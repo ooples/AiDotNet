@@ -70,6 +70,33 @@ public class Tensor<T> : TensorBase<T>, IEnumerable<T>
     }
 
     /// <summary>
+    /// Private constructor for zero-copy tensor creation from a Vector.
+    /// </summary>
+    private Tensor(Vector<T> data, int[] dimensions) : base(data, dimensions)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new tensor from existing memory without copying data.
+    /// </summary>
+    /// <param name="memory">The memory to use as the tensor's backing store.</param>
+    /// <param name="dimensions">An array specifying the size of each dimension.</param>
+    /// <returns>A new tensor using the provided memory.</returns>
+    /// <remarks>
+    /// <para><b>Performance:</b> This method does NOT copy data. The tensor directly uses
+    /// the provided memory. This is useful for high-performance scenarios where
+    /// memory pooling or ArrayPool is used.</para>
+    /// <para><b>Warning:</b> The caller must ensure the memory remains valid for the
+    /// lifetime of the tensor. If using ArrayPool, do NOT return the array to the pool
+    /// until the tensor is no longer in use.</para>
+    /// </remarks>
+    public static Tensor<T> FromMemory(Memory<T> memory, int[] dimensions)
+    {
+        var vector = Vector<T>.FromMemory(memory);
+        return new Tensor<T>(vector, dimensions);
+    }
+
+    /// <summary>
     /// Creates a new tensor with the specified dimensions using data from a matrix.
     /// </summary>
     /// <param name="dimensions">An array specifying the size of each dimension.</param>
