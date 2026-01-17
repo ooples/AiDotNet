@@ -91,6 +91,23 @@ internal static class CudaNativeBindings
         IntPtr kernelParams,
         IntPtr extra);
 
+    [DllImport(CudaLibrary, EntryPoint = "cuLaunchCooperativeKernel")]
+    public static extern CudaResult cuLaunchCooperativeKernel(
+        IntPtr function,
+        uint gridDimX, uint gridDimY, uint gridDimZ,
+        uint blockDimX, uint blockDimY, uint blockDimZ,
+        uint sharedMemBytes,
+        IntPtr stream,
+        IntPtr kernelParams);
+
+    [DllImport(CudaLibrary, EntryPoint = "cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags")]
+    public static extern CudaResult cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
+        out int numBlocks,
+        IntPtr func,
+        int blockSize,
+        nint dynamicSMemSize,
+        uint flags);
+
     [DllImport(CudaLibrary, EntryPoint = "cuStreamCreate")]
     public static extern CudaResult cuStreamCreate(out IntPtr stream, uint flags);
 

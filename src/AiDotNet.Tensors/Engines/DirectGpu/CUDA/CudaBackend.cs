@@ -1903,6 +1903,23 @@ public sealed class CudaBackend : IAsyncGpuBackend
             "cuLaunchKernel");
     }
 
+    /// <summary>
+    /// Launch a cooperative kernel that supports grid-level synchronization via cooperative_groups.
+    /// Cooperative kernels can use grid.sync() for cross-block synchronization.
+    /// </summary>
+    private unsafe void LaunchCooperativeKernel(IntPtr kernel, uint gridX, uint blockX, uint sharedMemBytes, void** args)
+    {
+        CuBlasNative.CheckCudaResult(
+            CudaNativeBindings.cuLaunchCooperativeKernel(
+                kernel,
+                gridX, 1, 1,
+                blockX, 1, 1,
+                sharedMemBytes,
+                _stream,
+                (IntPtr)args),
+            "cuLaunchCooperativeKernel");
+    }
+
     private unsafe void LaunchKernel2D(IntPtr kernel, uint gridX, uint gridY, uint gridZ, uint blockX, uint blockY, void** args)
     {
         CuBlasNative.CheckCudaResult(
@@ -7842,7 +7859,8 @@ public sealed class CudaBackend : IAsyncGpuBackend
         args[15] = &inputSize;
         args[16] = &hiddenSize;
 
-        LaunchKernelWithSharedMem(kernel, grid, DefaultBlockSize, sharedMemSize, args);
+        // Use cooperative kernel launch for grid-wide synchronization (grid.sync())
+        LaunchCooperativeKernel(kernel, grid, DefaultBlockSize, sharedMemSize, args);
     }
 
     public unsafe void GruCellBackward(

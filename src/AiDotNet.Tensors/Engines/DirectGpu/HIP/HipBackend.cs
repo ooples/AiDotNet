@@ -474,6 +474,26 @@ public sealed class HipBackend : IAsyncGpuBackend
         }
     }
 
+    /// <summary>
+    /// Launch a cooperative kernel that supports grid-level synchronization via cooperative_groups.
+    /// Cooperative kernels can use grid.sync() for cross-block synchronization.
+    /// </summary>
+    private unsafe void LaunchCooperativeKernel(IntPtr kernel, uint gridX, uint blockSize, uint sharedMemBytes, IntPtr[] args)
+    {
+        GCHandle argsHandle = GCHandle.Alloc(args, GCHandleType.Pinned);
+        try
+        {
+            var result = HipNativeBindings.hipLaunchCooperativeKernel(
+                kernel, gridX, 1, 1, blockSize, 1, 1,
+                sharedMemBytes, _stream, argsHandle.AddrOfPinnedObject());
+            HipNativeBindings.CheckError(result, "hipLaunchCooperativeKernel");
+        }
+        finally
+        {
+            argsHandle.Free();
+        }
+    }
+
     private unsafe void LaunchKernel2D(IntPtr kernel, uint gridX, uint gridY, uint blockX, uint blockY, IntPtr[] args, uint sharedMem = 0)
     {
         LaunchKernel2DOnStream(kernel, gridX, gridY, blockX, blockY, args, _stream, sharedMem);
@@ -9181,7 +9201,8 @@ public sealed class HipBackend : IAsyncGpuBackend
             var args = new IntPtr[17];
             for (int i = 0; i < 17; i++) args[i] = handles[i].AddrOfPinnedObject();
 
-            LaunchKernelWithSharedMem(kernel, grid, DefaultBlockSize, sharedMemSize, args);
+            // Use cooperative kernel launch for grid-wide synchronization (grid.sync())
+            LaunchCooperativeKernel(kernel, grid, DefaultBlockSize, sharedMemSize, args);
             Synchronize();
         }
         finally
