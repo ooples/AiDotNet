@@ -1914,9 +1914,38 @@ public sealed class CudaBackend : IAsyncGpuBackend
     /// <summary>
     /// Launch a cooperative kernel that supports grid-level synchronization via cooperative_groups.
     /// Cooperative kernels can use grid.sync() for cross-block synchronization.
+    /// Throws if device doesn't support cooperative launch or grid exceeds limits.
     /// </summary>
     private unsafe void LaunchCooperativeKernel(IntPtr kernel, uint gridX, uint blockX, uint sharedMemBytes, void** args)
     {
+        // Check cooperative launch support
+        if (!_supportsCooperativeLaunch)
+        {
+            throw new InvalidOperationException(
+                "Cooperative kernel launch is not supported on this device. " +
+                "Cooperative launch requires CUDA compute capability 6.0 or higher. " +
+                "Use cell-level operations instead of sequence-level operations.");
+        }
+
+        // Check grid size limits for cooperative launch
+        var occResult = CudaNativeBindings.cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
+            out int maxBlocksPerSm, kernel, (int)blockX, (nint)sharedMemBytes, 0);
+        if (occResult != CudaResult.Success)
+        {
+            throw new InvalidOperationException(
+                $"Failed to query occupancy for cooperative kernel: {occResult}. " +
+                "Use cell-level operations instead of sequence-level operations.");
+        }
+
+        int maxCooperativeBlocks = maxBlocksPerSm * _multiProcessorCount;
+        if (gridX > maxCooperativeBlocks)
+        {
+            throw new InvalidOperationException(
+                $"Grid size ({gridX}) exceeds cooperative launch limit ({maxCooperativeBlocks}) " +
+                $"for this device ({maxBlocksPerSm} blocks/SM × {_multiProcessorCount} SMs). " +
+                "Reduce batch size or use cell-level operations.");
+        }
+
         CuBlasNative.CheckCudaResult(
             CudaNativeBindings.cuLaunchCooperativeKernel(
                 kernel,
@@ -7838,16 +7867,6 @@ public sealed class CudaBackend : IAsyncGpuBackend
         if (!_kernelCache.TryGetValue("gru_backward_sequence", out var kernel))
             throw new InvalidOperationException("CUDA kernel not found: gru_backward_sequence");
 
-        // The gru_backward_sequence kernel uses grid.sync() for cross-block synchronization
-        // which requires cooperative kernel launch. Validate requirements.
-        if (!_supportsCooperativeLaunch)
-        {
-            throw new InvalidOperationException(
-                "GRU backward sequence requires cooperative kernel launch support, " +
-                "but this CUDA device does not support it (requires compute capability 6.0+). " +
-                "Consider using a newer GPU or reducing batch*hiddenSize to fit in one block.");
-        }
-
         using var _ = PushContext();
 
         int totalThreads = batch * hiddenSize;
@@ -7855,21 +7874,6 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
         // Shared memory size for accumulated hidden gradients (one float per thread)
         uint sharedMemSize = (uint)(DefaultBlockSize * sizeof(float));
-
-        // For cooperative launches, grid size is limited by device occupancy
-        // Get max blocks that can be launched cooperatively
-        var occupancyResult = CudaNativeBindings.cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
-            out int maxBlocksPerSm, kernel, DefaultBlockSize, (nint)sharedMemSize, 0);
-        if (occupancyResult == CudaResult.Success && maxBlocksPerSm > 0)
-        {
-            int maxCooperativeBlocks = maxBlocksPerSm * _multiProcessorCount;
-            if (grid > maxCooperativeBlocks)
-            {
-                throw new InvalidOperationException(
-                    $"GRU backward sequence grid size ({grid} blocks) exceeds cooperative launch limit " +
-                    $"({maxCooperativeBlocks} blocks). Reduce batch size or hidden size.");
-            }
-        }
 
         IntPtr gradOutputPtr = gradOutput.Handle;
         IntPtr allHPtr = allH.Handle;

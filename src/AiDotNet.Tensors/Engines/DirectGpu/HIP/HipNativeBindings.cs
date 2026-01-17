@@ -488,16 +488,16 @@ internal static class HipNativeBindings
         uint blockDimX,
         uint blockDimY,
         uint blockDimZ,
+        IntPtr kernelParams,
         uint sharedMemBytes,
-        IntPtr stream,
-        IntPtr kernelParams);
+        IntPtr stream);
 
     [DllImport(HipLibrary, CallingConvention = CallingConvention.Cdecl)]
     public static extern HipError hipOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
         out int numBlocks,
         IntPtr func,
         int blockSize,
-        nint dynamicSMemSize,
+        nuint dynamicSMemSize,
         uint flags);
 
     #endregion

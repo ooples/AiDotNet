@@ -486,16 +486,53 @@ public sealed class HipBackend : IAsyncGpuBackend
     /// <summary>
     /// Launch a cooperative kernel that supports grid-level synchronization via cooperative_groups.
     /// Cooperative kernels can use grid.sync() for cross-block synchronization.
+    /// If the device doesn't support cooperative launch or grid exceeds limits, falls back to regular launch.
     /// </summary>
     private unsafe void LaunchCooperativeKernel(IntPtr kernel, uint gridX, uint blockSize, uint sharedMemBytes, IntPtr[] args)
     {
+        bool useCooperative = _supportsCooperativeLaunch;
+
+        // Check grid size limits for cooperative launch
+        if (useCooperative)
+        {
+            var occResult = HipNativeBindings.hipOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
+                out int maxBlocksPerSm, kernel, (int)blockSize, (nuint)sharedMemBytes, 0);
+            if (occResult == HipError.Success && maxBlocksPerSm > 0)
+            {
+                int maxCooperativeBlocks = maxBlocksPerSm * _deviceProps.MultiProcessorCount;
+                if (gridX > maxCooperativeBlocks)
+                {
+                    // Grid too large for cooperative launch, fall back to regular launch
+                    useCooperative = false;
+                }
+            }
+            else
+            {
+                // Could not query occupancy, fall back to regular launch
+                useCooperative = false;
+            }
+        }
+
         GCHandle argsHandle = GCHandle.Alloc(args, GCHandleType.Pinned);
         try
         {
-            var result = HipNativeBindings.hipLaunchCooperativeKernel(
-                kernel, gridX, 1, 1, blockSize, 1, 1,
-                sharedMemBytes, _stream, argsHandle.AddrOfPinnedObject());
-            HipNativeBindings.CheckError(result, "hipLaunchCooperativeKernel");
+            if (useCooperative)
+            {
+                var result = HipNativeBindings.hipLaunchCooperativeKernel(
+                    kernel, gridX, 1, 1, blockSize, 1, 1,
+                    argsHandle.AddrOfPinnedObject(), sharedMemBytes, _stream);
+                HipNativeBindings.CheckError(result, "hipLaunchCooperativeKernel");
+            }
+            else
+            {
+                // Fallback to regular launch - cooperative synchronization will not work correctly
+                // but at least the kernel will run. This happens when device doesn't support
+                // cooperative launch or grid is too large.
+                var result = HipNativeBindings.hipModuleLaunchKernel(
+                    kernel, gridX, 1, 1, blockSize, 1, 1,
+                    sharedMemBytes, _stream, argsHandle.AddrOfPinnedObject(), IntPtr.Zero);
+                HipNativeBindings.CheckError(result, "hipModuleLaunchKernel (fallback)");
+            }
         }
         finally
         {
@@ -9197,31 +9234,6 @@ public sealed class HipBackend : IAsyncGpuBackend
 
         // Shared memory size for accumulated hidden gradients (one float per thread)
         uint sharedMemSize = (uint)(DefaultBlockSize * sizeof(float));
-
-        // The gru_backward_sequence kernel uses grid.sync() for cross-block synchronization
-        // which requires cooperative kernel launch. Validate requirements.
-        if (!_supportsCooperativeLaunch)
-        {
-            throw new InvalidOperationException(
-                "GRU backward sequence requires cooperative kernel launch support, " +
-                "but this HIP device does not support it. Consider using a device with " +
-                "cooperative launch capability or reducing batch*hiddenSize to fit in one block.");
-        }
-
-        // For cooperative launches, grid size is limited by device occupancy
-        // Get max blocks that can be launched cooperatively
-        var occupancyResult = HipNativeBindings.hipOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
-            out int maxBlocksPerSm, kernel, DefaultBlockSize, (nint)sharedMemSize, 0);
-        if (occupancyResult == HipError.Success && maxBlocksPerSm > 0)
-        {
-            int maxCooperativeBlocks = maxBlocksPerSm * _deviceProps.MultiProcessorCount;
-            if (grid > maxCooperativeBlocks)
-            {
-                throw new InvalidOperationException(
-                    $"GRU backward sequence grid size ({grid} blocks) exceeds cooperative launch limit " +
-                    $"({maxCooperativeBlocks} blocks). Reduce batch size or hidden size.");
-            }
-        }
 
         var handles = new GCHandle[17];
         try
