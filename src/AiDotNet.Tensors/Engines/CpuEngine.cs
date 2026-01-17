@@ -41,9 +41,9 @@ public class CpuEngine : IEngine
     public string Name => "CPU Engine";
     private const int ElementwiseParallelThreshold = 200_000;
     private const int ReductionParallelThreshold = 250_000;
-    private const int MatMulTransposeMaxElements = 2_000_000;
-    private const int MatMulTransposeMaxProduct = 262_144;
-    private const int MatMulTransposeParallelThreshold = 32_768;
+    private const int MatMulTransposeMaxElements = 4_000_000;
+    private const int MatMulTransposeMaxProduct = 1_048_576;  // 1024x1024
+    private const int MatMulTransposeParallelThreshold = 16_384;
 
     /// <inheritdoc/>
     public bool SupportsGpu => false;
@@ -4671,22 +4671,48 @@ public class CpuEngine : IEngine
             return;
         }
 
-        var aSpan = a.Span;
-        var bSpan = b.Span;
-        var cSpan = c.Span;
+        // Fallback: simple matmul with optional parallelization (matches master behavior)
+        long work = (long)m * n;
+        bool useParallel = allowParallel && work >= 256 && m > 1 && Environment.ProcessorCount > 1;
 
-        for (int i = 0; i < m; i++)
+        if (useParallel)
         {
-            int aRowOffset = aOffset + i * k;
-            int cRowOffset = cOffset + i * n;
-            for (int j = 0; j < n; j++)
+            Parallel.For(0, m, i =>
             {
-                T sum = numOps.Zero;
-                for (int kIndex = 0; kIndex < k; kIndex++)
+                var aSpan = a.Span;
+                var bSpan = b.Span;
+                var cSpan = c.Span;
+                int aRowOffset = aOffset + i * k;
+                int cRowOffset = cOffset + i * n;
+                for (int j = 0; j < n; j++)
                 {
-                    sum = numOps.Add(sum, numOps.Multiply(aSpan[aRowOffset + kIndex], bSpan[bOffset + kIndex * n + j]));
+                    T sum = numOps.Zero;
+                    for (int kIndex = 0; kIndex < k; kIndex++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(aSpan[aRowOffset + kIndex], bSpan[bOffset + kIndex * n + j]));
+                    }
+                    cSpan[cRowOffset + j] = sum;
                 }
-                cSpan[cRowOffset + j] = sum;
+            });
+        }
+        else
+        {
+            var aSpan = a.Span;
+            var bSpan = b.Span;
+            var cSpan = c.Span;
+            for (int i = 0; i < m; i++)
+            {
+                int aRowOffset = aOffset + i * k;
+                int cRowOffset = cOffset + i * n;
+                for (int j = 0; j < n; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int kIndex = 0; kIndex < k; kIndex++)
+                    {
+                        sum = numOps.Add(sum, numOps.Multiply(aSpan[aRowOffset + kIndex], bSpan[bOffset + kIndex * n + j]));
+                    }
+                    cSpan[cRowOffset + j] = sum;
+                }
             }
         }
     }
