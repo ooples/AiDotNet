@@ -583,6 +583,8 @@ extern ""C"" __global__ void gru_backward_sequence(
 
             // Also write to global buffer for cross-block access
             dH_buffer[gid] = dH;
+            // Ensure device-wide visibility of global write before other blocks read
+            __threadfence();
         }
 
         // Sync to ensure all threads have written their dH values
