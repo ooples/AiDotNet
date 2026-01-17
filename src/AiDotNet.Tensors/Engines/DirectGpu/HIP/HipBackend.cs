@@ -522,10 +522,11 @@ public sealed class HipBackend : IAsyncGpuBackend
         GCHandle argsHandle = GCHandle.Alloc(args, GCHandleType.Pinned);
         try
         {
-            var result = HipNativeBindings.hipLaunchCooperativeKernel(
+            // Use hipModuleLaunchCooperativeKernel for module-obtained kernels (via hipModuleGetFunction)
+            var result = HipNativeBindings.hipModuleLaunchCooperativeKernel(
                 kernel, gridX, 1, 1, blockSize, 1, 1,
-                argsHandle.AddrOfPinnedObject(), sharedMemBytes, _stream);
-            HipNativeBindings.CheckError(result, "hipLaunchCooperativeKernel");
+                sharedMemBytes, _stream, argsHandle.AddrOfPinnedObject());
+            HipNativeBindings.CheckError(result, "hipModuleLaunchCooperativeKernel");
         }
         finally
         {

@@ -1618,14 +1618,15 @@ public class LSTMLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Initial hidden/cell states not cached. ForwardGpu must be called with training mode enabled.");
 
         // Determine dimensions from input
+        // For 2D input [batchSize, inputSize]: batchSize = Shape[0], timeSteps = 1
+        // For 3D+ input [batchSize, timeSteps, inputSize]: batchSize = Shape[0], timeSteps = Shape[1]
         int batchSize = _gpuLastInput.Shape[0];
-        int timeSteps = _gpuLastInput.Shape.Length > 2 ? _gpuLastInput.Shape[1] : _gpuLastInput.Shape[0];
-        if (_gpuLastInput.Shape.Length == 2)
-            batchSize = 1;
+        int timeSteps = _gpuLastInput.Shape.Length >= 3 ? _gpuLastInput.Shape[1] : 1;
+        bool is2DInput = _gpuLastInput.Shape.Length == 2;
 
         int hiddenBufferSize = batchSize * _hiddenSize;
         int inputBufferSize = batchSize * _inputSize;
-        int inputGradientSize = batchSize * timeSteps * _inputSize;
+        int inputGradientSize = is2DInput ? batchSize * _inputSize : batchSize * timeSteps * _inputSize;
         int weightsIhSize = 4 * _hiddenSize * _inputSize;
         int weightsHhSize = 4 * _hiddenSize * _hiddenSize;
         int biasSize = 4 * _hiddenSize;
@@ -1693,7 +1694,9 @@ public class LSTMLayer<T> : LayerBase<T>
             gradBiasIhBuffer.Dispose();
             gradBiasHhBuffer.Dispose();
 
-            return new GpuTensor<T>(backend, gradInputBuffer, [batchSize, timeSteps, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            // Return gradient with shape matching input: [batchSize, inputSize] for 2D, [batchSize, timeSteps, inputSize] for 3D+
+            int[] gradShape = is2DInput ? [batchSize, _inputSize] : [batchSize, timeSteps, _inputSize];
+            return new GpuTensor<T>(backend, gradInputBuffer, gradShape, GpuTensorRole.Gradient, ownsBuffer: true);
         }
         catch
         {
