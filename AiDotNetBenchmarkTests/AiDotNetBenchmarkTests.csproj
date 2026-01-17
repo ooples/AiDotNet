@@ -30,5 +30,13 @@
     <ProjectReference Include="..\src\AiDotNet.csproj" />
   </ItemGroup>
 
+  <!-- Copy OpenBLAS native library to output for CPU acceleration -->
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT' AND '$(TargetFramework)' == 'net10.0'">
+    <Content Include="..\src\AiDotNet.Native.OpenBLAS\runtimes\win-x64\native\libopenblas.dll">
+      <Link>libopenblas.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
 

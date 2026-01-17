@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 
@@ -295,6 +296,30 @@ internal static class BlasProvider
             names.AddRange(openblas);
             names.AddRange(mkl);
         }
+
+        // Also try loading from various known directories
+        var additionalPaths = new List<string>();
+        var directories = new List<string?>
+        {
+            AppContext.BaseDirectory,
+            Path.GetDirectoryName(typeof(BlasProvider).Assembly.Location),
+            Environment.CurrentDirectory
+        };
+
+        foreach (var dir in directories.Where(d => !string.IsNullOrEmpty(d)))
+        {
+            foreach (var name in names.ToArray())
+            {
+                var fullPath = Path.Combine(dir!, name);
+                if (!additionalPaths.Contains(fullPath))
+                {
+                    additionalPaths.Add(fullPath);
+                }
+            }
+        }
+
+        // Add directory-relative paths at the beginning for priority
+        names.InsertRange(0, additionalPaths);
 
         return names.ToArray();
     }

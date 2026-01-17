@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>AiDotNet.Native.OpenBLAS</PackageId>
+    <Version>0.3.26</Version>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Authors>AiDotNet Contributors</Authors>
+    <Company>AiDotNet</Company>
+    <Description>Native OpenBLAS binaries for CPU-accelerated BLAS operations. This package provides the OpenBLAS native library required by AiDotNet.Tensors for CPU acceleration.</Description>
+    <PackageTags>openblas;blas;cpu;native</PackageTags>
+    <PackageLicenseExpression>BSD-3-Clause</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <ContentTargetFolders>content</ContentTargetFolders>
+  </PropertyGroup>
+
+  <!-- Windows x64 native library -->
+  <ItemGroup>
+    <None Include="runtimes\win-x64\native\libopenblas.dll" Pack="true" PackagePath="runtimes\win-x64\native" />
+  </ItemGroup>
+
+  <!-- Ensure the native library is copied to output for this project and referencing projects -->
+  <ItemGroup>
+    <None Include="runtimes\**\*" CopyToOutputDirectory="PreserveNewest" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="runtimes\win-x64\native\libopenblas.dll" Condition="'$(OS)' == 'Windows_NT'">
+      <Link>libopenblas.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Pack>false</Pack>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="LICENSE.OpenBLAS.txt" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- Build targets to copy native library -->
+  <ItemGroup>
+    <None Include="build\AiDotNet.Native.OpenBLAS.targets" Pack="true" PackagePath="build" />
+  </ItemGroup>
+</Project>

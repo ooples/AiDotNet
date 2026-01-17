@@ -69,6 +69,11 @@
     <ProjectReference Include="..\AiDotNet.Native.CLBlast\AiDotNet.Native.CLBlast.csproj" />
   </ItemGroup>
 
+  <!-- OpenBLAS native library for CPU BLAS acceleration -->
+  <ItemGroup>
+    <ProjectReference Include="..\AiDotNet.Native.OpenBLAS\AiDotNet.Native.OpenBLAS.csproj" />
+  </ItemGroup>
+
   <!-- Exclude files that require .NET Core intrinsics from .NET Framework builds -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net471'">
     <Compile Remove="Helpers\SimdVector.cs" />
