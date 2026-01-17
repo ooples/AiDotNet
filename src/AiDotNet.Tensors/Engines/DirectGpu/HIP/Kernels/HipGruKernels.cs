@@ -14,7 +14,10 @@ internal static class HipGruKernels
     {
         return @"
 #include <hip/hip_runtime.h>
+#include <hip/hip_cooperative_groups.h>
 #include <math.h>
+
+namespace cg = cooperative_groups;
 
 #define EPSILON 1e-15f
 #define WARP_SIZE 64
@@ -436,6 +439,9 @@ extern ""C"" __global__ void gru_backward_sequence(
     // Each thread stores its accumulated dH so other threads can read it
     extern __shared__ float shared_dH[];
 
+    // Get grid group for cross-block synchronization
+    cg::grid_group grid = cg::this_grid();
+
     // Each thread handles one (batch, hidden) element
     int gid = blockIdx.x * blockDim.x + threadIdx.x;
     int totalElements = batch * hiddenSize;
@@ -482,13 +488,12 @@ extern ""C"" __global__ void gru_backward_sequence(
 
             // Also write to global buffer for cross-block access
             dH_buffer[gid] = dH;
-
-            // Ensure device-wide visibility of global write before other blocks read
-            __threadfence();
         }
 
-        // Sync to ensure all threads in this block have written their dH values
+        // Sync within block first, then grid-wide sync to ensure all blocks
+        // have written their dH values before any block reads cross-block data
         __syncthreads();
+        grid.sync();
 
         // Phase 2: Compute reset gate gradient using accumulated hidden gradients
         float dR = 0.0f;
