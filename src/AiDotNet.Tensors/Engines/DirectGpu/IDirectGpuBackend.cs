@@ -2330,6 +2330,8 @@ public interface IDirectGpuBackend : IDisposable
     /// <param name="allH">All hidden states from forward [(seqLen + 1) * batch * hiddenSize].</param>
     /// <param name="allC">All cell states from forward [(seqLen + 1) * batch * hiddenSize].</param>
     /// <param name="cacheGates">Gate cache from forward [seqLen * batch * hiddenSize * 4].</param>
+    /// <param name="hInit">Initial hidden state from forward pass [batch * hiddenSize].</param>
+    /// <param name="cInit">Initial cell state from forward pass [batch * hiddenSize].</param>
     /// <param name="weightsIh">Input-to-hidden weights [4 * hiddenSize * inputSize].</param>
     /// <param name="weightsHh">Hidden-to-hidden weights [4 * hiddenSize * hiddenSize].</param>
     /// <param name="input">Original input sequence [seqLen * batch * inputSize].</param>

@@ -9114,8 +9114,30 @@ public sealed class HipBackend : IAsyncGpuBackend
             LaunchKernel(kernel, grid, DefaultBlockSize, args);
             Synchronize();
 
-            // Note: hFinal and cFinal are not used by the kernel - they can be extracted
-            // from allH[seqLen-1] and allC[seqLen-1] if needed by the caller
+            // Copy the last timestep from allH and allC into hFinal and cFinal
+            // allH layout: [(seqLen + 1) * batch * hiddenSize] where index 0 is hInit
+            // So final hidden state is at index seqLen (last timestep output)
+            int finalStateOffset = seqLen * batch * hiddenSize;
+            int stateSize = batch * hiddenSize;
+            var byteSize = (UIntPtr)(stateSize * sizeof(float));
+
+            // Device-to-device copy from allH[seqLen] to hFinal
+            IntPtr srcH = IntPtr.Add(allH.Handle, finalStateOffset * sizeof(float));
+            var resultH = HipNativeBindings.hipMemcpy(
+                hFinal.Handle,
+                srcH,
+                byteSize,
+                HipMemcpyKind.DeviceToDevice);
+            HipNativeBindings.CheckError(resultH, "hipMemcpy D2D (hFinal from allH)");
+
+            // Device-to-device copy from allC[seqLen] to cFinal
+            IntPtr srcC = IntPtr.Add(allC.Handle, finalStateOffset * sizeof(float));
+            var resultC = HipNativeBindings.hipMemcpy(
+                cFinal.Handle,
+                srcC,
+                byteSize,
+                HipMemcpyKind.DeviceToDevice);
+            HipNativeBindings.CheckError(resultC, "hipMemcpy D2D (cFinal from allC)");
         }
         finally
         {

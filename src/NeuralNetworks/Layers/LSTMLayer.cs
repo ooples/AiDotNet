@@ -1614,6 +1614,9 @@ public class LSTMLayer<T> : LayerBase<T>
         if (_gpuStackedWeightsIh == null || _gpuStackedWeightsHh == null)
             throw new InvalidOperationException("Stacked weights not prepared. ForwardGpu must be called first.");
 
+        if (_gpuInitialHiddenState == null || _gpuInitialCellState == null)
+            throw new InvalidOperationException("Initial hidden/cell states not cached. ForwardGpu must be called with training mode enabled.");
+
         // Determine dimensions from input
         int batchSize = _gpuLastInput.Shape[0];
         int timeSteps = _gpuLastInput.Shape.Length > 2 ? _gpuLastInput.Shape[1] : _gpuLastInput.Shape[0];
@@ -1641,6 +1644,7 @@ public class LSTMLayer<T> : LayerBase<T>
             // Call fused LSTM backward sequence kernel (processes all timesteps in one kernel launch)
             backend.LstmBackwardSequence(
                 outputGradient.Buffer, _gpuFusedAllH, _gpuFusedAllC, _gpuFusedCacheGates,
+                _gpuInitialHiddenState.Buffer, _gpuInitialCellState.Buffer,
                 _gpuStackedWeightsIh, _gpuStackedWeightsHh, _gpuLastInput.Buffer,
                 gradInputBuffer, gradHInitBuffer, gradCInitBuffer,
                 gradWeightsIhBuffer, gradWeightsHhBuffer, gradBiasIhBuffer, gradBiasHhBuffer,

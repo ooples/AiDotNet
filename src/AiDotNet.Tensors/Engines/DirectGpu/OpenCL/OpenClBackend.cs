@@ -9165,6 +9165,18 @@ KERNEL VARIANTS (A/B testing):
             IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
             int seqLen, int batch, int inputSize, int hiddenSize)
         {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context is not initialized. Cannot execute LstmForwardSequence.");
+
+            if (seqLen <= 0)
+                throw new ArgumentException($"seqLen must be positive, got {seqLen}", nameof(seqLen));
+            if (batch <= 0)
+                throw new ArgumentException($"batch must be positive, got {batch}", nameof(batch));
+            if (inputSize <= 0)
+                throw new ArgumentException($"inputSize must be positive, got {inputSize}", nameof(inputSize));
+            if (hiddenSize <= 0)
+                throw new ArgumentException($"hiddenSize must be positive, got {hiddenSize}", nameof(hiddenSize));
+
             if (!_kernelCache.TryGetValue("lstm_forward_sequence", out var kernel))
                 throw new InvalidOperationException("OpenCL kernel not found: lstm_forward_sequence");
 
@@ -9201,6 +9213,18 @@ KERNEL VARIANTS (A/B testing):
             IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
             int seqLen, int batch, int inputSize, int hiddenSize)
         {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context is not initialized. Cannot execute LstmBackwardSequence.");
+
+            if (seqLen <= 0)
+                throw new ArgumentException($"seqLen must be positive, got {seqLen}", nameof(seqLen));
+            if (batch <= 0)
+                throw new ArgumentException($"batch must be positive, got {batch}", nameof(batch));
+            if (inputSize <= 0)
+                throw new ArgumentException($"inputSize must be positive, got {inputSize}", nameof(inputSize));
+            if (hiddenSize <= 0)
+                throw new ArgumentException($"hiddenSize must be positive, got {hiddenSize}", nameof(hiddenSize));
+
             if (!_kernelCache.TryGetValue("lstm_backward_sequence", out var kernel))
                 throw new InvalidOperationException("OpenCL kernel not found: lstm_backward_sequence");
 
@@ -9238,6 +9262,18 @@ KERNEL VARIANTS (A/B testing):
             IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer allH, IGpuBuffer cacheGates,
             int seqLen, int batch, int inputSize, int hiddenSize)
         {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context is not initialized. Cannot execute GruForwardSequence.");
+
+            if (seqLen <= 0)
+                throw new ArgumentException($"seqLen must be positive, got {seqLen}", nameof(seqLen));
+            if (batch <= 0)
+                throw new ArgumentException($"batch must be positive, got {batch}", nameof(batch));
+            if (inputSize <= 0)
+                throw new ArgumentException($"inputSize must be positive, got {inputSize}", nameof(inputSize));
+            if (hiddenSize <= 0)
+                throw new ArgumentException($"hiddenSize must be positive, got {hiddenSize}", nameof(hiddenSize));
+
             if (!_kernelCache.TryGetValue("gru_forward_sequence", out var kernel))
                 throw new InvalidOperationException("OpenCL kernel not found: gru_forward_sequence");
 
@@ -9270,6 +9306,18 @@ KERNEL VARIANTS (A/B testing):
             IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
             int seqLen, int batch, int inputSize, int hiddenSize)
         {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context is not initialized. Cannot execute GruBackwardSequence.");
+
+            if (seqLen <= 0)
+                throw new ArgumentException($"seqLen must be positive, got {seqLen}", nameof(seqLen));
+            if (batch <= 0)
+                throw new ArgumentException($"batch must be positive, got {batch}", nameof(batch));
+            if (inputSize <= 0)
+                throw new ArgumentException($"inputSize must be positive, got {inputSize}", nameof(inputSize));
+            if (hiddenSize <= 0)
+                throw new ArgumentException($"hiddenSize must be positive, got {hiddenSize}", nameof(hiddenSize));
+
             if (!_kernelCache.TryGetValue("gru_backward_sequence", out var kernel))
                 throw new InvalidOperationException("OpenCL kernel not found: gru_backward_sequence");
 
@@ -9304,6 +9352,14 @@ KERNEL VARIANTS (A/B testing):
             IGpuBuffer gradPrevH, IGpuBuffer gradGateR, IGpuBuffer gradGateZ, IGpuBuffer gradGateN,
             int batch, int hiddenSize)
         {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context is not initialized. Cannot execute GruCellBackward.");
+
+            if (batch <= 0)
+                throw new ArgumentException($"batch must be positive, got {batch}", nameof(batch));
+            if (hiddenSize <= 0)
+                throw new ArgumentException($"hiddenSize must be positive, got {hiddenSize}", nameof(hiddenSize));
+
             // Step 1: Call gru_cell_backward to compute gate gradients and partial gradPrevH (direct path only)
             if (!_kernelCache.TryGetValue("gru_cell_backward", out var cellBackwardKernel))
                 throw new InvalidOperationException("OpenCL kernel not found: gru_cell_backward");
