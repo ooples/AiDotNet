@@ -520,6 +520,147 @@ extern ""C"" __global__ void hardtanh_vector(const float* A, float* B, float min
     B[idx] = fminf(fmaxf(A[idx], minVal), maxVal);
 }
 
+// ===========================================================================
+// ACTIVATION BACKWARD KERNELS
+// ===========================================================================
+
+// ReLU backward: grad * (x > 0 ? 1 : 0)
+extern ""C"" __global__ void relu_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    gradInput[idx] = input[idx] > 0.0f ? gradOutput[idx] : 0.0f;
+}
+
+// Sigmoid backward: grad * sigmoid(x) * (1 - sigmoid(x))
+extern ""C"" __global__ void sigmoid_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float sig = 1.0f / (1.0f + expf(-input[idx]));
+    gradInput[idx] = gradOutput[idx] * sig * (1.0f - sig);
+}
+
+// Tanh backward: grad * (1 - tanh(x)^2)
+extern ""C"" __global__ void tanh_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float t = tanhf(input[idx]);
+    gradInput[idx] = gradOutput[idx] * (1.0f - t * t);
+}
+
+// GELU backward (approximation)
+extern ""C"" __global__ void gelu_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    const float sqrt2OverPi = 0.7978845608f;
+    const float coeff = 0.044715f;
+
+    float x = input[idx];
+    float x2 = x * x;
+    float x3 = x2 * x;
+    float inner = sqrt2OverPi * (x + coeff * x3);
+    float t = tanhf(inner);
+    float sech2 = 1.0f - t * t;
+    float dInner = sqrt2OverPi * (1.0f + 3.0f * coeff * x2);
+
+    float dgelu = 0.5f * (1.0f + t) + 0.5f * x * sech2 * dInner;
+    gradInput[idx] = gradOutput[idx] * dgelu;
+}
+
+// Mish backward: d/dx[x * tanh(softplus(x))]
+extern ""C"" __global__ void mish_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    // Numerically stable softplus
+    float sp;
+    if (x > 20.0f) {
+        sp = x;
+    } else if (x < -20.0f) {
+        sp = expf(x);
+    } else {
+        sp = logf(1.0f + expf(x));
+    }
+    // tanh of softplus
+    float tanh_sp = tanhf(sp);
+    // Sigmoid of x
+    float sig = 1.0f / (1.0f + expf(-x));
+    // sech^2(sp) = 1 - tanh^2(sp)
+    float sech2_sp = 1.0f - tanh_sp * tanh_sp;
+    // Mish derivative: tanh(sp) + x * sech^2(sp) * sig
+    float dmish = tanh_sp + x * sech2_sp * sig;
+    gradInput[idx] = gradOutput[idx] * dmish;
+}
+
+// Softplus backward: d/dx[log(1 + exp(x))] = sigmoid(x)
+extern ""C"" __global__ void softplus_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    // Numerically stable sigmoid
+    float sig = x >= 0.0f ? 1.0f / (1.0f + expf(-x)) : expf(x) / (1.0f + expf(x));
+    gradInput[idx] = gradOutput[idx] * sig;
+}
+
+// Hardswish backward
+// f(x) = 0 if x <= -3
+// f(x) = x if x >= 3
+// f(x) = x * (x + 3) / 6 otherwise
+// f'(x) = 0 if x <= -3
+// f'(x) = 1 if x >= 3
+// f'(x) = (2x + 3) / 6 otherwise
+extern ""C"" __global__ void hardswish_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    float grad;
+    if (x <= -3.0f) {
+        grad = 0.0f;
+    } else if (x >= 3.0f) {
+        grad = 1.0f;
+    } else {
+        grad = (2.0f * x + 3.0f) / 6.0f;
+    }
+    gradInput[idx] = gradOutput[idx] * grad;
+}
+
+// SELU backward
+extern ""C"" __global__ void selu_backward(const float* gradOutput, const float* input, float* gradInput, float alpha, float scale, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    float grad = x > 0.0f ? scale : scale * alpha * expf(x);
+    gradInput[idx] = gradOutput[idx] * grad;
+}
+
+// Hardsigmoid backward
+extern ""C"" __global__ void hardsigmoid_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    float grad = (x > -3.0f && x < 3.0f) ? 1.0f / 6.0f : 0.0f;
+    gradInput[idx] = gradOutput[idx] * grad;
+}
+
+// Hardtanh backward
+extern ""C"" __global__ void hardtanh_backward(const float* gradOutput, const float* input, float* gradInput, float minVal, float maxVal, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    float grad = (x > minVal && x < maxVal) ? 1.0f : 0.0f;
+    gradInput[idx] = gradOutput[idx] * grad;
+}
+
 // Conv2D bias add in NCHW format: output[b,c,h,w] += bias[c]
 // Memory layout: output is [batch, channels, height, width] in row-major order
 extern ""C"" __global__ void conv2d_bias_add(float* output, const float* bias, int batch, int channels, int spatialSize)
@@ -549,6 +690,10 @@ extern ""C"" __global__ void conv2d_bias_add(float* output, const float* bias, i
             "floor_vector", "ceil_vector", "round_vector", "trunc_vector",
             "mish_vector", "softplus_vector", "hardswish_vector", "selu_vector",
             "hardsigmoid_vector", "hardtanh_vector",
+            // Activation backward kernels
+            "relu_backward", "sigmoid_backward", "tanh_backward", "gelu_backward",
+            "mish_backward", "softplus_backward", "hardswish_backward",
+            "selu_backward", "hardsigmoid_backward", "hardtanh_backward",
             "reduce_sum", "reduce_max", "sum_axis", "bias_add",
             "conv2d_bias_add"
         };

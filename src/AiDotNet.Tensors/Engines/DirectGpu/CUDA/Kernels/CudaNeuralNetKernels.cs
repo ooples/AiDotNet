@@ -639,6 +639,58 @@ extern ""C"" __global__ void elastic_net_gradient(
     gradient[idx] = 2.0f * diff + l1_weight * sign_pred + 2.0f * l2_weight * pred;
 }
 
+// Contrastive Loss
+extern ""C"" __global__ void contrastive_loss(
+    const float* pred1, const float* pred2, const float* label, float* output,
+    float margin, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float diff = pred1[idx] - pred2[idx];
+    float dist_sq = diff * diff;
+    float l = label[idx];
+
+    // Similar pairs (label=0): minimize distance
+    // Dissimilar pairs (label=1): push apart up to margin
+    float dist = sqrtf(dist_sq);
+    float margin_diff = fmaxf(0.0f, margin - dist);
+    output[idx] = (1.0f - l) * 0.5f * dist_sq + l * 0.5f * margin_diff * margin_diff;
+}
+
+extern ""C"" __global__ void contrastive_loss_backward(
+    const float* pred1, const float* pred2, const float* label,
+    float* grad1, float* grad2, int batchSize, int embeddingDim, float margin)
+{
+    int totalSize = batchSize * embeddingDim;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= totalSize) return;
+
+    float diff = pred1[idx] - pred2[idx];
+    float dist = sqrtf(diff * diff);
+    float l = label[idx];
+
+    // Scale by 1/batchSize to match forward pass batch reduction
+    float scale = 1.0f / (float)batchSize;
+
+    float gradient;
+    if (l < 0.5f) {
+        // Similar pair: d_loss/d_pred1 = diff * scale
+        gradient = diff * scale;
+    } else {
+        // Dissimilar pair
+        float margin_diff = margin - dist;
+        if (margin_diff > 0.0f && dist > 1e-7f) {
+            gradient = -margin_diff * diff / dist * scale;
+        } else {
+            gradient = 0.0f;
+        }
+    }
+
+    grad1[idx] = gradient;
+    grad2[idx] = -gradient;
+}
+
 // ===========================================================================
 // UTILITY KERNELS
 // ===========================================================================
@@ -2362,6 +2414,9 @@ extern ""C"" __global__ void adaptive_avgpool_backward(
                 "charbonnier_gradient",
                 "elastic_net_loss",
                 "elastic_net_gradient",
+                // Contrastive Loss
+                "contrastive_loss",
+                "contrastive_loss_backward",
                 // Utilities
                 "clamp",
                 "l2_norm_squared",

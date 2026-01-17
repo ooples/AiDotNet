@@ -581,6 +581,18 @@ public class LSTMLayer<T> : LayerBase<T>
     private IGpuTensor<T>? _gpuInitialHiddenState;
     private IGpuTensor<T>? _gpuInitialCellState;
 
+    // Cached stacked weights for fused kernel (PyTorch format: i, f, g, o)
+    private IGpuBuffer? _gpuStackedWeightsIh;
+    private IGpuBuffer? _gpuStackedWeightsHh;
+    private IGpuBuffer? _gpuStackedBiasIh;
+    private IGpuBuffer? _gpuStackedBiasHh;
+    private bool _gpuStackedWeightsValid;
+
+    // Fused kernel output cache buffers
+    private IGpuBuffer? _gpuFusedAllH;
+    private IGpuBuffer? _gpuFusedAllC;
+    private IGpuBuffer? _gpuFusedCacheGates;
+
     #endregion
 
     /// <summary>
@@ -1228,154 +1240,71 @@ public class LSTMLayer<T> : LayerBase<T>
                 $"Expected input size {_inputSize}, but got {expectedInputSize}.");
         }
 
-        // Upload weights to GPU (transposed for efficient matmul)
-        using var WfiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsFi).ToArray()));
-        using var WiiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsIi).ToArray()));
-        using var WciBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsCi).ToArray()));
-        using var WoiBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsOi).ToArray()));
-        using var WfhBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsFh).ToArray()));
-        using var WihBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsIh).ToArray()));
-        using var WchBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsCh).ToArray()));
-        using var WohBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(Engine.TensorTranspose(_weightsOh).ToArray()));
-        using var biasFBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biasF.ToArray()));
-        using var biasIBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biasI.ToArray()));
-        using var biasCBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biasC.ToArray()));
-        using var biasOBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_biasO.ToArray()));
+        // Prepare stacked weights in PyTorch format (i, f, g, o order)
+        PrepareStackedWeightsForGpu(backend);
 
-        // Allocate hidden and cell state buffers
+        // Buffer size calculations
         int hiddenBufferSize = batchSize * _hiddenSize;
-        var currentHBuffer = backend.AllocateBuffer(hiddenBufferSize);
-        var currentCBuffer = backend.AllocateBuffer(hiddenBufferSize);
-        backend.Fill(currentHBuffer, 0.0f, hiddenBufferSize); // Initialize to zero
-        backend.Fill(currentCBuffer, 0.0f, hiddenBufferSize);
-
-        // Allocate output buffer
         int outputSize = batchSize * timeSteps * _hiddenSize;
+        int allHCSize = (timeSteps + 1) * batchSize * _hiddenSize;
+        int cacheGatesSize = timeSteps * batchSize * _hiddenSize * 4;
+
+        // Allocate initial hidden and cell state buffers (zeros)
+        var hInitBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var cInitBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        backend.Fill(hInitBuffer, 0.0f, hiddenBufferSize);
+        backend.Fill(cInitBuffer, 0.0f, hiddenBufferSize);
+
+        // Allocate output buffers
         var outputBuffer = backend.AllocateBuffer(outputSize);
+        var hFinalBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var cFinalBuffer = backend.AllocateBuffer(hiddenBufferSize);
 
-        // Temporary buffers for gate computations
-        var tempBuffer1 = backend.AllocateBuffer(hiddenBufferSize);
-        var tempBuffer2 = backend.AllocateBuffer(hiddenBufferSize);
-
-        // For training mode, allocate arrays to cache per-timestep states
+        // Allocate cache buffers for backward pass (always needed for training)
         bool cacheForTraining = IsTrainingMode;
+        IGpuBuffer? allHBuffer = null;
+        IGpuBuffer? allCBuffer = null;
+        IGpuBuffer? cacheGatesBuffer = null;
+
         if (cacheForTraining)
         {
             ClearGpuTrainingCache();
             _gpuLastInput = input;
-            _gpuCachedForgetGates = new IGpuTensor<T>[timeSteps];
-            _gpuCachedInputGates = new IGpuTensor<T>[timeSteps];
-            _gpuCachedCellCandidates = new IGpuTensor<T>[timeSteps];
-            _gpuCachedOutputGates = new IGpuTensor<T>[timeSteps];
-            _gpuCachedCellStates = new IGpuTensor<T>[timeSteps];
-            _gpuCachedHiddenStates = new IGpuTensor<T>[timeSteps];
 
-            // Cache initial states (zeros)
-            var initHBuffer = backend.AllocateBuffer(hiddenBufferSize);
-            var initCBuffer = backend.AllocateBuffer(hiddenBufferSize);
-            backend.Fill(initHBuffer, 0.0f, hiddenBufferSize);
-            backend.Fill(initCBuffer, 0.0f, hiddenBufferSize);
-            _gpuInitialHiddenState = new GpuTensor<T>(backend, initHBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
-            _gpuInitialCellState = new GpuTensor<T>(backend, initCBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
+            allHBuffer = backend.AllocateBuffer(allHCSize);
+            allCBuffer = backend.AllocateBuffer(allHCSize);
+            cacheGatesBuffer = backend.AllocateBuffer(cacheGatesSize);
+
+            // Store fused cache buffers for backward pass
+            _gpuFusedAllH = allHBuffer;
+            _gpuFusedAllC = allCBuffer;
+            _gpuFusedCacheGates = cacheGatesBuffer;
+
+            // Cache initial states
+            var initHBufferCopy = backend.AllocateBuffer(hiddenBufferSize);
+            var initCBufferCopy = backend.AllocateBuffer(hiddenBufferSize);
+            backend.Copy(hInitBuffer, initHBufferCopy, hiddenBufferSize);
+            backend.Copy(cInitBuffer, initCBufferCopy, hiddenBufferSize);
+            _gpuInitialHiddenState = new GpuTensor<T>(backend, initHBufferCopy, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
+            _gpuInitialCellState = new GpuTensor<T>(backend, initCBufferCopy, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
+        }
+        else
+        {
+            // Allocate temporary cache buffers (will be disposed after forward)
+            allHBuffer = backend.AllocateBuffer(allHCSize);
+            allCBuffer = backend.AllocateBuffer(allHCSize);
+            cacheGatesBuffer = backend.AllocateBuffer(cacheGatesSize);
         }
 
         try
         {
-            // Process each time step
-            for (int t = 0; t < timeSteps; t++)
-            {
-                // Get input slice for time step t
-                // Input shape is [batch, timeSteps, inputSize], so slice at offset t * batchSize * inputSize
-                int inputSliceOffset = t * batchSize * _inputSize;
-
-                // Create view into input for this timestep
-                var inputSlice = input.CreateView(inputSliceOffset, [batchSize, _inputSize]);
-
-                // Allocate gate buffers (persistent if training, temporary otherwise)
-                var fGateBuffer = backend.AllocateBuffer(hiddenBufferSize);
-                var iGateBuffer = backend.AllocateBuffer(hiddenBufferSize);
-                var cTildeBuffer = backend.AllocateBuffer(hiddenBufferSize);
-                var oGateBuffer = backend.AllocateBuffer(hiddenBufferSize);
-                var newCBuffer = backend.AllocateBuffer(hiddenBufferSize);
-                var newHBuffer = backend.AllocateBuffer(hiddenBufferSize);
-
-                // Forget Gate: f = sigmoid(x*Wfi^T + h*Wfh^T + biasF)
-                backend.Gemm(inputSlice.Buffer, WfiBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
-                backend.Gemm(currentHBuffer, WfhBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
-                backend.Add(tempBuffer1, tempBuffer2, fGateBuffer, hiddenBufferSize);
-                backend.BiasAdd(fGateBuffer, biasFBuffer, fGateBuffer, batchSize, _hiddenSize);
-                backend.Sigmoid(fGateBuffer, fGateBuffer, hiddenBufferSize);
-
-                // Input Gate: i = sigmoid(x*Wii^T + h*Wih^T + biasI)
-                backend.Gemm(inputSlice.Buffer, WiiBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
-                backend.Gemm(currentHBuffer, WihBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
-                backend.Add(tempBuffer1, tempBuffer2, iGateBuffer, hiddenBufferSize);
-                backend.BiasAdd(iGateBuffer, biasIBuffer, iGateBuffer, batchSize, _hiddenSize);
-                backend.Sigmoid(iGateBuffer, iGateBuffer, hiddenBufferSize);
-
-                // Cell Candidate: c_tilde = tanh(x*Wci^T + h*Wch^T + biasC)
-                backend.Gemm(inputSlice.Buffer, WciBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
-                backend.Gemm(currentHBuffer, WchBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
-                backend.Add(tempBuffer1, tempBuffer2, cTildeBuffer, hiddenBufferSize);
-                backend.BiasAdd(cTildeBuffer, biasCBuffer, cTildeBuffer, batchSize, _hiddenSize);
-                backend.Tanh(cTildeBuffer, cTildeBuffer, hiddenBufferSize);
-
-                // Output Gate: o = sigmoid(x*Woi^T + h*Woh^T + biasO)
-                backend.Gemm(inputSlice.Buffer, WoiBuffer, tempBuffer1, batchSize, _hiddenSize, _inputSize);
-                backend.Gemm(currentHBuffer, WohBuffer, tempBuffer2, batchSize, _hiddenSize, _hiddenSize);
-                backend.Add(tempBuffer1, tempBuffer2, oGateBuffer, hiddenBufferSize);
-                backend.BiasAdd(oGateBuffer, biasOBuffer, oGateBuffer, batchSize, _hiddenSize);
-                backend.Sigmoid(oGateBuffer, oGateBuffer, hiddenBufferSize);
-
-                // Update Cell State: C = f * C_prev + i * c_tilde
-                backend.Multiply(fGateBuffer, currentCBuffer, tempBuffer1, hiddenBufferSize);
-                backend.Multiply(iGateBuffer, cTildeBuffer, tempBuffer2, hiddenBufferSize);
-                backend.Add(tempBuffer1, tempBuffer2, newCBuffer, hiddenBufferSize);
-
-                // Update Hidden State: H = o * tanh(C)
-                backend.Tanh(newCBuffer, tempBuffer1, hiddenBufferSize);
-                backend.Multiply(oGateBuffer, tempBuffer1, newHBuffer, hiddenBufferSize);
-
-                // Cache states for training
-                if (cacheForTraining && _gpuCachedForgetGates is not null && _gpuCachedInputGates is not null &&
-                    _gpuCachedCellCandidates is not null && _gpuCachedOutputGates is not null &&
-                    _gpuCachedCellStates is not null && _gpuCachedHiddenStates is not null)
-                {
-                    _gpuCachedForgetGates[t] = new GpuTensor<T>(backend, fGateBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
-                    _gpuCachedInputGates[t] = new GpuTensor<T>(backend, iGateBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
-                    _gpuCachedCellCandidates[t] = new GpuTensor<T>(backend, cTildeBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
-                    _gpuCachedOutputGates[t] = new GpuTensor<T>(backend, oGateBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
-                    _gpuCachedCellStates[t] = new GpuTensor<T>(backend, newCBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
-                    _gpuCachedHiddenStates[t] = new GpuTensor<T>(backend, newHBuffer, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
-                }
-                else
-                {
-                    // Dispose gate buffers if not caching
-                    fGateBuffer.Dispose();
-                    iGateBuffer.Dispose();
-                    cTildeBuffer.Dispose();
-                    oGateBuffer.Dispose();
-                }
-
-                // Copy new states to current state buffers (use the cached buffer if training)
-                if (cacheForTraining && _gpuCachedCellStates is not null && _gpuCachedHiddenStates is not null &&
-                    _gpuCachedCellStates[t] is not null && _gpuCachedHiddenStates[t] is not null)
-                {
-                    backend.Copy(_gpuCachedCellStates[t].Buffer, currentCBuffer, hiddenBufferSize);
-                    backend.Copy(_gpuCachedHiddenStates[t].Buffer, currentHBuffer, hiddenBufferSize);
-                }
-                else
-                {
-                    backend.Copy(newCBuffer, currentCBuffer, hiddenBufferSize);
-                    backend.Copy(newHBuffer, currentHBuffer, hiddenBufferSize);
-                    newCBuffer.Dispose();
-                    newHBuffer.Dispose();
-                }
-
-                // Store hidden state in output at position t
-                int outputOffset = t * hiddenBufferSize;
-                backend.Copy2DStrided(currentHBuffer, outputBuffer, 1, hiddenBufferSize, outputSize, outputOffset);
-            }
+            // Call fused LSTM sequence kernel (processes all timesteps in one kernel launch)
+            backend.LstmForwardSequence(
+                input.Buffer, hInitBuffer, cInitBuffer,
+                _gpuStackedWeightsIh!, _gpuStackedWeightsHh!, _gpuStackedBiasIh!, _gpuStackedBiasHh!,
+                outputBuffer, hFinalBuffer, cFinalBuffer,
+                allHBuffer, allCBuffer, cacheGatesBuffer,
+                timeSteps, batchSize, _inputSize, _hiddenSize);
 
             // Determine output shape
             int[] outputShape;
@@ -1397,22 +1326,41 @@ public class LSTMLayer<T> : LayerBase<T>
             }
 
             // Cleanup temporary buffers
-            currentHBuffer.Dispose();
-            currentCBuffer.Dispose();
-            tempBuffer1.Dispose();
-            tempBuffer2.Dispose();
+            hInitBuffer.Dispose();
+            cInitBuffer.Dispose();
+            hFinalBuffer.Dispose();
+            cFinalBuffer.Dispose();
+
+            // If not training, dispose cache buffers
+            if (!cacheForTraining)
+            {
+                allHBuffer.Dispose();
+                allCBuffer.Dispose();
+                cacheGatesBuffer.Dispose();
+            }
 
             return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
         }
         catch
         {
             // Cleanup buffers on error
-            currentHBuffer.Dispose();
-            currentCBuffer.Dispose();
-            tempBuffer1.Dispose();
-            tempBuffer2.Dispose();
+            hInitBuffer.Dispose();
+            cInitBuffer.Dispose();
+            hFinalBuffer.Dispose();
+            cFinalBuffer.Dispose();
             outputBuffer.Dispose();
-            ClearGpuTrainingCache();
+
+            if (!cacheForTraining)
+            {
+                allHBuffer?.Dispose();
+                allCBuffer?.Dispose();
+                cacheGatesBuffer?.Dispose();
+            }
+            else
+            {
+                ClearGpuTrainingCache();
+            }
+
             throw;
         }
     }
@@ -1471,20 +1419,182 @@ public class LSTMLayer<T> : LayerBase<T>
 
         (_gpuInitialCellState as IDisposable)?.Dispose();
         _gpuInitialCellState = null;
+
+        // Note: Do NOT dispose stacked weights here - they're reusable across forward passes
+        // and are only invalidated when actual weights are updated via InvalidateGpuStackedWeights()
+
+        _gpuFusedAllH?.Dispose();
+        _gpuFusedAllH = null;
+        _gpuFusedAllC?.Dispose();
+        _gpuFusedAllC = null;
+        _gpuFusedCacheGates?.Dispose();
+        _gpuFusedCacheGates = null;
     }
 
     /// <summary>
-    /// GPU-resident backward pass for LSTM using Backpropagation Through Time (BPTT).
-    /// Computes gradients for all weights while keeping tensors on GPU.
+    /// Prepares stacked weights in PyTorch format (i, f, g, o order) for the fused LSTM kernel.
+    /// </summary>
+    private void PrepareStackedWeightsForGpu(IDirectGpuBackend backend)
+    {
+        if (_gpuStackedWeightsValid && _gpuStackedWeightsIh != null)
+            return;
+
+        // Stack input-to-hidden weights: [4*hiddenSize, inputSize] in order i, f, g, o
+        // Layer order: I (input), F (forget), C (cell/gate), O (output)
+        // Kernel order: i, f, g, o -> I, F, C, O
+        int weightsIhSize = 4 * _hiddenSize * _inputSize;
+        int weightsHhSize = 4 * _hiddenSize * _hiddenSize;
+        int biasSize = 4 * _hiddenSize;
+
+        var stackedIh = new float[weightsIhSize];
+        var stackedHh = new float[weightsHhSize];
+        var stackedBiasIh = new float[biasSize];
+        var stackedBiasHh = new float[biasSize]; // PyTorch uses separate ih/hh biases
+
+        // Convert weights to float arrays
+        var wIi = DirectGpuEngine.ToFloatArray<T>(_weightsIi.ToArray());
+        var wFi = DirectGpuEngine.ToFloatArray<T>(_weightsFi.ToArray());
+        var wCi = DirectGpuEngine.ToFloatArray<T>(_weightsCi.ToArray());
+        var wOi = DirectGpuEngine.ToFloatArray<T>(_weightsOi.ToArray());
+
+        var wIh = DirectGpuEngine.ToFloatArray<T>(_weightsIh.ToArray());
+        var wFh = DirectGpuEngine.ToFloatArray<T>(_weightsFh.ToArray());
+        var wCh = DirectGpuEngine.ToFloatArray<T>(_weightsCh.ToArray());
+        var wOh = DirectGpuEngine.ToFloatArray<T>(_weightsOh.ToArray());
+
+        var bI = DirectGpuEngine.ToFloatArray<T>(_biasI.ToArray());
+        var bF = DirectGpuEngine.ToFloatArray<T>(_biasF.ToArray());
+        var bC = DirectGpuEngine.ToFloatArray<T>(_biasC.ToArray());
+        var bO = DirectGpuEngine.ToFloatArray<T>(_biasO.ToArray());
+
+        // Stack weights in kernel order (i, f, g, o)
+        int inputGateOffset = 0;
+        int forgetGateOffset = _hiddenSize * _inputSize;
+        int cellGateOffset = 2 * _hiddenSize * _inputSize;
+        int outputGateOffset = 3 * _hiddenSize * _inputSize;
+
+        Array.Copy(wIi, 0, stackedIh, inputGateOffset, _hiddenSize * _inputSize);
+        Array.Copy(wFi, 0, stackedIh, forgetGateOffset, _hiddenSize * _inputSize);
+        Array.Copy(wCi, 0, stackedIh, cellGateOffset, _hiddenSize * _inputSize);
+        Array.Copy(wOi, 0, stackedIh, outputGateOffset, _hiddenSize * _inputSize);
+
+        int hhInputGateOffset = 0;
+        int hhForgetGateOffset = _hiddenSize * _hiddenSize;
+        int hhCellGateOffset = 2 * _hiddenSize * _hiddenSize;
+        int hhOutputGateOffset = 3 * _hiddenSize * _hiddenSize;
+
+        Array.Copy(wIh, 0, stackedHh, hhInputGateOffset, _hiddenSize * _hiddenSize);
+        Array.Copy(wFh, 0, stackedHh, hhForgetGateOffset, _hiddenSize * _hiddenSize);
+        Array.Copy(wCh, 0, stackedHh, hhCellGateOffset, _hiddenSize * _hiddenSize);
+        Array.Copy(wOh, 0, stackedHh, hhOutputGateOffset, _hiddenSize * _hiddenSize);
+
+        // Stack biases (put all in biasIh, biasHh will be zeros - matches PyTorch default)
+        int biasInputGateOffset = 0;
+        int biasForgetGateOffset = _hiddenSize;
+        int biasCellGateOffset = 2 * _hiddenSize;
+        int biasOutputGateOffset = 3 * _hiddenSize;
+
+        Array.Copy(bI, 0, stackedBiasIh, biasInputGateOffset, _hiddenSize);
+        Array.Copy(bF, 0, stackedBiasIh, biasForgetGateOffset, _hiddenSize);
+        Array.Copy(bC, 0, stackedBiasIh, biasCellGateOffset, _hiddenSize);
+        Array.Copy(bO, 0, stackedBiasIh, biasOutputGateOffset, _hiddenSize);
+        // stackedBiasHh stays zeros
+
+        // Allocate GPU buffers
+        _gpuStackedWeightsIh?.Dispose();
+        _gpuStackedWeightsHh?.Dispose();
+        _gpuStackedBiasIh?.Dispose();
+        _gpuStackedBiasHh?.Dispose();
+
+        _gpuStackedWeightsIh = backend.AllocateBuffer(stackedIh);
+        _gpuStackedWeightsHh = backend.AllocateBuffer(stackedHh);
+        _gpuStackedBiasIh = backend.AllocateBuffer(stackedBiasIh);
+        _gpuStackedBiasHh = backend.AllocateBuffer(stackedBiasHh);
+        _gpuStackedWeightsValid = true;
+    }
+
+    /// <summary>
+    /// Invalidates and disposes the stacked GPU weight buffers.
+    /// Call this after any weight modification (CPU or GPU side) to ensure
+    /// PrepareStackedWeightsForGpu will rebuild the stacked buffers.
+    /// </summary>
+    private void InvalidateGpuStackedWeights()
+    {
+        _gpuStackedWeightsIh?.Dispose();
+        _gpuStackedWeightsIh = null;
+        _gpuStackedWeightsHh?.Dispose();
+        _gpuStackedWeightsHh = null;
+        _gpuStackedBiasIh?.Dispose();
+        _gpuStackedBiasIh = null;
+        _gpuStackedBiasHh?.Dispose();
+        _gpuStackedBiasHh = null;
+        _gpuStackedWeightsValid = false;
+    }
+
+    /// <summary>
+    /// Extracts per-gate gradients from stacked gradient buffers after fused backward kernel.
+    /// </summary>
+    private void UnstackGradients(
+        IDirectGpuBackend backend,
+        IGpuBuffer stackedGradIh, IGpuBuffer stackedGradHh, IGpuBuffer stackedGradBias,
+        out float[] dWIi, out float[] dWFi, out float[] dWCi, out float[] dWOi,
+        out float[] dWIh, out float[] dWFh, out float[] dWCh, out float[] dWOh,
+        out float[] dBI, out float[] dBF, out float[] dBC, out float[] dBO)
+    {
+        int weightsIhSize = 4 * _hiddenSize * _inputSize;
+        int weightsHhSize = 4 * _hiddenSize * _hiddenSize;
+        int biasSize = 4 * _hiddenSize;
+
+        var stackedIh = new float[weightsIhSize];
+        var stackedHh = new float[weightsHhSize];
+        var stackedBias = new float[biasSize];
+
+        backend.DownloadBuffer(stackedGradIh, stackedIh);
+        backend.DownloadBuffer(stackedGradHh, stackedHh);
+        backend.DownloadBuffer(stackedGradBias, stackedBias);
+
+        // Extract per-gate gradients from stacked format
+        dWIi = new float[_hiddenSize * _inputSize];
+        dWFi = new float[_hiddenSize * _inputSize];
+        dWCi = new float[_hiddenSize * _inputSize];
+        dWOi = new float[_hiddenSize * _inputSize];
+
+        Array.Copy(stackedIh, 0, dWIi, 0, _hiddenSize * _inputSize);
+        Array.Copy(stackedIh, _hiddenSize * _inputSize, dWFi, 0, _hiddenSize * _inputSize);
+        Array.Copy(stackedIh, 2 * _hiddenSize * _inputSize, dWCi, 0, _hiddenSize * _inputSize);
+        Array.Copy(stackedIh, 3 * _hiddenSize * _inputSize, dWOi, 0, _hiddenSize * _inputSize);
+
+        dWIh = new float[_hiddenSize * _hiddenSize];
+        dWFh = new float[_hiddenSize * _hiddenSize];
+        dWCh = new float[_hiddenSize * _hiddenSize];
+        dWOh = new float[_hiddenSize * _hiddenSize];
+
+        Array.Copy(stackedHh, 0, dWIh, 0, _hiddenSize * _hiddenSize);
+        Array.Copy(stackedHh, _hiddenSize * _hiddenSize, dWFh, 0, _hiddenSize * _hiddenSize);
+        Array.Copy(stackedHh, 2 * _hiddenSize * _hiddenSize, dWCh, 0, _hiddenSize * _hiddenSize);
+        Array.Copy(stackedHh, 3 * _hiddenSize * _hiddenSize, dWOh, 0, _hiddenSize * _hiddenSize);
+
+        dBI = new float[_hiddenSize];
+        dBF = new float[_hiddenSize];
+        dBC = new float[_hiddenSize];
+        dBO = new float[_hiddenSize];
+
+        Array.Copy(stackedBias, 0, dBI, 0, _hiddenSize);
+        Array.Copy(stackedBias, _hiddenSize, dBF, 0, _hiddenSize);
+        Array.Copy(stackedBias, 2 * _hiddenSize, dBC, 0, _hiddenSize);
+        Array.Copy(stackedBias, 3 * _hiddenSize, dBO, 0, _hiddenSize);
+    }
+
+    /// <summary>
+    /// GPU-resident backward pass for LSTM using fused sequence kernel.
+    /// Computes gradients for all weights in a single kernel launch.
     /// </summary>
     /// <param name="outputGradient">GPU-resident gradient from upstream layer.</param>
     /// <returns>GPU-resident gradient to pass to previous layer.</returns>
     /// <remarks>
     /// <para>
-    /// This method implements the GPU-accelerated backward pass of the LSTM layer.
-    /// It processes the sequence in reverse order (from the last time step to the first),
-    /// computing gradients for all gate parameters (forget, input, cell, output),
-    /// hidden states, and cell states.
+    /// This method implements the GPU-accelerated backward pass of the LSTM layer
+    /// using a fused sequence kernel that processes all timesteps in one kernel launch.
     /// </para>
     /// <para><b>For Beginners:</b> This is the GPU version of backpropagation through time.
     /// All computations stay on the GPU for maximum performance.
@@ -1497,221 +1607,70 @@ public class LSTMLayer<T> : LayerBase<T>
 
         var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
 
-        if (_gpuLastInput == null || _gpuCachedForgetGates == null || _gpuCachedInputGates == null ||
-            _gpuCachedCellCandidates == null || _gpuCachedOutputGates == null ||
-            _gpuCachedCellStates == null || _gpuCachedHiddenStates == null)
+        // Validate forward pass was called with fused kernel cache
+        if (_gpuLastInput == null || _gpuFusedAllH == null || _gpuFusedAllC == null || _gpuFusedCacheGates == null)
             throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
 
+        if (_gpuStackedWeightsIh == null || _gpuStackedWeightsHh == null)
+            throw new InvalidOperationException("Stacked weights not prepared. ForwardGpu must be called first.");
+
+        if (_gpuInitialHiddenState == null || _gpuInitialCellState == null)
+            throw new InvalidOperationException("Initial hidden/cell states not cached. ForwardGpu must be called with training mode enabled.");
+
+        // Determine dimensions from input
+        // For 2D input [batchSize, inputSize]: batchSize = Shape[0], timeSteps = 1
+        // For 3D+ input [batchSize, timeSteps, inputSize]: batchSize = Shape[0], timeSteps = Shape[1]
         int batchSize = _gpuLastInput.Shape[0];
-        int timeSteps = _gpuCachedForgetGates.Length;
+        int timeSteps = _gpuLastInput.Shape.Length >= 3 ? _gpuLastInput.Shape[1] : 1;
+        bool is2DInput = _gpuLastInput.Shape.Length == 2;
+
         int hiddenBufferSize = batchSize * _hiddenSize;
         int inputBufferSize = batchSize * _inputSize;
+        int inputGradientSize = is2DInput ? batchSize * _inputSize : batchSize * timeSteps * _inputSize;
+        int weightsIhSize = 4 * _hiddenSize * _inputSize;
+        int weightsHhSize = 4 * _hiddenSize * _hiddenSize;
+        int biasSize = 4 * _hiddenSize;
 
-        // Initialize gradient accumulators for weights (zeros)
-        var dWfiBuffer = backend.AllocateBuffer(_hiddenSize * _inputSize);
-        var dWiiBuffer = backend.AllocateBuffer(_hiddenSize * _inputSize);
-        var dWciBuffer = backend.AllocateBuffer(_hiddenSize * _inputSize);
-        var dWoiBuffer = backend.AllocateBuffer(_hiddenSize * _inputSize);
-        var dWfhBuffer = backend.AllocateBuffer(_hiddenSize * _hiddenSize);
-        var dWihBuffer = backend.AllocateBuffer(_hiddenSize * _hiddenSize);
-        var dWchBuffer = backend.AllocateBuffer(_hiddenSize * _hiddenSize);
-        var dWohBuffer = backend.AllocateBuffer(_hiddenSize * _hiddenSize);
-        var dBfBuffer = backend.AllocateBuffer(_hiddenSize);
-        var dBiBuffer = backend.AllocateBuffer(_hiddenSize);
-        var dBcBuffer = backend.AllocateBuffer(_hiddenSize);
-        var dBoBuffer = backend.AllocateBuffer(_hiddenSize);
-
-        backend.Fill(dWfiBuffer, 0.0f, _hiddenSize * _inputSize);
-        backend.Fill(dWiiBuffer, 0.0f, _hiddenSize * _inputSize);
-        backend.Fill(dWciBuffer, 0.0f, _hiddenSize * _inputSize);
-        backend.Fill(dWoiBuffer, 0.0f, _hiddenSize * _inputSize);
-        backend.Fill(dWfhBuffer, 0.0f, _hiddenSize * _hiddenSize);
-        backend.Fill(dWihBuffer, 0.0f, _hiddenSize * _hiddenSize);
-        backend.Fill(dWchBuffer, 0.0f, _hiddenSize * _hiddenSize);
-        backend.Fill(dWohBuffer, 0.0f, _hiddenSize * _hiddenSize);
-        backend.Fill(dBfBuffer, 0.0f, _hiddenSize);
-        backend.Fill(dBiBuffer, 0.0f, _hiddenSize);
-        backend.Fill(dBcBuffer, 0.0f, _hiddenSize);
-        backend.Fill(dBoBuffer, 0.0f, _hiddenSize);
-
-        // Allocate input gradient buffer
-        int inputGradientSize = batchSize * timeSteps * _inputSize;
-        var inputGradientBuffer = backend.AllocateBuffer(inputGradientSize);
-        backend.Fill(inputGradientBuffer, 0.0f, inputGradientSize);
-
-        // Upload transposed weights to GPU for backward matmul
-        using var WfiT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weightsFi.ToArray()));
-        using var WiiT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weightsIi.ToArray()));
-        using var WciT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weightsCi.ToArray()));
-        using var WoiT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weightsOi.ToArray()));
-        using var WfhT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weightsFh.ToArray()));
-        using var WihT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weightsIh.ToArray()));
-        using var WchT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weightsCh.ToArray()));
-        using var WohT = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_weightsOh.ToArray()));
-
-        // Temporary buffers
-        var dHNext = backend.AllocateBuffer(hiddenBufferSize);
-        var dCNext = backend.AllocateBuffer(hiddenBufferSize);
-        var tempBuffer1 = backend.AllocateBuffer(hiddenBufferSize);
-        var tempBuffer2 = backend.AllocateBuffer(hiddenBufferSize);
-        // Weight gradient buffer needs to hold max of input and hidden weight sizes
-        int maxWeightSize = Math.Max(_inputSize, _hiddenSize) * _hiddenSize;
-        var weightGradBuffer = backend.AllocateBuffer(maxWeightSize);
-        // Temp buffer for input gradient computation (batchSize x inputSize)
-        var inputGradTemp = backend.AllocateBuffer(inputBufferSize);
-        var dO = backend.AllocateBuffer(hiddenBufferSize);
-        var dC = backend.AllocateBuffer(hiddenBufferSize);
-        var dF = backend.AllocateBuffer(hiddenBufferSize);
-        var dI = backend.AllocateBuffer(hiddenBufferSize);
-        var dCTilde = backend.AllocateBuffer(hiddenBufferSize);
-        var tanhC = backend.AllocateBuffer(hiddenBufferSize);
-
-        // Additional buffers for transpose operations (GemmTN replacement)
-        var inputTranspose = backend.AllocateBuffer(inputBufferSize);
-        var hiddenTranspose = backend.AllocateBuffer(hiddenBufferSize);
-        var gateGradTranspose = backend.AllocateBuffer(hiddenBufferSize);
-        // Temp buffer for hidden gradient computation (batchSize x hiddenSize)
-        var hiddenGradTemp = backend.AllocateBuffer(hiddenBufferSize);
-
-        backend.Fill(dHNext, 0.0f, hiddenBufferSize);
-        backend.Fill(dCNext, 0.0f, hiddenBufferSize);
+        // Allocate output gradient buffers
+        var gradInputBuffer = backend.AllocateBuffer(inputGradientSize);
+        var gradHInitBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var gradCInitBuffer = backend.AllocateBuffer(hiddenBufferSize);
+        var gradWeightsIhBuffer = backend.AllocateBuffer(weightsIhSize);
+        var gradWeightsHhBuffer = backend.AllocateBuffer(weightsHhSize);
+        var gradBiasIhBuffer = backend.AllocateBuffer(biasSize);
+        var gradBiasHhBuffer = backend.AllocateBuffer(biasSize);
 
         try
         {
-            // Process each time step in reverse order (BPTT)
-            for (int t = timeSteps - 1; t >= 0; t--)
-            {
-                // Get output gradient for this timestep
-                int gradOffset = t * hiddenBufferSize;
-                var gradSlice = outputGradient.CreateView(gradOffset, [batchSize, _hiddenSize]);
+            // Call fused LSTM backward sequence kernel (processes all timesteps in one kernel launch)
+            backend.LstmBackwardSequence(
+                outputGradient.Buffer, _gpuFusedAllH, _gpuFusedAllC, _gpuFusedCacheGates,
+                _gpuInitialHiddenState.Buffer, _gpuInitialCellState.Buffer,
+                _gpuStackedWeightsIh, _gpuStackedWeightsHh, _gpuLastInput.Buffer,
+                gradInputBuffer, gradHInitBuffer, gradCInitBuffer,
+                gradWeightsIhBuffer, gradWeightsHhBuffer, gradBiasIhBuffer, gradBiasHhBuffer,
+                timeSteps, batchSize, _inputSize, _hiddenSize);
 
-                // Add gradient from next timestep to current output gradient
-                backend.Add(gradSlice.Buffer, dHNext, dHNext, hiddenBufferSize);
+            // Unstack gradients from kernel format (i, f, g, o) to layer format (I, F, C, O)
+            UnstackGradients(
+                backend, gradWeightsIhBuffer, gradWeightsHhBuffer, gradBiasIhBuffer,
+                out var dWIi, out var dWFi, out var dWCi, out var dWOi,
+                out var dWIh, out var dWFh, out var dWCh, out var dWOh,
+                out var dBI, out var dBF, out var dBC, out var dBO);
 
-                // Get cached states
-                var f_t = _gpuCachedForgetGates[t];
-                var i_t = _gpuCachedInputGates[t];
-                var cTilde_t = _gpuCachedCellCandidates[t];
-                var o_t = _gpuCachedOutputGates[t];
-                var c_t = _gpuCachedCellStates[t];
-                var h_t = _gpuCachedHiddenStates[t];
-
-                // Get previous states
-                IGpuTensor<T> c_prev = t > 0 ? _gpuCachedCellStates[t - 1] : _gpuInitialCellState!;
-                IGpuTensor<T> h_prev = t > 0 ? _gpuCachedHiddenStates[t - 1] : _gpuInitialHiddenState!;
-
-                // dO = dH * tanh(C) * sigmoid'(o) where sigmoid'(o) = o * (1 - o)
-                backend.Tanh(c_t.Buffer, tanhC, hiddenBufferSize);
-                backend.Multiply(dHNext, tanhC, tempBuffer1, hiddenBufferSize);
-                // SigmoidBackward computes: dO = tempBuffer1 * o * (1 - o)
-                backend.SigmoidBackward(tempBuffer1, o_t.Buffer, dO, hiddenBufferSize);
-
-                // dC = dH * o * tanh'(C) + dC_next where tanh'(C) = 1 - tanh(C)^2
-                backend.Multiply(dHNext, o_t.Buffer, tempBuffer1, hiddenBufferSize);
-                // TanhBackward computes: dC = tempBuffer1 * (1 - tanh(c_t)^2)
-                // Note: tanhC already contains tanh(c_t) from above
-                backend.TanhBackward(tempBuffer1, tanhC, dC, hiddenBufferSize);
-                backend.Add(dC, dCNext, dC, hiddenBufferSize);
-
-                // dF = dC * C_prev * sigmoid'(f) where sigmoid'(f) = f * (1 - f)
-                backend.Multiply(dC, c_prev.Buffer, tempBuffer1, hiddenBufferSize);
-                backend.SigmoidBackward(tempBuffer1, f_t.Buffer, dF, hiddenBufferSize);
-
-                // dI = dC * cTilde * sigmoid'(i) where sigmoid'(i) = i * (1 - i)
-                backend.Multiply(dC, cTilde_t.Buffer, tempBuffer1, hiddenBufferSize);
-                backend.SigmoidBackward(tempBuffer1, i_t.Buffer, dI, hiddenBufferSize);
-
-                // dCTilde = dC * i * tanh'(cTilde) where tanh'(cTilde) = 1 - cTilde^2
-                backend.Multiply(dC, i_t.Buffer, tempBuffer1, hiddenBufferSize);
-                backend.TanhBackward(tempBuffer1, cTilde_t.Buffer, dCTilde, hiddenBufferSize);
-
-                // dC_next = dC * f (for next iteration, which is previous timestep)
-                backend.Multiply(dC, f_t.Buffer, dCNext, hiddenBufferSize);
-
-                // Get input for this timestep
-                int inputOffset = t * inputBufferSize;
-                var inputSlice = _gpuLastInput.CreateView(inputOffset, [batchSize, _inputSize]);
-
-                // Accumulate weight gradients using outer products
-                // dW_i += x^T @ dGate (for input weights)
-                // dW_h += h_prev^T @ dGate (for hidden weights)
-                // dB += sum(dGate, axis=0) (for biases)
-
-                // Forget gate gradients
-                // dWfi += input^T @ dF: Transpose input then Gemm
-                backend.Transpose(inputSlice.Buffer, inputTranspose, batchSize, _inputSize);
-                backend.Gemm(inputTranspose, dF, weightGradBuffer, _inputSize, _hiddenSize, batchSize);
-                backend.Add(dWfiBuffer, weightGradBuffer, dWfiBuffer, _hiddenSize * _inputSize);
-                // dWfh += h_prev^T @ dF: Transpose h_prev then Gemm
-                backend.Transpose(h_prev.Buffer, hiddenTranspose, batchSize, _hiddenSize);
-                backend.Gemm(hiddenTranspose, dF, weightGradBuffer, _hiddenSize, _hiddenSize, batchSize);
-                backend.Add(dWfhBuffer, weightGradBuffer, dWfhBuffer, _hiddenSize * _hiddenSize);
-                // dBf += sum(dF, axis=0): Transpose then SumAxis
-                backend.Transpose(dF, gateGradTranspose, batchSize, _hiddenSize);
-                backend.SumAxis(gateGradTranspose, tempBuffer1, _hiddenSize, batchSize);
-                backend.Add(dBfBuffer, tempBuffer1, dBfBuffer, _hiddenSize);
-
-                // Input gate gradients
-                // dWii += input^T @ dI: input already transposed above
-                backend.Gemm(inputTranspose, dI, weightGradBuffer, _inputSize, _hiddenSize, batchSize);
-                backend.Add(dWiiBuffer, weightGradBuffer, dWiiBuffer, _hiddenSize * _inputSize);
-                // dWih += h_prev^T @ dI: h_prev already transposed above
-                backend.Gemm(hiddenTranspose, dI, weightGradBuffer, _hiddenSize, _hiddenSize, batchSize);
-                backend.Add(dWihBuffer, weightGradBuffer, dWihBuffer, _hiddenSize * _hiddenSize);
-                // dBi += sum(dI, axis=0): Transpose then SumAxis
-                backend.Transpose(dI, gateGradTranspose, batchSize, _hiddenSize);
-                backend.SumAxis(gateGradTranspose, tempBuffer1, _hiddenSize, batchSize);
-                backend.Add(dBiBuffer, tempBuffer1, dBiBuffer, _hiddenSize);
-
-                // Cell candidate gradients
-                // dWci += input^T @ dCTilde: input already transposed above
-                backend.Gemm(inputTranspose, dCTilde, weightGradBuffer, _inputSize, _hiddenSize, batchSize);
-                backend.Add(dWciBuffer, weightGradBuffer, dWciBuffer, _hiddenSize * _inputSize);
-                // dWch += h_prev^T @ dCTilde: h_prev already transposed above
-                backend.Gemm(hiddenTranspose, dCTilde, weightGradBuffer, _hiddenSize, _hiddenSize, batchSize);
-                backend.Add(dWchBuffer, weightGradBuffer, dWchBuffer, _hiddenSize * _hiddenSize);
-                // dBc += sum(dCTilde, axis=0): Transpose then SumAxis
-                backend.Transpose(dCTilde, gateGradTranspose, batchSize, _hiddenSize);
-                backend.SumAxis(gateGradTranspose, tempBuffer1, _hiddenSize, batchSize);
-                backend.Add(dBcBuffer, tempBuffer1, dBcBuffer, _hiddenSize);
-
-                // Output gate gradients
-                // dWoi += input^T @ dO: input already transposed above
-                backend.Gemm(inputTranspose, dO, weightGradBuffer, _inputSize, _hiddenSize, batchSize);
-                backend.Add(dWoiBuffer, weightGradBuffer, dWoiBuffer, _hiddenSize * _inputSize);
-                // dWoh += h_prev^T @ dO: h_prev already transposed above
-                backend.Gemm(hiddenTranspose, dO, weightGradBuffer, _hiddenSize, _hiddenSize, batchSize);
-                backend.Add(dWohBuffer, weightGradBuffer, dWohBuffer, _hiddenSize * _hiddenSize);
-                // dBo += sum(dO, axis=0): Transpose then SumAxis
-                backend.Transpose(dO, gateGradTranspose, batchSize, _hiddenSize);
-                backend.SumAxis(gateGradTranspose, tempBuffer1, _hiddenSize, batchSize);
-                backend.Add(dBoBuffer, tempBuffer1, dBoBuffer, _hiddenSize);
-
-                // Compute input gradient for this timestep
-                // dX = dF @ Wfi + dI @ Wii + dCTilde @ Wci + dO @ Woi
-                var inputGradSlice = backend.AllocateBuffer(inputBufferSize);
-                backend.Gemm(dF, WfiT, inputGradSlice, batchSize, _inputSize, _hiddenSize);
-                backend.Gemm(dI, WiiT, inputGradTemp, batchSize, _inputSize, _hiddenSize);
-                backend.Add(inputGradSlice, inputGradTemp, inputGradSlice, inputBufferSize);
-                backend.Gemm(dCTilde, WciT, inputGradTemp, batchSize, _inputSize, _hiddenSize);
-                backend.Add(inputGradSlice, inputGradTemp, inputGradSlice, inputBufferSize);
-                backend.Gemm(dO, WoiT, inputGradTemp, batchSize, _inputSize, _hiddenSize);
-                backend.Add(inputGradSlice, inputGradTemp, inputGradSlice, inputBufferSize);
-
-                // Store input gradient
-                backend.Copy2DStrided(inputGradSlice, inputGradientBuffer, 1, inputBufferSize, inputGradientSize, inputOffset);
-                inputGradSlice.Dispose();
-
-                // Compute dH_next for previous timestep
-                // dH_prev = dF @ Wfh + dI @ Wih + dCTilde @ Wch + dO @ Woh
-                backend.Gemm(dF, WfhT, dHNext, batchSize, _hiddenSize, _hiddenSize);
-                backend.Gemm(dI, WihT, hiddenGradTemp, batchSize, _hiddenSize, _hiddenSize);
-                backend.Add(dHNext, hiddenGradTemp, dHNext, hiddenBufferSize);
-                backend.Gemm(dCTilde, WchT, hiddenGradTemp, batchSize, _hiddenSize, _hiddenSize);
-                backend.Add(dHNext, hiddenGradTemp, dHNext, hiddenBufferSize);
-                backend.Gemm(dO, WohT, hiddenGradTemp, batchSize, _hiddenSize, _hiddenSize);
-                backend.Add(dHNext, hiddenGradTemp, dHNext, hiddenBufferSize);
-            }
+            // Allocate individual gradient buffers and upload unstacked gradients
+            var dWfiBuffer = backend.AllocateBuffer(dWFi);
+            var dWiiBuffer = backend.AllocateBuffer(dWIi);
+            var dWciBuffer = backend.AllocateBuffer(dWCi);
+            var dWoiBuffer = backend.AllocateBuffer(dWOi);
+            var dWfhBuffer = backend.AllocateBuffer(dWFh);
+            var dWihBuffer = backend.AllocateBuffer(dWIh);
+            var dWchBuffer = backend.AllocateBuffer(dWCh);
+            var dWohBuffer = backend.AllocateBuffer(dWOh);
+            var dBfBuffer = backend.AllocateBuffer(dBF);
+            var dBiBuffer = backend.AllocateBuffer(dBI);
+            var dBcBuffer = backend.AllocateBuffer(dBC);
+            var dBoBuffer = backend.AllocateBuffer(dBO);
 
             // Store gradient tensors for UpdateParametersGpu
             _gpuWeightsFiGradient = new GpuTensor<T>(backend, dWfiBuffer, [_hiddenSize, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
@@ -1727,57 +1686,27 @@ public class LSTMLayer<T> : LayerBase<T>
             _gpuBiasCGradient = new GpuTensor<T>(backend, dBcBuffer, [_hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
             _gpuBiasOGradient = new GpuTensor<T>(backend, dBoBuffer, [_hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
 
-            // Cleanup temporary buffers
-            dHNext.Dispose();
-            dCNext.Dispose();
-            tempBuffer1.Dispose();
-            tempBuffer2.Dispose();
-            weightGradBuffer.Dispose();
-            inputGradTemp.Dispose();
-            inputTranspose.Dispose();
-            hiddenTranspose.Dispose();
-            gateGradTranspose.Dispose();
-            hiddenGradTemp.Dispose();
-            dO.Dispose();
-            dC.Dispose();
-            dF.Dispose();
-            dI.Dispose();
-            dCTilde.Dispose();
-            tanhC.Dispose();
+            // Cleanup temporary buffers (stacked gradient buffers)
+            gradHInitBuffer.Dispose();
+            gradCInitBuffer.Dispose();
+            gradWeightsIhBuffer.Dispose();
+            gradWeightsHhBuffer.Dispose();
+            gradBiasIhBuffer.Dispose();
+            gradBiasHhBuffer.Dispose();
 
-            return new GpuTensor<T>(backend, inputGradientBuffer, [batchSize, timeSteps, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
+            // Return gradient with shape matching input: [batchSize, inputSize] for 2D, [batchSize, timeSteps, inputSize] for 3D+
+            int[] gradShape = is2DInput ? [batchSize, _inputSize] : [batchSize, timeSteps, _inputSize];
+            return new GpuTensor<T>(backend, gradInputBuffer, gradShape, GpuTensorRole.Gradient, ownsBuffer: true);
         }
         catch
         {
-            dWfiBuffer.Dispose();
-            dWiiBuffer.Dispose();
-            dWciBuffer.Dispose();
-            dWoiBuffer.Dispose();
-            dWfhBuffer.Dispose();
-            dWihBuffer.Dispose();
-            dWchBuffer.Dispose();
-            dWohBuffer.Dispose();
-            dBfBuffer.Dispose();
-            dBiBuffer.Dispose();
-            dBcBuffer.Dispose();
-            dBoBuffer.Dispose();
-            inputGradientBuffer.Dispose();
-            dHNext.Dispose();
-            dCNext.Dispose();
-            tempBuffer1.Dispose();
-            tempBuffer2.Dispose();
-            weightGradBuffer.Dispose();
-            inputGradTemp.Dispose();
-            inputTranspose.Dispose();
-            hiddenTranspose.Dispose();
-            gateGradTranspose.Dispose();
-            hiddenGradTemp.Dispose();
-            dO.Dispose();
-            dC.Dispose();
-            dF.Dispose();
-            dI.Dispose();
-            dCTilde.Dispose();
-            tanhC.Dispose();
+            gradInputBuffer.Dispose();
+            gradHInitBuffer.Dispose();
+            gradCInitBuffer.Dispose();
+            gradWeightsIhBuffer.Dispose();
+            gradWeightsHhBuffer.Dispose();
+            gradBiasIhBuffer.Dispose();
+            gradBiasHhBuffer.Dispose();
             throw;
         }
     }
@@ -1846,6 +1775,9 @@ public class LSTMLayer<T> : LayerBase<T>
         _biasI = _gpuBiasI.ToTensor();
         _biasC = _gpuBiasC.ToTensor();
         _biasO = _gpuBiasO.ToTensor();
+
+        // Invalidate stacked weight buffers since individual weights have been modified
+        InvalidateGpuStackedWeights();
     }
 
     /// <summary>
@@ -2584,6 +2516,9 @@ public class LSTMLayer<T> : LayerBase<T>
             Engine.InvalidatePersistentTensor(_biasC);
             Engine.InvalidatePersistentTensor(_biasO);
         }
+
+        // Invalidate stacked weight buffers since weights have been modified
+        InvalidateGpuStackedWeights();
     }
 
     /// <summary>
@@ -2658,6 +2593,9 @@ public class LSTMLayer<T> : LayerBase<T>
         _biasI = SerializationHelper<T>.DeserializeTensor(reader);
         _biasC = SerializationHelper<T>.DeserializeTensor(reader);
         _biasO = SerializationHelper<T>.DeserializeTensor(reader);
+
+        // Invalidate stacked weight buffers since weights have been replaced from deserialization
+        InvalidateGpuStackedWeights();
     }
 
     /// <summary>
