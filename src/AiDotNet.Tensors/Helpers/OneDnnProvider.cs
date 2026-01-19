@@ -107,8 +107,8 @@ internal static class OneDnnProvider
     private const int DnnlConvolutionWinograd = 2;
     private const int DnnlF32 = 3;
 
-    // Format tags
-    private const int DnnlFormatTagAny = 0;  // Let oneDNN choose optimal format
+    // Format tags (from dnnl_types.h)
+    private const int DnnlFormatTagAny = 1;  // Let oneDNN choose optimal format (format_tag_any = 1, not 0)
     private const int DnnlFormatTagNCHW = 11; // abcd format for 4D tensors
     private const int DnnlFormatTagOIHW = 11; // Same as NCHW for weights
 
@@ -577,6 +577,10 @@ internal static class OneDnnProvider
     {
         var cached = new CachedConv2D { OutHeight = outHeight, OutWidth = outWidth };
 
+        IntPtr anySrcDesc = IntPtr.Zero;
+        IntPtr anyWeightsDesc = IntPtr.Zero;
+        IntPtr anyDstDesc = IntPtr.Zero;
+
         try
         {
             // Create dimension arrays
@@ -643,12 +647,44 @@ internal static class OneDnnProvider
             status = dnnl_memory_desc_create_with_strides(out cached.UserDstDesc, 4, dstDims, DnnlF32, dstStrides);
             if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create user dst desc: {status}"); cached.Dispose(); return null; }
 
-            // Create convolution primitive descriptor with user format descriptors
-            // oneDNN will internally choose optimal layout for execution
-            status = dnnl_convolution_forward_primitive_desc_create(
-                out cached.PrimDesc, _engine, DnnlForwardInference, DnnlConvolutionAuto,
-                cached.UserSrcDesc, cached.UserWeightsDesc, IntPtr.Zero, cached.UserDstDesc,
-                stridesArr, dilatesArr, paddingLArr, paddingRArr, IntPtr.Zero);
+            // Determine whether to use format_tag_any (blocked formats) or user format (NCHW)
+            // Blocked formats enable brgconv algorithm which is ~6x faster than GEMM, even with reorder overhead
+            // Only skip for very small tensors where primitive overhead dominates
+            long outputElements = (long)key.Batch * key.OutChannels * outHeight * outWidth;
+            bool useBlockedFormat = outputElements >= 8 * 1024; // 8K elements (~32KB output) - use blocked for most cases
+
+            if (logThis)
+            {
+                Console.WriteLine($"[oneDNN] Output elements: {outputElements}, using blocked format: {useBlockedFormat}");
+            }
+
+            if (useBlockedFormat)
+            {
+                // Create "any" format descriptors to let oneDNN choose optimal layout
+                // This enables blocked formats (nChw16c) which allow Winograd for 3x3 kernels
+                status = dnnl_memory_desc_create_with_tag(out anySrcDesc, 4, srcDims, DnnlF32, DnnlFormatTagAny);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create any src desc: {status}"); cached.Dispose(); return null; }
+
+                status = dnnl_memory_desc_create_with_tag(out anyWeightsDesc, 4, weightsDims, DnnlF32, DnnlFormatTagAny);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create any weights desc: {status}"); cached.Dispose(); return null; }
+
+                status = dnnl_memory_desc_create_with_tag(out anyDstDesc, 4, dstDims, DnnlF32, DnnlFormatTagAny);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create any dst desc: {status}"); cached.Dispose(); return null; }
+
+                // Create convolution primitive descriptor with "any" format descriptors
+                status = dnnl_convolution_forward_primitive_desc_create(
+                    out cached.PrimDesc, _engine, DnnlForwardInference, DnnlConvolutionAuto,
+                    anySrcDesc, anyWeightsDesc, IntPtr.Zero, anyDstDesc,
+                    stridesArr, dilatesArr, paddingLArr, paddingRArr, IntPtr.Zero);
+            }
+            else
+            {
+                // Use user format (NCHW) directly to avoid reorder overhead for small tensors
+                status = dnnl_convolution_forward_primitive_desc_create(
+                    out cached.PrimDesc, _engine, DnnlForwardInference, DnnlConvolutionAuto,
+                    cached.UserSrcDesc, cached.UserWeightsDesc, IntPtr.Zero, cached.UserDstDesc,
+                    stridesArr, dilatesArr, paddingLArr, paddingRArr, IntPtr.Zero);
+            }
             if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create conv prim desc: {status}"); cached.Dispose(); return null; }
 
             // Query the memory descriptors that oneDNN chose
@@ -768,6 +804,13 @@ internal static class OneDnnProvider
             if (logThis) Console.WriteLine($"[oneDNN] CreateConv2DPrimitive exception: {ex.Message}");
             cached.Dispose();
             return null;
+        }
+        finally
+        {
+            // Clean up "any" format descriptors (they're no longer needed after primitive creation)
+            if (anySrcDesc != IntPtr.Zero) dnnl_memory_desc_destroy(anySrcDesc);
+            if (anyWeightsDesc != IntPtr.Zero) dnnl_memory_desc_destroy(anyWeightsDesc);
+            if (anyDstDesc != IntPtr.Zero) dnnl_memory_desc_destroy(anyDstDesc);
         }
     }
 

@@ -54,7 +54,7 @@ public class CpuEngine : IEngine
             throw new ArgumentException($"Vector lengths must match. Got {a.Length} and {b.Length}");
         }
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10x speedup for float)
         return TensorPrimitivesHelper<T>.Add(a, b);
     }
 
@@ -68,7 +68,7 @@ public class CpuEngine : IEngine
             throw new ArgumentException($"Vector lengths must match. Got {a.Length} and {b.Length}");
         }
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10x speedup for float)
         return TensorPrimitivesHelper<T>.Subtract(a, b);
     }
 
@@ -82,7 +82,7 @@ public class CpuEngine : IEngine
             throw new ArgumentException($"Vector lengths must match. Got {a.Length} and {b.Length}");
         }
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10x speedup for float)
         return TensorPrimitivesHelper<T>.Multiply(a, b);
     }
 
@@ -117,7 +117,7 @@ public class CpuEngine : IEngine
             }
         }
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10x speedup for float)
         return TensorPrimitivesHelper<T>.Divide(a, b);
     }
 
@@ -144,7 +144,7 @@ public class CpuEngine : IEngine
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10x speedup for float)
         return TensorPrimitivesHelper<T>.Sqrt(vector);
     }
 
@@ -227,7 +227,7 @@ public class CpuEngine : IEngine
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6x speedup for float)
         return TensorPrimitivesHelper<T>.Exp(vector);
     }
 
@@ -236,7 +236,7 @@ public class CpuEngine : IEngine
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6x speedup for float)
         return TensorPrimitivesHelper<T>.Log(vector);
     }
 
@@ -397,7 +397,7 @@ public class CpuEngine : IEngine
         if (vector == null) throw new ArgumentNullException(nameof(vector));
         if (vector.Length == 0) throw new ArgumentException("Cannot compute softmax of empty vector.");
 
-        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6x speedup for float)
         return TensorPrimitivesHelper<T>.Softmax(vector);
     }
 
@@ -409,7 +409,7 @@ public class CpuEngine : IEngine
         if (a.Length != b.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        // Use SIMD-optimized TensorPrimitivesHelper (10-15ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (10-15x speedup for float)
         return TensorPrimitivesHelper<T>.CosineSimilarity(a, b);
     }
 
@@ -418,7 +418,7 @@ public class CpuEngine : IEngine
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6x speedup for float)
         return TensorPrimitivesHelper<T>.Log2(vector);
     }
 
@@ -3976,7 +3976,7 @@ public class CpuEngine : IEngine
         if (vector == null)
             throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized Tanh (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized Tanh (3-6x speedup for float)
         return TensorPrimitivesHelper<T>.Tanh(vector);
     }
 
@@ -3985,7 +3985,7 @@ public class CpuEngine : IEngine
         if (vector == null)
             throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized Sigmoid (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized Sigmoid (3-6x speedup for float)
         return TensorPrimitivesHelper<T>.Sigmoid(vector);
     }
 
