@@ -69,11 +69,13 @@ Add to your `.csproj` file:
 
 For GPU-accelerated training on NVIDIA GPUs:
 
-1. **Install CUDA Toolkit 11.8+**
+1. **Install CUDA Toolkit 12.x+ (or 11.8+ minimum)**
    - Download from [NVIDIA CUDA Downloads](https://developer.nvidia.com/cuda-downloads)
+   - CUDA 12.x recommended for best performance with modern GPUs
 
-2. **Install cuDNN 8.6+**
+2. **Install cuDNN 9.x+ (or 8.6+ minimum)**
    - Download from [NVIDIA cuDNN](https://developer.nvidia.com/cudnn)
+   - cuDNN 9.x recommended for compatibility with CUDA 12.x
 
 3. **Verify installation**
    ```bash
@@ -115,8 +117,8 @@ using AiDotNet;
 Console.WriteLine("AiDotNet installed successfully!");
 
 // Test basic functionality
-var builder = new PredictionModelBuilder<double, double[], double>();
-Console.WriteLine("PredictionModelBuilder created.");
+var builder = new AiModelBuilder<double, double[], double>();
+Console.WriteLine("AiModelBuilder created.");
 ```
 
 Run it:

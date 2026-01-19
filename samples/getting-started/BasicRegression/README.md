@@ -4,7 +4,7 @@ This sample demonstrates regression using a house price prediction model.
 
 ## What You'll Learn
 
-- How to use `PredictionModelBuilder` for regression tasks
+- How to use `AiModelBuilder` for regression tasks
 - How to configure multiple regression algorithms
 - How to evaluate regression metrics (R², MAE, RMSE)
 - How to compare model performance
@@ -49,7 +49,7 @@ Sample Predictions:
 ## Key Code
 
 ```csharp
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new GradientBoostingRegression<double>(
         nEstimators: 100,
         maxDepth: 5,

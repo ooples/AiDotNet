@@ -132,8 +132,8 @@ The detailed version history is available on GitHub:
 AiDotNet follows [Semantic Versioning](https://semver.org/):
 
 - **MAJOR**: Breaking API changes
-- **MINOR**: New features, backward compatible
-- **PATCH**: Bug fixes, backward compatible
+- **MINOR**: New features, backward-compatible
+- **PATCH**: Bug fixes, backward-compatible
 
 ---
 

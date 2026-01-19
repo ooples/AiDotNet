@@ -57,7 +57,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
     /// Gets or sets options controlling optional post-search ensembling.
     /// </summary>
     /// <remarks>
-    /// This is primarily used by the facade options overload in <c>PredictionModelBuilder</c>.
+    /// This is primarily used by the facade options overload in <c>AiModelBuilder</c>.
     /// </remarks>
     public AutoMLEnsembleOptions EnsembleOptions { get; set; } = new();
 

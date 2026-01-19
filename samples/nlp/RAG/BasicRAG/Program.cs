@@ -68,7 +68,7 @@ try
     var reranker = new CrossEncoderReranker<float>();
 
     // Build the RAG model
-    var builder = new PredictionModelBuilder<float, string, string>()
+    var builder = new AiModelBuilder<float, string, string>()
         .ConfigureRetrievalAugmentedGeneration(
             retriever: retriever,
             reranker: reranker,

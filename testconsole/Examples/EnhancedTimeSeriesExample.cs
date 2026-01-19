@@ -114,7 +114,7 @@ public class EnhancedTimeSeriesExample
             Console.WriteLine($"Data split into training ({trainSize} days) and test ({testSize} days) sets");
 
             // 6. Create model builder
-            var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
+            var modelBuilder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
 
             // 7. Train multiple time series models
             Console.WriteLine("\nTraining time series models...");
@@ -383,10 +383,10 @@ public class EnhancedTimeSeriesExample
     }
 
     // Helper method to train a Prophet-like model
-    private Task<PredictionModelResult<double, Matrix<double>, Vector<double>>> TrainProphetModel(
+    private Task<AiModelResult<double, Matrix<double>, Vector<double>>> TrainProphetModel(
         Matrix<double> features, Vector<double> target)
     {
-        var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
+        var modelBuilder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
 
         // Configure Adam optimizer
         var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -414,10 +414,10 @@ public class EnhancedTimeSeriesExample
     }
 
     // Helper method to train an ARIMA model
-    private Task<PredictionModelResult<double, Matrix<double>, Vector<double>>> TrainArimaModel(
+    private Task<AiModelResult<double, Matrix<double>, Vector<double>>> TrainArimaModel(
         Matrix<double> features, Vector<double> target)
     {
-        var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
+        var modelBuilder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
 
         // Configure Adam optimizer
         var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -445,10 +445,10 @@ public class EnhancedTimeSeriesExample
     }
 
     // Helper method to train an Exponential Smoothing model
-    private Task<PredictionModelResult<double, Matrix<double>, Vector<double>>> TrainExponentialSmoothingModel(
+    private Task<AiModelResult<double, Matrix<double>, Vector<double>>> TrainExponentialSmoothingModel(
         Matrix<double> features, Vector<double> target)
     {
-        var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
+        var modelBuilder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
 
         // Configure Adam optimizer
         var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -478,11 +478,11 @@ public class EnhancedTimeSeriesExample
 
     // Helper method to evaluate a model
     private (double rmse, double mape, double mae) EvaluateModel(
-        PredictionModelResult<double, Matrix<double>, Vector<double>> model,
+        AiModelResult<double, Matrix<double>, Vector<double>> model,
         Matrix<double> features,
         Vector<double> targets)
     {
-        var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
+        var modelBuilder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
         var predictions = modelBuilder.Predict(features, model);
 
         // Calculate RMSE (Root Mean Squared Error)

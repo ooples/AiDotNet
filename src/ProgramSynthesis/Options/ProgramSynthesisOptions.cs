@@ -8,7 +8,7 @@ namespace AiDotNet.ProgramSynthesis.Options;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This options type is intended for use with <c>PredictionModelBuilder</c> to configure a code model and
+/// This options type is intended for use with <c>AiModelBuilder</c> to configure a code model and
 /// safe defaults (tokenization and architecture) without requiring users to construct low-level engines.
 /// </para>
 /// <para><b>For Beginners:</b> These settings control which built-in code model to use and how big it is.

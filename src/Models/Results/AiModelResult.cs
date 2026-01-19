@@ -76,7 +76,7 @@ namespace AiDotNet.Models.Results;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [Serializable]
-public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
+public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>
     /// Gets or sets the underlying model used for making predictions.
@@ -118,7 +118,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// </para>
     /// </remarks>
     [JsonIgnore]
-    internal PredictionModelResultOptions<T, TInput, TOutput>? Options { get; private set; }
+    internal AiModelResultOptions<T, TInput, TOutput>? Options { get; private set; }
 
     /// <summary>
     /// Gets the serialized model payload for the facade-hidden <see cref="Model"/>.
@@ -420,7 +420,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <remarks>
     /// <para>
     /// This is populated when benchmarking is enabled through the facade (for example,
-    /// <c>PredictionModelBuilder.ConfigureBenchmarking(...)</c>) or when
+    /// <c>AiModelBuilder.ConfigureBenchmarking(...)</c>) or when
     /// <see cref="EvaluateBenchmarksAsync"/> is called.
     /// </para>
     /// <para><b>For Beginners:</b> This is the "report card" from running standardized benchmark suites.</para>
@@ -1004,7 +1004,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     #endregion
 
     /// <summary>
-    /// Initializes a new instance of the PredictionModelResult class using an options object for clean configuration.
+    /// Initializes a new instance of the AiModelResult class using an options object for clean configuration.
     /// </summary>
     /// <param name="options">The configuration options containing all settings for the prediction model result.</param>
     /// <remarks>
@@ -1016,28 +1016,28 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     ///   <item><description><b>Standard path:</b> Set OptimizationResult and NormalizationInfo for regular trained models</description></item>
     ///   <item><description><b>Meta-learning path:</b> Set MetaLearner and MetaTrainingResult for meta-trained models</description></item>
     /// </list>
-    /// <para><b>For Beginners:</b> This is the only way to create a PredictionModelResult.
+    /// <para><b>For Beginners:</b> This is the only way to create a AiModelResult.
     ///
     /// For a standard trained model:
     /// <code>
-    /// var options = new PredictionModelResultOptions&lt;double, double[], double&gt;
+    /// var options = new AiModelResultOptions&lt;double, double[], double&gt;
     /// {
     ///     OptimizationResult = optimizationResult,
     ///     NormalizationInfo = normInfo,
     ///     BiasDetector = myBiasDetector
     /// };
-    /// var result = new PredictionModelResult&lt;double, double[], double&gt;(options);
+    /// var result = new AiModelResult&lt;double, double[], double&gt;(options);
     /// </code>
     ///
     /// For a meta-trained model:
     /// <code>
-    /// var options = new PredictionModelResultOptions&lt;double, double[], double&gt;
+    /// var options = new AiModelResultOptions&lt;double, double[], double&gt;
     /// {
     ///     MetaLearner = metaLearner,
     ///     MetaTrainingResult = metaResult,
     ///     LoRAConfiguration = loraConfig
     /// };
-    /// var result = new PredictionModelResult&lt;double, double[], double&gt;(options);
+    /// var result = new AiModelResult&lt;double, double[], double&gt;(options);
     /// </code>
     ///
     /// Benefits:
@@ -1047,7 +1047,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// - IDE auto-completion helps discover available options
     /// </para>
     /// </remarks>
-    internal PredictionModelResult(PredictionModelResultOptions<T, TInput, TOutput> options)
+    internal AiModelResult(AiModelResultOptions<T, TInput, TOutput> options)
     {
         if (options is null)
         {
@@ -1190,11 +1190,11 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     }
 
     /// <summary>
-    /// Initializes a new instance of the PredictionModelResult class with default values.
+    /// Initializes a new instance of the AiModelResult class with default values.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This constructor creates a new PredictionModelResult instance with default values for all properties. It is primarily 
+    /// This constructor creates a new AiModelResult instance with default values for all properties. It is primarily 
     /// used for deserialization, where the properties will be populated from the deserialized data. This constructor should 
     /// not be used directly for creating models that will be used for predictions, as the Model property will be null and 
     /// the Predict method will throw an exception.
@@ -1214,7 +1214,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// first deserializing data into it, you'll get an error because the Model is null.
     /// </para>
     /// </remarks>
-    internal PredictionModelResult()
+    internal AiModelResult()
     {
     }
 
@@ -1597,12 +1597,12 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// </remarks>
     public sealed class InferenceSession : IDisposable
     {
-        private readonly PredictionModelResult<T, TInput, TOutput> _result;
+        private readonly AiModelResult<T, TInput, TOutput> _result;
         private readonly AiDotNet.Configuration.InferenceOptimizationConfig? _config;
         private bool _disposed;
 
         internal InferenceSession(
-            PredictionModelResult<T, TInput, TOutput> result,
+            AiModelResult<T, TInput, TOutput> result,
             AiDotNet.Configuration.InferenceOptimizationConfig? config)
         {
             _result = result ?? throw new ArgumentNullException(nameof(result));
@@ -1656,7 +1656,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// </remarks>
     public sealed class InferenceSequence : IDisposable
     {
-        private readonly PredictionModelResult<T, TInput, TOutput> _result;
+        private readonly AiModelResult<T, TInput, TOutput> _result;
         private readonly AiDotNet.Configuration.InferenceOptimizationConfig? _config;
         private bool _disposed;
 
@@ -1667,7 +1667,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         private readonly object _sequenceLock = new();
 
         internal InferenceSequence(
-            PredictionModelResult<T, TInput, TOutput> result,
+            AiModelResult<T, TInput, TOutput> result,
             AiDotNet.Configuration.InferenceOptimizationConfig? config,
             string? multiLoRATask)
         {
@@ -1996,22 +1996,22 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     }
 
     /// <summary>
-    /// Training is not supported on PredictionModelResult. Use PredictionModelBuilder to create and train new models.
+    /// Training is not supported on AiModelResult. Use AiModelBuilder to create and train new models.
     /// </summary>
     /// <param name="input">Input training data (not used).</param>
     /// <param name="expectedOutput">Expected output values (not used).</param>
-    /// <exception cref="InvalidOperationException">Always thrown - PredictionModelResult represents an already-trained model and cannot be retrained.</exception>
+    /// <exception cref="InvalidOperationException">Always thrown - AiModelResult represents an already-trained model and cannot be retrained.</exception>
     /// <remarks>
-    /// PredictionModelResult is a snapshot of a trained model with its optimization results and metadata.
+    /// AiModelResult is a snapshot of a trained model with its optimization results and metadata.
     /// Retraining would invalidate the OptimizationResult and metadata.
-    /// To train a new model or retrain with different data, use PredictionModelBuilder.Build() instead.
+    /// To train a new model or retrain with different data, use AiModelBuilder.Build() instead.
     /// </remarks>
     public void Train(TInput input, TOutput expectedOutput)
     {
         throw new InvalidOperationException(
-            "PredictionModelResult represents an already-trained model and cannot be retrained. " +
+            "AiModelResult represents an already-trained model and cannot be retrained. " +
             "The OptimizationResult and metadata reflect the original training process. " +
-            "To train a new model, use PredictionModelBuilder.Build() instead.");
+            "To train a new model, use AiModelBuilder.Build() instead.");
     }
 
     /// <summary>
@@ -2240,20 +2240,20 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     }
 
     /// <summary>
-    /// Setting parameters is not supported on PredictionModelResult.
+    /// Setting parameters is not supported on AiModelResult.
     /// </summary>
     /// <param name="parameters">The parameter vector (not used).</param>
-    /// <exception cref="InvalidOperationException">Always thrown - PredictionModelResult parameters cannot be modified.</exception>
+    /// <exception cref="InvalidOperationException">Always thrown - AiModelResult parameters cannot be modified.</exception>
     /// <remarks>
     /// Modifying parameters would invalidate the OptimizationResult which reflects the optimized parameter values.
-    /// To create a model with different parameters, use PredictionModelBuilder with custom initial parameters.
+    /// To create a model with different parameters, use AiModelBuilder with custom initial parameters.
     /// </remarks>
     public void SetParameters(Vector<T> parameters)
     {
         throw new InvalidOperationException(
-            "PredictionModelResult parameters cannot be modified. " +
+            "AiModelResult parameters cannot be modified. " +
             "The current parameters reflect the optimized solution from the training process. " +
-            "To create a model with different parameters, use PredictionModelBuilder.");
+            "To create a model with different parameters, use AiModelBuilder.");
     }
 
     /// <summary>
@@ -2276,7 +2276,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// Creates a new instance with the specified parameters.
     /// </summary>
     /// <param name="parameters">The parameter vector to use.</param>
-    /// <returns>A new PredictionModelResult with updated parameters.</returns>
+    /// <returns>A new AiModelResult with updated parameters.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the Model is not initialized.</exception>
     /// <remarks>
     /// <para>
@@ -2307,7 +2307,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         // Create new result with updated optimization result
         // Preserve all configuration properties to ensure deployment behavior, model adaptation,
         // training history, and Graph RAG configuration are maintained across parameter updates
-        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = updatedOptimizationResult,
             NormalizationInfo = NormalizationInfo,
@@ -2357,7 +2357,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             TrainingMetricsHistory = TrainingMetricsHistory
         };
 
-        return new PredictionModelResult<T, TInput, TOutput>(options);
+        return new AiModelResult<T, TInput, TOutput>(options);
     }
 
     /// <summary>
@@ -2376,20 +2376,20 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     }
 
     /// <summary>
-    /// Setting active feature indices is not supported on PredictionModelResult.
+    /// Setting active feature indices is not supported on AiModelResult.
     /// </summary>
     /// <param name="featureIndices">The feature indices (not used).</param>
-    /// <exception cref="InvalidOperationException">Always thrown - PredictionModelResult feature configuration cannot be modified.</exception>
+    /// <exception cref="InvalidOperationException">Always thrown - AiModelResult feature configuration cannot be modified.</exception>
     /// <remarks>
     /// Changing active features would invalidate the trained model and optimization results.
-    /// To train a model with different features, use PredictionModelBuilder with the desired feature configuration.
+    /// To train a model with different features, use AiModelBuilder with the desired feature configuration.
     /// </remarks>
     public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         throw new InvalidOperationException(
-            "PredictionModelResult active features cannot be modified. " +
+            "AiModelResult active features cannot be modified. " +
             "The model was trained with a specific feature set. " +
-            "To use different features, train a new model using PredictionModelBuilder.");
+            "To use different features, train a new model using AiModelBuilder.");
     }
 
     /// <summary>
@@ -2678,9 +2678,9 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     #endregion
 
     /// <summary>
-    /// Creates a copy of this PredictionModelResult with deep-copied core model components.
+    /// Creates a copy of this AiModelResult with deep-copied core model components.
     /// </summary>
-    /// <returns>A new PredictionModelResult instance.</returns>
+    /// <returns>A new AiModelResult instance.</returns>
     /// <remarks>
     /// <para>
     /// <b>Deep-copied components</b> (independent copies, mutations don't affect original):
@@ -2720,7 +2720,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     {
         if (Model == null)
         {
-            throw new InvalidOperationException("Cannot deep copy PredictionModelResult with null Model.");
+            throw new InvalidOperationException("Cannot deep copy AiModelResult with null Model.");
         }
 
         var clonedModel = Model.DeepCopy();
@@ -2734,7 +2734,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
 
         // Preserve all configuration properties to ensure deployment behavior, model adaptation,
         // training history, and Graph RAG configuration are maintained across deep copy
-        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = clonedOptimizationResult,
             NormalizationInfo = clonedNormalizationInfo,
@@ -2784,13 +2784,13 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             TrainingMetricsHistory = TrainingMetricsHistory
         };
 
-        return new PredictionModelResult<T, TInput, TOutput>(options);
+        return new AiModelResult<T, TInput, TOutput>(options);
     }
 
     /// <summary>
-    /// Creates a shallow copy of this PredictionModelResult.
+    /// Creates a shallow copy of this AiModelResult.
     /// </summary>
-    /// <returns>A new PredictionModelResult instance that is a shallow copy of this one.</returns>
+    /// <returns>A new AiModelResult instance that is a shallow copy of this one.</returns>
     /// <remarks>
     /// This method delegates to WithParameters to ensure consistency in how OptimizationResult is handled.
     /// The cloned instance will have a new model with the same parameters and updated OptimizationResult metadata.
@@ -2799,7 +2799,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     {
         if (Model == null)
         {
-            throw new InvalidOperationException("Cannot clone PredictionModelResult with null Model.");
+            throw new InvalidOperationException("Cannot clone AiModelResult with null Model.");
         }
 
         return WithParameters(Model.GetParameters());
@@ -2811,10 +2811,10 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <returns>A byte array containing the serialized model.</returns>
     /// <remarks>
     /// <para>
-    /// This method serializes the entire PredictionModelResult object, including the model, optimization results, 
+    /// This method serializes the entire AiModelResult object, including the model, optimization results, 
     /// normalization information, and metadata. The model is serialized using its own Serialize() method, 
     /// ensuring that model-specific serialization logic is properly applied. The other components are 
-    /// serialized using JSON. This approach ensures that each component of the PredictionModelResult is 
+    /// serialized using JSON. This approach ensures that each component of the AiModelResult is 
     /// serialized in the most appropriate way.
     /// </para>
     /// <para><b>For Beginners:</b> This method converts the model into a format that can be stored or transmitted.
@@ -2853,7 +2853,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
                 SerializationBinder = new SafeSerializationBinder(),
                 Converters = JsonConverterRegistry.GetAllConverters(),
                 Formatting = Formatting.Indented,
-                ContractResolver = new PredictionModelResultContractResolver()
+                ContractResolver = new AiModelResultContractResolver()
             };
 
             // Serialize the object to JSON bytes
@@ -2882,7 +2882,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <exception cref="InvalidOperationException">Thrown when deserialization fails.</exception>
     /// <remarks>
     /// <para>
-    /// This method reconstructs a PredictionModelResult object from a serialized byte array. It reads 
+    /// This method reconstructs a AiModelResult object from a serialized byte array. It reads 
     /// the serialized data of each component (model, optimization results, normalization information, 
     /// and metadata) and deserializes them using the appropriate methods. The model is deserialized 
     /// using its model-specific deserialization method, while the other components are deserialized 
@@ -2894,7 +2894,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// - Takes a byte array containing a serialized model
     /// - Extracts each component (model, optimization results, etc.)
     /// - Uses the appropriate deserialization method for each component
-    /// - Reconstructs the complete PredictionModelResult object
+    /// - Reconstructs the complete AiModelResult object
     /// 
     /// This approach ensures:
     /// - Each model type is deserialized correctly using its own specific logic
@@ -2919,11 +2919,11 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
                 TypeNameHandling = TypeNameHandling.Auto,
                 SerializationBinder = new SafeSerializationBinder(),
                 Converters = JsonConverterRegistry.GetAllConverters(),
-                ContractResolver = new PredictionModelResultContractResolver()
+                ContractResolver = new AiModelResultContractResolver()
             };
 
             // Deserialize the object
-            var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
+            var deserializedObject = JsonConvert.DeserializeObject<AiModelResult<T, TInput, TOutput>>(jsonString, settings);
 
             if (deserializedObject != null)
             {
@@ -3073,7 +3073,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// </summary>
     /// <param name="filePath">The path of the file containing the serialized model.</param>
     /// <param name="modelFactory">A factory function that creates the appropriate model type based on metadata.</param>
-    /// <returns>A new PredictionModelResult&lt;T&gt; instance loaded from the file.</returns>
+    /// <returns>A new AiModelResult&lt;T&gt; instance loaded from the file.</returns>
     /// <remarks>
     /// <para>
     /// This static method loads a serialized model from a file at the specified path. It requires a model factory function
@@ -3085,7 +3085,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// The LoadModel method:
     /// - Takes a file path where the model is stored
     /// - Uses the model factory to create the right type of model based on metadata
-    /// - Reads the file and deserializes the data into a new PredictionModelResult object
+    /// - Reads the file and deserializes the data into a new AiModelResult object
     /// - Returns the fully loaded model ready for making predictions
     /// 
     /// The model factory is important because:
@@ -3093,12 +3093,12 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// - The factory knows how to create the right type of model based on information in the saved file
     /// 
     /// For example, you might load a model with:
-    /// `var model = PredictionModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
+    /// `var model = AiModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
     ///     "C:\\Models\\house_price_predictor.model", 
     ///     metadata => new LinearRegressionModel<double>());`
     /// </para>
     /// </remarks>
-    public static PredictionModelResult<T, TInput, TOutput> LoadModel(
+    public static AiModelResult<T, TInput, TOutput> LoadModel(
         string filePath,
         Func<ModelMetadata<T>, IFullModel<T, TInput, TOutput>> modelFactory)
     {
@@ -3111,8 +3111,8 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         // Create a new model instance of the appropriate type
         var model = modelFactory(metadata);
 
-        // Create a new PredictionModelResult with the model
-        var result = new PredictionModelResult<T, TInput, TOutput>
+        // Create a new AiModelResult with the model
+        var result = new AiModelResult<T, TInput, TOutput>
         {
             Model = model
         };
@@ -3136,7 +3136,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
             Converters = JsonConverterRegistry.GetAllConverters(),
             ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor
         };
-        var deserializedObject = JsonConvert.DeserializeObject<PredictionModelResult<T, TInput, TOutput>>(jsonString, settings);
+        var deserializedObject = JsonConvert.DeserializeObject<AiModelResult<T, TInput, TOutput>>(jsonString, settings);
         return deserializedObject?.ModelMetaData ?? new();
     }
 
@@ -3154,7 +3154,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// The system will search your document collection, find the most relevant sources,
     /// and generate an answer with citations.
     /// 
-    /// RAG must be configured via PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.
+    /// RAG must be configured via AiModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.
     /// </remarks>
     public AiDotNet.RetrievalAugmentedGeneration.Models.GroundedAnswer<T> GenerateAnswer(
         string query,
@@ -3165,7 +3165,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         if (RagRetriever == null || RagReranker == null || RagGenerator == null)
         {
             throw new InvalidOperationException(
-                "RAG pipeline not configured. Configure RAG components using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+                "RAG pipeline not configured. Configure RAG components using AiModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
         }
 
         if (string.IsNullOrWhiteSpace(query))
@@ -3215,7 +3215,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <b>For Beginners:</b> Use this during inference to search your document collection without generating an answer.
     /// Good for exploring what documents are available or debugging retrieval quality.
     /// 
-    /// RAG must be configured via PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.
+    /// RAG must be configured via AiModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.
     /// </remarks>
     public IEnumerable<AiDotNet.RetrievalAugmentedGeneration.Models.Document<T>> RetrieveDocuments(
         string query,
@@ -3226,7 +3226,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         if (RagRetriever == null)
         {
             throw new InvalidOperationException(
-                "RAG retriever not configured. Configure RAG components using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+                "RAG retriever not configured. Configure RAG components using AiModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
         }
 
         if (applyReranking && RagReranker == null)
@@ -3296,7 +3296,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         if (KnowledgeGraph == null)
         {
             throw new InvalidOperationException(
-                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+                "Knowledge graph not configured. Configure Graph RAG using AiModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
         }
 
         if (string.IsNullOrWhiteSpace(query))
@@ -3335,7 +3335,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         if (HybridGraphRetriever == null)
         {
             throw new InvalidOperationException(
-                "Hybrid graph retriever not configured. Configure Graph RAG with a document store using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+                "Hybrid graph retriever not configured. Configure Graph RAG with a document store using AiModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
         }
 
         if (queryEmbedding == null || queryEmbedding.Length == 0)
@@ -3367,7 +3367,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         if (KnowledgeGraph == null)
         {
             throw new InvalidOperationException(
-                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+                "Knowledge graph not configured. Configure Graph RAG using AiModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
         }
 
         if (string.IsNullOrWhiteSpace(startNodeId))
@@ -3397,7 +3397,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         if (KnowledgeGraph == null)
         {
             throw new InvalidOperationException(
-                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+                "Knowledge graph not configured. Configure Graph RAG using AiModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
         }
 
         if (string.IsNullOrWhiteSpace(startNodeId))
@@ -3429,7 +3429,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
         if (KnowledgeGraph == null)
         {
             throw new InvalidOperationException(
-                "Knowledge graph not configured. Configure Graph RAG using PredictionModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
+                "Knowledge graph not configured. Configure Graph RAG using AiModelBuilder.ConfigureRetrievalAugmentedGeneration() before building the model.");
         }
 
         if (string.IsNullOrWhiteSpace(nodeId))
@@ -3451,16 +3451,16 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     }
 
     /// <summary>
-    /// Attaches Graph RAG components to a PredictionModelResult instance.
+    /// Attaches Graph RAG components to a AiModelResult instance.
     /// </summary>
     /// <param name="knowledgeGraph">The knowledge graph to attach.</param>
     /// <param name="graphStore">The graph store backend to attach.</param>
     /// <param name="hybridGraphRetriever">The hybrid retriever to attach.</param>
     /// <remarks>
-    /// This method is internal and used by PredictionModelBuilder when loading/deserializing models.
+    /// This method is internal and used by AiModelBuilder when loading/deserializing models.
     /// Graph RAG components cannot be serialized (they contain file handles, WAL references, etc.),
     /// so the builder automatically reattaches them when loading a model that was configured with Graph RAG.
-    /// Users should use PredictionModelBuilder.LoadModel() which handles this automatically.
+    /// Users should use AiModelBuilder.LoadModel() which handles this automatically.
     /// </remarks>
     internal void AttachGraphComponents(
         KnowledgeGraph<T>? knowledgeGraph = null,
@@ -3478,7 +3478,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <param name="tokenizer">The tokenizer to attach.</param>
     /// <param name="config">Optional tokenization configuration.</param>
     /// <remarks>
-    /// This method is internal and used by PredictionModelBuilder during model construction.
+    /// This method is internal and used by AiModelBuilder during model construction.
     /// </remarks>
     internal void AttachTokenizer(
         ITokenizer? tokenizer,
@@ -3498,7 +3498,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <param name="promptAnalyzer">The analyzer for prompt metrics and validation.</param>
     /// <param name="promptCompressor">The compressor for reducing prompt token counts.</param>
     /// <remarks>
-    /// This method is internal and used by PredictionModelBuilder during model construction.
+    /// This method is internal and used by AiModelBuilder during model construction.
     /// </remarks>
     internal void AttachPromptEngineering(
         IPromptTemplate? promptTemplate,
@@ -3559,7 +3559,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     {
         if (PromptTemplate == null)
             throw new InvalidOperationException(
-                "No prompt template configured. Use ConfigurePromptTemplate() in PredictionModelBuilder.");
+                "No prompt template configured. Use ConfigurePromptTemplate() in AiModelBuilder.");
 
         return PromptTemplate.Format(variables);
     }
@@ -3608,7 +3608,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     {
         if (PromptAnalyzer == null)
             throw new InvalidOperationException(
-                "No prompt analyzer configured. Use ConfigurePromptAnalyzer() in PredictionModelBuilder.");
+                "No prompt analyzer configured. Use ConfigurePromptAnalyzer() in AiModelBuilder.");
 
         return PromptAnalyzer.Analyze(prompt);
     }
@@ -3656,7 +3656,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     {
         if (PromptAnalyzer == null)
             throw new InvalidOperationException(
-                "No prompt analyzer configured. Use ConfigurePromptAnalyzer() in PredictionModelBuilder.");
+                "No prompt analyzer configured. Use ConfigurePromptAnalyzer() in AiModelBuilder.");
 
         return PromptAnalyzer.ValidatePrompt(prompt, options).ToList();
     }
@@ -3714,7 +3714,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     {
         if (PromptCompressor == null)
             throw new InvalidOperationException(
-                "No prompt compressor configured. Use ConfigurePromptCompressor() in PredictionModelBuilder.");
+                "No prompt compressor configured. Use ConfigurePromptCompressor() in AiModelBuilder.");
 
         return PromptCompressor.CompressWithMetrics(prompt, options ?? CompressionOptions.Default);
     }
@@ -3762,7 +3762,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     {
         if (PromptChain == null)
             throw new InvalidOperationException(
-                "No prompt chain configured. Use ConfigurePromptChain() in PredictionModelBuilder.");
+                "No prompt chain configured. Use ConfigurePromptChain() in AiModelBuilder.");
 
         return PromptChain.Run(input);
     }
@@ -3804,7 +3804,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     {
         if (PromptChain == null)
             throw new InvalidOperationException(
-                "No prompt chain configured. Use ConfigurePromptChain() in PredictionModelBuilder.");
+                "No prompt chain configured. Use ConfigurePromptChain() in AiModelBuilder.");
 
         return PromptChain.RunAsync(input, cancellationToken);
     }
@@ -3908,7 +3908,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     {
         if (FewShotExampleSelector == null)
             throw new InvalidOperationException(
-                "No few-shot example selector configured. Use ConfigureFewShotExampleSelector() in PredictionModelBuilder.");
+                "No few-shot example selector configured. Use ConfigureFewShotExampleSelector() in AiModelBuilder.");
 
         return FewShotExampleSelector.SelectExamples(query, maxExamples);
     }
@@ -3965,7 +3965,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     {
         if (PromptOptimizer == null)
             throw new InvalidOperationException(
-                "No prompt optimizer configured. Use ConfigurePromptOptimizer() in PredictionModelBuilder.");
+                "No prompt optimizer configured. Use ConfigurePromptOptimizer() in AiModelBuilder.");
 
         return PromptOptimizer.Optimize(initialPrompt, evaluationFunction, maxIterations);
     }
@@ -4015,7 +4015,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     {
         if (PromptOptimizer == null)
             throw new InvalidOperationException(
-                "No prompt optimizer configured. Use ConfigurePromptOptimizer() in PredictionModelBuilder.");
+                "No prompt optimizer configured. Use ConfigurePromptOptimizer() in AiModelBuilder.");
 
         return PromptOptimizer.OptimizeAsync(initialPrompt, evaluationFunction, maxIterations, cancellationToken);
     }
@@ -4094,7 +4094,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     public TokenizationResult Tokenize(string text)
     {
         if (Tokenizer == null)
-            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in PredictionModelBuilder.");
+            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in AiModelBuilder.");
 
         var options = TokenizationConfig?.ToEncodingOptions();
         return Tokenizer.Encode(text, options);
@@ -4109,7 +4109,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     public List<TokenizationResult> TokenizeBatch(List<string> texts)
     {
         if (Tokenizer == null)
-            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in PredictionModelBuilder.");
+            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in AiModelBuilder.");
 
         var options = TokenizationConfig?.ToEncodingOptions();
         return Tokenizer.EncodeBatch(texts, options);
@@ -4125,7 +4125,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     public string Detokenize(List<int> tokenIds, bool skipSpecialTokens = true)
     {
         if (Tokenizer == null)
-            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in PredictionModelBuilder.");
+            throw new InvalidOperationException("No tokenizer configured. Use ConfigureTokenizer() in AiModelBuilder.");
 
         return Tokenizer.Decode(tokenIds, skipSpecialTokens);
     }
@@ -4141,7 +4141,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <param name="stream">The stream to write the model state to.</param>
     /// <remarks>
     /// <para>
-    /// This method serializes the entire PredictionModelResult, including the underlying model,
+    /// This method serializes the entire AiModelResult, including the underlying model,
     /// optimization results, normalization information, and metadata. It uses the existing
     /// Serialize method and writes the data to the provided stream.
     /// </para>
@@ -4194,7 +4194,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// <param name="stream">The stream to read the model state from.</param>
     /// <remarks>
     /// <para>
-    /// This method deserializes a complete PredictionModelResult that was previously saved with SaveState,
+    /// This method deserializes a complete AiModelResult that was previously saved with SaveState,
     /// restoring the model, optimization results, normalization information, and all metadata.
     /// It uses the existing Deserialize method after reading data from the stream.
     /// </para>
@@ -4273,7 +4273,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     ///
     /// Example:
     /// <code>
-    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    /// var model = await new AiModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CPU })
     ///     .BuildAsync();
     /// model.ExportToOnnx("model.onnx");
@@ -4315,7 +4315,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     ///
     /// Example:
     /// <code>
-    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    /// var model = await new AiModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TensorRT, Quantization = QuantizationMode.Float16 })
     ///     .BuildAsync();
     /// model.ExportToTensorRT("model.trt");
@@ -4356,7 +4356,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     ///
     /// Example:
     /// <code>
-    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    /// var model = await new AiModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.CoreML, Quantization = QuantizationMode.Float16 })
     ///     .BuildAsync();
     /// model.ExportToCoreML("model.mlmodel");
@@ -4398,7 +4398,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     ///
     /// Example:
     /// <code>
-    /// var model = await new PredictionModelBuilder&lt;double&gt;()
+    /// var model = await new AiModelBuilder&lt;double&gt;()
     ///     .ConfigureExport(new ExportConfig { TargetPlatform = TargetPlatform.TFLite, Quantization = QuantizationMode.Int8 })
     ///     .BuildAsync();
     /// model.ExportToTFLite("model.tflite");
@@ -4781,7 +4781,7 @@ public partial class PredictionModelResult<T, TInput, TOutput> : IFullModel<T, T
     /// - Decision trees, random forests, etc. cannot export computation graphs
     ///
     /// You typically don't call this method directly. It's used internally by:
-    /// - PredictionModelBuilder when building models with JIT enabled
+    /// - AiModelBuilder when building models with JIT enabled
     /// - The prediction pipeline to compile models for faster inference
     ///
     /// Example of what happens inside:

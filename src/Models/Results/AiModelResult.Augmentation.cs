@@ -7,7 +7,7 @@ namespace AiDotNet.Models.Results;
 /// <summary>
 /// Partial class containing Test-Time Augmentation (TTA) prediction methods.
 /// </summary>
-public partial class PredictionModelResult<T, TInput, TOutput>
+public partial class AiModelResult<T, TInput, TOutput>
 {
     /// <summary>
     /// Makes a prediction using Test-Time Augmentation for improved accuracy.

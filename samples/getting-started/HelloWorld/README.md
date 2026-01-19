@@ -4,7 +4,7 @@ This sample demonstrates the simplest possible AiDotNet model: a neural network 
 
 ## What You'll Learn
 
-- How to create a `PredictionModelBuilder`
+- How to create a `AiModelBuilder`
 - How to configure a basic neural network
 - How to train and make predictions
 
@@ -49,7 +49,7 @@ Predictions:
 The key parts of this sample:
 
 1. **Create training data** - Define inputs and expected outputs
-2. **Build the model** - Use `PredictionModelBuilder` with fluent API
+2. **Build the model** - Use `AiModelBuilder` with fluent API
 3. **Train** - Call `BuildAsync()` with the training data
 4. **Predict** - Use the trained model to make predictions
 

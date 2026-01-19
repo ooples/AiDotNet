@@ -154,7 +154,7 @@ result.SaveToFile("model.aidotnet");
 
 ```csharp
 // Load model
-var loadedResult = PredictionModelResult<double, double[], double>
+var loadedResult = AiModelResult<double, double[], double>
     .LoadFromFile("model.aidotnet");
 
 // Make predictions

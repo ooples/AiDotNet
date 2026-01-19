@@ -352,7 +352,7 @@ public class MyCustomModel : IServableModel<double>
 
 ### Model Serialization
 
-AiDotNet.Serving loads and serves AiDotNet model artifacts from disk via `PredictionModelResult<T, Matrix<T>, Vector<T>>`.
+AiDotNet.Serving loads and serves AiDotNet model artifacts from disk via `AiModelResult<T, Matrix<T>, Vector<T>>`.
 The server validates that the requested model path resolves under `ServingOptions.ModelDirectory` to prevent directory traversal.
 
 ## 🤝 Contributing

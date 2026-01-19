@@ -10,12 +10,12 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
-public sealed class PredictionModelBuilderProgramSynthesisTests
+public sealed class AiModelBuilderProgramSynthesisTests
 {
     [Fact]
     public async Task ConfigureProgramSynthesis_BuildAsync_ProducesResultWithCodeModel()
     {
-        var builder = new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureProgramSynthesis(new ProgramSynthesisOptions
             {
                 TargetLanguage = ProgramLanguage.CSharp,
@@ -40,11 +40,11 @@ public sealed class PredictionModelBuilderProgramSynthesisTests
     }
 
     [Fact]
-    public async Task ConfigureProgramSynthesisServing_WithCustomClient_WiresPredictionModelResult()
+    public async Task ConfigureProgramSynthesisServing_WithCustomClient_WiresAiModelResult()
     {
         var fakeClient = new FakeServingClient();
 
-        var builder = new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureProgramSynthesis(new ProgramSynthesisOptions
             {
                 TargetLanguage = ProgramLanguage.CSharp,
@@ -55,7 +55,7 @@ public sealed class PredictionModelBuilderProgramSynthesisTests
             })
             .ConfigureProgramSynthesisServing(client: fakeClient);
 
-        PredictionModelResult<double, Tensor<double>, Tensor<double>> result = await builder.BuildAsync();
+        AiModelResult<double, Tensor<double>, Tensor<double>> result = await builder.BuildAsync();
 
         var execute = await result.ExecuteProgramAsync(new ProgramExecuteRequest
         {

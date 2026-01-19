@@ -301,23 +301,23 @@ var kmeans = new KMeans<double>(
 
 ---
 
-## Usage with PredictionModelBuilder
+## Usage with AiModelBuilder
 
 ```csharp
 // Classification
-var result = await new PredictionModelBuilder<double, double[], int>()
+var result = await new AiModelBuilder<double, double[], int>()
     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
     .ConfigurePreprocessing()
     .BuildAsync(features, labels);
 
 // Regression
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new GradientBoostingRegressor<double>())
     .ConfigurePreprocessing()
     .BuildAsync(features, targets);
 
 // Clustering
-var result = await new PredictionModelBuilder<double, double[], int>()
+var result = await new AiModelBuilder<double, double[], int>()
     .ConfigureModel(new HDBSCAN<double>(minClusterSize: 5))
     .BuildAsync(features);
 ```

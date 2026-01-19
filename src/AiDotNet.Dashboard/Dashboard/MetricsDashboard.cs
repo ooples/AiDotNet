@@ -112,13 +112,13 @@ public class MetricsDashboard : IDisposable
     /// <remarks>
     /// <b>For Beginners:</b> This factory method creates a training monitor that shows a live dashboard.
     ///
-    /// Use this with PredictionModelBuilder to get real-time training visualization:
+    /// Use this with AiModelBuilder to get real-time training visualization:
     /// <code>
     /// // Create a dashboard-enabled training monitor
     /// using var monitor = MetricsDashboard.CreateTrainingMonitor&lt;double&gt;("My Training");
     ///
     /// // Configure the builder with the monitor
-    /// var result = new PredictionModelBuilder&lt;double, Matrix, Vector&gt;()
+    /// var result = new AiModelBuilder&lt;double, Matrix, Vector&gt;()
     ///     .ConfigureTrainingMonitor(monitor)
     ///     .ConfigureModel(myModel)
     ///     .Build(trainingData, validationData);

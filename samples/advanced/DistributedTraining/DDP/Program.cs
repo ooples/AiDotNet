@@ -68,7 +68,7 @@ try
     Console.WriteLine();
 
     // Build distributed training pipeline
-    var builder = new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>()
+    var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
         .ConfigureModel(model)
         .ConfigureOptimizer(new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(
             learningRate: 0.001f * worldSize,  // Scale LR with world size

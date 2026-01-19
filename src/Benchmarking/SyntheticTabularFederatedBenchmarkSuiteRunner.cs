@@ -11,7 +11,7 @@ namespace AiDotNet.Benchmarking;
 internal static class SyntheticTabularFederatedBenchmarkSuiteRunner
 {
     public static Task<BenchmarkSuiteReport> RunAsync<T, TInput, TOutput>(
-        PredictionModelResult<T, TInput, TOutput> model,
+        AiModelResult<T, TInput, TOutput> model,
         BenchmarkSuite suite,
         BenchmarkingOptions options,
         CancellationToken cancellationToken)
@@ -31,10 +31,10 @@ internal static class SyntheticTabularFederatedBenchmarkSuiteRunner
             throw new ArgumentNullException(nameof(options));
         }
 
-        if (model is not PredictionModelResult<T, Matrix<T>, Vector<T>> typedModel)
+        if (model is not AiModelResult<T, Matrix<T>, Vector<T>> typedModel)
         {
             throw new NotSupportedException(
-                $"Tabular benchmarking currently requires PredictionModelResult<T, Matrix<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
+                $"Tabular benchmarking currently requires AiModelResult<T, Matrix<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
         }
 
         var tabular = options.Tabular?.NonIid ?? new SyntheticTabularFederatedBenchmarkOptions();

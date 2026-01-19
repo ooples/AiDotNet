@@ -4,7 +4,7 @@ This sample demonstrates training a PPO (Proximal Policy Optimization) agent to 
 
 ## What You'll Learn
 
-- How to configure reinforcement learning with `PredictionModelBuilder`
+- How to configure reinforcement learning with `AiModelBuilder`
 - How to implement the CartPole environment
 - How to train a PPO agent
 - How to evaluate agent performance

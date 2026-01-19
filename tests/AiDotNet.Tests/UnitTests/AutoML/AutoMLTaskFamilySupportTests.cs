@@ -52,9 +52,9 @@ namespace AiDotNetTests.UnitTests.AutoML
         [InlineData(AutoMLTaskFamily.TimeSeriesAnomalyDetection)]
         [InlineData(AutoMLTaskFamily.Ranking)]
         [InlineData(AutoMLTaskFamily.Recommendation)]
-        public void PredictionModelBuilder_ConfigureAutoMLFacade_AllowsAdditionalTaskFamilies(AutoMLTaskFamily taskFamily)
+        public void AiModelBuilder_ConfigureAutoMLFacade_AllowsAdditionalTaskFamilies(AutoMLTaskFamily taskFamily)
         {
-            var builder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
+            var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
             var options = new AutoMLOptions<double, Matrix<double>, Vector<double>>
             {
                 Budget = new AutoMLBudgetOptions

@@ -40,22 +40,22 @@ Complete reference documentation for all AiDotNet components.
 
 ## Key Classes
 
-### PredictionModelBuilder
+### AiModelBuilder
 
 The main entry point for building models:
 
 ```csharp
-public class PredictionModelBuilder<T, TInput, TOutput>
+public class AiModelBuilder<T, TInput, TOutput>
 ```
 
 [Full documentation →](./prediction-model-builder)
 
-### PredictionModelResult
+### AiModelResult
 
 Contains the trained model and results:
 
 ```csharp
-public class PredictionModelResult<T, TInput, TOutput>
+public class AiModelResult<T, TInput, TOutput>
 ```
 
 [Full documentation →](./prediction-model-result)

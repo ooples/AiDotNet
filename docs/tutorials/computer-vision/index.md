@@ -69,7 +69,7 @@ var model = new ResNet<float>(new ResNetConfig<float>
 });
 
 // Build and train
-var result = await new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>()
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
     .ConfigureModel(model)
     .ConfigureOptimizer(new AdamOptimizer<float>(learningRate: 1e-4f))
     .ConfigureDataAugmentation(new ImageAugmentationConfig

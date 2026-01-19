@@ -12,7 +12,7 @@ using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet;
 
-public partial class PredictionModelBuilder<T, TInput, TOutput>
+public partial class AiModelBuilder<T, TInput, TOutput>
 {
     /// <summary>
     /// Configures uncertainty quantification (UQ) for inference-time uncertainty estimates.
@@ -36,7 +36,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     /// Typical usage:
     /// <code>
     /// var loader = DataLoaders.FromTensors(xTrain, yTrain);
-    /// var result = await new PredictionModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
     ///     .ConfigureDataLoader(loader)
     ///     .ConfigureModel(model)
     ///     .ConfigureOptimizer(optimizer)
@@ -45,7 +45,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureUncertaintyQuantification(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureUncertaintyQuantification(
         UncertaintyQuantificationOptions? options = null,
         UncertaintyCalibrationData<TInput, TOutput>? calibrationData = null)
     {
@@ -68,7 +68,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     /// <b>For Beginners:</b> Calibration makes uncertainty estimates more reliable by tuning them on a small held-out dataset.
     /// </para>
     /// </remarks>
-    private void TryComputeAndAttachUncertaintyCalibrationArtifacts(PredictionModelResult<T, TInput, TOutput> result)
+    private void TryComputeAndAttachUncertaintyCalibrationArtifacts(AiModelResult<T, TInput, TOutput> result)
     {
         if (_uncertaintyQuantificationOptions is not { Enabled: true })
         {
@@ -133,7 +133,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     /// <param name="yCalibration">Calibration targets.</param>
     /// <param name="artifacts">Artifact container to populate.</param>
     private static void TryComputeRegressionConformalArtifacts(
-        PredictionModelResult<T, TInput, TOutput> result,
+        AiModelResult<T, TInput, TOutput> result,
         TInput xCalibration,
         TOutput yCalibration,
         UncertaintyCalibrationArtifacts<T> artifacts)
@@ -197,7 +197,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     /// <param name="options">Uncertainty quantification options.</param>
     /// <param name="artifacts">Artifact container to populate.</param>
     private static void TryComputeClassificationCalibrationArtifacts(
-        PredictionModelResult<T, TInput, TOutput> result,
+        AiModelResult<T, TInput, TOutput> result,
         TInput xCalibration,
         Vector<int> labels,
         UncertaintyQuantificationOptions options,
@@ -865,7 +865,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     }
 
     private static void TryComputeLaplacePosteriorArtifacts(
-        PredictionModelResult<T, TInput, TOutput> result,
+        AiModelResult<T, TInput, TOutput> result,
         TInput xCalibration,
         Vector<int> labels,
         UncertaintyQuantificationOptions options,
@@ -920,7 +920,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     }
 
     private static void TryComputeLaplacePosteriorArtifacts(
-        PredictionModelResult<T, TInput, TOutput> result,
+        AiModelResult<T, TInput, TOutput> result,
         TInput xCalibration,
         TOutput yCalibration,
         UncertaintyQuantificationOptions options,
@@ -975,7 +975,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     }
 
     private static void TryComputeSwagPosteriorArtifacts(
-        PredictionModelResult<T, TInput, TOutput> result,
+        AiModelResult<T, TInput, TOutput> result,
         TInput xCalibration,
         Vector<int> labels,
         UncertaintyQuantificationOptions options,
@@ -1085,7 +1085,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     }
 
     private static void TryComputeSwagPosteriorArtifacts(
-        PredictionModelResult<T, TInput, TOutput> result,
+        AiModelResult<T, TInput, TOutput> result,
         TInput xCalibration,
         TOutput yCalibration,
         UncertaintyQuantificationOptions options,
@@ -1195,7 +1195,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     }
 
     private static bool TryPreparePosteriorCalibrationDataForClassification(
-        PredictionModelResult<T, TInput, TOutput> result,
+        AiModelResult<T, TInput, TOutput> result,
         TInput xCalibration,
         Vector<int> labels,
         UncertaintyQuantificationOptions options,

@@ -238,10 +238,10 @@ for (int epoch = 0; epoch < epochs; epoch++)
 }
 ```
 
-### With PredictionModelBuilder
+### With AiModelBuilder
 
 ```csharp
-var result = await new PredictionModelBuilder<float, Tensor<float>, int>()
+var result = await new AiModelBuilder<float, Tensor<float>, int>()
     .ConfigureModel(model)
     .ConfigureOptimizer(new AdamWOptimizer<float>(learningRate: 3e-4f))
     .ConfigureLearningRateScheduler(new CosineAnnealingLR(tMax: 100))

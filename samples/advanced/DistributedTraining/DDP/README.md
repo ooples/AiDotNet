@@ -4,7 +4,7 @@ This sample demonstrates how to train models across multiple GPUs using Distribu
 
 ## What You'll Learn
 
-- How to configure distributed training with `PredictionModelBuilder`
+- How to configure distributed training with `AiModelBuilder`
 - How to use NCCL backend for GPU communication
 - How to scale training across multiple GPUs
 - How to monitor distributed training progress
@@ -105,7 +105,7 @@ Training complete!
 ## Code Highlights
 
 ```csharp
-var result = await new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>()
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
     .ConfigureModel(resnet50)
     .ConfigureOptimizer(new AdamWOptimizer<float>(learningRate: 0.001f))
     .ConfigureDistributedTraining(

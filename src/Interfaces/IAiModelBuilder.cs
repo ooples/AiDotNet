@@ -36,7 +36,7 @@ namespace AiDotNet.Interfaces;
 /// - Create different variations of models without writing repetitive code
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public interface IPredictionModelBuilder<T, TInput, TOutput>
+public interface IAiModelBuilder<T, TInput, TOutput>
 {
     /// <summary>
     /// Configures the feature selector component for the model.
@@ -52,7 +52,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="selector">The feature selector implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFeatureSelector(IFeatureSelector<T, TInput> selector);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureFeatureSelector(IFeatureSelector<T, TInput> selector);
 
     /// <summary>
     /// Configures the data normalizer component for the model.
@@ -72,7 +72,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="normalizer">The normalizer implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer);
 
     /// <summary>
     /// Configures the data preprocessing pipeline for the model using a single transformer.
@@ -92,7 +92,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///
     /// Example with a single scaler:
     /// <code>
-    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigurePreprocessing(new StandardScaler&lt;double&gt;())
     ///     .ConfigureModel(new LassoRegression&lt;double&gt;())
     ///     .Build(X, y);
@@ -101,7 +101,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="transformer">The preprocessing transformer to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(IDataTransformer<T, TInput, TInput> transformer);
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(IDataTransformer<T, TInput, TInput> transformer);
 
     /// <summary>
     /// Configures the data preprocessing pipeline for the model using a fluent builder.
@@ -115,7 +115,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///
     /// Example with multiple steps:
     /// <code>
-    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigurePreprocessing(pipeline => pipeline
     ///         .Add(new SimpleImputer&lt;double&gt;(strategy: ImputationStrategy.Mean))
     ///         .Add(new StandardScaler&lt;double&gt;())
@@ -127,7 +127,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="configure">An action that configures the preprocessing pipeline.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
         Action<PreprocessingPipeline<T, TInput, TInput>> configure);
 
     /// <summary>
@@ -148,7 +148,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///
     /// Example with a single transformer:
     /// <code>
-    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigurePreprocessing(new StandardScaler&lt;double&gt;())
     ///     .ConfigurePostprocessing(new SoftmaxTransformer&lt;double&gt;())
     ///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
@@ -158,7 +158,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="transformer">The postprocessing transformer to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(IDataTransformer<T, TOutput, TOutput> transformer);
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(IDataTransformer<T, TOutput, TOutput> transformer);
 
     /// <summary>
     /// Configures the output postprocessing pipeline for the model using a fluent builder.
@@ -172,7 +172,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///
     /// Example with multiple steps:
     /// <code>
-    /// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigurePreprocessing(new StandardScaler&lt;double&gt;())
     ///     .ConfigurePostprocessing(pipeline => pipeline
     ///         .Add(new SoftmaxTransformer&lt;double&gt;())
@@ -184,7 +184,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="configure">An action that configures the postprocessing pipeline.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
         Action<PostprocessingPipeline<T, TOutput, TOutput>> configure);
 
     /// <summary>
@@ -207,7 +207,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="pipeline">The postprocessing pipeline to use, or null for industry defaults.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
         PostprocessingPipeline<T, TOutput, TOutput>? pipeline = null);
 
     /// <summary>
@@ -223,7 +223,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="regularization">The regularization implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureRegularization(IRegularization<T, TInput, TOutput> regularization);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureRegularization(IRegularization<T, TInput, TOutput> regularization);
 
     /// <summary>
     /// Configures the fitness calculator component for the model.
@@ -238,7 +238,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="calculator">The fitness calculator implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> calculator);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> calculator);
 
     /// <summary>
     /// Configures the fit detector component for the model.
@@ -256,7 +256,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="detector">The fit detector implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitDetector(IFitDetector<T, TInput, TOutput> detector);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureFitDetector(IFitDetector<T, TInput, TOutput> detector);
 
     /// <summary>
     /// Configures the prediction model algorithm to use.
@@ -290,7 +290,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="model">The prediction model implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model);
 
     /// <summary>
     /// Configures the optimization algorithm for the model.
@@ -308,7 +308,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="optimizationAlgorithm">The optimization algorithm implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm);
 
     /// <summary>
     /// Enables federated learning training using the provided options.
@@ -324,7 +324,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="heterogeneityCorrection">Optional heterogeneity correction strategy override (null uses defaults based on options).</param>
     /// <param name="homomorphicEncryptionProvider">Optional homomorphic encryption provider for encrypted aggregation (null uses plaintext aggregation).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
+    IAiModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
         FederatedLearningOptions options,
         IAggregationStrategy<IFullModel<T, TInput, TOutput>>? aggregationStrategy = null,
         IClientSelectionStrategy? clientSelectionStrategy = null,
@@ -349,7 +349,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="dataPreprocessor">The data preprocessor implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor);
 
     /// <summary>
     /// Configures the outlier removal component for the model.
@@ -365,7 +365,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="outlierRemoval">The outlier removal implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval);
 
     /// <summary>
     /// Uses a trained model to make predictions on new data.
@@ -381,7 +381,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="newData">The new input data to make predictions for.</param>
     /// <param name="model">The trained model to use for making predictions.</param>
     /// <returns>A vector of predicted values.</returns>
-    TOutput Predict(TInput newData, PredictionModelResult<T, TInput, TOutput> model);
+    TOutput Predict(TInput newData, AiModelResult<T, TInput, TOutput> model);
 
     /// <summary>
     /// Saves a trained model to a file.
@@ -395,7 +395,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="model">The trained model to save.</param>
     /// <param name="filePath">The file path where the model should be saved.</param>
-    void SaveModel(PredictionModelResult<T, TInput, TOutput> model, string filePath);
+    void SaveModel(AiModelResult<T, TInput, TOutput> model, string filePath);
 
     /// <summary>
     /// Loads a previously saved model from a file.
@@ -409,7 +409,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="filePath">The file path where the model is stored.</param>
     /// <returns>The loaded predictive model.</returns>
-    PredictionModelResult<T, TInput, TOutput> LoadModel(string filePath);
+    AiModelResult<T, TInput, TOutput> LoadModel(string filePath);
 
     /// <summary>
     /// Converts a trained model into a byte array for storage or transmission.
@@ -431,7 +431,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="model">The trained model to serialize.</param>
     /// <returns>A byte array containing the serialized model data.</returns>
-    byte[] SerializeModel(PredictionModelResult<T, TInput, TOutput> model);
+    byte[] SerializeModel(AiModelResult<T, TInput, TOutput> model);
 
     /// <summary>
     /// Reconstructs a model from a previously serialized byte array.
@@ -451,7 +451,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="modelData">The byte array containing the serialized model data.</param>
     /// <returns>The reconstructed predictive model.</returns>
-    PredictionModelResult<T, TInput, TOutput> DeserializeModel(byte[] modelData);
+    AiModelResult<T, TInput, TOutput> DeserializeModel(byte[] modelData);
 
     /// <summary>
     /// Configures the bias detector component for ethical AI evaluation.
@@ -467,7 +467,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="detector">The bias detector implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureBiasDetector(IBiasDetector<T> detector);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureBiasDetector(IBiasDetector<T> detector);
 
     /// <summary>
     /// Configures the fairness evaluator component for ethical AI evaluation.
@@ -484,7 +484,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="evaluator">The fairness evaluator implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator);
 
     /// <summary>
     /// Configures adversarial robustness and AI safety features for the model.
@@ -506,7 +506,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="configuration">The adversarial robustness configuration. When null, uses industry-standard defaults.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAdversarialRobustness(
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAdversarialRobustness(
         AdversarialRobustnessConfiguration<T, TInput, TOutput>? configuration = null);
 
     /// <summary>
@@ -529,7 +529,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="configuration">The fine-tuning configuration including training data. When null, uses industry-standard defaults.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFineTuning(
+    IAiModelBuilder<T, TInput, TOutput> ConfigureFineTuning(
         FineTuningConfiguration<T, TInput, TOutput>? configuration = null);
 
     /// <summary>
@@ -559,7 +559,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="loraConfiguration">The LoRA configuration implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration);
 
     /// <summary>
     /// Configures a multi-stage training pipeline for advanced training workflows.
@@ -576,7 +576,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="configuration">The training pipeline configuration defining the stages to execute.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
         TrainingPipelineConfiguration<T, TInput, TOutput>? configuration = null);
 
     /// <summary>
@@ -599,7 +599,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="options">Optional options; when null, defaults are used and UQ is enabled.</param>
     /// <param name="calibrationData">Optional calibration data for conformal/prediction calibration features.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureUncertaintyQuantification(
+    IAiModelBuilder<T, TInput, TOutput> ConfigureUncertaintyQuantification(
         UncertaintyQuantificationOptions? options = null,
         UncertaintyCalibrationData<TInput, TOutput>? calibrationData = null);
 
@@ -634,7 +634,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </para>
     /// <para>
     /// RAG operations (GenerateAnswer, RetrieveDocuments, GraphQuery, etc.) are performed during
-    /// inference via PredictionModelResult, not during model building.
+    /// inference via AiModelResult, not during model building.
     /// </para>
     /// </remarks>
     /// <param name="retriever">Optional retriever for finding relevant documents. If not provided, standard RAG won't be available.</param>
@@ -645,7 +645,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="knowledgeGraph">Optional pre-configured knowledge graph. If null but graphStore is provided, a new one is created.</param>
     /// <param name="documentStore">Optional document store for hybrid vector + graph retrieval.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
+    IAiModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
         IRetriever<T>? retriever = null,
         IReranker<T>? reranker = null,
         IGenerator<T>? generator = null,
@@ -675,14 +675,14 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///     IsEnabled = true
     /// };
     ///
-    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig);
     /// </code>
     /// </para>
     /// </remarks>
     /// <param name="configuration">The agent configuration containing API keys, provider settings, and options.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration);
 
     /// <summary>
     /// Configures a meta-learning algorithm (MAML, Reptile, SEAL) for training models that can quickly adapt to new tasks.
@@ -698,7 +698,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="metaLearner">The meta-learning algorithm to use (e.g., ReptileTrainer with its episodic data loader).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner);
 
     /// <summary>
     /// Configures distributed training across multiple GPUs or machines.
@@ -803,7 +803,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="strategy">Distributed training strategy. Default is DDP (most common).</param>
     /// <param name="configuration">Sharding configuration. If null, created from backend with defaults.</param>
     /// <returns>This builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
         ICommunicationBackend<T>? backend = null,
         DistributedStrategy strategy = DistributedStrategy.DDP,
         IShardingConfiguration<T>? configuration = null);
@@ -822,7 +822,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="evaluator">The model evaluator implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator);
 
     /// <summary>
     /// Configures the cross-validation strategy for automatic model evaluation during training.
@@ -846,7 +846,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="crossValidator">The cross-validation strategy to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator);
 
     /// <summary>
     /// Configures an AutoML model for automatic machine learning optimization.
@@ -875,13 +875,13 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
     /// autoML.SetCandidateModels(new List&lt;ModelType&gt; { ModelType.RandomForest, ModelType.GradientBoosting });
     ///
-    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAutoML(autoML)
     ///     .Build(trainingData, trainingLabels);
     /// </code>
     /// </para>
     /// </remarks>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel);
 
     /// <summary>
     /// Configures AutoML using facade-style options (recommended for most users).
@@ -898,7 +898,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// an AutoML implementation. Pick a budget preset (Fast/Standard/Thorough) and let AiDotNet handle the rest.
     /// </para>
     /// </remarks>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(AutoMLOptions<T, TInput, TOutput>? options = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(AutoMLOptions<T, TInput, TOutput>? options = null);
 
     /// <summary>
     /// Configures reinforcement learning options for training an RL agent.
@@ -926,13 +926,13 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///     OnEpisodeComplete = (metrics) =&gt; Console.WriteLine($"Episode {metrics.Episode}: {metrics.TotalReward}")
     /// };
     ///
-    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureReinforcementLearning(options)
     ///     .ConfigureModel(new DQNAgent&lt;double&gt;())
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureReinforcementLearning(RLTrainingOptions<T> options);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureReinforcementLearning(RLTrainingOptions<T> options);
 
     /// <summary>
     /// Configures knowledge distillation for training a smaller student model from a larger teacher model.
@@ -970,7 +970,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///     BatchSize = 32
     /// };
     /// 
-    /// var builder = new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureKnowledgeDistillation(distillationOptions);
     /// </code>
     ///
@@ -978,7 +978,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="options">The knowledge distillation configuration options (optional, uses sensible defaults if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
+    IAiModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
         KnowledgeDistillationOptions<T, TInput, TOutput>? options = null);
 
     /// <summary>
@@ -1004,7 +1004,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="config">The quantization configuration (optional, uses no quantization if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureQuantization(QuantizationConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureQuantization(QuantizationConfig? config = null);
 
     /// <summary>
     /// Configures model compression for reducing model size during serialization.
@@ -1048,7 +1048,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="config">The compression configuration (optional, uses automatic mode if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCompression(CompressionConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCompression(CompressionConfig? config = null);
 
     /// <summary>
     /// Configures model caching to avoid reloading models from disk repeatedly.
@@ -1073,7 +1073,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="config">The caching configuration (optional, uses default cache settings if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCaching(CacheConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCaching(CacheConfig? config = null);
 
     /// <summary>
     /// Configures model versioning for managing multiple versions of the same model.
@@ -1097,7 +1097,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="config">The versioning configuration (optional, uses "latest" version if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureVersioning(VersioningConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureVersioning(VersioningConfig? config = null);
 
     /// <summary>
     /// Configures A/B testing to compare multiple model versions by splitting traffic.
@@ -1129,7 +1129,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="config">The A/B testing configuration (optional, disables A/B testing if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureABTesting(ABTestingConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureABTesting(ABTestingConfig? config = null);
 
     /// <summary>
     /// Configures telemetry for tracking and monitoring model inference metrics.
@@ -1159,7 +1159,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="config">The telemetry configuration (optional, uses default telemetry settings if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
 
     /// <summary>
     /// Configures benchmarking to run standardized benchmark suites and attach a structured report to the built model.
@@ -1173,7 +1173,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="options">Benchmarking options. If null, sensible defaults are used.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureBenchmarking(BenchmarkingOptions? options = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureBenchmarking(BenchmarkingOptions? options = null);
 
     /// <summary>
     /// Configures export settings for deploying the model to different platforms.
@@ -1188,7 +1188,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// - **WASM**: Run models in web browsers
     ///
     /// Configure this BEFORE training if you know your target platform, so the model can be
-    /// optimized accordingly. After training, use the Export methods on PredictionModelResult.
+    /// optimized accordingly. After training, use the Export methods on AiModelResult.
     ///
     /// Example:
     /// <code>
@@ -1209,7 +1209,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="config">The export configuration (optional, uses CPU/ONNX if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null);
 
     /// <summary>
     /// Configures tokenization for text-based input processing.
@@ -1228,7 +1228,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// Example:
     /// <code>
     /// var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 32000);
-    /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
     ///     .ConfigureTokenizer(tokenizer)
     ///     .ConfigureModel(new TransformerModel())
     ///     .BuildAsync();
@@ -1237,7 +1237,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="tokenizer">The tokenizer to use for text processing. If null, no tokenizer is configured.</param>
     /// <param name="config">Optional tokenization configuration. If null, default settings are used.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizer(ITokenizer? tokenizer = null, TokenizationConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizer(ITokenizer? tokenizer = null, TokenizationConfig? config = null);
 
     /// <summary>
     /// Configures built-in Program Synthesis defaults for code tasks.
@@ -1247,11 +1247,11 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <typeparamref name="TInput"/> and <typeparamref name="TOutput"/> (for example <c>Tensor&lt;T&gt;</c>,
     /// <c>Vector&lt;T&gt;</c>, or <c>Matrix&lt;T&gt;</c>).
     /// Implementations should use sensible defaults and ensure the program-synthesis capabilities are available
-    /// through <c>PredictionModelResult</c> without requiring users to manually wire low-level components.
+    /// through <c>AiModelResult</c> without requiring users to manually wire low-level components.
     /// </remarks>
     /// <param name="options">Optional configuration options.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureProgramSynthesis(ProgramSynthesisOptions? options = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureProgramSynthesis(ProgramSynthesisOptions? options = null);
 
     /// <summary>
     /// Configures tokenization using a pretrained tokenizer from HuggingFace Hub.
@@ -1262,7 +1262,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///
     /// Simply call without parameters for sensible defaults:
     /// <code>
-    /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
     ///     .ConfigureTokenizerFromPretrained()  // Uses BertBaseUncased by default
     ///     .ConfigureModel(new BertModel())
     ///     .BuildAsync();
@@ -1284,7 +1284,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="model">The pretrained tokenizer model to use. Defaults to BertBaseUncased.</param>
     /// <param name="config">Optional tokenization configuration.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased, TokenizationConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased, TokenizationConfig? config = null);
 
     /// <summary>
     /// Configures tokenization using a pretrained tokenizer from a custom HuggingFace model name or local path.
@@ -1305,7 +1305,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="modelNameOrPath">The HuggingFace model name or local path. Defaults to "bert-base-uncased" if not specified.</param>
     /// <param name="config">Optional tokenization configuration.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(string? modelNameOrPath = null, TokenizationConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(string? modelNameOrPath = null, TokenizationConfig? config = null);
 
     /// <summary>
     /// Asynchronously configures the tokenizer by loading a pretrained model from HuggingFace Hub.
@@ -1326,7 +1326,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="model">The pretrained tokenizer model to use.</param>
     /// <param name="config">Optional tokenization configuration.</param>
     /// <returns>A task that completes with the builder instance for method chaining.</returns>
-    Task<IPredictionModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased, TokenizationConfig? config = null);
+    Task<IAiModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased, TokenizationConfig? config = null);
 
     /// <summary>
     /// Asynchronously configures the tokenizer by loading a pretrained model from HuggingFace Hub using a model name or path.
@@ -1346,7 +1346,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="modelNameOrPath">The HuggingFace model name or local path. Defaults to "bert-base-uncased" if not specified.</param>
     /// <param name="config">Optional tokenization configuration.</param>
     /// <returns>A task that completes with the builder instance for method chaining.</returns>
-    Task<IPredictionModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(string? modelNameOrPath = null, TokenizationConfig? config = null);
+    Task<IAiModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(string? modelNameOrPath = null, TokenizationConfig? config = null);
 
     /// <summary>
     /// Enables GPU acceleration for training and inference with optional configuration.
@@ -1383,7 +1383,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="config">GPU acceleration configuration (optional, uses defaults if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureGpuAcceleration(GpuAccelerationConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureGpuAcceleration(GpuAccelerationConfig? config = null);
 
     /// <summary>
     /// Configures Just-In-Time (JIT) compilation for neural network forward and backward passes.
@@ -1430,7 +1430,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="config">JIT compilation configuration (optional, enables with defaults if null).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(AiDotNet.Configuration.JitCompilationConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(AiDotNet.Configuration.JitCompilationConfig? config = null);
 
     /// <summary>
     /// Configures inference-time optimizations for faster predictions.
@@ -1448,7 +1448,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///
     /// Example:
     /// <code>
-    /// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
+    /// var result = await new AiModelBuilder&lt;double, ...&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
     ///     .BuildAsync();
@@ -1467,7 +1467,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </code>
     /// </para>
     /// </remarks>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null);
 
     /// <summary>
     /// Configures mixed-precision training for faster neural network training with reduced memory usage.
@@ -1491,7 +1491,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// Example:
     /// <code>
     /// // Enable with default settings (recommended)
-    /// var result = await new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
     ///     .ConfigureMixedPrecision()  // Enable mixed-precision
@@ -1502,7 +1502,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </code>
     /// </para>
     /// </remarks>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null);
 
     /// <summary>
     /// Configures advanced reasoning capabilities for the model using Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency strategies.
@@ -1518,7 +1518,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// - Verify and refine its answers
     /// - Provide transparent, explainable reasoning
     ///
-    /// After building your model, use the reasoning methods on PredictionModelResult:
+    /// After building your model, use the reasoning methods on AiModelResult:
     /// - ReasonAsync(): Solve problems with configurable reasoning strategies
     /// - QuickReasonAsync(): Fast answers for simple problems
     /// - DeepReasonAsync(): Thorough analysis for complex problems
@@ -1533,7 +1533,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     ///     IsEnabled = true
     /// };
     ///
-    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
     ///     .ConfigureReasoning()
     ///     .BuildAsync();
@@ -1547,7 +1547,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </code>
     /// </para>
     /// </remarks>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null);
 
     /// <summary>
     /// Configures the data loader for providing training data.
@@ -1584,7 +1584,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="dataLoader">The data loader that provides training data.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataLoader(IDataLoader<T> dataLoader);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDataLoader(IDataLoader<T> dataLoader);
 
     /// <summary>
     /// Configures the prompt template for language model interactions.
@@ -1601,7 +1601,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="template">The prompt template to use. If null, no template is configured.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptTemplate(IPromptTemplate? template = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePromptTemplate(IPromptTemplate? template = null);
 
     /// <summary>
     /// Configures the prompt chain for composing multiple language model operations.
@@ -1618,7 +1618,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="chain">The chain to use for processing prompts. If null, no chain is configured.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptChain(IChain<string, string>? chain = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePromptChain(IChain<string, string>? chain = null);
 
     /// <summary>
     /// Configures the prompt optimizer for automatically improving prompts.
@@ -1635,7 +1635,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="optimizer">The prompt optimizer to use. If null, no optimizer is configured.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptOptimizer(IPromptOptimizer<T>? optimizer = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePromptOptimizer(IPromptOptimizer<T>? optimizer = null);
 
     /// <summary>
     /// Configures the few-shot example selector for selecting examples to include in prompts.
@@ -1653,7 +1653,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="selector">The few-shot example selector to use. If null, no selector is configured.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureFewShotExampleSelector(IFewShotExampleSelector<T>? selector = null);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureFewShotExampleSelector(IFewShotExampleSelector<T>? selector = null);
 
     /// <summary>
     /// Configures Program Synthesis to prefer calling <c>AiDotNet.Serving</c> for sandboxed execution and evaluation.
@@ -1673,7 +1673,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="options">Serving client options. If null, Serving is not used unless a client is provided.</param>
     /// <param name="client">Optional custom client implementation. When provided, this takes precedence over <paramref name="options"/>.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureProgramSynthesisServing(
+    IAiModelBuilder<T, TInput, TOutput> ConfigureProgramSynthesisServing(
         ProgramSynthesisServingClientOptions? options = null,
         IProgramSynthesisServingClient? client = null);
 
@@ -1730,7 +1730,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="options">Curriculum learning options (schedule type, phases, difficulty estimation).
     /// If null, sensible defaults are used (Linear schedule, 5 phases, loss-based difficulty).</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCurriculumLearning(
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCurriculumLearning(
         CurriculumLearningOptions<T, TInput, TOutput>? options = null);
 
     /// <summary>
@@ -1768,7 +1768,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
     /// <exception cref="InvalidOperationException">Thrown if no valid training path was configured.</exception>
-    Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync();
+    Task<AiModelResult<T, TInput, TOutput>> BuildAsync();
 
     // ============================================================================
     // Training Infrastructure Configuration Methods
@@ -1792,7 +1792,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="tracker">The experiment tracker implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureExperimentTracker(IExperimentTracker<T> tracker);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureExperimentTracker(IExperimentTracker<T> tracker);
 
     /// <summary>
     /// Configures checkpoint management for saving and restoring training state.
@@ -1812,7 +1812,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="manager">The checkpoint manager implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureCheckpointManager(ICheckpointManager<T, TInput, TOutput> manager);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCheckpointManager(ICheckpointManager<T, TInput, TOutput> manager);
 
     /// <summary>
     /// Configures training monitoring for real-time visibility into training progress.
@@ -1832,7 +1832,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="monitor">The training monitor implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingMonitor(ITrainingMonitor<T> monitor);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingMonitor(ITrainingMonitor<T> monitor);
 
     /// <summary>
     /// Configures model registry for centralized model storage and versioning.
@@ -1852,7 +1852,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="registry">The model registry implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelRegistry(IModelRegistry<T, TInput, TOutput> registry);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModelRegistry(IModelRegistry<T, TInput, TOutput> registry);
 
     /// <summary>
     /// Configures data version control for tracking dataset changes.
@@ -1872,7 +1872,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <param name="dataVersionControl">The data version control implementation to use.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataVersionControl(IDataVersionControl<T> dataVersionControl);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDataVersionControl(IDataVersionControl<T> dataVersionControl);
 
     /// <summary>
     /// Configures hyperparameter optimization for automatic tuning of model settings.
@@ -1908,7 +1908,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// <param name="searchSpace">The hyperparameter search space defining parameter ranges. If null, hyperparameter optimization is disabled.</param>
     /// <param name="nTrials">Number of trials to run. Default is 10.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureHyperparameterOptimizer(
+    IAiModelBuilder<T, TInput, TOutput> ConfigureHyperparameterOptimizer(
         IHyperparameterOptimizer<T, TInput, TOutput> optimizer,
         HyperparameterSearchSpace? searchSpace = null,
         int nTrials = 10);
@@ -1968,7 +1968,7 @@ public interface IPredictionModelBuilder<T, TInput, TOutput>
     /// with automatic data-type detection.
     /// </param>
     /// <returns>The builder instance for method chaining.</returns>
-    IPredictionModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
         Augmentation.AugmentationConfig? config = null);
 
 }

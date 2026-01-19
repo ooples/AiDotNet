@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the exhaustive implementation plan for Active Learning (AL) and Continual Learning (CL) strategies in AiDotNet, as well as their integration into the PredictionModelBuilder facade.
+This document outlines the exhaustive implementation plan for Active Learning (AL) and Continual Learning (CL) strategies in AiDotNet, as well as their integration into the AiModelBuilder facade.
 
 ## Current State
 
@@ -144,7 +144,7 @@ This document outlines the exhaustive implementation plan for Active Learning (A
 
 ## Facade Integration Design
 
-### PredictionModelBuilder Integration
+### AiModelBuilder Integration
 
 ```csharp
 // New private fields
@@ -154,7 +154,7 @@ private ActiveLearningOptions? _activeLearningOptions;
 private ContinualLearningOptions? _continualLearningOptions;
 
 // New configuration methods
-public IPredictionModelBuilder<T, TInput, TOutput> ConfigureActiveLearning(
+public IAiModelBuilder<T, TInput, TOutput> ConfigureActiveLearning(
     IActiveLearningStrategy<T> strategy,
     ActiveLearningOptions? options = null)
 {
@@ -163,7 +163,7 @@ public IPredictionModelBuilder<T, TInput, TOutput> ConfigureActiveLearning(
     return this;
 }
 
-public IPredictionModelBuilder<T, TInput, TOutput> ConfigureContinualLearning(
+public IAiModelBuilder<T, TInput, TOutput> ConfigureContinualLearning(
     IContinualLearningStrategy<T> strategy,
     ContinualLearningOptions? options = null)
 {
@@ -252,10 +252,10 @@ public enum MemorySamplingStrategy
 }
 ```
 
-### PredictionModelResult Integration
+### AiModelResult Integration
 
 ```csharp
-// Add to PredictionModelResult or create new specialized result classes
+// Add to AiModelResult or create new specialized result classes
 
 /// <summary>
 /// Results from an Active Learning training session.
@@ -360,7 +360,7 @@ public class TaskPerformance<T>
 
 ### Phase 3: Facade Integration
 1. Create ActiveLearningOptions and ContinualLearningOptions
-2. Add private fields to PredictionModelBuilder
+2. Add private fields to AiModelBuilder
 3. Add ConfigureActiveLearning and ConfigureContinualLearning methods
 4. Integrate into BuildAsync methods
 5. Create specialized result classes
@@ -375,7 +375,7 @@ public class TaskPerformance<T>
 After implementation, AiDotNet will have:
 - **15 Active Learning strategies** (5 existing + 10 new)
 - **12 Continual Learning strategies** (3 existing + 9 new)
-- **Full facade integration** via PredictionModelBuilder
+- **Full facade integration** via AiModelBuilder
 - **Comprehensive options** for customization
 - **Result tracking** for analysis and debugging
 

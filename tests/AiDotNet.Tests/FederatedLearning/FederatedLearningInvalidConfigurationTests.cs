@@ -152,7 +152,7 @@ public class FederatedLearningInvalidConfigurationTests
             ? new FederatedDeterministicDeltaOptimizer(model)
             : new FederatedNoOpOptimizer(model);
 
-        await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+        await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)

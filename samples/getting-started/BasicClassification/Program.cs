@@ -23,15 +23,16 @@ var testLabels = labels.Skip(splitIndex).ToArray();
 Console.WriteLine($"Training set: {trainFeatures.Length} samples");
 Console.WriteLine($"Test set: {testFeatures.Length} samples\n");
 
-// Build and train the classifier
-Console.WriteLine("Building Random Forest classifier...");
+// Build and train the classifier using the facade pattern
+Console.WriteLine("Building Random Forest classifier with AiModelBuilder...");
 Console.WriteLine("  - 100 decision trees");
 Console.WriteLine("  - StandardScaler preprocessing");
 Console.WriteLine("  - 5-fold cross-validation\n");
 
 try
 {
-    var builder = new PredictionModelBuilder<double, double[], double>()
+    // Use the AiModelBuilder facade to configure and train
+    var builder = new AiModelBuilder<double, double[], double>()
         .ConfigureModel(new RandomForestClassifier<double, double[], double>(
             nEstimators: 100,
             maxDepth: 10,
@@ -44,7 +45,7 @@ try
 
     var result = await builder.BuildAsync(trainFeatures, trainLabels);
 
-    // Display cross-validation results
+    // Display cross-validation results through the result object
     if (result.CrossValidationResult != null)
     {
         Console.WriteLine("Cross-Validation Results:");
@@ -59,14 +60,15 @@ try
         Console.WriteLine($"\n  Mean Accuracy: {cvResult.MeanScore:P2} (+/- {cvResult.StandardDeviation:P2})");
     }
 
-    // Evaluate on test set
+    // Evaluate on test set using the result object directly (facade pattern)
     Console.WriteLine("\nFinal Model Evaluation:");
     Console.WriteLine("─────────────────────────────────────");
 
     int correct = 0;
     for (int i = 0; i < testFeatures.Length; i++)
     {
-        var prediction = result.Model!.Predict(testFeatures[i]);
+        // Use result.Predict() - NOT result.Model.Predict()
+        var prediction = result.Predict(testFeatures[i]);
         if (Math.Abs(prediction - testLabels[i]) < 0.5)
             correct++;
     }
@@ -74,14 +76,15 @@ try
     double testAccuracy = (double)correct / testFeatures.Length;
     Console.WriteLine($"  Test Accuracy: {testAccuracy:P2}");
 
-    // Show some predictions
+    // Show some predictions using the result object
     Console.WriteLine("\nSample Predictions:");
     Console.WriteLine("─────────────────────────────────────");
     string[] speciesNames = { "Setosa", "Versicolor", "Virginica" };
 
     for (int i = 0; i < Math.Min(5, testFeatures.Length); i++)
     {
-        var prediction = result.Model!.Predict(testFeatures[i]);
+        // Use result.Predict() directly - this is the facade pattern
+        var prediction = result.Predict(testFeatures[i]);
         int predictedClass = (int)Math.Round(prediction);
         int actualClass = (int)testLabels[i];
 
@@ -92,7 +95,7 @@ try
 catch (Exception ex)
 {
     Console.WriteLine($"Note: Full training requires complete model implementation.");
-    Console.WriteLine($"This sample demonstrates the API pattern for classification.");
+    Console.WriteLine($"This sample demonstrates the facade pattern API for classification.");
     Console.WriteLine($"\nError details: {ex.Message}");
 }
 

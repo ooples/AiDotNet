@@ -35,7 +35,7 @@ try
     Console.WriteLine($"  Top-K Predictions: {config.TopK}");
     Console.WriteLine();
 
-    // Create classifier using PredictionModelBuilder facade pattern
+    // Create classifier using AiModelBuilder facade pattern
     Console.WriteLine("Creating image classifier...");
     var classifier = new ImageClassifier(config);
     Console.WriteLine("  Classifier created successfully\n");
@@ -140,7 +140,7 @@ try
 ");
 
     Console.WriteLine("3. Train with your data:");
-    Console.WriteLine(@"   var result = await new PredictionModelBuilder<float, Tensor<float>, int>()
+    Console.WriteLine(@"   var result = await new AiModelBuilder<float, Tensor<float>, int>()
        .ConfigureModel(model)
        .ConfigureOptimizer(new Adam<float>(learningRate: 0.001))
        .ConfigureTraining(epochs: 10, batchSize: 32)
@@ -340,8 +340,8 @@ var config = new ImageClassificationConfig
     TopK = 5
 };
 
-// 2. Create classifier using PredictionModelBuilder facade
-var builder = new PredictionModelBuilder<float, Tensor<float>, int>()
+// 2. Create classifier using AiModelBuilder facade
+var builder = new AiModelBuilder<float, Tensor<float>, int>()
     .ConfigureModel(new ResNet50<float>(config))
     .ConfigurePreprocessing(pipeline => pipeline
         .Add(new Resize<float>(224, 224))

@@ -111,7 +111,7 @@ curl -X POST http://localhost:5200/api/classify \
 ```csharp
 // Load a custom trained model
 var modelPath = "path/to/your/model.aidotnet";
-var model = PredictionModelResult<float, Tensor<float>, Tensor<float>>
+var model = AiModelResult<float, Tensor<float>, Tensor<float>>
     .LoadFromFile(modelPath);
 ```
 

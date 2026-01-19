@@ -10,12 +10,12 @@ using AiDotNet.Tensors;
 namespace AiDotNet;
 
 /// <summary>
-/// Computer vision extensions for PredictionModelBuilder.
+/// Computer vision extensions for AiModelBuilder.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input type.</typeparam>
 /// <typeparam name="TOutput">The output type.</typeparam>
-public partial class PredictionModelBuilder<T, TInput, TOutput>
+public partial class AiModelBuilder<T, TInput, TOutput>
 {
     private ObjectDetectorBase<T>? _objectDetector;
     private InstanceSegmenterBase<T>? _instanceSegmenter;
@@ -36,12 +36,12 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <example>
     /// <code>
-    /// var builder = new PredictionModelBuilder&lt;float, Tensor&lt;float&gt;, DetectionResult&lt;float&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, DetectionResult&lt;float&gt;&gt;()
     ///     .ConfigureObjectDetector(new YOLOv8&lt;float&gt;(options))
     ///     .Build();
     /// </code>
     /// </example>
-    public PredictionModelBuilder<T, TInput, TOutput> ConfigureObjectDetector(ObjectDetectorBase<T> detector)
+    public AiModelBuilder<T, TInput, TOutput> ConfigureObjectDetector(ObjectDetectorBase<T> detector)
     {
         _objectDetector = detector;
         return this;
@@ -56,7 +56,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     /// <para><b>For Beginners:</b> Instance segmentation provides pixel-level masks
     /// for each detected object, not just bounding boxes.</para>
     /// </remarks>
-    public PredictionModelBuilder<T, TInput, TOutput> ConfigureInstanceSegmenter(InstanceSegmenterBase<T> segmenter)
+    public AiModelBuilder<T, TInput, TOutput> ConfigureInstanceSegmenter(InstanceSegmenterBase<T> segmenter)
     {
         _instanceSegmenter = segmenter;
         return this;
@@ -71,7 +71,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     /// <para><b>For Beginners:</b> OCR (Optical Character Recognition) extracts
     /// text from images, useful for reading documents or scene text.</para>
     /// </remarks>
-    public PredictionModelBuilder<T, TInput, TOutput> ConfigureSceneTextReader(SceneTextReader<T> textReader)
+    public AiModelBuilder<T, TInput, TOutput> ConfigureSceneTextReader(SceneTextReader<T> textReader)
     {
         _sceneTextReader = textReader;
         return this;
@@ -86,7 +86,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     /// <para><b>For Beginners:</b> Object tracking maintains identity of objects
     /// across video frames, assigning consistent IDs.</para>
     /// </remarks>
-    public PredictionModelBuilder<T, TInput, TOutput> ConfigureObjectTracker(ObjectTrackerBase<T> tracker)
+    public AiModelBuilder<T, TInput, TOutput> ConfigureObjectTracker(ObjectTrackerBase<T> tracker)
     {
         _objectTracker = tracker;
         return this;
@@ -97,7 +97,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput>
     /// </summary>
     /// <param name="options">Visualization options.</param>
     /// <returns>The builder for method chaining.</returns>
-    public PredictionModelBuilder<T, TInput, TOutput> ConfigureVisualization(VisualizationOptions? options = null)
+    public AiModelBuilder<T, TInput, TOutput> ConfigureVisualization(VisualizationOptions? options = null)
     {
         _detectionVisualizer = new DetectionVisualizer<T>(options);
         _maskVisualizer = new MaskVisualizer<T>(options);
@@ -154,7 +154,7 @@ public static class ComputerVisionBuilderExtensions
     /// <param name="image">Input image tensor [batch, channels, height, width].</param>
     /// <returns>Detection result with bounding boxes and labels.</returns>
     public static DetectionResult<T> DetectObjects<T>(
-        this PredictionModelBuilder<T, Tensor<T>, DetectionResult<T>> builder,
+        this AiModelBuilder<T, Tensor<T>, DetectionResult<T>> builder,
         Tensor<T> image)
     {
         if (builder.ObjectDetector == null)
@@ -173,7 +173,7 @@ public static class ComputerVisionBuilderExtensions
     /// <param name="image">Input image tensor.</param>
     /// <returns>Instance segmentation result with masks.</returns>
     public static InstanceSegmentationResult<T> SegmentInstances<T>(
-        this PredictionModelBuilder<T, Tensor<T>, InstanceSegmentationResult<T>> builder,
+        this AiModelBuilder<T, Tensor<T>, InstanceSegmentationResult<T>> builder,
         Tensor<T> image)
     {
         if (builder.InstanceSegmenter == null)
@@ -192,7 +192,7 @@ public static class ComputerVisionBuilderExtensions
     /// <param name="image">Input image tensor.</param>
     /// <returns>OCR result with recognized text.</returns>
     public static OCRResult<T> RecognizeText<T>(
-        this PredictionModelBuilder<T, Tensor<T>, OCRResult<T>> builder,
+        this AiModelBuilder<T, Tensor<T>, OCRResult<T>> builder,
         Tensor<T> image)
     {
         if (builder.SceneTextReader == null)
@@ -211,7 +211,7 @@ public static class ComputerVisionBuilderExtensions
     /// <param name="detections">Detections from the current frame.</param>
     /// <returns>Tracking result with updated tracks.</returns>
     public static TrackingResult<T> UpdateTracks<T>(
-        this PredictionModelBuilder<T, Tensor<T>, TrackingResult<T>> builder,
+        this AiModelBuilder<T, Tensor<T>, TrackingResult<T>> builder,
         List<Detection<T>> detections)
     {
         if (builder.ObjectTracker == null)
@@ -232,7 +232,7 @@ public static class ComputerVisionBuilderExtensions
     /// <param name="classNames">Optional class name mapping.</param>
     /// <returns>Image with visualizations drawn.</returns>
     public static Tensor<T> VisualizeDetections<T>(
-        this PredictionModelBuilder<T, Tensor<T>, DetectionResult<T>> builder,
+        this AiModelBuilder<T, Tensor<T>, DetectionResult<T>> builder,
         Tensor<T> image,
         DetectionResult<T> result,
         string[]? classNames = null)
@@ -251,7 +251,7 @@ public static class ComputerVisionBuilderExtensions
     /// <param name="classNames">Optional class name mapping.</param>
     /// <returns>Image with visualizations drawn.</returns>
     public static Tensor<T> VisualizeSegmentation<T>(
-        this PredictionModelBuilder<T, Tensor<T>, InstanceSegmentationResult<T>> builder,
+        this AiModelBuilder<T, Tensor<T>, InstanceSegmentationResult<T>> builder,
         Tensor<T> image,
         InstanceSegmentationResult<T> result,
         string[]? classNames = null)
@@ -269,7 +269,7 @@ public static class ComputerVisionBuilderExtensions
     /// <param name="result">OCR result to visualize.</param>
     /// <returns>Image with visualizations drawn.</returns>
     public static Tensor<T> VisualizeOCR<T>(
-        this PredictionModelBuilder<T, Tensor<T>, OCRResult<T>> builder,
+        this AiModelBuilder<T, Tensor<T>, OCRResult<T>> builder,
         Tensor<T> image,
         OCRResult<T> result)
     {
@@ -285,7 +285,7 @@ public static class ComputerVisionBuilderExtensions
     /// <param name="image">Input image tensor.</param>
     /// <returns>Tracking result with tracked objects.</returns>
     public static TrackingResult<T> DetectAndTrack<T>(
-        this PredictionModelBuilder<T, Tensor<T>, TrackingResult<T>> builder,
+        this AiModelBuilder<T, Tensor<T>, TrackingResult<T>> builder,
         Tensor<T> image)
     {
         if (builder.ObjectDetector == null)
@@ -314,13 +314,13 @@ public static class ComputerVisionPipelineFactory
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <param name="options">Detection options.</param>
     /// <returns>Configured builder for object detection.</returns>
-    public static PredictionModelBuilder<T, Tensor<T>, DetectionResult<T>> CreateYOLOv8Pipeline<T>(
+    public static AiModelBuilder<T, Tensor<T>, DetectionResult<T>> CreateYOLOv8Pipeline<T>(
         ObjectDetectionOptions<T>? options = null)
     {
         var detectionOptions = options ?? new ObjectDetectionOptions<T>();
         var detector = new AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv8<T>(detectionOptions);
 
-        return new PredictionModelBuilder<T, Tensor<T>, DetectionResult<T>>()
+        return new AiModelBuilder<T, Tensor<T>, DetectionResult<T>>()
             .ConfigureObjectDetector(detector)
             .ConfigureVisualization();
     }
@@ -331,13 +331,13 @@ public static class ComputerVisionPipelineFactory
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <param name="options">Segmentation options.</param>
     /// <returns>Configured builder for instance segmentation.</returns>
-    public static PredictionModelBuilder<T, Tensor<T>, InstanceSegmentationResult<T>> CreateMaskRCNNPipeline<T>(
+    public static AiModelBuilder<T, Tensor<T>, InstanceSegmentationResult<T>> CreateMaskRCNNPipeline<T>(
         InstanceSegmentationOptions<T>? options = null)
     {
         var segmentationOptions = options ?? new InstanceSegmentationOptions<T>();
         var segmenter = new MaskRCNN<T>(segmentationOptions);
 
-        return new PredictionModelBuilder<T, Tensor<T>, InstanceSegmentationResult<T>>()
+        return new AiModelBuilder<T, Tensor<T>, InstanceSegmentationResult<T>>()
             .ConfigureInstanceSegmenter(segmenter)
             .ConfigureVisualization();
     }
@@ -348,14 +348,14 @@ public static class ComputerVisionPipelineFactory
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <param name="options">OCR options.</param>
     /// <returns>Configured builder for OCR.</returns>
-    public static PredictionModelBuilder<T, Tensor<T>, OCRResult<T>> CreateSceneTextPipeline<T>(
+    public static AiModelBuilder<T, Tensor<T>, OCRResult<T>> CreateSceneTextPipeline<T>(
         OCROptions<T>? options = null)
     {
         var ocrOptions = options ?? new OCROptions<T>();
         ocrOptions.Mode = OCRMode.SceneText;
         var reader = new AiDotNet.ComputerVision.OCR.EndToEnd.SceneTextReader<T>(ocrOptions);
 
-        return new PredictionModelBuilder<T, Tensor<T>, OCRResult<T>>()
+        return new AiModelBuilder<T, Tensor<T>, OCRResult<T>>()
             .ConfigureSceneTextReader(reader)
             .ConfigureVisualization();
     }
@@ -367,7 +367,7 @@ public static class ComputerVisionPipelineFactory
     /// <param name="detectionOptions">Detection options.</param>
     /// <param name="trackingOptions">Tracking options.</param>
     /// <returns>Configured builder for detection and tracking.</returns>
-    public static PredictionModelBuilder<T, Tensor<T>, TrackingResult<T>> CreateDetectionTrackingPipeline<T>(
+    public static AiModelBuilder<T, Tensor<T>, TrackingResult<T>> CreateDetectionTrackingPipeline<T>(
         ObjectDetectionOptions<T>? detectionOptions = null,
         TrackingOptions<T>? trackingOptions = null)
     {
@@ -377,7 +377,7 @@ public static class ComputerVisionPipelineFactory
         var detector = new AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv8<T>(detOptions);
         var tracker = new ByteTrack<T>(trkOptions);
 
-        return new PredictionModelBuilder<T, Tensor<T>, TrackingResult<T>>()
+        return new AiModelBuilder<T, Tensor<T>, TrackingResult<T>>()
             .ConfigureObjectDetector(detector)
             .ConfigureObjectTracker(tracker)
             .ConfigureVisualization();

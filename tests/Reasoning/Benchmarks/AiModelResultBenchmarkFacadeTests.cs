@@ -5,7 +5,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.Reasoning.Benchmarks;
 
-public class PredictionModelResultBenchmarkFacadeTests
+public class AiModelResultBenchmarkFacadeTests
 {
     [Fact]
     public async Task EvaluateBenchmarkAsync_UsesPromptChain_WhenConfigured()
@@ -16,14 +16,14 @@ public class PredictionModelResultBenchmarkFacadeTests
         var answersByProblem = problems.ToDictionary(p => p.Problem, p => p.CorrectAnswer);
         var chain = new ProblemAnswerLookupChain(answersByProblem);
 
-        var options = new PredictionModelResultOptions<double, LinearAlgebra.Matrix<double>, LinearAlgebra.Vector<double>>
+        var options = new AiModelResultOptions<double, LinearAlgebra.Matrix<double>, LinearAlgebra.Vector<double>>
         {
             OptimizationResult = new OptimizationResult<double, LinearAlgebra.Matrix<double>, LinearAlgebra.Vector<double>>(),
             NormalizationInfo = new NormalizationInfo<double, LinearAlgebra.Matrix<double>, LinearAlgebra.Vector<double>>(),
             PromptChain = chain
         };
 
-        var modelResult = new PredictionModelResult<double, LinearAlgebra.Matrix<double>, LinearAlgebra.Vector<double>>(options);
+        var modelResult = new AiModelResult<double, LinearAlgebra.Matrix<double>, LinearAlgebra.Vector<double>>(options);
 
         var results = await modelResult.EvaluateBenchmarkAsync(benchmark, sampleSize: 3);
 

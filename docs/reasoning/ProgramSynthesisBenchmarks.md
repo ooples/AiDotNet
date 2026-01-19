@@ -1,8 +1,8 @@
 # Program Synthesis Benchmarks (HumanEval + CodeXGLUE)
 
 This document describes how to run program synthesis/code generation benchmarks using the façade APIs:
-- Build/configure via `PredictionModelBuilder`
-- Evaluate via `PredictionModelResult`
+- Build/configure via `AiModelBuilder`
+- Evaluate via `AiModelResult`
 - Prefer `AiDotNet.Serving` for untrusted execution
 
 ## HumanEval (execution-based)
@@ -15,10 +15,10 @@ HumanEval evaluation is implemented as **execution-based** correctness:
 Recommended pattern:
 
 1. Configure a model result with program-synthesis serving:
-   - `PredictionModelBuilder.ConfigureProgramSynthesisServing(...)`
+   - `AiModelBuilder.ConfigureProgramSynthesisServing(...)`
 2. Use:
-   - `PredictionModelResult.EvaluateHumanEvalAsync(...)` (pass@1 style)
-   - `PredictionModelResult.EvaluateHumanEvalPassAtKAsync(k, ...)` (pass@k)
+   - `AiModelResult.EvaluateHumanEvalAsync(...)` (pass@1 style)
+   - `AiModelResult.EvaluateHumanEvalPassAtKAsync(k, ...)` (pass@k)
 
 ## CodeXGLUE
 

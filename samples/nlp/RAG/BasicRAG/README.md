@@ -4,7 +4,7 @@ This sample demonstrates how to build a question-answering system using Retrieva
 
 ## What You'll Learn
 
-- How to configure RAG with `PredictionModelBuilder`
+- How to configure RAG with `AiModelBuilder`
 - How to use vector stores for document embedding
 - How to configure retrievers and rerankers
 - How to generate answers from retrieved context
@@ -57,14 +57,15 @@ Generated answer:
 ## Code Highlights
 
 ```csharp
-var result = await new PredictionModelBuilder<float, string, string>()
+var result = await new AiModelBuilder<float, string, string>()
     .ConfigureRetrievalAugmentedGeneration(
         retriever: new DenseRetriever<float>(embeddingModel, topK: 3),
         reranker: new CrossEncoderReranker<float>(),
         generator: new LLMGenerator<float>(llmClient))
     .BuildAsync();
 
-var answer = await result.Model.QueryAsync(question, documents);
+// Use the result object for RAG queries (facade pattern)
+var answer = await result.QueryAsync(question, documents);
 ```
 
 ## Architecture

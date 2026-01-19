@@ -61,7 +61,7 @@ Console.WriteLine(""Let's build something amazing!"");
                     Description = "Create and use a simple prediction model",
                     Difficulty = "Beginner",
                     Tags = ["regression", "prediction", "basics"],
-                    Code = @"// Basic Prediction with PredictionModelBuilder
+                    Code = @"// Basic Prediction with AiModelBuilder
 using AiDotNet;
 using System;
 
@@ -85,7 +85,7 @@ Console.WriteLine($""Training samples: {features.GetLength(0)}"");
 Console.WriteLine();
 
 // In a full implementation:
-// var result = await new PredictionModelBuilder<double, double[], double>()
+// var result = await new AiModelBuilder<double, double[], double>()
 //     .ConfigureModel(new LinearRegression<double>())
 //     .ConfigurePreprocessing()
 //     .BuildAsync(features, labels);
@@ -138,7 +138,7 @@ Console.WriteLine($""  Classes: {classNames.Length}"");
 Console.WriteLine();
 
 // In a full implementation:
-// var result = await new PredictionModelBuilder<double, double[], int>()
+// var result = await new AiModelBuilder<double, double[], int>()
 //     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
 //     .BuildAsync(features, labels);
 
@@ -186,7 +186,7 @@ for (int i = 0; i < reviews.Length; i++)
 Console.WriteLine();
 
 // In a full implementation:
-// var result = await new PredictionModelBuilder<float, string, int>()
+// var result = await new AiModelBuilder<float, string, int>()
 //     .ConfigureModel(new TextClassifier<float>(backbone: ""distilbert-base""))
 //     .ConfigureTokenizer(new BertTokenizer())
 //     .BuildAsync(reviews, sentiments);
@@ -237,7 +237,7 @@ Console.WriteLine();
 //     new SoftmaxActivation<float>()
 // );
 //
-// var result = await new PredictionModelBuilder<float, Tensor<float>, int>()
+// var result = await new AiModelBuilder<float, Tensor<float>, int>()
 //     .ConfigureModel(model)
 //     .ConfigureOptimizer(new AdamOptimizer<float>(learningRate: 0.001f))
 //     .ConfigureLossFunction(new CrossEntropyLoss<float>())
@@ -284,7 +284,7 @@ Console.WriteLine();
 //     numClasses: 10,
 //     pretrained: false);
 //
-// var result = await new PredictionModelBuilder<float, Tensor<float>, int>()
+// var result = await new AiModelBuilder<float, Tensor<float>, int>()
 //     .ConfigureModel(model)
 //     .ConfigureOptimizer(new AdamWOptimizer<float>(learningRate: 3e-4f))
 //     .ConfigureGpuAcceleration(new GpuAccelerationConfig { Enabled = true })

@@ -22,14 +22,14 @@ namespace AiDotNet.Training.Memory;
 /// - **Model Sharding**: Split large models across multiple GPUs
 /// </para>
 /// <para>
-/// Example usage with PredictionModelBuilder:
+/// Example usage with AiModelBuilder:
 /// <code>
 /// // Using a preset for common scenarios
-/// var builder = new PredictionModelBuilder&lt;double, double[], double&gt;()
+/// var builder = new AiModelBuilder&lt;double, double[], double&gt;()
 ///     .ConfigureMemoryManagement(TrainingMemoryConfig.ForTransformers());
 ///
 /// // Or with custom settings
-/// var builder = new PredictionModelBuilder&lt;double, double[], double&gt;()
+/// var builder = new AiModelBuilder&lt;double, double[], double&gt;()
 ///     .ConfigureMemoryManagement(new TrainingMemoryConfig
 ///     {
 ///         UseGradientCheckpointing = true,

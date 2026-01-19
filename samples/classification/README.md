@@ -26,12 +26,13 @@ using AiDotNet.Classification;
 var features = new double[][] { /* training data */ };
 var labels = new double[] { /* class labels */ };
 
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
     .ConfigurePreprocessing()
     .BuildAsync(features, labels);
 
-var prediction = result.Model.Predict(newSample);
+// Use result.Predict() directly - this is the facade pattern
+var prediction = result.Predict(newSample);
 ```
 
 ## Available Classifiers

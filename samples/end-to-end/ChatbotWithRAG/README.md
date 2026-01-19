@@ -101,7 +101,7 @@ The RAG pipeline uses these default settings:
 The chatbot comes pre-loaded with documentation about:
 
 - AiDotNet Overview
-- PredictionModelBuilder Guide
+- AiModelBuilder Guide
 - Neural Network Architectures
 - RAG Components
 - Distributed Training

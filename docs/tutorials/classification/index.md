@@ -59,7 +59,7 @@ var features = new double[][]
 var labels = new double[] { 0, 1, 2 };
 
 // Build and train
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
     .ConfigurePreprocessing()
     .ConfigureCrossValidation(new KFoldCrossValidator<double>(k: 5))
@@ -68,8 +68,8 @@ var result = await new PredictionModelBuilder<double, double[], double>()
 // Evaluate
 Console.WriteLine($"Accuracy: {result.CrossValidationResult?.MeanScore:P2}");
 
-// Predict
-var prediction = result.Model.Predict(new[] { 5.9, 3.0, 5.1, 1.8 });
+// Predict using result object (facade pattern)
+var prediction = result.Predict(new[] { 5.9, 3.0, 5.1, 1.8 });
 Console.WriteLine($"Predicted class: {prediction}");
 ```
 
@@ -110,7 +110,7 @@ Console.WriteLine($"Predicted class: {prediction}");
 ### Neural Networks
 
 ```csharp
-var result = await new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>()
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
     .ConfigureModel(new NeuralNetworkClassifier<float>(
         inputFeatures: 784,
         numClasses: 10,
@@ -169,7 +169,8 @@ Console.WriteLine($"Folds: {string.Join(", ", cv.FoldScores.Select(s => $"{s:P2}
 ### Confusion Matrix
 
 ```csharp
-var predictions = testSamples.Select(s => result.Model.Predict(s)).ToArray();
+// Use result.Predict() directly (facade pattern)
+var predictions = testSamples.Select(s => result.Predict(s)).ToArray();
 var cm = ConfusionMatrix.Compute(predictions, testLabels);
 
 Console.WriteLine($"Accuracy: {cm.Accuracy:P2}");
@@ -192,7 +193,7 @@ Console.WriteLine($"AUC: {rocCurve.AUC:F4}");
 ### Grid Search
 
 ```csharp
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new RandomForestClassifier<double>())
     .ConfigureHyperparameterSearch(new GridSearchConfig
     {

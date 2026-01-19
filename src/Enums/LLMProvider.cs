@@ -5,7 +5,7 @@ namespace AiDotNet.Enums;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This enum specifies which LLM provider to use when enabling agent assistance in the PredictionModelBuilder.
+/// This enum specifies which LLM provider to use when enabling agent assistance in the AiModelBuilder.
 /// Different providers offer different models with varying capabilities, pricing, and performance characteristics.
 /// The selected provider determines which API will be called for agent operations such as model selection,
 /// hyperparameter tuning, and conversational assistance.

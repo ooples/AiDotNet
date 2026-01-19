@@ -64,13 +64,13 @@ IRLAgent<T>  // RL-specific interface
 IFullModel<T, Vector<T>, Vector<T>>  // Integrates with AiDotNet
 ```
 
-### Integration with PredictionModelBuilder
+### Integration with AiModelBuilder
 
 ```csharp
 // Training an RL agent
 var agent = new DQNAgent<double>(options);
 
-var result = await new PredictionModelBuilder<double, Vector<double>, Vector<double>>()
+var result = await new AiModelBuilder<double, Vector<double>, Vector<double>>()
     .ConfigureEnvironment(new CartPoleEnvironment<double>())
     .ConfigureModel(agent)
     .BuildAsync(episodes: 1000);
@@ -161,7 +161,7 @@ public async Task DQNAgent_LearnCartPole()
     var agent = new DQNAgent<double>(options);
     var env = new CartPoleEnvironment<double>();
 
-    var result = await new PredictionModelBuilder<double, Vector<double>, Vector<double>>()
+    var result = await new AiModelBuilder<double, Vector<double>, Vector<double>>()
         .ConfigureEnvironment(env)
         .ConfigureModel(agent)
         .BuildAsync(episodes: 500);

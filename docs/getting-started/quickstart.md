@@ -53,14 +53,14 @@ var features = new double[][]
 var labels = new double[] { 0, 0, 1, 1, 2, 2 };
 
 // Build classifier
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
     .ConfigurePreprocessing()
     .BuildAsync(features, labels);
 
-// Make prediction
+// Make prediction using result object (facade pattern)
 var sample = new[] { 5.9, 3.0, 5.1, 1.8 };
-var prediction = result.Model.Predict(sample);
+var prediction = result.Predict(sample);
 
 Console.WriteLine($"Predicted species: {prediction}");  // Output: 2 (Virginica)
 ```
@@ -84,14 +84,14 @@ var features = new double[][]
 var prices = new double[] { 300000, 450000, 200000, 550000 };
 
 // Build regressor
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new GradientBoostingRegression<double>(nEstimators: 100))
     .ConfigurePreprocessing()
     .BuildAsync(features, prices);
 
-// Predict price
+// Predict price using result object (facade pattern)
 var newHouse = new[] { 1800.0, 3.0, 2.0 };
-var predictedPrice = result.Model.Predict(newHouse);
+var predictedPrice = result.Predict(newHouse);
 
 Console.WriteLine($"Predicted price: ${predictedPrice:N0}");
 ```
@@ -151,7 +151,7 @@ using AiDotNet;
 using AiDotNet.Classification;
 using AiDotNet.CrossValidation;
 
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
     .ConfigurePreprocessing()
     .ConfigureCrossValidation(new KFoldCrossValidator<double>(k: 5))
@@ -174,7 +174,7 @@ Enable GPU for faster training:
 using AiDotNet;
 using AiDotNet.Configuration;
 
-var result = await new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>()
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
     .ConfigureModel(cnnModel)
     .ConfigureOptimizer(new AdamOptimizer<float>())
     .ConfigureGpuAcceleration(new GpuAccelerationConfig

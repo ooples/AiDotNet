@@ -18,12 +18,13 @@ using AiDotNet.Regression;
 var features = new double[][] { /* features */ };
 var targets = new double[] { /* continuous values */ };
 
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new GradientBoostingRegression<double>(nEstimators: 100))
     .ConfigurePreprocessing()
     .BuildAsync(features, targets);
 
-var prediction = result.Model.Predict(newFeatures);
+// Use result.Predict() directly - this is the facade pattern
+var prediction = result.Predict(newFeatures);
 ```
 
 ## Available Regressors

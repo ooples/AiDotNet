@@ -183,10 +183,10 @@ var pipelineModel = Pipeline.Wrap(model, stages, pipelineConfig);
 
 ---
 
-## Using PredictionModelBuilder
+## Using AiModelBuilder
 
 ```csharp
-var result = await new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>()
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
     .ConfigureModel(largeModel)
     .ConfigureOptimizer(new AdamWOptimizer<float>())
     .ConfigureDistributedTraining(new DistributedConfig

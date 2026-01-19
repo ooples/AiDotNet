@@ -232,13 +232,13 @@ Key features include:
 Unlike TorchSharp or TensorFlow.NET, AiDotNet is a pure .NET implementation without external runtime
 dependencies, providing instant startup and native .NET type support including Memory<T> and Span<T>.
 "),
-            ("PredictionModelBuilder Guide", @"
-PredictionModelBuilder is the main entry point for building and training models in AiDotNet.
+            ("AiModelBuilder Guide", @"
+AiModelBuilder is the main entry point for building and training models in AiDotNet.
 It follows a fluent API pattern that makes model configuration simple and readable.
 
 Basic usage:
 ```csharp
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new NeuralNetwork<double>(inputSize: 4, hiddenSize: 16, outputSize: 3))
     .ConfigureOptimizer(new AdamOptimizer<double>())
     .ConfigurePreprocessing()

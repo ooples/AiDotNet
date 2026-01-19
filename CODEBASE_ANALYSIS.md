@@ -291,7 +291,7 @@ ExperimentTracking/
 - Namespace: `AiDotNet.ExperimentTracking`
 
 **Integration Points:**
-- Register with `PredictionModelBuilder`
+- Register with `AiModelBuilder`
 - Hook into `OptimizerBase` iteration loops
 - Use existing `OptimizationIterationInfo` structure
 
@@ -519,7 +519,7 @@ DataVersioning/
 - Follow naming: `{Component}Exception`
 - Examples: `CheckpointException`, `DataVersionException`
 
-**4. Integration with PredictionModelBuilder**
+**4. Integration with AiModelBuilder**
 - Add builder methods to configure each component
 - Follow existing pattern: `Configure{Component}()`
 - Example: `ConfigureCheckpointManager()`, `ConfigureExperimentTracker()`

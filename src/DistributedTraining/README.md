@@ -78,10 +78,10 @@ var configForLowBandwidth = ShardingConfiguration<double>.CreateForLowBandwidth(
 var distributedModel = model.AsDistributed(config);
 ```
 
-### 3. Using with PredictionModelBuilder
+### 3. Using with AiModelBuilder
 
 ```csharp
-var result = new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+var result = new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
     .ConfigureModel(model.AsDistributed(backend))
     .ConfigureOptimizer(optimizer.AsDistributed(backend))
     .Build(xTrain, yTrain);

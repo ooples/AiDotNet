@@ -1128,12 +1128,12 @@ public class BenchmarkRunner<T>
 
 ---
 
-## Phase 6: Integration with PredictionModelBuilder
+## Phase 6: Integration with AiModelBuilder
 
 ### Fluent API Integration
 
 ```csharp
-public class PredictionModelBuilder<T, TInput, TOutput>
+public class AiModelBuilder<T, TInput, TOutput>
 {
     private ContinualLearnerConfig<T>? _continualConfig;
     private ActiveLearnerConfig<T>? _activeConfig;
@@ -1142,7 +1142,7 @@ public class PredictionModelBuilder<T, TInput, TOutput>
     /// <summary>
     /// Configure continual learning for sequential task learning.
     /// </summary>
-    public PredictionModelBuilder<T, TInput, TOutput> WithContinualLearning(
+    public AiModelBuilder<T, TInput, TOutput> WithContinualLearning(
         Action<ContinualLearnerConfig<T>>? configure = null)
     {
         _continualConfig = new ContinualLearnerConfig<T>();
@@ -1153,7 +1153,7 @@ public class PredictionModelBuilder<T, TInput, TOutput>
     /// <summary>
     /// Configure active learning for efficient data labeling.
     /// </summary>
-    public PredictionModelBuilder<T, TInput, TOutput> WithActiveLearning(
+    public AiModelBuilder<T, TInput, TOutput> WithActiveLearning(
         Action<ActiveLearnerConfig<T>>? configure = null)
     {
         _activeConfig = new ActiveLearnerConfig<T>();
@@ -1164,7 +1164,7 @@ public class PredictionModelBuilder<T, TInput, TOutput>
     /// <summary>
     /// Configure curriculum learning for training optimization.
     /// </summary>
-    public PredictionModelBuilder<T, TInput, TOutput> WithCurriculumLearning(
+    public AiModelBuilder<T, TInput, TOutput> WithCurriculumLearning(
         Action<CurriculumLearnerConfig<T>>? configure = null)
     {
         _curriculumConfig = new CurriculumLearnerConfig<T>();

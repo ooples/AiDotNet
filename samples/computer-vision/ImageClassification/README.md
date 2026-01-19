@@ -150,7 +150,7 @@ model.ReplaceClassifier(new Sequential<float>(
 ));
 
 // Train
-var result = await new PredictionModelBuilder<float, Tensor<float>, int>()
+var result = await new AiModelBuilder<float, Tensor<float>, int>()
     .ConfigureModel(model)
     .ConfigureOptimizer(new Adam<float>(learningRate: 0.001))
     .BuildAsync(trainImages, trainLabels);

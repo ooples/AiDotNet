@@ -225,7 +225,7 @@ public class TrainingPipelineConfiguration<T, TInput, TOutput>
     // ========================================================================
     // Distributed Training Configuration
     // ========================================================================
-    // Note: For distributed training, use ConfigureDistributedTraining() on PredictionModelBuilder.
+    // Note: For distributed training, use ConfigureDistributedTraining() on AiModelBuilder.
     // For memory sharding (NumDevices), use ConfigureMemoryManagement() with TrainingMemoryConfig.
 
     // ========================================================================

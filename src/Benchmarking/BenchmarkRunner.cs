@@ -13,7 +13,7 @@ namespace AiDotNet.Benchmarking;
 internal static class BenchmarkRunner
 {
     public static async Task<BenchmarkReport> RunAsync<T, TInput, TOutput>(
-        PredictionModelResult<T, TInput, TOutput> model,
+        AiModelResult<T, TInput, TOutput> model,
         BenchmarkingOptions options,
         CancellationToken cancellationToken = default)
     {
@@ -101,7 +101,7 @@ internal static class BenchmarkRunner
     }
 
     private static async Task<BenchmarkSuiteReport> RunSuiteAsync<T, TInput, TOutput>(
-        PredictionModelResult<T, TInput, TOutput> model,
+        AiModelResult<T, TInput, TOutput> model,
         BenchmarkSuite suite,
         BenchmarkingOptions options,
         CancellationToken cancellationToken)

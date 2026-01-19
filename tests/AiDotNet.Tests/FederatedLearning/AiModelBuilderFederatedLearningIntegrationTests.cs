@@ -9,7 +9,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
-public class PredictionModelBuilderFederatedLearningIntegrationTests
+public class AiModelBuilderFederatedLearningIntegrationTests
 {
     [Fact]
     public async Task BuildAsync_WithFederatedLearning_AddsFederatedLearningMetadata()
@@ -42,7 +42,7 @@ public class PredictionModelBuilderFederatedLearningIntegrationTests
 
         var loader = DataLoaders.FromMatrixVector(x, y);
 
-        var result = await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)

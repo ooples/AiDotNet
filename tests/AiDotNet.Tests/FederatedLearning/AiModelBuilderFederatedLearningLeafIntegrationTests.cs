@@ -6,7 +6,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.FederatedLearning;
 
-public class PredictionModelBuilderFederatedLearningLeafIntegrationTests
+public class AiModelBuilderFederatedLearningLeafIntegrationTests
 {
     private const string TinyLeafJson = @"
 {
@@ -64,7 +64,7 @@ public class PredictionModelBuilderFederatedLearningLeafIntegrationTests
                 PrivacyDelta = 1e-5
             };
 
-            var result = await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+            var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
                 .ConfigureDataLoader(loader)
                 .ConfigureModel(model)
                 .ConfigureOptimizer(optimizer)

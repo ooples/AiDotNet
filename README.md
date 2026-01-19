@@ -88,7 +88,7 @@ dotnet add package AiDotNet
 using AiDotNet;
 
 // Build and train a model in one fluent chain
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new NeuralNetwork<double>(inputSize: 4, hiddenSize: 16, outputSize: 3))
     .ConfigureOptimizer(new AdamOptimizer<double>())
     .ConfigurePreprocessing()  // Auto-applies StandardScaler + Imputer
@@ -169,7 +169,7 @@ var prediction = result.Model.Predict(newSample);
 
 **Example:**
 ```csharp
-var model = new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+var model = new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
     .ConfigureModel(new ConvolutionalNeuralNetwork<double>(
         inputChannels: 3,
         numClasses: 1000,
@@ -231,7 +231,7 @@ var model = new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
 
 **Example:**
 ```csharp
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
     .ConfigurePreprocessing(pipeline => pipeline
         .Add(new StandardScaler<double>())
@@ -295,7 +295,7 @@ Console.WriteLine($"Accuracy: {result.CrossValidationResult?.MeanAccuracy:P2}");
 
 **Example:**
 ```csharp
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new GradientBoostingRegression<double>(
         nEstimators: 200,
         maxDepth: 5,
@@ -363,7 +363,7 @@ var result = await new PredictionModelBuilder<double, double[], double>()
 
 **Example:**
 ```csharp
-var result = await new PredictionModelBuilder<double, double[], int>()
+var result = await new AiModelBuilder<double, double[], int>()
     .ConfigureModel(new HDBSCAN<double>(minClusterSize: 15, minSamples: 5))
     .ConfigureAutoML(new ClusteringAutoML<double>())  // Auto-tune parameters
     .BuildAsync(features);
@@ -422,7 +422,7 @@ Console.WriteLine($"Silhouette Score: {result.ClusteringMetrics?.SilhouetteScore
 
 **Example:**
 ```csharp
-var builder = new PredictionModelBuilder<float, Tensor<float>, DetectionResult[]>()
+var builder = new AiModelBuilder<float, Tensor<float>, DetectionResult[]>()
     .ConfigureObjectDetector(new YOLOv8Detector<float>(
         modelSize: YOLOModelSize.Medium,
         confidenceThreshold: 0.5f))
@@ -686,7 +686,7 @@ for (int episode = 0; episode < 1000; episode++)
 
 **Example:**
 ```csharp
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new NBEATSModel<double>(
         stackTypes: new[] { StackType.Trend, StackType.Seasonality, StackType.Generic },
         horizonSize: 24))
@@ -750,7 +750,7 @@ var forecast = result.Model.Forecast(steps: 24);
 
 **Example:**
 ```csharp
-var result = await new PredictionModelBuilder<float, string, string>()
+var result = await new AiModelBuilder<float, string, string>()
     .ConfigureRetrievalAugmentedGeneration(
         retriever: new HybridRetriever<float>(
             denseRetriever: new DenseRetriever<float>(embeddingModel),
@@ -807,7 +807,7 @@ var answer = await result.Model.QueryAsync("What is the capital of France?", doc
 
 **Example:**
 ```csharp
-var result = await new PredictionModelBuilder<float, string, string>()
+var result = await new AiModelBuilder<float, string, string>()
     .ConfigureLoRA(new QLoRAConfiguration<float>
     {
         Rank = 16,
@@ -921,7 +921,7 @@ await image.SaveAsync("output.png");
 
 **Example:**
 ```csharp
-var result = await new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>()
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
     .ConfigureModel(largeModel)
     .ConfigureDistributedTraining(
         strategy: DistributedStrategy.FSDP,
@@ -971,7 +971,7 @@ var result = await new PredictionModelBuilder<float, Tensor<float>, Tensor<float
 
 **Example:**
 ```csharp
-var result = await new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>()
+var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
     .ConfigureMetaLearning(new MAMLAlgorithm<float>(
         innerLearningRate: 0.01f,
         outerLearningRate: 0.001f,

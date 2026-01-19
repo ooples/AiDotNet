@@ -14,7 +14,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.ProgramSynthesis;
 
-public class PredictionModelResultProgramSynthesisTests
+public class AiModelResultProgramSynthesisTests
 {
     [Fact]
     public void ExecuteCodeTask_DelegatesToUnderlyingCodeModel()
@@ -26,13 +26,13 @@ public class PredictionModelResultProgramSynthesisTests
             BestSolution = model
         };
 
-        var options = new PredictionModelResultOptions<double, Tensor<double>, Tensor<double>>
+        var options = new AiModelResultOptions<double, Tensor<double>, Tensor<double>>
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = new NormalizationInfo<double, Tensor<double>, Tensor<double>>()
         };
 
-        var modelResult = new PredictionModelResult<double, Tensor<double>, Tensor<double>>(options);
+        var modelResult = new AiModelResult<double, Tensor<double>, Tensor<double>>(options);
 
         var request = new CodeSummarizationRequest
         {
@@ -57,13 +57,13 @@ public class PredictionModelResultProgramSynthesisTests
             BestSolution = FakeCodeModel.CreateDefault(targetLanguage: ProgramLanguage.CSharp)
         };
 
-        var options = new PredictionModelResultOptions<double, Tensor<double>, Tensor<double>>
+        var options = new AiModelResultOptions<double, Tensor<double>, Tensor<double>>
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = new NormalizationInfo<double, Tensor<double>, Tensor<double>>()
         };
 
-        var modelResult = new PredictionModelResult<double, Tensor<double>, Tensor<double>>(options);
+        var modelResult = new AiModelResult<double, Tensor<double>, Tensor<double>>(options);
 
         var sql = modelResult.TokenizeCode(
             code: "SELECT 1;",
@@ -95,7 +95,7 @@ public class PredictionModelResultProgramSynthesisTests
 
         var stubClient = new StubServingClient();
 
-        var options = new PredictionModelResultOptions<double, Tensor<double>, Tensor<double>>
+        var options = new AiModelResultOptions<double, Tensor<double>, Tensor<double>>
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = new NormalizationInfo<double, Tensor<double>, Tensor<double>>(),
@@ -106,7 +106,7 @@ public class PredictionModelResultProgramSynthesisTests
             }
         };
 
-        var modelResult = new PredictionModelResult<double, Tensor<double>, Tensor<double>>(options);
+        var modelResult = new AiModelResult<double, Tensor<double>, Tensor<double>>(options);
 
         var request = new CodeSummarizationRequest
         {
@@ -133,7 +133,7 @@ public class PredictionModelResultProgramSynthesisTests
 
         var stubClient = new StubServingClient();
 
-        var options = new PredictionModelResultOptions<double, Tensor<double>, Tensor<double>>
+        var options = new AiModelResultOptions<double, Tensor<double>, Tensor<double>>
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = new NormalizationInfo<double, Tensor<double>, Tensor<double>>(),
@@ -144,7 +144,7 @@ public class PredictionModelResultProgramSynthesisTests
             }
         };
 
-        var modelResult = new PredictionModelResult<double, Tensor<double>, Tensor<double>>(options);
+        var modelResult = new AiModelResult<double, Tensor<double>, Tensor<double>>(options);
 
         var request = new CodeSummarizationRequest
         {
@@ -167,13 +167,13 @@ public class PredictionModelResultProgramSynthesisTests
             BestSolution = FakeCodeModel.CreateDefault(targetLanguage: ProgramLanguage.CSharp)
         };
 
-        var options = new PredictionModelResultOptions<double, Tensor<double>, Tensor<double>>
+        var options = new AiModelResultOptions<double, Tensor<double>, Tensor<double>>
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = new NormalizationInfo<double, Tensor<double>, Tensor<double>>()
         };
 
-        var modelResult = new PredictionModelResult<double, Tensor<double>, Tensor<double>>(options);
+        var modelResult = new AiModelResult<double, Tensor<double>, Tensor<double>>(options);
 
         Assert.Throws<InvalidOperationException>(() =>
             modelResult.ExecuteProgramAsync(new ProgramExecuteRequest()).GetAwaiter().GetResult());

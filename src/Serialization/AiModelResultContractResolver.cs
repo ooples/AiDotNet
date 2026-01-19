@@ -6,7 +6,7 @@ using Newtonsoft.Json.Serialization;
 
 namespace AiDotNet.Serialization;
 
-internal sealed class PredictionModelResultContractResolver : DefaultContractResolver
+internal sealed class AiModelResultContractResolver : DefaultContractResolver
 {
     protected override IList<JsonProperty> CreateProperties(Type type, MemberSerialization memberSerialization)
     {

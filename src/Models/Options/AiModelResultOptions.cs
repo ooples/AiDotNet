@@ -27,11 +27,11 @@ using AiDotNet.TrainingMonitoring.ExperimentTracking;
 namespace AiDotNet.Models.Options;
 
 /// <summary>
-/// Represents the configuration options for creating a PredictionModelResult.
+/// Represents the configuration options for creating a AiModelResult.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This class consolidates all the configuration parameters needed to construct a PredictionModelResult
+/// This class consolidates all the configuration parameters needed to construct a AiModelResult
 /// into a single, organized object. Instead of passing 20+ parameters to constructors, this options
 /// class groups related settings together for better readability and maintainability.
 /// </para>
@@ -54,12 +54,12 @@ namespace AiDotNet.Models.Options;
 ///
 /// Instead of writing code like this (hard to read):
 /// <code>
-/// var result = new PredictionModelResult(opt, norm, bias, fair, ret, rerank, gen, ...20 more);
+/// var result = new AiModelResult(opt, norm, bias, fair, ret, rerank, gen, ...20 more);
 /// </code>
 ///
 /// You can write this (easy to read):
 /// <code>
-/// var options = new PredictionModelResultOptions&lt;double, Matrix, Vector&gt;
+/// var options = new AiModelResultOptions&lt;double, Matrix, Vector&gt;
 /// {
 ///     OptimizationResult = opt,
 ///     NormalizationInfo = norm,
@@ -67,7 +67,7 @@ namespace AiDotNet.Models.Options;
 ///     PromptTemplate = myTemplate,
 ///     // ... only set what you need
 /// };
-/// var result = new PredictionModelResult(options);
+/// var result = new AiModelResult(options);
 /// </code>
 ///
 /// Benefits:
@@ -80,7 +80,7 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt;, Vector&lt;T&gt;).</typeparam>
 /// <typeparam name="TOutput">The type of output predictions (e.g., Vector&lt;T&gt;).</typeparam>
-public class PredictionModelResultOptions<T, TInput, TOutput>
+public class AiModelResultOptions<T, TInput, TOutput>
 {
     // ============================================================================
     // Core Model Properties
@@ -666,12 +666,12 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Program Synthesis is independent of the main prediction model. This allows a single <c>PredictionModelResult</c>
+    /// Program Synthesis is independent of the main prediction model. This allows a single <c>AiModelResult</c>
     /// to expose code-task capabilities even when the primary model uses non-tensor data types (for example,
     /// <c>Vector&lt;T&gt;</c> or <c>Matrix&lt;T&gt;</c>).
     /// </para>
     /// <para><b>For Beginners:</b> This is the specialized model used for code-related tasks such as code generation or repair.
-    /// You typically configure this via <c>PredictionModelBuilder.ConfigureProgramSynthesis(...)</c>.
+    /// You typically configure this via <c>AiModelBuilder.ConfigureProgramSynthesis(...)</c>.
     /// </para>
     /// </remarks>
     public IFullModel<T, Tensor<T>, Tensor<T>>? ProgramSynthesisModel { get; set; }
@@ -978,7 +978,7 @@ public class PredictionModelResultOptions<T, TInput, TOutput>
     /// <remarks>
     /// <para>
     /// This is populated when the user enables benchmarking through the facade (for example,
-    /// <c>PredictionModelBuilder.ConfigureBenchmarking(...)</c>) and a benchmark report is generated.
+    /// <c>AiModelBuilder.ConfigureBenchmarking(...)</c>) and a benchmark report is generated.
     /// </para>
     /// <para><b>For Beginners:</b> This is the "report card" produced when you run benchmark suites
     /// like GSM8K or MMLU. It contains summary metrics and timing.

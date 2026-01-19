@@ -16,7 +16,7 @@ namespace AiDotNet.Benchmarking;
 internal static class Sent140FederatedBenchmarkSuiteRunner
 {
     public static Task<BenchmarkSuiteReport> RunAsync<T, TInput, TOutput>(
-        PredictionModelResult<T, TInput, TOutput> model,
+        AiModelResult<T, TInput, TOutput> model,
         BenchmarkSuite suite,
         BenchmarkingOptions options,
         Sent140FederatedBenchmarkOptions sent140,
@@ -42,10 +42,10 @@ internal static class Sent140FederatedBenchmarkSuiteRunner
             throw new ArgumentNullException(nameof(sent140));
         }
 
-        if (model is not PredictionModelResult<T, Matrix<T>, Vector<T>> typedModel)
+        if (model is not AiModelResult<T, Matrix<T>, Vector<T>> typedModel)
         {
             throw new NotSupportedException(
-                $"Sent140 benchmarking currently requires PredictionModelResult<T, Matrix<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
+                $"Sent140 benchmarking currently requires AiModelResult<T, Matrix<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
         }
 
         if (string.IsNullOrWhiteSpace(sent140.TrainFilePath))

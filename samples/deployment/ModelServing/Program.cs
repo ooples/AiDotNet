@@ -40,7 +40,7 @@ var features = new double[][]
 };
 var labels = new double[] { 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2 };
 
-var modelResult = await new PredictionModelBuilder<double, double[], double>()
+var modelResult = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
     .ConfigurePreprocessing()
     .BuildAsync(features, labels);
@@ -117,7 +117,7 @@ Console.WriteLine("Step 4: Loading model into serving registry...\n");
 var repository = app.Services.GetRequiredService<IModelRepository>();
 
 // Create a servable model wrapper
-// This wraps the PredictionModelResult for serving
+// This wraps the AiModelResult for serving
 var servableModel = new ServableModelWrapper<double>(
     modelName: "iris-classifier",
     inputDimension: 4,

@@ -136,14 +136,14 @@ Notes:
             BestSolution = model
         };
 
-        var options = new PredictionModelResultOptions<float, Tensor<float>, Tensor<float>>
+        var options = new AiModelResultOptions<float, Tensor<float>, Tensor<float>>
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = new NormalizationInfo<float, Tensor<float>, Tensor<float>>(),
             Tokenizer = tokenizer
         };
 
-        var result = new PredictionModelResult<float, Tensor<float>, Tensor<float>>(options);
+        var result = new AiModelResult<float, Tensor<float>, Tensor<float>>(options);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
         result.SaveModel(outputPath);
         Console.WriteLine($"Saved model to {outputPath}");
@@ -214,14 +214,14 @@ Notes:
         return 0;
     }
 
-    private static PredictionModelResult<float, Tensor<float>, Tensor<float>> LoadProgramSynthesisModel(string modelPath)
+    private static AiModelResult<float, Tensor<float>, Tensor<float>> LoadProgramSynthesisModel(string modelPath)
     {
         if (!File.Exists(modelPath))
         {
             throw new FileNotFoundException("Model file not found.", modelPath);
         }
 
-        return PredictionModelResult<float, Tensor<float>, Tensor<float>>.LoadModel(
+        return AiModelResult<float, Tensor<float>, Tensor<float>>.LoadModel(
             modelPath,
             metadata =>
             {

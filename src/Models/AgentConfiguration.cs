@@ -9,7 +9,7 @@ namespace AiDotNet.Models;
 /// <remarks>
 /// <para>
 /// This class encapsulates all the settings needed to enable and configure AI agent assistance in the
-/// PredictionModelBuilder. It stores the API credentials, provider selection, and Azure-specific configuration
+/// AiModelBuilder. It stores the API credentials, provider selection, and Azure-specific configuration
 /// required to connect to large language model (LLM) services. The configuration is used both during model
 /// building (for recommendations and analysis) and during inference (for conversational assistance with trained models).
 /// </para>

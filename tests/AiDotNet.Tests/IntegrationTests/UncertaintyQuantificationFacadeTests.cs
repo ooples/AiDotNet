@@ -46,7 +46,7 @@ public sealed class UncertaintyQuantificationFacadeTests
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
-        var builder = new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
             .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
@@ -120,7 +120,7 @@ public sealed class UncertaintyQuantificationFacadeTests
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
-        var builder = new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
             .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu })
@@ -231,7 +231,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         }));
         var yCal = Tensor<double>.FromVector(new Vector<double>(new[] { 4.0, 5.0, 6.0 }));
 
-        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
@@ -290,7 +290,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         }));
         var labels = new Vector<int>(new[] { 1, 0 });
 
-        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
@@ -357,7 +357,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         }));
         var labels = new Vector<int>(new[] { 1, 0, 2 });
 
-        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
@@ -404,7 +404,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var xCal = xTrain;
         var labels = new Vector<int>(new[] { 0, 1, 1, 0 });
 
-        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
@@ -466,7 +466,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         }));
         var yCal = Tensor<double>.FromVector(new Vector<double>(new[] { 4.0, 5.0, 6.0 }));
 
-        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
@@ -513,7 +513,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var xCal = xTrain;
         var labels = new Vector<int>(new[] { 0, 1, 1, 0 });
 
-        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
@@ -576,7 +576,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         }));
         var yCal = Tensor<double>.FromVector(new Vector<double>(new[] { 4.0, 5.0, 6.0 }));
 
-        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
@@ -627,7 +627,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var xCal = xTrain;
         var yCalLabels = new Vector<int>(new[] { 0, 1, 2, 0 });
 
-        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
@@ -682,7 +682,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         }));
         var y = Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0, 2.0 }));
 
-        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
@@ -730,7 +730,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             { 2.0 }
         }));
 
-        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
             .ConfigureModel(bayesianModel)
             .ConfigureOptimizer(optimizer)
@@ -768,7 +768,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         }));
         var yTrain = Tensor<double>.FromVector(new Vector<double>(new[] { 0.0, 1.0 }));
 
-        var result = await new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
             .ConfigureDataLoader(DataLoaders.FromTensors(xTrain, yTrain))
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)

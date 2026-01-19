@@ -222,10 +222,10 @@ var loss = new CombinedLoss<float>(
 
 ## Usage Examples
 
-### With PredictionModelBuilder
+### With AiModelBuilder
 
 ```csharp
-var result = await new PredictionModelBuilder<float, Tensor<float>, int>()
+var result = await new AiModelBuilder<float, Tensor<float>, int>()
     .ConfigureModel(model)
     .ConfigureLossFunction(new FocalLoss<float>(gamma: 2.0f))
     .BuildAsync(trainData, trainLabels);

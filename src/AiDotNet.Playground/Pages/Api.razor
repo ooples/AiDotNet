@@ -41,7 +41,7 @@
         <div class="namespace-grid">
             <div class="namespace-card">
                 <h3>AiDotNet</h3>
-                <p>Core interfaces and the PredictionModelBuilder facade - your entry point to all ML functionality.</p>
+                <p>Core interfaces and the AiModelBuilder facade - your entry point to all ML functionality.</p>
             </div>
             <div class="namespace-card">
                 <h3>AiDotNet.NeuralNetworks</h3>
@@ -78,28 +78,27 @@
         <h2>Quick Reference</h2>
         <div class="code-example">
             <h3>Basic Usage Pattern</h3>
-            <pre><code>// All AiDotNet functionality goes through PredictionModelBuilder
+            <pre><code>// All AiDotNet functionality goes through AiModelBuilder
 using AiDotNet;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Preprocessing.Scalers;
 
-// Build and train a model
-var result = await new PredictionModelBuilder&lt;double, double[], int&gt;()
-    .WithTrainingData(features, labels)
-    .WithNeuralNetwork(nn => nn
-        .AddDenseLayer(128, Activation.ReLU)
-        .AddDropout(0.2)
-        .AddDenseLayer(64, Activation.ReLU)
-        .AddOutputLayer(numClasses, Activation.Softmax))
-    .WithOptimizer(OptimizerType.Adam, lr: 0.001)
-    .WithLossFunction(LossType.CrossEntropy)
+// Build and train a model using the facade pattern
+var result = await new AiModelBuilder&lt;double, double[], double&gt;()
+    .ConfigureModel(new NeuralNetwork&lt;double&gt;(new NeuralNetworkArchitecture&lt;double&gt;(
+        inputFeatures: 784,
+        numClasses: 10,
+        complexity: NetworkComplexity.Medium)))
+    .ConfigurePreprocessing(p => p.Add(new StandardScaler&lt;double&gt;()))
     .ConfigureTelemetry(t => t.Enabled = true)
-    .BuildAsync();
+    .BuildAsync(features, labels);
 
-// Use the trained model
-var prediction = result.Model.Predict(newSample);
+// Make predictions through the result object (facade pattern)
+var prediction = result.Predict(newSample);
 
-// Access training metrics
-Console.WriteLine($"Accuracy: {result.Metrics.Accuracy:P2}");
-Console.WriteLine($"Training Time: {result.TrainingTime}");</code></pre>
+// Access training metrics through the result object
+Console.WriteLine($"Best Fitness: {result.OptimizationResult?.BestFitness:F4}");
+Console.WriteLine($"Training completed successfully");</code></pre>
         </div>
     </div>
 </div>

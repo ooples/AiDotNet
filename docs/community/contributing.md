@@ -90,7 +90,7 @@ Use these prefixes:
 
 Write clear commit messages:
 
-```
+```text
 type(scope): Short description
 
 Longer description if needed. Explain what and why,

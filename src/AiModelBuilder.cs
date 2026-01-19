@@ -96,7 +96,7 @@ namespace AiDotNet;
 /// });
 ///
 /// // 3. Configure the builder with training infrastructure
-/// var builder = new PredictionModelBuilder&lt;double, double[], double&gt;()
+/// var builder = new AiModelBuilder&lt;double, double[], double&gt;()
 ///     .ConfigureModel(neuralNetwork)
 ///     .ConfigureOptimizer(adamOptimizer)
 ///     .ConfigureExperimentTracker(experimentTracker)
@@ -135,7 +135,7 @@ namespace AiDotNet;
 /// modelRegistry.TransitionStage(modelVersion.ModelId, modelVersion.Version, ModelStage.Production);
 /// </code>
 /// </remarks>
-public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionModelBuilder<T, TInput, TOutput>
+public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>
 {
     private IFeatureSelector<T, TInput>? _featureSelector;
     private INormalizer<T, TInput, TOutput>? _normalizer;
@@ -257,7 +257,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// For example, when predicting house prices, the number of bedrooms might be important,
     /// but the house's street number probably isn't.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFeatureSelector(IFeatureSelector<T, TInput> selector)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureFeatureSelector(IFeatureSelector<T, TInput> selector)
     {
         _featureSelector = selector;
         return this;
@@ -274,7 +274,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// normalization might scale both to ranges like 0-1 so the model doesn't think
     /// income is 10,000 times more important than age just because the numbers are bigger.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer)
     {
         _normalizer = normalizer;
         return this;
@@ -301,7 +301,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// and remember them for predictions on new data.
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
         Action<PreprocessingPipeline<T, TInput, TInput>>? pipelineBuilder = null)
     {
         _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
@@ -345,7 +345,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// If you need multiple steps, use the pipeline builder overload instead.
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
         IDataTransformer<T, TInput, TInput>? transformer = null)
     {
         _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
@@ -391,7 +391,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
         PreprocessingPipeline<T, TInput, TInput>? pipeline = null)
     {
         if (pipeline is not null)
@@ -436,7 +436,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// and can reverse them if needed.
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
         Action<PostprocessingPipeline<T, TOutput, TOutput>>? pipelineBuilder = null)
     {
         _postprocessingPipeline = new PostprocessingPipeline<T, TOutput, TOutput>();
@@ -470,7 +470,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// If you need multiple steps, use the pipeline builder overload instead.
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
         IDataTransformer<T, TOutput, TOutput>? transformer = null)
     {
         _postprocessingPipeline = new PostprocessingPipeline<T, TOutput, TOutput>();
@@ -505,7 +505,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
         PostprocessingPipeline<T, TOutput, TOutput>? pipeline = null)
     {
         if (pipeline is not null)
@@ -536,7 +536,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// rather than just memorizing answers to specific questions. This helps the model perform better
     /// on new, unseen data.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRegularization(IRegularization<T, TInput, TOutput> regularization)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureRegularization(IRegularization<T, TInput, TOutput> regularization)
     {
         _regularization = regularization;
         return this;
@@ -553,7 +553,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// we might care about the average error in dollars, but when predicting if an email is spam,
     /// we might care more about the percentage of emails correctly classified.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> calculator)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> calculator)
     {
         _fitnessCalculator = calculator;
         return this;
@@ -569,7 +569,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// (overfitting) or not learning enough (underfitting). It's like having a teacher who can tell
     /// if a student is just memorizing answers or not studying enough.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFitDetector(IFitDetector<T, TInput, TOutput> detector)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureFitDetector(IFitDetector<T, TInput, TOutput> detector)
     {
         _fitDetector = detector;
         return this;
@@ -585,7 +585,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// learn patterns from your data and make predictions. Different algorithms work better for
     /// different types of problems, so you can choose the one that fits your needs.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model)
     {
         _model = model;
         return this;
@@ -601,7 +601,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// It's like having someone adjust the knobs on a radio to get the clearest signal.
     /// The optimizer tries different settings and keeps the ones that work best.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
         _optimizer = optimizationAlgorithm;
         return this;
@@ -615,7 +615,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <param name="clientSelectionStrategy">Optional client selection strategy override (null uses defaults based on options).</param>
     /// <param name="serverOptimizer">Optional server-side optimizer override (null uses defaults based on options).</param>
     /// <returns>This builder instance for method chaining.</returns>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
         FederatedLearningOptions options,
         IAggregationStrategy<IFullModel<T, TInput, TOutput>>? aggregationStrategy = null,
         IClientSelectionStrategy? clientSelectionStrategy = null,
@@ -692,7 +692,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <example>
     /// <code>
     /// // Enable with default settings (recommended)
-    /// var result = await new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
     ///     .ConfigureMixedPrecision()  // Enable mixed-precision
@@ -702,7 +702,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// builder.ConfigureMixedPrecision(MixedPrecisionConfig.Conservative());
     /// </code>
     /// </example>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null)
     {
         _mixedPrecisionConfig = config ?? new MixedPrecisionConfig();
         return this;
@@ -722,7 +722,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// - Verify and refine its answers
     /// - Provide transparent, explainable reasoning
     ///
-    /// After building your model, use the reasoning methods on PredictionModelResult:
+    /// After building your model, use the reasoning methods on AiModelResult:
     /// - ReasonAsync(): Solve problems with configurable reasoning strategies
     /// - QuickReasonAsync(): Fast answers for simple problems
     /// - DeepReasonAsync(): Thorough analysis for complex problems
@@ -737,7 +737,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///     IsEnabled = true
     /// };
     ///
-    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
     ///     .ConfigureReasoning()
     ///     .BuildAsync();
@@ -751,7 +751,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null)
     {
         _reasoningConfig = config ?? new ReasoningConfig();
         return this;
@@ -793,7 +793,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///
     /// <b>Example usage:</b>
     /// <code>
-    /// var result = await new PredictionModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureJitCompilation(new JitCompilationConfig
     ///     {
@@ -815,14 +815,14 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///
     /// <b>Simple usage (uses defaults):</b>
     /// <code>
-    /// var result = await new PredictionModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureJitCompilation()  // Enables JIT with default settings
     ///     .BuildAsync();
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(AiDotNet.Configuration.JitCompilationConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(AiDotNet.Configuration.JitCompilationConfig? config = null)
     {
         _jitCompilationConfig = config ?? new AiDotNet.Configuration.JitCompilationConfig { Enabled = true };
         return this;
@@ -844,7 +844,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///
     /// Example:
     /// <code>
-    /// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
+    /// var result = await new AiModelBuilder&lt;double, ...&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
     ///     .BuildAsync();
@@ -863,13 +863,13 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureInferenceOptimizations(AiDotNet.Configuration.InferenceOptimizationConfig? config = null)
     {
         _inferenceOptimizationConfig = config ?? AiDotNet.Configuration.InferenceOptimizationConfig.Default;
         return this;
     }
 
-    // Uncertainty quantification configuration lives in PredictionModelBuilder.UncertaintyQuantification.cs to keep this file focused.
+    // Uncertainty quantification configuration lives in AiModelBuilder.UncertaintyQuantification.cs to keep this file focused.
 
     /// <summary>
     /// Enables GPU acceleration for training and inference with optional configuration.
@@ -934,7 +934,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <example>
     /// <code>
     /// // Enable with default settings (recommended for most cases)
-    /// var result = await new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
     ///     .ConfigureGpuAcceleration()  // Enable GPU acceleration with sensible defaults
@@ -960,7 +960,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// });
     /// </code>
     /// </example>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureGpuAcceleration(GpuAccelerationConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureGpuAcceleration(GpuAccelerationConfig? config = null)
     {
         _gpuAccelerationConfig = config ?? new GpuAccelerationConfig();
         return this;
@@ -976,7 +976,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// It's like washing and cutting vegetables before cooking. This might include handling missing values,
     /// converting text to numbers, or combining related features.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor)
     {
         _dataPreprocessor = dataPreprocessor;
         return this;
@@ -1010,7 +1010,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataLoader(IDataLoader<T> dataLoader)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureDataLoader(IDataLoader<T> dataLoader)
     {
         _dataLoader = dataLoader;
         return this;
@@ -1027,7 +1027,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// a $10,000,000 mansion would be an outlier. These unusual points can sometimes confuse the model,
     /// so we might want to handle them specially.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval)
     {
         _outlierRemoval = outlierRemoval;
         return this;
@@ -1054,7 +1054,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///
     /// Example with data loader:
     /// <code>
-    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureDataLoader(DataLoaders.FromArrays(features, labels))
     ///     .ConfigureModel(model)
     ///     .BuildAsync();
@@ -1062,14 +1062,14 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///
     /// Example with meta-learning:
     /// <code>
-    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureMetaLearning(metaLearner)
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public async Task<PredictionModelResult<T, TInput, TOutput>> BuildAsync()
+    public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync()
     {
-        PredictionModelResult<T, TInput, TOutput> result;
+        AiModelResult<T, TInput, TOutput> result;
 
         // RL TRAINING PATH - check if RL options are configured with an environment
         if (_rlOptions?.Environment is not null)
@@ -1141,7 +1141,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             "For supervised learning, configure a data loader via ConfigureDataLoader() and then call BuildAsync().");
     }
 
-    private PredictionModelResult<T, TInput, TOutput> BuildProgramSynthesisInferenceOnlyResult()
+    private AiModelResult<T, TInput, TOutput> BuildProgramSynthesisInferenceOnlyResult()
     {
         // Ensure inference-only builds still honor configured GPU acceleration.
         ApplyGpuConfiguration();
@@ -1162,7 +1162,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             _compressionConfig,
             _profilingConfig);
 
-        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = new NoNormalizer<T, TInput, TOutput>() },
@@ -1194,10 +1194,10 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             MemoryConfig = _memoryConfig
         };
 
-        return new PredictionModelResult<T, TInput, TOutput>(options);
+        return new AiModelResult<T, TInput, TOutput>(options);
     }
 
-    private Task RunBenchmarksIfConfiguredAsync(PredictionModelResult<T, TInput, TOutput> result)
+    private Task RunBenchmarksIfConfiguredAsync(AiModelResult<T, TInput, TOutput> result)
     {
         if (_benchmarkingOptions is null || _benchmarkingOptions.Suites is null || _benchmarkingOptions.Suites.Length == 0)
         {
@@ -1223,7 +1223,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// This is essential for large datasets like ImageNet or large text corpora.
     /// </para>
     /// </remarks>
-    private async Task<PredictionModelResult<T, TInput, TOutput>> BuildStreamingSupervisedAsync(
+    private async Task<AiModelResult<T, TInput, TOutput>> BuildStreamingSupervisedAsync(
         IStreamingDataLoader<T, TInput, TOutput> streamingLoader)
     {
         // Apply GPU configuration first
@@ -1339,7 +1339,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             _profilingConfig);
 
         // Build result using options pattern like other Build methods
-        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = new NoNormalizer<T, TInput, TOutput>() },
@@ -1366,7 +1366,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             MemoryConfig = _memoryConfig
         };
 
-        return new PredictionModelResult<T, TInput, TOutput>(options);
+        return new AiModelResult<T, TInput, TOutput>(options);
     }
 
     /// <summary>
@@ -1431,7 +1431,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <param name="x">Matrix of input features.</param>
     /// <param name="y">Vector of output values.</param>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
-    private async Task<PredictionModelResult<T, TInput, TOutput>> BuildSupervisedInternalAsync(TInput x, TOutput y)
+    private async Task<AiModelResult<T, TInput, TOutput>> BuildSupervisedInternalAsync(TInput x, TOutput y)
     {
         // SUPERVISED TRAINING PATH
 
@@ -1616,7 +1616,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             {
                 throw new InvalidOperationException(
                     $"Mixed-precision training requires T = float, got T = {typeof(T).Name}. " +
-                    $"Use PredictionModelBuilder<float, ...> to enable mixed-precision training.");
+                    $"Use AiModelBuilder<float, ...> to enable mixed-precision training.");
             }
 
             // Enable on neural network model if applicable
@@ -2172,7 +2172,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
                 ModelType = derivedModelType,
                 FeatureCount = convertedX.Columns,
                 Complexity = optimizationResult.BestSolution.GetType().GetProperties().Length,
-                Description = $"Model trained via PredictionModelBuilder on {trainingStartTime:yyyy-MM-dd HH:mm:ss} UTC",
+                Description = $"Model trained via AiModelBuilder on {trainingStartTime:yyyy-MM-dd HH:mm:ss} UTC",
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     ["experiment_run_id"] = experimentRunId ?? string.Empty,
@@ -2284,8 +2284,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             trainingMetricsHistory["fitness"] = fitnessHistoryAsDouble;
         }
 
-        // Return PredictionModelResult with CV results, agent data, JIT compilation, reasoning config, and training infrastructure
-        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        // Return AiModelResult with CV results, agent data, JIT compilation, reasoning config, and training infrastructure
+        var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = normInfo,
@@ -2339,7 +2339,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             HyperparameterTrialId = bestHyperparameterTrialId
         };
 
-        var finalResult = new PredictionModelResult<T, TInput, TOutput>(options);
+        var finalResult = new AiModelResult<T, TInput, TOutput>(options);
 
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);
@@ -2409,7 +2409,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// This contains all the core meta-learning logic.
     /// </summary>
     /// <returns>A task that represents the asynchronous operation, containing the trained meta-learner result.</returns>
-    private PredictionModelResult<T, TInput, TOutput> BuildMetaLearningInternalAsync()
+    private AiModelResult<T, TInput, TOutput> BuildMetaLearningInternalAsync()
     {
         // META-LEARNING TRAINING PATH
 
@@ -2445,8 +2445,8 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             _compressionConfig,
             _profilingConfig);
 
-        // Create PredictionModelResult with meta-learning options
-        var metaOptions = new PredictionModelResultOptions<T, TInput, TOutput>
+        // Create AiModelResult with meta-learning options
+        var metaOptions = new AiModelResultOptions<T, TInput, TOutput>
         {
             MetaLearner = _metaLearner,
             MetaTrainingResult = metaResult,
@@ -2478,7 +2478,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             MemoryConfig = _memoryConfig
         };
 
-        var result = new PredictionModelResult<T, TInput, TOutput>(metaOptions);
+        var result = new AiModelResult<T, TInput, TOutput>(metaOptions);
 
         return result;
     }
@@ -2498,7 +2498,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         if (typeof(TInput) != typeof(AiDotNet.Tensors.LinearAlgebra.Vector<T>) || typeof(TOutput) != typeof(AiDotNet.Tensors.LinearAlgebra.Vector<T>))
         {
             throw new InvalidOperationException(
-                $"RL AutoML requires PredictionModelBuilder<T, Vector<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
+                $"RL AutoML requires AiModelBuilder<T, Vector<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
         }
 
         if (_autoMLOptions.SearchStrategy != AutoMLSearchStrategy.RandomSearch)
@@ -2538,7 +2538,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <param name="verbose">Whether to print training progress.</param>
     /// <returns>A task that represents the asynchronous operation, containing the trained RL agent result.</returns>
 #pragma warning disable CS1998
-    private async Task<PredictionModelResult<T, TInput, TOutput>> BuildRLInternalAsync(int episodes, bool verbose)
+    private async Task<AiModelResult<T, TInput, TOutput>> BuildRLInternalAsync(int episodes, bool verbose)
     {
         // RL TRAINING PATH
 
@@ -2764,10 +2764,10 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             _compressionConfig,
             _profilingConfig);
 
-        // Return standard PredictionModelResult
+        // Return standard AiModelResult
         // Note: This Build() overload doesn't perform JIT compilation (only the main Build() does),
         // so JitCompiledFunction is not set
-        var rlOptions = new PredictionModelResultOptions<T, TInput, TOutput>
+        var rlOptions = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = normInfo,
@@ -2802,7 +2802,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             MemoryConfig = _memoryConfig
         };
 
-        var result = new PredictionModelResult<T, TInput, TOutput>(rlOptions);
+        var result = new AiModelResult<T, TInput, TOutput>(rlOptions);
 
         return result;
     }
@@ -2822,7 +2822,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///
     /// The input matrix should have the same number of columns (features) as the data you used to train the model.
     /// </remarks>
-    public TOutput Predict(TInput newData, PredictionModelResult<T, TInput, TOutput> modelResult)
+    public TOutput Predict(TInput newData, AiModelResult<T, TInput, TOutput> modelResult)
     {
         return modelResult.Predict(newData);
     }
@@ -2840,7 +2840,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// Think of it like saving a document in a word processor - you can close the program and come back later
     /// to continue where you left off.
     /// </remarks>
-    public void SaveModel(PredictionModelResult<T, TInput, TOutput> modelResult, string filePath)
+    public void SaveModel(AiModelResult<T, TInput, TOutput> modelResult, string filePath)
     {
         File.WriteAllBytes(filePath, SerializeModel(modelResult));
     }
@@ -2857,7 +2857,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// This is useful when you want to use your model in different applications or at different times
     /// without the time and computational cost of retraining.
     /// </remarks>
-    public PredictionModelResult<T, TInput, TOutput> LoadModel(string filePath)
+    public AiModelResult<T, TInput, TOutput> LoadModel(string filePath)
     {
         byte[] modelData = File.ReadAllBytes(filePath);
         return DeserializeModel(modelData);
@@ -2875,7 +2875,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// You might use this directly if you want to store the model in a database or send it over a network,
     /// rather than saving it to a file.
     /// </remarks>
-    public byte[] SerializeModel(PredictionModelResult<T, TInput, TOutput> modelResult)
+    public byte[] SerializeModel(AiModelResult<T, TInput, TOutput> modelResult)
     {
         return modelResult.Serialize();
     }
@@ -2892,9 +2892,9 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// 
     /// You might use this directly if you retrieved a serialized model from a database or received it over a network.
     /// </remarks>
-    public PredictionModelResult<T, TInput, TOutput> DeserializeModel(byte[] modelData)
+    public AiModelResult<T, TInput, TOutput> DeserializeModel(byte[] modelData)
     {
-        var result = new PredictionModelResult<T, TInput, TOutput>();
+        var result = new AiModelResult<T, TInput, TOutput>();
         result.Deserialize(modelData);
 
         // Automatically reattach Graph RAG components if they were configured on this builder
@@ -2928,7 +2928,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// Demographic Parity, or Equal Opportunity. This component will be used to evaluate your
     /// trained model's fairness across demographic groups.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureBiasDetector(IBiasDetector<T> detector)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureBiasDetector(IBiasDetector<T> detector)
     {
         _biasDetector = detector;
         return this;
@@ -2945,7 +2945,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// (just key metrics) to comprehensive (all fairness measures). This helps ensure your
     /// AI system is not only accurate but also ethical.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator)
     {
         _fairnessEvaluator = evaluator;
         return this;
@@ -3001,7 +3001,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </example>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAdversarialRobustness(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureAdversarialRobustness(
         AdversarialRobustnessConfiguration<T, TInput, TOutput>? configuration = null)
     {
         _adversarialRobustnessConfiguration = configuration ?? new AdversarialRobustnessConfiguration<T, TInput, TOutput>();
@@ -3072,7 +3072,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </example>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFineTuning(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureFineTuning(
         FineTuningConfiguration<T, TInput, TOutput>? configuration = null)
     {
         _fineTuningConfiguration = configuration ?? new FineTuningConfiguration<T, TInput, TOutput>();
@@ -3144,7 +3144,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </example>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
         TrainingPipelineConfiguration<T, TInput, TOutput>? configuration = null)
     {
         _trainingPipelineConfiguration = configuration;
@@ -3162,7 +3162,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// making fine-tuning much faster and more memory-efficient. The configuration determines which layers
     /// get LoRA adaptations and how they behave (rank, scaling, freezing).
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureLoRA(ILoRAConfiguration<T> loraConfiguration)
     {
         _loraConfiguration = loraConfiguration;
         return this;
@@ -3205,10 +3205,10 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <b>Disabling RAG:</b> Call with all parameters as null to disable RAG functionality completely.
     /// </para>
     /// <para>
-    /// RAG operations are performed during inference (after model training) via the PredictionModelResult.
+    /// RAG operations are performed during inference (after model training) via the AiModelResult.
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureRetrievalAugmentedGeneration(
         IRetriever<T>? retriever = null,
         IReranker<T>? reranker = null,
         IGenerator<T>? generator = null,
@@ -3275,7 +3275,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// cross-validation will automatically run during Build() on your training data, and the results
     /// will be included in your trained model.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator)
     {
         _modelEvaluator = evaluator;
         return this;
@@ -3293,7 +3293,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// cross-validation will automatically run during Build() and the results will be included
     /// in your trained model.
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator)
     {
         _crossValidator = crossValidator;
         return this;
@@ -3326,13 +3326,13 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// autoML.SetTimeLimit(TimeSpan.FromMinutes(30));
     /// autoML.SetCandidateModels(new List&lt;ModelType&gt; { ModelType.RandomForest, ModelType.GradientBoosting });
     ///
-    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAutoML(autoML)
     ///     .Build(trainingData, trainingLabels);
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(IAutoMLModel<T, TInput, TOutput> autoMLModel)
     {
         _autoMLModel = autoMLModel;
         _autoMLOptions = null;
@@ -3350,7 +3350,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// With this overload you only choose a budget (how much time to spend), and AiDotNet handles the rest.
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAutoML(AutoMLOptions<T, TInput, TOutput>? options = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureAutoML(AutoMLOptions<T, TInput, TOutput>? options = null)
     {
         _autoMLOptions = options ?? new AutoMLOptions<T, TInput, TOutput>();
 
@@ -3414,7 +3414,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// starting with easy examples and gradually introducing harder ones. This often leads to faster
     /// convergence and better final performance compared to random training order.</para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCurriculumLearning(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureCurriculumLearning(
         CurriculumLearningOptions<T, TInput, TOutput>? options = null)
     {
         _curriculumLearningOptions = options ?? new CurriculumLearningOptions<T, TInput, TOutput>();
@@ -3508,7 +3508,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
             throw new NotSupportedException(
                 $"Neural Architecture Search strategies ({strategy}) require TInput and TOutput to be Tensor<T>. " +
                 $"Current types are TInput={typeof(TInput).Name}, TOutput={typeof(TOutput).Name}. " +
-                $"Consider using PredictionModelBuilder<{typeof(T).Name}, Tensor<{typeof(T).Name}>, Tensor<{typeof(T).Name}>> for NAS.");
+                $"Consider using AiModelBuilder<{typeof(T).Name}, Tensor<{typeof(T).Name}>, Tensor<{typeof(T).Name}>> for NAS.");
         }
 
         // Resolve NAS options with industry-standard defaults.
@@ -3591,7 +3591,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <b>For Beginners:</b> If you configure this, Build() will do meta-training instead of regular training.
     /// The meta-learner should be created with all its dependencies (model, loss function, episodic data loader).
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureMetaLearning(IMetaLearner<T, TInput, TOutput> metaLearner)
     {
         _metaLearner = metaLearner;
         return this;
@@ -3623,7 +3623,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// You just train as normal - the distributed magic happens behind the scenes!
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
         ICommunicationBackend<T>? backend = null,
         DistributedStrategy strategy = DistributedStrategy.DDP,
         IShardingConfiguration<T>? configuration = null)
@@ -3658,7 +3658,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///     IsEnabled = true
     /// };
     ///
-    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
     ///     .BuildAsync();
     /// </code>
@@ -3676,12 +3676,12 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///         .DisableFeatureAnalysis()
     /// };
     ///
-    /// var result = await new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(agentConfig)
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureAgentAssistance(AgentConfiguration<T> configuration)
     {
         _agentConfig = configuration;
         _agentOptions = configuration.AssistanceOptions ?? AgentAssistanceOptions.Default;
@@ -3714,13 +3714,13 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///     OnEpisodeComplete = (metrics) =&gt; Console.WriteLine($"Episode {metrics.Episode}: {metrics.TotalReward}")
     /// };
     ///
-    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureReinforcementLearning(options)
     ///     .ConfigureModel(new DQNAgent&lt;double&gt;())
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureReinforcementLearning(RLTrainingOptions<T> options)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureReinforcementLearning(RLTrainingOptions<T> options)
     {
         _rlOptions = options;
         return this;
@@ -3738,7 +3738,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///
     /// Example:
     /// <code>
-    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureAgentAssistance(apiKey: "sk-...");
     ///
     /// var advice = await builder.AskAgentAsync(
@@ -3798,7 +3798,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///     LearningRate = 0.001
     /// };
     ///
-    /// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureModel(studentModel)
     ///     .ConfigureKnowledgeDistillation(distillationOptions)
     ///     .BuildAsync();
@@ -3830,7 +3830,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// - Sanh et al. (2019). DistilBERT
     /// - Park et al. (2019). Relational Knowledge Distillation</para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureKnowledgeDistillation(
         KnowledgeDistillationOptions<T, TInput, TOutput>? options = null)
     {
         _knowledgeDistillationOptions = options ?? new KnowledgeDistillationOptions<T, TInput, TOutput>();
@@ -3841,37 +3841,37 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     // Deployment Configuration Methods
     // ============================================================================
 
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureQuantization(QuantizationConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureQuantization(QuantizationConfig? config = null)
     {
         _quantizationConfig = config;
         return this;
     }
 
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCompression(CompressionConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureCompression(CompressionConfig? config = null)
     {
         _compressionConfig = config ?? new CompressionConfig();
         return this;
     }
 
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCaching(CacheConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureCaching(CacheConfig? config = null)
     {
         _cacheConfig = config;
         return this;
     }
 
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureVersioning(VersioningConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureVersioning(VersioningConfig? config = null)
     {
         _versioningConfig = config;
         return this;
     }
 
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureABTesting(ABTestingConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureABTesting(ABTestingConfig? config = null)
     {
         _abTestingConfig = config;
         return this;
     }
 
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null)
     {
         _telemetryConfig = config;
         return this;
@@ -3889,7 +3889,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </para>
     /// <para><b>For Beginners:</b> This is like running a standardized test after building your model to see how it performs.</para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureBenchmarking(BenchmarkingOptions? options = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureBenchmarking(BenchmarkingOptions? options = null)
     {
         _benchmarkingOptions = options ?? new BenchmarkingOptions();
         return this;
@@ -3922,7 +3922,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// - Percentiles: P50 (median), P95, P99 timing for statistical analysis
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureProfiling(ProfilingConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureProfiling(ProfilingConfig? config = null)
     {
         _profilingConfig = config ?? new ProfilingConfig { Enabled = true };
         return this;
@@ -3941,7 +3941,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
         return new ProfilerSession(_profilingConfig);
     }
 
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureExport(ExportConfig? config = null)
     {
         _exportConfig = config;
         return this;
@@ -3956,7 +3956,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <para><b>For Beginners:</b> An experiment tracker is like a lab notebook for your ML experiments.
     /// It logs parameters, metrics, and artifacts so you can compare runs and reproduce results.</para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureExperimentTracker(IExperimentTracker<T> tracker)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureExperimentTracker(IExperimentTracker<T> tracker)
     {
         _experimentTracker = tracker;
         return this;
@@ -3971,7 +3971,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <para><b>For Beginners:</b> Checkpoints are like save points in a video game.
     /// They let you pause training and resume later, or go back to an earlier state if something goes wrong.</para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureCheckpointManager(ICheckpointManager<T, TInput, TOutput> manager)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureCheckpointManager(ICheckpointManager<T, TInput, TOutput> manager)
     {
         _checkpointManager = manager;
         return this;
@@ -4023,7 +4023,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </example>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureMemoryManagement(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureMemoryManagement(
         Training.Memory.TrainingMemoryConfig? configuration = null)
     {
         _memoryConfig = configuration;
@@ -4039,7 +4039,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <para><b>For Beginners:</b> A training monitor is like a dashboard for your model training.
     /// It shows you how training is progressing, what resources are being used, and if there are any problems.</para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTrainingMonitor(ITrainingMonitor<T> monitor)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingMonitor(ITrainingMonitor<T> monitor)
     {
         _trainingMonitor = monitor;
         return this;
@@ -4054,7 +4054,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <para><b>For Beginners:</b> A model registry is like a library for your trained models.
     /// It keeps track of all your models, their versions, and which ones are in production.</para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureModelRegistry(IModelRegistry<T, TInput, TOutput> registry)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureModelRegistry(IModelRegistry<T, TInput, TOutput> registry)
     {
         _modelRegistry = registry;
         return this;
@@ -4069,7 +4069,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <para><b>For Beginners:</b> Data version control is like Git, but for your datasets.
     /// It tracks what data was used for training each model and lets you reproduce experiments.</para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureDataVersionControl(IDataVersionControl<T> dataVersionControl)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureDataVersionControl(IDataVersionControl<T> dataVersionControl)
     {
         _dataVersionControl = dataVersionControl;
         return this;
@@ -4086,7 +4086,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <para><b>For Beginners:</b> Hyperparameter optimization automatically finds the best settings
     /// for your model (like learning rate, number of layers, etc.) instead of you having to guess.</para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureHyperparameterOptimizer(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureHyperparameterOptimizer(
         IHyperparameterOptimizer<T, TInput, TOutput> optimizer,
         HyperparameterSearchSpace? searchSpace = null,
         int nTrials = 10)
@@ -4152,7 +4152,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// with automatic data-type detection.
     /// </param>
     /// <returns>The builder instance for method chaining.</returns>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
         Augmentation.AugmentationConfig? config = null)
     {
         _augmentationConfig = config ?? CreateDefaultAugmentationConfig();
@@ -4256,7 +4256,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///     .Build(unlabeledImages);
     /// </code>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
         Action<SelfSupervisedLearning.SSLConfig>? configure = null)
     {
         _sslConfig = new SelfSupervisedLearning.SSLConfig();
@@ -4286,7 +4286,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <code>
     /// // Using BPE tokenizer
     /// var tokenizer = BpeTokenizer.Train(corpus, vocabSize: 32000);
-    /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
     ///     .ConfigureTokenizer(tokenizer)
     ///     .ConfigureModel(new TransformerModel())
     ///     .Build(trainingData);
@@ -4296,7 +4296,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizer(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizer(
         ITokenizer? tokenizer = null,
         TokenizationConfig? config = null)
     {
@@ -4333,14 +4333,14 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///
     /// Simple usage (defaults):
     /// <code>
-    /// var result = await new PredictionModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
     ///     .ConfigureProgramSynthesis()
     ///     .BuildAsync();
     /// </code>
     ///
     /// Custom usage:
     /// <code>
-    /// var result = await new PredictionModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
     ///     .ConfigureProgramSynthesis(new ProgramSynthesisOptions
     ///     {
     ///         TargetLanguage = ProgramLanguage.CSharp,
@@ -4351,7 +4351,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureProgramSynthesis(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureProgramSynthesis(
         AiDotNet.ProgramSynthesis.Options.ProgramSynthesisOptions? options = null)
     {
         options ??= new AiDotNet.ProgramSynthesis.Options.ProgramSynthesisOptions();
@@ -4459,14 +4459,14 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///
     /// Example:
     /// <code>
-    /// var result = await new PredictionModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    /// var result = await new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
     ///     .ConfigureProgramSynthesis()
     ///     .ConfigureProgramSynthesisServing() // Defaults to http://localhost:52432/
     ///     .BuildAsync();
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureProgramSynthesisServing(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureProgramSynthesisServing(
         ProgramSynthesisServingClientOptions? options = null,
         IProgramSynthesisServingClient? client = null)
     {
@@ -4491,7 +4491,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///
     /// Simply call without parameters for sensible defaults:
     /// <code>
-    /// var builder = new PredictionModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
     ///     .ConfigureTokenizerFromPretrained()  // Uses BertBaseUncased by default
     ///     .ConfigureModel(new BertModel())
     ///     .Build(trainingData);
@@ -4511,7 +4511,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// - CodeBertBase: For code understanding tasks
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(
         PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased,
         TokenizationConfig? config = null)
     {
@@ -4540,7 +4540,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// If null or empty, defaults to "bert-base-uncased".
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizerFromPretrained(
         string? modelNameOrPath = null,
         TokenizationConfig? config = null)
     {
@@ -4571,7 +4571,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </para>
     /// </remarks>
-    public async Task<IPredictionModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(
+    public async Task<IAiModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(
         PretrainedTokenizerModel model = PretrainedTokenizerModel.BertBaseUncased,
         TokenizationConfig? config = null)
     {
@@ -4595,7 +4595,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </para>
     /// </remarks>
-    public async Task<IPredictionModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(
+    public async Task<IAiModelBuilder<T, TInput, TOutput>> ConfigureTokenizerFromPretrainedAsync(
         string? modelNameOrPath = null,
         TokenizationConfig? config = null)
     {
@@ -4630,13 +4630,13 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// Example:
     /// <code>
     /// var template = new SimplePromptTemplate("Translate {text} from {source} to {target}");
-    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigurePromptTemplate(template)
     ///     .ConfigureModel(model);
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptTemplate(IPromptTemplate? template = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePromptTemplate(IPromptTemplate? template = null)
     {
         _promptTemplate = template;
         return this;
@@ -4662,13 +4662,13 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     ///     .AddStep("classify", ClassifyEmail)
     ///     .AddStep("respond", GenerateResponse);
     ///
-    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigurePromptChain(chain)
     ///     .ConfigureModel(model);
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptChain(IChain<string, string>? chain = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePromptChain(IChain<string, string>? chain = null)
     {
         _promptChain = chain;
         return this;
@@ -4692,7 +4692,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <code>
     /// var optimizer = new DiscreteSearchOptimizer&lt;double&gt;();
     ///
-    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigurePromptOptimizer(optimizer)
     ///     .ConfigureModel(model);
     ///
@@ -4705,7 +4705,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptOptimizer(IPromptOptimizer<T>? optimizer = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePromptOptimizer(IPromptOptimizer<T>? optimizer = null)
     {
         _promptOptimizer = optimizer;
         return this;
@@ -4732,13 +4732,13 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// selector.AddExample(new FewShotExample { Input = "Hello", Output = "Hola" });
     /// selector.AddExample(new FewShotExample { Input = "Goodbye", Output = "Adiós" });
     ///
-    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureFewShotExampleSelector(selector)
     ///     .ConfigureModel(model);
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigureFewShotExampleSelector(IFewShotExampleSelector<T>? selector = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureFewShotExampleSelector(IFewShotExampleSelector<T>? selector = null)
     {
         _fewShotExampleSelector = selector;
         return this;
@@ -4765,7 +4765,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <code>
     /// var analyzer = new PromptAnalyzer();
     ///
-    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigurePromptAnalyzer(analyzer)
     ///     .ConfigureModel(model);
     ///
@@ -4775,7 +4775,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptAnalyzer(IPromptAnalyzer? analyzer = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePromptAnalyzer(IPromptAnalyzer? analyzer = null)
     {
         _promptAnalyzer = analyzer;
         return this;
@@ -4803,7 +4803,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// <code>
     /// var compressor = new RedundancyCompressor();
     ///
-    /// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigurePromptCompressor(compressor)
     ///     .ConfigureModel(model);
     ///
@@ -4813,7 +4813,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </code>
     /// </para>
     /// </remarks>
-    public IPredictionModelBuilder<T, TInput, TOutput> ConfigurePromptCompressor(IPromptCompressor? compressor = null)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePromptCompressor(IPromptCompressor? compressor = null)
     {
         _promptCompressor = compressor;
         return this;
@@ -4824,10 +4824,10 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     // ============================================================================
 
     /// <summary>
-    /// Attaches the configured prompt engineering components to a PredictionModelResult.
+    /// Attaches the configured prompt engineering components to a AiModelResult.
     /// </summary>
     /// <param name="result">The result to attach configuration to.</param>
-    private void AttachPromptEngineeringConfiguration(PredictionModelResult<T, TInput, TOutput> result)
+    private void AttachPromptEngineeringConfiguration(AiModelResult<T, TInput, TOutput> result)
     {
         result.AttachPromptEngineering(
             _promptTemplate,
@@ -6622,7 +6622,7 @@ public partial class PredictionModelBuilder<T, TInput, TOutput> : IPredictionMod
     /// </para>
     /// </remarks>
     private static void TryComputeAndAttachDeepEnsembleModels(
-        PredictionModelResult<T, TInput, TOutput> result,
+        AiModelResult<T, TInput, TOutput> result,
         IFullModel<T, TInput, TOutput>? deepEnsembleTemplate,
         OptimizationInputData<T, TInput, TOutput> optimizationInputData,
         IOptimizer<T, TInput, TOutput> templateOptimizer,

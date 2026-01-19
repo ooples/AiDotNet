@@ -5,18 +5,18 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Serving.Extensions;
 
 /// <summary>
-/// Extension methods for converting PredictionModelResult to IServableModel.
+/// Extension methods for converting AiModelResult to IServableModel.
 /// </summary>
 /// <remarks>
 /// <para>
 /// These extensions enable seamless integration between trained models and the serving infrastructure.
-/// Use these methods to convert a PredictionModelResult into a format suitable for the REST API.
+/// Use these methods to convert a AiModelResult into a format suitable for the REST API.
 /// </para>
 /// <para><b>For Beginners:</b> After training a model, you need to convert it to a serving format.
 ///
 /// Example:
 /// <code>
-/// // Train a model using PredictionModelBuilder
+/// // Train a model using AiModelBuilder
 /// var trainedModel = builder.Build(trainingData, validationData);
 ///
 /// // Convert to servable model for the REST API
@@ -27,10 +27,10 @@ namespace AiDotNet.Serving.Extensions;
 /// </code>
 /// </para>
 /// </remarks>
-public static class PredictionModelResultExtensions
+public static class AiModelResultExtensions
 {
     /// <summary>
-    /// Converts a PredictionModelResult with Vector input/output to an IServableModel.
+    /// Converts a AiModelResult with Vector input/output to an IServableModel.
     /// </summary>
     /// <typeparam name="T">The numeric type used by the model.</typeparam>
     /// <param name="result">The prediction model result to convert.</param>
@@ -57,7 +57,7 @@ public static class PredictionModelResultExtensions
     /// </para>
     /// </remarks>
     public static IServableModel<T> ToServableModel<T>(
-        this PredictionModelResult<T, Vector<T>, Vector<T>> result,
+        this AiModelResult<T, Vector<T>, Vector<T>> result,
         string modelName,
         int inputDimension,
         int outputDimension,
@@ -74,7 +74,7 @@ public static class PredictionModelResultExtensions
             throw new ArgumentException("Model name cannot be null or empty.", nameof(modelName));
         }
 
-        // Create prediction function that uses the PredictionModelResult
+        // Create prediction function that uses the AiModelResult
         Vector<T> predictFunc(Vector<T> input)
         {
             return result.Predict(input);
@@ -111,7 +111,7 @@ public static class PredictionModelResultExtensions
     }
 
     /// <summary>
-    /// Converts a PredictionModelResult with Matrix input and Vector output to an IServableModel.
+    /// Converts a AiModelResult with Matrix input and Vector output to an IServableModel.
     /// </summary>
     /// <typeparam name="T">The numeric type used by the model.</typeparam>
     /// <param name="result">The prediction model result to convert.</param>
@@ -137,7 +137,7 @@ public static class PredictionModelResultExtensions
     /// </para>
     /// </remarks>
     public static IServableModel<T> ToServableModel<T>(
-        this PredictionModelResult<T, Matrix<T>, Vector<T>> result,
+        this AiModelResult<T, Matrix<T>, Vector<T>> result,
         string modelName,
         int inputDimension,
         int outputDimension,
@@ -205,7 +205,7 @@ public static class PredictionModelResultExtensions
     }
 
     /// <summary>
-    /// Converts a PredictionModelResult to an IServableModel using custom conversion functions.
+    /// Converts a AiModelResult to an IServableModel using custom conversion functions.
     /// </summary>
     /// <typeparam name="T">The numeric type used by the model.</typeparam>
     /// <typeparam name="TInput">The input type of the prediction model.</typeparam>
@@ -222,7 +222,7 @@ public static class PredictionModelResultExtensions
     /// <exception cref="ArgumentNullException">Thrown when required parameters are null.</exception>
     /// <remarks>
     /// <para>
-    /// This method provides maximum flexibility for converting any PredictionModelResult type.
+    /// This method provides maximum flexibility for converting any AiModelResult type.
     /// You provide custom conversion functions to handle the type transformations.
     /// </para>
     /// <para><b>For Beginners:</b> Use this for models with custom input/output types.
@@ -239,7 +239,7 @@ public static class PredictionModelResultExtensions
     /// </para>
     /// </remarks>
     public static IServableModel<T> ToServableModel<T, TInput, TOutput>(
-        this PredictionModelResult<T, TInput, TOutput> result,
+        this AiModelResult<T, TInput, TOutput> result,
         string modelName,
         int inputDimension,
         int outputDimension,

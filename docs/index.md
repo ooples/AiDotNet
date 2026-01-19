@@ -43,13 +43,14 @@ dotnet add package AiDotNet
 ```csharp
 using AiDotNet;
 
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new NeuralNetwork<double>(inputSize: 4, hiddenSize: 16, outputSize: 3))
     .ConfigureOptimizer(new AdamOptimizer<double>())
     .ConfigurePreprocessing()
     .BuildAsync(features, labels);
 
-var prediction = result.Model.Predict(newSample);
+// Use result.Predict() directly - this is the facade pattern
+var prediction = result.Predict(newSample);
 ```
 
 ## What do you want to build?
@@ -59,12 +60,12 @@ var prediction = result.Model.Predict(newSample);
 | Task | Documentation |
 |:-----|:--------------|
 | **Classify data** | [Classification Tutorial](/tutorials/classification/) |
-| **Predict values** | [Regression Tutorial](/tutorials/regression/) |
 | **Detect objects** | [Computer Vision Tutorial](/tutorials/computer-vision/) |
-| **Process speech** | [Audio Tutorial](/tutorials/audio/) |
-| **Build a chatbot** | [RAG Tutorial](/tutorials/rag/) |
-| **Fine-tune LLMs** | [LoRA Tutorial](/tutorials/lora/) |
-| **Scale training** | [Distributed Training Tutorial](/tutorials/distributed/) |
+| **Process text & RAG** | [NLP & RAG Tutorial](/tutorials/nlp/) |
+| **Fine-tune LLMs** | [LLM Fine-tuning Tutorial](/tutorials/llm-fine-tuning/) |
+| **Train RL agents** | [Reinforcement Learning Tutorial](/tutorials/reinforcement-learning/) |
+| **Scale training** | [Distributed Training Tutorial](/tutorials/distributed-training/) |
+| **Deploy models** | [Deployment Tutorial](/tutorials/deployment/) |
 
 </div>
 
@@ -129,7 +130,7 @@ TensorFlow.NET wraps TensorFlow's C runtime, which means:
 AiDotNet provides:
 - **Simple NuGet install** - Just `dotnet add package AiDotNet`
 - **Always compatible** - No version matching required
-- **High-level API** - PredictionModelBuilder for easy model creation
+- **High-level API** - AiModelBuilder for easy model creation
 - **Lightweight** - Only load what you use
 
 ### Why Not ML.NET?
@@ -163,6 +164,7 @@ AiDotNet provides:
 | NeRF/3D | 5+ variants | None/.NET |
 
 #### Training Capabilities
+
 | Capability | AiDotNet | TorchSharp | ML.NET |
 |:-----------|:---------|:-----------|:-------|
 | Mixed Precision (FP16/BF16) | **Yes** | Yes | No |

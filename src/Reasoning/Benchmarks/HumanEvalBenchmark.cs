@@ -338,7 +338,7 @@ public class HumanEvalBenchmark<T> : IBenchmark<T>
         return normalizedPrompt + "\n" + indented + "\n";
     }
 
-    // Note: execution is orchestrated by higher-level components (e.g. PredictionModelResult) so benchmarks stay safe-by-default.
+    // Note: execution is orchestrated by higher-level components (e.g. AiModelResult) so benchmarks stay safe-by-default.
 
     private List<BenchmarkProblem> GenerateSampleProblems()
     {

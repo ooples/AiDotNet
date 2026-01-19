@@ -24,7 +24,7 @@ public class InferenceSessionIntegrationTests
     private const int FlatSize = SequenceLength * EmbeddingDimension;
 
     [Fact]
-    public void PredictionModelResult_Predict_IsStateless_WhenInferenceOptimizationsConfigured()
+    public void AiModelResult_Predict_IsStateless_WhenInferenceOptimizationsConfigured()
     {
         var result = CreateDeterministicResult(
             new InferenceOptimizationConfig
@@ -44,7 +44,7 @@ public class InferenceSessionIntegrationTests
     }
 
     [Fact]
-    public void PredictionModelResult_SerializeDeserialize_PreservesInferenceOptimizationConfig()
+    public void AiModelResult_SerializeDeserialize_PreservesInferenceOptimizationConfig()
     {
         var config = new InferenceOptimizationConfig
         {
@@ -444,13 +444,13 @@ public class InferenceSessionIntegrationTests
         Assert.NotEqual(model.GetParameters()[0], clone.GetParameters()[0]);
     }
 
-    private static PredictionModelResult<float, Tensor<float>, Tensor<float>> CreateDeterministicResult(InferenceOptimizationConfig config)
+    private static AiModelResult<float, Tensor<float>, Tensor<float>> CreateDeterministicResult(InferenceOptimizationConfig config)
     {
         var model = CreateDeterministicAttentionOnlyModel();
         return CreateDeterministicResultWithModel(config, model);
     }
 
-    private static PredictionModelResult<float, Tensor<float>, Tensor<float>> CreateDeterministicResultWithModel(
+    private static AiModelResult<float, Tensor<float>, Tensor<float>> CreateDeterministicResultWithModel(
         InferenceOptimizationConfig config,
         NeuralNetworkBase<float> model)
     {
@@ -467,14 +467,14 @@ public class InferenceSessionIntegrationTests
             YParams = new NormalizationParameters<float> { Method = NormalizationMethod.None }
         };
 
-        var options = new PredictionModelResultOptions<float, Tensor<float>, Tensor<float>>
+        var options = new AiModelResultOptions<float, Tensor<float>, Tensor<float>>
         {
             OptimizationResult = optimization,
             NormalizationInfo = normalization,
             InferenceOptimizationConfig = config
         };
 
-        return new PredictionModelResult<float, Tensor<float>, Tensor<float>>(options);
+        return new AiModelResult<float, Tensor<float>, Tensor<float>>(options);
     }
 
     private static NeuralNetworkBase<float> CreateDeterministicMultiLoRAModel()

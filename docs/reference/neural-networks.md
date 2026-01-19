@@ -315,7 +315,7 @@ var model = new EfficientNet<float>(
     variant: EfficientNetVariant.B4,
     numClasses: 100);
 
-var result = await new PredictionModelBuilder<float, Tensor<float>, int>()
+var result = await new AiModelBuilder<float, Tensor<float>, int>()
     .ConfigureModel(model)
     .ConfigureOptimizer(new AdamWOptimizer<float>())
     .ConfigureGpuAcceleration(new GpuAccelerationConfig { Enabled = true })

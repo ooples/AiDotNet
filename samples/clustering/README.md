@@ -17,12 +17,13 @@ using AiDotNet.Clustering;
 
 var features = new double[][] { /* data points */ };
 
-var result = await new PredictionModelBuilder<double, double[], int>()
+var result = await new AiModelBuilder<double, double[], int>()
     .ConfigureModel(new KMeansClustering<double>(k: 5))
     .ConfigurePreprocessing()
     .BuildAsync(features);
 
-var clusterLabels = result.Model.Predict(features);
+// Use result.Predict() directly - this is the facade pattern
+var clusterLabels = result.Predict(features);
 ```
 
 ## Available Clustering Algorithms (20+)

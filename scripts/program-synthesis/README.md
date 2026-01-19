@@ -15,7 +15,7 @@ Run Serving from `src/AiDotNet.Serving` and configure:
 
 ## HumanEval
 
-Use `PredictionModelResult.EvaluateHumanEvalAsync(...)` or `PredictionModelResult.EvaluateHumanEvalPassAtKAsync(k, ...)`.
+Use `AiModelResult.EvaluateHumanEvalAsync(...)` or `AiModelResult.EvaluateHumanEvalPassAtKAsync(k, ...)`.
 
 Local execution is intentionally opt-in only:
 - Set `AIDOTNET_HUMANEVAL_EXECUTION=1` for dev/test environments.

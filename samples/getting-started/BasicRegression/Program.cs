@@ -19,7 +19,7 @@ Console.WriteLine("  - Learning rate: 0.1\n");
 
 try
 {
-    var builder = new PredictionModelBuilder<double, double[], double>()
+    var builder = new AiModelBuilder<double, double[], double>()
         .ConfigureModel(new GradientBoostingRegression<double, double[], double>(
             nEstimators: 100,
             maxDepth: 5,
@@ -39,7 +39,8 @@ try
 
     for (int i = 0; i < testFeatures.Length; i++)
     {
-        predictions[i] = result.Model!.Predict(testFeatures[i]);
+        // Use result.Predict() directly - this is the facade pattern
+        predictions[i] = result.Predict(testFeatures[i]);
         double error = predictions[i] - testPrices[i];
         sumSquaredError += error * error;
         sumAbsoluteError += Math.Abs(error);

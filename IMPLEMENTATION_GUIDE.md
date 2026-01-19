@@ -4,7 +4,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                      PredictionModelBuilder<T>                          │
+│                      AiModelBuilder<T>                          │
 │                        (Main Configuration)                             │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -196,7 +196,7 @@ Enum                  {Name}.cs                   Enums/                Experime
 - [ ] Add enum: `ExperimentStatus.cs`
 - [ ] Create result class: `ExperimentTrackingResult.cs`
 - [ ] Create config: `ExperimentTrackingOptions.cs`
-- [ ] Integrate with `PredictionModelBuilder`:
+- [ ] Integrate with `AiModelBuilder`:
   - [ ] Add `ConfigureExperimentTracker()` method
 - [ ] Unit tests
 
@@ -327,7 +327,7 @@ Enum                  {Name}.cs                   Enums/                Experime
 - [ ] Create unit tests in `/tests/UnitTests/{Component}/`
 - [ ] Update `/src/AiDotNet.csproj` if needed
 
-### Integration with PredictionModelBuilder:
+### Integration with AiModelBuilder:
 - [ ] Add `Configure{Component}()` methods
 - [ ] Support builder chaining (return `this`)
 - [ ] Add to global usings if public APIs

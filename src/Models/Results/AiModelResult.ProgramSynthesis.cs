@@ -16,7 +16,7 @@ using AiDotNet.Tokenization.Models;
 
 namespace AiDotNet.Models.Results;
 
-public partial class PredictionModelResult<T, TInput, TOutput>
+public partial class AiModelResult<T, TInput, TOutput>
 {
     internal IFullModel<T, Tensor<T>, Tensor<T>>? ProgramSynthesisModel { get; private set; }
 
@@ -173,7 +173,7 @@ public partial class PredictionModelResult<T, TInput, TOutput>
         }
 
         throw new InvalidOperationException(
-            "No code model is configured for this PredictionModelResult. Configure an ICodeModel<T> via PredictionModelBuilder.ConfigureModel(...) or PredictionModelBuilder.ConfigureProgramSynthesis(...).");
+            "No code model is configured for this AiModelResult. Configure an ICodeModel<T> via AiModelBuilder.ConfigureModel(...) or AiModelBuilder.ConfigureProgramSynthesis(...).");
     }
 
     private bool ShouldPreferServing()

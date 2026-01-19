@@ -193,14 +193,15 @@ var texts = new[]
 };
 var labels = new[] { 1, 0, 1 }; // positive/negative
 
-var result = await new PredictionModelBuilder<float, string, int>()
+var result = await new AiModelBuilder<float, string, int>()
     .ConfigureModel(new TextClassifier<float>(
         backbone: "distilbert-base-uncased",
         numClasses: 2))
     .ConfigureTokenizer(new BertTokenizer())
     .BuildAsync(texts, labels);
 
-var prediction = result.Model.Predict("Great film!");
+// Use result.Predict() directly (facade pattern)
+var prediction = result.Predict("Great film!");
 ```
 
 ---

@@ -67,24 +67,24 @@ var features = new double[][]
 var labels = new double[] { 0, 1, 2 };
 
 // Build and train
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
     .ConfigurePreprocessing()  // Auto-applies StandardScaler
     .BuildAsync(features, labels);
 
-// Predict
-var prediction = result.Model.Predict(new[] { 5.9, 3.0, 5.1, 1.8 });
+// Predict using the result object (facade pattern)
+var prediction = result.Predict(new[] { 5.9, 3.0, 5.1, 1.8 });
 Console.WriteLine($"Predicted class: {prediction}");
 ```
 
 ## Core Concepts
 
-### PredictionModelBuilder
+### AiModelBuilder
 
-The `PredictionModelBuilder` is the main entry point for building models. It uses a fluent API:
+The `AiModelBuilder` is the main entry point for building models. It uses a fluent API:
 
 ```csharp
-var builder = new PredictionModelBuilder<T, TInput, TOutput>();
+var builder = new AiModelBuilder<T, TInput, TOutput>();
 ```
 
 Where:

@@ -4,7 +4,7 @@ This sample demonstrates multi-class classification using the classic Iris flowe
 
 ## What You'll Learn
 
-- How to use `PredictionModelBuilder` for classification
+- How to use `AiModelBuilder` for classification
 - How to configure preprocessing pipelines
 - How to use cross-validation
 - How to evaluate model accuracy
@@ -51,7 +51,7 @@ Final Model Evaluation:
 ## Code Highlights
 
 ```csharp
-var result = await new PredictionModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, double[], double>()
     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
     .ConfigurePreprocessing(pipeline => pipeline
         .Add(new StandardScaler<double>()))

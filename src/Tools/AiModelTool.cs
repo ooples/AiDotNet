@@ -7,7 +7,7 @@ namespace AiDotNet.Tools;
 
 /// <summary>
 /// A tool that allows agents to use trained machine learning models for predictions.
-/// Integrates with PredictionModelResult for inference on trained models.
+/// Integrates with AiModelResult for inference on trained models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
 /// <typeparam name="TInput">The input type for the model (e.g., Matrix&lt;T&gt;, Vector&lt;T&gt;).</typeparam>
@@ -36,7 +36,7 @@ namespace AiDotNet.Tools;
 /// Example:
 /// <code>
 /// // Train a model
-/// var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
 /// var trainedModel = builder
 ///     .ConfigureModel(new LinearRegressionModel&lt;double&gt;())
 ///     .Build(trainX, trainY);
@@ -56,7 +56,7 @@ namespace AiDotNet.Tools;
 /// </remarks>
 public class PredictionModelTool<T, TInput, TOutput> : ITool
 {
-    private readonly PredictionModelResult<T, TInput, TOutput> _model;
+    private readonly AiModelResult<T, TInput, TOutput> _model;
     private readonly string _name;
     private readonly string _description;
     private readonly Func<string, TInput> _inputParser;
@@ -73,7 +73,7 @@ public class PredictionModelTool<T, TInput, TOutput> : ITool
     /// For Beginners:
     ///
     /// **Parameters:**
-    /// - model: Your trained PredictionModelResult
+    /// - model: Your trained AiModelResult
     /// - name: Give it a clear, descriptive name
     /// - description: Explain what it predicts and what input format to use
     /// - inputParser: Convert agent's string input to model's expected format
@@ -98,7 +98,7 @@ public class PredictionModelTool<T, TInput, TOutput> : ITool
     /// ```
     /// </remarks>
     public PredictionModelTool(
-        PredictionModelResult<T, TInput, TOutput> model,
+        AiModelResult<T, TInput, TOutput> model,
         string name,
         string description,
         Func<string, TInput> inputParser)
@@ -298,7 +298,7 @@ public class PredictionModelTool<T, TInput, TOutput> : ITool
     /// </code>
     /// </remarks>
     public static PredictionModelTool<T, Vector<T>, TOutput> CreateVectorInputTool(
-        PredictionModelResult<T, Vector<T>, TOutput> model,
+        AiModelResult<T, Vector<T>, TOutput> model,
         string name,
         string description)
     {
@@ -341,7 +341,7 @@ public class PredictionModelTool<T, TInput, TOutput> : ITool
     /// </code>
     /// </remarks>
     public static PredictionModelTool<T, Matrix<T>, TOutput> CreateMatrixInputTool(
-        PredictionModelResult<T, Matrix<T>, TOutput> model,
+        AiModelResult<T, Matrix<T>, TOutput> model,
         string name,
         string description)
     {

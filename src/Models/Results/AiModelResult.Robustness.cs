@@ -8,7 +8,7 @@ using Newtonsoft.Json;
 
 namespace AiDotNet.Models.Results;
 
-public partial class PredictionModelResult<T, TInput, TOutput>
+public partial class AiModelResult<T, TInput, TOutput>
 {
     private readonly INumericOperations<T> _robustnessNumOps = MathHelper.GetNumericOperations<T>();
 
