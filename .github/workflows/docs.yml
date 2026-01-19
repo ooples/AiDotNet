@@ -47,7 +47,7 @@ jobs:
     - name: Download build artifacts from Build workflow
       uses: dawidd6/action-download-artifact@20319c5641d495c8a52e688b7dc5fada6c3a9fbc # v8
       with:
-        workflow: sonarcloud.yml
+        workflow: Build & SonarCloud
         workflow_conclusion: success
         name: build-output-${{ github.event.workflow_run.head_sha || github.sha }}
         path: .
@@ -63,7 +63,7 @@ jobs:
         else
           echo "Using build artifacts from Build & SonarCloud workflow"
           # Still need to restore for DocFX metadata extraction
-          dotnet restore src/AiDotNet.csproj src/AiDotNet.Tensors/AiDotNet.Tensors.csproj
+          dotnet restore
         fi
 
     - name: Build DocFX documentation
@@ -153,7 +153,7 @@ jobs:
 
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4
-      if: github.event.workflow_run.head_branch == 'master' || github.ref == 'refs/heads/master'
+      if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'master')
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./_site
