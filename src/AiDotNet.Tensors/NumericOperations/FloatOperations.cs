@@ -1,10 +1,13 @@
 using System;
+using System.Buffers;
+using System.Runtime.InteropServices;
 #if NET8_0_OR_GREATER
 using System.Numerics.Tensors;
 #endif
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using static AiDotNet.Tensors.Helpers.CpuParallelSettings;
 
 namespace AiDotNet.Tensors.NumericOperations;
 
@@ -31,6 +34,55 @@ namespace AiDotNet.Tensors.NumericOperations;
 /// </remarks>
 public class FloatOperations : INumericOperations<float>
 {
+    /// <summary>
+    /// Threshold for parallel processing of compute-intensive operations.
+    /// Memory-bound ops (Add, Multiply) use single-threaded SIMD regardless of size.
+    /// </summary>
+    private const int ParallelThreshold = 65536;
+
+    /// <summary>
+    /// Minimum chunk size per thread to ensure cache efficiency.
+    /// </summary>
+    private const int MinChunkSize = 8192;
+
+    /// <summary>
+    /// Tries to get the underlying array and offset from a Memory{T} without copying.
+    /// Returns false if the memory is not backed by an array.
+    /// </summary>
+    private static bool TryGetArraySegment(Memory<float> memory, out float[] array, out int offset, out int length)
+    {
+        if (MemoryMarshal.TryGetArray<float>(memory, out var segment) && segment.Array is not null)
+        {
+            array = segment.Array;
+            offset = segment.Offset;
+            length = segment.Count;
+            return true;
+        }
+        array = Array.Empty<float>();
+        offset = 0;
+        length = 0;
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to get the underlying array and offset from a ReadOnlyMemory{T} without copying.
+    /// Returns false if the memory is not backed by an array.
+    /// </summary>
+    private static bool TryGetArraySegment(ReadOnlyMemory<float> memory, out float[] array, out int offset, out int length)
+    {
+        if (MemoryMarshal.TryGetArray(memory, out var segment) && segment.Array is not null)
+        {
+            array = segment.Array;
+            offset = segment.Offset;
+            length = segment.Count;
+            return true;
+        }
+        array = Array.Empty<float>();
+        offset = 0;
+        length = 0;
+        return false;
+    }
+
     /// <summary>
     /// Adds two floating-point numbers.
     /// </summary>
@@ -871,6 +923,7 @@ public class FloatOperations : INumericOperations<float>
 
     /// <summary>
     /// Performs element-wise addition using SIMD-optimized TensorPrimitives.
+    /// Memory-bound operation - single-threaded SIMD saturates memory bandwidth.
     /// </summary>
     public void Add(ReadOnlySpan<float> x, ReadOnlySpan<float> y, Span<float> destination)
     {
@@ -883,6 +936,7 @@ public class FloatOperations : INumericOperations<float>
 
     /// <summary>
     /// Performs element-wise subtraction using SIMD-optimized TensorPrimitives.
+    /// Memory-bound operation - single-threaded SIMD saturates memory bandwidth.
     /// </summary>
     public void Subtract(ReadOnlySpan<float> x, ReadOnlySpan<float> y, Span<float> destination)
     {
@@ -895,6 +949,7 @@ public class FloatOperations : INumericOperations<float>
 
     /// <summary>
     /// Performs element-wise multiplication using SIMD-optimized TensorPrimitives.
+    /// Memory-bound operation - single-threaded SIMD saturates memory bandwidth.
     /// </summary>
     public void Multiply(ReadOnlySpan<float> x, ReadOnlySpan<float> y, Span<float> destination)
     {
@@ -907,6 +962,7 @@ public class FloatOperations : INumericOperations<float>
 
     /// <summary>
     /// Performs element-wise division using SIMD-optimized TensorPrimitives.
+    /// Memory-bound operation - single-threaded SIMD saturates memory bandwidth.
     /// </summary>
     public void Divide(ReadOnlySpan<float> x, ReadOnlySpan<float> y, Span<float> destination)
     {
@@ -1002,10 +1058,42 @@ public class FloatOperations : INumericOperations<float>
     }
 
     /// <summary>
-    /// Computes sigmoid using SIMD-optimized TensorPrimitives.
+    /// Computes sigmoid using SIMD-optimized TensorPrimitives with parallel processing for large arrays.
     /// </summary>
     public void Sigmoid(ReadOnlySpan<float> x, Span<float> destination)
     {
+        int length = x.Length;
+        if (length >= ParallelThreshold && MaxDegreeOfParallelism > 1)
+        {
+            var pool = ArrayPool<float>.Shared;
+            var xArray = pool.Rent(length);
+            var destArray = pool.Rent(length);
+            try
+            {
+                x.CopyTo(xArray);
+
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+#if NET8_0_OR_GREATER
+                    TensorPrimitives.Sigmoid(
+                        new ReadOnlySpan<float>(xArray, start, count),
+                        new Span<float>(destArray, start, count));
+#else
+                    for (int i = start; i < start + count; i++)
+                        destArray[i] = 1.0f / (1.0f + (float)Math.Exp(-xArray[i]));
+#endif
+                });
+
+                new ReadOnlySpan<float>(destArray, 0, length).CopyTo(destination);
+            }
+            finally
+            {
+                pool.Return(xArray);
+                pool.Return(destArray);
+            }
+            return;
+        }
+
 #if NET8_0_OR_GREATER
         TensorPrimitives.Sigmoid(x, destination);
 #else
@@ -1286,66 +1374,182 @@ public class FloatOperations : INumericOperations<float>
 
     /// <summary>
     /// Computes LeakyReLU element-wise using SIMD-optimized SimdKernels.
+    /// Simple comparison operation - single-threaded SIMD saturates memory bandwidth.
     /// </summary>
     public void LeakyReLU(ReadOnlySpan<float> x, float alpha, Span<float> destination)
     {
         if (x.Length != destination.Length)
             throw new ArgumentException("Spans must have the same length");
+
         Engines.Simd.SimdKernels.LeakyReLU(x, alpha, destination);
     }
 
     /// <summary>
-    /// Computes GELU (Gaussian Error Linear Unit) element-wise using SIMD-optimized SimdKernels.
+    /// Computes GELU (Gaussian Error Linear Unit) element-wise using SIMD-optimized SimdKernels with parallel processing for large arrays.
     /// Uses approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
     /// </summary>
     public void GELU(ReadOnlySpan<float> x, Span<float> destination)
     {
         if (x.Length != destination.Length)
             throw new ArgumentException("Spans must have the same length");
+
+        int length = x.Length;
+        if (length >= ParallelThreshold && MaxDegreeOfParallelism > 1)
+        {
+            var pool = ArrayPool<float>.Shared;
+            var xArray = pool.Rent(length);
+            var destArray = pool.Rent(length);
+            try
+            {
+                x.CopyTo(xArray);
+
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+                    Engines.Simd.SimdKernels.GELU(
+                        new ReadOnlySpan<float>(xArray, start, count),
+                        new Span<float>(destArray, start, count));
+                });
+
+                new ReadOnlySpan<float>(destArray, 0, length).CopyTo(destination);
+            }
+            finally
+            {
+                pool.Return(xArray);
+                pool.Return(destArray);
+            }
+            return;
+        }
+
         Engines.Simd.SimdKernels.GELU(x, destination);
     }
 
     /// <summary>
-    /// Computes Mish activation element-wise using SIMD-optimized SimdKernels.
+    /// Computes Mish activation element-wise using SIMD-optimized SimdKernels with parallel processing for large arrays.
     /// x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x)))
     /// </summary>
     public void Mish(ReadOnlySpan<float> x, Span<float> destination)
     {
         if (x.Length != destination.Length)
             throw new ArgumentException("Spans must have the same length");
+
+        int length = x.Length;
+        if (length >= ParallelThreshold && MaxDegreeOfParallelism > 1)
+        {
+            var pool = ArrayPool<float>.Shared;
+            var xArray = pool.Rent(length);
+            var destArray = pool.Rent(length);
+            try
+            {
+                x.CopyTo(xArray);
+
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+                    Engines.Simd.SimdKernels.Mish(
+                        new ReadOnlySpan<float>(xArray, start, count),
+                        new Span<float>(destArray, start, count));
+                });
+
+                new ReadOnlySpan<float>(destArray, 0, length).CopyTo(destination);
+            }
+            finally
+            {
+                pool.Return(xArray);
+                pool.Return(destArray);
+            }
+            return;
+        }
+
         Engines.Simd.SimdKernels.Mish(x, destination);
     }
 
     /// <summary>
-    /// Computes Swish/SiLU activation element-wise using SIMD-optimized SimdKernels.
+    /// Computes Swish/SiLU activation element-wise using SIMD-optimized SimdKernels with parallel processing for large arrays.
     /// x * sigmoid(x) = x / (1 + exp(-x))
     /// </summary>
     public void Swish(ReadOnlySpan<float> x, Span<float> destination)
     {
         if (x.Length != destination.Length)
             throw new ArgumentException("Spans must have the same length");
+
+        int length = x.Length;
+        if (length >= ParallelThreshold && MaxDegreeOfParallelism > 1)
+        {
+            var pool = ArrayPool<float>.Shared;
+            var xArray = pool.Rent(length);
+            var destArray = pool.Rent(length);
+            try
+            {
+                x.CopyTo(xArray);
+
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+                    Engines.Simd.SimdKernels.Swish(
+                        new ReadOnlySpan<float>(xArray, start, count),
+                        new Span<float>(destArray, start, count));
+                });
+
+                new ReadOnlySpan<float>(destArray, 0, length).CopyTo(destination);
+            }
+            finally
+            {
+                pool.Return(xArray);
+                pool.Return(destArray);
+            }
+            return;
+        }
+
         Engines.Simd.SimdKernels.Swish(x, destination);
     }
 
     /// <summary>
-    /// Computes ELU (Exponential Linear Unit) element-wise using SIMD-optimized SimdKernels.
+    /// Computes ELU (Exponential Linear Unit) element-wise using SIMD-optimized SimdKernels with parallel processing for large arrays.
     /// x if x > 0, alpha * (exp(x) - 1) otherwise
     /// </summary>
     public void ELU(ReadOnlySpan<float> x, float alpha, Span<float> destination)
     {
         if (x.Length != destination.Length)
             throw new ArgumentException("Spans must have the same length");
+
+        int length = x.Length;
+        if (length >= ParallelThreshold && MaxDegreeOfParallelism > 1)
+        {
+            var pool = ArrayPool<float>.Shared;
+            var xArray = pool.Rent(length);
+            var destArray = pool.Rent(length);
+            try
+            {
+                x.CopyTo(xArray);
+
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+                    Engines.Simd.SimdKernels.ELU(
+                        new ReadOnlySpan<float>(xArray, start, count),
+                        alpha,
+                        new Span<float>(destArray, start, count));
+                });
+
+                new ReadOnlySpan<float>(destArray, 0, length).CopyTo(destination);
+            }
+            finally
+            {
+                pool.Return(xArray);
+                pool.Return(destArray);
+            }
+            return;
+        }
+
         Engines.Simd.SimdKernels.ELU(x, alpha, destination);
     }
 
     /// <summary>
     /// Computes ReLU (Rectified Linear Unit) element-wise using SIMD-optimized SimdKernels.
-    /// max(0, x)
+    /// max(0, x) - Simple comparison operation - single-threaded SIMD saturates memory bandwidth.
     /// </summary>
     public void ReLU(ReadOnlySpan<float> x, Span<float> destination)
     {
         if (x.Length != destination.Length)
             throw new ArgumentException("Spans must have the same length");
+
         Engines.Simd.SimdKernels.ReLU(x, destination);
     }
 
