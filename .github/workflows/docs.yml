@@ -1,14 +1,14 @@
 name: Documentation
 
 # Auto-generate and publish API documentation and Interactive Playground
+# Triggered after Build & SonarCloud completes to reuse build artifacts
 on:
-  push:
+  workflow_run:
+    workflows: ["Build & SonarCloud"]
+    types:
+      - completed
     branches:
       - master
-    paths:
-      - 'src/**/*.cs'
-      - 'src/AiDotNet.Playground/**'
-      - 'docs/**'
   workflow_dispatch:
 
 concurrency:
@@ -19,6 +19,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  actions: read  # Required to download artifacts from other workflows
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
@@ -28,6 +29,8 @@ jobs:
   build-docs:
     name: Build Documentation and Playground
     runs-on: ubuntu-latest
+    # Only run if the triggering workflow succeeded (or if manually dispatched)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
     - name: Checkout code
@@ -41,118 +44,27 @@ jobs:
     - name: Install DocFX
       run: dotnet tool install --global docfx || true
 
-    - name: Restore dependencies
-      run: dotnet restore
+    - name: Download build artifacts from Build workflow
+      uses: dawidd6/action-download-artifact@20319c5641d495c8a52e688b7dc5fada6c3a9fbc # v8
+      with:
+        workflow: sonarcloud.yml
+        workflow_conclusion: success
+        name: build-output-${{ github.event.workflow_run.head_sha || github.sha }}
+        path: .
+        if_no_artifact_found: warn
 
-    - name: Build solution for DocFX metadata extraction
-      run: dotnet build -c Release --no-restore -p:TreatWarningsAsErrors=false
-
-    - name: Create DocFX project if not exists
+    - name: Restore dependencies (fallback if no artifacts)
       run: |
-        if [ ! -f "docfx.json" ]; then
-          cat > docfx.json << 'EOF'
-        {
-          "metadata": [
-            {
-              "src": [
-                {
-                  "files": [ "src/AiDotNet.csproj", "src/AiDotNet.Tensors/AiDotNet.Tensors.csproj" ],
-                  "src": "."
-                }
-              ],
-              "dest": "api",
-              "includePrivateMembers": false,
-              "disableGitFeatures": false,
-              "disableDefaultFilter": false,
-              "noRestore": true,
-              "namespaceLayout": "nested",
-              "memberLayout": "samePage",
-              "EnumSortOrder": "alphabetic",
-              "properties": {
-                "TargetFramework": "net10.0"
-              }
-            }
-          ],
-          "build": {
-            "content": [
-              {
-                "files": [ "api/**.yml", "api/index.md" ]
-              },
-              {
-                "files": [ "**.md", "toc.yml" ],
-                "src": "docs",
-                "dest": "."
-              }
-            ],
-            "resource": [
-              {
-                "files": [ "images/**" ],
-                "src": "docs"
-              }
-            ],
-            "output": "_site",
-            "globalMetadataFiles": [],
-            "fileMetadataFiles": [],
-            "template": [ "default", "modern" ],
-            "postProcessors": [],
-            "keepFileLink": false,
-            "disableGitFeatures": false,
-            "globalMetadata": {
-              "_appTitle": "AiDotNet Documentation",
-              "_appName": "AiDotNet",
-              "_appFooter": "AiDotNet - Enterprise AI/ML Library for .NET",
-              "_enableSearch": true,
-              "_enableNewTab": true
-            }
-          }
-        }
-        EOF
+        # Check if build artifacts exist, if not do a fresh build
+        if [ ! -d "src/bin/Release" ]; then
+          echo "No build artifacts found, performing fresh build..."
+          dotnet restore
+          dotnet build -c Release --no-restore -p:TreatWarningsAsErrors=false
+        else
+          echo "Using build artifacts from Build & SonarCloud workflow"
+          # Still need to restore for DocFX metadata extraction
+          dotnet restore src/AiDotNet.csproj src/AiDotNet.Tensors/AiDotNet.Tensors.csproj
         fi
-
-        # Create docs structure if not exists
-        mkdir -p docs/images
-        if [ ! -f "docs/index.md" ]; then
-          cat > docs/index.md << 'EOF'
-        # AiDotNet Documentation
-
-        Welcome to the AiDotNet API documentation.
-
-        ## Overview
-
-        AiDotNet is a comprehensive AI/ML library for .NET, supporting multiple target frameworks.
-
-        ## Features
-
-        - Neural Networks
-        - Time Series Analysis
-        - Regression Models
-        - Genetic Algorithms
-        - And much more...
-
-        ## Getting Started
-
-        Install via NuGet:
-        ```
-        dotnet add package AiDotNet
-        ```
-
-        ## API Reference
-
-        Browse the [API Reference](api/index.md) for detailed documentation.
-        EOF
-        fi
-
-        if [ ! -f "docs/toc.yml" ]; then
-          cat > docs/toc.yml << 'EOF'
-        - name: Home
-          href: index.md
-        - name: API Reference
-          href: api/
-        - name: Interactive Playground
-          href: playground/
-        EOF
-        fi
-      shell: bash
 
     - name: Build DocFX documentation
       run: docfx docfx.json
@@ -241,7 +153,7 @@ jobs:
 
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4
-      if: github.ref == 'refs/heads/master'
+      if: github.event.workflow_run.head_branch == 'master' || github.ref == 'refs/heads/master'
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./_site
