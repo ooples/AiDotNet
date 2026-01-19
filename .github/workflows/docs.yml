@@ -33,13 +33,19 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
 
-    - name: Setup .NET 8.0
+    - name: Setup .NET 10.0
       uses: actions/setup-dotnet@baa11fbfe1d6520db94683bd5c7a3818018e4309 # v5
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: '10.0.x'
 
     - name: Install DocFX
       run: dotnet tool install --global docfx || true
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build solution for DocFX metadata extraction
+      run: dotnet build -c Release --no-restore -p:TreatWarningsAsErrors=false
 
     - name: Create DocFX project if not exists
       run: |
@@ -50,8 +56,7 @@ jobs:
             {
               "src": [
                 {
-                  "files": [ "src/**/*.csproj" ],
-                  "exclude": [ "src/AiDotNet.Playground/**" ],
+                  "files": [ "src/AiDotNet.csproj", "src/AiDotNet.Tensors/AiDotNet.Tensors.csproj" ],
                   "src": "."
                 }
               ],
@@ -59,10 +64,13 @@ jobs:
               "includePrivateMembers": false,
               "disableGitFeatures": false,
               "disableDefaultFilter": false,
-              "noRestore": false,
+              "noRestore": true,
               "namespaceLayout": "nested",
               "memberLayout": "samePage",
-              "EnumSortOrder": "alphabetic"
+              "EnumSortOrder": "alphabetic",
+              "properties": {
+                "TargetFramework": "net10.0"
+              }
             }
           ],
           "build": {
