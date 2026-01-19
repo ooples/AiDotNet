@@ -1,0 +1,157 @@
+# AiDotNet Documentation Navigation
+# This file defines the site navigation structure for Jekyll/Just-the-Docs
+
+main:
+  - title: Home
+    url: /
+  - title: Getting Started
+    url: /getting-started/
+  - title: Tutorials
+    url: /tutorials/
+  - title: Samples
+    url: https://github.com/ooples/AiDotNet/tree/master/samples
+    external: true
+  - title: API Reference
+    url: /api/
+  - title: GitHub
+    url: https://github.com/ooples/AiDotNet
+    external: true
+
+# Getting Started section
+getting_started:
+  - title: Installation
+    url: /getting-started/installation/
+  - title: Quick Start
+    url: /getting-started/quickstart/
+  - title: Concepts
+    url: /getting-started/concepts/
+
+# Tutorials section - organized by category
+tutorials:
+  - title: Classification
+    url: /tutorials/classification/
+    children:
+      - title: Binary Classification
+        url: /tutorials/classification/#binary-classification
+      - title: Multi-class Classification
+        url: /tutorials/classification/#multi-class-classification
+      - title: Multi-label Classification
+        url: /tutorials/classification/#multi-label-classification
+
+  - title: Regression
+    url: /tutorials/regression/
+
+  - title: Clustering
+    url: /tutorials/clustering/
+
+  - title: Computer Vision
+    url: /tutorials/computer-vision/
+    children:
+      - title: Image Classification
+        url: /tutorials/computer-vision/#image-classification
+      - title: Object Detection
+        url: /tutorials/computer-vision/#object-detection
+      - title: Instance Segmentation
+        url: /tutorials/computer-vision/#instance-segmentation
+      - title: OCR
+        url: /tutorials/computer-vision/#ocr
+
+  - title: NLP & RAG
+    url: /tutorials/nlp/
+    children:
+      - title: Text Embeddings
+        url: /tutorials/nlp/#text-embeddings
+      - title: RAG Pipeline
+        url: /tutorials/nlp/#retrieval-augmented-generation-rag
+      - title: GraphRAG
+        url: /tutorials/nlp/#graphrag
+      - title: Text Classification
+        url: /tutorials/nlp/#text-classification
+
+  - title: Audio Processing
+    url: /tutorials/audio/
+    children:
+      - title: Speech Recognition
+        url: /tutorials/audio/#speech-recognition
+      - title: Text-to-Speech
+        url: /tutorials/audio/#text-to-speech
+      - title: Audio Classification
+        url: /tutorials/audio/#audio-classification
+
+  - title: Video Processing
+    url: /tutorials/video/
+
+  - title: Reinforcement Learning
+    url: /tutorials/reinforcement-learning/
+    children:
+      - title: DQN
+        url: /tutorials/reinforcement-learning/#dqn-deep-q-network
+      - title: PPO
+        url: /tutorials/reinforcement-learning/#ppo-proximal-policy-optimization
+      - title: SAC
+        url: /tutorials/reinforcement-learning/#sac-soft-actor-critic
+      - title: Multi-Agent RL
+        url: /tutorials/reinforcement-learning/#multi-agent-rl
+
+  - title: Time Series
+    url: /tutorials/time-series/
+
+  - title: LLM Fine-tuning
+    url: /tutorials/llm-fine-tuning/
+    children:
+      - title: LoRA
+        url: /tutorials/llm-fine-tuning/#basic-lora
+      - title: QLoRA
+        url: /tutorials/llm-fine-tuning/#qlora-4-bit-quantized
+      - title: LoRA Variants
+        url: /tutorials/llm-fine-tuning/#lora-variants
+
+  - title: Distributed Training
+    url: /tutorials/distributed-training/
+    children:
+      - title: DDP
+        url: /tutorials/distributed-training/#ddp-distributed-data-parallel
+      - title: FSDP
+        url: /tutorials/distributed-training/#fsdp-fully-sharded-data-parallel
+      - title: ZeRO
+        url: /tutorials/distributed-training/#zero-optimization
+      - title: Pipeline Parallelism
+        url: /tutorials/distributed-training/#pipeline-parallelism
+
+  - title: Deployment
+    url: /tutorials/deployment/
+    children:
+      - title: Model Serving
+        url: /tutorials/deployment/#aidotnetserving
+      - title: Quantization
+        url: /tutorials/deployment/#model-quantization
+      - title: ONNX Export
+        url: /tutorials/deployment/#onnx-export
+      - title: Docker
+        url: /tutorials/deployment/#docker-deployment
+      - title: Kubernetes
+        url: /tutorials/deployment/#kubernetes-deployment
+
+# Reference documentation
+reference:
+  - title: Neural Networks
+    url: /reference/neural-networks/
+  - title: Classical ML
+    url: /reference/classical-ml/
+  - title: Optimizers
+    url: /reference/optimizers/
+  - title: Loss Functions
+    url: /reference/loss-functions/
+  - title: LoRA Adapters
+    url: /reference/lora-adapters/
+  - title: Distributed Strategies
+    url: /reference/distributed-strategies/
+
+# Community section
+community:
+  - title: Contributing
+    url: /community/contributing/
+  - title: Changelog
+    url: /community/changelog/
+  - title: Roadmap
+    url: /community/roadmap/
