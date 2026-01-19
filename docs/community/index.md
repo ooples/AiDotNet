@@ -1,16 +1,6 @@
----
-layout: default
-title: Community
-nav_order: 6
-has_children: true
-permalink: /community/
----
-
 # Community
-{: .no_toc }
 
 Join the AiDotNet community and contribute to the project.
-{: .fs-6 .fw-300 }
 
 ---
 
@@ -26,9 +16,9 @@ Join the AiDotNet community and contribute to the project.
 
 | Resource | Description |
 |:---------|:------------|
-| [Contributing Guide](/community/contributing/) | How to contribute to AiDotNet |
-| [Changelog](/community/changelog/) | Version history and release notes |
-| [Roadmap](/community/roadmap/) | Future plans and upcoming features |
+| [Contributing Guide](contributing.md) | How to contribute to AiDotNet |
+| [Changelog](changelog.md) | Version history and release notes |
+| [Roadmap](roadmap.md) | Future plans and upcoming features |
 
 ---
 

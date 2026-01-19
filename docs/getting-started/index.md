@@ -1,24 +1,6 @@
----
-layout: default
-title: Getting Started
-nav_order: 2
-has_children: true
-permalink: /getting-started/
----
-
 # Getting Started with AiDotNet
-{: .no_toc }
 
 This guide will help you install AiDotNet and build your first AI model.
-{: .fs-6 .fw-300 }
-
----
-
-## Table of contents
-{: .no_toc .text-delta }
-
-1. TOC
-{:toc}
 
 ---
 
@@ -26,7 +8,7 @@ This guide will help you install AiDotNet and build your first AI model.
 
 Before installing AiDotNet, ensure you have:
 
-- **.NET 8.0 SDK** or later ([Download](https://dotnet.microsoft.com/download))
+- **.NET 10.0 SDK** (or .NET 8.0+) ([Download](https://dotnet.microsoft.com/download))
 - (Optional) **NVIDIA GPU** with CUDA for GPU acceleration
 
 ## Installation
@@ -120,10 +102,9 @@ The `result` contains:
 
 ## Next Steps
 
-- [Installation Guide](./installation) - Detailed installation instructions
-- [Quick Start Tutorial](./quickstart) - Build your first model
-- [Core Concepts](./concepts) - Understand the architecture
-- [Samples](../samples/) - Browse complete examples
+- [Installation Guide](installation.md) - Detailed installation instructions
+- [Quick Start Tutorial](quickstart.md) - Build your first model
+- [Samples](https://github.com/ooples/AiDotNet/tree/master/samples) - Browse complete examples
 
 ## GPU Acceleration
 
@@ -144,7 +125,5 @@ Requirements:
 
 ## Need Help?
 
-- [FAQ](./faq) - Frequently asked questions
-- [Troubleshooting](./troubleshooting) - Common issues and solutions
 - [GitHub Issues](https://github.com/ooples/AiDotNet/issues) - Report bugs
 - [GitHub Discussions](https://github.com/ooples/AiDotNet/discussions) - Ask questions

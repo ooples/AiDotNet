@@ -2,8 +2,12 @@
   href: index.md
 - name: Classification
   href: classification/
+- name: Regression
+  href: regression/
 - name: Computer Vision
   href: computer-vision/
+- name: Time Series
+  href: time-series/
 - name: NLP
   href: nlp/
 - name: LLM Fine-tuning
