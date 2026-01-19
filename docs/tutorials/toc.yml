@@ -1,0 +1,16 @@
+- name: Overview
+  href: index.md
+- name: Classification
+  href: classification/
+- name: Computer Vision
+  href: computer-vision/
+- name: NLP
+  href: nlp/
+- name: LLM Fine-tuning
+  href: llm-fine-tuning/
+- name: Reinforcement Learning
+  href: reinforcement-learning/
+- name: Distributed Training
+  href: distributed-training/
+- name: Deployment
+  href: deployment/
