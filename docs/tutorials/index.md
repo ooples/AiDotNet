@@ -25,7 +25,7 @@ Step-by-step guides to help you master AiDotNet.
 ### Beginner
 1. [Getting Started](../getting-started/index.md) - Installation and first model
 2. [Classification](classification/index.md) - Learn the fundamentals
-3. [Regression](regression/index.md) - Predict continuous values
+3. [Regression](./regression/) - Predict continuous values
 
 ### Intermediate
 4. [Computer Vision](computer-vision/index.md) - Image understanding
