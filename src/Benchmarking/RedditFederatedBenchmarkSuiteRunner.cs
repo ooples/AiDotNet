@@ -13,7 +13,7 @@ namespace AiDotNet.Benchmarking;
 internal static class RedditFederatedBenchmarkSuiteRunner
 {
     public static Task<BenchmarkSuiteReport> RunAsync<T, TInput, TOutput>(
-        PredictionModelResult<T, TInput, TOutput> model,
+        AiModelResult<T, TInput, TOutput> model,
         BenchmarkSuite suite,
         BenchmarkingOptions options,
         RedditFederatedBenchmarkOptions reddit,
@@ -39,10 +39,10 @@ internal static class RedditFederatedBenchmarkSuiteRunner
             throw new ArgumentNullException(nameof(reddit));
         }
 
-        if (model is not PredictionModelResult<T, Matrix<T>, Vector<T>> typedModel)
+        if (model is not AiModelResult<T, Matrix<T>, Vector<T>> typedModel)
         {
             throw new NotSupportedException(
-                $"Reddit benchmarking currently requires PredictionModelResult<T, Matrix<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
+                $"Reddit benchmarking currently requires AiModelResult<T, Matrix<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
         }
 
         if (string.IsNullOrWhiteSpace(reddit.TrainFilePath))

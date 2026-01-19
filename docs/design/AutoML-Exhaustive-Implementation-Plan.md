@@ -18,7 +18,7 @@ Purpose: Define a production-ready, facade-compliant plan to make AutoML "exhaus
 
 ## 2) Non-Negotiables (Project Guardrails)
 
-- Facade / Public API: users must build/train via `PredictionModelBuilder` and infer via `PredictionModelResult`.
+- Facade / Public API: users must build/train via `AiModelBuilder` and infer via `AiModelResult`.
 - IP protection: users must not be able to recreate/clone models outside the system using exposed artifacts (trial history, metadata, etc.).
 - Options-driven UX: one configuration object per feature area, with industry-standard defaults; allow optional injection of interfaces (nullable -> default internally).
 - Architecture standards:
@@ -71,14 +71,14 @@ Important: presets must be task-aware. For example, “trial” for a tree model
 
 ### 3.2 Facade Integration Requirements (AutoML)
 
-AutoML must remain “options-first” behind `PredictionModelBuilder`:
+AutoML must remain “options-first” behind `AiModelBuilder`:
 - Typical users should configure AutoML using a single configuration options object with safe defaults.
 - Advanced users may optionally inject interfaces (nullable -> internal defaults).
 - AutoML must not require users to manually instantiate internal components or provide custom evaluators for common task families.
 
 AutoML must also remain compatible with the existing facade rule:
-- build/train via `PredictionModelBuilder`
-- inference via `PredictionModelResult`
+- build/train via `AiModelBuilder`
+- inference via `AiModelResult`
 
 ---
 
@@ -396,7 +396,7 @@ Sprint 13 (Phase G):
 ### 8.0.1 v1 User Stories (Acceptance-Oriented)
 
 US1 (Beginner AutoML run):
-- As a beginner, I can run AutoML through `PredictionModelBuilder` with minimal configuration and receive a trained `PredictionModelResult`.
+- As a beginner, I can run AutoML through `AiModelBuilder` with minimal configuration and receive a trained `AiModelResult`.
 - Acceptance: no custom evaluator/cross-validator required for supported task families; defaults produce a valid best model and a primary metric.
 
 US2 (Task-aware defaults):
@@ -417,7 +417,7 @@ US5 (AutoML “exhaustiveness” enforcement):
 
 US6 (IP-safe results):
 - As a facade user, I can inspect AutoML trial history and model selection rationale without learning raw hyperparameter values or architecture internals.
-- Acceptance: `PredictionModelResult` (and any other facade outputs) expose only safe summaries + fingerprints; no weights/bytes/hyperparameter values/architecture dumps in default output.
+- Acceptance: `AiModelResult` (and any other facade outputs) expose only safe summaries + fingerprints; no weights/bytes/hyperparameter values/architecture dumps in default output.
 
 ### Phase A - Task taxonomy + default metric policy
 
@@ -584,7 +584,7 @@ Acceptance criteria:
 Junior checklist:
 - Implement tie-breakers (metric -> constraints -> simplicity).
 - Add simple, safe ensembling first (e.g., averaging for compatible outputs) before stacking.
-- Ensure inference through `PredictionModelResult` remains consistent and facade-friendly.
+- Ensure inference through `AiModelResult` remains consistent and facade-friendly.
 
 ---
 
@@ -603,7 +603,7 @@ Not allowed to expose:
 
 ### 9.1 Public vs Internal Trial Records (Schema-Level Guidance)
 
-Public trial summary (safe to return from `PredictionModelResult` / facade):
+Public trial summary (safe to return from `AiModelResult` / facade):
 - Identifiers: trial id, run id, status, timestamps, duration
 - Budgets: preset name, time used, trial index, early-stopping flags
 - Metrics: objective metric name/value/direction + secondary metrics
@@ -617,7 +617,7 @@ Internal replay record (never exposed by default; used only for in-system reprod
 - Optional internal-only artifacts (e.g., logs, traces) that must not be serialized into default user results
 
 Note: the current public `IAutoMLModel` surface includes methods that return or suggest raw hyperparameter values. v1 must reconcile this with IP protection by ensuring the facade results do not expose those values, and by moving any “raw hyperparameter” APIs behind internal-only pathways or premium-gated surfaces (design choice to be made in Phase E).
-Decision (v1): hyperparameter values are redacted from facade outputs only (i.e., anything returned via `PredictionModelResult` / builder path). Non-facade AutoML surfaces may continue to expose raw hyperparameters.
+Decision (v1): hyperparameter values are redacted from facade outputs only (i.e., anything returned via `AiModelResult` / builder path). Non-facade AutoML surfaces may continue to expose raw hyperparameters.
 
 ---
 

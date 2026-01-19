@@ -433,7 +433,7 @@ public class InferenceController : ControllerBase
             // LoRA adapters are available programmatically via:
             // - AiDotNet.LoRA.Adapters namespace (30+ adapter types)
             // - ILoRAConfiguration for selective layer adaptation
-            // - PredictionModelBuilder.ConfigureLoRA() for model configuration
+            // - AiModelBuilder.ConfigureLoRA() for model configuration
 
             sw.Stop();
 

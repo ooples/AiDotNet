@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>AiDotNet.Samples.Deployment.ModelServing</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../src/AiDotNet/AiDotNet.csproj" />
+    <ProjectReference Include="../../../src/AiDotNet.Serving/AiDotNet.Serving.csproj" />
+  </ItemGroup>
+
+</Project>

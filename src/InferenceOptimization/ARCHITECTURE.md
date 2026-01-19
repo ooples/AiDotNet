@@ -56,5 +56,5 @@ Responsibilities:
 ## Integration Points
 
 - `AiDotNet.Inference.InferenceOptimizer` selects and applies inference-time implementations (e.g., attention variants, paged KV-cache) based on `InferenceOptimizationConfig`.
-- `AiDotNet.Models.Results.PredictionModelResult` exposes facade-friendly entrypoints (`Predict`, `BeginInferenceSession`) while keeping internal complexity non-user-facing by default.
+- `AiDotNet.Models.Results.AiModelResult` exposes facade-friendly entrypoints (`Predict`, `BeginInferenceSession`) while keeping internal complexity non-user-facing by default.
 

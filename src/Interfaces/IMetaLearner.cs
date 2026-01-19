@@ -16,7 +16,7 @@ namespace AiDotNet.Interfaces;
 /// <para>
 /// This is the unified interface for all meta-learning algorithms in the framework.
 /// It combines both training infrastructure and algorithm capabilities, enabling
-/// seamless integration with PredictionModelBuilder while supporting all 17 meta-learning
+/// seamless integration with AiModelBuilder while supporting all 17 meta-learning
 /// algorithms (MAML, Reptile, ProtoNets, LEO, MetaOptNet, etc.).
 /// </para>
 /// <para><b>For Beginners:</b> Meta-learning is like teaching someone how to learn, not just what to learn.

@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks;
 /// - Only a few experts process each input (sparse activation), making it efficient
 /// - The final prediction combines the outputs from the selected experts
 ///
-/// This model automatically implements IFullModel, allowing it to work with PredictionModelBuilder
+/// This model automatically implements IFullModel, allowing it to work with AiModelBuilder
 /// just like any other neural network in AiDotNet.
 /// </para>
 /// <para>
@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <item><description>Configurable number of expert networks</description></item>
 /// <item><description>Top-K sparse routing for computational efficiency</description></item>
 /// <item><description>Automatic load balancing to prevent expert collapse</description></item>
-/// <item><description>Integration with PredictionModelBuilder for easy training</description></item>
+/// <item><description>Integration with AiModelBuilder for easy training</description></item>
 /// <item><description>Full support for serialization and deserialization</description></item>
 /// </list>
 /// </para>
@@ -99,7 +99,7 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
     /// If you don't specify an optimizer or loss function, the model will choose sensible defaults
     /// based on your task type (e.g., CrossEntropy for classification, MSE for regression).
     ///
-    /// The model automatically integrates with PredictionModelBuilder, so you can train it
+    /// The model automatically integrates with AiModelBuilder, so you can train it
     /// using the standard AiDotNet pattern without any special handling.
     /// </para>
     /// </remarks>
@@ -127,8 +127,8 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
     /// // Create the model
     /// var model = new MixtureOfExpertsNeuralNetwork&lt;float&gt;(options, architecture);
     ///
-    /// // Use with PredictionModelBuilder (standard pattern)
-    /// var builder = new PredictionModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;();
+    /// // Use with AiModelBuilder (standard pattern)
+    /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;();
     /// var result = builder.ConfigureModel(model).Build(trainingData, trainingLabels);
     /// </code>
     /// </example>

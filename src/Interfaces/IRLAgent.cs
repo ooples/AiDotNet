@@ -3,7 +3,7 @@ using AiDotNet.LinearAlgebra;
 namespace AiDotNet.Interfaces;
 
 /// <summary>
-/// Marker interface for reinforcement learning agents that integrate with PredictionModelBuilder.
+/// Marker interface for reinforcement learning agents that integrate with AiModelBuilder.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
@@ -17,7 +17,7 @@ namespace AiDotNet.Interfaces;
 /// An RL agent is just a special kind of model that learns through interaction with an environment.
 /// By implementing IFullModel, RL agents work with all of AiDotNet's existing infrastructure:
 /// - They can be saved and loaded
-/// - They work with the PredictionModelBuilder pattern
+/// - They work with the AiModelBuilder pattern
 /// - They support serialization, cloning, etc.
 ///
 /// The key difference is how they're trained:

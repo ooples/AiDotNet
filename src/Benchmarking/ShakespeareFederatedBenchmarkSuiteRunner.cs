@@ -16,7 +16,7 @@ namespace AiDotNet.Benchmarking;
 internal static class ShakespeareFederatedBenchmarkSuiteRunner
 {
     public static Task<BenchmarkSuiteReport> RunAsync<T, TInput, TOutput>(
-        PredictionModelResult<T, TInput, TOutput> model,
+        AiModelResult<T, TInput, TOutput> model,
         BenchmarkSuite suite,
         BenchmarkingOptions options,
         ShakespeareFederatedBenchmarkOptions shakespeare,
@@ -42,10 +42,10 @@ internal static class ShakespeareFederatedBenchmarkSuiteRunner
             throw new ArgumentNullException(nameof(shakespeare));
         }
 
-        if (model is not PredictionModelResult<T, Matrix<T>, Vector<T>> typedModel)
+        if (model is not AiModelResult<T, Matrix<T>, Vector<T>> typedModel)
         {
             throw new NotSupportedException(
-                $"Shakespeare benchmarking currently requires PredictionModelResult<T, Matrix<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
+                $"Shakespeare benchmarking currently requires AiModelResult<T, Matrix<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
         }
 
         if (string.IsNullOrWhiteSpace(shakespeare.TrainFilePath))

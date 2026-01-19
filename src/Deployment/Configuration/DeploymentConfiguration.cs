@@ -2,7 +2,7 @@ namespace AiDotNet.Deployment.Configuration;
 
 /// <summary>
 /// Aggregates all deployment-related configurations.
-/// Used to pass deployment settings from PredictionModelBuilder to PredictionModelResult.
+/// Used to pass deployment settings from AiModelBuilder to AiModelResult.
 /// </summary>
 public class DeploymentConfiguration
 {
@@ -57,7 +57,7 @@ public class DeploymentConfiguration
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> When configured, profiling measures the performance of training
-    /// and inference operations. The profiling report will be available in PredictionModelResult.
+    /// and inference operations. The profiling report will be available in AiModelResult.
     /// </para>
     /// </remarks>
     public ProfilingConfig? Profiling { get; set; }

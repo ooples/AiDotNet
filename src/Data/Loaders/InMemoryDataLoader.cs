@@ -30,7 +30,7 @@ namespace AiDotNet.Data.Loaders;
 /// // Create the loader
 /// var loader = new InMemoryDataLoader&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(features, labels);
 ///
-/// // Use with PredictionModelBuilder
+/// // Use with AiModelBuilder
 /// var result = await builder
 ///     .ConfigureDataLoader(loader)
 ///     .ConfigureModel(model)

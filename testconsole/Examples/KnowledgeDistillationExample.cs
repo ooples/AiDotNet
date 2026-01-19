@@ -114,8 +114,8 @@ public static class KnowledgeDistillationExample
 
         try
         {
-            // Note: This uses the PredictionModelBuilder API
-            var result = await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+            // Note: This uses the AiModelBuilder API
+            var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
                 .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(trainData, trainLabels))
                 .ConfigureModel(studentModel)
                 .ConfigureKnowledgeDistillation(kdOptions)

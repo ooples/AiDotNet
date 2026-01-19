@@ -78,7 +78,7 @@ public class EnhancedRegressionExample
             Console.WriteLine("\nTraining multiple regression models...");
 
             // 5. Create a model builder
-            var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
+            var modelBuilder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
 
             // Linear regression model
             Console.WriteLine("\n1. Training Multiple Linear Regression model...");

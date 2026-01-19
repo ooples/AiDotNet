@@ -13,7 +13,7 @@ namespace AiDotNet.Benchmarking;
 internal static class LeafFederatedBenchmarkSuiteRunner
 {
     public static async Task<BenchmarkSuiteReport> RunAsync<T, TInput, TOutput>(
-        PredictionModelResult<T, TInput, TOutput> model,
+        AiModelResult<T, TInput, TOutput> model,
         BenchmarkSuite suite,
         BenchmarkingOptions options,
         LeafFederatedBenchmarkOptions leaf,
@@ -34,10 +34,10 @@ internal static class LeafFederatedBenchmarkSuiteRunner
             throw new ArgumentNullException(nameof(leaf));
         }
 
-        if (model is not PredictionModelResult<T, Matrix<T>, Vector<T>> typedModel)
+        if (model is not AiModelResult<T, Matrix<T>, Vector<T>> typedModel)
         {
             throw new NotSupportedException(
-                $"Leaf-backed benchmarking currently requires PredictionModelResult<T, Matrix<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
+                $"Leaf-backed benchmarking currently requires AiModelResult<T, Matrix<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
         }
 
         if (string.IsNullOrWhiteSpace(leaf.TrainFilePath))

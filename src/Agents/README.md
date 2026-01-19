@@ -478,7 +478,7 @@ The agent also has fallback regex parsing if the LLM doesn't return valid JSON.
 4. **Iterations**: Start with 5-10 max iterations; adjust based on task complexity
 5. **Testing**: Use MockChatModel to test agent behavior without calling real APIs
 
-## Integration with PredictionModelBuilder
+## Integration with AiModelBuilder
 
 While the agent framework is standalone, you can integrate it with the broader AiDotNet ecosystem:
 

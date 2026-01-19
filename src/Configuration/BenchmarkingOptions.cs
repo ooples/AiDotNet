@@ -7,8 +7,8 @@ namespace AiDotNet.Configuration;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This options class is designed for use with <c>PredictionModelBuilder.ConfigureBenchmarking(...)</c> and
-/// <c>PredictionModelResult.EvaluateBenchmarksAsync(...)</c>. Users specify which benchmark suites to run,
+/// This options class is designed for use with <c>AiModelBuilder.ConfigureBenchmarking(...)</c> and
+/// <c>AiModelResult.EvaluateBenchmarksAsync(...)</c>. Users specify which benchmark suites to run,
 /// and AiDotNet orchestrates the execution behind the scenes.
 /// </para>
 /// <para>
@@ -67,8 +67,8 @@ public sealed class BenchmarkingOptions
     /// Gets or sets whether the generated report should be attached to the model result.
     /// </summary>
     /// <remarks>
-    /// When true, the last produced report is stored on the <c>PredictionModelResult</c> instance and can be retrieved
-    /// via <c>PredictionModelResult.GetBenchmarkReport()</c>.
+    /// When true, the last produced report is stored on the <c>AiModelResult</c> instance and can be retrieved
+    /// via <c>AiModelResult.GetBenchmarkReport()</c>.
     /// </remarks>
     public bool AttachReportToResult { get; set; } = true;
 

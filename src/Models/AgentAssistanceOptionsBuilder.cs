@@ -315,7 +315,7 @@ public class AgentAssistanceOptionsBuilder
     /// <remarks>
     /// <para>
     /// This method finalizes the configuration and returns the AgentAssistanceOptions object that can be
-    /// passed to the PredictionModelBuilder. You typically call this method at the end of your fluent chain.
+    /// passed to the AiModelBuilder. You typically call this method at the end of your fluent chain.
     /// </para>
     /// <para><b>For Beginners:</b> This finalizes your configuration choices and creates the options object.
     ///

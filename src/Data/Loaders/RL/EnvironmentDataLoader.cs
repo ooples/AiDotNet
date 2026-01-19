@@ -11,12 +11,12 @@ namespace AiDotNet.Data.Loaders.RL;
 /// <remarks>
 /// <para>
 /// EnvironmentDataLoader provides a clean facade for RL training by wrapping an environment
-/// and managing experience collection. Use this with PredictionModelBuilder for unified training.
+/// and managing experience collection. Use this with AiModelBuilder for unified training.
 /// </para>
 /// <para><b>For Beginners:</b> This is the main way to set up RL training:
 ///
 /// <code>
-/// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+/// var result = await new AiModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureDataLoader(new EnvironmentDataLoader&lt;double&gt;(
 ///         environment: new CartPoleEnvironment&lt;double&gt;(),
 ///         episodes: 1000))

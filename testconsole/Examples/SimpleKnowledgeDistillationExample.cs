@@ -43,7 +43,7 @@ public static class SimpleKnowledgeDistillationExample
         };
 
         // 5. Train student with knowledge distillation
-        var result = await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(trainX, trainY))
             .ConfigureModel(studentModel)
             .ConfigureKnowledgeDistillation(kdOptions)

@@ -6,10 +6,10 @@ Uncertainty quantification (UQ) augments standard point predictions with an unce
 
 This module is designed to integrate with AiDotNet’s facade workflow:
 
-- Build/train via `PredictionModelBuilder`
-- Run inference via `PredictionModelResult`
+- Build/train via `AiModelBuilder`
+- Run inference via `AiModelResult`
 
-The primary facade entrypoint is `PredictionModelResult.PredictWithUncertainty(...)`, which returns a `UncertaintyPredictionResult` containing a point prediction, optional variance, and additional diagnostics (e.g., entropy / mutual information for classification-like outputs).
+The primary facade entrypoint is `AiModelResult.PredictWithUncertainty(...)`, which returns a `UncertaintyPredictionResult` containing a point prediction, optional variance, and additional diagnostics (e.g., entropy / mutual information for classification-like outputs).
 
 ## Quick Start (Facade)
 
@@ -25,7 +25,7 @@ using AiDotNet.NeuralNetworks;
 var architecture = new NeuralNetworkArchitecture<double>(inputFeatures: 2, outputSize: 1);
 var model = new NeuralNetworkModel<double>(architecture);
 
-var builder = new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
     .ConfigureModel(model)
     .ConfigureUncertaintyQuantification(new UncertaintyQuantificationOptions
     {

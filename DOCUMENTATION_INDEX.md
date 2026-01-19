@@ -115,7 +115,7 @@ This folder contains comprehensive analysis of the AiDotNet codebase and detaile
 2. `/src/Interfaces/IOptimizer.cs` - Training concept
 3. `/src/Optimizers/OptimizerBase.cs` - Hook points
 4. `/src/Models/ModelMetadata.cs` - Metadata pattern
-5. `/src/PredictionModelBuilder.cs` - Builder pattern
+5. `/src/AiModelBuilder.cs` - Builder pattern
 
 ## Implementation Timeline
 

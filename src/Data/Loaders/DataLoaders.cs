@@ -272,7 +272,7 @@ public static class DataLoaders
     ///
     /// var loader = DataLoaders.FromMatrixVector(features, labels);
     ///
-    /// // Use with PredictionModelBuilder
+    /// // Use with AiModelBuilder
     /// var result = await builder
     ///     .ConfigureDataLoader(loader)
     ///     .ConfigureModel(model)

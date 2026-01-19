@@ -229,7 +229,7 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         await File.WriteAllBytesAsync(proPath, proBytes);
         _createdModelFiles.Add(proPath);
 
-        var proModel = PredictionModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
+        var proModel = AiModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
             proPath,
             metadata => new VectorModel<double>(new Vector<double>(metadata.FeatureCount > 0 ? metadata.FeatureCount : createResponse.ParameterCount)));
 
@@ -441,7 +441,7 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         var model = new VectorModel<double>(new Vector<double>(new[] { 0.0, 0.0, 0.0 }));
         var optimizer = new SinglePassTestOptimizer(model);
 
-        var result = await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(dataLoader)
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)

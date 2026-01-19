@@ -9,6 +9,8 @@
 	  <LangVersion>latest</LangVersion>
     <!-- CA1822: BenchmarkDotNet requires instance methods for benchmarks -->
     <NoWarn>$(NoWarn);CA1822</NoWarn>
+    <!-- Benchmark projects should not be packaged as NuGet packages -->
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>

@@ -36,7 +36,7 @@ This document outlines the **REVISED** implementation plan based on proper codeb
 
 ### Facade Architecture (Already Integrated)
 
-**PredictionModelBuilder.cs** (~4000+ lines) already has:
+**AiModelBuilder.cs** (~4000+ lines) already has:
 
 ```csharp
 // Training infrastructure configuration (lines 113-118)
@@ -68,7 +68,7 @@ With configuration methods:
 | Unit tests | High | 3-5 days | Tests for HPO, experiment tracking, model registry |
 | Usage documentation | High | 2-3 days | Examples showing how to use training infrastructure |
 | Integration tests | High | 2-3 days | End-to-end tests for full training workflows |
-| **Facade compliance** | **High** | **2-3 days** | **Ensure all access goes through PredictionModelBuilder/PredictionModelResult** |
+| **Facade compliance** | **High** | **2-3 days** | **Ensure all access goes through AiModelBuilder/AiModelResult** |
 | **Dashboard integration** | **High** | **2-3 days** | **Connect MetricsDashboard to ITrainingMonitor** |
 | **Serving integration** | **High** | **2-3 days** | **Bridge IModelRepository ↔ IModelRegistry** |
 | External export | Low | Optional | MLflow/W&B export adapters (nice-to-have) |
@@ -84,13 +84,13 @@ Target:  MetricsDashboard receives updates from ITrainingMonitor automatically
 **2. AiDotNet.Serving ↔ Main Library Gap:**
 ```text
 Current: IModelRepository (Serving) is separate from IModelRegistry (main)
-Target:  Models registered via PredictionModelBuilder are loadable in REST API
+Target:  Models registered via AiModelBuilder are loadable in REST API
 ```
 
-**3. PredictionModelResult Gap:**
+**3. AiModelResult Gap:**
 ```text
-Current: PredictionModelResult contains model but not infrastructure metadata
-Target:  PredictionModelResult contains experiment ID, model version, checkpoint path
+Current: AiModelResult contains model but not infrastructure metadata
+Target:  AiModelResult contains experiment ID, model version, checkpoint path
 ```
 
 ### What Does NOT Need to Be Built
@@ -160,23 +160,23 @@ Target:  PredictionModelResult contains experiment ID, model version, checkpoint
 
 #### Week 1: Facade Design Compliance
 
-**PredictionModelBuilder → PredictionModelResult Flow:**
+**AiModelBuilder → AiModelResult Flow:**
 
-- [ ] Verify `PredictionModelBuilder.Build()` produces `PredictionModelResult` with all infrastructure data
-- [ ] Ensure `PredictionModelResult` contains experiment run ID, model version, checkpoint path
-- [ ] Add `PredictionModelResult.GetExperimentInfo()` method to access training metadata
-- [ ] Add `PredictionModelResult.GetModelRegistryInfo()` method to access registry data
-- [ ] Verify `PredictionModelResult` can be serialized/deserialized with infrastructure metadata
+- [ ] Verify `AiModelBuilder.Build()` produces `AiModelResult` with all infrastructure data
+- [ ] Ensure `AiModelResult` contains experiment run ID, model version, checkpoint path
+- [ ] Add `AiModelResult.GetExperimentInfo()` method to access training metadata
+- [ ] Add `AiModelResult.GetModelRegistryInfo()` method to access registry data
+- [ ] Verify `AiModelResult` can be serialized/deserialized with infrastructure metadata
 
 **Two Entry Points Validation:**
 
 | Entry Point | Purpose | Infrastructure Integration |
 |-------------|---------|---------------------------|
-| `PredictionModelBuilder<T, TInput, TOutput>` | Training facade | Uses all training infrastructure (experiment tracking, checkpoints, HPO, monitoring) |
-| `PredictionModelResult<T, TInput, TOutput>` | Inference facade | Contains trained model + all metadata from training infrastructure |
+| `AiModelBuilder<T, TInput, TOutput>` | Training facade | Uses all training infrastructure (experiment tracking, checkpoints, HPO, monitoring) |
+| `AiModelResult<T, TInput, TOutput>` | Inference facade | Contains trained model + all metadata from training infrastructure |
 
-- [ ] Ensure no direct access to training infrastructure except through `PredictionModelBuilder`
-- [ ] Ensure no direct access to inference except through `PredictionModelResult`
+- [ ] Ensure no direct access to training infrastructure except through `AiModelBuilder`
+- [ ] Ensure no direct access to inference except through `AiModelResult`
 - [ ] Add validation that infrastructure components are only used via facades
 
 #### Week 2: Dashboard & Serving Project Integration
@@ -187,7 +187,7 @@ Current Gap: `MetricsDashboard` is standalone, not connected to `ITrainingMonito
 
 - [ ] Create `ITrainingMonitor` adapter for `MetricsDashboard`
 - [ ] Add `MetricsDashboard.FromTrainingMonitor(ITrainingMonitor<T> monitor)` factory method
-- [ ] Ensure `PredictionModelBuilder.ConfigureTrainingMonitor()` can accept `MetricsDashboard`
+- [ ] Ensure `AiModelBuilder.ConfigureTrainingMonitor()` can accept `MetricsDashboard`
 - [ ] Add real-time metric streaming from `ITrainingMonitor` to `MetricsDashboard`
 - [ ] Ensure `HtmlDashboard`, `ConsoleDashboard`, `LiveDashboard` all implement `ITrainingDashboard`
 
@@ -197,15 +197,15 @@ Current Gap: `IModelRepository` (Serving) is separate from `IModelRegistry` (mai
 
 - [ ] Create `ModelRegistryAdapter` that bridges `IModelRegistry` → `IModelRepository`
 - [ ] Add `IModelRepository.LoadFromRegistry(IModelRegistry registry, string modelName, int? version)` method
-- [ ] Ensure models registered via `PredictionModelBuilder` are loadable in Serving project
-- [ ] Add `PredictionModelResult.ToServableModel()` conversion method
+- [ ] Ensure models registered via `AiModelBuilder` are loadable in Serving project
+- [ ] Add `AiModelResult.ToServableModel()` conversion method
 - [ ] Ensure `InferenceController` can load models from `IModelRegistry`
 
 **Integration Architecture:**
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    TRAINING (via PredictionModelBuilder)             │
+│                    TRAINING (via AiModelBuilder)             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
 │  │ Experiment  │  │  Checkpoint │  │  Training   │  │   Model     │ │
 │  │  Tracker    │  │   Manager   │  │   Monitor   │  │  Registry   │ │
@@ -215,7 +215,7 @@ Current Gap: `IModelRepository` (Serving) is separate from `IModelRegistry` (mai
 │                                   │                                  │
 │                                   ▼                                  │
 │                    ┌──────────────────────────┐                     │
-│                    │   PredictionModelResult   │                     │
+│                    │   AiModelResult   │                     │
 │                    │   (Inference Facade)      │                     │
 │                    └─────────────┬────────────┘                     │
 └──────────────────────────────────┼──────────────────────────────────┘
@@ -310,7 +310,7 @@ public interface IHyperparameterOptimizer<T, TInput, TOutput>
 
 ```csharp
 // Full training pipeline with all infrastructure
-var result = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+var result = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     // Core model configuration
     .ConfigureModel(new FeedForwardNeuralNetwork<double>(...))
     .ConfigureOptimizer(new AdamOptimizer<double, Matrix<double>, Vector<double>>())
@@ -367,8 +367,8 @@ The actual work needed is:
 **Key Integration Requirements (Sprint 3):**
 
 1. **Facade Design Compliance:**
-   - All training infrastructure accessed ONLY via `PredictionModelBuilder`
-   - All inference accessed ONLY via `PredictionModelResult`
+   - All training infrastructure accessed ONLY via `AiModelBuilder`
+   - All inference accessed ONLY via `AiModelResult`
    - No direct instantiation of infrastructure components outside facades
 
 2. **AiDotNet.Dashboard Integration:**
@@ -377,7 +377,7 @@ The actual work needed is:
 
 3. **AiDotNet.Serving Integration:**
    - `IModelRepository` must bridge to `IModelRegistry`
-   - Models from `PredictionModelBuilder` loadable in Serving REST API
-   - `PredictionModelResult.ToServableModel()` conversion method
+   - Models from `AiModelBuilder` loadable in Serving REST API
+   - `AiModelResult.ToServableModel()` conversion method
 
 This can be completed in **3 required sprints** (6 weeks), not 16 sprints (8 months).

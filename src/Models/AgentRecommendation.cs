@@ -11,7 +11,7 @@ namespace AiDotNet.Models;
 /// model building process. It contains the results of various agent operations such as data analysis, model selection,
 /// hyperparameter tuning, and feature analysis. Each property corresponds to a specific agent capability that can be
 /// enabled through AgentAssistanceOptions. Properties will only be populated if their corresponding feature was enabled;
-/// otherwise, they remain null. This class is returned as part of the PredictionModelResult and provides valuable
+/// otherwise, they remain null. This class is returned as part of the AiModelResult and provides valuable
 /// insights into why the agent made specific recommendations.
 /// </para>
 /// <para><b>For Beginners:</b> This class holds all the advice and recommendations the AI agent provides about your

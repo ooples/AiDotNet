@@ -46,7 +46,7 @@ public class FederatedLearningCompressionIntegrationTests
             }
         };
 
-        var result = await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
@@ -87,7 +87,7 @@ public class FederatedLearningCompressionIntegrationTests
             }
         };
 
-        var result = await new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(model)
             .ConfigureOptimizer(optimizer)
