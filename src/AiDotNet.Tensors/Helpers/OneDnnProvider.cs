@@ -103,7 +103,14 @@ internal static class OneDnnProvider
     private const int DnnlCpu = 1;
     private const int DnnlForwardInference = 96;
     private const int DnnlConvolutionAuto = 3;
+    private const int DnnlConvolutionDirect = 1;
+    private const int DnnlConvolutionWinograd = 2;
     private const int DnnlF32 = 3;
+
+    // Format tags
+    private const int DnnlFormatTagAny = 0;  // Let oneDNN choose optimal format
+    private const int DnnlFormatTagNCHW = 11; // abcd format for 4D tensors
+    private const int DnnlFormatTagOIHW = 11; // Same as NCHW for weights
 
     // Argument indices (from dnnl_types.h)
     private const int DnnlArgSrc = 1;
@@ -278,6 +285,26 @@ internal static class OneDnnProvider
 
     [DllImport("dnnl", CallingConvention = CallingConvention.Cdecl)]
     private static extern int dnnl_memory_desc_destroy(IntPtr memoryDesc);
+
+    [DllImport("dnnl", CallingConvention = CallingConvention.Cdecl)]
+    private static extern unsafe int dnnl_memory_desc_create_with_tag(
+        out IntPtr memoryDesc,
+        int ndims,
+        long* dims,
+        int dataType,
+        int formatTag);
+
+    [DllImport("dnnl", CallingConvention = CallingConvention.Cdecl)]
+    private static extern int dnnl_reorder_primitive_desc_create(
+        out IntPtr reorderPrimDesc,
+        IntPtr srcMemDesc,
+        IntPtr srcEngine,
+        IntPtr dstMemDesc,
+        IntPtr dstEngine,
+        IntPtr attr);
+
+    [DllImport("dnnl", CallingConvention = CallingConvention.Cdecl)]
+    private static extern int dnnl_memory_desc_equal(IntPtr lhs, IntPtr rhs);
 
     [DllImport("dnnl", CallingConvention = CallingConvention.Cdecl)]
     private static extern int dnnl_memory_create(
@@ -518,11 +545,34 @@ internal static class OneDnnProvider
             if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create dst desc: {status}"); cached.Dispose(); return null; }
 
             // Create convolution primitive descriptor
-            status = dnnl_convolution_forward_primitive_desc_create(
-                out cached.PrimDesc, _engine, DnnlForwardInference, DnnlConvolutionAuto,
-                cached.UserSrcDesc, cached.UserWeightsDesc, IntPtr.Zero, cached.UserDstDesc,
-                stridesArr, dilatesArr, paddingLArr, paddingRArr, IntPtr.Zero);
-            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create conv prim desc: {status}"); cached.Dispose(); return null; }
+            // Try Winograd for 3x3 kernels with stride 1 (optimal case), fall back to auto
+            if (key.KernelH == 3 && key.KernelW == 3 && key.StrideH == 1 && key.StrideW == 1 &&
+                key.DilationH == 1 && key.DilationW == 1)
+            {
+                // Try Winograd first
+                status = dnnl_convolution_forward_primitive_desc_create(
+                    out cached.PrimDesc, _engine, DnnlForwardInference, DnnlConvolutionWinograd,
+                    cached.UserSrcDesc, cached.UserWeightsDesc, IntPtr.Zero, cached.UserDstDesc,
+                    stridesArr, dilatesArr, paddingLArr, paddingRArr, IntPtr.Zero);
+                if (status == DnnlSuccess)
+                {
+                    if (logThis) Console.WriteLine("[oneDNN] Using Winograd algorithm for 3x3 kernel");
+                }
+                else
+                {
+                    if (logThis) Console.WriteLine($"[oneDNN] Winograd failed with status={status}, falling back to auto");
+                }
+            }
+
+            // Fall back to auto if Winograd wasn't tried or failed
+            if (cached.PrimDesc == IntPtr.Zero)
+            {
+                status = dnnl_convolution_forward_primitive_desc_create(
+                    out cached.PrimDesc, _engine, DnnlForwardInference, DnnlConvolutionAuto,
+                    cached.UserSrcDesc, cached.UserWeightsDesc, IntPtr.Zero, cached.UserDstDesc,
+                    stridesArr, dilatesArr, paddingLArr, paddingRArr, IntPtr.Zero);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create conv prim desc: {status}"); cached.Dispose(); return null; }
+            }
 
             // Query the memory descriptors the primitive expects
             IntPtr convSrcDesc = dnnl_primitive_desc_query_md(cached.PrimDesc, DnnlQuerySrcMd, 0);
