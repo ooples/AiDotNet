@@ -137,6 +137,21 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// </summary>
     private Tensor<T>? _biasGradient;
 
+    // GPU cache fields for backward pass
+    private IGpuTensor<T>? _gpuLastInput;
+    private IGpuBuffer? _gpuTransformedCache;  // [numNodes * outputFeatures * numHeads]
+    private IGpuBuffer? _gpuAttentionCache;    // [numNodes * numNodes * numHeads]
+    private IGpuBuffer? _gpuPreActivationCache;  // [batchSize * numNodes * outputFeatures] - pre-activation output for backward
+    private IGpuBuffer? _gpuPostActivationCache; // [batchSize * numNodes * outputFeatures] - post-activation output for backward
+    private IGpuBuffer? _gpuPreLeakyReluCache;   // [batchSize * numHeads * numNodes * numNodes] - pre-LeakyReLU attention scores
+    private int _gpuNumNodes;
+    private int _gpuBatchSize;
+
+    // GPU gradient fields
+    private IGpuBuffer? _gpuWeightsGradient;
+    private IGpuBuffer? _gpuAttentionWeightsGradient;
+    private IGpuBuffer? _gpuBiasGradient;
+
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
@@ -1394,6 +1409,34 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _weightsGradient = null;
         _attentionWeightsGradient = null;
         _biasGradient = null;
+
+        // Clear GPU cache
+        ClearGpuCache();
+    }
+
+    /// <summary>
+    /// Clears GPU cache tensors and gradients.
+    /// </summary>
+    private void ClearGpuCache()
+    {
+        _gpuLastInput = null;
+        _gpuTransformedCache?.Dispose();
+        _gpuTransformedCache = null;
+        _gpuAttentionCache?.Dispose();
+        _gpuAttentionCache = null;
+        _gpuPreActivationCache?.Dispose();
+        _gpuPreActivationCache = null;
+        _gpuPostActivationCache?.Dispose();
+        _gpuPostActivationCache = null;
+        _gpuPreLeakyReluCache?.Dispose();
+        _gpuPreLeakyReluCache = null;
+
+        _gpuWeightsGradient?.Dispose();
+        _gpuWeightsGradient = null;
+        _gpuAttentionWeightsGradient?.Dispose();
+        _gpuAttentionWeightsGradient = null;
+        _gpuBiasGradient?.Dispose();
+        _gpuBiasGradient = null;
     }
 
     /// <summary>
@@ -1511,6 +1554,36 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         float alphaValue = (float)NumOps.ToDouble(_alpha);
 
+        // Pre-allocate cache for backward pass when training (MUST be before batch loop)
+        if (IsTrainingMode)
+        {
+            ClearGpuCache();
+            _gpuLastInput = input;
+            _gpuNumNodes = numNodes;
+            _gpuBatchSize = batchSize;
+
+            // Transformed cache: [batchSize * numHeads * numNodes * outputFeatures]
+            int transformedCacheSize = batchSize * _numHeads * numNodes * _outputFeatures;
+            _gpuTransformedCache = backend.AllocateBuffer(transformedCacheSize);
+            backend.Fill(_gpuTransformedCache, 0.0f, transformedCacheSize);
+
+            // Attention cache: [batchSize * numHeads * numNodes * numNodes]
+            int attentionCacheSize = batchSize * _numHeads * numNodes * numNodes;
+            _gpuAttentionCache = backend.AllocateBuffer(attentionCacheSize);
+            backend.Fill(_gpuAttentionCache, 0.0f, attentionCacheSize);
+
+            // Pre-activation cache: [batchSize * numNodes * outputFeatures] - stores output before activation
+            int preActivationCacheSize = batchSize * numNodes * _outputFeatures;
+            _gpuPreActivationCache = backend.AllocateBuffer(preActivationCacheSize);
+
+            // Post-activation cache: same size as pre-activation - stores output after activation
+            _gpuPostActivationCache = backend.AllocateBuffer(preActivationCacheSize);
+
+            // Pre-LeakyReLU cache: same size as attention cache - stores scores before LeakyReLU
+            _gpuPreLeakyReluCache = backend.AllocateBuffer(attentionCacheSize);
+            backend.Fill(_gpuPreLeakyReluCache, 0.0f, attentionCacheSize);
+        }
+
         // Process each batch
         for (int b = 0; b < batchSize; b++)
         {
@@ -1540,6 +1613,15 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 // [numNodes, inputFeatures] @ [inputFeatures, outputFeatures] -> [numNodes, outputFeatures]
                 backend.Gemm(batchInputBuffer, headWeightBuffers[h], transformedBuffer,
                     numNodes, _outputFeatures, inputFeatures);
+
+                // Cache transformed features for backward pass
+                if (IsTrainingMode && _gpuTransformedCache != null)
+                {
+                    int transformedOffset = (b * _numHeads + h) * numNodes * _outputFeatures;
+                    backend.Copy2DStrided(transformedBuffer, _gpuTransformedCache,
+                        1, numNodes * _outputFeatures,
+                        batchSize * _numHeads * numNodes * _outputFeatures, transformedOffset);
+                }
 
                 // Step 2: Compute attention scores
                 // For each node i, compute score_ij = LeakyReLU(source_i + target_j)
@@ -1582,6 +1664,35 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     var edgeScoreBuffer = backend.AllocateBuffer(new float[numEdges]);
                     backend.Add(edgeSrcScoreBuffer, edgeTgtScoreBuffer, edgeScoreBuffer, numEdges);
 
+                    // Cache pre-LeakyReLU scores in dense format for backward pass
+                    if (IsTrainingMode && _gpuPreLeakyReluCache != null)
+                    {
+                        // Create dense indices for scattering edge scores
+                        var denseIndicesPreLeaky = new int[numEdges];
+                        for (int e = 0; e < numEdges; e++)
+                        {
+                            int src = sourceIndicesData[e];
+                            int tgt = targetIndicesData[e];
+                            denseIndicesPreLeaky[e] = tgt * numNodes + src;
+                        }
+                        var denseIdxPreLeakyBuffer = backend.AllocateIntBuffer(denseIndicesPreLeaky);
+
+                        // Create temp buffer for this batch/head, fill with 0 (non-edges stay 0)
+                        using var preLeakyTemp = backend.AllocateBuffer(numNodes * numNodes);
+                        backend.Fill(preLeakyTemp, 0.0f, numNodes * numNodes);
+
+                        // Scatter pre-LeakyReLU edge scores to dense format
+                        backend.ScatterAdd(edgeScoreBuffer, denseIdxPreLeakyBuffer, preLeakyTemp, numEdges, numNodes * numNodes);
+
+                        // Copy to cache at correct offset
+                        int preLeakyOffset = (b * _numHeads + h) * numNodes * numNodes;
+                        backend.Copy2DStrided(preLeakyTemp, _gpuPreLeakyReluCache,
+                            1, numNodes * numNodes,
+                            batchSize * _numHeads * numNodes * numNodes, preLeakyOffset);
+
+                        denseIdxPreLeakyBuffer.Dispose();
+                    }
+
                     // Apply LeakyReLU to edge scores on GPU
                     backend.LeakyRelu(edgeScoreBuffer, edgeScoreBuffer, alphaValue, numEdges);
 
@@ -1609,6 +1720,15 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
                     // Apply row-wise softmax on GPU (handles -inf for non-edges)
                     backend.Softmax(edgeAttnBuffer, edgeAttnBuffer, numNodes, numNodes);
+
+                    // Cache attention scores for backward pass
+                    if (IsTrainingMode && _gpuAttentionCache != null)
+                    {
+                        int attnOffset = (b * _numHeads + h) * numNodes * numNodes;
+                        backend.Copy2DStrided(edgeAttnBuffer, _gpuAttentionCache,
+                            1, numNodes * numNodes,
+                            batchSize * _numHeads * numNodes * numNodes, attnOffset);
+                    }
 
                     // Aggregate: headResult = attention @ transformed
                     var headResultBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
@@ -1665,6 +1785,15 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     // Add source and target broadcasts on GPU
                     backend.Add(sourceBroadcastBuffer, targetBroadcastBuffer, attnScoreBuffer, numNodes * numNodes);
 
+                    // Cache pre-LeakyReLU scores for backward pass (before LeakyReLU is applied)
+                    if (IsTrainingMode && _gpuPreLeakyReluCache != null)
+                    {
+                        int preLeakyOffset = (b * _numHeads + h) * numNodes * numNodes;
+                        backend.Copy2DStrided(attnScoreBuffer, _gpuPreLeakyReluCache,
+                            1, numNodes * numNodes,
+                            batchSize * _numHeads * numNodes * numNodes, preLeakyOffset);
+                    }
+
                     // Apply LeakyReLU on GPU
                     backend.LeakyRelu(attnScoreBuffer, attnScoreBuffer, alphaValue, numNodes * numNodes);
 
@@ -1682,6 +1811,15 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
                     // Apply row-wise softmax on GPU
                     backend.Softmax(attnScoreBuffer, attnScoreBuffer, numNodes, numNodes);
+
+                    // Cache attention scores for backward pass
+                    if (IsTrainingMode && _gpuAttentionCache != null)
+                    {
+                        int attnOffset = (b * _numHeads + h) * numNodes * numNodes;
+                        backend.Copy2DStrided(attnScoreBuffer, _gpuAttentionCache,
+                            1, numNodes * numNodes,
+                            batchSize * _numHeads * numNodes * numNodes, attnOffset);
+                    }
 
                     // Aggregate: output = attention @ transformed on GPU
                     var headResultBuffer = backend.AllocateBuffer(new float[numNodes * _outputFeatures]);
@@ -1738,7 +1876,20 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var activationType = GetFusedActivationType();
         if (activationType != FusedActivationType.None)
         {
+            // Cache pre-activation output for backward pass (before activation is applied)
+            if (IsTrainingMode && _gpuPreActivationCache != null)
+            {
+                backend.Copy(outputBuffer, _gpuPreActivationCache, outputSize);
+            }
+
             ApplyGpuActivation(backend, outputBuffer, outputBuffer, outputSize, activationType);
+
+            // Cache post-activation output for backward pass (after activation is applied)
+            // Some activations (Sigmoid, Tanh) need the output for their backward pass
+            if (IsTrainingMode && _gpuPostActivationCache != null)
+            {
+                backend.Copy(outputBuffer, _gpuPostActivationCache, outputSize);
+            }
         }
 
         // Clean up weight buffers
@@ -1758,7 +1909,286 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             ? [numNodes, _outputFeatures]
             : [batchSize, numNodes, _outputFeatures];
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+    }
+
+    /// <summary>
+    /// GPU-accelerated backward pass for Graph Attention Networks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Computes gradients through the GAT layer using cached forward values:
+    /// 1. Bias gradient: sum of output gradients over nodes
+    /// 2. Weight gradients: input^T @ (attention^T @ dOutput)
+    /// 3. Input gradient: (attention^T @ dOutput) @ W^T
+    /// 4. Attention weight gradients: through attention score computation
+    /// </para>
+    /// </remarks>
+    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
+    {
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+
+        var backend = gpuEngine.GetBackend();
+        if (backend == null)
+            throw new InvalidOperationException("No GPU backend available.");
+
+        if (_gpuLastInput == null || _gpuTransformedCache == null || _gpuAttentionCache == null)
+        {
+            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
+        }
+
+        int numNodes = _gpuNumNodes;
+        int batchSize = _gpuBatchSize;
+        int outputSize = batchSize * numNodes * _outputFeatures;
+
+        // Apply activation derivative if an activation function was used in forward pass
+        // gradAfterActivation = outputGradient * activation.Derivative(preActivation)
+        IGpuBuffer effectiveGradBuffer = outputGradient.Buffer;
+        IGpuBuffer? gradAfterActivationBuffer = null;
+        var activationType = GetFusedActivationType();
+        if (activationType != FusedActivationType.None && _gpuPreActivationCache != null)
+        {
+            // Allocate buffer for gradient after applying activation derivative
+            gradAfterActivationBuffer = backend.AllocateBuffer(outputSize);
+
+            // Apply activation derivative on GPU: dL/dPreAct = dL/dOutput * activation'(preAct)
+            // Some activations (ReLU, GELU) need preActivation (input), others (Sigmoid, Tanh) need postActivation (output)
+            ApplyGpuActivationBackward(backend, outputGradient.Buffer, _gpuPreActivationCache,
+                _gpuPostActivationCache, gradAfterActivationBuffer, outputSize, activationType);
+
+            effectiveGradBuffer = gradAfterActivationBuffer;
+        }
+
+        // Allocate input gradient buffer
+        int gradInputSize = batchSize * numNodes * _inputFeatures;
+        var gradInputBuffer = backend.AllocateBuffer(gradInputSize);
+        backend.Fill(gradInputBuffer, 0.0f, gradInputSize);
+
+        // Allocate weight gradient buffers
+        _gpuWeightsGradient = backend.AllocateBuffer(_numHeads * _inputFeatures * _outputFeatures);
+        _gpuAttentionWeightsGradient = backend.AllocateBuffer(_numHeads * 2 * _outputFeatures);
+        _gpuBiasGradient = backend.AllocateBuffer(_outputFeatures);
+
+        backend.Fill(_gpuWeightsGradient, 0.0f, _numHeads * _inputFeatures * _outputFeatures);
+        backend.Fill(_gpuAttentionWeightsGradient, 0.0f, _numHeads * 2 * _outputFeatures);
+        backend.Fill(_gpuBiasGradient, 0.0f, _outputFeatures);
+
+        // Bias gradient: sum output gradients over all nodes and batches (use gradient after activation derivative)
+        backend.SumAxis(effectiveGradBuffer, _gpuBiasGradient, batchSize * numNodes, _outputFeatures);
+
+        // Allocate temporary buffers for backward computation
+        using var dTransformed = backend.AllocateBuffer(numNodes * _outputFeatures);
+        using var inputTransposed = backend.AllocateBuffer(_inputFeatures * numNodes);
+        using var headAttn = backend.AllocateBuffer(numNodes * numNodes);
+        using var headAttnT = backend.AllocateBuffer(numNodes * numNodes);
+        using var cachedTransformed = backend.AllocateBuffer(numNodes * _outputFeatures);
+        using var scaledDOutput = backend.AllocateBuffer(numNodes * _outputFeatures);
+
+        float headScale = 1.0f / _numHeads;
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Get batch input using GPU view (no CPU roundtrip)
+            IGpuBuffer batchInput;
+            bool ownsBatchInput = false;
+            if (batchSize == 1)
+            {
+                batchInput = _gpuLastInput.Buffer;
+            }
+            else
+            {
+                int inputOffset = b * numNodes * _inputFeatures;
+                var batchView = _gpuLastInput.CreateView(inputOffset, [numNodes, _inputFeatures]);
+                batchInput = batchView.Buffer;
+                // View shares buffer, no ownership transfer needed
+            }
+
+            // Get batch output gradient (after activation derivative if applicable)
+            // Use effectiveGradBuffer which has activation derivative already applied
+            IGpuBuffer batchDOutput;
+            bool ownsBatchDOutput = false;
+            if (batchSize == 1)
+            {
+                batchDOutput = effectiveGradBuffer;
+            }
+            else
+            {
+                // Extract batch slice from effectiveGradBuffer using Copy2DStrided
+                int gradOffset = b * numNodes * _outputFeatures;
+                int batchGradSize = numNodes * _outputFeatures;
+                var batchGradBuffer = backend.AllocateBuffer(batchGradSize);
+                backend.Copy2DStrided(effectiveGradBuffer, batchGradBuffer,
+                    1, batchGradSize, batchGradSize, gradOffset);
+                batchDOutput = batchGradBuffer;
+                ownsBatchDOutput = true;
+            }
+
+            // Transpose batch input: [numNodes, inputFeatures] -> [inputFeatures, numNodes]
+            backend.Transpose(batchInput, inputTransposed, numNodes, _inputFeatures);
+
+            // Process each head
+            for (int h = 0; h < _numHeads; h++)
+            {
+                // Load cached attention for this batch and head
+                int attnOffset = (b * _numHeads + h) * numNodes * numNodes;
+                backend.Copy2DStrided(_gpuAttentionCache, headAttn,
+                    1, numNodes * numNodes,
+                    numNodes * numNodes, attnOffset);
+
+                // Load cached transformed for this batch and head
+                int transformedOffset = (b * _numHeads + h) * numNodes * _outputFeatures;
+                backend.Copy2DStrided(_gpuTransformedCache, cachedTransformed,
+                    1, numNodes * _outputFeatures,
+                    numNodes * _outputFeatures, transformedOffset);
+
+                // Scale output gradient by 1/numHeads (since forward averaged heads)
+                backend.Scale(batchDOutput, scaledDOutput, headScale, numNodes * _outputFeatures);
+
+                // Transpose attention: [numNodes, numNodes] -> [numNodes, numNodes]
+                backend.Transpose(headAttn, headAttnT, numNodes, numNodes);
+
+                // dTransformed = attention^T @ scaledDOutput
+                // [numNodes, numNodes] @ [numNodes, outputFeatures] -> [numNodes, outputFeatures]
+                backend.Gemm(headAttnT, scaledDOutput, dTransformed, numNodes, _outputFeatures, numNodes);
+
+                // Weight gradient: dW[h] += input^T @ dTransformed
+                // [inputFeatures, numNodes] @ [numNodes, outputFeatures] -> [inputFeatures, outputFeatures]
+                int weightOffset = h * _inputFeatures * _outputFeatures;
+                using var headWeightGrad = backend.AllocateBuffer(_inputFeatures * _outputFeatures);
+                backend.Gemm(inputTransposed, dTransformed, headWeightGrad, _inputFeatures, _outputFeatures, numNodes);
+
+                // Accumulate to weight gradient buffer at head offset
+                using var currentHeadGrad = backend.AllocateBuffer(_inputFeatures * _outputFeatures);
+                backend.Copy2DStrided(_gpuWeightsGradient, currentHeadGrad,
+                    1, _inputFeatures * _outputFeatures,
+                    _inputFeatures * _outputFeatures, weightOffset);
+                backend.Add(currentHeadGrad, headWeightGrad, currentHeadGrad, _inputFeatures * _outputFeatures);
+                backend.Copy2DStrided(currentHeadGrad, _gpuWeightsGradient,
+                    1, _inputFeatures * _outputFeatures,
+                    _numHeads * _inputFeatures * _outputFeatures, weightOffset);
+
+                // Input gradient: dInput += dTransformed @ W[h]^T
+                // Upload transposed weights for this head
+                var headWeightTData = new float[_outputFeatures * _inputFeatures];
+                for (int i = 0; i < _inputFeatures; i++)
+                {
+                    for (int j = 0; j < _outputFeatures; j++)
+                    {
+                        headWeightTData[j * _inputFeatures + i] = (float)NumOps.ToDouble(_weights[h, i, j]);
+                    }
+                }
+                using var headWeightTBuffer = backend.AllocateBuffer(headWeightTData);
+
+                // dInput contribution: [numNodes, outputFeatures] @ [outputFeatures, inputFeatures] -> [numNodes, inputFeatures]
+                using var headInputGrad = backend.AllocateBuffer(numNodes * _inputFeatures);
+                backend.Gemm(dTransformed, headWeightTBuffer, headInputGrad, numNodes, _inputFeatures, _outputFeatures);
+
+                // Accumulate input gradient at batch offset
+                int inputGradOffset = b * numNodes * _inputFeatures;
+                using var batchInputGrad = backend.AllocateBuffer(numNodes * _inputFeatures);
+                if (batchSize > 1)
+                {
+                    backend.Copy2DStrided(gradInputBuffer, batchInputGrad,
+                        1, numNodes * _inputFeatures,
+                        numNodes * _inputFeatures, inputGradOffset);
+                    backend.Add(batchInputGrad, headInputGrad, batchInputGrad, numNodes * _inputFeatures);
+                    backend.Copy2DStrided(batchInputGrad, gradInputBuffer,
+                        1, numNodes * _inputFeatures,
+                        batchSize * numNodes * _inputFeatures, inputGradOffset);
+                }
+                else
+                {
+                    backend.Add(gradInputBuffer, headInputGrad, gradInputBuffer, numNodes * _inputFeatures);
+                }
+
+                // Attention weight gradients through attention mechanism:
+                // source_score = transformed @ a_source, target_score = transformed @ a_target
+                // dAttention goes through softmax backward (complex), then through LeakyReLU backward
+                // Then: d_source_score = dAttention.sum(axis=1), d_target_score = dAttention.sum(axis=0)
+                // d_a_source = transformed^T @ d_source_score, d_a_target = transformed^T @ d_target_score
+                // Computing approximate attention weight gradients:
+                using var dAttn = backend.AllocateBuffer(numNodes * numNodes);
+                // dAttn = scaledDOutput @ cachedTransformed^T (for attention backward)
+                using var cachedTransformedT = backend.AllocateBuffer(_outputFeatures * numNodes);
+                backend.Transpose(cachedTransformed, cachedTransformedT, numNodes, _outputFeatures);
+                backend.Gemm(scaledDOutput, cachedTransformedT, dAttn, numNodes, numNodes, _outputFeatures);
+
+                // Softmax backward: dPreSoftmax[i,j] = attn[i,j] * (dAttn[i,j] - sum_k(dAttn[i,k] * attn[i,k]))
+                // For each row i: dPreSoftmax[i,:] = attn[i,:] * (dAttn[i,:] - dot(dAttn[i,:], attn[i,:]))
+                using var dPreSoftmax = backend.AllocateBuffer(numNodes * numNodes);
+                backend.SoftmaxBackward(dAttn, headAttn, dPreSoftmax, numNodes, numNodes);
+
+                // LeakyReLU backward: dLeakyReLU = dPreSoftmax * (1 if score > 0 else alpha)
+                // Use cached pre-LeakyReLU scores to compute proper derivative mask
+                if (_gpuPreLeakyReluCache != null)
+                {
+                    float alphaVal = (float)NumOps.ToDouble(_alpha);
+
+                    // Load cached pre-LeakyReLU scores for this batch/head
+                    using var preLeakyScores = backend.AllocateBuffer(numNodes * numNodes);
+                    int preLeakyOffset = (b * _numHeads + h) * numNodes * numNodes;
+                    backend.Copy2DStrided(_gpuPreLeakyReluCache, preLeakyScores,
+                        1, numNodes * numNodes, numNodes * numNodes, preLeakyOffset);
+
+                    // Apply LeakyReLU backward: multiply dPreSoftmax by derivative mask
+                    // derivative = 1 where preLeakyScores > 0, alpha where preLeakyScores <= 0
+                    backend.LeakyReluBackward(dPreSoftmax, preLeakyScores, dPreSoftmax, alphaVal, numNodes * numNodes);
+                }
+
+                // Sum across rows (for source) and columns (for target)
+                using var dSourceScore = backend.AllocateBuffer(numNodes);
+                using var dTargetScore = backend.AllocateBuffer(numNodes);
+                backend.SumAxis(dPreSoftmax, dSourceScore, numNodes, numNodes);  // Sum each row
+                // Sum columns requires transpose
+                using var dPreSoftmaxT = backend.AllocateBuffer(numNodes * numNodes);
+                backend.Transpose(dPreSoftmax, dPreSoftmaxT, numNodes, numNodes);
+                backend.SumAxis(dPreSoftmaxT, dTargetScore, numNodes, numNodes);  // Sum each row of transposed = columns of original
+
+                // d_a_source = transformed^T @ dSourceScore, d_a_target = transformed^T @ dTargetScore
+                // [outputFeatures, numNodes] @ [numNodes, 1] -> [outputFeatures, 1]
+                using var dAttnSource = backend.AllocateBuffer(_outputFeatures);
+                using var dAttnTarget = backend.AllocateBuffer(_outputFeatures);
+                backend.Gemm(cachedTransformedT, dSourceScore, dAttnSource, _outputFeatures, 1, numNodes);
+                backend.Gemm(cachedTransformedT, dTargetScore, dAttnTarget, _outputFeatures, 1, numNodes);
+
+                // Accumulate to attention weight gradients
+                int attnSourceOffset = h * 2 * _outputFeatures;
+                int attnTargetOffset = h * 2 * _outputFeatures + _outputFeatures;
+                using var currentSourceGrad = backend.AllocateBuffer(_outputFeatures);
+                using var currentTargetGrad = backend.AllocateBuffer(_outputFeatures);
+                backend.Copy2DStrided(_gpuAttentionWeightsGradient, currentSourceGrad,
+                    1, _outputFeatures, _outputFeatures, attnSourceOffset);
+                backend.Copy2DStrided(_gpuAttentionWeightsGradient, currentTargetGrad,
+                    1, _outputFeatures, _outputFeatures, attnTargetOffset);
+                backend.Add(currentSourceGrad, dAttnSource, currentSourceGrad, _outputFeatures);
+                backend.Add(currentTargetGrad, dAttnTarget, currentTargetGrad, _outputFeatures);
+                backend.Copy2DStrided(currentSourceGrad, _gpuAttentionWeightsGradient,
+                    1, _outputFeatures, _numHeads * 2 * _outputFeatures, attnSourceOffset);
+                backend.Copy2DStrided(currentTargetGrad, _gpuAttentionWeightsGradient,
+                    1, _outputFeatures, _numHeads * 2 * _outputFeatures, attnTargetOffset);
+            }
+
+            if (ownsBatchInput && batchInput is IDisposable disposableBatchInput)
+            {
+                disposableBatchInput.Dispose();
+            }
+
+            if (ownsBatchDOutput && batchDOutput is IDisposable disposableBatchDOutput)
+            {
+                disposableBatchDOutput.Dispose();
+            }
+        }
+
+        // Clean up activation gradient buffer if allocated
+        gradAfterActivationBuffer?.Dispose();
+
+        // Return input gradient
+        int[] gradInputShape = _gpuLastInput.Shape.Length == 2
+            ? [numNodes, _inputFeatures]
+            : [batchSize, numNodes, _inputFeatures];
+
+        return new GpuTensor<T>(backend, gradInputBuffer, gradInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <inheritdoc/>

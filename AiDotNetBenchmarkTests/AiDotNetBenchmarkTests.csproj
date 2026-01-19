@@ -5,6 +5,7 @@
 	  <TargetFrameworks>net10.0;net471</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	  <LangVersion>latest</LangVersion>
     <!-- CA1822: BenchmarkDotNet requires instance methods for benchmarks -->
     <NoWarn>$(NoWarn);CA1822</NoWarn>
@@ -36,6 +37,13 @@
       <Link>libopenblas.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <!-- Intel oneDNN native DLLs for benchmarking (Windows x64 only, .NET Core+) -->
+  <!-- Using vcomp variant which uses Visual C++ OpenMP (fewer dependency issues) -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net471' AND $([MSBuild]::IsOSPlatform('Windows'))">
+    <PackageReference Include="onednn.cpu_vcomp.redist.win-x64" Version="2023.2.0.49513" GeneratePathProperty="true" />
+    <Content Include="$(Pkgonednn_cpu_vcomp_redist_win-x64)\runtimes\native\dnnl.dll" CopyToOutputDirectory="Always" Link="dnnl.dll" CopyToPublishDirectory="Always" />
   </ItemGroup>
 
 </Project>

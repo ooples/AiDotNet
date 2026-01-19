@@ -1857,6 +1857,40 @@ public class CpuEngine : IEngine
         return result;
     }
 
+    /// <summary>
+    /// Adds tensor b to tensor a in-place (a += b). Zero allocation.
+    /// </summary>
+    public void TensorAddInPlace<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (!ShapesMatch(a.Shape, b.Shape))
+        {
+            throw new ArgumentException(
+                $"Tensor shapes must match. Got {FormatShape(a.Shape)} and {FormatShape(b.Shape)}.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.Add(a.AsSpan(), b.AsSpan(), a.AsWritableSpan());
+    }
+
+    /// <summary>
+    /// Adds tensors a and b, storing result in destination. Zero allocation.
+    /// </summary>
+    public void TensorAddInto<T>(Tensor<T> destination, Tensor<T> a, Tensor<T> b)
+    {
+        if (destination == null) throw new ArgumentNullException(nameof(destination));
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (!ShapesMatch(a.Shape, b.Shape) || !ShapesMatch(a.Shape, destination.Shape))
+        {
+            throw new ArgumentException("All tensor shapes must match.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.Add(a.AsSpan(), b.AsSpan(), destination.AsWritableSpan());
+    }
+
     /// <inheritdoc/>
     public Tensor<T> TensorBroadcastAdd<T>(Tensor<T> a, Tensor<T> b)
     {
@@ -1990,6 +2024,40 @@ public class CpuEngine : IEngine
         numOps.Multiply(a.AsSpan(), b.AsSpan(), result.AsWritableSpan());
 
         return result;
+    }
+
+    /// <summary>
+    /// Multiplies tensor a by tensor b in-place (a *= b). Zero allocation.
+    /// </summary>
+    public void TensorMultiplyInPlace<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (!ShapesMatch(a.Shape, b.Shape))
+        {
+            throw new ArgumentException(
+                $"Tensor shapes must match. Got {FormatShape(a.Shape)} and {FormatShape(b.Shape)}.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.Multiply(a.AsSpan(), b.AsSpan(), a.AsWritableSpan());
+    }
+
+    /// <summary>
+    /// Multiplies tensors a and b, storing result in destination. Zero allocation.
+    /// </summary>
+    public void TensorMultiplyInto<T>(Tensor<T> destination, Tensor<T> a, Tensor<T> b)
+    {
+        if (destination == null) throw new ArgumentNullException(nameof(destination));
+        if (a == null) throw new ArgumentNullException(nameof(a));
+        if (b == null) throw new ArgumentNullException(nameof(b));
+        if (!ShapesMatch(a.Shape, b.Shape) || !ShapesMatch(a.Shape, destination.Shape))
+        {
+            throw new ArgumentException("All tensor shapes must match.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.Multiply(a.AsSpan(), b.AsSpan(), destination.AsWritableSpan());
     }
 
     /// <inheritdoc/>
@@ -3430,46 +3498,473 @@ public class CpuEngine : IEngine
 
         var result = new Tensor<T>(new[] { batch, outChannels, outputHeight, outputWidth });
 
-        // Perform convolution
+        // Use im2col + GEMM for float (significantly faster)
+        if (typeof(T) == typeof(float))
+        {
+            Conv2DWithIm2ColFloat(
+                input as Tensor<float> ?? throw new InvalidCastException(),
+                kernel as Tensor<float> ?? throw new InvalidCastException(),
+                result as Tensor<float> ?? throw new InvalidCastException(),
+                batch, inChannels, height, width,
+                outChannels, kernelHeight, kernelWidth,
+                stride, padding, dilation,
+                outputHeight, outputWidth);
+            return result;
+        }
+
+        // Fallback for non-float types: naive implementation
+        Conv2DNaive(input, kernel, result, numOps,
+            batch, inChannels, height, width,
+            outChannels, kernelHeight, kernelWidth,
+            stride, padding, dilation,
+            outputHeight, outputWidth);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Optimized Conv2D using multiple strategies for float tensors.
+    /// Tries in order: oneDNN, SIMD direct conv, Winograd, im2col+GEMM.
+    /// </summary>
+    private void Conv2DWithIm2ColFloat(
+        Tensor<float> input,
+        Tensor<float> kernel,
+        Tensor<float> result,
+        int batch,
+        int inChannels,
+        int height,
+        int width,
+        int outChannels,
+        int kernelHeight,
+        int kernelWidth,
+        int stride,
+        int padding,
+        int dilation,
+        int outputHeight,
+        int outputWidth)
+    {
+#if !NET471
+        // Strategy 1: Try oneDNN for best performance (uses optimized CPU kernels)
+        if (TryConv2DOneDnn(input, kernel, result, batch, inChannels, height, width,
+            outChannels, kernelHeight, kernelWidth, stride, padding, dilation, outputHeight, outputWidth))
+        {
+            return;
+        }
+
+        // Strategy 2: Try SIMD direct convolution for 3x3 kernels with stride=1
+        if (TryConv2DSimd(input, kernel, result, batch, inChannels, height, width,
+            outChannels, kernelHeight, kernelWidth, stride, padding, dilation, outputHeight, outputWidth))
+        {
+            return;
+        }
+
+        // Strategy 3: Try fused im2col-GEMM with cache tiling for larger convolutions
+        if (FusedConvHelper.ShouldUseFusedConv(kernelHeight, kernelWidth, stride, stride,
+            outputHeight, outputWidth, inChannels, outChannels))
+        {
+            var inputSpan = input.Data.Span;
+            var kernelSpan = kernel.Data.Span;
+            var outputSpan = result.Data.Span;
+
+            FusedConvHelper.Conv2DFused(
+                inputSpan, kernelSpan, outputSpan,
+                batch, inChannels, height, width,
+                outChannels, kernelHeight, kernelWidth,
+                stride, stride, padding, padding,
+                dilation, dilation, outputHeight, outputWidth);
+            return;
+        }
+#endif
+
+        // Strategy 4: Try Winograd for large 3x3 convolutions with stride=1, dilation=1
+        // (Only reached on net471 or when fused conv doesn't apply)
+        if (WinogradHelper.ShouldUseWinograd(kernelHeight, kernelWidth, stride, stride, dilation, dilation, outputHeight, outputWidth))
+        {
+            var inputSpan = input.Data.Span;
+            var kernelSpan = kernel.Data.Span;
+            var outputSpan = result.Data.Span;
+
+            WinogradHelper.Conv2DWinograd(
+                inputSpan, kernelSpan, outputSpan,
+                batch, inChannels, height, width,
+                outChannels, padding, padding);
+            return;
+        }
+
+        // Strategy 5: Fallback to im2col + GEMM (works for all cases)
+        Conv2DWithIm2ColGemm(input, kernel, result, batch, inChannels, height, width,
+            outChannels, kernelHeight, kernelWidth, stride, padding, dilation, outputHeight, outputWidth);
+    }
+
+#if !NET471
+    /// <summary>
+    /// Try Conv2D using Intel oneDNN library.
+    /// </summary>
+    private unsafe bool TryConv2DOneDnn(
+        Tensor<float> input, Tensor<float> kernel, Tensor<float> result,
+        int batch, int inChannels, int height, int width,
+        int outChannels, int kernelHeight, int kernelWidth,
+        int stride, int padding, int dilation, int outputHeight, int outputWidth)
+    {
+        if (!OneDnnProvider.IsAvailable)
+        {
+            return false;
+        }
+
+        var inputSpan = input.Data.Span;
+        var kernelSpan = kernel.Data.Span;
+        var outputSpan = result.Data.Span;
+
+        fixed (float* inputPtr = inputSpan)
+        fixed (float* kernelPtr = kernelSpan)
+        fixed (float* outputPtr = outputSpan)
+        {
+            return OneDnnProvider.TryConv2D(
+                inputPtr, batch, inChannels, height, width,
+                kernelPtr, outChannels, kernelHeight, kernelWidth,
+                outputPtr, outputHeight, outputWidth,
+                stride, stride, padding, padding, dilation, dilation);
+        }
+    }
+
+    /// <summary>
+    /// Try Conv2D using SIMD-optimized direct convolution.
+    /// </summary>
+    private unsafe bool TryConv2DSimd(
+        Tensor<float> input, Tensor<float> kernel, Tensor<float> result,
+        int batch, int inChannels, int height, int width,
+        int outChannels, int kernelHeight, int kernelWidth,
+        int stride, int padding, int dilation, int outputHeight, int outputWidth)
+    {
+        if (!SimdConvHelper.CanUseSimdConv(kernelHeight, kernelWidth, stride, stride))
+        {
+            return false;
+        }
+
+        var inputSpan = input.Data.Span;
+        var kernelSpan = kernel.Data.Span;
+        var outputSpan = result.Data.Span;
+
+        fixed (float* inputPtr = inputSpan)
+        fixed (float* kernelPtr = kernelSpan)
+        fixed (float* outputPtr = outputSpan)
+        {
+            if (kernelHeight == 3 && kernelWidth == 3)
+            {
+                SimdConvHelper.Conv3x3Stride1(
+                    inputPtr, kernelPtr, outputPtr,
+                    batch, inChannels, height, width,
+                    outChannels, padding, padding, dilation, dilation);
+                return true;
+            }
+            else if (kernelHeight == 1 && kernelWidth == 1)
+            {
+                SimdConvHelper.Conv1x1(
+                    inputPtr, kernelPtr, outputPtr,
+                    batch, inChannels, height, width, outChannels);
+                return true;
+            }
+        }
+
+        return false;
+    }
+#endif
+
+    /// <summary>
+    /// Conv2D using im2col + GEMM (fallback implementation).
+    /// </summary>
+    private void Conv2DWithIm2ColGemm(
+        Tensor<float> input, Tensor<float> kernel, Tensor<float> result,
+        int batch, int inChannels, int height, int width,
+        int outChannels, int kernelHeight, int kernelWidth,
+        int stride, int padding, int dilation, int outputHeight, int outputWidth)
+    {
+        int colH = inChannels * kernelHeight * kernelWidth;
+        int colW = outputHeight * outputWidth;
+        int bufferSize = batch * colH * colW;
+
+        var inputSpan = input.Data.Span;
+        var kernelSpan = kernel.Data.Span;
+        var outputSpan = result.Data.Span;
+
+#if !NET471
+        // Use native memory for im2col buffer to reduce GC pressure
+        using var im2colBuffer = new NativeBuffer<float>(bufferSize);
+        var im2colSpan = im2colBuffer.Span;
+#else
+        // Fallback to ArrayPool for .NET Framework
+        var pool = System.Buffers.ArrayPool<float>.Shared;
+        float[] im2colArray = pool.Rent(bufferSize);
+        try
+        {
+        var im2colSpan = im2colArray.AsSpan(0, bufferSize);
+#endif
+
+        // Step 1: im2col transformation
+        Helpers.Im2ColHelper.Im2Col(
+            inputSpan, im2colSpan,
+            batch, inChannels, height, width,
+            kernelHeight, kernelWidth, stride, stride, padding, padding, dilation, dilation);
+
+        // Step 2: GEMM for each batch
         for (int b = 0; b < batch; b++)
         {
-            for (int oc = 0; oc < outChannels; oc++)
+            int im2colOffset = b * colH * colW;
+            int outputOffset = b * outChannels * colW;
+
+            bool usedBlas = Helpers.BlasProvider.TryGemm(
+                outChannels, colW, colH,
+                kernelSpan.Slice(0, outChannels * colH),
+                colH,
+                im2colSpan.Slice(im2colOffset, colH * colW),
+                colW,
+                outputSpan.Slice(outputOffset, outChannels * colW),
+                colW);
+
+            if (!usedBlas)
             {
-                for (int oh = 0; oh < outputHeight; oh++)
+                MultiplyMatrixBlockedFloat(
+                    kernelSpan,
+                    im2colSpan.Slice(im2colOffset, colH * colW),
+                    outputSpan.Slice(outputOffset, outChannels * colW),
+                    outChannels, colH, colW);
+            }
+        }
+
+#if NET471
+        }
+        finally
+        {
+            pool.Return(im2colArray);
+        }
+#endif
+    }
+
+    /// <summary>
+    /// Blocked matrix multiplication for float: C = A @ B
+    /// Uses cache-friendly access pattern with SIMD vectorization.
+    /// </summary>
+    private static void MultiplyMatrixBlockedFloat(
+        ReadOnlySpan<float> a,
+        ReadOnlySpan<float> b,
+        Span<float> c,
+        int m,
+        int k,
+        int n)
+    {
+        const int BlockSize = 64;
+
+        // Initialize output to zero
+        c.Clear();
+
+        // Use parallel processing for large matrices
+        bool useParallel = m * n >= 16384 && Environment.ProcessorCount > 1;
+
+        if (useParallel)
+        {
+            // Copy to arrays for parallel access (Span cannot be captured in lambdas)
+            float[] aArray = a.ToArray();
+            float[] bArray = b.ToArray();
+            float[] cArray = c.ToArray();
+
+            int numRowBlocks = (m + BlockSize - 1) / BlockSize;
+            System.Threading.Tasks.Parallel.For(0, numRowBlocks, iiBlock =>
+            {
+                int ii = iiBlock * BlockSize;
+                int iEnd = Math.Min(ii + BlockSize, m);
+                ProcessBlockRowArray(aArray, bArray, cArray, k, n, BlockSize, ii, iEnd);
+            });
+
+            // Copy back
+            cArray.AsSpan().CopyTo(c);
+        }
+        else
+        {
+            for (int ii = 0; ii < m; ii += BlockSize)
+            {
+                int iEnd = Math.Min(ii + BlockSize, m);
+                ProcessBlockRowSpan(a, b, c, k, n, BlockSize, ii, iEnd);
+            }
+        }
+    }
+
+    private static void ProcessBlockRowArray(
+        float[] a,
+        float[] b,
+        float[] c,
+        int k,
+        int n,
+        int blockSize,
+        int ii,
+        int iEnd)
+    {
+        for (int kk = 0; kk < k; kk += blockSize)
+        {
+            int kEnd = Math.Min(kk + blockSize, k);
+
+            for (int jj = 0; jj < n; jj += blockSize)
+            {
+                int jEnd = Math.Min(jj + blockSize, n);
+
+                // Process block
+                for (int i = ii; i < iEnd; i++)
                 {
-                    for (int ow = 0; ow < outputWidth; ow++)
+                    int aRowOffset = i * k + kk;
+                    int cRowOffset = i * n + jj;
+
+                    for (int kIdx = kk; kIdx < kEnd; kIdx++)
                     {
-                        T sum = numOps.Zero;
+                        float aik = a[aRowOffset + kIdx - kk];
+                        int bRowOffset = kIdx * n + jj;
+                        int jLen = jEnd - jj;
 
-                        // Sum over all input channels
-                        for (int ic = 0; ic < inChannels; ic++)
+                        for (int j = 0; j < jLen; j++)
                         {
-                            // Sum over kernel window
-                            for (int kh = 0; kh < kernelHeight; kh++)
-                            {
-                                for (int kw = 0; kw < kernelWidth; kw++)
-                                {
-                                    int ih = oh * stride + kh * dilation - padding;
-                                    int iw = ow * stride + kw * dilation - padding;
-
-                                    // Check bounds (handle padding)
-                                    if (ih >= 0 && ih < height && iw >= 0 && iw < width)
-                                    {
-                                        T inputVal = input[b, ic, ih, iw];
-                                        T kernelVal = kernel[oc, ic, kh, kw];
-                                        sum = numOps.Add(sum, numOps.Multiply(inputVal, kernelVal));
-                                    }
-                                }
-                            }
+                            c[cRowOffset + j] += aik * b[bRowOffset + j];
                         }
-
-                        result[b, oc, oh, ow] = sum;
                     }
                 }
             }
         }
+    }
 
-        return result;
+    private static void ProcessBlockRowSpan(
+        ReadOnlySpan<float> a,
+        ReadOnlySpan<float> b,
+        Span<float> c,
+        int k,
+        int n,
+        int blockSize,
+        int ii,
+        int iEnd)
+    {
+        for (int kk = 0; kk < k; kk += blockSize)
+        {
+            int kEnd = Math.Min(kk + blockSize, k);
+
+            for (int jj = 0; jj < n; jj += blockSize)
+            {
+                int jEnd = Math.Min(jj + blockSize, n);
+
+                // Process block
+                for (int i = ii; i < iEnd; i++)
+                {
+                    int aRowOffset = i * k + kk;
+                    int cRowOffset = i * n + jj;
+
+                    for (int kIdx = kk; kIdx < kEnd; kIdx++)
+                    {
+                        float aik = a[aRowOffset + kIdx - kk];
+                        int bRowOffset = kIdx * n + jj;
+                        int jLen = jEnd - jj;
+
+                        for (int j = 0; j < jLen; j++)
+                        {
+                            c[cRowOffset + j] += aik * b[bRowOffset + j];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Naive Conv2D implementation for non-float types.
+    /// </summary>
+    private static void Conv2DNaive<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> result,
+        INumericOperations<T> numOps,
+        int batch,
+        int inChannels,
+        int height,
+        int width,
+        int outChannels,
+        int kernelHeight,
+        int kernelWidth,
+        int stride,
+        int padding,
+        int dilation,
+        int outputHeight,
+        int outputWidth)
+    {
+        // Use parallel processing for batch and output channels
+        bool useParallel = batch * outChannels >= 4 && Environment.ProcessorCount > 1;
+
+        if (useParallel)
+        {
+            System.Threading.Tasks.Parallel.For(0, batch * outChannels, idx =>
+            {
+                int b = idx / outChannels;
+                int oc = idx % outChannels;
+                ProcessOutputChannel(input, kernel, result, numOps,
+                    b, oc, inChannels, height, width,
+                    kernelHeight, kernelWidth, stride, padding, dilation,
+                    outputHeight, outputWidth);
+            });
+        }
+        else
+        {
+            for (int b = 0; b < batch; b++)
+            {
+                for (int oc = 0; oc < outChannels; oc++)
+                {
+                    ProcessOutputChannel(input, kernel, result, numOps,
+                        b, oc, inChannels, height, width,
+                        kernelHeight, kernelWidth, stride, padding, dilation,
+                        outputHeight, outputWidth);
+                }
+            }
+        }
+    }
+
+    private static void ProcessOutputChannel<T>(
+        Tensor<T> input,
+        Tensor<T> kernel,
+        Tensor<T> result,
+        INumericOperations<T> numOps,
+        int b,
+        int oc,
+        int inChannels,
+        int height,
+        int width,
+        int kernelHeight,
+        int kernelWidth,
+        int stride,
+        int padding,
+        int dilation,
+        int outputHeight,
+        int outputWidth)
+    {
+        for (int oh = 0; oh < outputHeight; oh++)
+        {
+            for (int ow = 0; ow < outputWidth; ow++)
+            {
+                T sum = numOps.Zero;
+
+                for (int ic = 0; ic < inChannels; ic++)
+                {
+                    for (int kh = 0; kh < kernelHeight; kh++)
+                    {
+                        for (int kw = 0; kw < kernelWidth; kw++)
+                        {
+                            int ih = oh * stride + kh * dilation - padding;
+                            int iw = ow * stride + kw * dilation - padding;
+
+                            if (ih >= 0 && ih < height && iw >= 0 && iw < width)
+                            {
+                                T inputVal = input[b, ic, ih, iw];
+                                T kernelVal = kernel[oc, ic, kh, kw];
+                                sum = numOps.Add(sum, numOps.Multiply(inputVal, kernelVal));
+                            }
+                        }
+                    }
+                }
+
+                result[b, oc, oh, ow] = sum;
+            }
+        }
     }
 
     #endregion
@@ -3546,6 +4041,34 @@ public class CpuEngine : IEngine
         return result;
     }
 
+    /// <summary>
+    /// Applies Sigmoid activation in-place: x = 1 / (1 + exp(-x)). Zero allocation.
+    /// </summary>
+    public void SigmoidInPlace<T>(Tensor<T> tensor)
+    {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.Sigmoid(tensor.AsSpan(), tensor.AsWritableSpan());
+    }
+
+    /// <summary>
+    /// Applies Sigmoid activation to input, storing in destination. Zero allocation.
+    /// </summary>
+    public void SigmoidInto<T>(Tensor<T> destination, Tensor<T> input)
+    {
+        if (destination == null) throw new ArgumentNullException(nameof(destination));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (!ShapesMatch(destination.Shape, input.Shape))
+        {
+            throw new ArgumentException("Tensor shapes must match.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.Sigmoid(input.AsSpan(), destination.AsWritableSpan());
+    }
+
     public Tensor<T> ReLU<T>(Tensor<T> tensor)
     {
         if (tensor == null)
@@ -3558,6 +4081,34 @@ public class CpuEngine : IEngine
         numOps.ReLU(tensor.AsSpan(), result.AsWritableSpan());
 
         return result;
+    }
+
+    /// <summary>
+    /// Applies ReLU activation in-place: x = max(0, x). Zero allocation.
+    /// </summary>
+    public void ReLUInPlace<T>(Tensor<T> tensor)
+    {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.ReLU(tensor.AsSpan(), tensor.AsWritableSpan());
+    }
+
+    /// <summary>
+    /// Applies ReLU activation to input, storing in destination. Zero allocation.
+    /// </summary>
+    public void ReLUInto<T>(Tensor<T> destination, Tensor<T> input)
+    {
+        if (destination == null) throw new ArgumentNullException(nameof(destination));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (!ShapesMatch(destination.Shape, input.Shape))
+        {
+            throw new ArgumentException("Tensor shapes must match.");
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.ReLU(input.AsSpan(), destination.AsWritableSpan());
     }
 
     public Vector<T> GELU<T>(Vector<T> vector)

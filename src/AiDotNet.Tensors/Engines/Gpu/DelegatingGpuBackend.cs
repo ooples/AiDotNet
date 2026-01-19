@@ -1458,6 +1458,61 @@ public class DelegatingGpuBackend : IDirectGpuBackend
 
     #endregion
 
+    #region RNN (LSTM/GRU) Sequence Operations
+
+    /// <inheritdoc/>
+    public virtual void LstmForwardSequence(
+        IGpuBuffer input, IGpuBuffer hInit, IGpuBuffer cInit,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer biasIh, IGpuBuffer biasHh,
+        IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer cFinal,
+        IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+        => Inner.LstmForwardSequence(input, hInit, cInit, weightsIh, weightsHh, biasIh, biasHh,
+            output, hFinal, cFinal, allH, allC, cacheGates, seqLen, batch, inputSize, hiddenSize);
+
+    /// <inheritdoc/>
+    public virtual void LstmBackwardSequence(
+        IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        IGpuBuffer hInit, IGpuBuffer cInit,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer gradCInit,
+        IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+        => Inner.LstmBackwardSequence(gradOutput, allH, allC, cacheGates, hInit, cInit, weightsIh, weightsHh, input,
+            gradInput, gradHInit, gradCInit, gradWeightsIh, gradWeightsHh, gradBiasIh, gradBiasHh,
+            seqLen, batch, inputSize, hiddenSize);
+
+    /// <inheritdoc/>
+    public virtual void GruForwardSequence(
+        IGpuBuffer input, IGpuBuffer hInit,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer biasIh, IGpuBuffer biasHh,
+        IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer allH, IGpuBuffer cacheGates,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+        => Inner.GruForwardSequence(input, hInit, weightsIh, weightsHh, biasIh, biasHh,
+            output, hFinal, allH, cacheGates, seqLen, batch, inputSize, hiddenSize);
+
+    /// <inheritdoc/>
+    public virtual void GruBackwardSequence(
+        IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer cacheGates,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer dHBuffer,
+        IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+        => Inner.GruBackwardSequence(gradOutput, allH, cacheGates, weightsIh, weightsHh, input,
+            gradInput, gradHInit, dHBuffer, gradWeightsIh, gradWeightsHh, gradBiasIh, gradBiasHh,
+            seqLen, batch, inputSize, hiddenSize);
+
+    /// <inheritdoc/>
+    public virtual void GruCellBackward(
+        IGpuBuffer gradH, IGpuBuffer gateR, IGpuBuffer gateZ, IGpuBuffer gateN, IGpuBuffer prevH,
+        IGpuBuffer weightsHh,
+        IGpuBuffer gradPrevH, IGpuBuffer gradGateR, IGpuBuffer gradGateZ, IGpuBuffer gradGateN,
+        int batch, int hiddenSize)
+        => Inner.GruCellBackward(gradH, gateR, gateZ, gateN, prevH, weightsHh,
+            gradPrevH, gradGateR, gradGateZ, gradGateN, batch, hiddenSize);
+
+    #endregion
+
     #region IDisposable
 
     private bool _disposed;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using MKLNET;
 
 namespace AiDotNet.Tensors.Helpers;
 
@@ -14,6 +15,7 @@ internal static class BlasProvider
     private static readonly object InitLock = new object();
     private static bool _initialized;
     private static bool _available;
+    private static bool _useMklNet;  // True if using MKL.NET managed bindings
     private static IntPtr _libraryHandle;
     private static CblasSgemm? _sgemm;
     private static CblasDgemm? _dgemm;
@@ -21,6 +23,7 @@ internal static class BlasProvider
     private static MklSetDynamic? _setDynamic;
     private static readonly int? ThreadCountOverride = ReadEnvInt("AIDOTNET_BLAS_THREADS");
     private static readonly bool PreferMkl = ReadEnvBool("AIDOTNET_BLAS_PREFER_MKL");
+    private static readonly bool TraceEnabled = ReadEnvBool("AIDOTNET_BLAS_TRACE");
 
 #if NETFRAMEWORK
     [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -59,9 +62,36 @@ internal static class BlasProvider
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void MklSetDynamic(int enabled);
 
+    /// <summary>
+    /// Returns true if a BLAS library has been successfully loaded.
+    /// Useful for diagnostics to verify native library is available.
+    /// </summary>
+    internal static bool IsAvailable
+    {
+        get
+        {
+            EnsureInitialized();
+            return _available && (_useMklNet || _sgemm != null);
+        }
+    }
+
+    /// <summary>
+    /// Returns the name of the BLAS backend being used.
+    /// </summary>
+    internal static string BackendName
+    {
+        get
+        {
+            EnsureInitialized();
+            if (_useMklNet) return "Intel MKL.NET";
+            if (_sgemm != null) return "Native BLAS";
+            return "None";
+        }
+    }
+
     internal static bool TryGemm(int m, int n, int k, float[] a, int aOffset, int lda, float[] b, int bOffset, int ldb, float[] c, int cOffset, int ldc)
     {
-        if (!EnsureInitialized() || _sgemm == null)
+        if (!EnsureInitialized())
         {
             return false;
         }
@@ -69,6 +99,18 @@ internal static class BlasProvider
         if (!HasEnoughData(a.Length, aOffset, m, k, lda) ||
             !HasEnoughData(b.Length, bOffset, k, n, ldb) ||
             !HasEnoughData(c.Length, cOffset, m, n, ldc))
+        {
+            return false;
+        }
+
+        // Use MKL.NET if available (preferred for performance)
+        if (_useMklNet)
+        {
+            return TryMklNetSgemm(m, n, k, a, aOffset, lda, b, bOffset, ldb, c, cOffset, ldc);
+        }
+
+        // Fall back to native library
+        if (_sgemm == null)
         {
             return false;
         }
@@ -89,9 +131,144 @@ internal static class BlasProvider
         return true;
     }
 
+    /// <summary>
+    /// Span-based GEMM for zero-copy operations.
+    /// </summary>
+    internal static bool TryGemm(int m, int n, int k, ReadOnlySpan<float> a, int lda, ReadOnlySpan<float> b, int ldb, Span<float> c, int ldc)
+    {
+        if (!EnsureInitialized())
+        {
+            return false;
+        }
+
+        // Use MKL.NET if available (preferred for performance)
+        if (_useMklNet)
+        {
+            try
+            {
+                Blas.gemm(
+                    Layout.RowMajor,
+                    Trans.No,
+                    Trans.No,
+                    m, n, k,
+                    1.0f,
+                    a, lda,
+                    b, ldb,
+                    0.0f,
+                    c, ldc);
+                return true;
+            }
+            catch
+            {
+                _useMklNet = false;
+                return false;
+            }
+        }
+
+        // Fall back to native library with pinned pointers
+        if (_sgemm == null)
+        {
+            return false;
+        }
+
+        unsafe
+        {
+            fixed (float* aPtr = a)
+            fixed (float* bPtr = b)
+            fixed (float* cPtr = c)
+            {
+                _sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0f, aPtr, lda, bPtr, ldb, 0.0f, cPtr, ldc);
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Span-based GEMM for double precision.
+    /// </summary>
+    internal static bool TryGemm(int m, int n, int k, ReadOnlySpan<double> a, int lda, ReadOnlySpan<double> b, int ldb, Span<double> c, int ldc)
+    {
+        if (!EnsureInitialized())
+        {
+            return false;
+        }
+
+        if (_useMklNet)
+        {
+            try
+            {
+                Blas.gemm(
+                    Layout.RowMajor,
+                    Trans.No,
+                    Trans.No,
+                    m, n, k,
+                    1.0,
+                    a, lda,
+                    b, ldb,
+                    0.0,
+                    c, ldc);
+                return true;
+            }
+            catch
+            {
+                _useMklNet = false;
+                return false;
+            }
+        }
+
+        if (_dgemm == null)
+        {
+            return false;
+        }
+
+        unsafe
+        {
+            fixed (double* aPtr = a)
+            fixed (double* bPtr = b)
+            fixed (double* cPtr = c)
+            {
+                _dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, m, n, k, 1.0, aPtr, lda, bPtr, ldb, 0.0, cPtr, ldc);
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryMklNetSgemm(int m, int n, int k, float[] a, int aOffset, int lda, float[] b, int bOffset, int ldb, float[] c, int cOffset, int ldc)
+    {
+        try
+        {
+            // Use MKL.NET's managed bindings - it handles native library loading automatically
+            // Create offset views for the arrays
+            var aSpan = a.AsSpan(aOffset);
+            var bSpan = b.AsSpan(bOffset);
+            var cSpan = c.AsSpan(cOffset);
+
+            Blas.gemm(
+                Layout.RowMajor,
+                Trans.No,
+                Trans.No,
+                m, n, k,
+                1.0f,
+                aSpan, lda,
+                bSpan, ldb,
+                0.0f,
+                cSpan, ldc);
+
+            return true;
+        }
+        catch
+        {
+            // If MKL.NET fails, mark it as unavailable and return false
+            _useMklNet = false;
+            return false;
+        }
+    }
+
     internal static bool TryGemm(int m, int n, int k, double[] a, int aOffset, int lda, double[] b, int bOffset, int ldb, double[] c, int cOffset, int ldc)
     {
-        if (!EnsureInitialized() || _dgemm == null)
+        if (!EnsureInitialized())
         {
             return false;
         }
@@ -99,6 +276,18 @@ internal static class BlasProvider
         if (!HasEnoughData(a.Length, aOffset, m, k, lda) ||
             !HasEnoughData(b.Length, bOffset, k, n, ldb) ||
             !HasEnoughData(c.Length, cOffset, m, n, ldc))
+        {
+            return false;
+        }
+
+        // Use MKL.NET if available (preferred for performance)
+        if (_useMklNet)
+        {
+            return TryMklNetDgemm(m, n, k, a, aOffset, lda, b, bOffset, ldb, c, cOffset, ldc);
+        }
+
+        // Fall back to native library
+        if (_dgemm == null)
         {
             return false;
         }
@@ -117,6 +306,34 @@ internal static class BlasProvider
         }
 
         return true;
+    }
+
+    private static bool TryMklNetDgemm(int m, int n, int k, double[] a, int aOffset, int lda, double[] b, int bOffset, int ldb, double[] c, int cOffset, int ldc)
+    {
+        try
+        {
+            var aSpan = a.AsSpan(aOffset);
+            var bSpan = b.AsSpan(bOffset);
+            var cSpan = c.AsSpan(cOffset);
+
+            Blas.gemm(
+                Layout.RowMajor,
+                Trans.No,
+                Trans.No,
+                m, n, k,
+                1.0,
+                aSpan, lda,
+                bSpan, ldb,
+                0.0,
+                cSpan, ldc);
+
+            return true;
+        }
+        catch
+        {
+            _useMklNet = false;
+            return false;
+        }
     }
 
     private static bool EnsureInitialized()
@@ -141,50 +358,122 @@ internal static class BlasProvider
 
     private static bool TryLoadLibrary()
     {
+        Trace("[BLAS] TryLoadLibrary starting...");
+        Trace($"[BLAS] AppContext.BaseDirectory: {AppContext.BaseDirectory}");
+
         var disable = Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_BLAS");
         if (!string.IsNullOrWhiteSpace(disable) &&
             (string.Equals(disable, "1", StringComparison.OrdinalIgnoreCase) ||
              string.Equals(disable, "true", StringComparison.OrdinalIgnoreCase)))
         {
+            Trace("[BLAS] Disabled via AIDOTNET_DISABLE_BLAS");
             return false;
         }
+
+        // Try MKL.NET first (preferred for best performance)
+        if (TryInitializeMklNet())
+        {
+            Trace("[BLAS] Initialized MKL.NET successfully");
+            _useMklNet = true;
+            return true;
+        }
+        Trace("[BLAS] MKL.NET not available, trying native libraries...");
 
         string? explicitPath = Environment.GetEnvironmentVariable("AIDOTNET_BLAS_PATH");
-        if (!string.IsNullOrWhiteSpace(explicitPath) && TryLoadNativeLibrary(explicitPath, out _libraryHandle))
+        if (!string.IsNullOrWhiteSpace(explicitPath))
         {
-            if (TryLoadSymbols())
+            Trace($"[BLAS] Explicit path from env: {explicitPath}");
+            if (TryLoadNativeLibrary(explicitPath, out _libraryHandle))
             {
-                return true;
-            }
+                Trace("[BLAS] Loaded from explicit path");
+                if (TryLoadSymbols())
+                {
+                    Trace("[BLAS] Symbols loaded successfully from explicit path");
+                    return true;
+                }
 
-            FreeNativeLibrary(_libraryHandle);
-            _libraryHandle = IntPtr.Zero;
+                FreeNativeLibrary(_libraryHandle);
+                _libraryHandle = IntPtr.Zero;
+            }
+            else
+            {
+                Trace("[BLAS] Failed to load from explicit path");
+            }
             return false;
         }
 
-        foreach (var name in GetCandidateLibraryNames())
+        var candidates = GetCandidateLibraryNames();
+        Trace($"[BLAS] Searching {candidates.Length} candidate paths...");
+
+        foreach (var name in candidates)
         {
             if (!TryLoadNativeLibrary(name, out _libraryHandle))
             {
                 continue;
             }
 
+            Trace($"[BLAS] Loaded native library from: {name}");
             if (TryLoadSymbols())
             {
+                Trace("[BLAS] BLAS symbols loaded successfully!");
                 return true;
             }
 
+            Trace($"[BLAS] Failed to load symbols from: {name}");
             FreeNativeLibrary(_libraryHandle);
             _libraryHandle = IntPtr.Zero;
         }
 
+        Trace("[BLAS] No BLAS library found in any candidate path");
         return false;
+    }
+
+    private static bool TryInitializeMklNet()
+    {
+        try
+        {
+            // Verify MKL.NET is working by doing a tiny GEMM
+            // This will trigger MKL.NET to load its native libraries
+            float[] a = { 1.0f };
+            float[] b = { 1.0f };
+            float[] c = { 0.0f };
+
+            Blas.gemm(
+                Layout.RowMajor,
+                Trans.No,
+                Trans.No,
+                1, 1, 1,
+                1.0f,
+                a.AsSpan(), 1,
+                b.AsSpan(), 1,
+                0.0f,
+                c.AsSpan(), 1);
+
+            // If we get here, MKL.NET is working
+            Trace($"[BLAS] MKL.NET verification: 1x1 GEMM result = {c[0]} (expected 1.0)");
+            return Math.Abs(c[0] - 1.0f) < 0.001f;
+        }
+        catch (Exception ex)
+        {
+            Trace($"[BLAS] MKL.NET initialization failed: {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static void Trace(string message)
+    {
+        if (TraceEnabled)
+        {
+            Console.WriteLine(message);
+        }
     }
 
     private static bool TryLoadSymbols()
     {
         _sgemm = TryLoadSymbol<CblasSgemm>("cblas_sgemm");
         _dgemm = TryLoadSymbol<CblasDgemm>("cblas_dgemm");
+        Trace($"[BLAS] cblas_sgemm loaded: {_sgemm != null}");
+        Trace($"[BLAS] cblas_dgemm loaded: {_dgemm != null}");
         TryLoadThreadControls();
         return _sgemm != null || _dgemm != null;
     }
@@ -204,15 +493,13 @@ internal static class BlasProvider
             return;
         }
 
-        if (!ThreadCountOverride.HasValue || ThreadCountOverride.Value <= 0)
-        {
-            return;
-        }
-
         try
         {
+            // Use override if specified, otherwise use all available processors
+            int threadCount = ThreadCountOverride ?? Environment.ProcessorCount;
             _setDynamic?.Invoke(0);
-            _setNumThreads(ThreadCountOverride.Value);
+            _setNumThreads(threadCount);
+            Trace($"[BLAS] Set thread count to {threadCount}");
         }
         catch (DllNotFoundException)
         {
@@ -305,6 +592,30 @@ internal static class BlasProvider
             Path.GetDirectoryName(typeof(BlasProvider).Assembly.Location),
             Environment.CurrentDirectory
         };
+
+        // Also search in parent directories (helps with BenchmarkDotNet artifact subdirectories)
+        var baseDir = AppContext.BaseDirectory;
+        for (int i = 0; i < 5 && !string.IsNullOrEmpty(baseDir); i++)
+        {
+            baseDir = Path.GetDirectoryName(baseDir);
+            if (!string.IsNullOrEmpty(baseDir))
+            {
+                directories.Add(baseDir);
+            }
+        }
+
+        // Search in runtimes/win-x64/native subdirectory (common NuGet native layout)
+        foreach (var dir in directories.ToList())
+        {
+            if (!string.IsNullOrEmpty(dir))
+            {
+                var nativePath = Path.Combine(dir!, "runtimes", "win-x64", "native");
+                if (Directory.Exists(nativePath))
+                {
+                    directories.Add(nativePath);
+                }
+            }
+        }
 
         foreach (var dir in directories.Where(d => !string.IsNullOrEmpty(d)))
         {

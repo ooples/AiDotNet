@@ -137,9 +137,87 @@ extern ""C"" __global__ void hardtanh(const float* input, float* output, int siz
     output[idx] = fminf(fmaxf(x, -1.0f), 1.0f);
 }
 
+// Leaky ReLU: x > 0 ? x : alpha * x
+extern ""C"" __global__ void leaky_relu(const float* input, float* output, float alpha, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    output[idx] = x > 0.0f ? x : alpha * x;
+}
+
 // ===========================================================================
 // ACTIVATION BACKWARD KERNELS
 // ===========================================================================
+
+// ReLU backward: grad * (x > 0 ? 1 : 0)
+extern ""C"" __global__ void relu_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    gradInput[idx] = input[idx] > 0.0f ? gradOutput[idx] : 0.0f;
+}
+
+// Leaky ReLU backward: grad * (x > 0 ? 1 : alpha)
+extern ""C"" __global__ void leaky_relu_backward(const float* gradOutput, const float* input, float* gradInput, float alpha, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float x = input[idx];
+    gradInput[idx] = gradOutput[idx] * (x > 0.0f ? 1.0f : alpha);
+}
+
+// Sigmoid backward: grad * sigmoid(x) * (1 - sigmoid(x))
+extern ""C"" __global__ void sigmoid_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float sig = 1.0f / (1.0f + expf(-input[idx]));
+    gradInput[idx] = gradOutput[idx] * sig * (1.0f - sig);
+}
+
+// Tanh backward: grad * (1 - tanh(x)^2)
+extern ""C"" __global__ void tanh_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+    float t = tanhf(input[idx]);
+    gradInput[idx] = gradOutput[idx] * (1.0f - t * t);
+}
+
+// GELU backward (approximation)
+extern ""C"" __global__ void gelu_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    const float sqrt2OverPi = 0.7978845608f;
+    const float coeff = 0.044715f;
+
+    float x = input[idx];
+    float x2 = x * x;
+    float x3 = x2 * x;
+    float inner = sqrt2OverPi * (x + coeff * x3);
+    float t = tanhf(inner);
+    float sech2 = 1.0f - t * t;
+    float dInner = sqrt2OverPi * (1.0f + 3.0f * coeff * x2);
+
+    float dgelu = 0.5f * (1.0f + t) + 0.5f * x * sech2 * dInner;
+    gradInput[idx] = gradOutput[idx] * dgelu;
+}
+
+// Swish backward: grad * (swish(x) + sigmoid(x) * (1 - swish(x)))
+extern ""C"" __global__ void swish_backward(const float* gradOutput, const float* input, float* gradInput, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size) return;
+
+    float x = input[idx];
+    float sig = 1.0f / (1.0f + expf(-x));
+    float swish_val = x * sig;
+    float dswish = swish_val + sig * (1.0f - swish_val);
+    gradInput[idx] = gradOutput[idx] * dswish;
+}
 
 // Mish backward: d/dx[x * tanh(softplus(x))]
 // Uses numerically stable softplus and sigmoid to prevent overflow
@@ -645,8 +723,15 @@ extern ""C"" __global__ void trunc_vector(const float* A, float* B, int size)
                 "selu",
                 "hardsigmoid",
                 "hardtanh",
+                "leaky_relu",
                 "softmax",
                 // Activation backward
+                "relu_backward",
+                "leaky_relu_backward",
+                "sigmoid_backward",
+                "tanh_backward",
+                "gelu_backward",
+                "swish_backward",
                 "mish_backward",
                 "softplus_backward",
                 "hardswish_backward",

@@ -704,12 +704,6 @@ public abstract class MatrixBase<T>
             return result;
         }
 
-        if (MatrixMultiplyHelper.TryMultiplyPacked(_numOps, _memory, other, result._memory, M, K, N))
-        {
-            MatrixMultiplyHelper.TraceMatmul("PACKED", M, N, K);
-            return result;
-        }
-
         if (MatrixMultiplyHelper.ShouldUseBlocked<T>(M, K, N))
         {
             MatrixMultiplyHelper.TraceMatmul("BLOCKED", M, N, K);

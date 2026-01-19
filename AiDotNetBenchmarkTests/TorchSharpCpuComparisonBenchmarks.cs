@@ -2,19 +2,18 @@
 using AiDotNet.Tensors.Engines;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
-using BenchmarkDotNet.Jobs;
 using TorchSharp;
 using TorchTensor = TorchSharp.torch.Tensor;
 
 namespace AiDotNetBenchmarkTests;
 
 [MemoryDiagnoser]
-[SimpleJob(RuntimeMoniker.Net10_0, launchCount: 1, warmupCount: 3, iterationCount: 5)]
 public class TorchSharpCpuComparisonBenchmarks
 {
     private static readonly int[] MatrixSizes = [256, 512];
     private static readonly int[] VectorSizes = [100_000, 1_000_000];
 
+    private CpuEngine _cpuEngine = null!;
     private readonly Dictionary<int, Tensor<float>> _aiMatricesA = new();
     private readonly Dictionary<int, Tensor<float>> _aiMatricesB = new();
     private readonly Dictionary<int, Tensor<float>> _aiVectorsA = new();
@@ -37,17 +36,20 @@ public class TorchSharpCpuComparisonBenchmarks
     private long[]? _torchConvPadding;
     private long[]? _torchConvDilation;
 
-    private torch.Device _torchDevice = torch.CPU;
+    private torch.Device _torchDevice = null!;
     private readonly Consumer _consumer = new();
 
     [GlobalSetup]
     public void Setup()
     {
-        AiDotNetEngine.Current = new CpuEngine();
+        _cpuEngine = new CpuEngine();
+        AiDotNetEngine.Current = _cpuEngine;
 
         torch.set_grad_enabled(false);
         _torchDevice = torch.CPU;
-        Console.WriteLine("TorchSharp device: CPU");
+        Console.WriteLine("TorchSharp device: CPU (forced)");
+        Console.WriteLine($"AiDotNet BLAS available: {AiDotNet.Tensors.Helpers.BlasProvider.IsAvailable}");
+        Console.WriteLine($"AiDotNet BLAS backend: {AiDotNet.Tensors.Helpers.BlasProvider.BackendName}");
 
         foreach (var size in MatrixSizes)
         {
@@ -74,16 +76,6 @@ public class TorchSharpCpuComparisonBenchmarks
         }
 
         InitializeConv2D();
-        if (_aiConvInput == null || _aiConvKernel == null)
-        {
-            throw new InvalidOperationException("Conv2D tensors were not initialized.");
-        }
-
-        if (_torchConvInput is null || _torchConvKernel is null)
-        {
-            throw new InvalidOperationException("TorchSharp Conv2D tensors were not initialized.");
-        }
-
         Warmup();
     }
 
@@ -122,52 +114,13 @@ public class TorchSharpCpuComparisonBenchmarks
             ConsumeTorchResult(result);
         }
 
-        _ = AiDotNetEngine.Current.TensorAdd(_aiVectorsA[VectorSizes[0]], _aiVectorsB[VectorSizes[0]]);
-        using (var result = torch.add(_torchVectorsA[VectorSizes[0]], _torchVectorsB[VectorSizes[0]]))
-        {
-            ConsumeTorchResult(result);
-        }
+        _cpuEngine.TensorAddInPlace(_aiVectorsA[VectorSizes[0]], _aiVectorsB[VectorSizes[0]]);
+        torch.add_(_torchVectorsA[VectorSizes[0]], _torchVectorsB[VectorSizes[0]]);
+        ConsumeTorchResult(_torchVectorsA[VectorSizes[0]]);
 
-        _ = AiDotNetEngine.Current.TensorMultiply(_aiVectorsA[VectorSizes[0]], _aiVectorsB[VectorSizes[0]]);
-        using (var result = torch.mul(_torchVectorsA[VectorSizes[0]], _torchVectorsB[VectorSizes[0]]))
-        {
-            ConsumeTorchResult(result);
-        }
-
-        _ = AiDotNetEngine.Current.ReLU(_aiVectorsA[VectorSizes[0]]);
-        using (var result = torch.nn.functional.relu(_torchVectorsA[VectorSizes[0]]))
-        {
-            ConsumeTorchResult(result);
-        }
-
-        _ = AiDotNetEngine.Current.Sigmoid(_aiVectorsA[VectorSizes[0]]);
-        using (var result = torch.nn.functional.sigmoid(_torchVectorsA[VectorSizes[0]]))
-        {
-            ConsumeTorchResult(result);
-        }
-
-        _ = AiDotNetEngine.Current.TensorSum(_aiVectorsA[VectorSizes[0]]);
-        using (var result = torch.sum(_torchVectorsA[VectorSizes[0]]))
-        {
-            ConsumeTorchResult(result);
-        }
-
-        _ = AiDotNetEngine.Current.TensorMean(_aiVectorsA[VectorSizes[0]]);
-        using (var result = torch.mean(_torchVectorsA[VectorSizes[0]]))
-        {
-            ConsumeTorchResult(result);
-        }
-
-        var convInput = _aiConvInput ?? throw new InvalidOperationException("Conv2D tensors were not initialized.");
-        var convKernel = _aiConvKernel ?? throw new InvalidOperationException("Conv2D tensors were not initialized.");
-        _ = AiDotNetEngine.Current.Conv2D(convInput, convKernel, _convStride, _convPadding, _convDilation);
-        var torchConvInput = _torchConvInput ?? throw new InvalidOperationException("TorchSharp Conv2D input was not initialized.");
-        var torchConvKernel = _torchConvKernel ?? throw new InvalidOperationException("TorchSharp Conv2D kernel was not initialized.");
-        var torchConvStride = _torchConvStride ?? throw new InvalidOperationException("TorchSharp Conv2D stride was not initialized.");
-        var torchConvPadding = _torchConvPadding ?? throw new InvalidOperationException("TorchSharp Conv2D padding was not initialized.");
-        var torchConvDilation = _torchConvDilation ?? throw new InvalidOperationException("TorchSharp Conv2D dilation was not initialized.");
-        using (var result = torch.nn.functional.conv2d(torchConvInput, torchConvKernel,
-            strides: torchConvStride, padding: torchConvPadding, dilation: torchConvDilation))
+        _ = AiDotNetEngine.Current.Conv2D(_aiConvInput!, _aiConvKernel!, _convStride, _convPadding, _convDilation);
+        using (var result = torch.nn.functional.conv2d(_torchConvInput!, _torchConvKernel!,
+            strides: _torchConvStride!, padding: _torchConvPadding!, dilation: _torchConvDilation!))
         {
             ConsumeTorchResult(result);
         }
@@ -247,7 +200,8 @@ public class TorchSharpCpuComparisonBenchmarks
     [Arguments(1_000_000)]
     public Tensor<float> AiDotNet_TensorAdd(int size)
     {
-        return AiDotNetEngine.Current.TensorAdd(_aiVectorsA[size], _aiVectorsB[size]);
+        _cpuEngine.TensorAddInPlace(_aiVectorsA[size], _aiVectorsB[size]);
+        return _aiVectorsA[size];
     }
 
     [Benchmark]
@@ -255,8 +209,8 @@ public class TorchSharpCpuComparisonBenchmarks
     [Arguments(1_000_000)]
     public void TorchSharp_Add(int size)
     {
-        using var result = torch.add(_torchVectorsA[size], _torchVectorsB[size]);
-        ConsumeTorchResult(result);
+        torch.add_(_torchVectorsA[size], _torchVectorsB[size]);
+        ConsumeTorchResult(_torchVectorsA[size]);
     }
 
     [Benchmark]
@@ -264,7 +218,8 @@ public class TorchSharpCpuComparisonBenchmarks
     [Arguments(1_000_000)]
     public Tensor<float> AiDotNet_TensorMultiply(int size)
     {
-        return AiDotNetEngine.Current.TensorMultiply(_aiVectorsA[size], _aiVectorsB[size]);
+        _cpuEngine.TensorMultiplyInPlace(_aiVectorsA[size], _aiVectorsB[size]);
+        return _aiVectorsA[size];
     }
 
     [Benchmark]
@@ -272,34 +227,36 @@ public class TorchSharpCpuComparisonBenchmarks
     [Arguments(1_000_000)]
     public void TorchSharp_Multiply(int size)
     {
-        using var result = torch.mul(_torchVectorsA[size], _torchVectorsB[size]);
-        ConsumeTorchResult(result);
+        torch.mul_(_torchVectorsA[size], _torchVectorsB[size]);
+        ConsumeTorchResult(_torchVectorsA[size]);
     }
 
     [Benchmark]
     public Tensor<float> AiDotNet_ReLU()
     {
-        return AiDotNetEngine.Current.ReLU(_aiVectorsA[VectorSizes[1]]);
+        _cpuEngine.ReLUInPlace(_aiVectorsA[VectorSizes[1]]);
+        return _aiVectorsA[VectorSizes[1]];
     }
 
     [Benchmark]
     public void TorchSharp_ReLU()
     {
-        using var result = torch.nn.functional.relu(_torchVectorsA[VectorSizes[1]]);
-        ConsumeTorchResult(result);
+        _torchVectorsA[VectorSizes[1]].relu_();
+        ConsumeTorchResult(_torchVectorsA[VectorSizes[1]]);
     }
 
     [Benchmark]
     public Tensor<float> AiDotNet_Sigmoid()
     {
-        return AiDotNetEngine.Current.Sigmoid(_aiVectorsA[VectorSizes[1]]);
+        _cpuEngine.SigmoidInPlace(_aiVectorsA[VectorSizes[1]]);
+        return _aiVectorsA[VectorSizes[1]];
     }
 
     [Benchmark]
     public void TorchSharp_Sigmoid()
     {
-        using var result = torch.nn.functional.sigmoid(_torchVectorsA[VectorSizes[1]]);
-        ConsumeTorchResult(result);
+        _torchVectorsA[VectorSizes[1]].sigmoid_();
+        ConsumeTorchResult(_torchVectorsA[VectorSizes[1]]);
     }
 
     [Benchmark]
@@ -331,24 +288,14 @@ public class TorchSharpCpuComparisonBenchmarks
     [Benchmark]
     public Tensor<float> AiDotNet_Conv2D()
     {
-        if (_aiConvInput == null || _aiConvKernel == null)
-        {
-            throw new InvalidOperationException("Conv2D tensors were not initialized.");
-        }
-
-        return AiDotNetEngine.Current.Conv2D(_aiConvInput, _aiConvKernel, _convStride, _convPadding, _convDilation);
+        return AiDotNetEngine.Current.Conv2D(_aiConvInput!, _aiConvKernel!, _convStride, _convPadding, _convDilation);
     }
 
     [Benchmark]
     public void TorchSharp_Conv2D()
     {
-        var torchConvInput = _torchConvInput ?? throw new InvalidOperationException("TorchSharp Conv2D input was not initialized.");
-        var torchConvKernel = _torchConvKernel ?? throw new InvalidOperationException("TorchSharp Conv2D kernel was not initialized.");
-        var torchConvStride = _torchConvStride ?? throw new InvalidOperationException("TorchSharp Conv2D stride was not initialized.");
-        var torchConvPadding = _torchConvPadding ?? throw new InvalidOperationException("TorchSharp Conv2D padding was not initialized.");
-        var torchConvDilation = _torchConvDilation ?? throw new InvalidOperationException("TorchSharp Conv2D dilation was not initialized.");
-        using var result = torch.nn.functional.conv2d(torchConvInput, torchConvKernel,
-            strides: torchConvStride, padding: torchConvPadding, dilation: torchConvDilation);
+        using var result = torch.nn.functional.conv2d(_torchConvInput!, _torchConvKernel!,
+            strides: _torchConvStride!, padding: _torchConvPadding!, dilation: _torchConvDilation!);
         ConsumeTorchResult(result);
     }
 }

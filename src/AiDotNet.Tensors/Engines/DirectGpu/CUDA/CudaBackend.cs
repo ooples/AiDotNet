@@ -36,12 +36,16 @@ public sealed class CudaBackend : IAsyncGpuBackend
     private IntPtr _deformableConvModule;
     private IntPtr _capsuleModule;
     private IntPtr _specializedModule;
+    private IntPtr _lstmModule;
+    private IntPtr _gruModule;
     private IntPtr _fp16Module;
     private bool _disposed;
     private const int MaxPooledBufferElements = 1_048_576;
     private const int MaxPooledBuffersPerSize = 4;
     private readonly GpuBufferPool<CudaGpuBuffer> _bufferPool =
         new GpuBufferPool<CudaGpuBuffer>(MaxPooledBuffersPerSize, MaxPooledBufferElements);
+    private bool _supportsCooperativeLaunch;
+    private int _multiProcessorCount;
 
     public bool IsAvailable { get; }
     public string BackendName => "CUDA";
@@ -91,6 +95,12 @@ public sealed class CudaBackend : IAsyncGpuBackend
                 CuBlasNative.cuDeviceGetAttribute(out int multiprocessors, (int)CudaDeviceAttribute.MultiprocessorCount, device),
                 "cuDeviceGetAttribute(MultiprocessorCount)");
             ComputeUnits = multiprocessors;
+            _multiProcessorCount = multiprocessors;
+
+            // Check cooperative launch support (requires compute capability 6.0+)
+            var coopResult = CuBlasNative.cuDeviceGetAttribute(
+                out int coopLaunchSupport, (int)CudaDeviceAttribute.CooperativeLaunch, device);
+            _supportsCooperativeLaunch = coopResult == CudaResult.Success && coopLaunchSupport != 0;
 
             CuBlasNative.CheckCudaResult(
                 CuBlasNative.cuDeviceGetAttribute(out int sharedMem, (int)CudaDeviceAttribute.MaxSharedMemoryPerBlock, device),
@@ -304,6 +314,12 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
         // Compile FP16 conversion kernels (half-precision float conversion)
         _fp16Module = CompileKernelModule(device, CudaFp16Kernels.GetSource(), "fp16_kernels", CudaFp16Kernels.GetKernelNames());
+
+        // Compile LSTM sequence kernels (forward/backward for BPTT training)
+        _lstmModule = CompileKernelModule(device, CudaLstmKernels.GetSource(), "lstm_kernels", CudaLstmKernels.GetKernelNames());
+
+        // Compile GRU sequence kernels (forward/backward for BPTT training)
+        _gruModule = CompileKernelModule(device, CudaGruKernels.GetSource(), "gru_kernels", CudaGruKernels.GetKernelNames());
     }
 
     private static string GetNvrtcLog(IntPtr program)
@@ -1923,6 +1939,52 @@ public sealed class CudaBackend : IAsyncGpuBackend
                 (IntPtr)args,
                 IntPtr.Zero),
             "cuLaunchKernel");
+    }
+
+    /// <summary>
+    /// Launch a cooperative kernel that supports grid-level synchronization via cooperative_groups.
+    /// Cooperative kernels can use grid.sync() for cross-block synchronization.
+    /// Throws if device doesn't support cooperative launch or grid exceeds limits.
+    /// </summary>
+    private unsafe void LaunchCooperativeKernel(IntPtr kernel, uint gridX, uint blockX, uint sharedMemBytes, void** args)
+    {
+        // Check cooperative launch support
+        if (!_supportsCooperativeLaunch)
+        {
+            throw new InvalidOperationException(
+                "Cooperative kernel launch is not supported on this device. " +
+                "Cooperative launch requires CUDA compute capability 6.0 or higher. " +
+                "Use cell-level operations instead of sequence-level operations.");
+        }
+
+        // Check grid size limits for cooperative launch
+        var occResult = CudaNativeBindings.cuOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
+            out int maxBlocksPerSm, kernel, (int)blockX, (nint)sharedMemBytes, 0);
+        if (occResult != CudaResult.Success)
+        {
+            throw new InvalidOperationException(
+                $"Failed to query occupancy for cooperative kernel: {occResult}. " +
+                "Use cell-level operations instead of sequence-level operations.");
+        }
+
+        int maxCooperativeBlocks = maxBlocksPerSm * _multiProcessorCount;
+        if (gridX > maxCooperativeBlocks)
+        {
+            throw new InvalidOperationException(
+                $"Grid size ({gridX}) exceeds cooperative launch limit ({maxCooperativeBlocks}) " +
+                $"for this device ({maxBlocksPerSm} blocks/SM × {_multiProcessorCount} SMs). " +
+                "Reduce batch size or use cell-level operations.");
+        }
+
+        CuBlasNative.CheckCudaResult(
+            CudaNativeBindings.cuLaunchCooperativeKernel(
+                kernel,
+                gridX, 1, 1,
+                blockX, 1, 1,
+                sharedMemBytes,
+                _stream,
+                (IntPtr)args),
+            "cuLaunchCooperativeKernel");
     }
 
     private unsafe void LaunchKernel2D(IntPtr kernel, uint gridX, uint gridY, uint gridZ, uint blockX, uint blockY, void** args)
@@ -7663,6 +7725,346 @@ public sealed class CudaBackend : IAsyncGpuBackend
 
     #endregion
 
+    #region RNN (LSTM/GRU) Sequence Operations
+
+    public unsafe void LstmForwardSequence(
+        IGpuBuffer input, IGpuBuffer hInit, IGpuBuffer cInit,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer biasIh, IGpuBuffer biasHh,
+        IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer cFinal,
+        IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+    {
+        if (!_kernelCache.TryGetValue("lstm_forward_sequence", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: lstm_forward_sequence");
+
+        // Validate hiddenSize fits in a block for correct synchronization
+        if (hiddenSize > DefaultBlockSize)
+        {
+            throw new InvalidOperationException(
+                $"LSTM forward sequence hiddenSize ({hiddenSize}) exceeds block size ({DefaultBlockSize}). " +
+                "The kernel requires all hidden units of a batch to fit within a single block for " +
+                "correct synchronization. Use smaller hiddenSize or use cell-level LSTM operations.");
+        }
+
+        using var _ = PushContext();
+
+        // Grid = one block per batch sample, block = hiddenSize threads per batch
+        // This ensures __syncthreads() correctly synchronizes all threads for the same batch
+        uint grid = (uint)batch;
+
+        IntPtr inputPtr = input.Handle;
+        IntPtr hInitPtr = hInit.Handle;
+        IntPtr cInitPtr = cInit.Handle;
+        IntPtr weightsIhPtr = weightsIh.Handle;
+        IntPtr weightsHhPtr = weightsHh.Handle;
+        IntPtr biasIhPtr = biasIh.Handle;
+        IntPtr biasHhPtr = biasHh.Handle;
+        IntPtr outputPtr = output.Handle;
+        IntPtr allHPtr = allH.Handle;
+        IntPtr allCPtr = allC.Handle;
+        IntPtr cacheGatesPtr = cacheGates.Handle;
+
+        // Kernel signature: input, h_init, c_init, Wi, Wh, biasIh, biasHh, output, h_states, c_states, gates, batch, timeSteps, inputSize, hiddenSize
+        void** args = stackalloc void*[15];
+        args[0] = &inputPtr;
+        args[1] = &hInitPtr;
+        args[2] = &cInitPtr;
+        args[3] = &weightsIhPtr;
+        args[4] = &weightsHhPtr;
+        args[5] = &biasIhPtr;
+        args[6] = &biasHhPtr;
+        args[7] = &outputPtr;
+        args[8] = &allHPtr;       // h_states cache
+        args[9] = &allCPtr;       // c_states cache
+        args[10] = &cacheGatesPtr; // gates cache
+        args[11] = &batch;
+        args[12] = &seqLen;       // timeSteps
+        args[13] = &inputSize;
+        args[14] = &hiddenSize;
+
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+
+        // Copy the last timestep from allH and allC into hFinal and cFinal
+        // allH layout: [(seqLen + 1) * batch * hiddenSize] where index 0 is hInit
+        // So final hidden state is at index seqLen (last timestep output)
+        int finalStateOffset = seqLen * batch * hiddenSize;
+        int stateSize = batch * hiddenSize;
+        ulong byteSize = (ulong)(stateSize * sizeof(float));
+
+        // Device-to-device copy from allH[seqLen] to hFinal
+        IntPtr srcH = IntPtr.Add(allH.Handle, finalStateOffset * sizeof(float));
+        var resultH = CudaNativeBindings.cuMemcpyDtoDAsync(
+            hFinal.Handle,
+            srcH,
+            byteSize,
+            _stream);
+        CuBlasNative.CheckCudaResult(resultH, "cuMemcpyDtoDAsync (hFinal from allH)");
+
+        // Device-to-device copy from allC[seqLen] to cFinal
+        IntPtr srcC = IntPtr.Add(allC.Handle, finalStateOffset * sizeof(float));
+        var resultC = CudaNativeBindings.cuMemcpyDtoDAsync(
+            cFinal.Handle,
+            srcC,
+            byteSize,
+            _stream);
+        CuBlasNative.CheckCudaResult(resultC, "cuMemcpyDtoDAsync (cFinal from allC)");
+    }
+
+    public unsafe void LstmBackwardSequence(
+        IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer allC, IGpuBuffer cacheGates,
+        IGpuBuffer hInit, IGpuBuffer cInit,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer gradCInit,
+        IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+    {
+        if (!_kernelCache.TryGetValue("lstm_backward_sequence", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: lstm_backward_sequence");
+
+        // Validate hiddenSize fits in a block for correct synchronization
+        if (hiddenSize > DefaultBlockSize)
+        {
+            throw new InvalidOperationException(
+                $"LSTM backward sequence hiddenSize ({hiddenSize}) exceeds block size ({DefaultBlockSize}). " +
+                "The kernel requires all hidden units of a batch to fit within a single block for " +
+                "correct synchronization. Use smaller hiddenSize or use cell-level LSTM operations.");
+        }
+
+        using var _ = PushContext();
+
+        // Grid = one block per batch sample, block = hiddenSize threads per batch
+        // This ensures __syncthreads() correctly synchronizes all threads for the same batch
+        uint grid = (uint)batch;
+
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr allHPtr = allH.Handle;
+        IntPtr allCPtr = allC.Handle;
+        IntPtr cacheGatesPtr = cacheGates.Handle;
+        IntPtr cInitPtr = cInit.Handle;
+        IntPtr hInitPtr = hInit.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr weightsIhPtr = weightsIh.Handle;
+        IntPtr weightsHhPtr = weightsHh.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+        IntPtr gradWeightsIhPtr = gradWeightsIh.Handle;
+        IntPtr gradWeightsHhPtr = gradWeightsHh.Handle;
+        IntPtr gradBiasIhPtr = gradBiasIh.Handle;
+        IntPtr gradBiasHhPtr = gradBiasHh.Handle;
+        IntPtr gradHInitPtr = gradHInit.Handle;
+        IntPtr gradCInitPtr = gradCInit.Handle;
+
+        // Kernel signature: gradOutput, h_states, c_states, gates, c_init, h_init, input, Wi, Wh,
+        //                   gradInput, dWi, dWh, dBiasIh, dBiasHh, dH_init, dC_init, batch, timeSteps, inputSize, hiddenSize
+        void** args = stackalloc void*[20];
+        args[0] = &gradOutputPtr;
+        args[1] = &allHPtr;        // h_states
+        args[2] = &allCPtr;        // c_states
+        args[3] = &cacheGatesPtr;  // gates
+        args[4] = &cInitPtr;       // c_init
+        args[5] = &hInitPtr;       // h_init
+        args[6] = &inputPtr;
+        args[7] = &weightsIhPtr;   // Wi
+        args[8] = &weightsHhPtr;   // Wh
+        args[9] = &gradInputPtr;
+        args[10] = &gradWeightsIhPtr;  // dWi
+        args[11] = &gradWeightsHhPtr;  // dWh
+        args[12] = &gradBiasIhPtr;
+        args[13] = &gradBiasHhPtr;
+        args[14] = &gradHInitPtr;  // dH_init
+        args[15] = &gradCInitPtr;  // dC_init
+        args[16] = &batch;
+        args[17] = &seqLen;        // timeSteps
+        args[18] = &inputSize;
+        args[19] = &hiddenSize;
+
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void GruForwardSequence(
+        IGpuBuffer input, IGpuBuffer hInit,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer biasIh, IGpuBuffer biasHh,
+        IGpuBuffer output, IGpuBuffer hFinal, IGpuBuffer allH, IGpuBuffer cacheGates,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+    {
+        if (!_kernelCache.TryGetValue("gru_forward_sequence", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: gru_forward_sequence");
+
+        // The forward kernel uses __syncthreads() which only synchronizes within a block.
+        // If hiddenSize > DefaultBlockSize, threads within a batch would span multiple blocks,
+        // causing a race condition when reading reset gates computed by other threads.
+        // Enforce one-block-per-batch constraint for correctness.
+        if (hiddenSize > DefaultBlockSize)
+        {
+            throw new InvalidOperationException(
+                $"GRU forward sequence hiddenSize ({hiddenSize}) exceeds block size ({DefaultBlockSize}). " +
+                "The kernel requires all hidden units of a batch to fit within a single block for " +
+                "correct synchronization. Use smaller hiddenSize or use cell-level GRU operations.");
+        }
+
+        using var _ = PushContext();
+
+        // Grid = one block per batch sample, block = hiddenSize threads per batch
+        // This ensures __syncthreads() correctly synchronizes all threads for the same batch
+        uint grid = (uint)batch;
+
+        IntPtr inputPtr = input.Handle;
+        IntPtr hInitPtr = hInit.Handle;
+        IntPtr weightsIhPtr = weightsIh.Handle;
+        IntPtr weightsHhPtr = weightsHh.Handle;
+        IntPtr biasIhPtr = biasIh.Handle;
+        IntPtr biasHhPtr = biasHh.Handle;
+        IntPtr outputPtr = output.Handle;
+        IntPtr hFinalPtr = hFinal.Handle;
+        IntPtr allHPtr = allH.Handle;
+        IntPtr cacheGatesPtr = cacheGates.Handle;
+
+        void** args = stackalloc void*[14];
+        args[0] = &inputPtr;
+        args[1] = &hInitPtr;
+        args[2] = &weightsIhPtr;
+        args[3] = &weightsHhPtr;
+        args[4] = &biasIhPtr;
+        args[5] = &biasHhPtr;
+        args[6] = &outputPtr;
+        args[7] = &hFinalPtr;
+        args[8] = &allHPtr;
+        args[9] = &cacheGatesPtr;
+        args[10] = &seqLen;
+        args[11] = &batch;
+        args[12] = &inputSize;
+        args[13] = &hiddenSize;
+
+        LaunchKernel(kernel, grid, DefaultBlockSize, args);
+    }
+
+    public unsafe void GruBackwardSequence(
+        IGpuBuffer gradOutput, IGpuBuffer allH, IGpuBuffer cacheGates,
+        IGpuBuffer weightsIh, IGpuBuffer weightsHh, IGpuBuffer input,
+        IGpuBuffer gradInput, IGpuBuffer gradHInit, IGpuBuffer dHBuffer,
+        IGpuBuffer gradWeightsIh, IGpuBuffer gradWeightsHh, IGpuBuffer gradBiasIh, IGpuBuffer gradBiasHh,
+        int seqLen, int batch, int inputSize, int hiddenSize)
+    {
+        if (!_kernelCache.TryGetValue("gru_backward_sequence", out var kernel))
+            throw new InvalidOperationException("CUDA kernel not found: gru_backward_sequence");
+
+        // Validate hiddenSize fits in a block for correct synchronization
+        if (hiddenSize > DefaultBlockSize)
+        {
+            throw new InvalidOperationException(
+                $"GRU backward sequence hiddenSize ({hiddenSize}) exceeds block size ({DefaultBlockSize}). " +
+                "The kernel requires all hidden units of a batch to fit within a single block for " +
+                "correct synchronization. Use smaller hiddenSize or use cell-level GRU operations.");
+        }
+
+        using var _ = PushContext();
+
+        // Grid = one block per batch sample, block = hiddenSize threads per batch
+        // This ensures __syncthreads() correctly synchronizes all threads for the same batch
+        uint grid = (uint)batch;
+
+        // Shared memory size for accumulated hidden gradients (one float per thread)
+        uint sharedMemSize = (uint)(DefaultBlockSize * sizeof(float));
+
+        IntPtr gradOutputPtr = gradOutput.Handle;
+        IntPtr allHPtr = allH.Handle;
+        IntPtr cacheGatesPtr = cacheGates.Handle;
+        IntPtr weightsIhPtr = weightsIh.Handle;
+        IntPtr weightsHhPtr = weightsHh.Handle;
+        IntPtr inputPtr = input.Handle;
+        IntPtr gradInputPtr = gradInput.Handle;
+        IntPtr gradHInitPtr = gradHInit.Handle;
+        IntPtr dHBufferPtr = dHBuffer.Handle;
+        IntPtr gradWeightsIhPtr = gradWeightsIh.Handle;
+        IntPtr gradWeightsHhPtr = gradWeightsHh.Handle;
+        IntPtr gradBiasIhPtr = gradBiasIh.Handle;
+        IntPtr gradBiasHhPtr = gradBiasHh.Handle;
+
+        void** args = stackalloc void*[17];
+        args[0] = &gradOutputPtr;
+        args[1] = &allHPtr;
+        args[2] = &cacheGatesPtr;
+        args[3] = &weightsIhPtr;
+        args[4] = &weightsHhPtr;
+        args[5] = &inputPtr;
+        args[6] = &gradInputPtr;
+        args[7] = &gradHInitPtr;
+        args[8] = &dHBufferPtr;
+        args[9] = &gradWeightsIhPtr;
+        args[10] = &gradWeightsHhPtr;
+        args[11] = &gradBiasIhPtr;
+        args[12] = &gradBiasHhPtr;
+        args[13] = &seqLen;
+        args[14] = &batch;
+        args[15] = &inputSize;
+        args[16] = &hiddenSize;
+
+        // Use cooperative kernel launch for grid-wide synchronization (grid.sync())
+        LaunchCooperativeKernel(kernel, grid, DefaultBlockSize, sharedMemSize, args);
+    }
+
+    public unsafe void GruCellBackward(
+        IGpuBuffer gradH, IGpuBuffer gateR, IGpuBuffer gateZ, IGpuBuffer gateN, IGpuBuffer prevH,
+        IGpuBuffer weightsHh,
+        IGpuBuffer gradPrevH, IGpuBuffer gradGateR, IGpuBuffer gradGateZ, IGpuBuffer gradGateN,
+        int batch, int hiddenSize)
+    {
+        using var _ = PushContext();
+
+        int totalThreads = batch * hiddenSize;
+        uint grid = (uint)((totalThreads + DefaultBlockSize - 1) / DefaultBlockSize);
+
+        // Step 1: Call gru_cell_backward_unified to compute gate gradients and partial gradPrevH
+        if (!_kernelCache.TryGetValue("gru_cell_backward_unified", out var cellBackwardKernel))
+            throw new InvalidOperationException("CUDA kernel not found: gru_cell_backward_unified");
+
+        IntPtr gradHPtr = gradH.Handle;
+        IntPtr gateRPtr = gateR.Handle;
+        IntPtr gateZPtr = gateZ.Handle;
+        IntPtr gateNPtr = gateN.Handle;
+        IntPtr prevHPtr = prevH.Handle;
+        IntPtr weightsHhPtr = weightsHh.Handle;
+        IntPtr gradPrevHPtr = gradPrevH.Handle;
+        IntPtr gradGateRPtr = gradGateR.Handle;
+        IntPtr gradGateZPtr = gradGateZ.Handle;
+        IntPtr gradGateNPtr = gradGateN.Handle;
+
+        void** args1 = stackalloc void*[12];
+        args1[0] = &gradHPtr;
+        args1[1] = &gateRPtr;
+        args1[2] = &gateZPtr;
+        args1[3] = &gateNPtr;
+        args1[4] = &prevHPtr;
+        args1[5] = &weightsHhPtr;
+        args1[6] = &gradPrevHPtr;
+        args1[7] = &gradGateRPtr;
+        args1[8] = &gradGateZPtr;
+        args1[9] = &gradGateNPtr;
+        args1[10] = &batch;
+        args1[11] = &hiddenSize;
+
+        LaunchKernel(cellBackwardKernel, grid, DefaultBlockSize, args1);
+
+        // Step 2: Call gru_backward_prevh_unified to compute full gradPrevH using all gate gradients
+        if (!_kernelCache.TryGetValue("gru_backward_prevh_unified", out var prevhKernel))
+            throw new InvalidOperationException("CUDA kernel not found: gru_backward_prevh_unified");
+
+        void** args2 = stackalloc void*[10];
+        args2[0] = &gradGateRPtr;
+        args2[1] = &gradGateZPtr;
+        args2[2] = &gradGateNPtr;
+        args2[3] = &gradHPtr;
+        args2[4] = &gateRPtr;
+        args2[5] = &gateZPtr;
+        args2[6] = &weightsHhPtr;
+        args2[7] = &gradPrevHPtr;
+        args2[8] = &batch;
+        args2[9] = &hiddenSize;
+
+        LaunchKernel(prevhKernel, grid, DefaultBlockSize, args2);
+    }
+
+    #endregion
+
 
     public void Dispose()
     {
@@ -7754,6 +8156,18 @@ public sealed class CudaBackend : IAsyncGpuBackend
         {
             CudaNativeBindings.cuModuleUnload(_fp16Module);
             _fp16Module = IntPtr.Zero;
+        }
+
+        if (_lstmModule != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_lstmModule);
+            _lstmModule = IntPtr.Zero;
+        }
+
+        if (_gruModule != IntPtr.Zero)
+        {
+            CudaNativeBindings.cuModuleUnload(_gruModule);
+            _gruModule = IntPtr.Zero;
         }
 
         if (_fusedConvolutionModule != IntPtr.Zero)

@@ -479,6 +479,45 @@ internal static class HipNativeBindings
         IntPtr kernelParams,
         IntPtr extra);
 
+    [DllImport(HipLibrary, CallingConvention = CallingConvention.Cdecl)]
+    public static extern HipError hipLaunchCooperativeKernel(
+        IntPtr function,
+        uint gridDimX,
+        uint gridDimY,
+        uint gridDimZ,
+        uint blockDimX,
+        uint blockDimY,
+        uint blockDimZ,
+        IntPtr kernelParams,
+        uint sharedMemBytes,
+        IntPtr stream);
+
+    /// <summary>
+    /// Launches a cooperative kernel that was loaded via hipModuleGetFunction.
+    /// Uses the same signature as hipLaunchCooperativeKernel but is the proper API
+    /// for module-obtained kernels.
+    /// </summary>
+    [DllImport(HipLibrary, CallingConvention = CallingConvention.Cdecl)]
+    public static extern HipError hipModuleLaunchCooperativeKernel(
+        IntPtr function,
+        uint gridDimX,
+        uint gridDimY,
+        uint gridDimZ,
+        uint blockDimX,
+        uint blockDimY,
+        uint blockDimZ,
+        uint sharedMemBytes,
+        IntPtr stream,
+        IntPtr kernelParams);
+
+    [DllImport(HipLibrary, CallingConvention = CallingConvention.Cdecl)]
+    public static extern HipError hipOccupancyMaxActiveBlocksPerMultiprocessorWithFlags(
+        out int numBlocks,
+        IntPtr func,
+        int blockSize,
+        nuint dynamicSMemSize,
+        uint flags);
+
     #endregion
 
     #region RTC (Runtime Compilation)

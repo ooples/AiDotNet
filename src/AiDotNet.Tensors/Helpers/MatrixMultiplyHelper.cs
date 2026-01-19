@@ -1,10 +1,8 @@
 using System;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Tensors.Helpers;
 
@@ -13,26 +11,34 @@ internal static class MatrixMultiplyHelper
     private const long DefaultBlasWorkThreshold = 128L * 128L * 128L;
     private const long DefaultBlockedWorkThreshold = 64L * 64L * 64L;
     private const long DefaultParallelThreshold = 16384;
-    private const int DefaultPackedMaxDim = 128;
-    private const long DefaultPackedMaxElements = 1_048_576;
     private static readonly int? BlockSizeOverride = ReadEnvInt("AIDOTNET_MATMUL_BLOCK_SIZE");
     private static readonly long? BlasWorkThresholdOverride = ReadEnvLong("AIDOTNET_MATMUL_BLAS_THRESHOLD");
     private static readonly long? BlockedWorkThresholdOverride = ReadEnvLong("AIDOTNET_MATMUL_BLOCKED_THRESHOLD");
     private static readonly long? ParallelThresholdOverride = ReadEnvLong("AIDOTNET_MATMUL_PARALLEL_THRESHOLD");
-    private static readonly int? PackedMaxDimOverride = ReadEnvInt("AIDOTNET_MATMUL_PACKED_MAX_DIM");
-    private static readonly long? PackedMaxElementsOverride = ReadEnvLong("AIDOTNET_MATMUL_PACKED_MAX_ELEMENTS");
     private static readonly bool TraceEnabled = ReadEnvBool("AIDOTNET_MATMUL_TRACE");
 
     internal static bool TryGemm<T>(ReadOnlyMemory<T> a, int aOffset, ReadOnlyMemory<T> b, int bOffset, Memory<T> c, int cOffset, int m, int k, int n)
     {
+        if (TraceEnabled)
+        {
+            Console.WriteLine($"[MATMUL-TRACE] TryGemm<{typeof(T).Name}>: m={m}, k={k}, n={n}");
+        }
+
         if (!(typeof(T) == typeof(float) || typeof(T) == typeof(double)))
         {
+            if (TraceEnabled) Console.WriteLine("[MATMUL-TRACE] Type check failed - not float/double");
             return false;
         }
 
         long work = (long)m * k * n;
-        if (work < GetBlasWorkThreshold())
+        long threshold = GetBlasWorkThreshold();
+        if (TraceEnabled)
         {
+            Console.WriteLine($"[MATMUL-TRACE] work={work:N0}, threshold={threshold:N0}");
+        }
+        if (work < threshold)
+        {
+            if (TraceEnabled) Console.WriteLine("[MATMUL-TRACE] Below threshold - using non-BLAS path");
             return false;
         }
 
@@ -96,50 +102,16 @@ internal static class MatrixMultiplyHelper
         }
 
         bool used = TryGemmFromArray(aArray, aStart, bArray, bStart, cArray, cStart, m, k, n);
+        if (TraceEnabled)
+        {
+            Console.WriteLine($"[MATMUL-TRACE] TryGemmFromArray returned: {used}");
+        }
         if (used && copyBack)
         {
             cArray.AsSpan(0, (int)cLength).CopyTo(c.Span.Slice(cOffset, (int)cLength));
         }
 
         return used;
-    }
-
-    internal static bool TryMultiplyPacked<T>(
-        INumericOperations<T> numOps,
-        ReadOnlyMemory<T> a,
-        MatrixBase<T> bMatrix,
-        Memory<T> c,
-        int m,
-        int k,
-        int n)
-    {
-        if (!ShouldUsePacked<T>(m, k, n))
-        {
-            return false;
-        }
-
-        var packed = PackedMatrixCache<T>.GetOrCreate(bMatrix, k, n, n);
-        if (packed == null)
-        {
-            return false;
-        }
-
-        var aSpan = a.Span;
-        var cSpan = c.Span;
-        T[] packedData = packed.Data;
-
-        for (int i = 0; i < m; i++)
-        {
-            var aRow = aSpan.Slice(i * k, k);
-            int cRowOffset = i * n;
-            for (int j = 0; j < n; j++)
-            {
-                var bCol = new ReadOnlySpan<T>(packedData, j * k, k);
-                cSpan[cRowOffset + j] = numOps.Dot(aRow, bCol);
-            }
-        }
-
-        return true;
     }
 
     internal static bool ShouldUseBlocked<T>(int m, int k, int n)
@@ -161,28 +133,6 @@ internal static class MatrixMultiplyHelper
         }
 
         Console.WriteLine($"[MATMUL-TRACE CPU] {m}x{n}x{k} {path}");
-    }
-
-    private static bool ShouldUsePacked<T>(int m, int k, int n)
-    {
-        if (!(typeof(T) == typeof(float) || typeof(T) == typeof(double)))
-        {
-            return false;
-        }
-
-        int maxDim = GetPackedMaxDim();
-        if (m > maxDim || n > maxDim || k > maxDim)
-        {
-            return false;
-        }
-
-        long packedElements = (long)k * n;
-        if (packedElements <= 0)
-        {
-            return false;
-        }
-
-        return packedElements <= GetPackedMaxElements();
     }
 
     internal static void MultiplyBlocked<T>(
@@ -309,26 +259,6 @@ internal static class MatrixMultiplyHelper
         return block;
     }
 
-    private static int GetPackedMaxDim()
-    {
-        if (PackedMaxDimOverride.HasValue && PackedMaxDimOverride.Value > 0)
-        {
-            return Clamp(PackedMaxDimOverride.Value, 8, 512);
-        }
-
-        return DefaultPackedMaxDim;
-    }
-
-    private static long GetPackedMaxElements()
-    {
-        if (PackedMaxElementsOverride.HasValue && PackedMaxElementsOverride.Value > 0)
-        {
-            return PackedMaxElementsOverride.Value;
-        }
-
-        return DefaultPackedMaxElements;
-    }
-
     private static long GetBlasWorkThreshold()
     {
         if (BlasWorkThresholdOverride.HasValue && BlasWorkThresholdOverride.Value > 0)
@@ -402,70 +332,5 @@ internal static class MatrixMultiplyHelper
         }
 
         return long.TryParse(raw, out var value) && value > 0 ? value : null;
-    }
-
-    private sealed class PackedMatrix<T>
-    {
-        public PackedMatrix(long version, int k, int n, T[] data)
-        {
-            Version = version;
-            K = k;
-            N = n;
-            Data = data;
-        }
-
-        public long Version { get; }
-        public int K { get; }
-        public int N { get; }
-        public T[] Data { get; }
-    }
-
-    private static class PackedMatrixCache<T>
-    {
-        private static readonly ConditionalWeakTable<MatrixBase<T>, PackedMatrix<T>> Cache = new();
-        private static readonly object CacheLock = new object();
-
-        public static PackedMatrix<T>? GetOrCreate(MatrixBase<T> matrix, int k, int n, int stride)
-        {
-            long version = matrix.Version;
-            lock (CacheLock)
-            {
-                if (Cache.TryGetValue(matrix, out var packed) &&
-                    packed.Version == version &&
-                    packed.K == k &&
-                    packed.N == n)
-                {
-                    return packed;
-                }
-
-                long packedSize = (long)k * n;
-                if (packedSize <= 0 || packedSize > int.MaxValue)
-                {
-                    return null;
-                }
-
-                var data = new T[(int)packedSize];
-                PackMatrix(matrix.AsMemory().Span, data, k, n, stride);
-
-                packed = new PackedMatrix<T>(version, k, n, data);
-                Cache.Remove(matrix);
-                Cache.Add(matrix, packed);
-                return packed;
-            }
-        }
-
-        private static void PackMatrix(ReadOnlySpan<T> source, T[] destination, int k, int n, int stride)
-        {
-            for (int kk = 0; kk < k; kk++)
-            {
-                int srcOffset = kk * stride;
-                int destOffset = kk;
-                for (int j = 0; j < n; j++)
-                {
-                    destination[destOffset] = source[srcOffset + j];
-                    destOffset += k;
-                }
-            }
-        }
     }
 }

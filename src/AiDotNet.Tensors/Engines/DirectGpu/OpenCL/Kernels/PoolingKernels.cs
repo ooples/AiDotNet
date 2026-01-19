@@ -509,6 +509,136 @@ __kernel void maxpool3d_backward(
     gradInput[inputIdx] += grad;
 }
 
+// Average Pooling 3D
+// Input layout: NCDHW (batch, channels, depth, height, width)
+__kernel void avgpool3d(
+    __global const float* input,
+    __global float* output,
+    const int batch,
+    const int channels,
+    const int inDepth,
+    const int inHeight,
+    const int inWidth,
+    const int outDepth,
+    const int outHeight,
+    const int outWidth,
+    const int kernelD,
+    const int kernelH,
+    const int kernelW,
+    const int strideD,
+    const int strideH,
+    const int strideW,
+    const int countIncludePad)
+{
+    const int ow = get_global_id(0);
+    const int oh = get_global_id(1);
+    const int linear_z = get_global_id(2);
+
+    const int od = linear_z % outDepth;
+    const int c = (linear_z / outDepth) % channels;
+    const int b = linear_z / (outDepth * channels);
+
+    if (ow >= outWidth || oh >= outHeight || od >= outDepth || b >= batch) return;
+
+    float sum = 0.0f;
+    int count = 0;
+
+    for (int kd = 0; kd < kernelD; kd++) {
+        int id = od * strideD + kd;
+        if (id >= inDepth) continue;
+
+        for (int kh = 0; kh < kernelH; kh++) {
+            int ih = oh * strideH + kh;
+            if (ih >= inHeight) continue;
+
+            for (int kw = 0; kw < kernelW; kw++) {
+                int iw = ow * strideW + kw;
+                if (iw >= inWidth) continue;
+
+                int inputIdx = ((b * channels + c) * inDepth + id) * inHeight * inWidth
+                             + ih * inWidth + iw;
+                sum += input[inputIdx];
+                count++;
+            }
+        }
+    }
+
+    int divisor = countIncludePad ? (kernelD * kernelH * kernelW) : count;
+    int outIdx = ((b * channels + c) * outDepth + od) * outHeight * outWidth
+               + oh * outWidth + ow;
+    output[outIdx] = sum / (float)max(divisor, 1);
+}
+
+// Average Pooling 3D backward pass
+__kernel void avgpool3d_backward(
+    __global const float* gradOutput,
+    __global float* gradInput,
+    const int batch,
+    const int channels,
+    const int inDepth,
+    const int inHeight,
+    const int inWidth,
+    const int outDepth,
+    const int outHeight,
+    const int outWidth,
+    const int kernelD,
+    const int kernelH,
+    const int kernelW,
+    const int strideD,
+    const int strideH,
+    const int strideW,
+    const int countIncludePad)
+{
+    const int iw = get_global_id(0);
+    const int ih = get_global_id(1);
+    const int linear_z = get_global_id(2);
+
+    const int id = linear_z % inDepth;
+    const int c = (linear_z / inDepth) % channels;
+    const int b = linear_z / (inDepth * channels);
+
+    if (iw >= inWidth || ih >= inHeight || id >= inDepth || b >= batch) return;
+
+    float sum = 0.0f;
+
+    // Iterate over all output positions that could have used this input
+    for (int od = 0; od < outDepth; od++) {
+        int dStart = od * strideD;
+        int dEnd = dStart + kernelD;
+        if (id < dStart || id >= dEnd) continue;
+
+        for (int oh = 0; oh < outHeight; oh++) {
+            int hStart = oh * strideH;
+            int hEnd = hStart + kernelH;
+            if (ih < hStart || ih >= hEnd) continue;
+
+            for (int ow = 0; ow < outWidth; ow++) {
+                int wStart = ow * strideW;
+                int wEnd = wStart + kernelW;
+                if (iw < wStart || iw >= wEnd) continue;
+
+                int poolSize;
+                if (countIncludePad) {
+                    poolSize = kernelD * kernelH * kernelW;
+                } else {
+                    int dEndClamp = min(dEnd, inDepth);
+                    int hEndClamp = min(hEnd, inHeight);
+                    int wEndClamp = min(wEnd, inWidth);
+                    poolSize = (dEndClamp - dStart) * (hEndClamp - hStart) * (wEndClamp - wStart);
+                }
+
+                int outIdx = ((b * channels + c) * outDepth + od) * outHeight * outWidth
+                           + oh * outWidth + ow;
+                sum += gradOutput[outIdx] / (float)max(poolSize, 1);
+            }
+        }
+    }
+
+    int inputIdx = ((b * channels + c) * inDepth + id) * inHeight * inWidth
+                 + ih * inWidth + iw;
+    gradInput[inputIdx] = sum;
+}
+
 // Nearest Neighbor Upsample 3D
 __kernel void nearest_upsample3d(
     __global const float* input,
@@ -688,6 +818,8 @@ __kernel void nearest_neighbor_upsample_backward(
                 "adaptive_avgpool2d",
                 "maxpool3d",
                 "maxpool3d_backward",
+                "avgpool3d",
+                "avgpool3d_backward",
                 "nearest_upsample3d",
                 "nearest_upsample3d_backward",
                 "nearest_neighbor_upsample",
