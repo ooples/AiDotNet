@@ -1,8 +1,6 @@
 using System;
-using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using AiDotNet.Tensors.Engines.Simd;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -39,11 +37,6 @@ public class CpuEngine : IEngine
 {
     /// <inheritdoc/>
     public string Name => "CPU Engine";
-    private const int ElementwiseParallelThreshold = 200_000;
-    private const int ReductionParallelThreshold = 250_000;
-    private const int MatMulTransposeMaxElements = 4_000_000;
-    private const int MatMulTransposeMaxProduct = 1_048_576;  // 1024x1024
-    private const int MatMulTransposeParallelThreshold = 16_384;
 
     /// <inheritdoc/>
     public bool SupportsGpu => false;
@@ -61,7 +54,7 @@ public class CpuEngine : IEngine
             throw new ArgumentException($"Vector lengths must match. Got {a.Length} and {b.Length}");
         }
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10x speedup for float)
         return TensorPrimitivesHelper<T>.Add(a, b);
     }
 
@@ -75,7 +68,7 @@ public class CpuEngine : IEngine
             throw new ArgumentException($"Vector lengths must match. Got {a.Length} and {b.Length}");
         }
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10x speedup for float)
         return TensorPrimitivesHelper<T>.Subtract(a, b);
     }
 
@@ -89,7 +82,7 @@ public class CpuEngine : IEngine
             throw new ArgumentException($"Vector lengths must match. Got {a.Length} and {b.Length}");
         }
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10x speedup for float)
         return TensorPrimitivesHelper<T>.Multiply(a, b);
     }
 
@@ -124,7 +117,7 @@ public class CpuEngine : IEngine
             }
         }
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10x speedup for float)
         return TensorPrimitivesHelper<T>.Divide(a, b);
     }
 
@@ -151,7 +144,7 @@ public class CpuEngine : IEngine
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized TensorPrimitivesHelper (5-10ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (5-10x speedup for float)
         return TensorPrimitivesHelper<T>.Sqrt(vector);
     }
 
@@ -234,7 +227,7 @@ public class CpuEngine : IEngine
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6x speedup for float)
         return TensorPrimitivesHelper<T>.Exp(vector);
     }
 
@@ -243,7 +236,7 @@ public class CpuEngine : IEngine
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6x speedup for float)
         return TensorPrimitivesHelper<T>.Log(vector);
     }
 
@@ -404,7 +397,7 @@ public class CpuEngine : IEngine
         if (vector == null) throw new ArgumentNullException(nameof(vector));
         if (vector.Length == 0) throw new ArgumentException("Cannot compute softmax of empty vector.");
 
-        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6x speedup for float)
         return TensorPrimitivesHelper<T>.Softmax(vector);
     }
 
@@ -416,7 +409,7 @@ public class CpuEngine : IEngine
         if (a.Length != b.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        // Use SIMD-optimized TensorPrimitivesHelper (10-15ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (10-15x speedup for float)
         return TensorPrimitivesHelper<T>.CosineSimilarity(a, b);
     }
 
@@ -425,7 +418,7 @@ public class CpuEngine : IEngine
     {
         if (vector == null) throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized TensorPrimitivesHelper (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
+        // Use SIMD-optimized TensorPrimitivesHelper (3-6x speedup for float)
         return TensorPrimitivesHelper<T>.Log2(vector);
     }
 
@@ -1420,7 +1413,24 @@ public class CpuEngine : IEngine
                 $"First matrix columns ({a.Columns}) must equal second matrix rows ({b.Rows}).");
         }
 
-        return a.Multiply(b);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Matrix<T>(a.Rows, b.Columns);
+
+        // Standard O(nÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³) matrix multiplication
+        for (int i = 0; i < a.Rows; i++)
+        {
+            for (int j = 0; j < b.Columns; j++)
+            {
+                T sum = numOps.Zero;
+                for (int k = 0; k < a.Columns; k++)
+                {
+                    sum = numOps.Add(sum, numOps.Multiply(a[i, k], b[k, j]));
+                }
+                result[i, j] = sum;
+            }
+        }
+
+        return result;
     }
 
     /// <inheritdoc/>
@@ -1841,34 +1851,8 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(a.Shape);
 
-        int length = a.Length;
-        var aData = a.Data;
-        var bData = b.Data;
-        var resultData = result.Data;
-
-        if (length >= ElementwiseParallelThreshold && Environment.ProcessorCount > 1)
-        {
-            int workerCount = Environment.ProcessorCount;
-            int chunkSize = (length + workerCount - 1) / workerCount;
-            Parallel.For(0, workerCount, worker =>
-            {
-                int start = worker * chunkSize;
-                if (start >= length)
-                {
-                    return;
-                }
-
-                int count = Math.Min(chunkSize, length - start);
-                numOps.Add(
-                    aData.Span.Slice(start, count),
-                    bData.Span.Slice(start, count),
-                    resultData.Span.Slice(start, count));
-            });
-        }
-        else
-        {
-            numOps.Add(aData.Span, bData.Span, resultData.Span);
-        }
+        // Use SIMD-optimized span-based addition (5-15x faster than element-by-element)
+        numOps.Add(a.AsSpan(), b.AsSpan(), result.AsWritableSpan());
 
         return result;
     }
@@ -1982,34 +1966,8 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(a.Shape);
 
-        int length = a.Length;
-        var aData = a.Data;
-        var bData = b.Data;
-        var resultData = result.Data;
-
-        if (length >= ElementwiseParallelThreshold && Environment.ProcessorCount > 1)
-        {
-            int workerCount = Environment.ProcessorCount;
-            int chunkSize = (length + workerCount - 1) / workerCount;
-            Parallel.For(0, workerCount, worker =>
-            {
-                int start = worker * chunkSize;
-                if (start >= length)
-                {
-                    return;
-                }
-
-                int count = Math.Min(chunkSize, length - start);
-                numOps.Subtract(
-                    aData.Span.Slice(start, count),
-                    bData.Span.Slice(start, count),
-                    resultData.Span.Slice(start, count));
-            });
-        }
-        else
-        {
-            numOps.Subtract(aData.Span, bData.Span, resultData.Span);
-        }
+        // Use SIMD-optimized span-based subtraction (5-15x faster than element-by-element)
+        numOps.Subtract(a.AsSpan(), b.AsSpan(), result.AsWritableSpan());
 
         return result;
     }
@@ -2028,34 +1986,8 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(a.Shape);
 
-        int length = a.Length;
-        var aData = a.Data;
-        var bData = b.Data;
-        var resultData = result.Data;
-
-        if (length >= ElementwiseParallelThreshold && Environment.ProcessorCount > 1)
-        {
-            int workerCount = Environment.ProcessorCount;
-            int chunkSize = (length + workerCount - 1) / workerCount;
-            Parallel.For(0, workerCount, worker =>
-            {
-                int start = worker * chunkSize;
-                if (start >= length)
-                {
-                    return;
-                }
-
-                int count = Math.Min(chunkSize, length - start);
-                numOps.Multiply(
-                    aData.Span.Slice(start, count),
-                    bData.Span.Slice(start, count),
-                    resultData.Span.Slice(start, count));
-            });
-        }
-        else
-        {
-            numOps.Multiply(aData.Span, bData.Span, resultData.Span);
-        }
+        // Use SIMD-optimized span-based multiplication (5-15x faster than element-by-element)
+        numOps.Multiply(a.AsSpan(), b.AsSpan(), result.AsWritableSpan());
 
         return result;
     }
@@ -2122,7 +2054,11 @@ public class CpuEngine : IEngine
 
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(tensor.Shape);
-        numOps.MultiplyScalar(tensor.Data.Span, scalar, result.Data.Span);
+
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            result.SetFlat(i, numOps.Multiply(tensor.GetFlat(i), scalar));
+        }
 
         return result;
     }
@@ -3077,49 +3013,8 @@ public class CpuEngine : IEngine
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        int length = tensor.Length;
-        var data = tensor.Data;
-
-        if (length == 0)
-        {
-            return numOps.Zero;
-        }
-
-        if (length >= ReductionParallelThreshold && Environment.ProcessorCount > 1)
-        {
-            int workerCount = Environment.ProcessorCount;
-            int chunkSize = (length + workerCount - 1) / workerCount;
-            var partialSums = new T[workerCount];
-            var hasValue = new bool[workerCount];
-
-            Parallel.For(0, workerCount, worker =>
-            {
-                int start = worker * chunkSize;
-                if (start >= length)
-                {
-                    return;
-                }
-
-                int count = Math.Min(chunkSize, length - start);
-                partialSums[worker] = numOps.Sum(data.Span.Slice(start, count));
-                hasValue[worker] = true;
-            });
-
-            T sum = numOps.Zero;
-            for (int i = 0; i < workerCount; i++)
-            {
-                if (!hasValue[i])
-                {
-                    continue;
-                }
-
-                sum = numOps.Add(sum, partialSums[i]);
-            }
-
-            return sum;
-        }
-
-        return numOps.Sum(data.Span);
+        // Use SIMD-optimized sum via IVectorizedOperations
+        return numOps.Sum(tensor.AsSpan());
     }
 
     /// <inheritdoc/>
@@ -3535,11 +3430,6 @@ public class CpuEngine : IEngine
 
         var result = new Tensor<T>(new[] { batch, outChannels, outputHeight, outputWidth });
 
-        if (TryConv2DIm2Col(input, kernel, result, stride, padding, dilation, outputHeight, outputWidth, numOps))
-        {
-            return result;
-        }
-
         // Perform convolution
         for (int b = 0; b < batch; b++)
         {
@@ -3581,187 +3471,6 @@ public class CpuEngine : IEngine
 
         return result;
     }
-    private static bool TryConv2DIm2Col<T>(
-        Tensor<T> input,
-        Tensor<T> kernel,
-        Tensor<T> result,
-        int stride,
-        int padding,
-        int dilation,
-        int outputHeight,
-        int outputWidth,
-        INumericOperations<T> numOps)
-    {
-        if (!(typeof(T) == typeof(float) || typeof(T) == typeof(double)))
-        {
-            return false;
-        }
-
-        int batch = input.Shape[0];
-        int inChannels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        int outChannels = kernel.Shape[0];
-        int kernelHeight = kernel.Shape[2];
-        int kernelWidth = kernel.Shape[3];
-
-        long colRowsLong = (long)outputHeight * outputWidth;
-        long colColsLong = (long)inChannels * kernelHeight * kernelWidth;
-        if (colRowsLong <= 0 || colColsLong <= 0)
-        {
-            return false;
-        }
-
-        // Avoid Im2Col packing overhead for small workloads.
-        const long im2ColWorkThreshold = 1_000_000;
-        long work = colRowsLong * colColsLong * outChannels;
-        if (work < im2ColWorkThreshold)
-        {
-            return false;
-        }
-
-        if (colRowsLong > int.MaxValue || colColsLong > int.MaxValue)
-        {
-            return false;
-        }
-
-        long colSizeLong = colRowsLong * colColsLong;
-        if (colSizeLong > int.MaxValue)
-        {
-            return false;
-        }
-
-        // Guard against large temporary buffers from Im2Col.
-        const long maxScratchBytes = 512L * 1024 * 1024;
-        int elementSize = typeof(T) == typeof(double) ? 8 : 4;
-        int parallelBatches = Math.Min(batch, Environment.ProcessorCount);
-        long kernelElems = (long)outChannels * colColsLong;
-        long perBatchElems = colSizeLong + ((long)outChannels * colRowsLong);
-        long approxScratchBytes;
-        try
-        {
-            approxScratchBytes = checked((kernelElems + (perBatchElems * parallelBatches)) * elementSize);
-        }
-        catch (OverflowException)
-        {
-            return false;
-        }
-        if (approxScratchBytes > maxScratchBytes)
-        {
-            return false;
-        }
-
-        int colRows = (int)colRowsLong;
-        int colCols = (int)colColsLong;
-
-        var kernelMatrix = new T[outChannels * colCols];
-        var kernelSpan = kernel.Data.Span;
-        for (int oc = 0; oc < outChannels; oc++)
-        {
-            int baseOffset = oc * colCols;
-            int colIndex = 0;
-            for (int ic = 0; ic < inChannels; ic++)
-            {
-                int kernelChannelBase = ((oc * inChannels) + ic) * kernelHeight * kernelWidth;
-                for (int kh = 0; kh < kernelHeight; kh++)
-                {
-                    int kernelRowBase = kernelChannelBase + kh * kernelWidth;
-                    for (int kw = 0; kw < kernelWidth; kw++)
-                    {
-                        kernelMatrix[baseOffset + colIndex] = kernelSpan[kernelRowBase + kw];
-                        colIndex++;
-                    }
-                }
-            }
-        }
-
-        var inputData = input.Data;
-        var resultData = result.Data;
-        var pool = ArrayPool<T>.Shared;
-
-        Action<int> processBatch = b =>
-        {
-            var inputSpan = inputData.Span;
-            var resultSpan = resultData.Span;
-            int colMatrixSize = colCols * colRows;
-            int outputMatrixSize = outChannels * colRows;
-            var colMatrix = pool.Rent(colMatrixSize);
-            var outputMatrix = pool.Rent(outputMatrixSize);
-
-            try
-            {
-                var colSpan = colMatrix.AsSpan(0, colMatrixSize);
-                for (int oh = 0; oh < outputHeight; oh++)
-                {
-                    int inBaseH = oh * stride - padding;
-                    for (int ow = 0; ow < outputWidth; ow++)
-                    {
-                        int inBaseW = ow * stride - padding;
-                        int rowIndex = oh * outputWidth + ow;
-                        int colIndex = 0;
-
-                        for (int ic = 0; ic < inChannels; ic++)
-                        {
-                            int inputChannelBase = ((b * inChannels) + ic) * height * width;
-                            for (int kh = 0; kh < kernelHeight; kh++)
-                            {
-                                int ih = inBaseH + kh * dilation;
-                                int inputRowBase = inputChannelBase + ih * width;
-                                for (int kw = 0; kw < kernelWidth; kw++)
-                                {
-                                    int iw = inBaseW + kw * dilation;
-                                    T value = numOps.Zero;
-                                    if (ih >= 0 && ih < height && iw >= 0 && iw < width)
-                                    {
-                                        value = inputSpan[inputRowBase + iw];
-                                    }
-
-                                    colSpan[colIndex * colRows + rowIndex] = value;
-                                    colIndex++;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                MultiplyMatrixCore(
-                    numOps,
-                    kernelMatrix,
-                    0,
-                    colMatrix.AsMemory(0, colMatrixSize),
-                    0,
-                    outputMatrix.AsMemory(0, outputMatrixSize),
-                    0,
-                    outChannels,
-                    colCols,
-                    colRows,
-                    allowParallel: batch == 1);
-
-                int outputBatchOffset = b * outChannels * colRows;
-                var outputSpan = outputMatrix.AsSpan(0, outputMatrixSize);
-                for (int oc = 0; oc < outChannels; oc++)
-                {
-                    outputSpan.Slice(oc * colRows, colRows)
-                        .CopyTo(resultSpan.Slice(outputBatchOffset + oc * colRows, colRows));
-                }
-            }
-            finally
-            {
-                pool.Return(colMatrix, clearArray: false);
-                pool.Return(outputMatrix, clearArray: false);
-            }
-        };
-
-        if (batch > 1)
-        {
-            Parallel.For(0, batch, processBatch);
-            return true;
-        }
-
-        processBatch(0);
-        return true;
-    }
 
     #endregion
 
@@ -3772,11 +3481,8 @@ public class CpuEngine : IEngine
         if (vector == null)
             throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized Tanh (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Vector<T>(vector.Length);
-        numOps.Tanh(vector.AsSpan(), result.AsWritableSpan());
-        return result;
+        // Use SIMD-optimized Tanh (3-6x speedup for float)
+        return TensorPrimitivesHelper<T>.Tanh(vector);
     }
 
     public Vector<T> Sigmoid<T>(Vector<T> vector)
@@ -3784,11 +3490,8 @@ public class CpuEngine : IEngine
         if (vector == null)
             throw new ArgumentNullException(nameof(vector));
 
-        // Use SIMD-optimized Sigmoid (3-6ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â speedup for float)
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Vector<T>(vector.Length);
-        numOps.Sigmoid(vector.AsSpan(), result.AsWritableSpan());
-        return result;
+        // Use SIMD-optimized Sigmoid (3-6x speedup for float)
+        return TensorPrimitivesHelper<T>.Sigmoid(vector);
     }
 
     public Vector<T> ReLU<T>(Vector<T> vector)
@@ -3796,47 +3499,23 @@ public class CpuEngine : IEngine
         if (vector == null)
             throw new ArgumentNullException(nameof(vector));
 
-        var result = new Vector<T>(vector.Length);
-#if NET5_0_OR_GREATER
-        if (typeof(T) == typeof(float))
-        {
-            var floatInSpan = vector.AsSpan();
-            var floatOutSpan = result.AsWritableSpan();
-            var input = MemoryMarshal.CreateSpan(
-                ref Unsafe.As<T, float>(ref MemoryMarshal.GetReference(floatInSpan)),
-                floatInSpan.Length);
-            var output = MemoryMarshal.CreateSpan(
-                ref Unsafe.As<T, float>(ref MemoryMarshal.GetReference(floatOutSpan)),
-                floatOutSpan.Length);
-            SimdKernels.ReLU(input, output);
-            return result;
-        }
-
-        if (typeof(T) == typeof(double))
-        {
-            var doubleInSpan = vector.AsSpan();
-            var doubleOutSpan = result.AsWritableSpan();
-            var input = MemoryMarshal.CreateSpan(
-                ref Unsafe.As<T, double>(ref MemoryMarshal.GetReference(doubleInSpan)),
-                doubleInSpan.Length);
-            var output = MemoryMarshal.CreateSpan(
-                ref Unsafe.As<T, double>(ref MemoryMarshal.GetReference(doubleOutSpan)),
-                doubleOutSpan.Length);
-            SimdKernels.ReLU(input, output);
-            return result;
-        }
-#endif
-
+        // ReLU(x) = max(0, x)
+        // TensorPrimitives doesn't have ReLU directly, but has Max
+        // For now, use element-wise max with zero
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputSpan = vector.AsSpan();
-        var outputSpan = result.AsWritableSpan();
-        for (int i = 0; i < inputSpan.Length; i++)
+        var inputArray = vector.ToArray();
+        var outputArray = new T[inputArray.Length];
+
+        // For float, we could use TensorPrimitives.Max with scalar zero
+        // For now, manual implementation that works for all types
+        for (int i = 0; i < inputArray.Length; i++)
         {
-            var value = inputSpan[i];
-            outputSpan[i] = numOps.GreaterThan(value, numOps.Zero) ? value : numOps.Zero;
+            outputArray[i] = numOps.GreaterThan(inputArray[i], numOps.Zero)
+                ? inputArray[i]
+                : numOps.Zero;
         }
 
-        return result;
+        return new Vector<T>(outputArray);
     }
 
     public Tensor<T> Tanh<T>(Tensor<T> tensor)
@@ -3844,34 +3523,11 @@ public class CpuEngine : IEngine
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
 
+        // Use SIMD-optimized Tanh - single allocation, zero-copy
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(tensor.Shape);
-        var inputData = tensor.Data;
-        var resultData = result.Data;
-        int length = tensor.Length;
 
-        if (length >= ElementwiseParallelThreshold && Environment.ProcessorCount > 1)
-        {
-            int workerCount = Environment.ProcessorCount;
-            int chunkSize = (length + workerCount - 1) / workerCount;
-            Parallel.For(0, workerCount, worker =>
-            {
-                int start = worker * chunkSize;
-                if (start >= length)
-                {
-                    return;
-                }
-
-                int count = Math.Min(chunkSize, length - start);
-                numOps.Tanh(
-                    inputData.Span.Slice(start, count),
-                    resultData.Span.Slice(start, count));
-            });
-        }
-        else
-        {
-            numOps.Tanh(inputData.Span, resultData.Span);
-        }
+        numOps.Tanh(tensor.AsSpan(), result.AsWritableSpan());
 
         return result;
     }
@@ -3881,34 +3537,12 @@ public class CpuEngine : IEngine
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
 
+        // Use SIMD-optimized Sigmoid: 1 / (1 + exp(-x)) - single allocation, zero-copy
         var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>(tensor.Shape);
-        var inputData = tensor.Data;
-        var resultData = result.Data;
-        int length = tensor.Length;
 
-        if (length >= ElementwiseParallelThreshold && Environment.ProcessorCount > 1)
-        {
-            int workerCount = Environment.ProcessorCount;
-            int chunkSize = (length + workerCount - 1) / workerCount;
-            Parallel.For(0, workerCount, worker =>
-            {
-                int start = worker * chunkSize;
-                if (start >= length)
-                {
-                    return;
-                }
+        numOps.Sigmoid(tensor.AsSpan(), result.AsWritableSpan());
 
-                int count = Math.Min(chunkSize, length - start);
-                numOps.Sigmoid(
-                    inputData.Span.Slice(start, count),
-                    resultData.Span.Slice(start, count));
-            });
-        }
-        else
-        {
-            numOps.Sigmoid(inputData.Span, resultData.Span);
-        }
         return result;
     }
 
@@ -3917,105 +3551,12 @@ public class CpuEngine : IEngine
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
 
-        var result = new Tensor<T>(tensor.Shape);
-        int length = tensor.Length;
-        var inputData = tensor.Data;
-        var resultData = result.Data;
-
-#if NET5_0_OR_GREATER
-        if (typeof(T) == typeof(float))
-        {
-            if (length >= ElementwiseParallelThreshold && Environment.ProcessorCount > 1)
-            {
-                int workerCount = Environment.ProcessorCount;
-                int chunkSize = (length + workerCount - 1) / workerCount;
-                Parallel.For(0, workerCount, worker =>
-                {
-                    int start = worker * chunkSize;
-                    if (start >= length)
-                    {
-                        return;
-                    }
-
-                    int count = Math.Min(chunkSize, length - start);
-                    var inputSlice = inputData.Span.Slice(start, count);
-                    var outputSlice = resultData.Span.Slice(start, count);
-                    var input = MemoryMarshal.CreateSpan(
-                        ref Unsafe.As<T, float>(ref MemoryMarshal.GetReference(inputSlice)),
-                        inputSlice.Length);
-                    var output = MemoryMarshal.CreateSpan(
-                        ref Unsafe.As<T, float>(ref MemoryMarshal.GetReference(outputSlice)),
-                        outputSlice.Length);
-                    SimdKernels.ReLU(input, output);
-                });
-            }
-            else
-            {
-                var floatInSpan = inputData.Span;
-                var floatOutSpan = resultData.Span;
-                var input = MemoryMarshal.CreateSpan(
-                    ref Unsafe.As<T, float>(ref MemoryMarshal.GetReference(floatInSpan)),
-                    floatInSpan.Length);
-                var output = MemoryMarshal.CreateSpan(
-                    ref Unsafe.As<T, float>(ref MemoryMarshal.GetReference(floatOutSpan)),
-                    floatOutSpan.Length);
-                SimdKernels.ReLU(input, output);
-            }
-
-            return result;
-        }
-
-        if (typeof(T) == typeof(double))
-        {
-            if (length >= ElementwiseParallelThreshold && Environment.ProcessorCount > 1)
-            {
-                int workerCount = Environment.ProcessorCount;
-                int chunkSize = (length + workerCount - 1) / workerCount;
-                Parallel.For(0, workerCount, worker =>
-                {
-                    int start = worker * chunkSize;
-                    if (start >= length)
-                    {
-                        return;
-                    }
-
-                    int count = Math.Min(chunkSize, length - start);
-                    var inputSlice = inputData.Span.Slice(start, count);
-                    var outputSlice = resultData.Span.Slice(start, count);
-                    var input = MemoryMarshal.CreateSpan(
-                        ref Unsafe.As<T, double>(ref MemoryMarshal.GetReference(inputSlice)),
-                        inputSlice.Length);
-                    var output = MemoryMarshal.CreateSpan(
-                        ref Unsafe.As<T, double>(ref MemoryMarshal.GetReference(outputSlice)),
-                        outputSlice.Length);
-                    SimdKernels.ReLU(input, output);
-                });
-            }
-            else
-            {
-                var doubleInSpan = inputData.Span;
-                var doubleOutSpan = resultData.Span;
-                var input = MemoryMarshal.CreateSpan(
-                    ref Unsafe.As<T, double>(ref MemoryMarshal.GetReference(doubleInSpan)),
-                    doubleInSpan.Length);
-                var output = MemoryMarshal.CreateSpan(
-                    ref Unsafe.As<T, double>(ref MemoryMarshal.GetReference(doubleOutSpan)),
-                    doubleOutSpan.Length);
-                SimdKernels.ReLU(input, output);
-            }
-
-            return result;
-        }
-#endif
-
+        // Use SIMD-optimized ReLU: max(0, x) - single allocation, zero-copy
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputSpan = inputData.Span;
-        var outputSpan = resultData.Span;
-        for (int i = 0; i < inputSpan.Length; i++)
-        {
-            var value = inputSpan[i];
-            outputSpan[i] = numOps.GreaterThan(value, numOps.Zero) ? value : numOps.Zero;
-        }
+        var result = new Tensor<T>(tensor.Shape);
+
+        numOps.ReLU(tensor.AsSpan(), result.AsWritableSpan());
+
         return result;
     }
 
@@ -4056,9 +3597,13 @@ public class CpuEngine : IEngine
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
 
-        var flatVector = tensor.ToVector();
-        var resultVector = TensorPrimitivesHelper<T>.GELU(flatVector);
-        return new Tensor<T>(tensor.Shape, resultVector);
+        // Use SIMD-optimized GELU - single allocation, zero-copy
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        numOps.GELU(tensor.AsSpan(), result.AsWritableSpan());
+
+        return result;
     }
 
     public Tensor<T> Mish<T>(Tensor<T> tensor)
@@ -4066,9 +3611,13 @@ public class CpuEngine : IEngine
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
 
-        var flatVector = tensor.ToVector();
-        var resultVector = TensorPrimitivesHelper<T>.Mish(flatVector);
-        return new Tensor<T>(tensor.Shape, resultVector);
+        // Use SIMD-optimized Mish - single allocation, zero-copy
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        numOps.Mish(tensor.AsSpan(), result.AsWritableSpan());
+
+        return result;
     }
 
     public Tensor<T> Swish<T>(Tensor<T> tensor)
@@ -4076,9 +3625,13 @@ public class CpuEngine : IEngine
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
 
-        var flatVector = tensor.ToVector();
-        var resultVector = TensorPrimitivesHelper<T>.Swish(flatVector);
-        return new Tensor<T>(tensor.Shape, resultVector);
+        // Use SIMD-optimized Swish (SiLU) - single allocation, zero-copy
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        numOps.Swish(tensor.AsSpan(), result.AsWritableSpan());
+
+        return result;
     }
 
     public Tensor<T> ELU<T>(Tensor<T> tensor, double alpha = 1.0)
@@ -4086,9 +3639,13 @@ public class CpuEngine : IEngine
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
 
-        var flatVector = tensor.ToVector();
-        var resultVector = TensorPrimitivesHelper<T>.ELU(flatVector, alpha);
-        return new Tensor<T>(tensor.Shape, resultVector);
+        // Use SIMD-optimized ELU - single allocation, zero-copy
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(tensor.Shape);
+
+        numOps.ELU(tensor.AsSpan(), numOps.FromDouble(alpha), result.AsWritableSpan());
+
+        return result;
     }
 
     /// <inheritdoc/>
@@ -4097,11 +3654,13 @@ public class CpuEngine : IEngine
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
 
+        // Use SIMD-optimized LeakyReLU - single allocation, zero-copy
         var numOps = MathHelper.GetNumericOperations<T>();
-        double alphaDouble = numOps.ToDouble(alpha);
-        var flatVector = tensor.ToVector();
-        var resultVector = TensorPrimitivesHelper<T>.LeakyReLU(flatVector, alphaDouble);
-        return new Tensor<T>(tensor.Shape, resultVector);
+        var result = new Tensor<T>(tensor.Shape);
+
+        numOps.LeakyReLU(tensor.AsSpan(), alpha, result.AsWritableSpan());
+
+        return result;
     }
 
     /// <summary>
@@ -4642,178 +4201,9 @@ public class CpuEngine : IEngine
         throw new ArgumentException($"Unsupported TensorMatMul combination: ranks {a.Rank} and {b.Rank}. Supported: 2Dx2D, NDx2D, NDxND (same rank).");
     }
 
-    private static void MultiplyMatrixCore<T>(
-        INumericOperations<T> numOps,
-        ReadOnlyMemory<T> a,
-        int aOffset,
-        ReadOnlyMemory<T> b,
-        int bOffset,
-        Memory<T> c,
-        int cOffset,
-        int m,
-        int k,
-        int n,
-        bool allowParallel)
-    {
-        if (MatrixMultiplyHelper.TryGemm(a, aOffset, b, bOffset, c, cOffset, m, k, n))
-        {
-            return;
-        }
-
-        if (TryMultiplyTransposed(numOps, a, aOffset, b, bOffset, c, cOffset, m, k, n, allowParallel))
-        {
-            return;
-        }
-
-        if (MatrixMultiplyHelper.ShouldUseBlocked<T>(m, k, n))
-        {
-            MatrixMultiplyHelper.MultiplyBlocked(numOps, a, b, c, m, k, n, k, n, n, aOffset, bOffset, cOffset, allowParallel);
-            return;
-        }
-
-        // Fallback: simple matmul with optional parallelization (matches master behavior)
-        long work = (long)m * n;
-        bool useParallel = allowParallel && work >= 256 && m > 1 && Environment.ProcessorCount > 1;
-
-        if (useParallel)
-        {
-            Parallel.For(0, m, i =>
-            {
-                var aSpan = a.Span;
-                var bSpan = b.Span;
-                var cSpan = c.Span;
-                int aRowOffset = aOffset + i * k;
-                int cRowOffset = cOffset + i * n;
-                for (int j = 0; j < n; j++)
-                {
-                    T sum = numOps.Zero;
-                    for (int kIndex = 0; kIndex < k; kIndex++)
-                    {
-                        sum = numOps.Add(sum, numOps.Multiply(aSpan[aRowOffset + kIndex], bSpan[bOffset + kIndex * n + j]));
-                    }
-                    cSpan[cRowOffset + j] = sum;
-                }
-            });
-        }
-        else
-        {
-            var aSpan = a.Span;
-            var bSpan = b.Span;
-            var cSpan = c.Span;
-            for (int i = 0; i < m; i++)
-            {
-                int aRowOffset = aOffset + i * k;
-                int cRowOffset = cOffset + i * n;
-                for (int j = 0; j < n; j++)
-                {
-                    T sum = numOps.Zero;
-                    for (int kIndex = 0; kIndex < k; kIndex++)
-                    {
-                        sum = numOps.Add(sum, numOps.Multiply(aSpan[aRowOffset + kIndex], bSpan[bOffset + kIndex * n + j]));
-                    }
-                    cSpan[cRowOffset + j] = sum;
-                }
-            }
-        }
-    }
-
-    private static bool TryMultiplyTransposed<T>(
-        INumericOperations<T> numOps,
-        ReadOnlyMemory<T> a,
-        int aOffset,
-        ReadOnlyMemory<T> b,
-        int bOffset,
-        Memory<T> c,
-        int cOffset,
-        int m,
-        int k,
-        int n,
-        bool allowParallel)
-    {
-        if (!(typeof(T) == typeof(float) || typeof(T) == typeof(double)))
-        {
-            return false;
-        }
-
-        long bElements = (long)k * n;
-        if (bElements <= 0 || bElements > MatMulTransposeMaxElements)
-        {
-            return false;
-        }
-
-        long mn = (long)m * n;
-        if (mn <= 0 || mn > MatMulTransposeMaxProduct)
-        {
-            return false;
-        }
-
-        var pool = ArrayPool<T>.Shared;
-        T[] transposed = pool.Rent((int)bElements);
-        try
-        {
-            var bSpan = b.Span;
-            var tSpan = transposed.AsSpan(0, (int)bElements);
-
-            for (int row = 0; row < k; row++)
-            {
-                int bRowOffset = bOffset + row * n;
-                for (int col = 0; col < n; col++)
-                {
-                    tSpan[col * k + row] = bSpan[bRowOffset + col];
-                }
-            }
-
-            var aMemory = a;
-            var cMemory = c;
-            var tMemory = transposed.AsMemory(0, (int)bElements);
-            bool parallel = allowParallel &&
-                mn >= MatMulTransposeParallelThreshold &&
-                Environment.ProcessorCount > 1;
-
-            if (parallel)
-            {
-                Parallel.For(0, m, i =>
-                {
-                    var aSpan = aMemory.Span;
-                    var cSpan = cMemory.Span;
-                    var bTransSpan = tMemory.Span;
-                    int aRowOffset = aOffset + i * k;
-                    int cRowOffset = cOffset + i * n;
-                    var aRow = aSpan.Slice(aRowOffset, k);
-                    for (int j = 0; j < n; j++)
-                    {
-                        var bRow = bTransSpan.Slice(j * k, k);
-                        cSpan[cRowOffset + j] = numOps.Dot(aRow, bRow);
-                    }
-                });
-            }
-            else
-            {
-                var aSpan = aMemory.Span;
-                var cSpan = cMemory.Span;
-                var bTransSpan = tMemory.Span;
-                for (int i = 0; i < m; i++)
-                {
-                    int aRowOffset = aOffset + i * k;
-                    int cRowOffset = cOffset + i * n;
-                    var aRow = aSpan.Slice(aRowOffset, k);
-                    for (int j = 0; j < n; j++)
-                    {
-                        var bRow = bTransSpan.Slice(j * k, k);
-                        cSpan[cRowOffset + j] = numOps.Dot(aRow, bRow);
-                    }
-                }
-            }
-
-            return true;
-        }
-        finally
-        {
-            pool.Return(transposed, clearArray: false);
-        }
-    }
     /// <summary>
     /// Standard 2D matrix multiplication: [M, N] @ [N, P] = [M, P]
+    /// Uses BLAS when available for float/double, falls back to parallel loops otherwise.
     /// </summary>
     private Tensor<T> TensorMatMul2D<T>(Tensor<T> a, Tensor<T> b, INumericOperations<T> numOps)
     {
@@ -4824,8 +4214,28 @@ public class CpuEngine : IEngine
         if (n != b.Shape[0])
             throw new ArgumentException($"Matrix dimensions incompatible: [{m},{n}] x [{b.Shape[0]},{p}]");
 
-        var result = new Tensor<T>(new[] { m, p });
-        MultiplyMatrixCore(numOps, a.Data, 0, b.Data, 0, result.Data, 0, m, n, p, allowParallel: true);
+        var result = new Tensor<T>([m, p]);
+
+        // Try BLAS-accelerated path for float/double tensors
+        if (MatrixMultiplyHelper.TryGemm(a.Data, 0, b.Data, 0, result.Data, 0, m, n, p))
+        {
+            return result;
+        }
+
+        // Fallback to parallel loops for non-float/double or when BLAS unavailable
+        Parallel.For(0, m, i =>
+        {
+            for (int j = 0; j < p; j++)
+            {
+                T sum = numOps.Zero;
+                for (int k = 0; k < n; k++)
+                {
+                    sum = numOps.Add(sum, numOps.Multiply(a[i, k], b[k, j]));
+                }
+                result[i, j] = sum;
+            }
+        });
+
         return result;
     }
 
@@ -4862,9 +4272,9 @@ public class CpuEngine : IEngine
         outputShape[aRank - 1] = p;
 
         var result = new Tensor<T>(outputShape);
-        var aData = a.Data;
-        var bData = b.Data;
-        var resultData = result.Data;
+        var aData = a.ToArray();
+        var bData = b.ToArray();
+        var resultData = result.ToArray();
 
         int matrixSizeA = m * n;
         int matrixSizeResult = m * p;
@@ -4874,10 +4284,23 @@ public class CpuEngine : IEngine
             int aOffset = batch * matrixSizeA;
             int resultOffset = batch * matrixSizeResult;
 
-            MultiplyMatrixCore(numOps, aData, aOffset, bData, 0, resultData, resultOffset, m, n, p, allowParallel: false);
+            for (int i = 0; i < m; i++)
+            {
+                for (int j = 0; j < p; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int k = 0; k < n; k++)
+                    {
+                        T aVal = aData[aOffset + i * n + k];
+                        T bVal = bData[k * p + j];
+                        sum = numOps.Add(sum, numOps.Multiply(aVal, bVal));
+                    }
+                    resultData[resultOffset + i * p + j] = sum;
+                }
+            }
         });
 
-        return result;
+        return new Tensor<T>(outputShape, new Vector<T>(resultData));
     }
 
     /// <summary>
@@ -4918,9 +4341,9 @@ public class CpuEngine : IEngine
         outputShape[rank - 1] = p;
 
         var result = new Tensor<T>(outputShape);
-        var aData = a.Data;
-        var bData = b.Data;
-        var resultData = result.Data;
+        var aData = a.ToArray();
+        var bData = b.ToArray();
+        var resultData = result.ToArray();
 
         int matrixSizeA = m * n;
         int matrixSizeB = n * p;
@@ -4932,10 +4355,23 @@ public class CpuEngine : IEngine
             int bOffset = batch * matrixSizeB;
             int resultOffset = batch * matrixSizeResult;
 
-            MultiplyMatrixCore(numOps, aData, aOffset, bData, bOffset, resultData, resultOffset, m, n, p, allowParallel: false);
+            for (int i = 0; i < m; i++)
+            {
+                for (int j = 0; j < p; j++)
+                {
+                    T sum = numOps.Zero;
+                    for (int k = 0; k < n; k++)
+                    {
+                        T aVal = aData[aOffset + i * n + k];
+                        T bVal = bData[bOffset + k * p + j];
+                        sum = numOps.Add(sum, numOps.Multiply(aVal, bVal));
+                    }
+                    resultData[resultOffset + i * p + j] = sum;
+                }
+            }
         });
 
-        return result;
+        return new Tensor<T>(outputShape, new Vector<T>(resultData));
     }
 
     /// <inheritdoc/>
@@ -4955,11 +4391,6 @@ public class CpuEngine : IEngine
         int strideH = stride[0], strideW = stride[1];
         int padH = padding[0], padW = padding[1];
         int dilationH = dilation[0], dilationW = dilation[1];
-
-        if (strideH == strideW && padH == padW && dilationH == dilationW)
-        {
-            return Conv2D(input, kernel, strideH, padH, dilationH);
-        }
 
         var numOps = MathHelper.GetNumericOperations<T>();
 

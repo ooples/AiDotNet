@@ -52,9 +52,10 @@ public abstract class VectorBase<T>
     /// <param name="length">The number of elements in the vector.</param>
     /// <exception cref="ArgumentException">Thrown when length is not positive.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This creates an empty vector with a specific size.
-    /// For example, creating a vector with length 3 gives you a vector with 3 elements,
-    /// but all elements start with the default value (usually 0).</para>
+    /// <para><b>For Beginners:</b> This creates a vector with a specific size.
+    /// For example, creating a vector with length 3 gives you a vector with 3 elements.</para>
+    /// <para><b>Important:</b> On .NET 5+, elements may be uninitialized for performance.
+    /// Derived classes must initialize elements before exposing the vector to consumers.</para>
     /// </remarks>
     protected VectorBase(int length)
     {
@@ -64,6 +65,7 @@ public abstract class VectorBase<T>
 #if NET5_0_OR_GREATER
         // Use uninitialized allocation for performance - avoids zeroing memory
         // that will be immediately overwritten. ~30-50% faster for large arrays.
+        // Derived classes MUST initialize elements before exposing to consumers.
         _memory = GC.AllocateUninitializedArray<T>(length);
 #else
         _memory = new T[length];

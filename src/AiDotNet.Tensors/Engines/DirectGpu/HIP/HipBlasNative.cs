@@ -56,16 +56,16 @@ internal static class HipBlasNative
         }
     }
 
-    [DllImport(HipBlasLibrary, EntryPoint = "hipblasCreate")]
+    [DllImport(HipBlasLibrary, EntryPoint = "hipblasCreate", CallingConvention = CallingConvention.Cdecl)]
     internal static extern HipBlasStatus hipblasCreate(ref IntPtr handle); // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
 
-    [DllImport(HipBlasLibrary, EntryPoint = "hipblasDestroy")]
+    [DllImport(HipBlasLibrary, EntryPoint = "hipblasDestroy", CallingConvention = CallingConvention.Cdecl)]
     internal static extern HipBlasStatus hipblasDestroy(IntPtr handle); // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
 
-    [DllImport(HipBlasLibrary, EntryPoint = "hipblasSetStream")]
+    [DllImport(HipBlasLibrary, EntryPoint = "hipblasSetStream", CallingConvention = CallingConvention.Cdecl)]
     internal static extern HipBlasStatus hipblasSetStream(IntPtr handle, IntPtr stream); // lgtm[cs/unmanaged-code] HIP BLAS requires native bindings.
 
-    [DllImport(HipBlasLibrary, EntryPoint = "hipblasSgemm")]
+    [DllImport(HipBlasLibrary, EntryPoint = "hipblasSgemm", CallingConvention = CallingConvention.Cdecl)]
     internal static extern HipBlasStatus hipblasSgemm(
         IntPtr handle,
         HipBlasOperation transA,
