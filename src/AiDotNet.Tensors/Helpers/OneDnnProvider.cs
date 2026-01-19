@@ -220,18 +220,48 @@ internal static class OneDnnProvider
 
     /// <summary>
     /// Cached Conv2D primitive with memory objects for reuse.
+    /// Includes reorder primitives for optimal data formats when oneDNN chooses
+    /// a different internal format than the user's NCHW format.
     /// </summary>
     private sealed class CachedConv2D : IDisposable
     {
+        // Main convolution primitive
         public IntPtr Primitive;
         public IntPtr PrimDesc;
-        public IntPtr SrcMem;
-        public IntPtr WeightsMem;
-        public IntPtr DstMem;
+
+        // User format memory objects (for setting data handles)
+        public IntPtr UserSrcMem;
+        public IntPtr UserWeightsMem;
+        public IntPtr UserDstMem;
+
+        // Optimal format memory objects (for convolution execution)
+        // These may point to the same memory as UserXxxMem if no reorder is needed
+        public IntPtr ConvSrcMem;
+        public IntPtr ConvWeightsMem;
+        public IntPtr ConvDstMem;
         public IntPtr ScratchpadMem;
+
+        // Reorder primitives (IntPtr.Zero if no reorder needed)
+        public IntPtr SrcReorderPrim;
+        public IntPtr WeightsReorderPrim;
+        public IntPtr DstReorderPrim;
+
+        // Memory descriptors (user format)
         public IntPtr UserSrcDesc;
         public IntPtr UserWeightsDesc;
         public IntPtr UserDstDesc;
+
+        // Allocated buffers for reordered data (IntPtr.Zero if no reorder)
+        public IntPtr ReorderedSrcBuffer;
+        public IntPtr ReorderedWeightsBuffer;
+        public IntPtr ReorderedDstBuffer;
+
+        // Flags
+        public bool NeedsSrcReorder;
+        public bool NeedsWeightsReorder;
+        public bool NeedsDstReorder;
+        public bool WeightsReordered; // True after first weights reorder
+
         public int OutHeight;
         public int OutWidth;
         private bool _disposed;
@@ -241,12 +271,30 @@ internal static class OneDnnProvider
             if (_disposed) return;
             _disposed = true;
 
+            // Free reorder primitives
+            if (DstReorderPrim != IntPtr.Zero) dnnl_primitive_destroy(DstReorderPrim);
+            if (WeightsReorderPrim != IntPtr.Zero) dnnl_primitive_destroy(WeightsReorderPrim);
+            if (SrcReorderPrim != IntPtr.Zero) dnnl_primitive_destroy(SrcReorderPrim);
+
+            // Free memory objects (only free Conv* if they are different from User*)
             if (ScratchpadMem != IntPtr.Zero) dnnl_memory_destroy(ScratchpadMem);
-            if (DstMem != IntPtr.Zero) dnnl_memory_destroy(DstMem);
-            if (WeightsMem != IntPtr.Zero) dnnl_memory_destroy(WeightsMem);
-            if (SrcMem != IntPtr.Zero) dnnl_memory_destroy(SrcMem);
+            if (ConvDstMem != IntPtr.Zero && ConvDstMem != UserDstMem) dnnl_memory_destroy(ConvDstMem);
+            if (ConvWeightsMem != IntPtr.Zero && ConvWeightsMem != UserWeightsMem) dnnl_memory_destroy(ConvWeightsMem);
+            if (ConvSrcMem != IntPtr.Zero && ConvSrcMem != UserSrcMem) dnnl_memory_destroy(ConvSrcMem);
+            if (UserDstMem != IntPtr.Zero) dnnl_memory_destroy(UserDstMem);
+            if (UserWeightsMem != IntPtr.Zero) dnnl_memory_destroy(UserWeightsMem);
+            if (UserSrcMem != IntPtr.Zero) dnnl_memory_destroy(UserSrcMem);
+
+            // Free primitives
             if (Primitive != IntPtr.Zero) dnnl_primitive_destroy(Primitive);
             if (PrimDesc != IntPtr.Zero) dnnl_primitive_desc_destroy(PrimDesc);
+
+            // Free allocated buffers
+            if (ReorderedDstBuffer != IntPtr.Zero) Marshal.FreeHGlobal(ReorderedDstBuffer);
+            if (ReorderedWeightsBuffer != IntPtr.Zero) Marshal.FreeHGlobal(ReorderedWeightsBuffer);
+            if (ReorderedSrcBuffer != IntPtr.Zero) Marshal.FreeHGlobal(ReorderedSrcBuffer);
+
+            // Free memory descriptors
             if (UserDstDesc != IntPtr.Zero) dnnl_memory_desc_destroy(UserDstDesc);
             if (UserWeightsDesc != IntPtr.Zero) dnnl_memory_desc_destroy(UserWeightsDesc);
             if (UserSrcDesc != IntPtr.Zero) dnnl_memory_desc_destroy(UserSrcDesc);
@@ -305,6 +353,12 @@ internal static class OneDnnProvider
 
     [DllImport("dnnl", CallingConvention = CallingConvention.Cdecl)]
     private static extern int dnnl_memory_desc_equal(IntPtr lhs, IntPtr rhs);
+
+    [DllImport("dnnl", CallingConvention = CallingConvention.Cdecl)]
+    private static extern long dnnl_memory_desc_get_size(IntPtr memoryDesc);
+
+    [DllImport("dnnl", CallingConvention = CallingConvention.Cdecl)]
+    private static extern int dnnl_memory_get_data_handle(IntPtr memory, out IntPtr handle);
 
     [DllImport("dnnl", CallingConvention = CallingConvention.Cdecl)]
     private static extern int dnnl_memory_create(
@@ -426,30 +480,73 @@ internal static class OneDnnProvider
 
         try
         {
-            // Update memory data handles to point directly to user data (no copy needed!)
-            // The user pointers are already valid native pointers from Tensor<float>.Data.Pin()
-            int status = dnnl_memory_set_data_handle(cached.SrcMem, (IntPtr)input);
+            int status;
+
+            // Step 1: Set user memory data handles to point to user data
+            status = dnnl_memory_set_data_handle(cached.UserSrcMem, (IntPtr)input);
             if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to set src handle: {status}"); return false; }
 
-            status = dnnl_memory_set_data_handle(cached.WeightsMem, (IntPtr)kernel);
+            status = dnnl_memory_set_data_handle(cached.UserWeightsMem, (IntPtr)kernel);
             if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to set weights handle: {status}"); return false; }
 
-            status = dnnl_memory_set_data_handle(cached.DstMem, (IntPtr)output);
+            status = dnnl_memory_set_data_handle(cached.UserDstMem, (IntPtr)output);
             if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to set dst handle: {status}"); return false; }
 
-            // Execute with cached memory objects
+            // Step 2: Execute source reorder if needed (NCHW -> blocked format)
+            if (cached.NeedsSrcReorder)
+            {
+                DnnlExecArg* srcReorderArgs = stackalloc DnnlExecArg[2];
+                srcReorderArgs[0].Arg = DnnlArgSrc;
+                srcReorderArgs[0].Memory = cached.UserSrcMem;
+                srcReorderArgs[1].Arg = DnnlArgDst;
+                srcReorderArgs[1].Memory = cached.ConvSrcMem;
+
+                status = dnnl_primitive_execute(cached.SrcReorderPrim, _stream, 2, srcReorderArgs);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Src reorder failed: {status}"); return false; }
+            }
+
+            // Step 3: Execute weights reorder if needed (only first time - weights are cached)
+            if (cached.NeedsWeightsReorder && !cached.WeightsReordered)
+            {
+                DnnlExecArg* weightsReorderArgs = stackalloc DnnlExecArg[2];
+                weightsReorderArgs[0].Arg = DnnlArgSrc;
+                weightsReorderArgs[0].Memory = cached.UserWeightsMem;
+                weightsReorderArgs[1].Arg = DnnlArgDst;
+                weightsReorderArgs[1].Memory = cached.ConvWeightsMem;
+
+                status = dnnl_primitive_execute(cached.WeightsReorderPrim, _stream, 2, weightsReorderArgs);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Weights reorder failed: {status}"); return false; }
+
+                cached.WeightsReordered = true;
+                if (logThis) Console.WriteLine("[oneDNN] Weights reordered to blocked format (cached for future use)");
+            }
+
+            // Step 4: Execute convolution with optimal format memory objects
             DnnlExecArg* convArgs = stackalloc DnnlExecArg[4];
             convArgs[0].Arg = DnnlArgSrc;
-            convArgs[0].Memory = cached.SrcMem;
+            convArgs[0].Memory = cached.ConvSrcMem;
             convArgs[1].Arg = DnnlArgWeights;
-            convArgs[1].Memory = cached.WeightsMem;
+            convArgs[1].Memory = cached.ConvWeightsMem;
             convArgs[2].Arg = DnnlArgDst;
-            convArgs[2].Memory = cached.DstMem;
+            convArgs[2].Memory = cached.ConvDstMem;
             convArgs[3].Arg = DnnlArgScratchpad;
             convArgs[3].Memory = cached.ScratchpadMem;
 
             status = dnnl_primitive_execute(cached.Primitive, _stream, 4, convArgs);
             if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Conv execute failed: {status}"); return false; }
+
+            // Step 5: Execute destination reorder if needed (blocked format -> NCHW)
+            if (cached.NeedsDstReorder)
+            {
+                DnnlExecArg* dstReorderArgs = stackalloc DnnlExecArg[2];
+                dstReorderArgs[0].Arg = DnnlArgSrc;
+                dstReorderArgs[0].Memory = cached.ConvDstMem;
+                dstReorderArgs[1].Arg = DnnlArgDst;
+                dstReorderArgs[1].Memory = cached.UserDstMem;
+
+                status = dnnl_primitive_execute(cached.DstReorderPrim, _stream, 2, dstReorderArgs);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Dst reorder failed: {status}"); return false; }
+            }
 
             dnnl_stream_wait(_stream);
 
@@ -473,6 +570,8 @@ internal static class OneDnnProvider
 
     /// <summary>
     /// Creates a new Conv2D primitive with all associated memory objects.
+    /// Uses "any" format descriptors to let oneDNN choose optimal data layouts,
+    /// with reorder primitives for format conversion.
     /// </summary>
     private static unsafe CachedConv2D? CreateConv2DPrimitive(Conv2DKey key, int outHeight, int outWidth, bool logThis)
     {
@@ -515,7 +614,7 @@ internal static class OneDnnProvider
             paddingRArr[0] = key.PadH;
             paddingRArr[1] = key.PadW;
 
-            // Create NCHW strides
+            // Create NCHW strides for user format
             long* srcStrides = stackalloc long[4];
             srcStrides[0] = (long)key.InChannels * key.Height * key.Width;
             srcStrides[1] = (long)key.Height * key.Width;
@@ -534,47 +633,25 @@ internal static class OneDnnProvider
             dstStrides[2] = outWidth;
             dstStrides[3] = 1;
 
-            // Create memory descriptors
+            // Create user format memory descriptors (plain NCHW using strides)
             int status = dnnl_memory_desc_create_with_strides(out cached.UserSrcDesc, 4, srcDims, DnnlF32, srcStrides);
-            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create src desc: {status}"); cached.Dispose(); return null; }
+            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create user src desc: {status}"); cached.Dispose(); return null; }
 
             status = dnnl_memory_desc_create_with_strides(out cached.UserWeightsDesc, 4, weightsDims, DnnlF32, weightsStrides);
-            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create weights desc: {status}"); cached.Dispose(); return null; }
+            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create user weights desc: {status}"); cached.Dispose(); return null; }
 
             status = dnnl_memory_desc_create_with_strides(out cached.UserDstDesc, 4, dstDims, DnnlF32, dstStrides);
-            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create dst desc: {status}"); cached.Dispose(); return null; }
+            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create user dst desc: {status}"); cached.Dispose(); return null; }
 
-            // Create convolution primitive descriptor
-            // Try Winograd for 3x3 kernels with stride 1 (optimal case), fall back to auto
-            if (key.KernelH == 3 && key.KernelW == 3 && key.StrideH == 1 && key.StrideW == 1 &&
-                key.DilationH == 1 && key.DilationW == 1)
-            {
-                // Try Winograd first
-                status = dnnl_convolution_forward_primitive_desc_create(
-                    out cached.PrimDesc, _engine, DnnlForwardInference, DnnlConvolutionWinograd,
-                    cached.UserSrcDesc, cached.UserWeightsDesc, IntPtr.Zero, cached.UserDstDesc,
-                    stridesArr, dilatesArr, paddingLArr, paddingRArr, IntPtr.Zero);
-                if (status == DnnlSuccess)
-                {
-                    if (logThis) Console.WriteLine("[oneDNN] Using Winograd algorithm for 3x3 kernel");
-                }
-                else
-                {
-                    if (logThis) Console.WriteLine($"[oneDNN] Winograd failed with status={status}, falling back to auto");
-                }
-            }
+            // Create convolution primitive descriptor with user format descriptors
+            // oneDNN will internally choose optimal layout for execution
+            status = dnnl_convolution_forward_primitive_desc_create(
+                out cached.PrimDesc, _engine, DnnlForwardInference, DnnlConvolutionAuto,
+                cached.UserSrcDesc, cached.UserWeightsDesc, IntPtr.Zero, cached.UserDstDesc,
+                stridesArr, dilatesArr, paddingLArr, paddingRArr, IntPtr.Zero);
+            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create conv prim desc: {status}"); cached.Dispose(); return null; }
 
-            // Fall back to auto if Winograd wasn't tried or failed
-            if (cached.PrimDesc == IntPtr.Zero)
-            {
-                status = dnnl_convolution_forward_primitive_desc_create(
-                    out cached.PrimDesc, _engine, DnnlForwardInference, DnnlConvolutionAuto,
-                    cached.UserSrcDesc, cached.UserWeightsDesc, IntPtr.Zero, cached.UserDstDesc,
-                    stridesArr, dilatesArr, paddingLArr, paddingRArr, IntPtr.Zero);
-                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create conv prim desc: {status}"); cached.Dispose(); return null; }
-            }
-
-            // Query the memory descriptors the primitive expects
+            // Query the memory descriptors that oneDNN chose
             IntPtr convSrcDesc = dnnl_primitive_desc_query_md(cached.PrimDesc, DnnlQuerySrcMd, 0);
             IntPtr convWeightsDesc = dnnl_primitive_desc_query_md(cached.PrimDesc, DnnlQueryWeightsMd, 0);
             IntPtr convDstDesc = dnnl_primitive_desc_query_md(cached.PrimDesc, DnnlQueryDstMd, 0);
@@ -587,22 +664,99 @@ internal static class OneDnnProvider
                 return null;
             }
 
+            // Check if reorders are needed by comparing user format with oneDNN's chosen format
+            cached.NeedsSrcReorder = dnnl_memory_desc_equal(cached.UserSrcDesc, convSrcDesc) == 0;
+            cached.NeedsWeightsReorder = dnnl_memory_desc_equal(cached.UserWeightsDesc, convWeightsDesc) == 0;
+            cached.NeedsDstReorder = dnnl_memory_desc_equal(cached.UserDstDesc, convDstDesc) == 0;
+
+            if (logThis)
+            {
+                Console.WriteLine($"[oneDNN] Reorder needed: src={cached.NeedsSrcReorder}, weights={cached.NeedsWeightsReorder}, dst={cached.NeedsDstReorder}");
+            }
+
             // Create primitive
             status = dnnl_primitive_create(out cached.Primitive, cached.PrimDesc);
             if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create primitive: {status}"); cached.Dispose(); return null; }
 
-            // Create memory objects with null handles (will be set before each execute)
-            status = dnnl_memory_create(out cached.SrcMem, convSrcDesc, _engine, IntPtr.Zero);
-            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create src mem: {status}"); cached.Dispose(); return null; }
+            // Create user format memory objects
+            status = dnnl_memory_create(out cached.UserSrcMem, cached.UserSrcDesc, _engine, IntPtr.Zero);
+            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create user src mem: {status}"); cached.Dispose(); return null; }
 
-            status = dnnl_memory_create(out cached.WeightsMem, convWeightsDesc, _engine, IntPtr.Zero);
-            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create weights mem: {status}"); cached.Dispose(); return null; }
+            status = dnnl_memory_create(out cached.UserWeightsMem, cached.UserWeightsDesc, _engine, IntPtr.Zero);
+            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create user weights mem: {status}"); cached.Dispose(); return null; }
 
-            status = dnnl_memory_create(out cached.DstMem, convDstDesc, _engine, IntPtr.Zero);
-            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create dst mem: {status}"); cached.Dispose(); return null; }
+            status = dnnl_memory_create(out cached.UserDstMem, cached.UserDstDesc, _engine, IntPtr.Zero);
+            if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create user dst mem: {status}"); cached.Dispose(); return null; }
 
-            // Create scratchpad memory (always required, even when size is 0)
-            // Use queried scratchpad descriptor if available, otherwise use a minimal fallback
+            // Create reorder primitives and allocate buffers if needed
+            if (cached.NeedsSrcReorder)
+            {
+                long srcSize = dnnl_memory_desc_get_size(convSrcDesc);
+                cached.ReorderedSrcBuffer = Marshal.AllocHGlobal((IntPtr)srcSize);
+
+                status = dnnl_memory_create(out cached.ConvSrcMem, convSrcDesc, _engine, cached.ReorderedSrcBuffer);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create conv src mem: {status}"); cached.Dispose(); return null; }
+
+                // Create reorder primitive: user src -> conv src
+                status = dnnl_reorder_primitive_desc_create(out IntPtr srcReorderPrimDesc,
+                    cached.UserSrcDesc, _engine, convSrcDesc, _engine, IntPtr.Zero);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create src reorder prim desc: {status}"); cached.Dispose(); return null; }
+
+                status = dnnl_primitive_create(out cached.SrcReorderPrim, srcReorderPrimDesc);
+                dnnl_primitive_desc_destroy(srcReorderPrimDesc);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create src reorder prim: {status}"); cached.Dispose(); return null; }
+            }
+            else
+            {
+                // No reorder needed - conv uses user memory directly
+                cached.ConvSrcMem = cached.UserSrcMem;
+            }
+
+            if (cached.NeedsWeightsReorder)
+            {
+                long weightsSize = dnnl_memory_desc_get_size(convWeightsDesc);
+                cached.ReorderedWeightsBuffer = Marshal.AllocHGlobal((IntPtr)weightsSize);
+
+                status = dnnl_memory_create(out cached.ConvWeightsMem, convWeightsDesc, _engine, cached.ReorderedWeightsBuffer);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create conv weights mem: {status}"); cached.Dispose(); return null; }
+
+                // Create reorder primitive: user weights -> conv weights
+                status = dnnl_reorder_primitive_desc_create(out IntPtr weightsReorderPrimDesc,
+                    cached.UserWeightsDesc, _engine, convWeightsDesc, _engine, IntPtr.Zero);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create weights reorder prim desc: {status}"); cached.Dispose(); return null; }
+
+                status = dnnl_primitive_create(out cached.WeightsReorderPrim, weightsReorderPrimDesc);
+                dnnl_primitive_desc_destroy(weightsReorderPrimDesc);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create weights reorder prim: {status}"); cached.Dispose(); return null; }
+            }
+            else
+            {
+                cached.ConvWeightsMem = cached.UserWeightsMem;
+            }
+
+            if (cached.NeedsDstReorder)
+            {
+                long dstSize = dnnl_memory_desc_get_size(convDstDesc);
+                cached.ReorderedDstBuffer = Marshal.AllocHGlobal((IntPtr)dstSize);
+
+                status = dnnl_memory_create(out cached.ConvDstMem, convDstDesc, _engine, cached.ReorderedDstBuffer);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create conv dst mem: {status}"); cached.Dispose(); return null; }
+
+                // Create reorder primitive: conv dst -> user dst
+                status = dnnl_reorder_primitive_desc_create(out IntPtr dstReorderPrimDesc,
+                    convDstDesc, _engine, cached.UserDstDesc, _engine, IntPtr.Zero);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create dst reorder prim desc: {status}"); cached.Dispose(); return null; }
+
+                status = dnnl_primitive_create(out cached.DstReorderPrim, dstReorderPrimDesc);
+                dnnl_primitive_desc_destroy(dstReorderPrimDesc);
+                if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create dst reorder prim: {status}"); cached.Dispose(); return null; }
+            }
+            else
+            {
+                cached.ConvDstMem = cached.UserDstMem;
+            }
+
+            // Create scratchpad memory
             IntPtr scratchpadDescToUse = scratchpadDesc != IntPtr.Zero ? scratchpadDesc : cached.UserDstDesc;
             status = dnnl_memory_create(out cached.ScratchpadMem, scratchpadDescToUse, _engine, IntPtr.Zero);
             if (status != DnnlSuccess) { if (logThis) Console.WriteLine($"[oneDNN] Failed to create scratchpad mem: {status}"); cached.Dispose(); return null; }
