@@ -3600,6 +3600,96 @@ public class CpuEngine : IEngine
     }
 
     /// <summary>
+    /// Performs 2D convolution, storing result in pre-allocated output tensor. Zero allocation.
+    /// </summary>
+    /// <param name="output">Pre-allocated output tensor with correct shape [batch, out_channels, output_height, output_width].</param>
+    /// <param name="input">Input tensor [batch, in_channels, height, width].</param>
+    /// <param name="kernel">Kernel tensor [out_channels, in_channels, kernel_height, kernel_width].</param>
+    /// <param name="stride">Stride for the convolution.</param>
+    /// <param name="padding">Padding to add to input.</param>
+    /// <param name="dilation">Dilation factor for the kernel.</param>
+    public void Conv2DInto<T>(Tensor<T> output, Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int dilation = 1)
+    {
+        if (output == null) throw new ArgumentNullException(nameof(output));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (input.Rank != 4)
+        {
+            throw new ArgumentException($"Conv2D input requires a 4D tensor [batch, in_channels, height, width]. Got rank {input.Rank}.");
+        }
+        if (kernel.Rank != 4)
+        {
+            throw new ArgumentException($"Conv2D kernel requires a 4D tensor [out_channels, in_channels, kernel_height, kernel_width]. Got rank {kernel.Rank}.");
+        }
+        if (output.Rank != 4)
+        {
+            throw new ArgumentException($"Conv2D output requires a 4D tensor [batch, out_channels, output_height, output_width]. Got rank {output.Rank}.");
+        }
+        if (stride <= 0) throw new ArgumentException("Stride must be positive.");
+        if (dilation <= 0) throw new ArgumentException("Dilation must be positive.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outChannels = kernel.Shape[0];
+        int kernelInChannels = kernel.Shape[1];
+        int kernelHeight = kernel.Shape[2];
+        int kernelWidth = kernel.Shape[3];
+
+        if (inChannels != kernelInChannels)
+        {
+            throw new ArgumentException(
+                $"Input channels ({inChannels}) must match kernel input channels ({kernelInChannels}).");
+        }
+
+        int effectiveKernelHeight = dilation * (kernelHeight - 1) + 1;
+        int effectiveKernelWidth = dilation * (kernelWidth - 1) + 1;
+
+        int outputHeight = (height + 2 * padding - effectiveKernelHeight) / stride + 1;
+        int outputWidth = (width + 2 * padding - effectiveKernelWidth) / stride + 1;
+
+        if (outputHeight <= 0 || outputWidth <= 0)
+        {
+            throw new ArgumentException(
+                $"Invalid convolution parameters. Output dimensions would be {outputHeight}x{outputWidth}. " +
+                $"Ensure stride={stride}, padding={padding}, dilation={dilation} are compatible with input size {height}x{width} and kernel size {kernelHeight}x{kernelWidth}.");
+        }
+
+        // Validate output shape matches expected dimensions
+        if (output.Shape[0] != batch || output.Shape[1] != outChannels ||
+            output.Shape[2] != outputHeight || output.Shape[3] != outputWidth)
+        {
+            throw new ArgumentException(
+                $"Output tensor shape [{string.Join(", ", output.Shape)}] doesn't match expected shape [{batch}, {outChannels}, {outputHeight}, {outputWidth}].");
+        }
+
+        // Use im2col + GEMM for float (significantly faster)
+        if (typeof(T) == typeof(float))
+        {
+            Conv2DWithIm2ColFloat(
+                input as Tensor<float> ?? throw new InvalidCastException(),
+                kernel as Tensor<float> ?? throw new InvalidCastException(),
+                output as Tensor<float> ?? throw new InvalidCastException(),
+                batch, inChannels, height, width,
+                outChannels, kernelHeight, kernelWidth,
+                stride, padding, dilation,
+                outputHeight, outputWidth);
+            return;
+        }
+
+        // Fallback for non-float types: naive implementation
+        Conv2DNaive(input, kernel, output, numOps,
+            batch, inChannels, height, width,
+            outChannels, kernelHeight, kernelWidth,
+            stride, padding, dilation,
+            outputHeight, outputWidth);
+    }
+
+    /// <summary>
     /// Optimized Conv2D using multiple strategies for float tensors.
     /// Tries in order: oneDNN, SIMD direct conv, Winograd, im2col+GEMM.
     /// </summary>
