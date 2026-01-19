@@ -30,7 +30,7 @@ Step-by-step guides to help you master AiDotNet.
 ### Intermediate
 4. [Computer Vision](computer-vision/index.md) - Image understanding
 5. [NLP & RAG](nlp/index.md) - Text processing
-6. [Time Series](time-series/index.md) - Temporal data
+6. [Time Series](time-series/) - Temporal data
 
 ### Advanced
 7. [LLM Fine-tuning](llm-fine-tuning/index.md) - Customize language models
