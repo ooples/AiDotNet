@@ -6,15 +6,15 @@ This document outlines the implementation roadmap to elevate AiDotNet's AutoML c
 
 **Current State:** Solid NAS algorithm foundation (DARTS, GDAS, OnceForAll) with FLOP-based cost estimation. Existing quantization infrastructure (Int8Quantizer, Float16Quantizer) and CompressionOptimizer AutoML.
 
-**Target State:** Production-ready, hardware-aware AutoML system with end-to-end training, real performance measurement, distributed execution, and **full facade integration via PredictionModelBuilder**.
+**Target State:** Production-ready, hardware-aware AutoML system with end-to-end training, real performance measurement, distributed execution, and **full facade integration via AiModelBuilder**.
 
 ---
 
 ## Facade Architecture Integration
 
 **CRITICAL:** All NAS functionality MUST be accessible through the existing facade pattern:
-- **Training/Building:** Users access NAS via `PredictionModelBuilder.ConfigureAutoML()`
-- **Inference:** Users access trained models via `PredictionModelResult`
+- **Training/Building:** Users access NAS via `AiModelBuilder.ConfigureAutoML()`
+- **Inference:** Users access trained models via `AiModelResult`
 
 ### User-Facing API Design
 
@@ -95,7 +95,7 @@ public class NASOptions<T>
 
 ```csharp
 // Simple NAS usage through facade
-var builder = new PredictionModelBuilder<double, Tensor<double>, Tensor<double>>()
+var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
     .WithTrainingData(trainData, trainLabels)
     .WithValidationData(valData, valLabels)
     .ConfigureAutoML(options =>
@@ -129,7 +129,7 @@ Console.WriteLine($"Best architecture: {architecture?.GetDescription()}");
 var predictions = result.Predict(testData);
 ```
 
-### Implementation in PredictionModelBuilder
+### Implementation in AiModelBuilder
 
 The factory method `CreateBuiltInAutoMLModel()` needs extension:
 
@@ -520,9 +520,9 @@ We will have exceeded industry standards when:
 
 Before any NAS feature is considered complete, verify:
 
-- [ ] Accessible via `PredictionModelBuilder.ConfigureAutoML()`
+- [ ] Accessible via `AiModelBuilder.ConfigureAutoML()`
 - [ ] Configuration through `AutoMLOptions<T, TInput, TOutput>`
-- [ ] Results returned via `PredictionModelResult.AutoMLSummary`
+- [ ] Results returned via `AiModelResult.AutoMLSummary`
 - [ ] No direct usage of internal NAS classes required by users
 - [ ] Works with existing `AutoMLBudgetOptions` for time/trial limits
 - [ ] Integrates with existing quantization via `Int8Quantizer`/`Float16Quantizer`

@@ -15,8 +15,8 @@ namespace AiDotNet.Diagnostics;
 /// </para>
 /// <para><b>Facade Pattern:</b>
 /// This class follows the AiDotNet facade pattern. Users don't create ProfilerSession directly;
-/// instead, they configure profiling through <c>PredictionModelBuilder.ConfigureProfiling()</c>
-/// and access results through <c>PredictionModelResult.ProfilingReport</c>.
+/// instead, they configure profiling through <c>AiModelBuilder.ConfigureProfiling()</c>
+/// and access results through <c>AiModelResult.ProfilingReport</c>.
 /// </para>
 /// <para><b>Production-Ready Features:</b>
 /// - O(1) streaming statistics using Welford's algorithm

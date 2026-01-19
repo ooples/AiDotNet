@@ -1,6 +1,6 @@
 # Mixture-of-Experts (MoE) Usage Guide
 
-This guide demonstrates how to use the Mixture-of-Experts neural network model with AiDotNet's PredictionModelBuilder.
+This guide demonstrates how to use the Mixture-of-Experts neural network model with AiDotNet's AiModelBuilder.
 
 ## Overview
 
@@ -40,8 +40,8 @@ var architecture = new NeuralNetworkArchitecture<float>(
 // 3. Create the model (implements IFullModel automatically)
 var model = new MixtureOfExpertsNeuralNetwork<float>(options, architecture);
 
-// 4. Use with PredictionModelBuilder (same as always)
-var builder = new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>();
+// 4. Use with AiModelBuilder (same as always)
+var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
 var result = builder
     .ConfigureModel(model)
     .Build(trainingData, trainingLabels);
@@ -91,8 +91,8 @@ var architecture = new NeuralNetworkArchitecture<float>(
 // Create model
 var model = new MixtureOfExpertsNeuralNetwork<float>(options, architecture);
 
-// Train with PredictionModelBuilder
-var builder = new PredictionModelBuilder<float, Tensor<float>, Tensor<float>>();
+// Train with AiModelBuilder
+var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
 var result = builder
     .ConfigureModel(model)
     .Build(trainingData, trainingLabels);
@@ -318,7 +318,7 @@ if (model is MixtureOfExpertsNeuralNetwork<float> moeNet)
    ```
 
 4. **Use Standard Pattern**: Follow the same pattern as all AiDotNet models:
-   - Create Options → Create Architecture → Create Model → Use with PredictionModelBuilder
+   - Create Options → Create Architecture → Create Model → Use with AiModelBuilder
 
 5. **Monitor Training**: Check that training loss decreases and validation accuracy improves
 
@@ -327,7 +327,7 @@ if (model is MixtureOfExpertsNeuralNetwork<float> moeNet)
 ## Key Points
 
 1. **Configuration Class**: MoE uses `MixtureOfExpertsOptions` for all configuration
-2. **Implements IFullModel**: Works automatically with PredictionModelBuilder
+2. **Implements IFullModel**: Works automatically with AiModelBuilder
 3. **Same Pattern**: Identical to ARIMAModel, NBEATSModel, FeedForwardNeuralNetwork, etc.
 4. **No Special Helpers**: No extension methods or special builders needed at model level
 5. **Automatic Integration**: Load balancing loss is automatically integrated during training
@@ -374,6 +374,6 @@ Mixture-of-Experts in AiDotNet follows the standard model pattern:
 1. Create a `MixtureOfExpertsOptions<T>` configuration object
 2. Create a `NeuralNetworkArchitecture<T>` defining the task
 3. Create a `MixtureOfExpertsNeuralNetwork<T>` model
-4. Use with `PredictionModelBuilder` for training and inference
+4. Use with `AiModelBuilder` for training and inference
 
 This is the same pattern as all other models in AiDotNet, making it easy to use and integrate into your workflows.

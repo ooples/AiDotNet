@@ -1,12 +1,13 @@
 name: Documentation
 
-# Auto-generate and publish API documentation
+# Auto-generate and publish API documentation and Interactive Playground
 on:
   push:
     branches:
       - master
     paths:
       - 'src/**/*.cs'
+      - 'src/AiDotNet.Playground/**'
       - 'docs/**'
   workflow_dispatch:
 
@@ -25,7 +26,7 @@ env:
 
 jobs:
   build-docs:
-    name: Build and Publish Docs
+    name: Build Documentation and Playground
     runs-on: ubuntu-latest
 
     steps:
@@ -50,6 +51,7 @@ jobs:
               "src": [
                 {
                   "files": [ "src/**/*.csproj" ],
+                  "exclude": [ "src/AiDotNet.Playground/**" ],
                   "src": "."
                 }
               ],
@@ -138,12 +140,90 @@ jobs:
           href: index.md
         - name: API Reference
           href: api/
+        - name: Interactive Playground
+          href: playground/
         EOF
         fi
       shell: bash
 
-    - name: Build documentation
+    - name: Build DocFX documentation
       run: docfx docfx.json
+
+    - name: Restore Playground dependencies
+      run: dotnet restore src/AiDotNet.Playground/AiDotNet.Playground.csproj
+
+    - name: Build Blazor WASM Playground
+      run: dotnet publish src/AiDotNet.Playground/AiDotNet.Playground.csproj -c Release -o _playground
+
+    - name: Copy Playground to documentation site
+      run: |
+        mkdir -p _site/playground
+        cp -r _playground/wwwroot/* _site/playground/
+        # Update base href for the playground subdirectory
+        sed -i 's|<base href="/" />|<base href="/AiDotNet/playground/" />|g' _site/playground/index.html
+
+    - name: Create unified landing page
+      run: |
+        cat > _site/index.html << 'EOF'
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>AiDotNet - Enterprise AI/ML for .NET</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; color: #f8fafc; }
+                .hero { text-align: center; padding: 80px 20px; }
+                .hero h1 { font-size: 3.5rem; margin-bottom: 16px; background: linear-gradient(135deg, #6366f1, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+                .hero p { font-size: 1.25rem; color: #94a3b8; max-width: 600px; margin: 0 auto 40px; }
+                .features { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; margin-bottom: 60px; }
+                .feature { background: rgba(99, 102, 241, 0.15); padding: 8px 16px; border-radius: 9999px; font-size: 0.9rem; color: #a5b4fc; }
+                .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; max-width: 1000px; margin: 0 auto; padding: 0 20px 80px; }
+                .card { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 32px; text-align: center; transition: all 0.3s; text-decoration: none; color: inherit; }
+                .card:hover { transform: translateY(-4px); border-color: #6366f1; box-shadow: 0 12px 40px rgba(99, 102, 241, 0.2); }
+                .card-icon { font-size: 3rem; margin-bottom: 16px; }
+                .card h2 { font-size: 1.5rem; margin-bottom: 12px; }
+                .card p { color: #94a3b8; line-height: 1.6; }
+                .btn { display: inline-block; margin-top: 20px; padding: 12px 24px; background: #6366f1; color: white; border-radius: 8px; font-weight: 500; }
+            </style>
+        </head>
+        <body>
+            <div class="hero">
+                <h1>AiDotNet</h1>
+                <p>The most comprehensive AI/ML framework for .NET. 100+ neural networks, 106+ classical ML algorithms, and more.</p>
+                <div class="features">
+                    <span class="feature">100+ Neural Networks</span>
+                    <span class="feature">106+ ML Algorithms</span>
+                    <span class="feature">50+ Vision Models</span>
+                    <span class="feature">90+ Audio Models</span>
+                    <span class="feature">80+ RL Agents</span>
+                    <span class="feature">HuggingFace Compatible</span>
+                </div>
+            </div>
+            <div class="cards">
+                <a href="playground/" class="card">
+                    <div class="card-icon">🚀</div>
+                    <h2>Interactive Playground</h2>
+                    <p>Try AiDotNet directly in your browser with live code execution and interactive examples.</p>
+                    <span class="btn">Launch Playground</span>
+                </a>
+                <a href="api/index.html" class="card">
+                    <div class="card-icon">📚</div>
+                    <h2>API Documentation</h2>
+                    <p>Complete API reference with detailed documentation for all classes, methods, and examples.</p>
+                    <span class="btn">Browse Docs</span>
+                </a>
+                <a href="https://github.com/ooples/AiDotNet" class="card">
+                    <div class="card-icon">💻</div>
+                    <h2>GitHub Repository</h2>
+                    <p>View source code, report issues, contribute, and star the project on GitHub.</p>
+                    <span class="btn">View on GitHub</span>
+                </a>
+            </div>
+        </body>
+        </html>
+        EOF
 
     - name: Upload documentation artifact
       uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
@@ -163,12 +243,14 @@ jobs:
       run: |
         echo "## Documentation Build Results" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "✅ Documentation built successfully" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Documentation and Playground built successfully" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Links" >> $GITHUB_STEP_SUMMARY
-        echo "- [View Documentation](https://${{ github.repository_owner }}.github.io/AiDotNet/)" >> $GITHUB_STEP_SUMMARY
+        echo "- [Documentation Home](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/)" >> $GITHUB_STEP_SUMMARY
+        echo "- [API Reference](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/api/)" >> $GITHUB_STEP_SUMMARY
+        echo "- [Interactive Playground](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/playground/)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
         echo "1. Enable GitHub Pages in repository settings" >> $GITHUB_STEP_SUMMARY
         echo "2. Set source to 'gh-pages' branch" >> $GITHUB_STEP_SUMMARY
-        echo "3. Documentation will be available at the link above" >> $GITHUB_STEP_SUMMARY
+        echo "3. Documentation will be available at the links above" >> $GITHUB_STEP_SUMMARY

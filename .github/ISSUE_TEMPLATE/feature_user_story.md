@@ -103,16 +103,16 @@ public {ImplementationName}({ImplementationName}Options? options = null)
   - Document WHY each default was chosen (cite papers/standards)
   - Include in XML documentation
 
-#### AC 1.3: PredictionModelBuilder Integration (REQUIRED)
+#### AC 1.3: AiModelBuilder Integration (REQUIRED)
 
 **Requirement:** Integrate feature with existing builder pipeline.
 
-- [ ] **Add Private Field:** Add to `PredictionModelBuilder.cs`:
+- [ ] **Add Private Field:** Add to `AiModelBuilder.cs`:
   ```csharp
   private I{FeatureName}<T, TInput, TOutput>? _{featureName};
   ```
 
-- [ ] **Add Configure Method:** Add to `PredictionModelBuilder.cs`:
+- [ ] **Add Configure Method:** Add to `AiModelBuilder.cs`:
   ```csharp
   /// <summary>
   /// Configures the {feature description}.
@@ -124,7 +124,7 @@ public {ImplementationName}({ImplementationName}Options? options = null)
   ///
   /// [Provide real-world analogy or example]
   /// </remarks>
-  public IPredictionModelBuilder<T, TInput, TOutput> Configure{FeatureName}(
+  public IAiModelBuilder<T, TInput, TOutput> Configure{FeatureName}(
       I{FeatureName}<T, TInput, TOutput> {featureName})
   {
       _{featureName} = {featureName};
@@ -138,7 +138,7 @@ public {ImplementationName}({ImplementationName}Options? options = null)
 - MUST return `this` for method chaining
 - MUST include XML documentation with beginner-friendly remarks
 
-- [ ] **Use in Build():** Modify `Build()` method in `PredictionModelBuilder.cs`:
+- [ ] **Use in Build():** Modify `Build()` method in `AiModelBuilder.cs`:
   ```csharp
   // Create default if not configured
   var {featureName} = _{featureName} ?? new Default{FeatureName}<T, TInput, TOutput>();
@@ -179,7 +179,7 @@ public {ImplementationName}({ImplementationName}Options? options = null)
   /// <param name="learningRate">The learning rate. Default: 0.001 (Adam optimizer standard from Kingma & Ba, 2014)</param>
   ```
 
-- [ ] **Follow Existing Format:** Match documentation style of similar components (e.g., ActivationFunctionBase, PredictionModelBuilder)
+- [ ] **Follow Existing Format:** Match documentation style of similar components (e.g., ActivationFunctionBase, AiModelBuilder)
 
 #### AC 1.5: Unit Tests (REQUIRED)
 
@@ -225,13 +225,13 @@ public {ImplementationName}({ImplementationName}Options? options = null)
   }
   ```
 
-- [ ] **Integration Testing** (if feature integrates with PredictionModelBuilder):
+- [ ] **Integration Testing** (if feature integrates with AiModelBuilder):
   ```csharp
   [Fact]
   public void Configure{FeatureName}_ShouldBeUsedInBuild()
   {
       var feature = new {ImplementationName}<double>();
-      var builder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>()
+      var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
           .Configure{FeatureName}(feature)
           .ConfigureModel(mockModel);
 
@@ -260,7 +260,7 @@ public {ImplementationName}({ImplementationName}Options? options = null)
 - [ ] All numeric operations use INumericOperations<T> (no hardcoded double/float)
 - [ ] All properties properly initialized (no `default!`)
 - [ ] All interfaces in `src/Interfaces/` (root level)
-- [ ] Integrated with PredictionModelBuilder (Configure method + usage in Build())
+- [ ] Integrated with AiModelBuilder (Configure method + usage in Build())
 - [ ] All defaults based on research/industry standards and documented
 - [ ] Complete XML documentation with beginner-friendly remarks
 - [ ] All unit tests pass with 80%+ code coverage

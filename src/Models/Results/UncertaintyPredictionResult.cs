@@ -10,7 +10,7 @@ namespace AiDotNet.Models.Results;
 /// <typeparam name="TOutput">The model's output type (e.g., <c>Tensor&lt;T&gt;</c>).</typeparam>
 /// <remarks>
 /// <para>
-/// This type is returned by the facade method <c>PredictionModelResult.PredictWithUncertainty(...)</c>.
+/// This type is returned by the facade method <c>AiModelResult.PredictWithUncertainty(...)</c>.
 /// </para>
 /// <para><b>For Beginners:</b> This lets you ask the model both:
 /// - "What is the prediction?"

@@ -22,7 +22,7 @@ namespace AiDotNet.Configuration;
 /// <code>
 /// var config = InferenceOptimizationConfig.Default;
 ///
-/// var result = await new PredictionModelBuilder&lt;double, ...&gt;()
+/// var result = await new AiModelBuilder&lt;double, ...&gt;()
 ///     .ConfigureModel(myModel)
 ///     .ConfigureInferenceOptimizations(config)
 ///     .BuildAsync();

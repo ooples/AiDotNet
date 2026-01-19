@@ -9,13 +9,13 @@ namespace AiDotNet.Preprocessing;
 /// <para>
 /// PreprocessingRegistry provides a singleton pattern for managing the active preprocessing pipeline.
 /// By default, a standard pipeline with imputation and scaling is used. Users can configure
-/// custom preprocessing via PredictionModelBuilder.ConfigurePreprocessing().
+/// custom preprocessing via AiModelBuilder.ConfigurePreprocessing().
 /// </para>
 /// <para><b>For Beginners:</b> This is like a global settings panel for data preprocessing.
-/// You don't need to interact with this directly - just use PredictionModelBuilder:
+/// You don't need to interact with this directly - just use AiModelBuilder:
 ///
 /// <code>
-/// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigurePreprocessing(pipeline => pipeline
 ///         .Add(new SimpleImputer&lt;double&gt;(ImputationStrategy.Mean))
 ///         .Add(new StandardScaler&lt;double&gt;()))
@@ -38,11 +38,11 @@ public static class PreprocessingRegistry<T, TInput>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This is set automatically when you call PredictionModelBuilder.ConfigurePreprocessing().
+    /// This is set automatically when you call AiModelBuilder.ConfigurePreprocessing().
     /// The pipeline is global and thread-safe.
     /// </para>
     /// <para><b>For Beginners:</b> You typically don't set this directly.
-    /// Use PredictionModelBuilder.ConfigurePreprocessing() instead.
+    /// Use AiModelBuilder.ConfigurePreprocessing() instead.
     /// </para>
     /// </remarks>
     public static IDataTransformer<T, TInput, TInput>? Current

@@ -6,7 +6,7 @@ using AiDotNet.ReinforcementLearning.ReplayBuffers;
 namespace AiDotNet.Configuration;
 
 /// <summary>
-/// Configuration options for reinforcement learning training loops via PredictionModelBuilder.
+/// Configuration options for reinforcement learning training loops via AiModelBuilder.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
@@ -34,7 +34,7 @@ namespace AiDotNet.Configuration;
 ///     MaxStepsPerEpisode = 500
 /// };
 ///
-/// var result = await new PredictionModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
+/// var result = await new AiModelBuilder&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureReinforcementLearning(options)
 ///     .ConfigureModel(new DQNAgent&lt;double&gt;(agentOptions))
 ///     .BuildAsync();

@@ -62,7 +62,7 @@ public class AgentGlobalConfigurationBuilder
     /// <para>
     /// This method sets the API key that will be used for all OpenAI API calls when agent assistance is enabled.
     /// The key should be obtained from your OpenAI account at platform.openai.com. Once configured, this key
-    /// will be used automatically by any PredictionModelBuilder that enables agent assistance with the OpenAI provider,
+    /// will be used automatically by any AiModelBuilder that enables agent assistance with the OpenAI provider,
     /// unless explicitly overridden at the builder level.
     /// </para>
     /// <para><b>For Beginners:</b> This sets up your OpenAI credentials so the AI agent can use OpenAI's models.
@@ -110,7 +110,7 @@ public class AgentGlobalConfigurationBuilder
     /// <para>
     /// This method sets the API key that will be used for all Anthropic API calls when agent assistance is enabled.
     /// The key should be obtained from your Anthropic account at console.anthropic.com. Once configured, this key
-    /// will be used automatically by any PredictionModelBuilder that enables agent assistance with the Anthropic provider,
+    /// will be used automatically by any AiModelBuilder that enables agent assistance with the Anthropic provider,
     /// unless explicitly overridden at the builder level. Anthropic's Claude models are known for detailed explanations
     /// and large context windows.
     /// </para>

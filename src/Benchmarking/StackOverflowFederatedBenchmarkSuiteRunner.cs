@@ -13,7 +13,7 @@ namespace AiDotNet.Benchmarking;
 internal static class StackOverflowFederatedBenchmarkSuiteRunner
 {
     public static Task<BenchmarkSuiteReport> RunAsync<T, TInput, TOutput>(
-        PredictionModelResult<T, TInput, TOutput> model,
+        AiModelResult<T, TInput, TOutput> model,
         BenchmarkSuite suite,
         BenchmarkingOptions options,
         StackOverflowFederatedBenchmarkOptions stackOverflow,
@@ -39,10 +39,10 @@ internal static class StackOverflowFederatedBenchmarkSuiteRunner
             throw new ArgumentNullException(nameof(stackOverflow));
         }
 
-        if (model is not PredictionModelResult<T, Matrix<T>, Vector<T>> typedModel)
+        if (model is not AiModelResult<T, Matrix<T>, Vector<T>> typedModel)
         {
             throw new NotSupportedException(
-                $"StackOverflow benchmarking currently requires PredictionModelResult<T, Matrix<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
+                $"StackOverflow benchmarking currently requires AiModelResult<T, Matrix<T>, Vector<T>>. Received {typeof(TInput).Name}/{typeof(TOutput).Name}.");
         }
 
         if (string.IsNullOrWhiteSpace(stackOverflow.TrainFilePath))

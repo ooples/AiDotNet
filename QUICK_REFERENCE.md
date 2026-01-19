@@ -64,7 +64,7 @@ Interfaces:        I{Name} (IOptimizer, IModel)
 3. Implementations (`specific algorithms`)
 
 **Builder Pattern:**
-- `PredictionModelBuilder<T, TInput, TOutput>` - Main builder
+- `AiModelBuilder<T, TInput, TOutput>` - Main builder
 - Fluent API for configuration
 
 ## Current Capabilities
@@ -132,7 +132,7 @@ Interfaces:        I{Name} (IOptimizer, IModel)
    - Extend properties dictionary
    - Store custom information
 
-3. **Integrate with PredictionModelBuilder:**
+3. **Integrate with AiModelBuilder:**
    - Add Configure* methods
    - Support builder chaining
 

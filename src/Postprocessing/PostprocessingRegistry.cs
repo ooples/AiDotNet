@@ -9,13 +9,13 @@ namespace AiDotNet.Postprocessing;
 /// <para>
 /// PostprocessingRegistry provides a singleton pattern for managing the active postprocessing pipeline.
 /// By default, no postprocessing is applied (pass-through). Users can configure
-/// custom postprocessing via PredictionModelBuilder.ConfigurePostprocessing().
+/// custom postprocessing via AiModelBuilder.ConfigurePostprocessing().
 /// </para>
 /// <para><b>For Beginners:</b> This is like a global settings panel for output processing.
-/// You don't need to interact with this directly - just use PredictionModelBuilder:
+/// You don't need to interact with this directly - just use AiModelBuilder:
 ///
 /// <code>
-/// var result = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigurePostprocessing(pipeline => pipeline
 ///         .Add(new SoftmaxTransformer&lt;double&gt;())
 ///         .Add(new LabelDecoder&lt;double&gt;(labels)))
@@ -38,11 +38,11 @@ public static class PostprocessingRegistry<T, TOutput>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This is set automatically when you call PredictionModelBuilder.ConfigurePostprocessing().
+    /// This is set automatically when you call AiModelBuilder.ConfigurePostprocessing().
     /// The pipeline is global and thread-safe.
     /// </para>
     /// <para><b>For Beginners:</b> You typically don't set this directly.
-    /// Use PredictionModelBuilder.ConfigurePostprocessing() instead.
+    /// Use AiModelBuilder.ConfigurePostprocessing() instead.
     /// </para>
     /// </remarks>
     public static IDataTransformer<T, TOutput, TOutput>? Current

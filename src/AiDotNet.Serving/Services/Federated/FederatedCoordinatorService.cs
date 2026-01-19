@@ -328,7 +328,7 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
     {
         if (numericType == NumericType.Float)
         {
-            var model = new PredictionModelResult<float, Matrix<float>, Vector<float>>();
+            var model = new AiModelResult<float, Matrix<float>, Vector<float>>();
             model.LoadFromFile(sourcePath);
             var p = model.GetParameters();
             return (p.Length, p.Select(v => (double)v).ToArray());
@@ -336,13 +336,13 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
 
         if (numericType == NumericType.Decimal)
         {
-            var model = new PredictionModelResult<decimal, Matrix<decimal>, Vector<decimal>>();
+            var model = new AiModelResult<decimal, Matrix<decimal>, Vector<decimal>>();
             model.LoadFromFile(sourcePath);
             var p = model.GetParameters();
             return (p.Length, p.Select(v => (double)v).ToArray());
         }
 
-        var modelDouble = new PredictionModelResult<double, Matrix<double>, Vector<double>>();
+        var modelDouble = new AiModelResult<double, Matrix<double>, Vector<double>>();
         modelDouble.LoadFromFile(sourcePath);
         var pd = modelDouble.GetParameters();
         return (pd.Length, pd.ToArray());
@@ -351,7 +351,7 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
     private static double[] AggregateRoundInternal<T>(FederatedRunState state)
     {
         var globalBaseline = ToVector<T>(state.GlobalParameters);
-        var model = new PredictionModelResult<T, Matrix<T>, Vector<T>>();
+        var model = new AiModelResult<T, Matrix<T>, Vector<T>>();
         model.LoadFromFile(state.ModelArtifactPath);
         var globalModel = model.WithParameters(globalBaseline);
 
@@ -555,7 +555,7 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
 
     private static void PersistTypedArtifact<T>(string artifactPath, double[] globalParameters)
     {
-        var model = new PredictionModelResult<T, Matrix<T>, Vector<T>>();
+        var model = new AiModelResult<T, Matrix<T>, Vector<T>>();
         model.LoadFromFile(artifactPath);
         var updated = model.WithParameters(ToVector<T>(globalParameters));
         updated.SaveModel(artifactPath);

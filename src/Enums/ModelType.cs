@@ -1408,7 +1408,7 @@ public enum ModelType
     /// - MobileNet: Distilled from ResNet, runs on smartphones
     /// - TinyBERT: 7.5x smaller, suitable for edge deployment
     ///
-    /// Use ConfigureKnowledgeDistillation() on PredictionModelBuilder to enable this technique.
+    /// Use ConfigureKnowledgeDistillation() on AiModelBuilder to enable this technique.
     /// </para>
     /// </remarks>
     KnowledgeDistillation,

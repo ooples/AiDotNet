@@ -1,0 +1,219 @@
+@page "/examples"
+@inject ExampleService ExampleService
+@inject NavigationManager Navigation
+
+<PageTitle>Examples - AiDotNet Playground</PageTitle>
+
+<div class="examples-page">
+    <div class="examples-header">
+        <h1>Interactive Examples</h1>
+        <p>Explore AiDotNet's capabilities through runnable code examples. Click any example to open it in the playground.</p>
+    </div>
+
+    <div class="examples-grid">
+        @foreach (var category in ExampleService.GetCategories())
+        {
+            <div class="category-section">
+                <h2 class="category-title">
+                    <span class="category-icon">@GetCategoryIcon(category)</span>
+                    @category
+                </h2>
+                <div class="examples-list">
+                    @foreach (var example in ExampleService.GetExamples(category))
+                    {
+                        <div class="example-card" @onclick="() => OpenExample(example.Id)">
+                            <div class="example-header">
+                                <span class="example-name">@example.Name</span>
+                                <span class="difficulty-badge @GetDifficultyClass(example.Difficulty)">@example.Difficulty</span>
+                            </div>
+                            <p class="example-description">@example.Description</p>
+                            <div class="example-tags">
+                                @foreach (var tag in example.Tags)
+                                {
+                                    <span class="tag">@tag</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .examples-page {
+        padding: 40px;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+    .examples-header {
+        text-align: center;
+        margin-bottom: 48px;
+    }
+
+    .examples-header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 12px;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .examples-header p {
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .examples-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+    }
+
+    .category-section {
+        background: var(--bg-card);
+        border-radius: 16px;
+        padding: 24px;
+        border: 1px solid var(--border-color);
+    }
+
+    .category-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .category-icon {
+        font-size: 1.75rem;
+    }
+
+    .examples-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 16px;
+    }
+
+    .example-card {
+        background: var(--bg-dark);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 20px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .example-card:hover {
+        border-color: var(--primary-color);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(99, 102, 241, 0.15);
+    }
+
+    .example-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+
+    .example-name {
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+
+    .difficulty-badge {
+        padding: 4px 10px;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .difficulty-beginner {
+        background: rgba(34, 197, 94, 0.2);
+        color: #4ade80;
+    }
+
+    .difficulty-intermediate {
+        background: rgba(245, 158, 11, 0.2);
+        color: #fbbf24;
+    }
+
+    .difficulty-advanced {
+        background: rgba(239, 68, 68, 0.2);
+        color: #f87171;
+    }
+
+    .example-description {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        line-height: 1.5;
+        margin-bottom: 12px;
+    }
+
+    .example-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .tag {
+        background: rgba(99, 102, 241, 0.15);
+        color: #a5b4fc;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+    }
+
+    @@media (max-width: 768px) {
+        .examples-page {
+            padding: 20px;
+        }
+
+        .examples-header h1 {
+            font-size: 1.75rem;
+        }
+
+        .examples-list {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+@code {
+    private void OpenExample(string exampleId)
+    {
+        Navigation.NavigateTo($"/?example={exampleId}");
+    }
+
+    private string GetCategoryIcon(string category) => category switch
+    {
+        "Getting Started" => "🚀",
+        "Classification" => "🏷️",
+        "Regression" => "📈",
+        "Neural Networks" => "🧠",
+        "Computer Vision" => "👁️",
+        "Natural Language Processing" => "📝",
+        "RAG & LLMs" => "🤖",
+        "Reinforcement Learning" => "🎮",
+        "Time Series" => "⏱️",
+        "Audio Processing" => "🎵",
+        "Clustering" => "🔮",
+        _ => "📦"
+    };
+
+    private string GetDifficultyClass(string difficulty) => difficulty.ToLower() switch
+    {
+        "beginner" => "difficulty-beginner",
+        "intermediate" => "difficulty-intermediate",
+        "advanced" => "difficulty-advanced",
+        _ => "difficulty-beginner"
+    };
+}

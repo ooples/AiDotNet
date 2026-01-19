@@ -98,6 +98,14 @@
 	  <None Remove="AiDotNet.Dashboard\**\*" />
 	</ItemGroup>
 
+	<!-- Exclude the AiDotNet.Playground project files from this project -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Playground\**\*.cs" />
+	  <Content Remove="AiDotNet.Playground\**\*" />
+	  <EmbeddedResource Remove="AiDotNet.Playground\**\*" />
+	  <None Remove="AiDotNet.Playground\**\*" />
+	</ItemGroup>
+
 	<!-- Exclude the AiDotNet.Tensors project files from this project -->
 	<ItemGroup>
 	  <Compile Remove="AiDotNet.Tensors\**\*.cs" />

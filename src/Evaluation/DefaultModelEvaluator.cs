@@ -199,7 +199,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
 
     private static void TryPopulateUncertaintyStats(DataSetStats<T, TInput, TOutput> stats, TInput X, IFullModel<T, TInput, TOutput> model)
     {
-        if (model is not AiDotNet.Models.Results.PredictionModelResult<T, TInput, TOutput> predictionModelResult)
+        if (model is not AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput> predictionModelResult)
         {
             return;
         }
@@ -574,12 +574,12 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         NormalizationInfo<T, TInput, TOutput> normInfo)
     {
         var optimizationResult = new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
-        var options = new PredictionModelResultOptions<T, TInput, TOutput>
+        var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
             NormalizationInfo = normInfo
         };
-        var predictionModelResult = new PredictionModelResult<T, TInput, TOutput>(options);
+        var predictionModelResult = new AiModelResult<T, TInput, TOutput>(options);
 
         return new ModelStats<T, TInput, TOutput>(new ModelStatsInputs<T, TInput, TOutput>
         {

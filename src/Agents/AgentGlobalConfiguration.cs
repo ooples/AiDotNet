@@ -11,7 +11,7 @@ namespace AiDotNet.Agents;
 /// This static class manages global configuration settings for AI agent assistance across your entire application.
 /// It stores API keys for different LLM providers (OpenAI, Anthropic, Azure OpenAI) and allows you to set a default
 /// provider to use when one isn't explicitly specified. Configuration set through this class applies to all
-/// PredictionModelBuilder instances unless overridden at the individual builder level. This centralized approach
+/// AiModelBuilder instances unless overridden at the individual builder level. This centralized approach
 /// eliminates the need to specify API keys for each model you build and ensures consistent settings across your
 /// application.
 /// </para>
@@ -39,7 +39,7 @@ namespace AiDotNet.Agents;
 ///
 /// Then later when building models, the agent automatically uses those credentials:
 /// <code>
-/// var result = await new PredictionModelBuilder&lt;double&gt;()
+/// var result = await new AiModelBuilder&lt;double&gt;()
 ///     .ConfigureAgentAssistance(options => options.EnableModelSelection())
 ///     .BuildAsync();  // Automatically uses global OpenAI configuration
 /// </code>

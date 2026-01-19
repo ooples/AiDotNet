@@ -1,11 +1,11 @@
 # PR #447 Sprint Plan — 3D AI Models (Issue #399)
 
-This document is the exhaustive, phased plan to take PR #447 (“3D AI capabilities: point clouds + neural radiance fields”) from its current state to production-ready, while preserving AiDotNet’s facade philosophy: end users primarily interact via `PredictionModelBuilder` (build/train) and `PredictionModelResult` (inference).
+This document is the exhaustive, phased plan to take PR #447 (“3D AI capabilities: point clouds + neural radiance fields”) from its current state to production-ready, while preserving AiDotNet’s facade philosophy: end users primarily interact via `AiModelBuilder` (build/train) and `AiModelResult` (inference).
 
 ## Goals (User-Facing Outcome)
 
 - No change to user-facing entry points:
-  - Users can still provide a concrete model via `PredictionModelBuilder.ConfigureModel(...)`.
+  - Users can still provide a concrete model via `AiModelBuilder.ConfigureModel(...)`.
   - AutoML can still select a model automatically when enabled.
   - Agents can still recommend/assemble a model and configuration.
 - Add production-ready 3D-focused models and workflows:
@@ -46,8 +46,8 @@ This phase is about producing a precise checklist of what must change before any
   - Confirm expected overrides: `Predict`, `Train` (internal use), `Serialize/Deserialize`, `Clone/DeepCopy`, metadata.
 - For each new 3D model:
   - Define the exact `TInput` / `TOutput` types to be supported.
-  - Verify the model can be passed to `PredictionModelBuilder.ConfigureModel(...)` without adapters.
-  - Verify `PredictionModelResult<T,TInput,TOutput>` can run inference for those types.
+  - Verify the model can be passed to `AiModelBuilder.ConfigureModel(...)` without adapters.
+  - Verify `AiModelResult<T,TInput,TOutput>` can run inference for those types.
 
 **Acceptance criteria:** For every 3D model, we have a one-page “contract sheet”:
 - Model type name + namespace.
@@ -69,8 +69,8 @@ This phase is about producing a precise checklist of what must change before any
 
 ### 0.3 Integration Inventory (Facade Wiring)
 - Identify required integration points in:
-  - `src/PredictionModelBuilder.cs` (AutoML/Agents selection flow, model family routing).
-  - `src/Models/Results/PredictionModelResult.cs` (inference session flow, tensor shapes, batching expectations).
+  - `src/AiModelBuilder.cs` (AutoML/Agents selection flow, model family routing).
+  - `src/Models/Results/AiModelResult.cs` (inference session flow, tensor shapes, batching expectations).
   - Any existing “model registry” / “task family” mapping used by AutoML and agents.
 
 **Acceptance criteria:** A routing map that explicitly answers:
@@ -149,7 +149,7 @@ This phase is about producing a precise checklist of what must change before any
 
 **Acceptance criteria (Point Cloud):**
 - Unit tests: shape checks, permutation invariance (PointNet), basic forward pass determinism.
-- Integration tests: `PredictionModelBuilder -> Build -> PredictionModelResult -> Predict` for at least one point cloud task.
+- Integration tests: `AiModelBuilder -> Build -> AiModelResult -> Predict` for at least one point cloud task.
 
 ## Phase 3 — Radiance Fields Core (Correctness + Options + Scalability)
 
@@ -211,7 +211,7 @@ This phase is explicitly dependent on what is already merged vs still in-flight 
   - Render scheduling policies.
   - Safety/resource limits by default (timeouts, max rays, max points).
 
-**Acceptance criteria:** 3D models can run inference reliably via `PredictionModelResult`; serving extensions are optional and isolated.
+**Acceptance criteria:** 3D models can run inference reliably via `AiModelResult`; serving extensions are optional and isolated.
 
 ## Phase 6 — Serialization, Cloning, and Reproducibility
 

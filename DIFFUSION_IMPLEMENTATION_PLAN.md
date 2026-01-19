@@ -8,8 +8,8 @@ This document outlines a complete implementation plan for diffusion models in Ai
 - **Primary Focus**: Multi-modal generation (Video first, then Audio, then 3D)
 - **Architecture**: Interfaces extending IFullModel + Base classes + Concrete implementations
 - **Weight Loading**: Support both HuggingFace Hub download AND local .pt/.safetensors/.onnx files
-- **Builder Pattern**: Use existing `ConfigureModel()` method on PredictionModelBuilder
-- **Facade Pattern**: Users interact via PredictionModelBuilder/PredictionModelResult only
+- **Builder Pattern**: Use existing `ConfigureModel()` method on AiModelBuilder
+- **Facade Pattern**: Users interact via AiModelBuilder/AiModelResult only
 - **AutoML Integration**: Full support for automated diffusion model selection/tuning
 - **Agents Integration**: Full support for AI agents to create and configure diffusion models
 - **Engine**: Extend existing IEngine with diffusion-specific operations
@@ -816,6 +816,6 @@ src/
 5. **Memory Optimization**: Will implement gradient checkpointing, attention slicing as options
 6. **Priority Order**: Video diffusion first, then audio, then 3D
 7. **Testing Strategy**: Test against HuggingFace diffusers reference implementations
-8. **Builder Pattern**: Use existing ConfigureModel() on PredictionModelBuilder
+8. **Builder Pattern**: Use existing ConfigureModel() on AiModelBuilder
 9. **Engine Extension**: Add diffusion-specific operations to existing IEngine
 

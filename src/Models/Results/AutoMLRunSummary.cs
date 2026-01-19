@@ -9,7 +9,7 @@ namespace AiDotNet.Models.Results;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This summary is intended for facade outputs (for example, <c>PredictionModelResult</c>) and avoids exposing
+/// This summary is intended for facade outputs (for example, <c>AiModelResult</c>) and avoids exposing
 /// hyperparameters or sensitive model details. It provides transparency into the AutoML process while protecting
 /// proprietary implementation choices.
 /// </para>

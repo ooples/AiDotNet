@@ -57,7 +57,7 @@ public class RLTrainingIntegrationTests
             }
         };
 
-        var builder = new PredictionModelBuilder<double, Vector<double>, Vector<double>>()
+        var builder = new AiModelBuilder<double, Vector<double>, Vector<double>>()
             .ConfigureReinforcementLearning(rlOptions)
             .ConfigureModel(agent);
 
@@ -117,7 +117,7 @@ public class RLTrainingIntegrationTests
             }
         };
 
-        var builder = new PredictionModelBuilder<double, Vector<double>, Vector<double>>()
+        var builder = new AiModelBuilder<double, Vector<double>, Vector<double>>()
             .ConfigureReinforcementLearning(rlOptions)
             .ConfigureModel(agent);
 

@@ -145,7 +145,7 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para>
     /// <b>Priority Order:</b>
-    /// 1. If user configured a pipeline via PredictionModelBuilder.ConfigurePreprocessing() → use it
+    /// 1. If user configured a pipeline via AiModelBuilder.ConfigurePreprocessing() → use it
     /// 2. Otherwise → use industry-standard defaults for this specific model type
     /// </para>
     /// <para>
@@ -153,7 +153,7 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// You can either let the model use its industry-standard defaults (recommended for most cases),
     /// or configure custom preprocessing:
     /// <code>
-    /// var result = new PredictionModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+    /// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
     ///     .ConfigurePreprocessing(pipeline => pipeline
     ///         .Add(new ImageResizer&lt;double&gt;(224, 224))
     ///         .Add(new ImageNormalizer&lt;double&gt;()))
@@ -163,7 +163,7 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected Tensor<T> PreprocessDocument(Tensor<T> rawImage)
     {
-        // Priority 1: User-configured pipeline via PredictionModelBuilder
+        // Priority 1: User-configured pipeline via AiModelBuilder
         if (PreprocessingRegistry<T, Tensor<T>>.IsConfigured)
         {
             return PreprocessingRegistry<T, Tensor<T>>.Transform(rawImage);
@@ -197,7 +197,7 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para>
     /// <b>Priority Order:</b>
-    /// 1. If user configured a pipeline via PredictionModelBuilder.ConfigurePostprocessing() → use it
+    /// 1. If user configured a pipeline via AiModelBuilder.ConfigurePostprocessing() → use it
     /// 2. Otherwise → use industry-standard defaults for this specific model type
     /// </para>
     /// <para>
@@ -205,7 +205,7 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// You can either let the model use its industry-standard defaults (recommended for most cases),
     /// or configure custom postprocessing:
     /// <code>
-    /// var result = new PredictionModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+    /// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
     ///     .ConfigurePostprocessing(pipeline => pipeline
     ///         .Add(new SoftmaxTransformer&lt;double&gt;())
     ///         .Add(new LabelDecoder&lt;double&gt;(labels)))
@@ -215,7 +215,7 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        // Priority 1: User-configured pipeline via PredictionModelBuilder
+        // Priority 1: User-configured pipeline via AiModelBuilder
         if (PostprocessingRegistry<T, Tensor<T>>.IsConfigured)
         {
             return PostprocessingRegistry<T, Tensor<T>>.Transform(modelOutput);

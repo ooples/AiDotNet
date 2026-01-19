@@ -9,7 +9,7 @@ namespace AiDotNet.Configuration;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// This options class is designed for use with <c>PredictionModelBuilder</c> when training RL agents.
+/// This options class is designed for use with <c>AiModelBuilder</c> when training RL agents.
 /// It supports the AiDotNet facade pattern by providing sensible defaults while allowing customization.
 /// </para>
 /// <para><b>For Beginners:</b> RL AutoML tries a few different RL agent settings, measures which one earns

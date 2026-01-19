@@ -12,7 +12,7 @@ namespace AiDotNet.Configuration;
 /// <typeparam name="TOutput">The model output type.</typeparam>
 /// <remarks>
 /// <para>
-/// This options class is designed for use with <c>PredictionModelBuilder</c>.
+/// This options class is designed for use with <c>AiModelBuilder</c>.
 /// It follows the AiDotNet facade pattern: users provide minimal configuration, and the library supplies
 /// industry-standard defaults internally.
 /// </para>

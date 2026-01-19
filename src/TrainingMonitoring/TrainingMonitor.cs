@@ -2,6 +2,7 @@ using System.Diagnostics;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using Newtonsoft.Json;
+using LogLevel = AiDotNet.Interfaces.LogLevel;
 
 namespace AiDotNet.TrainingMonitoring;
 

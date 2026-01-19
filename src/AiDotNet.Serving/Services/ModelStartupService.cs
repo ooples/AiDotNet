@@ -15,7 +15,7 @@ namespace AiDotNet.Serving.Services;
 /// <remarks>
 /// <para>
 /// This service runs during application startup and loads models specified in the
-/// ServingOptions.StartupModels configuration. Models are loaded as PredictionModelResult
+/// ServingOptions.StartupModels configuration. Models are loaded as AiModelResult
 /// instances to maintain the facade pattern and include all configured optimizations.
 /// </para>
 /// <para><b>For Beginners:</b> This service automatically loads models when your server starts.
@@ -201,15 +201,15 @@ public class ModelStartupService : IHostedService
     /// Loads a typed model and registers it with the repository.
     /// </summary>
     /// <remarks>
-    /// This method loads a serialized PredictionModelResult from disk and wraps it
+    /// This method loads a serialized AiModelResult from disk and wraps it
     /// in a ServableModelWrapper for serving. The facade pattern is maintained -
     /// all configuration (LoRA, inference opts, etc.) is preserved.
     /// </remarks>
     private void LoadTypedModel<T>(string name, string path)
     {
-        // Load the serialized PredictionModelResult using internal constructor
+        // Load the serialized AiModelResult using internal constructor
         // This is accessible via InternalsVisibleTo
-        var modelResult = new PredictionModelResult<T, Matrix<T>, Vector<T>>();
+        var modelResult = new AiModelResult<T, Matrix<T>, Vector<T>>();
         modelResult.LoadFromFile(path);
 
         // Get dimensions from the model metadata
@@ -233,7 +233,7 @@ public class ModelStartupService : IHostedService
             }
         }
 
-        // PredictionModelResult.Predict returns Vector<T> (single output per sample)
+        // AiModelResult.Predict returns Vector<T> (single output per sample)
         // Multi-output models are not currently supported in the serving layer
         if (outputDim > 1)
         {
@@ -243,9 +243,9 @@ public class ModelStartupService : IHostedService
             outputDim = 1;
         }
 
-        // Create predict functions that delegate to PredictionModelResult
+        // Create predict functions that delegate to AiModelResult
         // This preserves all facade functionality (LoRA, inference opts, etc.)
-        // Note: PredictionModelResult<T, Matrix<T>, Vector<T>> has Predict(Matrix<T>) -> Vector<T>
+        // Note: AiModelResult<T, Matrix<T>, Vector<T>> has Predict(Matrix<T>) -> Vector<T>
         // We wrap single vectors in a matrix for prediction
         Func<Vector<T>, Vector<T>> predictFunc = input =>
         {
@@ -261,7 +261,7 @@ public class ModelStartupService : IHostedService
         Func<Matrix<T>, Matrix<T>> predictBatchFunc = inputs =>
         {
             // Pass entire batch for efficient batch inference
-            // PredictionModelResult.Predict(Matrix<T>) returns Vector<T> with one value per sample
+            // AiModelResult.Predict(Matrix<T>) returns Vector<T> with one value per sample
             var predictions = modelResult.Predict(inputs);
 
             // Convert Vector<T> result to Matrix<T> format (single output per sample)

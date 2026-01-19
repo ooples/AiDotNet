@@ -215,7 +215,7 @@ The following features require a separate UI project:
    - Consistent security (path validation, thread safety)
    - Good documentation with "For Beginners" sections
 
-2. **PredictionModelBuilder Integration**
+2. **AiModelBuilder Integration**
    - All 6 training infrastructure components have Configure methods
    - Fluent builder pattern maintained
 

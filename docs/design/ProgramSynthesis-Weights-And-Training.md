@@ -15,15 +15,15 @@ Recommended approach:
 
 This approach:
 - Avoids embedding weights in source control.
-- Keeps the public API surface minimal (users interact via `PredictionModelBuilder` + `PredictionModelResult`; Serving executes untrusted code).
+- Keeps the public API surface minimal (users interact via `AiModelBuilder` + `AiModelResult`; Serving executes untrusted code).
 - Supports monetization/IP constraints by keeping proprietary weights private.
 
 ## Model Serialization (Library)
 
-`PredictionModelResult` supports saving and loading serialized models:
+`AiModelResult` supports saving and loading serialized models:
 
-- Save: `PredictionModelResult.SaveToFile(...)`
-- Load: `PredictionModelResult.LoadFromFile(...)`
+- Save: `AiModelResult.SaveToFile(...)`
+- Load: `AiModelResult.LoadFromFile(...)`
 
 These APIs store architecture + parameters via the model’s `Serialize()` implementation.
 

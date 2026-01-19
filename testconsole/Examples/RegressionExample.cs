@@ -51,7 +51,7 @@ public class RegressionExample
             Console.WriteLine("Data prepared. Starting model training...");
 
             // Create and configure the model builder
-            var modelBuilder = new PredictionModelBuilder<double, Matrix<double>, Vector<double>>();
+            var modelBuilder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
 
             // Configure Adam optimizer for training
             var adamOptions = new AdamOptimizerOptions<double, Matrix<double>, Vector<double>>
