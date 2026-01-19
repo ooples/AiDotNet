@@ -1,16 +1,6 @@
----
-layout: default
-title: Tutorials
-nav_order: 3
-has_children: true
-permalink: /tutorials/
----
-
 # Tutorials
-{: .no_toc }
 
 Step-by-step guides to help you master AiDotNet.
-{: .fs-6 .fw-300 }
 
 ---
 
@@ -33,22 +23,22 @@ Step-by-step guides to help you master AiDotNet.
 ## Learning Path
 
 ### Beginner
-1. [Getting Started](/getting-started/) - Installation and first model
-2. [Classification](./classification/) - Learn the fundamentals
-3. [Regression](./regression/) - Predict continuous values
+1. [Getting Started](../getting-started/index.md) - Installation and first model
+2. [Classification](classification/index.md) - Learn the fundamentals
+3. [Regression](regression/index.md) - Predict continuous values
 
 ### Intermediate
-4. [Computer Vision](./computer-vision/) - Image understanding
-5. [NLP & RAG](./nlp/) - Text processing
-6. [Time Series](./time-series/) - Temporal data
+4. [Computer Vision](computer-vision/index.md) - Image understanding
+5. [NLP & RAG](nlp/index.md) - Text processing
+6. [Time Series](time-series/index.md) - Temporal data
 
 ### Advanced
-7. [LLM Fine-tuning](./llm-fine-tuning/) - Customize language models
-8. [Distributed Training](./distributed-training/) - Scale to multiple GPUs
-9. [Deployment](./deployment/) - Production deployment
+7. [LLM Fine-tuning](llm-fine-tuning/index.md) - Customize language models
+8. [Distributed Training](distributed-training/index.md) - Scale to multiple GPUs
+9. [Deployment](deployment/index.md) - Production deployment
 
 ## Quick Links
 
-- [Samples Repository](/samples/) - Complete runnable examples
-- [API Reference](/api/) - Full API documentation
+- [Samples Repository](https://github.com/ooples/AiDotNet/tree/master/samples) - Complete runnable examples
+- [API Reference](../../api/index.md) - Full API documentation
 - [GitHub Issues](https://github.com/ooples/AiDotNet/issues) - Get help

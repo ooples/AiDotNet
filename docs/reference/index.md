@@ -1,16 +1,6 @@
----
-layout: default
-title: Reference
-nav_order: 4
-has_children: true
-permalink: /reference/
----
-
-# API Reference
-{: .no_toc }
+# Reference Documentation
 
 Complete reference documentation for all AiDotNet components.
-{: .fs-6 .fw-300 }
 
 ---
 
