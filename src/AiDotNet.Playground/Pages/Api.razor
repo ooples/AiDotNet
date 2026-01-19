@@ -1,0 +1,307 @@
+@page "/api"
+
+<PageTitle>API Documentation - AiDotNet Playground</PageTitle>
+
+<div class="api-page">
+    <div class="api-header">
+        <h1>API Documentation</h1>
+        <p>Comprehensive API reference for AiDotNet, auto-generated from XML documentation comments.</p>
+    </div>
+
+    <div class="api-options">
+        <div class="api-card" @onclick="OpenDocFx">
+            <div class="api-icon">📚</div>
+            <h2>API Reference</h2>
+            <p>Full API documentation generated with DocFX. Browse namespaces, classes, methods, and detailed usage information.</p>
+            <div class="api-features">
+                <span class="feature">📖 100+ Neural Network Architectures</span>
+                <span class="feature">🔧 106+ Classical ML Algorithms</span>
+                <span class="feature">⚡ 42+ Optimizers</span>
+                <span class="feature">📊 37+ Loss Functions</span>
+            </div>
+            <button class="btn btn-primary">Browse API Docs</button>
+        </div>
+
+        <div class="api-card" @onclick="OpenSwagger">
+            <div class="api-icon">🔌</div>
+            <h2>REST API (Swagger)</h2>
+            <p>Interactive REST API documentation for AiDotNet.Serving. Test endpoints directly in your browser.</p>
+            <div class="api-features">
+                <span class="feature">🚀 Model Inference Endpoints</span>
+                <span class="feature">📤 Batch Predictions</span>
+                <span class="feature">📊 Health Monitoring</span>
+                <span class="feature">🔒 Authentication Support</span>
+            </div>
+            <button class="btn btn-primary">Open Swagger UI</button>
+        </div>
+    </div>
+
+    <div class="namespace-overview">
+        <h2>Key Namespaces</h2>
+        <div class="namespace-grid">
+            <div class="namespace-card">
+                <h3>AiDotNet</h3>
+                <p>Core interfaces and the PredictionModelBuilder facade - your entry point to all ML functionality.</p>
+            </div>
+            <div class="namespace-card">
+                <h3>AiDotNet.NeuralNetworks</h3>
+                <p>100+ neural network architectures including CNN, RNN, Transformer, GAN, VAE, GNN, and more.</p>
+            </div>
+            <div class="namespace-card">
+                <h3>AiDotNet.Classification</h3>
+                <p>28 classification algorithms: SVM, Random Forest, Naive Bayes, Gradient Boosting, etc.</p>
+            </div>
+            <div class="namespace-card">
+                <h3>AiDotNet.Regression</h3>
+                <p>41 regression algorithms: Linear, Ridge, Lasso, ElasticNet, SVR, Gaussian Process.</p>
+            </div>
+            <div class="namespace-card">
+                <h3>AiDotNet.ComputerVision</h3>
+                <p>50+ vision models: YOLO v8-11, DETR, Faster R-CNN, Mask R-CNN, OCR.</p>
+            </div>
+            <div class="namespace-card">
+                <h3>AiDotNet.Audio</h3>
+                <p>90+ audio models: Whisper, Wav2Vec2, TTS, Speech Enhancement, VAD.</p>
+            </div>
+            <div class="namespace-card">
+                <h3>AiDotNet.ReinforcementLearning</h3>
+                <p>80+ RL agents: DQN, PPO, SAC, DDPG, MCTS, Multi-Agent RL.</p>
+            </div>
+            <div class="namespace-card">
+                <h3>AiDotNet.LoRA</h3>
+                <p>37+ LoRA adapters for efficient fine-tuning: QLoRA, DoRA, AdaLoRA, VeRA.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="quick-reference">
+        <h2>Quick Reference</h2>
+        <div class="code-example">
+            <h3>Basic Usage Pattern</h3>
+            <pre><code>// All AiDotNet functionality goes through PredictionModelBuilder
+using AiDotNet;
+
+// Build and train a model
+var result = await new PredictionModelBuilder&lt;double, double[], int&gt;()
+    .WithTrainingData(features, labels)
+    .WithNeuralNetwork(nn => nn
+        .AddDenseLayer(128, Activation.ReLU)
+        .AddDropout(0.2)
+        .AddDenseLayer(64, Activation.ReLU)
+        .AddOutputLayer(numClasses, Activation.Softmax))
+    .WithOptimizer(OptimizerType.Adam, lr: 0.001)
+    .WithLossFunction(LossType.CrossEntropy)
+    .ConfigureTelemetry(t => t.Enabled = true)
+    .BuildAsync();
+
+// Use the trained model
+var prediction = result.Model.Predict(newSample);
+
+// Access training metrics
+Console.WriteLine($"Accuracy: {result.Metrics.Accuracy:P2}");
+Console.WriteLine($"Training Time: {result.TrainingTime}");</code></pre>
+        </div>
+    </div>
+</div>
+
+<style>
+    .api-page {
+        padding: 40px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .api-header {
+        text-align: center;
+        margin-bottom: 48px;
+    }
+
+    .api-header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 12px;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .api-header p {
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+    }
+
+    .api-options {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 24px;
+        margin-bottom: 48px;
+    }
+
+    .api-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 32px;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-align: center;
+    }
+
+    .api-card:hover {
+        border-color: var(--primary-color);
+        transform: translateY(-4px);
+        box-shadow: 0 12px 40px rgba(99, 102, 241, 0.2);
+    }
+
+    .api-icon {
+        font-size: 3rem;
+        margin-bottom: 16px;
+    }
+
+    .api-card h2 {
+        font-size: 1.5rem;
+        margin-bottom: 12px;
+    }
+
+    .api-card p {
+        color: var(--text-secondary);
+        margin-bottom: 20px;
+        line-height: 1.6;
+    }
+
+    .api-features {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        margin-bottom: 24px;
+    }
+
+    .feature {
+        background: var(--bg-dark);
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+    }
+
+    .btn {
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-primary {
+        background: var(--primary-color);
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: var(--primary-dark);
+    }
+
+    .namespace-overview {
+        margin-bottom: 48px;
+    }
+
+    .namespace-overview h2 {
+        font-size: 1.75rem;
+        margin-bottom: 24px;
+    }
+
+    .namespace-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 16px;
+    }
+
+    .namespace-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 20px;
+        transition: all 0.2s;
+    }
+
+    .namespace-card:hover {
+        border-color: var(--primary-color);
+    }
+
+    .namespace-card h3 {
+        color: var(--primary-color);
+        font-family: monospace;
+        font-size: 1rem;
+        margin-bottom: 8px;
+    }
+
+    .namespace-card p {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        line-height: 1.5;
+        margin: 0;
+    }
+
+    .quick-reference {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 32px;
+    }
+
+    .quick-reference h2 {
+        font-size: 1.5rem;
+        margin-bottom: 24px;
+    }
+
+    .code-example h3 {
+        font-size: 1.1rem;
+        margin-bottom: 16px;
+        color: var(--text-secondary);
+    }
+
+    .code-example pre {
+        background: var(--bg-dark);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 20px;
+        overflow-x: auto;
+        font-size: 0.9rem;
+        line-height: 1.6;
+    }
+
+    .code-example code {
+        color: #e2e8f0;
+    }
+
+    @@media (max-width: 768px) {
+        .api-page {
+            padding: 20px;
+        }
+
+        .api-options {
+            grid-template-columns: 1fr;
+        }
+
+        .api-header h1 {
+            font-size: 1.75rem;
+        }
+    }
+</style>
+
+@code {
+    private void OpenDocFx()
+    {
+        // Link to the DocFX-generated API documentation
+        // This would be hosted at /api-docs/ or similar path
+    }
+
+    private void OpenSwagger()
+    {
+        // Link to the Swagger UI for AiDotNet.Serving
+        // This would be at /swagger when running AiDotNet.Serving
+    }
+}
