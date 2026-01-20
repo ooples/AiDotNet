@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using MKLNET;
 
@@ -146,20 +147,13 @@ internal static class BlasProvider
         {
             try
             {
-                Blas.gemm(
-                    Layout.RowMajor,
-                    Trans.No,
-                    Trans.No,
-                    m, n, k,
-                    1.0f,
-                    a, lda,
-                    b, ldb,
-                    0.0f,
-                    c, ldc);
-                return true;
+                // Use helper method to prevent JIT from loading MKL.NET types
+                // if MKL.NET assembly is not available on this platform
+                return TryMklNetSpanSgemm(m, n, k, a, lda, b, ldb, c, ldc);
             }
-            catch
+            catch (Exception)
             {
+                // MKL.NET call failed, disable and fall back to native
                 _useMklNet = false;
                 return false;
             }
@@ -198,20 +192,13 @@ internal static class BlasProvider
         {
             try
             {
-                Blas.gemm(
-                    Layout.RowMajor,
-                    Trans.No,
-                    Trans.No,
-                    m, n, k,
-                    1.0,
-                    a, lda,
-                    b, ldb,
-                    0.0,
-                    c, ldc);
-                return true;
+                // Use helper method to prevent JIT from loading MKL.NET types
+                // if MKL.NET assembly is not available on this platform
+                return TryMklNetSpanDgemm(m, n, k, a, lda, b, ldb, c, ldc);
             }
-            catch
+            catch (Exception)
             {
+                // MKL.NET call failed, disable and fall back to native
                 _useMklNet = false;
                 return false;
             }
@@ -235,6 +222,11 @@ internal static class BlasProvider
         return true;
     }
 
+    /// <summary>
+    /// Helper method for array-based float GEMM using MKL.NET.
+    /// Marked NoInlining to prevent JIT from loading MKL.NET types when method is not called.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static bool TryMklNetSgemm(int m, int n, int k, float[] a, int aOffset, int lda, float[] b, int bOffset, int ldb, float[] c, int cOffset, int ldc)
     {
         try
@@ -258,12 +250,32 @@ internal static class BlasProvider
 
             return true;
         }
-        catch
+        catch (Exception)
         {
             // If MKL.NET fails, mark it as unavailable and return false
             _useMklNet = false;
             return false;
         }
+    }
+
+    /// <summary>
+    /// Helper method for span-based float GEMM using MKL.NET.
+    /// Marked NoInlining to prevent JIT from loading MKL.NET types when method is not called.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool TryMklNetSpanSgemm(int m, int n, int k, ReadOnlySpan<float> a, int lda, ReadOnlySpan<float> b, int ldb, Span<float> c, int ldc)
+    {
+        Blas.gemm(
+            Layout.RowMajor,
+            Trans.No,
+            Trans.No,
+            m, n, k,
+            1.0f,
+            a, lda,
+            b, ldb,
+            0.0f,
+            c, ldc);
+        return true;
     }
 
     internal static bool TryGemm(int m, int n, int k, double[] a, int aOffset, int lda, double[] b, int bOffset, int ldb, double[] c, int cOffset, int ldc)
@@ -308,6 +320,11 @@ internal static class BlasProvider
         return true;
     }
 
+    /// <summary>
+    /// Helper method for array-based double GEMM using MKL.NET.
+    /// Marked NoInlining to prevent JIT from loading MKL.NET types when method is not called.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static bool TryMklNetDgemm(int m, int n, int k, double[] a, int aOffset, int lda, double[] b, int bOffset, int ldb, double[] c, int cOffset, int ldc)
     {
         try
@@ -329,11 +346,32 @@ internal static class BlasProvider
 
             return true;
         }
-        catch
+        catch (Exception)
         {
+            // MKL.NET call failed, disable and fall back to native
             _useMklNet = false;
             return false;
         }
+    }
+
+    /// <summary>
+    /// Helper method for span-based double GEMM using MKL.NET.
+    /// Marked NoInlining to prevent JIT from loading MKL.NET types when method is not called.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool TryMklNetSpanDgemm(int m, int n, int k, ReadOnlySpan<double> a, int lda, ReadOnlySpan<double> b, int ldb, Span<double> c, int ldc)
+    {
+        Blas.gemm(
+            Layout.RowMajor,
+            Trans.No,
+            Trans.No,
+            m, n, k,
+            1.0,
+            a, lda,
+            b, ldb,
+            0.0,
+            c, ldc);
+        return true;
     }
 
     private static bool EnsureInitialized()

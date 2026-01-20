@@ -4,7 +4,6 @@ using System.Numerics.Tensors;
 #endif
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Operators;
 
 namespace AiDotNet.Tensors.NumericOperations;
@@ -801,100 +800,190 @@ public class DoubleOperations : INumericOperations<double>
     /// <inheritdoc/>
     public bool SupportsGpuAcceleration => true;
 
-    #region IVectorizedOperations<double> Implementation - SIMD via TensorPrimitivesCore
+    #region IVectorizedOperations<double> Implementation - SIMD via TensorPrimitives
 
     /// <summary>
-    /// Performs element-wise addition using SIMD-optimized TensorPrimitivesCore.
+    /// Performs element-wise addition using SIMD-optimized TensorPrimitives.
     /// </summary>
     /// <remarks>
-    /// Uses AVX-512/AVX2/SSE for hardware acceleration on .NET 5+, scalar fallback on .NET Framework.
+    /// Uses AVX-512/AVX2/SSE for hardware acceleration on .NET 8+, with fallback on pre-.NET 8 targets.
     /// </remarks>
     public void Add(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
-        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<AddOperatorDouble>(x, y, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Add(x, y, destination);
+#else
+        TensorPrimitivesCore.InvokeSpanSpanIntoSpan<AddOperatorDouble>(x, y, destination);
+#endif
+    }
 
     /// <summary>
-    /// Performs element-wise subtraction using SIMD-optimized TensorPrimitivesCore.
+    /// Performs element-wise subtraction using SIMD-optimized TensorPrimitives.
     /// </summary>
     public void Subtract(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
-        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<SubtractOperatorDouble>(x, y, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Subtract(x, y, destination);
+#else
+        TensorPrimitivesCore.InvokeSpanSpanIntoSpan<SubtractOperatorDouble>(x, y, destination);
+#endif
+    }
 
     /// <summary>
-    /// Performs element-wise multiplication using SIMD-optimized TensorPrimitivesCore.
+    /// Performs element-wise multiplication using SIMD-optimized TensorPrimitives.
     /// </summary>
     public void Multiply(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
-        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<MultiplyOperatorDouble>(x, y, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Multiply(x, y, destination);
+#else
+        TensorPrimitivesCore.InvokeSpanSpanIntoSpan<MultiplyOperatorDouble>(x, y, destination);
+#endif
+    }
 
     /// <summary>
-    /// Performs element-wise division using SIMD-optimized TensorPrimitivesCore.
+    /// Performs element-wise division using SIMD-optimized TensorPrimitives.
     /// </summary>
     public void Divide(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
-        => TensorPrimitivesCore.InvokeSpanSpanIntoSpan<DivideOperatorDouble>(x, y, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Divide(x, y, destination);
+#else
+        TensorPrimitivesCore.InvokeSpanSpanIntoSpan<DivideOperatorDouble>(x, y, destination);
+#endif
+    }
 
     /// <summary>
-    /// Computes dot product using SIMD-optimized TensorPrimitivesCore.
+    /// Computes dot product using SIMD-optimized TensorPrimitives.
     /// </summary>
     public double Dot(ReadOnlySpan<double> x, ReadOnlySpan<double> y)
-        => TensorPrimitivesCore.Dot(x, y);
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.Dot(x, y);
+#else
+        return TensorPrimitivesCore.Dot(x, y);
+#endif
+    }
 
     /// <summary>
-    /// Computes sum using SIMD-optimized TensorPrimitivesCore.
+    /// Computes sum using SIMD-optimized TensorPrimitives.
     /// </summary>
     public double Sum(ReadOnlySpan<double> x)
-        => TensorPrimitivesCore.Sum(x);
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.Sum(x);
+#else
+        return TensorPrimitivesCore.Sum(x);
+#endif
+    }
 
     /// <summary>
-    /// Finds maximum using SIMD-optimized TensorPrimitivesCore.
+    /// Finds maximum using SIMD-optimized TensorPrimitives.
     /// </summary>
     public double Max(ReadOnlySpan<double> x)
-        => TensorPrimitivesCore.Max(x);
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.Max(x);
+#else
+        return TensorPrimitivesCore.Max(x);
+#endif
+    }
 
     /// <summary>
-    /// Finds minimum using SIMD-optimized TensorPrimitivesCore.
+    /// Finds minimum using SIMD-optimized TensorPrimitives.
     /// </summary>
     public double Min(ReadOnlySpan<double> x)
-        => TensorPrimitivesCore.Min(x);
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.Min(x);
+#else
+        return TensorPrimitivesCore.Min(x);
+#endif
+    }
 
     /// <summary>
-    /// Computes exponential using SIMD-optimized TensorPrimitivesCore.
+    /// Computes exponential using SIMD-optimized TensorPrimitives.
     /// </summary>
     public void Exp(ReadOnlySpan<double> x, Span<double> destination)
-        => TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorDouble>(x, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Exp(x, destination);
+#else
+        TensorPrimitivesCore.InvokeSpanIntoSpan<ExpOperatorDouble>(x, destination);
+#endif
+    }
 
     /// <summary>
-    /// Computes natural logarithm using SIMD-optimized TensorPrimitivesCore.
+    /// Computes natural logarithm using SIMD-optimized TensorPrimitives.
     /// </summary>
     public void Log(ReadOnlySpan<double> x, Span<double> destination)
-        => TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorDouble>(x, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Log(x, destination);
+#else
+        TensorPrimitivesCore.InvokeSpanIntoSpan<LogOperatorDouble>(x, destination);
+#endif
+    }
 
     /// <summary>
-    /// Computes hyperbolic tangent using SIMD-optimized TensorPrimitivesCore.
+    /// Computes hyperbolic tangent using SIMD-optimized TensorPrimitives.
     /// </summary>
     public void Tanh(ReadOnlySpan<double> x, Span<double> destination)
-        => TensorPrimitivesCore.InvokeSpanIntoSpan<TanhOperatorDouble>(x, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Tanh(x, destination);
+#else
+        TensorPrimitivesCore.InvokeSpanIntoSpan<TanhOperatorDouble>(x, destination);
+#endif
+    }
 
     /// <summary>
-    /// Computes sigmoid using sequential loops (no SIMD operator yet).
+    /// Computes sigmoid using SIMD-optimized TensorPrimitives.
     /// </summary>
     public void Sigmoid(ReadOnlySpan<double> x, Span<double> destination)
-        => VectorizedOperationsFallback.Sigmoid(this, x, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Sigmoid(x, destination);
+#else
+        VectorizedOperationsFallback.Sigmoid(this, x, destination);
+#endif
+    }
 
     /// <summary>
-    /// Computes base-2 logarithm using SIMD-optimized TensorPrimitivesCore.
+    /// Computes base-2 logarithm using SIMD-optimized TensorPrimitives.
     /// </summary>
     public void Log2(ReadOnlySpan<double> x, Span<double> destination)
-        => TensorPrimitivesCore.InvokeSpanIntoSpan<Log2OperatorDouble>(x, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.Log2(x, destination);
+#else
+        TensorPrimitivesCore.InvokeSpanIntoSpan<Log2OperatorDouble>(x, destination);
+#endif
+    }
 
     /// <summary>
-    /// Computes softmax using sequential loops (reduction operation).
+    /// Computes softmax using SIMD-optimized TensorPrimitives.
     /// </summary>
     public void SoftMax(ReadOnlySpan<double> x, Span<double> destination)
-        => VectorizedOperationsFallback.SoftMax(this, x, destination);
+    {
+#if NET8_0_OR_GREATER
+        TensorPrimitives.SoftMax(x, destination);
+#else
+        VectorizedOperationsFallback.SoftMax(this, x, destination);
+#endif
+    }
 
     /// <summary>
-    /// Computes cosine similarity using sequential loops (complex reduction).
+    /// Computes cosine similarity using SIMD-optimized TensorPrimitives.
     /// </summary>
     public double CosineSimilarity(ReadOnlySpan<double> x, ReadOnlySpan<double> y)
-        => VectorizedOperationsFallback.CosineSimilarity(this, x, y);
+    {
+#if NET8_0_OR_GREATER
+        return TensorPrimitives.CosineSimilarity(x, y);
+#else
+        return VectorizedOperationsFallback.CosineSimilarity(this, x, y);
+#endif
+    }
 
     /// <summary>
     /// Fills the destination span with a constant value.

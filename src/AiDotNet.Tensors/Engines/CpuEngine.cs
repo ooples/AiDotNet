@@ -5,6 +5,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Operators;
+using static AiDotNet.Tensors.Helpers.CpuParallelSettings;
 using TensorPrimitives = System.Numerics.Tensors.TensorPrimitives;
 
 namespace AiDotNet.Tensors.Engines;
@@ -1859,6 +1860,7 @@ public class CpuEngine : IEngine
 
     /// <summary>
     /// Adds tensor b to tensor a in-place (a += b). Zero allocation.
+    /// Uses parallel processing for large tensors to maximize throughput.
     /// </summary>
     public void TensorAddInPlace<T>(Tensor<T> a, Tensor<T> b)
     {
@@ -1870,6 +1872,43 @@ public class CpuEngine : IEngine
                 $"Tensor shapes must match. Got {FormatShape(a.Shape)} and {FormatShape(b.Shape)}.");
         }
 
+        int length = a.Length;
+
+        // Use parallel TensorPrimitives for large float/double tensors
+        if (length >= ParallelThreshold && MaxDegreeOfParallelism > 1)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var aData = a.Data;
+                var bData = b.Data;
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+                    TensorPrimitives.Add(
+                        ((Memory<float>)(object)bData).Span.Slice(start, count),
+                        ((Memory<float>)(object)aData).Span.Slice(start, count),
+                        ((Memory<float>)(object)aData).Span.Slice(start, count));
+                });
+                return;
+            }
+
+#if NET5_0_OR_GREATER
+            if (typeof(T) == typeof(double))
+            {
+                var aData = a.Data;
+                var bData = b.Data;
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+                    TensorPrimitives.Add(
+                        ((Memory<double>)(object)bData).Span.Slice(start, count),
+                        ((Memory<double>)(object)aData).Span.Slice(start, count),
+                        ((Memory<double>)(object)aData).Span.Slice(start, count));
+                });
+                return;
+            }
+#endif
+        }
+
+        // Fallback for small tensors or non-float/double types
         var numOps = MathHelper.GetNumericOperations<T>();
         numOps.Add(a.AsSpan(), b.AsSpan(), a.AsWritableSpan());
     }
@@ -2028,6 +2067,7 @@ public class CpuEngine : IEngine
 
     /// <summary>
     /// Multiplies tensor a by tensor b in-place (a *= b). Zero allocation.
+    /// Uses parallel processing for large tensors to maximize throughput.
     /// </summary>
     public void TensorMultiplyInPlace<T>(Tensor<T> a, Tensor<T> b)
     {
@@ -2039,6 +2079,43 @@ public class CpuEngine : IEngine
                 $"Tensor shapes must match. Got {FormatShape(a.Shape)} and {FormatShape(b.Shape)}.");
         }
 
+        int length = a.Length;
+
+        // Use parallel TensorPrimitives for large float/double tensors
+        if (length >= ParallelThreshold && MaxDegreeOfParallelism > 1)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var aData = a.Data;
+                var bData = b.Data;
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+                    TensorPrimitives.Multiply(
+                        ((Memory<float>)(object)bData).Span.Slice(start, count),
+                        ((Memory<float>)(object)aData).Span.Slice(start, count),
+                        ((Memory<float>)(object)aData).Span.Slice(start, count));
+                });
+                return;
+            }
+
+#if NET5_0_OR_GREATER
+            if (typeof(T) == typeof(double))
+            {
+                var aData = a.Data;
+                var bData = b.Data;
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+                    TensorPrimitives.Multiply(
+                        ((Memory<double>)(object)bData).Span.Slice(start, count),
+                        ((Memory<double>)(object)aData).Span.Slice(start, count),
+                        ((Memory<double>)(object)aData).Span.Slice(start, count));
+                });
+                return;
+            }
+#endif
+        }
+
+        // Fallback for small tensors or non-float/double types
         var numOps = MathHelper.GetNumericOperations<T>();
         numOps.Multiply(a.AsSpan(), b.AsSpan(), a.AsWritableSpan());
     }
@@ -3523,6 +3600,96 @@ public class CpuEngine : IEngine
     }
 
     /// <summary>
+    /// Performs 2D convolution, storing result in pre-allocated output tensor. Zero allocation.
+    /// </summary>
+    /// <param name="output">Pre-allocated output tensor with correct shape [batch, out_channels, output_height, output_width].</param>
+    /// <param name="input">Input tensor [batch, in_channels, height, width].</param>
+    /// <param name="kernel">Kernel tensor [out_channels, in_channels, kernel_height, kernel_width].</param>
+    /// <param name="stride">Stride for the convolution.</param>
+    /// <param name="padding">Padding to add to input.</param>
+    /// <param name="dilation">Dilation factor for the kernel.</param>
+    public void Conv2DInto<T>(Tensor<T> output, Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int dilation = 1)
+    {
+        if (output == null) throw new ArgumentNullException(nameof(output));
+        if (input == null) throw new ArgumentNullException(nameof(input));
+        if (kernel == null) throw new ArgumentNullException(nameof(kernel));
+        if (input.Rank != 4)
+        {
+            throw new ArgumentException($"Conv2D input requires a 4D tensor [batch, in_channels, height, width]. Got rank {input.Rank}.");
+        }
+        if (kernel.Rank != 4)
+        {
+            throw new ArgumentException($"Conv2D kernel requires a 4D tensor [out_channels, in_channels, kernel_height, kernel_width]. Got rank {kernel.Rank}.");
+        }
+        if (output.Rank != 4)
+        {
+            throw new ArgumentException($"Conv2D output requires a 4D tensor [batch, out_channels, output_height, output_width]. Got rank {output.Rank}.");
+        }
+        if (stride <= 0) throw new ArgumentException("Stride must be positive.");
+        if (dilation <= 0) throw new ArgumentException("Dilation must be positive.");
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        int batch = input.Shape[0];
+        int inChannels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        int outChannels = kernel.Shape[0];
+        int kernelInChannels = kernel.Shape[1];
+        int kernelHeight = kernel.Shape[2];
+        int kernelWidth = kernel.Shape[3];
+
+        if (inChannels != kernelInChannels)
+        {
+            throw new ArgumentException(
+                $"Input channels ({inChannels}) must match kernel input channels ({kernelInChannels}).");
+        }
+
+        int effectiveKernelHeight = dilation * (kernelHeight - 1) + 1;
+        int effectiveKernelWidth = dilation * (kernelWidth - 1) + 1;
+
+        int outputHeight = (height + 2 * padding - effectiveKernelHeight) / stride + 1;
+        int outputWidth = (width + 2 * padding - effectiveKernelWidth) / stride + 1;
+
+        if (outputHeight <= 0 || outputWidth <= 0)
+        {
+            throw new ArgumentException(
+                $"Invalid convolution parameters. Output dimensions would be {outputHeight}x{outputWidth}. " +
+                $"Ensure stride={stride}, padding={padding}, dilation={dilation} are compatible with input size {height}x{width} and kernel size {kernelHeight}x{kernelWidth}.");
+        }
+
+        // Validate output shape matches expected dimensions
+        if (output.Shape[0] != batch || output.Shape[1] != outChannels ||
+            output.Shape[2] != outputHeight || output.Shape[3] != outputWidth)
+        {
+            throw new ArgumentException(
+                $"Output tensor shape [{string.Join(", ", output.Shape)}] doesn't match expected shape [{batch}, {outChannels}, {outputHeight}, {outputWidth}].");
+        }
+
+        // Use im2col + GEMM for float (significantly faster)
+        if (typeof(T) == typeof(float))
+        {
+            Conv2DWithIm2ColFloat(
+                input as Tensor<float> ?? throw new InvalidCastException(),
+                kernel as Tensor<float> ?? throw new InvalidCastException(),
+                output as Tensor<float> ?? throw new InvalidCastException(),
+                batch, inChannels, height, width,
+                outChannels, kernelHeight, kernelWidth,
+                stride, padding, dilation,
+                outputHeight, outputWidth);
+            return;
+        }
+
+        // Fallback for non-float types: naive implementation
+        Conv2DNaive(input, kernel, output, numOps,
+            batch, inChannels, height, width,
+            outChannels, kernelHeight, kernelWidth,
+            stride, padding, dilation,
+            outputHeight, outputWidth);
+    }
+
+    /// <summary>
     /// Optimized Conv2D using multiple strategies for float tensors.
     /// Tries in order: oneDNN, SIMD direct conv, Winograd, im2col+GEMM.
     /// </summary>
@@ -4043,12 +4210,44 @@ public class CpuEngine : IEngine
 
     /// <summary>
     /// Applies Sigmoid activation in-place: x = 1 / (1 + exp(-x)). Zero allocation.
+    /// Uses parallel processing for large tensors to maximize throughput.
     /// </summary>
     public void SigmoidInPlace<T>(Tensor<T> tensor)
     {
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
 
+        int length = tensor.Length;
+
+        // Use parallel TensorPrimitives for large float/double tensors
+#if NET8_0_OR_GREATER
+        if (length >= ParallelThreshold && MaxDegreeOfParallelism > 1)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var data = tensor.Data;
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+                    var floatSpan = ((Memory<float>)(object)data).Span.Slice(start, count);
+                    TensorPrimitives.Sigmoid(floatSpan, floatSpan);
+                });
+                return;
+            }
+
+            if (typeof(T) == typeof(double))
+            {
+                var data = tensor.Data;
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+                    var doubleSpan = ((Memory<double>)(object)data).Span.Slice(start, count);
+                    TensorPrimitives.Sigmoid(doubleSpan, doubleSpan);
+                });
+                return;
+            }
+        }
+#endif
+
+        // Fallback for small tensors, non-float/double types, or older .NET
         var numOps = MathHelper.GetNumericOperations<T>();
         numOps.Sigmoid(tensor.AsSpan(), tensor.AsWritableSpan());
     }
@@ -4085,12 +4284,51 @@ public class CpuEngine : IEngine
 
     /// <summary>
     /// Applies ReLU activation in-place: x = max(0, x). Zero allocation.
+    /// Uses parallel processing for large tensors to maximize throughput.
     /// </summary>
     public void ReLUInPlace<T>(Tensor<T> tensor)
     {
         if (tensor == null)
             throw new ArgumentNullException(nameof(tensor));
 
+        int length = tensor.Length;
+
+        // Use parallel TensorPrimitives for large float/double tensors
+#if NET8_0_OR_GREATER
+        if (length >= ParallelThreshold && MaxDegreeOfParallelism > 1)
+        {
+            if (typeof(T) == typeof(float))
+            {
+                var data = tensor.Data;
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+                    var floatSpan = ((Memory<float>)(object)data).Span.Slice(start, count);
+                    // ReLU = max(x, 0), TensorPrimitives.Max with zeros is fastest
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (floatSpan[i] < 0) floatSpan[i] = 0;
+                    }
+                });
+                return;
+            }
+
+            if (typeof(T) == typeof(double))
+            {
+                var data = tensor.Data;
+                ParallelForChunks(length, MinChunkSize, (start, count) =>
+                {
+                    var doubleSpan = ((Memory<double>)(object)data).Span.Slice(start, count);
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (doubleSpan[i] < 0) doubleSpan[i] = 0;
+                    }
+                });
+                return;
+            }
+        }
+#endif
+
+        // Fallback for small tensors, non-float/double types, or older .NET
         var numOps = MathHelper.GetNumericOperations<T>();
         numOps.ReLU(tensor.AsSpan(), tensor.AsWritableSpan());
     }

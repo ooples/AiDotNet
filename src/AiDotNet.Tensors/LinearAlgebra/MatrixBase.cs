@@ -1,6 +1,7 @@
 global using System.Text;
 using System.Buffers;
 using System.Runtime.InteropServices;
+using System.Threading;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -25,6 +26,7 @@ public abstract class MatrixBase<T>
     /// Memory&lt;T&gt; provides zero-copy slicing, better Span&lt;T&gt; interop, and integration with memory pooling.</para>
     /// </remarks>
     protected readonly Memory<T> _memory;
+    private long _version;
 
 
     /// <summary>
@@ -41,6 +43,19 @@ public abstract class MatrixBase<T>
     /// Operations for performing numeric calculations with type T.
     /// </summary>
     protected static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Version counter for tracking mutations on the matrix data.
+    /// </summary>
+    internal long Version => Interlocked.Read(ref _version);
+
+    /// <summary>
+    /// Marks the matrix as mutated to invalidate cached views.
+    /// </summary>
+    protected void MarkDirty()
+    {
+        Interlocked.Increment(ref _version);
+    }
 
     /// <summary>
     /// Gets the global execution engine for vector operations.
@@ -225,6 +240,7 @@ public abstract class MatrixBase<T>
         set
         {
             ValidateIndices(row, col);
+            MarkDirty();
             _memory.Span[row * _cols + col] = value;
         }
     }
@@ -318,9 +334,11 @@ public abstract class MatrixBase<T>
             throw new ArgumentOutOfRangeException(nameof(columnIndex));
         if (vector.Length != Rows)
             throw new ArgumentException("Vector length must match matrix row count");
+        MarkDirty();
+        var span = _memory.Span;
         for (int i = 0; i < Rows; i++)
         {
-            this[i, columnIndex] = vector[i];
+            span[i * _cols + columnIndex] = vector[i];
         }
     }
 
@@ -344,6 +362,7 @@ public abstract class MatrixBase<T>
             throw new ArgumentException("Vector length must match matrix column count");
 
         // Use vectorized Copy operation to copy entire row at once
+        MarkDirty();
         var destRow = _memory.Span.Slice(rowIndex * _cols, _cols);
         _numOps.Copy(vector.AsSpan(), destRow);
     }
@@ -573,6 +592,7 @@ public abstract class MatrixBase<T>
         if (_rows != other.Rows || _cols != other.Columns)
             throw new ArgumentException("Matrix dimensions must match for addition.");
 
+        MarkDirty();
         _numOps.Add(_memory.Span, other._memory.Span, _memory.Span);
     }
 
@@ -631,6 +651,7 @@ public abstract class MatrixBase<T>
         if (_rows != other.Rows || _cols != other.Columns)
             throw new ArgumentException("Matrix dimensions must match for subtraction.");
 
+        MarkDirty();
         _numOps.Subtract(_memory.Span, other._memory.Span, _memory.Span);
     }
 
@@ -677,10 +698,22 @@ public abstract class MatrixBase<T>
         int N = other.Columns;
         int K = _cols;
 
-        // Create output array for the recursive algorithm
-        var resultData = new T[M * N];
+        if (MatrixMultiplyHelper.TryGemm(_memory, 0, other._memory, 0, result._memory, 0, M, K, N))
+        {
+            MatrixMultiplyHelper.TraceMatmul("BLAS", M, N, K);
+            return result;
+        }
+
+        if (MatrixMultiplyHelper.ShouldUseBlocked<T>(M, K, N))
+        {
+            MatrixMultiplyHelper.TraceMatmul("BLOCKED", M, N, K);
+            MatrixMultiplyHelper.MultiplyBlocked(_numOps, _memory, other._memory, result._memory, M, K, N, K, N, N);
+            return result;
+        }
 
         // Use cache-oblivious recursive algorithm
+        MatrixMultiplyHelper.TraceMatmul("RECURSIVE", M, N, K);
+        var resultData = new T[M * N];
         MultiplyRecursive(_memory.ToArray(), other._memory.ToArray(), resultData, 0, 0, 0, 0, 0, 0, M, K, N, K, N, N);
 
         // Copy result back to the result matrix
@@ -861,6 +894,7 @@ public abstract class MatrixBase<T>
     /// </remarks>
     public virtual void MultiplyInPlace(T scalar)
     {
+        MarkDirty();
         _numOps.MultiplyScalar(_memory.Span, scalar, _memory.Span);
     }
 
@@ -1015,6 +1049,7 @@ public abstract class MatrixBase<T>
         if (_rows != _cols)
             throw new InvalidOperationException("In-place transpose is only valid for square matrices.");
 
+        MarkDirty();
         int n = _rows;
         var span = _memory.Span;
 
@@ -1197,6 +1232,7 @@ public abstract class MatrixBase<T>
     /// </remarks>
     internal Span<T> AsWritableSpan()
     {
+        MarkDirty();
         return _memory.Span;
     }
 
@@ -1231,6 +1267,7 @@ public abstract class MatrixBase<T>
     /// </remarks>
     internal Memory<T> AsWritableMemory()
     {
+        MarkDirty();
         return _memory;
     }
 

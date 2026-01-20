@@ -47,21 +47,45 @@ public abstract class VectorBase<T>
     protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
-    /// Creates a new vector with the specified length.
+    /// Creates a new vector with the specified length, zero-initialized.
     /// </summary>
     /// <param name="length">The number of elements in the vector.</param>
     /// <exception cref="ArgumentException">Thrown when length is not positive.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This creates an empty vector with a specific size.
-    /// For example, creating a vector with length 3 gives you a vector with 3 elements,
-    /// but all elements start with the default value (usually 0).</para>
+    /// <para><b>For Beginners:</b> This creates a vector with a specific size.
+    /// For example, creating a vector with length 3 gives you a vector with 3 elements.
+    /// All elements are initialized to zero/default value.</para>
     /// </remarks>
-    protected VectorBase(int length)
+    protected VectorBase(int length) : this(length, skipZeroInit: false)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new vector with the specified length.
+    /// </summary>
+    /// <param name="length">The number of elements in the vector.</param>
+    /// <param name="skipZeroInit">If true, skips zero-initialization for performance.
+    /// Only set to true if you will immediately overwrite all elements.</param>
+    protected VectorBase(int length, bool skipZeroInit)
     {
         if (length < 0)
             throw new ArgumentException("Length must be non-negative", nameof(length));
 
+#if NET5_0_OR_GREATER
+        if (skipZeroInit)
+        {
+            // Use uninitialized allocation for performance - avoids zeroing memory
+            // that will be immediately overwritten. ~30-50% faster for large arrays.
+            // Caller MUST initialize all elements before exposing to consumers.
+            _memory = GC.AllocateUninitializedArray<T>(length);
+        }
+        else
+        {
+            _memory = new T[length];
+        }
+#else
         _memory = new T[length];
+#endif
     }
 
     /// <summary>
