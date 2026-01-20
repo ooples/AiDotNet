@@ -45,6 +45,8 @@ jobs:
       run: dotnet tool install --global docfx || true
 
     - name: Download build artifacts from Build workflow
+      if: github.event_name == 'workflow_run'
+      continue-on-error: true
       uses: dawidd6/action-download-artifact@v6
       with:
         workflow: Build & SonarCloud
@@ -53,7 +55,7 @@ jobs:
         path: .
         if_no_artifact_found: warn
 
-    - name: Restore dependencies (fallback if no artifacts)
+    - name: Restore dependencies and build (fallback if no artifacts)
       run: |
         # Check if build artifacts exist, if not do a fresh build
         if [ ! -d "src/bin/Release" ]; then
