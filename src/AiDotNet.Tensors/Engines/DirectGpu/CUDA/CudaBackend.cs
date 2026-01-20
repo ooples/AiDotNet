@@ -8275,8 +8275,9 @@ public sealed class CudaBackend : IAsyncGpuBackend
             {
                 _returnToPool(this);
             }
-            catch
+            catch (Exception)
             {
+                // If returning to pool fails for any reason, release directly
                 Release();
             }
         }

@@ -62,35 +62,38 @@ internal static class GpuResidentQuickHarness
         var vectorA = new Tensor<float>(CreateData(VectorSize, VectorSize), new[] { VectorSize });
         var vectorB = new Tensor<float>(CreateData(VectorSize, VectorSize + 999), new[] { VectorSize });
 
-        var gpuMatrixA = gpuEngine.UploadToContext(matrixA, GpuTensorRole.Activation);
-        var gpuMatrixB = gpuEngine.UploadToContext(matrixB, GpuTensorRole.Activation);
-        var gpuVectorA = gpuEngine.UploadToContext(vectorA, GpuTensorRole.Activation);
-        var gpuVectorB = gpuEngine.UploadToContext(vectorB, GpuTensorRole.Activation);
-
-        if (gpuMatrixA == null || gpuMatrixB == null || gpuVectorA == null || gpuVectorB == null)
-        {
-            gpuMatrixA?.Dispose();
-            gpuMatrixB?.Dispose();
-            gpuVectorA?.Dispose();
-            gpuVectorB?.Dispose();
-            Console.WriteLine("GPU upload failed; skipping.");
-            return;
-        }
-
-        var addOutput = backend.AllocateBuffer(VectorSize);
-        var multiplyOutput = backend.AllocateBuffer(VectorSize);
-
-        var convInput = CreateConvInput();
-        var convKernel = CreateConvKernel();
-        var gpuConvInput = gpuEngine.UploadToContext(convInput, GpuTensorRole.Activation);
-
-        if (gpuConvInput == null)
-        {
-            Console.WriteLine("GPU conv upload failed; skipping conv2d.");
-        }
+        GpuTensor<float>? gpuMatrixA = null;
+        GpuTensor<float>? gpuMatrixB = null;
+        GpuTensor<float>? gpuVectorA = null;
+        GpuTensor<float>? gpuVectorB = null;
+        IGpuBuffer? addOutput = null;
+        IGpuBuffer? multiplyOutput = null;
+        GpuTensor<float>? gpuConvInput = null;
 
         try
         {
+            gpuMatrixA = gpuEngine.UploadToContext(matrixA, GpuTensorRole.Activation);
+            gpuMatrixB = gpuEngine.UploadToContext(matrixB, GpuTensorRole.Activation);
+            gpuVectorA = gpuEngine.UploadToContext(vectorA, GpuTensorRole.Activation);
+            gpuVectorB = gpuEngine.UploadToContext(vectorB, GpuTensorRole.Activation);
+
+            if (gpuMatrixA == null || gpuMatrixB == null || gpuVectorA == null || gpuVectorB == null)
+            {
+                Console.WriteLine("GPU upload failed; skipping.");
+                return;
+            }
+
+            addOutput = backend.AllocateBuffer(VectorSize);
+            multiplyOutput = backend.AllocateBuffer(VectorSize);
+
+            var convInput = CreateConvInput();
+            var convKernel = CreateConvKernel();
+            gpuConvInput = gpuEngine.UploadToContext(convInput, GpuTensorRole.Activation);
+
+            if (gpuConvInput == null)
+            {
+                Console.WriteLine("GPU conv upload failed; skipping conv2d.");
+            }
             RunTimed("MatMul (GPU resident)", warmup, iterations, ctx, () =>
                 gpuEngine.MatMulGpuTensors(gpuMatrixA, gpuMatrixB));
 
@@ -147,12 +150,12 @@ internal static class GpuResidentQuickHarness
         }
         finally
         {
-            addOutput.Dispose();
-            multiplyOutput.Dispose();
-            gpuMatrixA.Dispose();
-            gpuMatrixB.Dispose();
-            gpuVectorA.Dispose();
-            gpuVectorB.Dispose();
+            addOutput?.Dispose();
+            multiplyOutput?.Dispose();
+            gpuMatrixA?.Dispose();
+            gpuMatrixB?.Dispose();
+            gpuVectorA?.Dispose();
+            gpuVectorB?.Dispose();
             gpuConvInput?.Dispose();
         }
 

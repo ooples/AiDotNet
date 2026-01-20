@@ -10318,8 +10318,9 @@ internal sealed class HipGpuBuffer : IGpuBuffer, IPoolableGpuBuffer
         {
             _returnToPool(this);
         }
-        catch
+        catch (Exception)
         {
+            // If returning to pool fails for any reason, release directly
             Release();
         }
     }

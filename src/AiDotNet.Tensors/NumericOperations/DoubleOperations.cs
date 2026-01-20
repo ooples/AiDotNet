@@ -806,7 +806,7 @@ public class DoubleOperations : INumericOperations<double>
     /// Performs element-wise addition using SIMD-optimized TensorPrimitives.
     /// </summary>
     /// <remarks>
-    /// Uses AVX-512/AVX2/SSE for hardware acceleration on .NET 8+, fallback on .NET Framework.
+    /// Uses AVX-512/AVX2/SSE for hardware acceleration on .NET 8+, with fallback on pre-.NET 8 targets.
     /// </remarks>
     public void Add(ReadOnlySpan<double> x, ReadOnlySpan<double> y, Span<double> destination)
     {
