@@ -414,9 +414,15 @@ internal static class DirectConv2DHelper
 
                         float kVal = (kh, kw) switch
                         {
-                            (0, 0) => k00, (0, 1) => k01, (0, 2) => k02,
-                            (1, 0) => k10, (1, 1) => k11, (1, 2) => k12,
-                            (2, 0) => k20, (2, 1) => k21, (2, 2) => k22,
+                            (0, 0) => k00,
+                            (0, 1) => k01,
+                            (0, 2) => k02,
+                            (1, 0) => k10,
+                            (1, 1) => k11,
+                            (1, 2) => k12,
+                            (2, 0) => k20,
+                            (2, 1) => k21,
+                            (2, 2) => k22,
                             _ => 0f
                         };
                         sum += input[inRowOffset + iw] * kVal;
