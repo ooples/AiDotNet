@@ -29,6 +29,12 @@ class Program
             return;
         }
 
+        if (args[0] == "--cpu-matmul")
+        {
+            CpuMatMulDiagnostics.Run();
+            return;
+        }
+
 #if !NET462
         // Run cuBLAS vs DirectGpu GEMM benchmark
         if (args[0] == "--cublas")
@@ -63,6 +69,7 @@ class Program
         Console.WriteLine("  --quick    : Run quick performance validation (default)");
         Console.WriteLine("  --full     : Run full BenchmarkDotNet suite (trigonometric)");
         Console.WriteLine("  --linalg   : Run linear algebra benchmarks vs MathNet.Numerics");
+        Console.WriteLine("  --cpu-matmul: Run CPU matrix multiply diagnostics");
 #if !NET462
         Console.WriteLine("  --cublas   : Run cuBLAS vs DirectGpu GEMM benchmark");
         Console.WriteLine("  --opencl   : Run OpenCL GEMM benchmark (AMD/Intel GPUs)");

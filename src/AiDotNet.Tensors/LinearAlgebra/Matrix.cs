@@ -1054,6 +1054,7 @@ public class Matrix<T> : MatrixBase<T>, IEnumerable<T>
     /// </remarks>
     public void DivideInPlace(T scalar)
     {
+        MarkDirty();
         _numOps.DivideScalar(_memory.Span, scalar, _memory.Span);
     }
 

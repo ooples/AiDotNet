@@ -6,6 +6,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.DirectGpu.OpenCL.Kernels;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
@@ -35,6 +37,10 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         private DynamicGemmKernel? _dynamicGemm;
         private bool _disposed;
         private OpenClCommandQueue? _defaultStream;
+        private const int MaxPooledBufferElements = 1_048_576;
+        private const int MaxPooledBuffersPerSize = 4;
+        private readonly GpuBufferPool<DirectOpenClGpuBuffer> _bufferPool =
+            new GpuBufferPool<DirectOpenClGpuBuffer>(MaxPooledBuffersPerSize, MaxPooledBufferElements);
         private const string OfflineTuningEnvVar = "AIDOTNET_GPU_TUNE";
         private const string OfflineTuningTrialsEnvVar = "AIDOTNET_GPU_TUNE_TRIALS";
         private const string OfflineTuningDiagEnvVar = "AIDOTNET_GPU_TUNE_DIAG";
@@ -43,7 +49,10 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         private const string OfflineTuningProgressEnvVar = "AIDOTNET_GPU_TUNE_PROGRESS";
         private const string OfflineTuningResetEnvVar = "AIDOTNET_GPU_TUNE_RESET";
         private const string OfflineTuningHeartbeatEnvVar = "AIDOTNET_GPU_TUNE_HEARTBEAT";
+        private const string GemmVendorImplEnvVar = "AIDOTNET_GPU_GEMM_IMPL";
+        private const string GemmVendorThresholdEnvVar = "AIDOTNET_GPU_GEMM_VENDOR_THRESHOLD";
         private const int DefaultBayesianTrials = 500;
+        private const long DefaultVendorGemmThreshold = 128L * 128L * 128L;
         private readonly Dictionary<(int M, int N, int K), GemmConfig> _tunedConfigCache = new();
         private readonly object _tunedConfigLock = new();
         private bool _tuningDbResetDone;
@@ -555,6 +564,36 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             return localSize;
         }
 
+        private int ClampLocalSizeForKernel(DirectOpenClKernel kernel, int localSize, int localElementBytes)
+        {
+            if (_context == null)
+                return localSize;
+
+            var kernelMaxSize = OpenClNativeBindings.GetKernelWorkGroupInfoSizeT(
+                kernel.Handle,
+                _context.Device,
+                OpenClNativeBindings.CL_KERNEL_WORK_GROUP_SIZE);
+            if (kernelMaxSize != UIntPtr.Zero)
+            {
+                var max = (int)Math.Min(kernelMaxSize.ToUInt64(), (ulong)int.MaxValue);
+                if (max > 0)
+                {
+                    localSize = Math.Min(localSize, max);
+                }
+            }
+
+            if (_context.LocalMemSize > 0 && localElementBytes > 0)
+            {
+                var maxByMem = (int)Math.Min(_context.LocalMemSize / (ulong)localElementBytes, (ulong)int.MaxValue);
+                if (maxByMem > 0)
+                {
+                    localSize = Math.Min(localSize, maxByMem);
+                }
+            }
+
+            return Math.Max(localSize, 1);
+        }
+
         private string GetDeviceSignature()
         {
             if (_context == null)
@@ -592,6 +631,56 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             }
 
             return defaultValue;
+        }
+
+        private static long GetEnvLong(string name, long defaultValue)
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            return long.TryParse(value, out var parsed) && parsed > 0 ? parsed : defaultValue;
+        }
+
+        private static bool ShouldUseVendorGemm(int m, int n, int k, bool offlineEnabled)
+        {
+            string? mode = Environment.GetEnvironmentVariable(GemmVendorImplEnvVar);
+            if (IsVendorGemmDisabled(mode))
+            {
+                return false;
+            }
+
+            if (IsVendorGemmForced(mode))
+            {
+                return true;
+            }
+
+            if (offlineEnabled)
+            {
+                return false;
+            }
+
+            long work;
+            try
+            {
+                work = checked((long)m * n * k);
+            }
+            catch (OverflowException)
+            {
+                work = long.MaxValue;
+            }
+            return work >= GetEnvLong(GemmVendorThresholdEnvVar, DefaultVendorGemmThreshold);
+        }
+
+        private static bool IsVendorGemmForced(string? mode)
+        {
+            return string.Equals(mode, "vendor", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(mode, "clblast", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsVendorGemmDisabled(string? mode)
+        {
+            return string.Equals(mode, "builtin", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(mode, "internal", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(mode, "kernel", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(mode, "custom", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool TryGetOfflineTuningMode(out bool useExhaustive)
@@ -704,8 +793,14 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             if (_context == null)
                 throw new InvalidOperationException("OpenCL context not available");
 
+            if (_bufferPool.TryRent(data.Length, out var pooled) && pooled != null)
+            {
+                pooled.Buffer.CopyFromHost(data);
+                return pooled;
+            }
+
             var buffer = new DirectOpenClBuffer(_context, data);
-            return new DirectOpenClGpuBuffer(buffer);
+            return new DirectOpenClGpuBuffer(buffer, _bufferPool.Return);
         }
 
         public IGpuBuffer AllocateBuffer(int size)
@@ -713,8 +808,11 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             if (_context == null)
                 throw new InvalidOperationException("OpenCL context not available");
 
+            if (_bufferPool.TryRent(size, out var pooled) && pooled != null)
+                return pooled;
+
             var buffer = new DirectOpenClBuffer(_context, size);
-            return new DirectOpenClGpuBuffer(buffer);
+            return new DirectOpenClGpuBuffer(buffer, _bufferPool.Return);
         }
 
         public float[] DownloadBuffer(IGpuBuffer buffer)
@@ -1738,6 +1836,26 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
             // DIAGNOSTIC TRACING (always prints for debugging)
             bool traceEnabled = Environment.GetEnvironmentVariable("AIDOTNET_GEMM_TRACE") == "1";
 
+            if (ClBlastNative.IsAvailable && ShouldUseVendorGemm(M, N, K, offlineEnabled))
+            {
+                if (traceEnabled)
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] Trying CLBlast library");
+
+                if (TryExecuteClBlastLibraryGemm(A, B, C, M, N, K, alpha, beta))
+                {
+                    if (traceEnabled)
+                        Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] SUCCESS: CLBlast library executed");
+                    return;
+                }
+
+                if (traceEnabled)
+                    Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] FALLBACK: CLBlast library FAILED");
+            }
+            else if (traceEnabled && !ClBlastNative.IsAvailable)
+            {
+                Console.WriteLine($"[GEMM-TRACE {M}x{N}x{K}] SKIP: CLBlast library not available");
+            }
+
             if (!offlineEnabled && TryGetClBlastBaselineConfig(out var baselineConfig))
             {
                 if (traceEnabled)
@@ -2555,13 +2673,15 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 throw new InvalidOperationException("OpenCL context not available");
 
             var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
+            // Kernel lookup happens before clamping to honor kernel work-group constraints.
+            var kernel = _kernelCache["reduce_sum"];
             int localSize = CalculateOptimalWorkGroupSize1D(size);
+            localSize = ClampLocalSizeForKernel(kernel, localSize, sizeof(float));
             int groupCount = (size + localSize - 1) / localSize;
 
             using var partialBuffer = AllocateBuffer(groupCount);
             var partial = ((DirectOpenClGpuBuffer)partialBuffer).Buffer;
 
-            var kernel = _kernelCache["reduce_sum"];
             kernel.SetArg(0, bufferA.Handle);
             kernel.SetArg(1, partial.Handle);
             kernel.SetLocalArg(2, localSize * sizeof(float));
@@ -2583,13 +2703,14 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 throw new InvalidOperationException("OpenCL context not available");
 
             var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
+            var kernel = _kernelCache["reduce_max"];
             int localSize = CalculateOptimalWorkGroupSize1D(size);
+            localSize = ClampLocalSizeForKernel(kernel, localSize, sizeof(float));
             int groupCount = (size + localSize - 1) / localSize;
 
             using var partialBuffer = AllocateBuffer(groupCount);
             var partial = ((DirectOpenClGpuBuffer)partialBuffer).Buffer;
 
-            var kernel = _kernelCache["reduce_max"];
             kernel.SetArg(0, bufferA.Handle);
             kernel.SetArg(1, partial.Handle);
             kernel.SetLocalArg(2, localSize * sizeof(float));
@@ -4037,13 +4158,10 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
         /// Executes GEMM using the actual CLBlast library for head-to-head comparison.
         /// Returns the execution time in milliseconds, or -1 if CLBlast is not available.
         /// </summary>
-        public double GemmWithClBlast(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        private bool TryExecuteClBlastLibraryGemm(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta)
         {
-            if (_context == null)
-                throw new InvalidOperationException("OpenCL context not available");
-
-            if (!ClBlastNative.IsAvailable)
-                return -1.0;
+            if (_context == null || !ClBlastNative.IsAvailable)
+                return false;
 
             var bufferA = ((DirectOpenClGpuBuffer)A).Buffer;
             var bufferB = ((DirectOpenClGpuBuffer)B).Buffer;
@@ -4051,7 +4169,6 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
 
             IntPtr queue = _context.CommandQueue;
 
-            var sw = Stopwatch.StartNew();
             var status = ClBlastNative.Sgemm(
                 ClBlastNative.Layout.RowMajor,
                 ClBlastNative.Transpose.No,
@@ -4065,14 +4182,30 @@ namespace AiDotNet.Tensors.Engines.DirectGpu.OpenCL
                 ref queue,
                 IntPtr.Zero);
 
+            if (status != ClBlastNative.StatusCode.Success)
+            {
+                if (EnableTuningDiagnostics)
+                {
+                    Console.WriteLine($"CLBlast SGEMM failed with status: {status}");
+                }
+                return false;
+            }
+
+            return true;
+        }
+
+        public double GemmWithClBlast(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha = 1.0f, float beta = 0.0f)
+        {
+            if (_context == null)
+                throw new InvalidOperationException("OpenCL context not available");
+
+            var sw = Stopwatch.StartNew();
+            bool ok = TryExecuteClBlastLibraryGemm(A, B, C, M, N, K, alpha, beta);
             OpenClNativeBindings.Finish(_context.CommandQueue);
             sw.Stop();
 
-            if (status != ClBlastNative.StatusCode.Success)
-            {
-                Console.WriteLine($"CLBlast SGEMM failed with status: {status}");
+            if (!ok)
                 return -1.0;
-            }
 
             return sw.Elapsed.TotalMilliseconds;
         }
@@ -9409,6 +9542,7 @@ KERNEL VARIANTS (A/B testing):
             if (_disposed) return;
 
             _dynamicGemm?.Dispose();
+            _bufferPool.Dispose();
 
             foreach (var kernel in _kernelCache.Values)
             {
@@ -9431,17 +9565,20 @@ KERNEL VARIANTS (A/B testing):
     /// OpenCL GPU buffer wrapper implementing IGpuBuffer.
     /// Uses pure P/Invoke with no managed GPU runtime dependency.
     /// </summary>
-    internal sealed class DirectOpenClGpuBuffer : IGpuBuffer
+    internal sealed class DirectOpenClGpuBuffer : IGpuBuffer, IPoolableGpuBuffer
     {
         internal readonly DirectOpenClBuffer Buffer;
+        private readonly Action<DirectOpenClGpuBuffer>? _returnToPool;
+        private int _poolState;
 
         public int Size => Buffer.Length;
         public long SizeInBytes => Buffer.Length * sizeof(float);
         public IntPtr Handle => Buffer.Handle;
 
-        public DirectOpenClGpuBuffer(DirectOpenClBuffer buffer)
+        public DirectOpenClGpuBuffer(DirectOpenClBuffer buffer, Action<DirectOpenClGpuBuffer>? returnToPool = null)
         {
             Buffer = buffer;
+            _returnToPool = returnToPool;
         }
 
         public float[] Download()
@@ -9454,9 +9591,31 @@ KERNEL VARIANTS (A/B testing):
             Buffer.CopyToHost(destination);
         }
 
+        public void MarkRented()
+        {
+            Interlocked.Exchange(ref _poolState, 0);
+        }
+
+        public void Release()
+        {
+            if (Interlocked.Exchange(ref _poolState, 2) == 2)
+                return;
+
+            Buffer.Dispose();
+        }
+
         public void Dispose()
         {
-            Buffer.Dispose();
+            if (_returnToPool == null)
+            {
+                Release();
+                return;
+            }
+
+            if (Interlocked.CompareExchange(ref _poolState, 1, 0) != 0)
+                return;
+
+            _returnToPool(this);
         }
     }
 
@@ -9596,4 +9755,3 @@ KERNEL VARIANTS (A/B testing):
         }
     }
 }
-

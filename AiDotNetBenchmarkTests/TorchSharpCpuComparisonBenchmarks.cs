@@ -26,6 +26,7 @@ public class TorchSharpCpuComparisonBenchmarks
 
     private Tensor<float>? _aiConvInput;
     private Tensor<float>? _aiConvKernel;
+    private Tensor<float>? _aiConvOutput; // Pre-allocated for zero-allocation benchmark
     private TorchTensor? _torchConvInput;
     private TorchTensor? _torchConvKernel;
 
@@ -144,6 +145,10 @@ public class TorchSharpCpuComparisonBenchmarks
 
         _aiConvInput = new Tensor<float>(inputData, new[] { batch, inChannels, height, width });
         _aiConvKernel = new Tensor<float>(kernelData, new[] { outChannels, inChannels, kernelSize, kernelSize });
+
+        // Pre-allocate output for zero-allocation benchmark
+        // Output shape: (64 + 2*1 - 3) / 1 + 1 = 64
+        _aiConvOutput = new Tensor<float>(new[] { batch, outChannels, height, width });
 
         _torchConvInput = torch.tensor(inputData, new long[] { batch, inChannels, height, width }, device: _torchDevice);
         _torchConvKernel = torch.tensor(kernelData, new long[] { outChannels, inChannels, kernelSize, kernelSize }, device: _torchDevice);
@@ -289,6 +294,12 @@ public class TorchSharpCpuComparisonBenchmarks
     public Tensor<float> AiDotNet_Conv2D()
     {
         return AiDotNetEngine.Current.Conv2D(_aiConvInput!, _aiConvKernel!, _convStride, _convPadding, _convDilation);
+    }
+
+    [Benchmark]
+    public void AiDotNet_Conv2D_ZeroAlloc()
+    {
+        _cpuEngine.Conv2DInto(_aiConvOutput!, _aiConvInput!, _aiConvKernel!, _convStride, _convPadding, _convDilation);
     }
 
     [Benchmark]

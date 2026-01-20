@@ -1320,54 +1320,65 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         return result;
     }
 
-    private static void ApplyGpuActivation(IDirectGpuBackend backend, IGpuBuffer buffer, int size, FusedActivationType activation)
+    private static void ApplyGpuActivation(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size, FusedActivationType activation)
     {
         switch (activation)
         {
             case FusedActivationType.ReLU:
-                backend.Relu(buffer, buffer, size);
+                backend.Relu(input, output, size);
                 break;
             case FusedActivationType.LeakyReLU:
-                backend.LeakyRelu(buffer, buffer, 0.01f, size);
+                backend.LeakyRelu(input, output, 0.01f, size);
                 break;
             case FusedActivationType.Sigmoid:
-                backend.Sigmoid(buffer, buffer, size);
+                backend.Sigmoid(input, output, size);
                 break;
             case FusedActivationType.Tanh:
-                backend.Tanh(buffer, buffer, size);
+                backend.Tanh(input, output, size);
                 break;
             case FusedActivationType.GELU:
-                backend.Gelu(buffer, buffer, size);
+                backend.Gelu(input, output, size);
                 break;
             case FusedActivationType.Swish:
-                backend.Swish(buffer, buffer, size);
+                backend.Swish(input, output, size);
                 break;
             case FusedActivationType.ELU:
-                backend.Elu(buffer, buffer, 1.0f, size); // alpha = 1.0 is standard
+                backend.Elu(input, output, 1.0f, size); // alpha = 1.0 is standard
                 break;
             case FusedActivationType.SELU:
                 // SELU: scale * (x if x > 0, else alpha * (exp(x) - 1))
                 // Standard parameters: scale ≈ 1.0507, alpha ≈ 1.6733
-                backend.Selu(buffer, buffer, 1.6732632423543772f, 1.0507009873554805f, size);
+                backend.Selu(input, output, 1.6732632423543772f, 1.0507010f, size);
                 break;
             case FusedActivationType.Softplus:
-                backend.Softplus(buffer, buffer, size);
+                backend.Softplus(input, output, size);
                 break;
             case FusedActivationType.Mish:
-                backend.Mish(buffer, buffer, size);
+                backend.Mish(input, output, size);
                 break;
             case FusedActivationType.HardSwish:
-                backend.Hardswish(buffer, buffer, size);
+                backend.Hardswish(input, output, size);
                 break;
             case FusedActivationType.HardSigmoid:
-                backend.Hardsigmoid(buffer, buffer, size);
+                backend.Hardsigmoid(input, output, size);
                 break;
             case FusedActivationType.HardTanh:
-                backend.Hardtanh(buffer, buffer, -1.0f, 1.0f, size);
+                backend.Hardtanh(input, output, -1.0f, 1.0f, size);
                 break;
             case FusedActivationType.None:
+                if (!ReferenceEquals(input, output))
+                {
+                    backend.Copy(input, 0, output, 0, size);
+                }
                 break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(activation), activation, "Unsupported activation.");
         }
+    }
+
+    private static void ApplyGpuActivation(IDirectGpuBackend backend, IGpuBuffer buffer, int size, FusedActivationType activation)
+    {
+        ApplyGpuActivation(backend, buffer, buffer, size, activation);
     }
 
     /// <summary>
@@ -1516,11 +1527,15 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         int size = input.ElementCount;
         var outputBuffer = backend.AllocateBuffer(size);
 
-        // Copy input to output first (activations work in-place)
-        backend.Copy(input.Buffer, outputBuffer, size);
-
-        // Apply activation in-place on output buffer
-        ApplyGpuActivation(backend, outputBuffer, size, activation);
+        if (activation == FusedActivationType.None)
+        {
+            // Preserve previous behavior: output is a copy of input.
+            backend.Copy(input.Buffer, outputBuffer, size);
+        }
+        else
+        {
+            ApplyGpuActivation(backend, input.Buffer, outputBuffer, size, activation);
+        }
 
         // Return new GPU tensor
         return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
@@ -7022,7 +7037,24 @@ public partial class DirectGpuTensorEngine : CpuEngine, IEngine, IDisposable
         }
 
         var outputBuffer = backend.AllocateBuffer(outputSize);
-        backend.SumAxis(input.Buffer, outputBuffer, outerSize, innerSize);
+
+        if (axis == 0)
+        {
+            if (innerSize == 1)
+            {
+                backend.SumAxis(input.Buffer, outputBuffer, 1, outerSize);
+            }
+            else
+            {
+                using var transposedBuffer = backend.AllocateBuffer(outerSize * innerSize);
+                backend.Transpose(input.Buffer, transposedBuffer, outerSize, innerSize);
+                backend.SumAxis(transposedBuffer, outputBuffer, innerSize, outerSize);
+            }
+        }
+        else
+        {
+            backend.SumAxis(input.Buffer, outputBuffer, outerSize, innerSize);
+        }
 
         return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }

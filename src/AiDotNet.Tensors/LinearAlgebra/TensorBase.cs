@@ -130,6 +130,26 @@ public abstract class TensorBase<T>
     }
 
     /// <summary>
+    /// Initializes a new instance of the TensorBase class with an existing Vector (zero-copy).
+    /// </summary>
+    /// <param name="data">The vector to use as backing storage (not copied).</param>
+    /// <param name="shape">The shape of the tensor.</param>
+    /// <remarks>
+    /// <para><b>Performance:</b> This constructor does NOT copy data. The tensor directly uses
+    /// the provided vector's memory. This is useful for high-performance scenarios where
+    /// memory pooling or external memory management is used.</para>
+    /// </remarks>
+    protected TensorBase(Vector<T> data, int[] shape)
+    {
+        Shape = shape;
+        _data = data;
+        if (_data.Length != shape.Aggregate(1, (acc, dim) => acc * dim))
+        {
+            throw new ArgumentException("The number of values does not match the specified shape.");
+        }
+    }
+
+    /// <summary>
     /// Gets or sets the value at the specified indices.
     /// </summary>
     /// <param name="indices">The indices of the element.</param>

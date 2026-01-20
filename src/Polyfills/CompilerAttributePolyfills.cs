@@ -70,6 +70,20 @@ namespace System.Diagnostics.CodeAnalysis
     internal sealed class SetsRequiredMembersAttribute : Attribute
     {
     }
+
+    /// <summary>
+    /// Indicates that the specified parameter will be non-null when the method returns the specified value.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
+    public sealed class NotNullWhenAttribute : Attribute
+    {
+        public NotNullWhenAttribute(bool returnValue)
+        {
+            ReturnValue = returnValue;
+        }
+
+        public bool ReturnValue { get; }
+    }
 }
 
 #endif
