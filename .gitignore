@@ -378,3 +378,14 @@ GPU_VECTORIZATION_TODO.md
 external/
 .clblast/
 nul
+
+# DocFX generated API documentation (yml files)
+api/*.yml
+api/.manifest
+
+# Build output directories
+_site/
+_playground/
+
+# Node modules for Vercel API
+api/node_modules/

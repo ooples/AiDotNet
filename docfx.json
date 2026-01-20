@@ -12,7 +12,7 @@
       "disableDefaultFilter": false,
       "noRestore": true,
       "properties": {
-        "TargetFramework": "net10.0"
+        "TargetFramework": "net8.0"
       }
     }
   ],
@@ -70,8 +70,8 @@
     "globalMetadata": {
       "_appTitle": "AiDotNet API Documentation",
       "_appName": "AiDotNet",
-      "_appLogoPath": "docs/images/logo.png",
-      "_appFaviconPath": "docs/images/favicon.ico",
+      "_appLogoPath": "docs/images/logo.svg",
+      "_appFaviconPath": "docs/images/favicon.svg",
       "_enableSearch": true,
       "_enableNewTab": true,
       "_disableContribution": false,

@@ -7,7 +7,6 @@
     <base href="/" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <link href="css/app.css" rel="stylesheet" />
-    <link href="AiDotNet.Playground.styles.css" rel="stylesheet" />
 </head>
 <body>
     <div id="app">
@@ -33,10 +32,16 @@
         <a href="" style="color: white; text-decoration: underline;" onclick="location.reload()">Reload</a>
     </div>
 
-    <script src="_framework/blazor.webassembly.js"></script>
+    <script src="_framework/blazor.webassembly.js" autostart="false"></script>
     <script>
-        window.addEventListener('error', function(e) {
-            document.getElementById('blazor-error-ui').style.display = 'block';
+        // Handle Blazor startup errors with useful error messages
+        Blazor.start().catch(function(error) {
+            console.error('Blazor startup error:', error);
+            var errorUI = document.getElementById('blazor-error-ui');
+            errorUI.innerHTML = 'Failed to load the playground. ' +
+                '<a href="" style="color: white; text-decoration: underline;" onclick="location.reload()">Reload</a>' +
+                '<br><small style="opacity: 0.7;">Error: ' + (error.message || 'Unknown error') + '</small>';
+            errorUI.style.display = 'block';
         });
     </script>
 </body>
