@@ -27,7 +27,11 @@ internal static class OneDnnProvider
 
     // Primitive cache for avoiding recreation overhead
     private static readonly ConcurrentDictionary<Conv2DKey, CachedConv2D> _conv2DCache = new();
+    private static readonly ConcurrentDictionary<EltwiseKey, CachedEltwise> _eltwiseCache = new();
+    private static readonly ConcurrentDictionary<BinaryKey, CachedBinary> _binaryCache = new();
     private const int MaxCacheSize = 32; // Limit cache size to avoid memory bloat
+    private const int MaxEltwiseCacheSize = 16; // Limit eltwise cache size
+    private const int MaxBinaryCacheSize = 16; // Limit binary cache size
 
     // Windows API for DLL search path manipulation
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
@@ -107,6 +111,14 @@ internal static class OneDnnProvider
     private const int DnnlConvolutionWinograd = 2;
     private const int DnnlF32 = 3;
 
+    // Eltwise algorithms (from dnnl_types.h)
+    private const int DnnlEltwiseRelu = 1;      // relu: max(0, x) or max(alpha*x, x)
+    private const int DnnlEltwiseLogistic = 16; // logistic (sigmoid): 1/(1+exp(-x))
+
+    // Binary algorithms (from dnnl_types.h)
+    private const int DnnlBinaryAdd = 0x1fff0;  // binary_add = 131056
+    private const int DnnlBinaryMul = 0x1fff1;  // binary_mul = 131057
+
     // Format tags (from dnnl_types.h)
     private const int DnnlFormatTagAny = 1;  // Let oneDNN choose optimal format (format_tag_any = 1, not 0)
     private const int DnnlFormatTagNCHW = 11; // abcd format for 4D tensors
@@ -114,6 +126,8 @@ internal static class OneDnnProvider
 
     // Argument indices (from dnnl_types.h)
     private const int DnnlArgSrc = 1;
+    private const int DnnlArgSrc0 = 1;   // For binary ops
+    private const int DnnlArgSrc1 = 2;   // For binary ops
     private const int DnnlArgDst = 17;
     private const int DnnlArgWeights = 33;
     private const int DnnlArgScratchpad = 80;
@@ -301,6 +315,104 @@ internal static class OneDnnProvider
         }
     }
 
+    /// <summary>
+    /// Cache key for eltwise primitives, keyed by algorithm and length.
+    /// </summary>
+    private readonly struct EltwiseKey : IEquatable<EltwiseKey>
+    {
+        public readonly int Algorithm;
+        public readonly int Length;
+
+        public EltwiseKey(int algorithm, int length)
+        {
+            Algorithm = algorithm;
+            Length = length;
+        }
+
+        public bool Equals(EltwiseKey other) =>
+            Algorithm == other.Algorithm && Length == other.Length;
+
+        public override bool Equals(object? obj) => obj is EltwiseKey other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(Algorithm, Length);
+    }
+
+    /// <summary>
+    /// Cached eltwise primitive with memory object for reuse.
+    /// </summary>
+    private sealed class CachedEltwise : IDisposable
+    {
+        public IntPtr Primitive;
+        public IntPtr PrimDesc;
+        public IntPtr SrcDesc;
+        public IntPtr SrcMem;
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            if (SrcMem != IntPtr.Zero) dnnl_memory_destroy(SrcMem);
+            if (Primitive != IntPtr.Zero) dnnl_primitive_destroy(Primitive);
+            if (PrimDesc != IntPtr.Zero) dnnl_primitive_desc_destroy(PrimDesc);
+            if (SrcDesc != IntPtr.Zero) dnnl_memory_desc_destroy(SrcDesc);
+        }
+    }
+
+    /// <summary>
+    /// Cache key for binary primitives, keyed by algorithm and length.
+    /// </summary>
+    private readonly struct BinaryKey : IEquatable<BinaryKey>
+    {
+        public readonly int Algorithm;
+        public readonly int Length;
+
+        public BinaryKey(int algorithm, int length)
+        {
+            Algorithm = algorithm;
+            Length = length;
+        }
+
+        public bool Equals(BinaryKey other) =>
+            Algorithm == other.Algorithm && Length == other.Length;
+
+        public override bool Equals(object? obj) => obj is BinaryKey other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(Algorithm, Length);
+    }
+
+    /// <summary>
+    /// Cached binary primitive with memory objects for reuse.
+    /// </summary>
+    private sealed class CachedBinary : IDisposable
+    {
+        public IntPtr Primitive;
+        public IntPtr PrimDesc;
+        public IntPtr Src0Desc;
+        public IntPtr Src1Desc;
+        public IntPtr DstDesc;
+        public IntPtr Src0Mem;
+        public IntPtr Src1Mem;
+        public IntPtr DstMem;
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            if (Src0Mem != IntPtr.Zero) dnnl_memory_destroy(Src0Mem);
+            if (Src1Mem != IntPtr.Zero) dnnl_memory_destroy(Src1Mem);
+            if (DstMem != IntPtr.Zero) dnnl_memory_destroy(DstMem);
+            if (Primitive != IntPtr.Zero) dnnl_primitive_destroy(Primitive);
+            if (PrimDesc != IntPtr.Zero) dnnl_primitive_desc_destroy(PrimDesc);
+            if (Src0Desc != IntPtr.Zero) dnnl_memory_desc_destroy(Src0Desc);
+            if (Src1Desc != IntPtr.Zero) dnnl_memory_desc_destroy(Src1Desc);
+            if (DstDesc != IntPtr.Zero) dnnl_memory_desc_destroy(DstDesc);
+        }
+    }
+
     #endregion
 
     #region P/Invoke Declarations
@@ -407,6 +519,28 @@ internal static class OneDnnProvider
         IntPtr stream,
         int nargs,
         DnnlExecArg* args);
+
+    [DllImport("dnnl", CallingConvention = CallingConvention.Cdecl)]
+    private static extern unsafe int dnnl_eltwise_forward_primitive_desc_create(
+        out IntPtr primitiveDesc,
+        IntPtr engine,
+        int propKind,
+        int algKind,
+        IntPtr srcDesc,
+        IntPtr dstDesc,
+        float alpha,
+        float beta,
+        IntPtr attr);
+
+    [DllImport("dnnl", CallingConvention = CallingConvention.Cdecl)]
+    private static extern unsafe int dnnl_binary_primitive_desc_create(
+        out IntPtr primitiveDesc,
+        IntPtr engine,
+        int algKind,
+        IntPtr src0Desc,
+        IntPtr src1Desc,
+        IntPtr dstDesc,
+        IntPtr attr);
 
     #endregion
 
@@ -565,6 +699,316 @@ internal static class OneDnnProvider
                 _firstConv2DLogged = true;
             }
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Performs in-place ReLU using oneDNN's optimized eltwise primitive with caching.
+    /// </summary>
+    /// <param name="data">Pointer to float array to transform in-place.</param>
+    /// <param name="length">Number of elements.</param>
+    /// <returns>True if successful, false if oneDNN not available or operation failed.</returns>
+    internal static unsafe bool TryReLU(float* data, int length)
+    {
+        return TryEltwiseInPlace(data, length, DnnlEltwiseRelu);
+    }
+
+    /// <summary>
+    /// Performs in-place Sigmoid using oneDNN's optimized eltwise primitive with caching.
+    /// </summary>
+    /// <param name="data">Pointer to float array to transform in-place.</param>
+    /// <param name="length">Number of elements.</param>
+    /// <returns>True if successful, false if oneDNN not available or operation failed.</returns>
+    internal static unsafe bool TrySigmoid(float* data, int length)
+    {
+        return TryEltwiseInPlace(data, length, DnnlEltwiseLogistic);
+    }
+
+    /// <summary>
+    /// Performs in-place eltwise operation using cached oneDNN primitives.
+    /// </summary>
+    private static unsafe bool TryEltwiseInPlace(float* data, int length, int algorithm)
+    {
+        if (!EnsureInitialized())
+            return false;
+
+        var key = new EltwiseKey(algorithm, length);
+
+        // Try to get cached primitive or create new one
+        if (!_eltwiseCache.TryGetValue(key, out var cached))
+        {
+            cached = CreateEltwisePrimitive(algorithm, length);
+            if (cached == null)
+                return false;
+
+            // Add to cache (limit cache size)
+            if (_eltwiseCache.Count >= MaxEltwiseCacheSize)
+            {
+                // Remove a random entry to make room
+                foreach (var k in _eltwiseCache.Keys)
+                {
+                    if (_eltwiseCache.TryRemove(k, out var removed))
+                    {
+                        removed.Dispose();
+                        break;
+                    }
+                }
+            }
+            _eltwiseCache[key] = cached;
+        }
+
+        try
+        {
+            // Update memory handle to point to user data
+            int status = dnnl_memory_set_data_handle(cached.SrcMem, (IntPtr)data);
+            if (status != DnnlSuccess)
+                return false;
+
+            // Execute eltwise in-place (src and dst point to same memory)
+            DnnlExecArg* args = stackalloc DnnlExecArg[2];
+            args[0].Arg = DnnlArgSrc;
+            args[0].Memory = cached.SrcMem;
+            args[1].Arg = DnnlArgDst;
+            args[1].Memory = cached.SrcMem; // In-place
+
+            status = dnnl_primitive_execute(cached.Primitive, _stream, 2, args);
+            if (status != DnnlSuccess)
+                return false;
+
+            dnnl_stream_wait(_stream);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Creates a new eltwise primitive for caching.
+    /// </summary>
+    private static unsafe CachedEltwise? CreateEltwisePrimitive(int algorithm, int length)
+    {
+        var cached = new CachedEltwise();
+
+        try
+        {
+            // Create 1D memory descriptor for the data
+            long* dims = stackalloc long[1];
+            dims[0] = length;
+
+            long* strides = stackalloc long[1];
+            strides[0] = 1;
+
+            int status = dnnl_memory_desc_create_with_strides(out cached.SrcDesc, 1, dims, DnnlF32, strides);
+            if (status != DnnlSuccess)
+            {
+                cached.Dispose();
+                return null;
+            }
+
+            // Create eltwise primitive descriptor
+            status = dnnl_eltwise_forward_primitive_desc_create(
+                out cached.PrimDesc, _engine, DnnlForwardInference, algorithm,
+                cached.SrcDesc, cached.SrcDesc, 0.0f, 0.0f, IntPtr.Zero);
+            if (status != DnnlSuccess)
+            {
+                cached.Dispose();
+                return null;
+            }
+
+            // Create primitive
+            status = dnnl_primitive_create(out cached.Primitive, cached.PrimDesc);
+            if (status != DnnlSuccess)
+            {
+                cached.Dispose();
+                return null;
+            }
+
+            // Create memory object with null handle (will be set on each call)
+            status = dnnl_memory_create(out cached.SrcMem, cached.SrcDesc, _engine, IntPtr.Zero);
+            if (status != DnnlSuccess)
+            {
+                cached.Dispose();
+                return null;
+            }
+
+            return cached;
+        }
+        catch
+        {
+            cached.Dispose();
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Performs element-wise addition using oneDNN's optimized binary primitive with caching.
+    /// </summary>
+    internal static unsafe bool TryAdd(float* src0, float* src1, float* dst, int length)
+    {
+        return TryBinary(src0, src1, dst, length, DnnlBinaryAdd);
+    }
+
+    /// <summary>
+    /// Performs element-wise multiplication using oneDNN's optimized binary primitive with caching.
+    /// </summary>
+    internal static unsafe bool TryMultiply(float* src0, float* src1, float* dst, int length)
+    {
+        return TryBinary(src0, src1, dst, length, DnnlBinaryMul);
+    }
+
+    /// <summary>
+    /// Performs binary operation using cached oneDNN primitives.
+    /// </summary>
+    private static unsafe bool TryBinary(float* src0, float* src1, float* dst, int length, int algorithm)
+    {
+        if (!EnsureInitialized())
+            return false;
+
+        var key = new BinaryKey(algorithm, length);
+        if (!_binaryCache.TryGetValue(key, out var cached))
+        {
+            cached = CreateBinaryPrimitive(algorithm, length);
+            if (cached == null)
+                return false;
+
+            // Manage cache size
+            if (_binaryCache.Count >= MaxBinaryCacheSize)
+            {
+                // Remove a random entry to make room
+                foreach (var k in _binaryCache.Keys)
+                {
+                    if (_binaryCache.TryRemove(k, out var removed))
+                    {
+                        removed.Dispose();
+                        break;
+                    }
+                }
+            }
+            _binaryCache[key] = cached;
+        }
+
+        try
+        {
+            // Update memory handles
+            int status = dnnl_memory_set_data_handle(cached.Src0Mem, (IntPtr)src0);
+            if (status != DnnlSuccess)
+                return false;
+
+            status = dnnl_memory_set_data_handle(cached.Src1Mem, (IntPtr)src1);
+            if (status != DnnlSuccess)
+                return false;
+
+            status = dnnl_memory_set_data_handle(cached.DstMem, (IntPtr)dst);
+            if (status != DnnlSuccess)
+                return false;
+
+            // Execute with 3 arguments: src0, src1, dst
+            DnnlExecArg* args = stackalloc DnnlExecArg[3];
+            args[0].Arg = DnnlArgSrc0;
+            args[0].Memory = cached.Src0Mem;
+            args[1].Arg = DnnlArgSrc1;
+            args[1].Memory = cached.Src1Mem;
+            args[2].Arg = DnnlArgDst;
+            args[2].Memory = cached.DstMem;
+
+            status = dnnl_primitive_execute(cached.Primitive, _stream, 3, args);
+            if (status != DnnlSuccess)
+                return false;
+
+            dnnl_stream_wait(_stream);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Creates a new binary primitive for caching.
+    /// </summary>
+    private static unsafe CachedBinary? CreateBinaryPrimitive(int algorithm, int length)
+    {
+        var cached = new CachedBinary();
+
+        try
+        {
+            // Create 1D memory descriptor for the data
+            long* dims = stackalloc long[1];
+            dims[0] = length;
+
+            long* strides = stackalloc long[1];
+            strides[0] = 1;
+
+            int status = dnnl_memory_desc_create_with_strides(out cached.Src0Desc, 1, dims, DnnlF32, strides);
+            if (status != DnnlSuccess)
+            {
+                cached.Dispose();
+                return null;
+            }
+
+            status = dnnl_memory_desc_create_with_strides(out cached.Src1Desc, 1, dims, DnnlF32, strides);
+            if (status != DnnlSuccess)
+            {
+                cached.Dispose();
+                return null;
+            }
+
+            status = dnnl_memory_desc_create_with_strides(out cached.DstDesc, 1, dims, DnnlF32, strides);
+            if (status != DnnlSuccess)
+            {
+                cached.Dispose();
+                return null;
+            }
+
+            // Create binary primitive descriptor
+            status = dnnl_binary_primitive_desc_create(
+                out cached.PrimDesc, _engine, algorithm,
+                cached.Src0Desc, cached.Src1Desc, cached.DstDesc, IntPtr.Zero);
+            if (status != DnnlSuccess)
+            {
+                cached.Dispose();
+                return null;
+            }
+
+            // Create primitive
+            status = dnnl_primitive_create(out cached.Primitive, cached.PrimDesc);
+            if (status != DnnlSuccess)
+            {
+                cached.Dispose();
+                return null;
+            }
+
+            // Create memory objects with null handles (will be set on each call)
+            status = dnnl_memory_create(out cached.Src0Mem, cached.Src0Desc, _engine, IntPtr.Zero);
+            if (status != DnnlSuccess)
+            {
+                cached.Dispose();
+                return null;
+            }
+
+            status = dnnl_memory_create(out cached.Src1Mem, cached.Src1Desc, _engine, IntPtr.Zero);
+            if (status != DnnlSuccess)
+            {
+                cached.Dispose();
+                return null;
+            }
+
+            status = dnnl_memory_create(out cached.DstMem, cached.DstDesc, _engine, IntPtr.Zero);
+            if (status != DnnlSuccess)
+            {
+                cached.Dispose();
+                return null;
+            }
+
+            return cached;
+        }
+        catch
+        {
+            cached.Dispose();
+            return null;
         }
     }
 

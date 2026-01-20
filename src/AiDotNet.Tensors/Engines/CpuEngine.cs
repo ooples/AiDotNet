@@ -4210,8 +4210,34 @@ public class CpuEngine : IEngine
 
     /// <summary>
     /// Applies Sigmoid activation in-place: x = 1 / (1 + exp(-x)). Zero allocation.
-    /// Uses parallel processing for large tensors to maximize throughput.
+    /// Uses oneDNN for float tensors when available, otherwise falls back to SIMD.
     /// </summary>
+#if !NETFRAMEWORK
+    public unsafe void SigmoidInPlace<T>(Tensor<T> tensor)
+    {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
+        // Try oneDNN for float tensors
+        if (typeof(T) == typeof(float) && OneDnnProvider.IsAvailable)
+        {
+            var floatMem = (Memory<float>)(object)tensor.Data;
+            if (MemoryMarshal.TryGetArray((ReadOnlyMemory<float>)floatMem, out var segment) &&
+                segment.Array is not null && segment.Offset == 0)
+            {
+                fixed (float* ptr = segment.Array)
+                {
+                    if (OneDnnProvider.TrySigmoid(ptr, tensor.Length))
+                        return;
+                }
+            }
+        }
+
+        // Fallback to existing implementation
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.Sigmoid(tensor.AsSpan(), tensor.AsWritableSpan());
+    }
+#else
     public void SigmoidInPlace<T>(Tensor<T> tensor)
     {
         if (tensor == null)
@@ -4251,6 +4277,7 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         numOps.Sigmoid(tensor.AsSpan(), tensor.AsWritableSpan());
     }
+#endif
 
     /// <summary>
     /// Applies Sigmoid activation to input, storing in destination. Zero allocation.
@@ -4284,8 +4311,34 @@ public class CpuEngine : IEngine
 
     /// <summary>
     /// Applies ReLU activation in-place: x = max(0, x). Zero allocation.
-    /// Uses parallel processing for large tensors to maximize throughput.
+    /// Uses oneDNN for float tensors when available, otherwise falls back to SIMD.
     /// </summary>
+#if !NETFRAMEWORK
+    public unsafe void ReLUInPlace<T>(Tensor<T> tensor)
+    {
+        if (tensor == null)
+            throw new ArgumentNullException(nameof(tensor));
+
+        // Try oneDNN for float tensors
+        if (typeof(T) == typeof(float) && OneDnnProvider.IsAvailable)
+        {
+            var floatMem = (Memory<float>)(object)tensor.Data;
+            if (MemoryMarshal.TryGetArray((ReadOnlyMemory<float>)floatMem, out var segment) &&
+                segment.Array is not null && segment.Offset == 0)
+            {
+                fixed (float* ptr = segment.Array)
+                {
+                    if (OneDnnProvider.TryReLU(ptr, tensor.Length))
+                        return;
+                }
+            }
+        }
+
+        // Fallback to existing implementation
+        var numOps = MathHelper.GetNumericOperations<T>();
+        numOps.ReLU(tensor.AsSpan(), tensor.AsWritableSpan());
+    }
+#else
     public void ReLUInPlace<T>(Tensor<T> tensor)
     {
         if (tensor == null)
@@ -4332,6 +4385,7 @@ public class CpuEngine : IEngine
         var numOps = MathHelper.GetNumericOperations<T>();
         numOps.ReLU(tensor.AsSpan(), tensor.AsWritableSpan());
     }
+#endif
 
     /// <summary>
     /// Applies ReLU activation to input, storing in destination. Zero allocation.

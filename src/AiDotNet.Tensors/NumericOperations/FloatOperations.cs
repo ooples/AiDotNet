@@ -35,10 +35,11 @@ namespace AiDotNet.Tensors.NumericOperations;
 public class FloatOperations : INumericOperations<float>
 {
     /// <summary>
-    /// Threshold for parallel processing of compute-intensive operations.
-    /// Memory-bound ops (Add, Multiply) use single-threaded SIMD regardless of size.
+    /// Threshold for parallel processing to maximize memory bandwidth.
+    /// TorchSharp uses OpenMP to parallelize all operations including Add/Multiply/Sum.
+    /// Set to 50000 to enable parallelism for 100K+ element arrays.
     /// </summary>
-    private const int ParallelThreshold = 65536;
+    private const int ParallelThreshold = 50000;
 
     /// <summary>
     /// Minimum chunk size per thread to ensure cache efficiency.
@@ -922,12 +923,27 @@ public class FloatOperations : INumericOperations<float>
     private static readonly FloatOperations _instance = new();
 
     /// <summary>
-    /// Performs element-wise addition using SIMD-optimized TensorPrimitives.
-    /// Memory-bound operation - single-threaded SIMD saturates memory bandwidth.
+    /// Performs element-wise addition using oneDNN when available, falling back to TensorPrimitives.
+    /// Uses multi-threading for large arrays to maximize memory bandwidth.
     /// </summary>
     public void Add(ReadOnlySpan<float> x, ReadOnlySpan<float> y, Span<float> destination)
     {
+        int length = x.Length;
 #if NET8_0_OR_GREATER
+        // Try oneDNN first for large arrays - it has highly optimized multi-threaded implementation
+        if (length >= ParallelThreshold && OneDnnProvider.IsAvailable)
+        {
+            unsafe
+            {
+                fixed (float* xPtr = x, yPtr = y, destPtr = destination)
+                {
+                    if (OneDnnProvider.TryAdd(xPtr, yPtr, destPtr, length))
+                        return;
+                }
+            }
+        }
+
+        // Fallback to TensorPrimitives
         TensorPrimitives.Add(x, y, destination);
 #else
         VectorizedOperationsFallback.Add(_instance, x, y, destination);
@@ -948,12 +964,27 @@ public class FloatOperations : INumericOperations<float>
     }
 
     /// <summary>
-    /// Performs element-wise multiplication using SIMD-optimized TensorPrimitives.
-    /// Memory-bound operation - single-threaded SIMD saturates memory bandwidth.
+    /// Performs element-wise multiplication using oneDNN when available, falling back to TensorPrimitives.
+    /// Uses multi-threading for large arrays to maximize memory bandwidth.
     /// </summary>
     public void Multiply(ReadOnlySpan<float> x, ReadOnlySpan<float> y, Span<float> destination)
     {
+        int length = x.Length;
 #if NET8_0_OR_GREATER
+        // Try oneDNN first for large arrays - it has highly optimized multi-threaded implementation
+        if (length >= ParallelThreshold && OneDnnProvider.IsAvailable)
+        {
+            unsafe
+            {
+                fixed (float* xPtr = x, yPtr = y, destPtr = destination)
+                {
+                    if (OneDnnProvider.TryMultiply(xPtr, yPtr, destPtr, length))
+                        return;
+                }
+            }
+        }
+
+        // Fallback to TensorPrimitives
         TensorPrimitives.Multiply(x, y, destination);
 #else
         VectorizedOperationsFallback.Multiply(_instance, x, y, destination);
@@ -986,12 +1017,38 @@ public class FloatOperations : INumericOperations<float>
     }
 
     /// <summary>
-    /// Computes sum using SIMD-optimized TensorPrimitives.
+    /// Computes sum using SIMD-optimized TensorPrimitives with multi-threading for large arrays.
     /// </summary>
     public float Sum(ReadOnlySpan<float> x)
     {
+        int length = x.Length;
 #if NET8_0_OR_GREATER
-        return TensorPrimitives.Sum(x);
+        if (length >= ParallelThreshold && MaxDegreeOfParallelism > 1)
+        {
+            // Parallel reduction: compute partial sums then combine
+            float totalSum = 0;
+            var lockObj = new object();
+            unsafe
+            {
+                fixed (float* xPtr = x)
+                {
+                    var xp = xPtr;
+                    ParallelForChunks(length, MinChunkSize, (start, count) =>
+                    {
+                        var partialSum = TensorPrimitives.Sum(new ReadOnlySpan<float>(xp + start, count));
+                        lock (lockObj)
+                        {
+                            totalSum += partialSum;
+                        }
+                    });
+                }
+            }
+            return totalSum;
+        }
+        else
+        {
+            return TensorPrimitives.Sum(x);
+        }
 #else
         return VectorizedOperationsFallback.Sum(_instance, x);
 #endif
@@ -1542,8 +1599,9 @@ public class FloatOperations : INumericOperations<float>
     }
 
     /// <summary>
-    /// Computes ReLU (Rectified Linear Unit) element-wise using SIMD-optimized SimdKernels.
-    /// max(0, x) - Simple comparison operation - single-threaded SIMD saturates memory bandwidth.
+    /// Computes ReLU (Rectified Linear Unit) element-wise using SIMD-optimized operations.
+    /// max(0, x) - Memory-bound operation where single-threaded SIMD is optimal.
+    /// Note: Parallelism adds copy overhead that hurts performance for simple ops like ReLU.
     /// </summary>
     public void ReLU(ReadOnlySpan<float> x, Span<float> destination)
     {

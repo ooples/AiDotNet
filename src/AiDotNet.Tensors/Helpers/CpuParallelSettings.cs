@@ -1,3 +1,6 @@
+using System;
+using System.Threading.Tasks;
+
 namespace AiDotNet.Tensors.Helpers;
 
 /// <summary>
@@ -35,7 +38,7 @@ public static class CpuParallelSettings
     /// For small arrays, the overhead of parallelization may exceed the benefits.
     /// Operations on arrays smaller than this threshold will run sequentially.
     /// </remarks>
-    public static int ParallelThreshold { get; set; } = 65536;
+    public static int ParallelThreshold { get; set; } = 50000;
 
     /// <summary>
     /// The minimum chunk size for parallel operations.
@@ -61,23 +64,35 @@ public static class CpuParallelSettings
         if (length <= 0)
             return;
 
-        int maxThreads = MaxDegreeOfParallelism;
-        if (maxThreads <= 1 || length < minChunkSize)
+        if (action is null)
+            throw new ArgumentNullException(nameof(action));
+
+        int maxDegree = MaxDegreeOfParallelism;
+        if (maxDegree <= 1 || length <= minChunkSize)
         {
-            // Sequential execution
+            // Single-threaded execution
             action(0, length);
             return;
         }
 
-        // Calculate chunk size - ensure at least minChunkSize per thread
-        int chunkSize = Math.Max(minChunkSize, (length + maxThreads - 1) / maxThreads);
-        int numChunks = (length + chunkSize - 1) / chunkSize;
-
-        Parallel.For(0, numChunks, new ParallelOptions { MaxDegreeOfParallelism = maxThreads }, chunkIndex =>
+        // Calculate number of chunks based on length and min chunk size
+        int numChunks = Math.Min(maxDegree, (length + minChunkSize - 1) / minChunkSize);
+        if (numChunks <= 1)
         {
-            int start = chunkIndex * chunkSize;
+            action(0, length);
+            return;
+        }
+
+        int chunkSize = (length + numChunks - 1) / numChunks;
+
+        Parallel.For(0, numChunks, new ParallelOptions { MaxDegreeOfParallelism = maxDegree }, i =>
+        {
+            int start = i * chunkSize;
             int count = Math.Min(chunkSize, length - start);
-            action(start, count);
+            if (count > 0)
+            {
+                action(start, count);
+            }
         });
     }
 }

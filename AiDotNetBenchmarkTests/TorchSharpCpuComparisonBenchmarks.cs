@@ -19,6 +19,10 @@ public class TorchSharpCpuComparisonBenchmarks
     private readonly Dictionary<int, Tensor<float>> _aiVectorsA = new();
     private readonly Dictionary<int, Tensor<float>> _aiVectorsB = new();
 
+    // Raw arrays for direct TensorPrimitives comparison
+    private readonly Dictionary<int, float[]> _rawArraysA = new();
+    private readonly Dictionary<int, float[]> _rawArraysB = new();
+
     private readonly Dictionary<int, TorchTensor> _torchMatricesA = new();
     private readonly Dictionary<int, TorchTensor> _torchMatricesB = new();
     private readonly Dictionary<int, TorchTensor> _torchVectorsA = new();
@@ -71,6 +75,10 @@ public class TorchSharpCpuComparisonBenchmarks
 
             _aiVectorsA[size] = new Tensor<float>(dataA, new[] { size });
             _aiVectorsB[size] = new Tensor<float>(dataB, new[] { size });
+
+            // Also store raw arrays for direct comparison
+            _rawArraysA[size] = (float[])dataA.Clone();
+            _rawArraysB[size] = (float[])dataB.Clone();
 
             _torchVectorsA[size] = torch.tensor(dataA, new long[] { size }, device: _torchDevice);
             _torchVectorsB[size] = torch.tensor(dataB, new long[] { size }, device: _torchDevice);
@@ -212,6 +220,17 @@ public class TorchSharpCpuComparisonBenchmarks
     [Benchmark]
     [Arguments(100_000)]
     [Arguments(1_000_000)]
+    public void RawTensorPrimitives_Add(int size)
+    {
+        System.Numerics.Tensors.TensorPrimitives.Add(
+            _rawArraysA[size].AsSpan(),
+            _rawArraysB[size].AsSpan(),
+            _rawArraysA[size].AsSpan());
+    }
+
+    [Benchmark]
+    [Arguments(100_000)]
+    [Arguments(1_000_000)]
     public void TorchSharp_Add(int size)
     {
         torch.add_(_torchVectorsA[size], _torchVectorsB[size]);
@@ -268,6 +287,12 @@ public class TorchSharpCpuComparisonBenchmarks
     public float AiDotNet_TensorSum()
     {
         return AiDotNetEngine.Current.TensorSum(_aiVectorsA[VectorSizes[1]]);
+    }
+
+    [Benchmark]
+    public float RawTensorPrimitives_Sum()
+    {
+        return System.Numerics.Tensors.TensorPrimitives.Sum(_rawArraysA[VectorSizes[1]].AsSpan());
     }
 
     [Benchmark]
