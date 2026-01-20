@@ -533,12 +533,14 @@ jobs:
           echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "- Publish size: ${{ steps.size.outputs.current_mb }} MB" >> $GITHUB_STEP_SUMMARY
 
-  # Documentation build and deployment - runs in parallel with tests after build completes
+  # Documentation build and deployment - runs independently to avoid cancellation
   # Deploys DocFX API docs and Blazor WASM Playground to GitHub Pages
+  # NOTE: No 'needs' dependency - this job builds from source and has its own
+  # concurrency group (pages) with cancel-in-progress: false, so it won't be
+  # cancelled when new commits trigger the main workflow cancellation
   build-docs:
     name: Build & Deploy Documentation
     runs-on: ubuntu-latest
-    needs: build-windows
     timeout-minutes: 30
     # Only deploy on master branch pushes (not PRs)
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
@@ -559,6 +561,23 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
+      - name: Free up disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h /
+          # Remove large pre-installed packages we don't need for docs
+          sudo rm -rf /usr/share/dotnet/shared/Microsoft.AspNetCore.App/6.* || true
+          sudo rm -rf /usr/share/dotnet/shared/Microsoft.AspNetCore.App/7.* || true
+          sudo rm -rf /usr/share/dotnet/shared/Microsoft.NETCore.App/6.* || true
+          sudo rm -rf /usr/share/dotnet/shared/Microsoft.NETCore.App/7.* || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /usr/local/share/chromium || true
+          sudo rm -rf /usr/local/share/powershell || true
+          echo "=== Disk space after cleanup ==="
+          df -h /
+
       - name: Checkout code
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v4
         with:
