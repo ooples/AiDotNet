@@ -931,7 +931,9 @@ public class FloatOperations : INumericOperations<float>
         int length = x.Length;
 #if NET8_0_OR_GREATER
         // Try oneDNN first for large arrays - it has highly optimized multi-threaded implementation
-        if (length >= ParallelThreshold && OneDnnProvider.IsAvailable)
+        // Validate all spans have sufficient length before unsafe operations
+        if (length >= ParallelThreshold && OneDnnProvider.IsAvailable &&
+            y.Length >= length && destination.Length >= length)
         {
             unsafe
             {
@@ -943,7 +945,7 @@ public class FloatOperations : INumericOperations<float>
             }
         }
 
-        // Fallback to TensorPrimitives
+        // Fallback to TensorPrimitives (handles length validation internally)
         TensorPrimitives.Add(x, y, destination);
 #else
         VectorizedOperationsFallback.Add(_instance, x, y, destination);
@@ -972,7 +974,9 @@ public class FloatOperations : INumericOperations<float>
         int length = x.Length;
 #if NET8_0_OR_GREATER
         // Try oneDNN first for large arrays - it has highly optimized multi-threaded implementation
-        if (length >= ParallelThreshold && OneDnnProvider.IsAvailable)
+        // Validate all spans have sufficient length before unsafe operations
+        if (length >= ParallelThreshold && OneDnnProvider.IsAvailable &&
+            y.Length >= length && destination.Length >= length)
         {
             unsafe
             {
@@ -984,7 +988,7 @@ public class FloatOperations : INumericOperations<float>
             }
         }
 
-        // Fallback to TensorPrimitives
+        // Fallback to TensorPrimitives (handles length validation internally)
         TensorPrimitives.Multiply(x, y, destination);
 #else
         VectorizedOperationsFallback.Multiply(_instance, x, y, destination);
@@ -1019,29 +1023,51 @@ public class FloatOperations : INumericOperations<float>
     /// <summary>
     /// Computes sum using SIMD-optimized TensorPrimitives with multi-threading for large arrays.
     /// </summary>
+    /// <remarks>
+    /// Note: Due to floating-point non-associativity, parallel execution may produce slightly
+    /// different results across runs depending on thread execution order. This is generally
+    /// acceptable for neural network computations where exact bit-reproducibility is not required.
+    /// </remarks>
     public float Sum(ReadOnlySpan<float> x)
     {
         int length = x.Length;
 #if NET8_0_OR_GREATER
         if (length >= ParallelThreshold && MaxDegreeOfParallelism > 1)
         {
-            // Parallel reduction: compute partial sums then combine
-            float totalSum = 0;
-            var lockObj = new object();
+            // Lock-free parallel reduction: compute partial sums in array, then combine sequentially
+            int maxDegree = MaxDegreeOfParallelism;
+            int numChunks = Math.Min(maxDegree, (length + MinChunkSize - 1) / MinChunkSize);
+            if (numChunks <= 1)
+            {
+                return TensorPrimitives.Sum(x);
+            }
+
+            // Allocate array for partial sums - each thread writes to its own slot
+            var partialSums = new float[numChunks];
+            int chunkSize = (length + numChunks - 1) / numChunks;
+
             unsafe
             {
                 fixed (float* xPtr = x)
                 {
                     var xp = xPtr;
-                    ParallelForChunks(length, MinChunkSize, (start, count) =>
+                    Parallel.For(0, numChunks, new ParallelOptions { MaxDegreeOfParallelism = maxDegree }, i =>
                     {
-                        var partialSum = TensorPrimitives.Sum(new ReadOnlySpan<float>(xp + start, count));
-                        lock (lockObj)
+                        int start = i * chunkSize;
+                        int count = Math.Min(chunkSize, length - start);
+                        if (count > 0)
                         {
-                            totalSum += partialSum;
+                            partialSums[i] = TensorPrimitives.Sum(new ReadOnlySpan<float>(xp + start, count));
                         }
                     });
                 }
+            }
+
+            // Combine partial sums sequentially (no lock contention)
+            float totalSum = 0;
+            for (int i = 0; i < numChunks; i++)
+            {
+                totalSum += partialSums[i];
             }
             return totalSum;
         }

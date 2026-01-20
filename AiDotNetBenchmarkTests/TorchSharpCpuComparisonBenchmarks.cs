@@ -22,6 +22,7 @@ public class TorchSharpCpuComparisonBenchmarks
     // Raw arrays for direct TensorPrimitives comparison
     private readonly Dictionary<int, float[]> _rawArraysA = new();
     private readonly Dictionary<int, float[]> _rawArraysB = new();
+    private readonly Dictionary<int, float[]> _rawDestination = new();
 
     private readonly Dictionary<int, TorchTensor> _torchMatricesA = new();
     private readonly Dictionary<int, TorchTensor> _torchMatricesB = new();
@@ -79,6 +80,7 @@ public class TorchSharpCpuComparisonBenchmarks
             // Also store raw arrays for direct comparison
             _rawArraysA[size] = (float[])dataA.Clone();
             _rawArraysB[size] = (float[])dataB.Clone();
+            _rawDestination[size] = new float[size]; // Separate destination to avoid modifying source data
 
             _torchVectorsA[size] = torch.tensor(dataA, new long[] { size }, device: _torchDevice);
             _torchVectorsB[size] = torch.tensor(dataB, new long[] { size }, device: _torchDevice);
@@ -225,7 +227,7 @@ public class TorchSharpCpuComparisonBenchmarks
         System.Numerics.Tensors.TensorPrimitives.Add(
             _rawArraysA[size].AsSpan(),
             _rawArraysB[size].AsSpan(),
-            _rawArraysA[size].AsSpan());
+            _rawDestination[size].AsSpan());
     }
 
     [Benchmark]

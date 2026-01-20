@@ -741,10 +741,20 @@ internal static class OneDnnProvider
             if (cached == null)
                 return false;
 
-            // Add to cache (limit cache size)
-            if (_eltwiseCache.Count >= MaxEltwiseCacheSize)
+            // Add to cache first, then evict if over limit (avoids race condition)
+            // Using GetOrAdd to handle concurrent creation of same key
+            var existingOrNew = _eltwiseCache.GetOrAdd(key, cached);
+            if (!ReferenceEquals(existingOrNew, cached))
             {
-                // Remove a random entry to make room
+                // Another thread added the same key first, dispose our duplicate
+                cached.Dispose();
+                cached = existingOrNew;
+            }
+
+            // Evict after adding to prevent exceeding cache size
+            while (_eltwiseCache.Count > MaxEltwiseCacheSize)
+            {
+                // Remove any entry to make room
                 foreach (var k in _eltwiseCache.Keys)
                 {
                     if (_eltwiseCache.TryRemove(k, out var removed))
@@ -754,7 +764,6 @@ internal static class OneDnnProvider
                     }
                 }
             }
-            _eltwiseCache[key] = cached;
         }
 
         try
@@ -873,10 +882,20 @@ internal static class OneDnnProvider
             if (cached == null)
                 return false;
 
-            // Manage cache size
-            if (_binaryCache.Count >= MaxBinaryCacheSize)
+            // Add to cache first, then evict if over limit (avoids race condition)
+            // Using GetOrAdd to handle concurrent creation of same key
+            var existingOrNew = _binaryCache.GetOrAdd(key, cached);
+            if (!ReferenceEquals(existingOrNew, cached))
             {
-                // Remove a random entry to make room
+                // Another thread added the same key first, dispose our duplicate
+                cached.Dispose();
+                cached = existingOrNew;
+            }
+
+            // Evict after adding to prevent exceeding cache size
+            while (_binaryCache.Count > MaxBinaryCacheSize)
+            {
+                // Remove any entry to make room
                 foreach (var k in _binaryCache.Keys)
                 {
                     if (_binaryCache.TryRemove(k, out var removed))
@@ -886,7 +905,6 @@ internal static class OneDnnProvider
                     }
                 }
             }
-            _binaryCache[key] = cached;
         }
 
         try
