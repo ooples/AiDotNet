@@ -1,365 +1,309 @@
-# Tensor Basics Guide
+# Getting Started with AiDotNet
 
-This guide demonstrates the fundamentals of working with tensors in AiDotNet.
+This guide demonstrates the fundamentals of using AiDotNet for machine learning tasks.
 
 ## Overview
 
-Tensors are the fundamental data structure in AiDotNet. They represent multi-dimensional arrays with support for GPU acceleration and automatic differentiation.
+AiDotNet provides a simple, unified API for machine learning through the `AiModelBuilder` class. All complexity is handled internally, so you can focus on your data and results.
 
-## Creating Tensors
-
-### From Arrays
+## Quick Start: Linear Regression
 
 ```csharp
 using AiDotNet;
-using AiDotNet.Tensors;
 
-// 1D Tensor (Vector)
-var vector = new Tensor<float>(new float[] { 1, 2, 3, 4, 5 });
-Console.WriteLine($"Vector shape: {string.Join(", ", vector.Shape)}");  // [5]
-
-// 2D Tensor (Matrix)
-var matrix = new Tensor<float>(new float[,]
+// Your training data
+var features = new double[][]
 {
-    { 1, 2, 3 },
-    { 4, 5, 6 }
-});
-Console.WriteLine($"Matrix shape: {string.Join(", ", matrix.Shape)}");  // [2, 3]
+    new[] { 1.0 },
+    new[] { 2.0 },
+    new[] { 3.0 },
+    new[] { 4.0 },
+    new[] { 5.0 }
+};
 
-// 3D Tensor
-var tensor3d = new Tensor<float>(new[] { 2, 3, 4 });  // Shape: [2, 3, 4]
-Console.WriteLine($"3D Tensor elements: {tensor3d.Size}");  // 24
+var targets = new double[] { 2.1, 4.0, 5.9, 8.1, 10.0 };
+
+// Build and train a model
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureRegression()
+    .ConfigurePreprocessing()
+    .BuildAsync(features, targets);
+
+// Make predictions
+var prediction = result.Predict(new double[][] { new[] { 6.0 } });
+Console.WriteLine($"Prediction for x=6: {prediction[0]:F2}");
+// Output: Prediction for x=6: 12.01
+
+// View model performance
+Console.WriteLine($"R-Squared: {result.RSquared:F4}");
+Console.WriteLine($"Mean Squared Error: {result.MeanSquaredError:F4}");
 ```
 
-### Factory Methods
+## Multiple Features (Multivariate Regression)
 
 ```csharp
-// Zeros
-var zeros = Tensor<float>.Zeros(3, 4);  // 3x4 matrix of zeros
+using AiDotNet;
 
-// Ones
-var ones = Tensor<float>.Ones(2, 3);  // 2x3 matrix of ones
-
-// Random uniform [0, 1)
-var random = Tensor<float>.Random(100, 50);  // 100x50 random matrix
-
-// Random normal (mean=0, std=1)
-var normal = Tensor<float>.RandomNormal(100, 50);
-
-// Identity matrix
-var identity = Tensor<float>.Identity(4);  // 4x4 identity matrix
-
-// Range
-var range = Tensor<float>.Arange(0, 10, 1);  // [0, 1, 2, ..., 9]
-
-// Linspace
-var linspace = Tensor<float>.Linspace(0, 1, 11);  // 11 evenly spaced values from 0 to 1
-```
-
-## Basic Operations
-
-### Element-wise Operations
-
-```csharp
-var a = new Tensor<float>(new float[] { 1, 2, 3, 4 });
-var b = new Tensor<float>(new float[] { 5, 6, 7, 8 });
-
-// Addition
-var sum = a + b;  // or a.Add(b)
-Console.WriteLine($"Sum: {string.Join(", ", sum.ToArray())}");  // [6, 8, 10, 12]
-
-// Subtraction
-var diff = a - b;  // or a.Subtract(b)
-
-// Multiplication (element-wise)
-var product = a * b;  // or a.Multiply(b)
-
-// Division
-var quotient = a / b;  // or a.Divide(b)
-
-// Scalar operations
-var scaled = a * 2.0f;  // [2, 4, 6, 8]
-var offset = a + 10.0f;  // [11, 12, 13, 14]
-```
-
-### Matrix Operations
-
-```csharp
-var m1 = new Tensor<float>(new float[,]
+// House price prediction: [sqft, bedrooms, age]
+var houseFeatures = new double[][]
 {
-    { 1, 2 },
-    { 3, 4 }
-});
+    new[] { 1500.0, 3.0, 10.0 },
+    new[] { 2000.0, 4.0, 5.0 },
+    new[] { 1200.0, 2.0, 20.0 },
+    new[] { 1800.0, 3.0, 8.0 },
+    new[] { 2500.0, 5.0, 2.0 }
+};
 
-var m2 = new Tensor<float>(new float[,]
+var prices = new double[] { 300000, 450000, 200000, 380000, 550000 };
+
+// Build model
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureRegression(config =>
+    {
+        config.ModelType = RegressionModelType.Ridge;
+        config.RegularizationStrength = 0.1;
+    })
+    .ConfigurePreprocessing(config =>
+    {
+        config.NormalizeFeatures = true;
+        config.HandleMissingValues = true;
+    })
+    .BuildAsync(houseFeatures, prices);
+
+// Predict new house price
+var newHouse = new double[][] { new[] { 1700.0, 3.0, 12.0 } };
+var predictedPrice = result.Predict(newHouse);
+Console.WriteLine($"Estimated price: ${predictedPrice[0]:N0}");
+
+// View feature importance
+Console.WriteLine("\nFeature Importance:");
+Console.WriteLine($"  Square Feet: {result.FeatureImportance[0]:F3}");
+Console.WriteLine($"  Bedrooms: {result.FeatureImportance[1]:F3}");
+Console.WriteLine($"  Age: {result.FeatureImportance[2]:F3}");
+```
+
+## Binary Classification
+
+```csharp
+using AiDotNet;
+
+// Customer churn prediction
+var customerData = new double[][]
 {
-    { 5, 6 },
-    { 7, 8 }
-});
+    new[] { 12.0, 50.0, 1.0 },   // tenure, monthly charges, has contract
+    new[] { 1.0, 80.0, 0.0 },
+    new[] { 24.0, 45.0, 1.0 },
+    new[] { 3.0, 95.0, 0.0 },
+    new[] { 36.0, 40.0, 1.0 }
+};
 
-// Matrix multiplication
-var matmul = m1.MatMul(m2);
-Console.WriteLine($"MatMul result shape: {string.Join(", ", matmul.Shape)}");
+var churned = new double[] { 0, 1, 0, 1, 0 };
 
-// Transpose
-var transposed = m1.Transpose();
+// Build classification model
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureClassification(config =>
+    {
+        config.ModelType = ClassificationModelType.LogisticRegression;
+        config.ClassCount = 2;
+    })
+    .ConfigurePreprocessing()
+    .BuildAsync(customerData, churned);
 
-// Inverse (for square matrices)
-var inverse = m1.Inverse();
+// Predict churn probability
+var newCustomer = new double[][] { new[] { 6.0, 70.0, 0.0 } };
+var churnProbability = result.PredictProbability(newCustomer);
+Console.WriteLine($"Churn probability: {churnProbability[0]:P1}");
 
-// Determinant
-var det = m1.Determinant();
+// View model metrics
+Console.WriteLine($"Accuracy: {result.Accuracy:P2}");
+Console.WriteLine($"Precision: {result.Precision:P2}");
+Console.WriteLine($"Recall: {result.Recall:P2}");
+Console.WriteLine($"F1 Score: {result.F1Score:P2}");
 ```
 
-### Reduction Operations
+## Multi-Class Classification
 
 ```csharp
-var tensor = Tensor<float>.Random(10, 5);
+using AiDotNet;
 
-// Sum
-var totalSum = tensor.Sum();  // Sum of all elements
-var rowSums = tensor.Sum(axis: 1);  // Sum along rows
-var colSums = tensor.Sum(axis: 0);  // Sum along columns
-
-// Mean
-var mean = tensor.Mean();
-var rowMeans = tensor.Mean(axis: 1);
-
-// Min/Max
-var min = tensor.Min();
-var max = tensor.Max();
-var argmax = tensor.ArgMax(axis: 1);  // Indices of max values per row
-
-// Standard deviation
-var std = tensor.Std();
-var variance = tensor.Var();
-```
-
-## Indexing and Slicing
-
-### Single Element Access
-
-```csharp
-var matrix = new Tensor<float>(new float[,]
+// Iris flower classification
+var irisFeatures = new double[][]
 {
-    { 1, 2, 3 },
-    { 4, 5, 6 },
-    { 7, 8, 9 }
-});
+    new[] { 5.1, 3.5, 1.4, 0.2 },
+    new[] { 7.0, 3.2, 4.7, 1.4 },
+    new[] { 6.3, 3.3, 6.0, 2.5 },
+    // ... more samples
+};
 
-// Get single element
-float value = matrix[1, 2];  // 6
+var species = new double[] { 0, 1, 2 }; // 0=setosa, 1=versicolor, 2=virginica
 
-// Set single element
-matrix[0, 0] = 100;
+// Build model
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureClassification(config =>
+    {
+        config.ModelType = ClassificationModelType.RandomForest;
+        config.ClassCount = 3;
+    })
+    .ConfigurePreprocessing()
+    .BuildAsync(irisFeatures, species);
+
+// Predict species
+var newFlower = new double[][] { new[] { 5.9, 3.0, 5.1, 1.8 } };
+var predicted = result.Predict(newFlower);
+var probabilities = result.PredictProbability(newFlower);
+
+Console.WriteLine($"Predicted species: {predicted[0]}");
+Console.WriteLine($"Confidence: {probabilities.Max():P1}");
 ```
 
-### Slicing
+## Working with Data
+
+### Automatic Preprocessing
 
 ```csharp
-// Get a row
-var row = matrix[1, ..];  // [4, 5, 6]
+using AiDotNet;
 
-// Get a column
-var col = matrix[.., 0];  // [1, 4, 7]
-
-// Get a submatrix
-var sub = matrix[0..2, 1..3];  // 2x2 submatrix
-
-// Negative indexing (from end)
-var lastRow = matrix[^1, ..];  // Last row
-var lastCol = matrix[.., ^1];  // Last column
-```
-
-## Reshaping
-
-```csharp
-var original = Tensor<float>.Arange(0, 12, 1);  // Shape: [12]
-
-// Reshape to 3x4 matrix
-var reshaped = original.Reshape(3, 4);
-
-// Reshape to 2x2x3 tensor
-var tensor3d = original.Reshape(2, 2, 3);
-
-// Flatten to 1D
-var flattened = tensor3d.Flatten();
-
-// Squeeze removes dimensions of size 1
-var squeezed = new Tensor<float>(new[] { 1, 3, 1, 4 }).Squeeze();  // Shape: [3, 4]
-
-// Unsqueeze adds a dimension of size 1
-var unsqueezed = original.Unsqueeze(0);  // Shape: [1, 12]
-```
-
-## Broadcasting
-
-Broadcasting allows operations between tensors of different shapes:
-
-```csharp
-var matrix = Tensor<float>.Ones(3, 4);
-var rowVector = new Tensor<float>(new float[] { 1, 2, 3, 4 });
-var colVector = new Tensor<float>(new float[] { 10, 20, 30 }).Reshape(3, 1);
-
-// Row vector broadcasts across rows
-var result1 = matrix + rowVector;  // Each row adds [1, 2, 3, 4]
-
-// Column vector broadcasts across columns
-var result2 = matrix + colVector;  // Each column adds [10, 20, 30]
-
-// Scalar broadcasts to all elements
-var result3 = matrix + 5.0f;  // Add 5 to all elements
-```
-
-## Mathematical Functions
-
-```csharp
-var x = new Tensor<float>(new float[] { -2, -1, 0, 1, 2 });
-
-// Trigonometric functions
-var sin = x.Sin();
-var cos = x.Cos();
-var tan = x.Tan();
-
-// Exponential and logarithm
-var exp = x.Exp();
-var log = x.Abs().Log();  // Log requires positive values
-
-// Power
-var squared = x.Pow(2);
-var sqrt = x.Abs().Sqrt();
-
-// Absolute value
-var abs = x.Abs();
-
-// Clipping
-var clipped = x.Clip(-1, 1);  // Values clamped to [-1, 1]
-```
-
-## GPU Acceleration
-
-```csharp
-// Check GPU availability
-if (TensorDevice.IsGpuAvailable)
+// Data with missing values and different scales
+var rawData = new double[][]
 {
-    // Create tensor on GPU
-    var gpuTensor = Tensor<float>.Zeros(1000, 1000, device: TensorDevice.GPU);
+    new[] { 1000.0, 25.0, double.NaN },
+    new[] { 2000.0, 30.0, 3.0 },
+    new[] { double.NaN, 35.0, 5.0 },
+    new[] { 1500.0, double.NaN, 4.0 }
+};
 
-    // Move existing tensor to GPU
-    var cpuTensor = Tensor<float>.Random(1000, 1000);
-    var onGpu = cpuTensor.ToDevice(TensorDevice.GPU);
+var targets = new double[] { 100, 200, 180, 150 };
 
-    // Operations automatically use GPU
-    var result = onGpu.MatMul(onGpu.Transpose());
+// AiModelBuilder handles preprocessing automatically
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureRegression()
+    .ConfigurePreprocessing(config =>
+    {
+        config.HandleMissingValues = true;         // Impute missing values
+        config.NormalizeFeatures = true;           // Scale to 0-1 range
+        config.RemoveOutliers = true;              // Remove statistical outliers
+        config.EncodeCategories = true;            // One-hot encode categories
+    })
+    .BuildAsync(rawData, targets);
+```
 
-    // Move back to CPU for inspection
-    var onCpu = result.ToDevice(TensorDevice.CPU);
+### Train/Test Split
+
+```csharp
+using AiDotNet;
+
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureRegression()
+    .ConfigurePreprocessing()
+    .ConfigureValidation(config =>
+    {
+        config.ValidationSplit = 0.2;    // 20% for validation
+        config.Shuffle = true;
+        config.RandomSeed = 42;
+    })
+    .BuildAsync(features, targets);
+
+Console.WriteLine($"Training R-Squared: {result.TrainingRSquared:F4}");
+Console.WriteLine($"Validation R-Squared: {result.ValidationRSquared:F4}");
+```
+
+### Cross-Validation
+
+```csharp
+using AiDotNet;
+
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureClassification()
+    .ConfigurePreprocessing()
+    .ConfigureValidation(config =>
+    {
+        config.CrossValidationFolds = 5;
+    })
+    .BuildAsync(features, labels);
+
+Console.WriteLine($"CV Accuracy: {result.CrossValidationAccuracy:P2}");
+Console.WriteLine($"CV Std Dev: {result.CrossValidationStdDev:F4}");
+```
+
+## Saving and Loading Models
+
+```csharp
+using AiDotNet;
+
+// Train and save
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureRegression()
+    .BuildAsync(features, targets);
+
+result.SaveModel("my_model.aimodel");
+Console.WriteLine("Model saved!");
+
+// Load and use later
+var loadedModel = AiModelResult<double>.Load("my_model.aimodel");
+var prediction = loadedModel.Predict(newData);
+Console.WriteLine($"Prediction: {prediction[0]}");
+```
+
+## Batch Predictions
+
+```csharp
+using AiDotNet;
+
+// Make predictions on multiple samples at once
+var testData = new double[][]
+{
+    new[] { 1.5 },
+    new[] { 2.5 },
+    new[] { 3.5 },
+    new[] { 4.5 }
+};
+
+var predictions = result.Predict(testData);
+
+Console.WriteLine("Batch Predictions:");
+for (int i = 0; i < predictions.Length; i++)
+{
+    Console.WriteLine($"  Input {testData[i][0]}: {predictions[i]:F2}");
 }
 ```
 
-## Data Types
-
-```csharp
-// Float32 (default)
-var floatTensor = new Tensor<float>(new float[] { 1, 2, 3 });
-
-// Float64 (double precision)
-var doubleTensor = new Tensor<double>(new double[] { 1, 2, 3 });
-
-// Integer
-var intTensor = new Tensor<int>(new int[] { 1, 2, 3 });
-
-// Type conversion
-var asDouble = floatTensor.Cast<double>();
-```
-
-## Complete Example: Linear Regression
+## Model Comparison
 
 ```csharp
 using AiDotNet;
-using AiDotNet.Tensors;
 
-// Generate synthetic data: y = 2x + 3 + noise
-int numSamples = 100;
-var x = Tensor<float>.Random(numSamples, 1) * 10;  // Random x values [0, 10)
-var noise = Tensor<float>.RandomNormal(numSamples, 1) * 0.5f;
-var y = x * 2.0f + 3.0f + noise;  // True relationship with noise
-
-// Add bias column to x
-var xWithBias = Tensor<float>.Concatenate(
-    x,
-    Tensor<float>.Ones(numSamples, 1),
-    axis: 1
-);
-
-// Solve using normal equations: weights = (X^T X)^-1 X^T y
-var xTx = xWithBias.Transpose().MatMul(xWithBias);
-var xTy = xWithBias.Transpose().MatMul(y);
-var weights = xTx.Inverse().MatMul(xTy);
-
-Console.WriteLine($"Learned weights: [{weights[0, 0]:F4}, {weights[1, 0]:F4}]");
-Console.WriteLine("(Expected approximately: [2.0, 3.0])");
-
-// Predict
-var yPred = xWithBias.MatMul(weights);
-
-// Calculate R^2 score
-var ssRes = (y - yPred).Pow(2).Sum();
-var ssTot = (y - y.Mean()).Pow(2).Sum();
-var r2 = 1 - ssRes / ssTot;
-Console.WriteLine($"R^2 Score: {r2:F4}");
-```
-
-## Best Practices
-
-1. **Use GPU for Large Tensors**: Operations on tensors larger than 1000x1000 benefit from GPU acceleration
-
-2. **Preallocate When Possible**: Avoid creating many small temporary tensors in loops
-
-3. **Use In-Place Operations**: When memory is a concern, use in-place variants:
-   ```csharp
-   tensor.AddInPlace(other);  // Modifies tensor in place
-   ```
-
-4. **Batch Operations**: Process data in batches rather than element by element
-
-5. **Check Shapes**: Use shape assertions to catch dimension mismatches early:
-   ```csharp
-   Debug.Assert(tensor.Shape[0] == expectedBatchSize);
-   ```
-
-## Common Issues
-
-### Shape Mismatch
-
-```csharp
-// This will throw an exception - shapes don't match
-var a = Tensor<float>.Zeros(3, 4);
-var b = Tensor<float>.Zeros(4, 3);
-// var c = a + b;  // Error!
-
-// Fix: Transpose one of them
-var c = a + b.Transpose();  // Now shapes match
-```
-
-### Memory Management
-
-```csharp
-// For large computations, dispose tensors when done
-using (var temp = Tensor<float>.Random(10000, 10000))
+// Compare different model types
+var models = new[]
 {
-    var result = temp.Sum();
-    // temp is disposed when leaving the block
+    RegressionModelType.Linear,
+    RegressionModelType.Ridge,
+    RegressionModelType.Lasso,
+    RegressionModelType.ElasticNet
+};
+
+Console.WriteLine("Model Comparison:");
+Console.WriteLine("Model\t\t\tR-Squared\tMSE");
+Console.WriteLine("-----\t\t\t---------\t---");
+
+foreach (var modelType in models)
+{
+    var result = await new AiModelBuilder<double, double[][], double[]>()
+        .ConfigureRegression(c => c.ModelType = modelType)
+        .ConfigurePreprocessing()
+        .ConfigureValidation(c => c.ValidationSplit = 0.2)
+        .BuildAsync(features, targets);
+
+    Console.WriteLine($"{modelType}\t\t{result.ValidationRSquared:F4}\t\t{result.ValidationMse:F4}");
 }
 ```
 
 ## Summary
 
-Tensors in AiDotNet provide:
-- Efficient multi-dimensional array operations
-- Automatic broadcasting
-- GPU acceleration
-- NumPy-like syntax and operations
-- Support for automatic differentiation
+AiDotNet's `AiModelBuilder` provides:
+- Simple, fluent API for all ML tasks
+- Automatic preprocessing and feature engineering
+- Built-in validation and cross-validation
+- Model saving and loading
+- Performance metrics and feature importance
 
-Use tensors as the foundation for all numerical computations in AiDotNet.
+All complexity is handled internally. You focus on your data and business problem.

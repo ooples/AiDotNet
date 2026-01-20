@@ -1,544 +1,395 @@
-# Neural Network Training Guide
+# Neural Networks with AiModelBuilder
 
-This guide demonstrates how to build and train neural networks with AiDotNet.
+This guide demonstrates how to train neural networks for various tasks using AiDotNet's simplified API.
 
 ## Overview
 
-AiDotNet provides a flexible neural network API that supports:
-- Feed-forward networks
-- Convolutional neural networks (CNNs)
-- Recurrent neural networks (RNNs)
-- Transformers
-- Custom architectures
+AiDotNet provides powerful neural network capabilities through the `AiModelBuilder` facade. You configure what you want, and the system handles the architecture details.
 
-## Quick Start: MNIST Classification
+## Image Classification
 
 ```csharp
 using AiDotNet;
-using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
 
-// Load MNIST data (28x28 images, 10 classes)
-var (trainImages, trainLabels) = LoadMNIST("train");
-var (testImages, testLabels) = LoadMNIST("test");
+// Load image data (28x28 grayscale images as flat arrays)
+var images = LoadMnistImages();  // double[][] with 784 features each
+var labels = LoadMnistLabels();  // double[] with values 0-9
 
-// Define architecture
-var architecture = new NeuralNetworkArchitecture<float>(
-    inputType: InputType.OneDimensional,
-    taskType: NeuralNetworkTaskType.MultiClassClassification,
-    inputSize: 784,  // 28x28 flattened
-    outputSize: 10   // 10 digit classes
-);
-
-// Create model
-var model = new FeedForwardNeuralNetwork<float>(architecture);
-
-// Train with AiModelBuilder
-var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
-var result = await builder
-    .ConfigureModel(model)
-    .ConfigureOptimizer(new AdamOptimizer<float>(learningRate: 0.001f))
-    .ConfigureLossFunction(new CrossEntropyLoss<float>())
-    .ConfigureTraining(new TrainingConfig
+// Build and train a neural network
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureNeuralNetwork(config =>
     {
-        Epochs = 10,
-        BatchSize = 64,
-        ValidationSplit = 0.1f
+        config.TaskType = NeuralNetworkTaskType.ImageClassification;
+        config.InputShape = new[] { 28, 28, 1 };  // Height, Width, Channels
+        config.NumClasses = 10;
     })
-    .BuildAsync(trainImages, trainLabels);
+    .ConfigureTraining(config =>
+    {
+        config.Epochs = 10;
+        config.BatchSize = 64;
+        config.LearningRate = 0.001;
+    })
+    .ConfigurePreprocessing()
+    .BuildAsync(images, labels);
 
-// Evaluate
-Console.WriteLine($"Training Accuracy: {result.TrainingAccuracy:P2}");
+// Make predictions
+var newImage = LoadTestImage();
+var prediction = result.Predict(new[] { newImage });
+var probabilities = result.PredictProbability(new[] { newImage });
+
+Console.WriteLine($"Predicted digit: {prediction[0]}");
+Console.WriteLine($"Confidence: {probabilities.Max():P1}");
+
+// View training metrics
+Console.WriteLine($"\nTraining Accuracy: {result.TrainingAccuracy:P2}");
 Console.WriteLine($"Validation Accuracy: {result.ValidationAccuracy:P2}");
 ```
 
-## Building Custom Architectures
-
-### Layer-by-Layer Construction
+## Binary Classification (Spam Detection)
 
 ```csharp
-using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
+using AiDotNet;
 
-// Create layers manually
-var layers = new List<ILayer<float>>
+// Email features (word frequencies, etc.)
+var emailFeatures = new double[][]
 {
-    // Input: 784 features
-    new DenseLayer<float>(784, 256, new ReLUActivation<float>()),
-    new DropoutLayer<float>(0.3f),
-
-    new DenseLayer<float>(256, 128, new ReLUActivation<float>()),
-    new DropoutLayer<float>(0.3f),
-
-    new DenseLayer<float>(128, 64, new ReLUActivation<float>()),
-
-    // Output: 10 classes with softmax
-    new DenseLayer<float>(64, 10, new SoftmaxActivation<float>())
+    new[] { 0.1, 0.8, 0.0, 0.9 },  // high frequency of spam words
+    new[] { 0.9, 0.1, 0.7, 0.0 },  // normal email
+    new[] { 0.2, 0.7, 0.1, 0.8 },
+    // ... more samples
 };
 
-// Create architecture with custom layers
-var architecture = new NeuralNetworkArchitecture<float>(
-    inputType: InputType.OneDimensional,
-    taskType: NeuralNetworkTaskType.MultiClassClassification,
-    inputSize: 784,
-    outputSize: 10,
-    layers: layers
-);
+var isSpam = new double[] { 1, 0, 1 };
 
-var model = new FeedForwardNeuralNetwork<float>(architecture);
+// Build neural network for binary classification
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureNeuralNetwork(config =>
+    {
+        config.TaskType = NeuralNetworkTaskType.BinaryClassification;
+        config.InputSize = 4;
+    })
+    .ConfigureTraining(config =>
+    {
+        config.Epochs = 50;
+        config.BatchSize = 32;
+        config.ValidationSplit = 0.2;
+    })
+    .BuildAsync(emailFeatures, isSpam);
+
+// Classify new email
+var newEmail = new double[][] { new[] { 0.3, 0.6, 0.2, 0.7 } };
+var spamProbability = result.PredictProbability(newEmail);
+Console.WriteLine($"Spam probability: {spamProbability[0]:P1}");
+
+// View metrics
+Console.WriteLine($"Accuracy: {result.Accuracy:P2}");
+Console.WriteLine($"AUC-ROC: {result.AucRoc:F4}");
 ```
 
-### Convolutional Neural Network (CNN)
+## Regression (Price Prediction)
 
 ```csharp
-// CNN for image classification
-var cnnLayers = new List<ILayer<float>>
+using AiDotNet;
+
+// Product features for price prediction
+var productFeatures = new double[][]
 {
-    // Input: 28x28x1 grayscale image
-    // Conv block 1
-    new Conv2DLayer<float>(
-        inputChannels: 1,
-        outputChannels: 32,
-        kernelSize: 3,
-        padding: 1,
-        activation: new ReLUActivation<float>()
-    ),
-    new MaxPooling2DLayer<float>(poolSize: 2),
-
-    // Conv block 2
-    new Conv2DLayer<float>(
-        inputChannels: 32,
-        outputChannels: 64,
-        kernelSize: 3,
-        padding: 1,
-        activation: new ReLUActivation<float>()
-    ),
-    new MaxPooling2DLayer<float>(poolSize: 2),
-
-    // Flatten and classify
-    new FlattenLayer<float>(),
-    new DenseLayer<float>(64 * 7 * 7, 128, new ReLUActivation<float>()),
-    new DropoutLayer<float>(0.5f),
-    new DenseLayer<float>(128, 10, new SoftmaxActivation<float>())
+    new[] { 100.0, 4.5, 1000.0, 2.0 },  // weight, rating, reviews, category
+    new[] { 250.0, 4.2, 500.0, 1.0 },
+    new[] { 50.0, 4.8, 2000.0, 3.0 },
+    // ... more samples
 };
 
-var cnnArchitecture = new NeuralNetworkArchitecture<float>(
-    inputType: InputType.Image,
-    taskType: NeuralNetworkTaskType.MultiClassClassification,
-    inputSize: 784,  // 28x28
-    outputSize: 10,
-    inputHeight: 28,
-    inputWidth: 28,
-    inputChannels: 1,
-    layers: cnnLayers
-);
+var prices = new double[] { 29.99, 59.99, 19.99 };
 
-var cnn = new ConvolutionalNeuralNetwork<float>(cnnArchitecture);
+// Build neural network for regression
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureNeuralNetwork(config =>
+    {
+        config.TaskType = NeuralNetworkTaskType.Regression;
+        config.InputSize = 4;
+    })
+    .ConfigureTraining(config =>
+    {
+        config.Epochs = 100;
+        config.BatchSize = 16;
+        config.LearningRate = 0.0001;
+    })
+    .ConfigurePreprocessing(config =>
+    {
+        config.NormalizeFeatures = true;
+        config.NormalizeTargets = true;
+    })
+    .BuildAsync(productFeatures, prices);
+
+// Predict price
+var newProduct = new double[][] { new[] { 150.0, 4.3, 750.0, 2.0 } };
+var predictedPrice = result.Predict(newProduct);
+Console.WriteLine($"Predicted price: ${predictedPrice[0]:F2}");
+
+// View metrics
+Console.WriteLine($"R-Squared: {result.RSquared:F4}");
+Console.WriteLine($"MAE: ${result.MeanAbsoluteError:F2}");
 ```
 
-## Available Layers
-
-### Dense (Fully Connected)
+## Time Series Forecasting
 
 ```csharp
-new DenseLayer<float>(
-    inputSize: 256,
-    outputSize: 128,
-    activation: new ReLUActivation<float>(),
-    useBias: true
-)
+using AiDotNet;
+
+// Historical sales data
+var historicalData = new double[][]
+{
+    new[] { 100.0, 110.0, 105.0, 115.0, 120.0 },  // past 5 days
+    new[] { 110.0, 105.0, 115.0, 120.0, 125.0 },
+    new[] { 105.0, 115.0, 120.0, 125.0, 130.0 },
+    // ... more sequences
+};
+
+var nextDaySales = new double[] { 125, 130, 135 };
+
+// Build neural network for time series
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureNeuralNetwork(config =>
+    {
+        config.TaskType = NeuralNetworkTaskType.TimeSeriesForecasting;
+        config.SequenceLength = 5;
+        config.ForecastHorizon = 1;
+    })
+    .ConfigureTraining(config =>
+    {
+        config.Epochs = 100;
+        config.BatchSize = 32;
+    })
+    .BuildAsync(historicalData, nextDaySales);
+
+// Forecast next day
+var recentSales = new double[][] { new[] { 125.0, 130.0, 135.0, 140.0, 145.0 } };
+var forecast = result.Predict(recentSales);
+Console.WriteLine($"Forecasted sales: ${forecast[0]:F0}");
 ```
 
-### Convolutional
+## Multi-Output Prediction
 
 ```csharp
-// 2D Convolution
-new Conv2DLayer<float>(
-    inputChannels: 3,
-    outputChannels: 64,
-    kernelSize: 3,
-    stride: 1,
-    padding: 1,
-    activation: new ReLUActivation<float>()
-)
+using AiDotNet;
 
-// 1D Convolution (for sequences)
-new Conv1DLayer<float>(
-    inputChannels: 128,
-    outputChannels: 256,
-    kernelSize: 3
-)
-```
+// Predict multiple targets at once
+var features = new double[][]
+{
+    new[] { 1.0, 2.0, 3.0 },
+    new[] { 2.0, 3.0, 4.0 },
+    new[] { 3.0, 4.0, 5.0 }
+};
 
-### Pooling
+// Multiple targets: [price, quantity, rating]
+var multiTargets = new double[][]
+{
+    new[] { 10.0, 100.0, 4.5 },
+    new[] { 15.0, 80.0, 4.2 },
+    new[] { 12.0, 90.0, 4.7 }
+};
 
-```csharp
-// Max pooling
-new MaxPooling2DLayer<float>(poolSize: 2, stride: 2)
+var result = await new AiModelBuilder<double, double[][], double[][]>()
+    .ConfigureNeuralNetwork(config =>
+    {
+        config.TaskType = NeuralNetworkTaskType.MultiOutputRegression;
+        config.InputSize = 3;
+        config.OutputSize = 3;
+    })
+    .ConfigureTraining(config =>
+    {
+        config.Epochs = 50;
+        config.BatchSize = 16;
+    })
+    .BuildAsync(features, multiTargets);
 
-// Average pooling
-new AveragePooling2DLayer<float>(poolSize: 2, stride: 2)
-
-// Global average pooling
-new GlobalAveragePooling2DLayer<float>()
-```
-
-### Regularization
-
-```csharp
-// Dropout
-new DropoutLayer<float>(rate: 0.5f)
-
-// Batch normalization
-new BatchNormalizationLayer<float>(numFeatures: 64)
-
-// Layer normalization
-new LayerNormalizationLayer<float>(normalizedShape: 128)
-```
-
-### Recurrent
-
-```csharp
-// LSTM
-new LSTMLayer<float>(
-    inputSize: 128,
-    hiddenSize: 256,
-    numLayers: 2,
-    bidirectional: true,
-    dropout: 0.1f
-)
-
-// GRU
-new GRULayer<float>(
-    inputSize: 128,
-    hiddenSize: 256
-)
-```
-
-### Attention
-
-```csharp
-// Multi-head attention
-new MultiHeadAttentionLayer<float>(
-    embedDim: 512,
-    numHeads: 8,
-    dropout: 0.1f
-)
-```
-
-## Activation Functions
-
-```csharp
-// Common activations
-new ReLUActivation<float>()
-new LeakyReLUActivation<float>(alpha: 0.01f)
-new ELUActivation<float>(alpha: 1.0f)
-new SELUActivation<float>()
-new SiLUActivation<float>()  // Swish
-new GELUActivation<float>()
-
-// Sigmoid family
-new SigmoidActivation<float>()
-new TanhActivation<float>()
-new HardSigmoidActivation<float>()
-
-// Output activations
-new SoftmaxActivation<float>()
-new LogSoftmaxActivation<float>()
-```
-
-## Optimizers
-
-### Adam (Recommended Default)
-
-```csharp
-var adam = new AdamOptimizer<float>(
-    learningRate: 0.001f,
-    beta1: 0.9f,
-    beta2: 0.999f,
-    epsilon: 1e-8f,
-    weightDecay: 0.01f
-);
-```
-
-### SGD with Momentum
-
-```csharp
-var sgd = new SGDOptimizer<float>(
-    learningRate: 0.01f,
-    momentum: 0.9f,
-    nesterov: true
-);
-```
-
-### Other Optimizers
-
-```csharp
-// AdamW (Adam with decoupled weight decay)
-var adamw = new AdamWOptimizer<float>(learningRate: 0.001f, weightDecay: 0.01f);
-
-// RMSprop
-var rmsprop = new RMSpropOptimizer<float>(learningRate: 0.001f, alpha: 0.99f);
-
-// Adagrad
-var adagrad = new AdagradOptimizer<float>(learningRate: 0.01f);
-```
-
-## Loss Functions
-
-### Classification
-
-```csharp
-// Cross-entropy for multi-class
-var crossEntropy = new CrossEntropyLoss<float>();
-
-// Binary cross-entropy
-var bce = new BinaryCrossEntropyLoss<float>();
-
-// Focal loss (for imbalanced classes)
-var focal = new FocalLoss<float>(alpha: 0.25f, gamma: 2.0f);
-```
-
-### Regression
-
-```csharp
-// Mean squared error
-var mse = new MeanSquaredErrorLoss<float>();
-
-// Mean absolute error
-var mae = new MeanAbsoluteErrorLoss<float>();
-
-// Huber loss (robust to outliers)
-var huber = new HuberLoss<float>(delta: 1.0f);
+// Predict multiple outputs
+var newFeatures = new double[][] { new[] { 2.5, 3.5, 4.5 } };
+var predictions = result.Predict(newFeatures);
+Console.WriteLine($"Price: ${predictions[0][0]:F2}");
+Console.WriteLine($"Quantity: {predictions[0][1]:F0}");
+Console.WriteLine($"Rating: {predictions[0][2]:F1}");
 ```
 
 ## Training Configuration
 
-### Basic Training
-
 ```csharp
-.ConfigureTraining(new TrainingConfig
+using AiDotNet;
+
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureNeuralNetwork(config =>
+    {
+        config.TaskType = NeuralNetworkTaskType.MultiClassClassification;
+        config.InputSize = 784;
+        config.NumClasses = 10;
+    })
+    .ConfigureTraining(config =>
+    {
+        // Basic training parameters
+        config.Epochs = 100;
+        config.BatchSize = 64;
+        config.LearningRate = 0.001;
+        config.ValidationSplit = 0.15;
+
+        // Optimizer settings
+        config.Optimizer = OptimizerType.Adam;
+        config.WeightDecay = 0.0001;
+
+        // Learning rate scheduling
+        config.UseLearningRateScheduler = true;
+        config.SchedulerType = SchedulerType.CosineAnnealing;
+
+        // Early stopping
+        config.UseEarlyStopping = true;
+        config.Patience = 10;
+        config.MinDelta = 0.001;
+
+        // Regularization
+        config.DropoutRate = 0.3;
+    })
+    .ConfigurePreprocessing()
+    .BuildAsync(features, labels);
+
+// Access training history
+Console.WriteLine("\nTraining History:");
+foreach (var epoch in result.TrainingHistory)
 {
-    Epochs = 50,
-    BatchSize = 32,
-    ValidationSplit = 0.2f,  // 20% for validation
-    ShuffleData = true,
-    RandomSeed = 42
-})
-```
-
-### Learning Rate Scheduling
-
-```csharp
-.ConfigureLearningRateScheduler(new StepLRScheduler(
-    stepSize: 10,  // Decay every 10 epochs
-    gamma: 0.1f    // Multiply LR by 0.1
-))
-
-// Or cosine annealing
-.ConfigureLearningRateScheduler(new CosineAnnealingScheduler(
-    tMax: 50,      // Total epochs
-    etaMin: 1e-6f  // Minimum learning rate
-))
-```
-
-### Early Stopping
-
-```csharp
-.ConfigureEarlyStopping(new EarlyStoppingConfig
-{
-    Patience = 10,         // Stop if no improvement for 10 epochs
-    MinDelta = 0.001f,     // Minimum change to qualify as improvement
-    Monitor = "val_loss",  // Metric to monitor
-    RestoreBestWeights = true
-})
-```
-
-### Callbacks
-
-```csharp
-.ConfigureCallbacks(new List<ICallback>
-{
-    new ModelCheckpoint("best_model.bin", saveWeightsOnly: true, monitor: "val_accuracy", mode: "max"),
-    new ReduceLROnPlateau(factor: 0.5f, patience: 5),
-    new TensorBoardLogger("logs/run1")
-})
-```
-
-## GPU Training
-
-```csharp
-// Enable GPU acceleration
-.ConfigureGpuAcceleration(new GpuConfig
-{
-    DeviceId = 0,              // GPU device ID
-    MemoryFraction = 0.9f,     // Use 90% of GPU memory
-    AllowGrowth = true         // Allocate memory as needed
-})
+    Console.WriteLine($"Epoch {epoch.EpochNumber}: " +
+        $"Loss={epoch.Loss:F4}, Acc={epoch.Accuracy:P2}, " +
+        $"ValLoss={epoch.ValidationLoss:F4}, ValAcc={epoch.ValidationAccuracy:P2}");
+}
 ```
 
 ## Data Augmentation
 
 ```csharp
-// Image augmentation
-.ConfigureDataAugmentation(new ImageAugmentationConfig
-{
-    RandomHorizontalFlip = true,
-    RandomRotation = 15,  // degrees
-    RandomCrop = new CropConfig { Height = 28, Width = 28, Padding = 4 },
-    Normalize = new NormalizeConfig { Mean = new[] { 0.485f }, Std = new[] { 0.229f } }
-})
+using AiDotNet;
+
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureNeuralNetwork(config =>
+    {
+        config.TaskType = NeuralNetworkTaskType.ImageClassification;
+        config.InputShape = new[] { 32, 32, 3 };  // CIFAR-like images
+        config.NumClasses = 10;
+    })
+    .ConfigurePreprocessing(config =>
+    {
+        config.NormalizeFeatures = true;
+    })
+    .ConfigureAugmentation(config =>
+    {
+        config.HorizontalFlip = true;
+        config.RotationRange = 15;
+        config.WidthShiftRange = 0.1;
+        config.HeightShiftRange = 0.1;
+        config.ZoomRange = 0.1;
+    })
+    .ConfigureTraining(config =>
+    {
+        config.Epochs = 50;
+        config.BatchSize = 32;
+    })
+    .BuildAsync(images, labels);
 ```
 
-## Complete Training Example
+## GPU Acceleration
 
 ```csharp
 using AiDotNet;
-using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
-using AiDotNet.Optimizers;
-using AiDotNet.LossFunctions;
 
-// Prepare data
-var (trainData, trainLabels) = PrepareData("train");
-var (testData, testLabels) = PrepareData("test");
-
-// Build model
-var layers = new List<ILayer<float>>
-{
-    new DenseLayer<float>(784, 512, new ReLUActivation<float>()),
-    new BatchNormalizationLayer<float>(512),
-    new DropoutLayer<float>(0.3f),
-
-    new DenseLayer<float>(512, 256, new ReLUActivation<float>()),
-    new BatchNormalizationLayer<float>(256),
-    new DropoutLayer<float>(0.3f),
-
-    new DenseLayer<float>(256, 10, new SoftmaxActivation<float>())
-};
-
-var architecture = new NeuralNetworkArchitecture<float>(
-    inputType: InputType.OneDimensional,
-    taskType: NeuralNetworkTaskType.MultiClassClassification,
-    inputSize: 784,
-    outputSize: 10,
-    layers: layers
-);
-
-var model = new FeedForwardNeuralNetwork<float>(architecture);
-
-// Train
-var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
-var result = await builder
-    .ConfigureModel(model)
-    .ConfigureOptimizer(new AdamOptimizer<float>(learningRate: 0.001f))
-    .ConfigureLossFunction(new CrossEntropyLoss<float>())
-    .ConfigureTraining(new TrainingConfig
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureNeuralNetwork(config =>
     {
-        Epochs = 50,
-        BatchSize = 64,
-        ValidationSplit = 0.1f
+        config.TaskType = NeuralNetworkTaskType.ImageClassification;
+        config.InputShape = new[] { 224, 224, 3 };
+        config.NumClasses = 1000;
     })
-    .ConfigureLearningRateScheduler(new CosineAnnealingScheduler(tMax: 50))
-    .ConfigureEarlyStopping(new EarlyStoppingConfig
+    .ConfigureCompute(config =>
     {
-        Patience = 10,
-        Monitor = "val_loss",
-        RestoreBestWeights = true
+        config.UseGpu = true;
+        config.GpuDeviceId = 0;
+        config.MixedPrecision = true;  // FP16 for faster training
     })
-    .ConfigureGpuAcceleration()
-    .BuildAsync(trainData, trainLabels);
+    .ConfigureTraining(config =>
+    {
+        config.Epochs = 100;
+        config.BatchSize = 128;
+    })
+    .BuildAsync(images, labels);
 
-// Print training history
-Console.WriteLine("\nTraining History:");
-for (int i = 0; i < result.History.Epochs.Count; i++)
-{
-    var epoch = result.History.Epochs[i];
-    Console.WriteLine($"Epoch {i+1}: loss={epoch.Loss:F4}, acc={epoch.Accuracy:P2}, " +
-                     $"val_loss={epoch.ValLoss:F4}, val_acc={epoch.ValAccuracy:P2}");
-}
-
-// Evaluate on test set
-var predictions = builder.Predict(testData, result);
-var testAccuracy = ComputeAccuracy(predictions, testLabels);
-Console.WriteLine($"\nTest Accuracy: {testAccuracy:P2}");
-
-// Save model
-builder.SaveModel(result, "mnist_model.bin");
-Console.WriteLine("Model saved to mnist_model.bin");
+Console.WriteLine($"Training completed on: {result.TrainingDevice}");
 ```
 
-## Monitoring Training
-
-### Training Progress
+## Model Checkpointing and Resume
 
 ```csharp
-// Access training history
-var history = result.History;
+using AiDotNet;
 
-Console.WriteLine("Training Metrics:");
-Console.WriteLine($"  Final Loss: {history.Epochs.Last().Loss:F4}");
-Console.WriteLine($"  Final Accuracy: {history.Epochs.Last().Accuracy:P2}");
-Console.WriteLine($"  Best Val Accuracy: {history.Epochs.Max(e => e.ValAccuracy):P2}");
-Console.WriteLine($"  Epochs Trained: {history.Epochs.Count}");
-```
+// Train with checkpoints
+var result = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureNeuralNetwork(config =>
+    {
+        config.TaskType = NeuralNetworkTaskType.ImageClassification;
+    })
+    .ConfigureTraining(config =>
+    {
+        config.Epochs = 100;
+        config.SaveCheckpoints = true;
+        config.CheckpointPath = "./checkpoints";
+        config.CheckpointFrequency = 10;  // Every 10 epochs
+    })
+    .BuildAsync(images, labels);
 
-### Visualizing Loss Curves
-
-```csharp
-// Export history for plotting
-var losses = history.Epochs.Select(e => e.Loss).ToArray();
-var valLosses = history.Epochs.Select(e => e.ValLoss).ToArray();
-
-// Use your preferred plotting library
-PlotLossCurves(losses, valLosses, "training_curves.png");
+// Resume from checkpoint
+var resumedResult = await new AiModelBuilder<double, double[][], double[]>()
+    .ConfigureNeuralNetwork(config =>
+    {
+        config.TaskType = NeuralNetworkTaskType.ImageClassification;
+    })
+    .ConfigureTraining(config =>
+    {
+        config.Epochs = 50;  // Additional epochs
+        config.ResumeFromCheckpoint = "./checkpoints/epoch_100.ckpt";
+    })
+    .BuildAsync(images, labels);
 ```
 
 ## Best Practices
 
-1. **Start Simple**: Begin with a small network and increase complexity as needed
+1. **Start with small models**: Begin simple and increase complexity only if needed
+2. **Use validation data**: Always monitor validation metrics to detect overfitting
+3. **Normalize your data**: Neural networks train better with normalized inputs
+4. **Use early stopping**: Prevent overfitting by stopping when validation loss increases
+5. **Experiment with learning rates**: The learning rate is often the most important hyperparameter
+6. **Use data augmentation**: Especially helpful for image tasks with limited data
 
-2. **Use Batch Normalization**: Helps with training stability and often improves results
+## Troubleshooting
 
-3. **Apply Dropout**: Prevents overfitting, especially in dense layers
+### Training too slow?
+- Reduce batch size if memory is limited
+- Enable GPU acceleration
+- Use mixed precision training
 
-4. **Monitor Validation Loss**: The key indicator for generalization
-
-5. **Use Learning Rate Scheduling**: Helps fine-tune convergence
-
-6. **Save Checkpoints**: Don't lose progress if training is interrupted
-
-7. **Normalize Inputs**: Scale features to zero mean and unit variance
-
-## Common Issues
-
-### Overfitting
-- Add dropout layers
+### Overfitting?
+- Add dropout via `config.DropoutRate`
+- Enable early stopping
 - Use data augmentation
-- Reduce model size
-- Add weight decay
+- Reduce model complexity
 
-### Underfitting
-- Increase model capacity
-- Train longer
-- Reduce regularization
-- Check data preprocessing
-
-### Training Instability
-- Reduce learning rate
-- Add batch normalization
-- Use gradient clipping
-- Check for NaN values in data
+### Underfitting?
+- Train for more epochs
+- Increase learning rate
+- Increase model complexity
+- Check data quality
 
 ## Summary
 
-Training neural networks with AiDotNet involves:
-1. Define architecture (layers, activations)
-2. Choose optimizer and loss function
-3. Configure training parameters
-4. Use callbacks for monitoring and early stopping
-5. Evaluate and save the model
+AiDotNet's `AiModelBuilder` makes neural network training accessible:
+- Configure task type and the system builds the appropriate architecture
+- Built-in training loop with validation and early stopping
+- Automatic preprocessing and data augmentation
+- GPU acceleration support
+- Model checkpointing and resumption
 
-The AiModelBuilder provides a fluent API that makes this process straightforward while allowing full customization when needed.
+All complexity is handled internally. You focus on your data and results.

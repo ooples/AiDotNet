@@ -1,468 +1,261 @@
-# Transformer Model Usage Guide
+# Transformer Models with AiModelBuilder
 
-This guide demonstrates how to build and use Transformer models with AiDotNet.
+This guide demonstrates how to use transformer-based models for NLP tasks using AiDotNet's simplified API.
 
 ## Overview
 
-Transformers are the foundation of modern NLP and increasingly used in computer vision. AiDotNet provides:
-- Pre-built transformer architectures
-- Multi-head self-attention layers
-- Positional encodings
-- Encoder-decoder structures
+AiDotNet provides powerful transformer capabilities through the `AiModelBuilder` facade, hiding the complexity of transformer architecture while giving you full control over configuration.
 
-## Quick Start: Text Classification
+## Text Classification
 
 ```csharp
 using AiDotNet;
-using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Models;
 
-// Configure transformer for text classification
-var config = new TransformerConfig<float>
+// Prepare your text data
+var texts = new string[]
 {
-    VocabSize = 30000,
-    MaxSequenceLength = 512,
-    EmbeddingDim = 256,
-    NumHeads = 8,
-    NumLayers = 4,
-    FeedForwardDim = 1024,
-    Dropout = 0.1f,
-    NumClasses = 5
+    "This product is amazing, I love it!",
+    "Terrible quality, waste of money",
+    "Good value for the price",
+    "Not what I expected, disappointed",
+    "Excellent service and fast shipping"
 };
 
-// Create model
-var transformer = new TransformerClassifier<float>(config);
+var sentiments = new double[] { 1, 0, 1, 0, 1 }; // 1 = positive, 0 = negative
 
-// Train
-var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
-var result = await builder
-    .ConfigureModel(transformer)
-    .ConfigureOptimizer(new AdamWOptimizer<float>(learningRate: 1e-4f, weightDecay: 0.01f))
-    .BuildAsync(tokenizedTexts, labels);
-
-// Predict
-var prediction = builder.Predict(newText, result);
-```
-
-## Transformer Architecture
-
-### Components
-
-1. **Token Embeddings**: Convert tokens to vectors
-2. **Positional Encodings**: Add position information
-3. **Multi-Head Attention**: Learn relationships between tokens
-4. **Feed-Forward Networks**: Process each position
-5. **Layer Normalization**: Stabilize training
-
-### Building Custom Transformer
-
-```csharp
-using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.ActivationFunctions;
-
-// Transformer encoder block
-public class TransformerEncoderBlock<T> where T : struct, IFloatingPoint<T>
-{
-    private readonly MultiHeadAttentionLayer<T> _attention;
-    private readonly LayerNormalizationLayer<T> _norm1;
-    private readonly DenseLayer<T> _ff1;
-    private readonly DenseLayer<T> _ff2;
-    private readonly LayerNormalizationLayer<T> _norm2;
-    private readonly DropoutLayer<T> _dropout;
-
-    public TransformerEncoderBlock(int embedDim, int numHeads, int ffDim, float dropout)
+// Build and train a transformer model for text classification
+var result = await new AiModelBuilder<double, string[], double[]>()
+    .ConfigureNlp(config =>
     {
-        _attention = new MultiHeadAttentionLayer<T>(embedDim, numHeads, dropout);
-        _norm1 = new LayerNormalizationLayer<T>(embedDim);
-        _ff1 = new DenseLayer<T>(embedDim, ffDim, new GELUActivation<T>());
-        _ff2 = new DenseLayer<T>(ffDim, embedDim);
-        _norm2 = new LayerNormalizationLayer<T>(embedDim);
-        _dropout = new DropoutLayer<T>(dropout);
-    }
-
-    public Tensor<T> Forward(Tensor<T> x, Tensor<T>? mask = null)
-    {
-        // Self-attention with residual
-        var attnOutput = _attention.Forward(x, x, x, mask);
-        x = _norm1.Forward(x + _dropout.Forward(attnOutput));
-
-        // Feed-forward with residual
-        var ffOutput = _ff2.Forward(_ff1.Forward(x));
-        x = _norm2.Forward(x + _dropout.Forward(ffOutput));
-
-        return x;
-    }
-}
-```
-
-## Multi-Head Attention
-
-### How It Works
-
-```csharp
-// Multi-head attention layer
-var attention = new MultiHeadAttentionLayer<float>(
-    embedDim: 256,    // Embedding dimension
-    numHeads: 8,      // Number of attention heads
-    dropout: 0.1f     // Attention dropout
-);
-
-// Forward pass
-// Query, Key, Value all same for self-attention
-var output = attention.Forward(
-    query: embeddings,
-    key: embeddings,
-    value: embeddings,
-    mask: attentionMask  // Optional: mask padding tokens
-);
-```
-
-### Attention Mask
-
-```csharp
-// Create padding mask for variable-length sequences
-public Tensor<float> CreatePaddingMask(int[] sequenceLengths, int maxLen)
-{
-    var batchSize = sequenceLengths.Length;
-    var mask = Tensor<float>.Zeros(batchSize, maxLen);
-
-    for (int i = 0; i < batchSize; i++)
-    {
-        for (int j = sequenceLengths[i]; j < maxLen; j++)
-        {
-            mask[i, j] = float.NegativeInfinity;  // Masked positions
-        }
-    }
-
-    return mask;
-}
-
-// Create causal mask for autoregressive models (decoder)
-public Tensor<float> CreateCausalMask(int seqLen)
-{
-    var mask = Tensor<float>.Zeros(seqLen, seqLen);
-
-    for (int i = 0; i < seqLen; i++)
-    {
-        for (int j = i + 1; j < seqLen; j++)
-        {
-            mask[i, j] = float.NegativeInfinity;  // Can't attend to future
-        }
-    }
-
-    return mask;
-}
-```
-
-## Positional Encoding
-
-### Sinusoidal Encoding (Original Transformer)
-
-```csharp
-public class SinusoidalPositionalEncoding<T> where T : struct, IFloatingPoint<T>
-{
-    private readonly Tensor<T> _encodings;
-
-    public SinusoidalPositionalEncoding(int maxLen, int embedDim)
-    {
-        _encodings = Tensor<T>.Zeros(maxLen, embedDim);
-
-        for (int pos = 0; pos < maxLen; pos++)
-        {
-            for (int i = 0; i < embedDim; i++)
-            {
-                var angle = pos / Math.Pow(10000, (2 * (i / 2)) / (double)embedDim);
-
-                if (i % 2 == 0)
-                    _encodings[pos, i] = T.CreateChecked(Math.Sin(angle));
-                else
-                    _encodings[pos, i] = T.CreateChecked(Math.Cos(angle));
-            }
-        }
-    }
-
-    public Tensor<T> Forward(Tensor<T> x)
-    {
-        var seqLen = x.Shape[1];
-        return x + _encodings[..seqLen, ..];
-    }
-}
-```
-
-### Learned Positional Encoding
-
-```csharp
-// Learned positional embeddings (often better for shorter sequences)
-var posEmbedding = new EmbeddingLayer<float>(
-    numEmbeddings: maxSequenceLength,
-    embeddingDim: embedDim
-);
-
-// In forward pass
-var positions = Tensor<int>.Arange(0, seqLen);
-var posEmbed = posEmbedding.Forward(positions);
-var embeddings = tokenEmbeddings + posEmbed;
-```
-
-## Complete Transformer Encoder
-
-```csharp
-public class TransformerEncoder<T> where T : struct, IFloatingPoint<T>
-{
-    private readonly EmbeddingLayer<T> _tokenEmbedding;
-    private readonly SinusoidalPositionalEncoding<T> _posEncoding;
-    private readonly List<TransformerEncoderBlock<T>> _layers;
-    private readonly LayerNormalizationLayer<T> _finalNorm;
-    private readonly DropoutLayer<T> _dropout;
-
-    public TransformerEncoder(TransformerConfig<T> config)
-    {
-        _tokenEmbedding = new EmbeddingLayer<T>(config.VocabSize, config.EmbeddingDim);
-        _posEncoding = new SinusoidalPositionalEncoding<T>(config.MaxSequenceLength, config.EmbeddingDim);
-        _dropout = new DropoutLayer<T>(config.Dropout);
-        _finalNorm = new LayerNormalizationLayer<T>(config.EmbeddingDim);
-
-        _layers = new List<TransformerEncoderBlock<T>>();
-        for (int i = 0; i < config.NumLayers; i++)
-        {
-            _layers.Add(new TransformerEncoderBlock<T>(
-                config.EmbeddingDim,
-                config.NumHeads,
-                config.FeedForwardDim,
-                config.Dropout
-            ));
-        }
-    }
-
-    public Tensor<T> Forward(Tensor<int> tokenIds, Tensor<T>? mask = null)
-    {
-        // Token embeddings
-        var x = _tokenEmbedding.Forward(tokenIds);
-
-        // Add positional encoding
-        x = _posEncoding.Forward(x);
-        x = _dropout.Forward(x);
-
-        // Pass through encoder layers
-        foreach (var layer in _layers)
-        {
-            x = layer.Forward(x, mask);
-        }
-
-        return _finalNorm.Forward(x);
-    }
-}
-```
-
-## Text Classification Example
-
-```csharp
-using AiDotNet;
-using AiDotNet.NeuralNetworks;
-using AiDotNet.Text;
-
-// Tokenize text data
-var tokenizer = new BPETokenizer(vocabSize: 30000);
-tokenizer.Train(trainingTexts);
-
-var tokenizedTexts = trainingTexts
-    .Select(text => tokenizer.Encode(text, maxLength: 128))
-    .ToArray();
-
-// Create labels (one-hot encoded)
-var labels = CreateOneHotLabels(rawLabels, numClasses: 5);
-
-// Configure model
-var config = new TransformerConfig<float>
-{
-    VocabSize = tokenizer.VocabSize,
-    MaxSequenceLength = 128,
-    EmbeddingDim = 128,
-    NumHeads = 4,
-    NumLayers = 3,
-    FeedForwardDim = 512,
-    Dropout = 0.1f,
-    NumClasses = 5
-};
-
-var model = new TransformerClassifier<float>(config);
-
-// Train
-var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
-var result = await builder
-    .ConfigureModel(model)
-    .ConfigureOptimizer(new AdamWOptimizer<float>(
-        learningRate: 2e-4f,
-        weightDecay: 0.01f
-    ))
-    .ConfigureLossFunction(new CrossEntropyLoss<float>())
-    .ConfigureTraining(new TrainingConfig
-    {
-        Epochs = 10,
-        BatchSize = 32,
-        ValidationSplit = 0.1f
+        config.TaskType = NlpTaskType.TextClassification;
+        config.ModelType = NlpModelType.Transformer;
+        config.MaxSequenceLength = 128;
+        config.VocabSize = 30000;
     })
-    .ConfigureLearningRateScheduler(new WarmupLinearScheduler(
-        warmupSteps: 1000,
-        totalSteps: 10000
-    ))
-    .BuildAsync(tokenizedTexts, labels);
+    .ConfigurePreprocessing()
+    .BuildAsync(texts, sentiments);
 
+// Make predictions
+var newTexts = new[] { "I really enjoyed this purchase!" };
+var predictions = result.Predict(newTexts);
+Console.WriteLine($"Sentiment: {(predictions[0] > 0.5 ? "Positive" : "Negative")}");
+
+// View training metrics
+Console.WriteLine($"Training Accuracy: {result.TrainingAccuracy:P2}");
 Console.WriteLine($"Validation Accuracy: {result.ValidationAccuracy:P2}");
-
-// Predict on new text
-var newText = "This product is amazing!";
-var tokenized = tokenizer.Encode(newText, maxLength: 128);
-var prediction = builder.Predict(tokenized, result);
-var predictedClass = prediction.ArgMax();
-Console.WriteLine($"Predicted class: {predictedClass}");
 ```
 
-## Encoder-Decoder (Seq2Seq)
-
-For tasks like translation:
+## Named Entity Recognition
 
 ```csharp
-public class TransformerSeq2Seq<T> where T : struct, IFloatingPoint<T>
+using AiDotNet;
+
+// Prepare training data with entity labels
+var sentences = new string[]
 {
-    private readonly TransformerEncoder<T> _encoder;
-    private readonly TransformerDecoder<T> _decoder;
-    private readonly DenseLayer<T> _outputProjection;
+    "John Smith works at Microsoft in Seattle.",
+    "Apple released a new iPhone yesterday.",
+    "Dr. Jane Doe will speak at Harvard University."
+};
 
-    public TransformerSeq2Seq(Seq2SeqConfig<T> config)
+// Entity labels (per token)
+var entityLabels = new int[][]
+{
+    new[] { 1, 1, 0, 0, 2, 0, 3 }, // PERSON, O, ORG, O, LOC
+    new[] { 2, 0, 0, 0, 4, 0 },     // ORG, O, PRODUCT
+    new[] { 1, 1, 1, 0, 0, 0, 2, 2 } // PERSON, O, ORG
+};
+
+// Build NER model
+var result = await new AiModelBuilder<double, string[], int[][]>()
+    .ConfigureNlp(config =>
     {
-        _encoder = new TransformerEncoder<T>(config.EncoderConfig);
-        _decoder = new TransformerDecoder<T>(config.DecoderConfig);
-        _outputProjection = new DenseLayer<T>(
-            config.DecoderConfig.EmbeddingDim,
-            config.TargetVocabSize
-        );
-    }
+        config.TaskType = NlpTaskType.NamedEntityRecognition;
+        config.ModelType = NlpModelType.Transformer;
+        config.NumLabels = 5; // O, PERSON, ORG, LOC, PRODUCT
+    })
+    .ConfigurePreprocessing()
+    .BuildAsync(sentences, entityLabels);
 
-    public Tensor<T> Forward(Tensor<int> srcTokens, Tensor<int> tgtTokens,
-                             Tensor<T>? srcMask = null, Tensor<T>? tgtMask = null)
+// Extract entities from new text
+var newSentence = new[] { "Elon Musk founded SpaceX in California." };
+var entities = result.Predict(newSentence);
+Console.WriteLine($"Detected entities: {string.Join(", ", entities[0])}");
+```
+
+## Text Generation
+
+```csharp
+using AiDotNet;
+
+// Training corpus for text generation
+var trainingTexts = new string[]
+{
+    "Once upon a time in a faraway kingdom",
+    "The scientist discovered a new element",
+    "In the depths of the ocean lives a creature",
+    // ... more training texts
+};
+
+// Build generative model
+var result = await new AiModelBuilder<double, string[], string[]>()
+    .ConfigureNlp(config =>
     {
-        // Encode source
-        var encoderOutput = _encoder.Forward(srcTokens, srcMask);
+        config.TaskType = NlpTaskType.TextGeneration;
+        config.ModelType = NlpModelType.Transformer;
+        config.MaxSequenceLength = 256;
+        config.Temperature = 0.7;
+    })
+    .ConfigurePreprocessing()
+    .BuildAsync(trainingTexts, trainingTexts);
 
-        // Decode with cross-attention to encoder output
-        var decoderOutput = _decoder.Forward(tgtTokens, encoderOutput, tgtMask);
+// Generate new text
+var prompt = new[] { "The robot looked at the sunset and" };
+var generated = result.Predict(prompt);
+Console.WriteLine($"Generated: {generated[0]}");
+```
 
-        // Project to vocabulary
-        return _outputProjection.Forward(decoderOutput);
-    }
+## Question Answering
+
+```csharp
+using AiDotNet;
+
+// Context-question-answer triplets
+var contexts = new string[]
+{
+    "The Eiffel Tower is located in Paris, France. It was built in 1889.",
+    "Python is a programming language created by Guido van Rossum.",
+};
+
+var questions = new string[]
+{
+    "Where is the Eiffel Tower located?",
+    "Who created Python?"
+};
+
+var answers = new string[]
+{
+    "Paris, France",
+    "Guido van Rossum"
+};
+
+// Combine context and question as input
+var inputs = contexts.Zip(questions, (c, q) => $"{c} [SEP] {q}").ToArray();
+
+// Build QA model
+var result = await new AiModelBuilder<double, string[], string[]>()
+    .ConfigureNlp(config =>
+    {
+        config.TaskType = NlpTaskType.QuestionAnswering;
+        config.ModelType = NlpModelType.Transformer;
+        config.MaxSequenceLength = 512;
+    })
+    .ConfigurePreprocessing()
+    .BuildAsync(inputs, answers);
+
+// Answer new questions
+var newContext = "Albert Einstein developed the theory of relativity.";
+var newQuestion = "What did Einstein develop?";
+var newInput = new[] { $"{newContext} [SEP] {newQuestion}" };
+
+var answer = result.Predict(newInput);
+Console.WriteLine($"Answer: {answer[0]}");
+```
+
+## Text Similarity / Embeddings
+
+```csharp
+using AiDotNet;
+
+// Pairs of similar texts
+var text1 = new string[]
+{
+    "The cat sat on the mat",
+    "I love programming",
+    "The weather is nice today"
+};
+
+var text2 = new string[]
+{
+    "A cat was sitting on a rug",
+    "Coding is my passion",
+    "It's a beautiful sunny day"
+};
+
+var similarityScores = new double[] { 0.9, 0.85, 0.8 };
+
+// Build similarity model
+var result = await new AiModelBuilder<double, (string, string)[], double[]>()
+    .ConfigureNlp(config =>
+    {
+        config.TaskType = NlpTaskType.SemanticSimilarity;
+        config.ModelType = NlpModelType.Transformer;
+    })
+    .ConfigurePreprocessing()
+    .BuildAsync(
+        text1.Zip(text2, (a, b) => (a, b)).ToArray(),
+        similarityScores
+    );
+
+// Compare new text pairs
+var comparison = result.Predict(new[] { ("Hello world", "Hi there") });
+Console.WriteLine($"Similarity: {comparison[0]:F2}");
+```
+
+## Configuration Options
+
+```csharp
+using AiDotNet;
+
+// Full configuration example
+var result = await new AiModelBuilder<double, string[], double[]>()
+    .ConfigureNlp(config =>
+    {
+        // Model architecture
+        config.TaskType = NlpTaskType.TextClassification;
+        config.ModelType = NlpModelType.Transformer;
+        config.MaxSequenceLength = 256;
+        config.VocabSize = 32000;
+
+        // Training parameters
+        config.LearningRate = 2e-5;
+        config.BatchSize = 16;
+        config.Epochs = 5;
+        config.WarmupSteps = 500;
+
+        // Regularization
+        config.Dropout = 0.1;
+        config.WeightDecay = 0.01;
+
+        // Tokenization
+        config.TokenizerType = TokenizerType.BPE;
+        config.LowercaseInput = true;
+    })
+    .ConfigurePreprocessing()
+    .ConfigureValidation(validationSplit: 0.15)
+    .BuildAsync(texts, labels);
+
+// Access training history
+foreach (var epoch in result.TrainingHistory)
+{
+    Console.WriteLine($"Epoch {epoch.EpochNumber}: Loss={epoch.Loss:F4}, Accuracy={epoch.Accuracy:P2}");
 }
 ```
 
-## Vision Transformer (ViT)
+## Best Practices
 
-Transformers for image classification:
-
-```csharp
-public class VisionTransformer<T> where T : struct, IFloatingPoint<T>
-{
-    private readonly PatchEmbedding<T> _patchEmbed;
-    private readonly EmbeddingLayer<T> _posEmbed;
-    private readonly Tensor<T> _clsToken;
-    private readonly List<TransformerEncoderBlock<T>> _layers;
-    private readonly LayerNormalizationLayer<T> _norm;
-    private readonly DenseLayer<T> _classifier;
-
-    public VisionTransformer(ViTConfig<T> config)
-    {
-        int numPatches = (config.ImageSize / config.PatchSize) *
-                         (config.ImageSize / config.PatchSize);
-
-        _patchEmbed = new PatchEmbedding<T>(
-            config.ImageSize, config.PatchSize, config.Channels, config.EmbeddingDim);
-        _posEmbed = new EmbeddingLayer<T>(numPatches + 1, config.EmbeddingDim);
-        _clsToken = Tensor<T>.RandomNormal(1, 1, config.EmbeddingDim);
-
-        _layers = new List<TransformerEncoderBlock<T>>();
-        for (int i = 0; i < config.NumLayers; i++)
-        {
-            _layers.Add(new TransformerEncoderBlock<T>(
-                config.EmbeddingDim, config.NumHeads, config.FeedForwardDim, config.Dropout));
-        }
-
-        _norm = new LayerNormalizationLayer<T>(config.EmbeddingDim);
-        _classifier = new DenseLayer<T>(config.EmbeddingDim, config.NumClasses);
-    }
-
-    public Tensor<T> Forward(Tensor<T> images)
-    {
-        var batchSize = images.Shape[0];
-
-        // Create patch embeddings
-        var x = _patchEmbed.Forward(images);  // [batch, numPatches, embedDim]
-
-        // Prepend CLS token
-        var clsTokens = _clsToken.Expand(batchSize, -1, -1);
-        x = Tensor<T>.Concatenate(clsTokens, x, axis: 1);
-
-        // Add positional embeddings
-        var positions = Tensor<int>.Arange(0, x.Shape[1]);
-        x = x + _posEmbed.Forward(positions);
-
-        // Transformer layers
-        foreach (var layer in _layers)
-        {
-            x = layer.Forward(x);
-        }
-
-        // Classify using CLS token
-        var clsOutput = _norm.Forward(x[.., 0, ..]);  // [batch, embedDim]
-        return _classifier.Forward(clsOutput);
-    }
-}
-```
-
-## Training Tips
-
-### Learning Rate Warmup
-
-```csharp
-// Important for transformer training stability
-.ConfigureLearningRateScheduler(new WarmupLinearScheduler(
-    warmupSteps: 1000,    // Gradually increase LR
-    totalSteps: 50000,    // Total training steps
-    peakLr: 1e-4f,        // Maximum learning rate
-    endLr: 1e-6f          // Final learning rate
-))
-```
-
-### Gradient Clipping
-
-```csharp
-// Prevent gradient explosion
-.ConfigureOptimizer(new AdamWOptimizer<float>(
-    learningRate: 1e-4f,
-    weightDecay: 0.01f,
-    gradientClipNorm: 1.0f  // Clip gradients by norm
-))
-```
-
-### Mixed Precision Training
-
-```csharp
-// Use FP16 for faster training with lower memory
-.ConfigureMixedPrecision(new MixedPrecisionConfig
-{
-    Enabled = true,
-    LossScale = 1024f
-})
-```
+1. **Use appropriate sequence length**: Shorter sequences train faster but may truncate important information
+2. **Adjust batch size for memory**: Transformer models are memory-intensive; reduce batch size if needed
+3. **Use warmup steps**: Gradually increasing learning rate helps training stability
+4. **Monitor validation metrics**: Watch for overfitting on small datasets
 
 ## Summary
 
-This guide covered:
-- Transformer architecture components
-- Multi-head attention mechanism
-- Positional encodings
-- Building encoder and encoder-decoder models
-- Text classification with transformers
-- Vision Transformer (ViT) for images
-- Training best practices
+The `AiModelBuilder` provides a clean interface for transformer-based NLP tasks:
+- Text classification and sentiment analysis
+- Named entity recognition
+- Text generation
+- Question answering
+- Semantic similarity
 
-Transformers are versatile and powerful - start with pre-trained models when possible, and fine-tune for your specific task.
+All complexity is handled internally, letting you focus on your data and results.

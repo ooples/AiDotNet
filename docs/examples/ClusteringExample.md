@@ -1,24 +1,17 @@
-# Clustering Example: Customer Segmentation
+# Clustering with AiModelBuilder
 
-This guide demonstrates how to use clustering algorithms in AiDotNet for customer segmentation.
+This guide demonstrates how to use clustering algorithms for customer segmentation and pattern discovery using AiDotNet.
 
 ## Overview
 
-Customer segmentation is a classic clustering use case where we group customers based on their behavior patterns without predefined labels. This example uses K-Means and DBSCAN to segment customers.
+AiDotNet provides clustering capabilities through the `AiModelBuilder` facade, making it easy to discover patterns in unlabeled data.
 
-## The Dataset
-
-We'll work with a customer purchase dataset containing:
-- Age
-- Annual income
-- Spending score (1-100)
+## Customer Segmentation
 
 ```csharp
 using AiDotNet;
-using AiDotNet.Clustering;
-using AiDotNet.Clustering.Options;
 
-// Sample customer data: [Age, AnnualIncome($K), SpendingScore]
+// Customer data: [Age, Annual Income ($K), Spending Score (1-100)]
 var customers = new double[][]
 {
     new[] { 19.0, 15.0, 39.0 },
@@ -33,358 +26,336 @@ var customers = new double[][]
     new[] { 30.0, 19.0, 72.0 },
     // ... more customers
 };
-```
 
-## Step 1: Data Preprocessing
-
-Always scale features before clustering:
-
-```csharp
-using AiDotNet.Preprocessing;
-
-// Scale features to zero mean and unit variance
-var scaler = new StandardScaler<double>();
-var scaledData = scaler.FitTransform(customers);
-
-Console.WriteLine("Data scaled successfully");
-Console.WriteLine($"Original first customer: [{string.Join(", ", customers[0])}]");
-Console.WriteLine($"Scaled first customer: [{string.Join(", ", scaledData[0].Select(x => $"{x:F3}"))}]");
-```
-
-## Step 2: Finding Optimal K (Number of Clusters)
-
-### Elbow Method
-
-```csharp
-using AiDotNet.Clustering.Evaluation;
-
-var evaluator = new ClusteringEvaluator<double>();
-
-// Calculate WCSS for different K values
-Console.WriteLine("\nElbow Method Analysis:");
-Console.WriteLine("K\tWCSS\t\tSilhouette");
-Console.WriteLine("---\t----\t\t----------");
-
-for (int k = 2; k <= 10; k++)
-{
-    var kmeans = new KMeans<double>(new KMeansOptions<double>
+// Build clustering model
+var result = await new AiModelBuilder<double, double[][], int[]>()
+    .ConfigureClustering(config =>
     {
-        K = k,
-        MaxIterations = 100,
-        RandomState = 42
-    });
+        config.Algorithm = ClusteringAlgorithm.KMeans;
+        config.NumClusters = 5;
+    })
+    .ConfigurePreprocessing(config =>
+    {
+        config.NormalizeFeatures = true;
+    })
+    .BuildAsync(customers);
 
-    kmeans.Fit(scaledData);
+// Get cluster assignments
+var clusterLabels = result.ClusterLabels;
 
-    var wcss = evaluator.WCSS(scaledData, kmeans.Labels, kmeans.ClusterCenters);
-    var silhouette = evaluator.SilhouetteScore(scaledData, kmeans.Labels);
+// View cluster statistics
+Console.WriteLine("Customer Segmentation Results:");
+Console.WriteLine($"Number of clusters: {result.NumClusters}");
+Console.WriteLine($"Silhouette Score: {result.SilhouetteScore:F4}");
 
-    Console.WriteLine($"{k}\t{wcss:F2}\t\t{silhouette:F4}");
+foreach (var cluster in result.ClusterSummaries)
+{
+    Console.WriteLine($"\nCluster {cluster.Id} ({cluster.Size} customers):");
+    Console.WriteLine($"  Avg Age: {cluster.Centroid[0]:F1}");
+    Console.WriteLine($"  Avg Income: ${cluster.Centroid[1]:F1}K");
+    Console.WriteLine($"  Avg Spending: {cluster.Centroid[2]:F1}");
+}
+```
+
+## Automatic Cluster Detection
+
+```csharp
+using AiDotNet;
+
+// Let the algorithm find the optimal number of clusters
+var result = await new AiModelBuilder<double, double[][], int[]>()
+    .ConfigureClustering(config =>
+    {
+        config.Algorithm = ClusteringAlgorithm.KMeans;
+        config.AutoDetectClusters = true;
+        config.MinClusters = 2;
+        config.MaxClusters = 10;
+    })
+    .ConfigurePreprocessing(config =>
+    {
+        config.NormalizeFeatures = true;
+    })
+    .BuildAsync(data);
+
+Console.WriteLine($"Optimal number of clusters: {result.NumClusters}");
+Console.WriteLine($"Selection method: {result.ClusterSelectionMethod}");
+
+// View elbow analysis
+Console.WriteLine("\nElbow Analysis:");
+foreach (var point in result.ElbowAnalysis)
+{
+    Console.WriteLine($"K={point.K}: Inertia={point.Inertia:F2}, Silhouette={point.Silhouette:F4}");
+}
+```
+
+## Density-Based Clustering (DBSCAN)
+
+```csharp
+using AiDotNet;
+
+// DBSCAN for finding clusters of arbitrary shape
+var result = await new AiModelBuilder<double, double[][], int[]>()
+    .ConfigureClustering(config =>
+    {
+        config.Algorithm = ClusteringAlgorithm.DBSCAN;
+        config.Epsilon = 0.5;       // Neighborhood radius
+        config.MinSamples = 5;      // Minimum points to form cluster
+    })
+    .ConfigurePreprocessing(config =>
+    {
+        config.NormalizeFeatures = true;
+    })
+    .BuildAsync(data);
+
+Console.WriteLine($"Clusters found: {result.NumClusters}");
+Console.WriteLine($"Outliers detected: {result.NumOutliers}");
+
+// Outliers are labeled as -1
+var outlierIndices = result.ClusterLabels
+    .Select((label, index) => new { label, index })
+    .Where(x => x.label == -1)
+    .Select(x => x.index)
+    .ToArray();
+
+Console.WriteLine($"\nOutlier samples: {string.Join(", ", outlierIndices)}");
+```
+
+## Hierarchical Clustering
+
+```csharp
+using AiDotNet;
+
+// Hierarchical clustering with dendrogram
+var result = await new AiModelBuilder<double, double[][], int[]>()
+    .ConfigureClustering(config =>
+    {
+        config.Algorithm = ClusteringAlgorithm.Hierarchical;
+        config.NumClusters = 4;
+        config.Linkage = LinkageType.Ward;
+    })
+    .ConfigurePreprocessing(config =>
+    {
+        config.NormalizeFeatures = true;
+    })
+    .BuildAsync(data);
+
+Console.WriteLine("Hierarchical Clustering Results:");
+Console.WriteLine($"Number of clusters: {result.NumClusters}");
+
+// View cluster hierarchy
+Console.WriteLine("\nCluster Hierarchy:");
+foreach (var node in result.DendrogramNodes)
+{
+    Console.WriteLine($"Merge: {node.Left} + {node.Right} at distance {node.Distance:F4}");
+}
+```
+
+## Gaussian Mixture Models
+
+```csharp
+using AiDotNet;
+
+// GMM for soft clustering (probability of belonging to each cluster)
+var result = await new AiModelBuilder<double, double[][], double[][]>()
+    .ConfigureClustering(config =>
+    {
+        config.Algorithm = ClusteringAlgorithm.GaussianMixture;
+        config.NumClusters = 3;
+        config.CovarianceType = CovarianceType.Full;
+    })
+    .ConfigurePreprocessing(config =>
+    {
+        config.NormalizeFeatures = true;
+    })
+    .BuildAsync(data);
+
+// Get soft assignments (probabilities)
+var probabilities = result.ClusterProbabilities;
+
+Console.WriteLine("Soft Cluster Assignments:");
+for (int i = 0; i < Math.Min(5, probabilities.Length); i++)
+{
+    Console.WriteLine($"Sample {i}: " +
+        $"P(C0)={probabilities[i][0]:F3}, " +
+        $"P(C1)={probabilities[i][1]:F3}, " +
+        $"P(C2)={probabilities[i][2]:F3}");
 }
 
-// Look for the "elbow" - where WCSS decrease slows down
+Console.WriteLine($"\nBIC Score: {result.BicScore:F2}");
+Console.WriteLine($"AIC Score: {result.AicScore:F2}");
 ```
 
-### Gap Statistic
+## Assigning New Data Points
 
 ```csharp
-// More rigorous method for determining optimal K
-var gapResult = evaluator.GapStatistic(scaledData, kRange: Enumerable.Range(2, 9));
+using AiDotNet;
 
-Console.WriteLine($"\nGap Statistic suggests K = {gapResult.OptimalK}");
-Console.WriteLine($"Gap value: {gapResult.GapValues[gapResult.OptimalK - 2]:F4}");
-```
+// Train clustering model
+var result = await new AiModelBuilder<double, double[][], int[]>()
+    .ConfigureClustering(config =>
+    {
+        config.Algorithm = ClusteringAlgorithm.KMeans;
+        config.NumClusters = 5;
+    })
+    .ConfigurePreprocessing(config =>
+    {
+        config.NormalizeFeatures = true;
+    })
+    .BuildAsync(trainingData);
 
-## Step 3: K-Means Clustering
-
-```csharp
-// Based on elbow analysis, let's use K=5
-var kmeans = new KMeans<double>(new KMeansOptions<double>
+// Assign new customers to existing clusters
+var newCustomers = new double[][]
 {
-    K = 5,
-    InitMethod = KMeansInitMethod.KMeansPlusPlus,
-    MaxIterations = 300,
-    Tolerance = 1e-4,
-    RandomState = 42
-});
+    new[] { 25.0, 85.0, 90.0 },   // Young, high income, high spending
+    new[] { 55.0, 45.0, 20.0 },   // Older, moderate income, low spending
+};
 
-// Fit the model
-kmeans.Fit(scaledData);
+var assignments = result.Predict(newCustomers);
 
-// Get results
-var labels = kmeans.Labels;
-var centers = kmeans.ClusterCenters;
-var iterations = kmeans.NumIterations;
-
-Console.WriteLine($"\nK-Means converged in {iterations} iterations");
-Console.WriteLine($"Final inertia (WCSS): {kmeans.Inertia:F2}");
+for (int i = 0; i < newCustomers.Length; i++)
+{
+    Console.WriteLine($"New customer {i + 1}: Assigned to Cluster {assignments[i]}");
+}
 ```
 
-## Step 4: Analyzing Clusters
+## Cluster Evaluation
 
 ```csharp
-// Analyze each cluster
-Console.WriteLine("\n=== Cluster Analysis ===");
+using AiDotNet;
 
-for (int cluster = 0; cluster < 5; cluster++)
+var result = await new AiModelBuilder<double, double[][], int[]>()
+    .ConfigureClustering(config =>
+    {
+        config.Algorithm = ClusteringAlgorithm.KMeans;
+        config.NumClusters = 5;
+    })
+    .ConfigurePreprocessing(config =>
+    {
+        config.NormalizeFeatures = true;
+    })
+    .BuildAsync(data);
+
+// Comprehensive evaluation metrics
+Console.WriteLine("Cluster Quality Metrics:");
+Console.WriteLine($"Silhouette Score: {result.SilhouetteScore:F4}");
+Console.WriteLine("  (Range: -1 to 1, higher is better)");
+
+Console.WriteLine($"\nCalinski-Harabasz Index: {result.CalinskiHarabaszIndex:F2}");
+Console.WriteLine("  (Higher values indicate better defined clusters)");
+
+Console.WriteLine($"\nDavies-Bouldin Index: {result.DaviesBouldinIndex:F4}");
+Console.WriteLine("  (Lower values indicate better separation)");
+
+Console.WriteLine($"\nInertia (WCSS): {result.Inertia:F2}");
+Console.WriteLine("  (Lower values indicate tighter clusters)");
+```
+
+## Feature Importance for Clustering
+
+```csharp
+using AiDotNet;
+
+var result = await new AiModelBuilder<double, double[][], int[]>()
+    .ConfigureClustering(config =>
+    {
+        config.Algorithm = ClusteringAlgorithm.KMeans;
+        config.NumClusters = 5;
+        config.ComputeFeatureImportance = true;
+    })
+    .ConfigurePreprocessing(config =>
+    {
+        config.NormalizeFeatures = true;
+    })
+    .BuildAsync(data);
+
+Console.WriteLine("Feature Importance for Clustering:");
+var featureNames = new[] { "Age", "Income", "Spending Score" };
+for (int i = 0; i < result.FeatureImportance.Length; i++)
 {
-    // Get customers in this cluster
-    var clusterIndices = labels
-        .Select((label, idx) => new { label, idx })
-        .Where(x => x.label == cluster)
-        .Select(x => x.idx)
-        .ToArray();
+    Console.WriteLine($"  {featureNames[i]}: {result.FeatureImportance[i]:F3}");
+}
+```
 
-    // Calculate statistics for original (unscaled) data
-    var clusterCustomers = clusterIndices.Select(i => customers[i]).ToArray();
+## Complete Customer Segmentation Pipeline
 
-    var avgAge = clusterCustomers.Average(c => c[0]);
-    var avgIncome = clusterCustomers.Average(c => c[1]);
-    var avgSpending = clusterCustomers.Average(c => c[2]);
+```csharp
+using AiDotNet;
 
-    Console.WriteLine($"\nCluster {cluster} ({clusterIndices.Length} customers):");
-    Console.WriteLine($"  Average Age: {avgAge:F1} years");
-    Console.WriteLine($"  Average Income: ${avgIncome:F1}K");
-    Console.WriteLine($"  Average Spending Score: {avgSpending:F1}");
+// Full pipeline example
+var customers = LoadCustomerData();
+Console.WriteLine($"Loaded {customers.Length} customers");
 
-    // Assign business-friendly labels
-    string segmentName = (avgIncome, avgSpending) switch
+// Build and evaluate model
+var result = await new AiModelBuilder<double, double[][], int[]>()
+    .ConfigureClustering(config =>
+    {
+        config.Algorithm = ClusteringAlgorithm.KMeans;
+        config.AutoDetectClusters = true;
+        config.MinClusters = 2;
+        config.MaxClusters = 10;
+        config.ComputeFeatureImportance = true;
+    })
+    .ConfigurePreprocessing(config =>
+    {
+        config.NormalizeFeatures = true;
+        config.HandleMissingValues = true;
+    })
+    .BuildAsync(customers);
+
+// Print results
+Console.WriteLine($"\n=== Segmentation Complete ===");
+Console.WriteLine($"Optimal clusters: {result.NumClusters}");
+Console.WriteLine($"Silhouette Score: {result.SilhouetteScore:F4}");
+
+// Analyze each segment
+Console.WriteLine("\n=== Customer Segments ===");
+foreach (var cluster in result.ClusterSummaries)
+{
+    string segmentName = ClassifySegment(cluster.Centroid);
+
+    Console.WriteLine($"\n{segmentName} (Cluster {cluster.Id}):");
+    Console.WriteLine($"  Size: {cluster.Size} customers ({100.0 * cluster.Size / customers.Length:F1}%)");
+    Console.WriteLine($"  Avg Age: {cluster.Centroid[0]:F1} years");
+    Console.WriteLine($"  Avg Income: ${cluster.Centroid[1]:F1}K");
+    Console.WriteLine($"  Avg Spending: {cluster.Centroid[2]:F1}");
+}
+
+// Save model for future use
+result.SaveModel("customer_segmentation.aimodel");
+Console.WriteLine("\nModel saved for future predictions");
+
+string ClassifySegment(double[] centroid)
+{
+    var income = centroid[1];
+    var spending = centroid[2];
+
+    return (income, spending) switch
     {
         ( > 70, > 70) => "High Value",
-        ( > 70, < 30) => "High Income, Low Spend (Potential)",
+        ( > 70, < 30) => "High Income Potential",
         ( < 30, > 70) => "Budget Enthusiasts",
         ( < 30, < 30) => "Price Sensitive",
         _ => "Average"
     };
-
-    Console.WriteLine($"  Segment: {segmentName}");
 }
 ```
 
-## Step 5: DBSCAN for Comparison
+## Best Practices
 
-DBSCAN can find clusters of arbitrary shape and identify outliers:
-
-```csharp
-// Try DBSCAN
-var dbscan = new DBSCAN<double>(new DBSCANOptions<double>
-{
-    Epsilon = 0.5,   // Neighborhood radius
-    MinPoints = 5    // Minimum points to form a cluster
-});
-
-dbscan.Fit(scaledData);
-
-var dbscanLabels = dbscan.Labels;
-var numClusters = dbscanLabels.Where(l => l >= 0).Distinct().Count();
-var numOutliers = dbscanLabels.Count(l => l == -1);
-
-Console.WriteLine($"\n=== DBSCAN Results ===");
-Console.WriteLine($"Number of clusters: {numClusters}");
-Console.WriteLine($"Number of outliers: {numOutliers}");
-
-// Outliers might be unusual customers worth investigating
-if (numOutliers > 0)
-{
-    Console.WriteLine("\nOutlier customers (unusual patterns):");
-    for (int i = 0; i < dbscanLabels.Length; i++)
-    {
-        if (dbscanLabels[i] == -1)
-        {
-            Console.WriteLine($"  Customer {i}: Age={customers[i][0]}, " +
-                            $"Income=${customers[i][1]}K, Spending={customers[i][2]}");
-        }
-    }
-}
-```
-
-## Step 6: Evaluating Cluster Quality
-
-```csharp
-Console.WriteLine("\n=== Cluster Quality Metrics ===");
-
-// Silhouette Score (-1 to 1, higher is better)
-var silhouette = evaluator.SilhouetteScore(scaledData, labels);
-Console.WriteLine($"Silhouette Score: {silhouette:F4}");
-Console.WriteLine("  (Values > 0.5 indicate good clustering)");
-
-// Calinski-Harabasz Index (higher is better)
-var ch = evaluator.CalinskiHarabaszIndex(scaledData, labels);
-Console.WriteLine($"Calinski-Harabasz Index: {ch:F2}");
-
-// Davies-Bouldin Index (lower is better)
-var db = evaluator.DaviesBouldinIndex(scaledData, labels);
-Console.WriteLine($"Davies-Bouldin Index: {db:F4}");
-Console.WriteLine("  (Values < 1 indicate good separation)");
-```
-
-## Step 7: Predicting New Customers
-
-```csharp
-// Assign new customers to existing clusters
-var newCustomers = new double[][]
-{
-    new[] { 25.0, 85.0, 90.0 },  // Young, high income, high spending
-    new[] { 55.0, 45.0, 20.0 },  // Older, moderate income, low spending
-};
-
-Console.WriteLine("\n=== New Customer Predictions ===");
-
-foreach (var customer in newCustomers)
-{
-    // Scale the new customer using the same scaler
-    var scaledCustomer = scaler.Transform(new[] { customer })[0];
-
-    // Predict cluster
-    var cluster = kmeans.Predict(scaledCustomer);
-
-    Console.WriteLine($"Customer (Age={customer[0]}, Income=${customer[1]}K, Spending={customer[2]})");
-    Console.WriteLine($"  -> Assigned to Cluster {cluster}");
-}
-```
-
-## Complete Example
-
-```csharp
-using AiDotNet;
-using AiDotNet.Clustering;
-using AiDotNet.Clustering.Options;
-using AiDotNet.Clustering.Evaluation;
-using AiDotNet.Preprocessing;
-
-class CustomerSegmentation
-{
-    public static void Main()
-    {
-        // Load customer data
-        var customers = LoadCustomerData();
-        Console.WriteLine($"Loaded {customers.Length} customers");
-
-        // Preprocess
-        var scaler = new StandardScaler<double>();
-        var scaledData = scaler.FitTransform(customers);
-
-        // Find optimal K
-        var evaluator = new ClusteringEvaluator<double>();
-        int optimalK = FindOptimalK(scaledData, evaluator);
-        Console.WriteLine($"Optimal K: {optimalK}");
-
-        // Cluster
-        var kmeans = new KMeans<double>(new KMeansOptions<double>
-        {
-            K = optimalK,
-            InitMethod = KMeansInitMethod.KMeansPlusPlus,
-            MaxIterations = 300,
-            RandomState = 42
-        });
-
-        kmeans.Fit(scaledData);
-
-        // Analyze
-        AnalyzeClusters(customers, kmeans.Labels, optimalK);
-
-        // Evaluate
-        var silhouette = evaluator.SilhouetteScore(scaledData, kmeans.Labels);
-        Console.WriteLine($"\nFinal Silhouette Score: {silhouette:F4}");
-
-        // Export results
-        ExportResults(customers, kmeans.Labels, "customer_segments.csv");
-        Console.WriteLine("\nResults exported to customer_segments.csv");
-    }
-
-    static int FindOptimalK(double[][] data, ClusteringEvaluator<double> evaluator)
-    {
-        double maxSilhouette = -1;
-        int bestK = 2;
-
-        for (int k = 2; k <= 10; k++)
-        {
-            var kmeans = new KMeans<double>(new KMeansOptions<double>
-            {
-                K = k,
-                MaxIterations = 100,
-                RandomState = 42
-            });
-
-            kmeans.Fit(data);
-            var silhouette = evaluator.SilhouetteScore(data, kmeans.Labels);
-
-            if (silhouette > maxSilhouette)
-            {
-                maxSilhouette = silhouette;
-                bestK = k;
-            }
-        }
-
-        return bestK;
-    }
-
-    static void AnalyzeClusters(double[][] customers, int[] labels, int k)
-    {
-        Console.WriteLine("\n=== Customer Segments ===\n");
-
-        for (int cluster = 0; cluster < k; cluster++)
-        {
-            var clusterCustomers = customers
-                .Where((c, i) => labels[i] == cluster)
-                .ToArray();
-
-            if (clusterCustomers.Length == 0) continue;
-
-            var avgAge = clusterCustomers.Average(c => c[0]);
-            var avgIncome = clusterCustomers.Average(c => c[1]);
-            var avgSpending = clusterCustomers.Average(c => c[2]);
-
-            Console.WriteLine($"Segment {cluster + 1}: {clusterCustomers.Length} customers");
-            Console.WriteLine($"  Avg Age: {avgAge:F1}");
-            Console.WriteLine($"  Avg Income: ${avgIncome:F1}K");
-            Console.WriteLine($"  Avg Spending: {avgSpending:F1}");
-            Console.WriteLine();
-        }
-    }
-
-    static void ExportResults(double[][] customers, int[] labels, string filename)
-    {
-        using var writer = new StreamWriter(filename);
-        writer.WriteLine("Age,Income,SpendingScore,Cluster");
-
-        for (int i = 0; i < customers.Length; i++)
-        {
-            writer.WriteLine($"{customers[i][0]},{customers[i][1]},{customers[i][2]},{labels[i]}");
-        }
-    }
-
-    static double[][] LoadCustomerData()
-    {
-        // In practice, load from file or database
-        return new double[][]
-        {
-            new[] { 19.0, 15.0, 39.0 },
-            new[] { 21.0, 15.0, 81.0 },
-            new[] { 20.0, 16.0, 6.0 },
-            // ... more data
-        };
-    }
-}
-```
-
-## Business Recommendations
-
-Based on clustering results, you might:
-
-1. **High Value Segment**: Offer loyalty programs, exclusive products
-2. **Potential Segment**: Target with engagement campaigns
-3. **Budget Enthusiasts**: Promote deals and discounts
-4. **Price Sensitive**: Focus on value propositions
+1. **Always normalize features**: Clustering algorithms are sensitive to feature scales
+2. **Use multiple metrics**: No single metric tells the whole story
+3. **Validate with domain knowledge**: Clusters should make business sense
+4. **Try multiple algorithms**: Different algorithms may reveal different patterns
+5. **Handle outliers**: Consider DBSCAN for datasets with outliers
 
 ## Summary
 
-This example demonstrated:
-- Data preprocessing for clustering
-- Finding optimal number of clusters
-- K-Means clustering implementation
-- DBSCAN for outlier detection
-- Cluster evaluation metrics
-- Business interpretation of results
+AiDotNet's `AiModelBuilder` provides:
+- Multiple clustering algorithms (K-Means, DBSCAN, Hierarchical, GMM)
+- Automatic cluster detection
+- Comprehensive evaluation metrics
+- Outlier detection
+- Feature importance analysis
+- Easy prediction for new data points
 
-Clustering is a powerful tool for discovering patterns in customer data without the need for labeled examples.
+All complexity is handled internally. You focus on understanding your data.
