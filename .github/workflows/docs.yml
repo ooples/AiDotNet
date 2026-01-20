@@ -61,15 +61,15 @@ jobs:
       continue-on-error: true  # Don't fail deployment due to docfx warnings
 
     - name: Restore Playground dependencies
-      if: ${{ !inputs.skip_playground }}
+      if: ${{ inputs.skip_playground != true }}
       run: dotnet restore src/AiDotNet.Playground/AiDotNet.Playground.csproj
 
     - name: Build Blazor WASM Playground
-      if: ${{ !inputs.skip_playground }}
+      if: ${{ inputs.skip_playground != true }}
       run: dotnet publish src/AiDotNet.Playground/AiDotNet.Playground.csproj -c Release -o _playground
 
     - name: Copy Playground to documentation site
-      if: ${{ !inputs.skip_playground }}
+      if: ${{ inputs.skip_playground != true }}
       run: |
         mkdir -p _site/playground
         cp -r _playground/wwwroot/* _site/playground/
@@ -92,11 +92,17 @@ jobs:
         if [ "${{ inputs.skip_playground }}" == "true" ]; then
           echo "(Playground build was skipped)" >> $GITHUB_STEP_SUMMARY
         fi
+        if [ "${{ github.ref }}" != "refs/heads/master" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Note:** Deployment will be skipped because this workflow was triggered from branch '${{ github.ref_name }}', not 'master'." >> $GITHUB_STEP_SUMMARY
+        fi
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Links" >> $GITHUB_STEP_SUMMARY
         echo "- [Documentation Home](https://ooples.github.io/AiDotNet/)" >> $GITHUB_STEP_SUMMARY
         echo "- [API Reference](https://ooples.github.io/AiDotNet/api/)" >> $GITHUB_STEP_SUMMARY
-        echo "- [Interactive Playground](https://ooples.github.io/AiDotNet/playground/)" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ inputs.skip_playground }}" != "true" ]; then
+          echo "- [Interactive Playground](https://ooples.github.io/AiDotNet/playground/)" >> $GITHUB_STEP_SUMMARY
+        fi
 
   deploy:
     name: Deploy to GitHub Pages

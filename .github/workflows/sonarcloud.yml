@@ -580,14 +580,14 @@ jobs:
       - name: Install DocFX
         run: dotnet tool install --global docfx || true
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v4
-        with:
-          name: build-output-${{ github.sha }}
-          path: .
-
-      - name: Restore dependencies (for DocFX metadata)
-        run: dotnet restore
+      # Note: We don't download build artifacts from build-windows because:
+      # 1. DocFX builds from source during metadata extraction
+      # 2. Windows build artifacts may have path incompatibilities on Ubuntu
+      # 3. Playground publish also builds from source
+      - name: Restore and build
+        run: |
+          dotnet restore
+          dotnet build -c Release --no-restore -p:TreatWarningsAsErrors=false
 
       - name: Build DocFX documentation
         run: docfx docfx.json
