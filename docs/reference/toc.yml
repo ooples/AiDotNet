@@ -1,0 +1,14 @@
+- name: Overview
+  href: index.md
+- name: Neural Networks
+  href: neural-networks.md
+- name: Classical ML
+  href: classical-ml.md
+- name: Optimizers
+  href: optimizers.md
+- name: Loss Functions
+  href: loss-functions.md
+- name: LoRA Adapters
+  href: lora-adapters.md
+- name: Distributed Strategies
+  href: distributed-strategies.md

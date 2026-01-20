@@ -1,19 +1,8 @@
----
-layout: default
-title: Home
-nav_order: 1
-description: "AiDotNet - The most comprehensive AI/ML framework for .NET"
-permalink: /
----
-
 # AiDotNet Documentation
-{: .fs-9 }
 
 The most comprehensive AI/ML framework for .NET with 4,300+ implementations across 60+ feature categories.
-{: .fs-6 .fw-300 }
 
-[Get Started](/getting-started/){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
-[View on GitHub](https://github.com/ooples/AiDotNet){: .btn .fs-5 .mb-4 .mb-md-0 }
+[Get Started](getting-started/index.md) | [View on GitHub](https://github.com/ooples/AiDotNet) | [Interactive Playground](https://ooples.github.io/AiDotNet/playground/)
 
 ---
 
@@ -55,19 +44,15 @@ var prediction = result.Predict(newSample);
 
 ## What do you want to build?
 
-<div class="grid-container">
-
 | Task | Documentation |
 |:-----|:--------------|
-| **Classify data** | [Classification Tutorial](/tutorials/classification/) |
-| **Detect objects** | [Computer Vision Tutorial](/tutorials/computer-vision/) |
-| **Process text & RAG** | [NLP & RAG Tutorial](/tutorials/nlp/) |
-| **Fine-tune LLMs** | [LLM Fine-tuning Tutorial](/tutorials/llm-fine-tuning/) |
-| **Train RL agents** | [Reinforcement Learning Tutorial](/tutorials/reinforcement-learning/) |
-| **Scale training** | [Distributed Training Tutorial](/tutorials/distributed-training/) |
-| **Deploy models** | [Deployment Tutorial](/tutorials/deployment/) |
-
-</div>
+| **Classify data** | [Classification Tutorial](tutorials/classification/index.md) |
+| **Detect objects** | [Computer Vision Tutorial](tutorials/computer-vision/index.md) |
+| **Process text & RAG** | [NLP & RAG Tutorial](tutorials/nlp/index.md) |
+| **Fine-tune LLMs** | [LLM Fine-tuning Tutorial](tutorials/llm-fine-tuning/index.md) |
+| **Train RL agents** | [Reinforcement Learning Tutorial](tutorials/reinforcement-learning/index.md) |
+| **Scale training** | [Distributed Training Tutorial](tutorials/distributed-training/index.md) |
+| **Deploy models** | [Deployment Tutorial](tutorials/deployment/index.md) |
 
 ## Why AiDotNet?
 
@@ -193,8 +178,8 @@ AiDotNet provides:
 
 ## Getting Help
 
-- [Samples Repository](/samples/) - Complete, runnable examples
-- [API Reference](/api/) - Full API documentation
+- [Samples Repository](https://github.com/ooples/AiDotNet/tree/master/samples) - Complete, runnable examples
+- [API Reference](../api/index.md) - Full API documentation
 - [GitHub Issues](https://github.com/ooples/AiDotNet/issues) - Report bugs
 - [GitHub Discussions](https://github.com/ooples/AiDotNet/discussions) - Ask questions
 
