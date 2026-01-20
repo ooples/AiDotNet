@@ -158,8 +158,9 @@ internal static class BlasProvider
                     c, ldc);
                 return true;
             }
-            catch
+            catch (Exception)
             {
+                // MKL.NET call failed, disable and fall back to native
                 _useMklNet = false;
                 return false;
             }
@@ -210,8 +211,9 @@ internal static class BlasProvider
                     c, ldc);
                 return true;
             }
-            catch
+            catch (Exception)
             {
+                // MKL.NET call failed, disable and fall back to native
                 _useMklNet = false;
                 return false;
             }
@@ -258,7 +260,7 @@ internal static class BlasProvider
 
             return true;
         }
-        catch
+        catch (Exception)
         {
             // If MKL.NET fails, mark it as unavailable and return false
             _useMklNet = false;
@@ -329,8 +331,9 @@ internal static class BlasProvider
 
             return true;
         }
-        catch
+        catch (Exception)
         {
+            // MKL.NET call failed, disable and fall back to native
             _useMklNet = false;
             return false;
         }

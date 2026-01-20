@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using BenchmarkDotNet.Loggers;
 using BenchmarkDotNet.Toolchains;
 using BenchmarkDotNet.Toolchains.CsProj;
@@ -12,6 +13,10 @@ namespace AiDotNetBenchmarkTests.Benchmarking;
 
 internal static class FixedProjectFileToolchain
 {
+    // Cross-platform executable name for dotnet CLI
+    private static readonly string DotNetExeName =
+        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "dotnet.exe" : "dotnet";
+
     public static IToolchain Create(string targetFrameworkMoniker, string projectFilePath)
     {
         var dotNetCliPath = ResolveDotNetCliPath();
@@ -54,7 +59,7 @@ internal static class FixedProjectFileToolchain
         }
 #endif
         if (!string.IsNullOrWhiteSpace(processPath) &&
-            string.Equals(Path.GetFileName(processPath), "dotnet.exe", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(Path.GetFileName(processPath), DotNetExeName, StringComparison.OrdinalIgnoreCase) &&
             File.Exists(processPath))
         {
             return processPath;
@@ -63,7 +68,7 @@ internal static class FixedProjectFileToolchain
         var dotNetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
         if (!string.IsNullOrWhiteSpace(dotNetRoot))
         {
-            var candidate = Path.Combine(dotNetRoot, "dotnet.exe");
+            var candidate = Path.Combine(dotNetRoot, DotNetExeName);
             if (File.Exists(candidate))
             {
                 return candidate;
@@ -71,12 +76,13 @@ internal static class FixedProjectFileToolchain
         }
 
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-        var programFilesCandidate = Path.Combine(programFiles, "dotnet", "dotnet.exe");
+        var programFilesCandidate = Path.Combine(programFiles, "dotnet", DotNetExeName);
         if (File.Exists(programFilesCandidate))
         {
             return programFilesCandidate;
         }
 
+        // Fallback to PATH lookup - just return "dotnet" without extension
         return "dotnet";
     }
 
