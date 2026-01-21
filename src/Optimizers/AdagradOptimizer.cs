@@ -486,12 +486,12 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
             if (hasAccumulatedGradients)
             {
                 int length = reader.ReadInt32();
-                T[] data_arr = new T[length];
+                T[] dataArray = new T[length];
                 for (int i = 0; i < length; i++)
                 {
-                    data_arr[i] = NumOps.FromDouble(reader.ReadDouble());
+                    dataArray[i] = NumOps.FromDouble(reader.ReadDouble());
                 }
-                _accumulatedSquaredGradients = new Vector<T>(data_arr);
+                _accumulatedSquaredGradients = new Vector<T>(dataArray);
             }
             else
             {
