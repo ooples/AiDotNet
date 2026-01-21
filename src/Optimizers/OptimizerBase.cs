@@ -1238,6 +1238,15 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             int features = matrix.Columns;
             int paramCount = _model!.ParameterCount;
 
+            // If the model is untrained (ParameterCount is less than the number of features),
+            // infer the correct parameter count from the input dimensions.
+            // For regression models: paramCount = features + 1 (for intercept) is typical.
+            if (paramCount < features)
+            {
+                // Assume model uses intercept (common default)
+                paramCount = features + 1;
+            }
+
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
 

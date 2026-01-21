@@ -132,8 +132,9 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         var population = InitializePopulation(inputData.XTrain, _deOptions.PopulationSize);
+        // Use model's parameter count instead of input dimensions for trial vectors
+        int paramCount = population.Count > 0 ? population[0].ParameterCount : InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var prevStepData = new OptimizationStepData<T, TInput, TOutput>();
         var currentStepData = new OptimizationStepData<T, TInput, TOutput>();
@@ -142,7 +143,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
         {
             for (int i = 0; i < _deOptions.PopulationSize; i++)
             {
-                var trial = GenerateTrialModel(population, i, dimensions);
+                var trial = GenerateTrialModel(population, i, paramCount);
                 currentStepData = EvaluateSolution(trial, inputData);
                 UpdateBestSolution(currentStepData, ref bestStepData);
                 population[i] = currentStepData.Solution;

@@ -84,6 +84,12 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     protected INumericOperations<T> NumOps { get; set; } = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// The training input data, stored before population initialization so derived classes
+    /// can use it to determine proper parameter dimensions when models have empty parameters.
+    /// </summary>
+    protected TInput? TrainingInputForInitialization { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the GeneticModelBase class.
     /// </summary>
     /// <param name="fitnessCalculator">The fitness calculator to use.</param>
@@ -423,6 +429,10 @@ public abstract class GeneticBase<T, TInput, TOutput> :
         TOutput? validationOutput = default,
         Func<EvolutionStats<T, TInput, TOutput>, bool>? stopCriteria = null)
     {
+        // Store training input for population initialization
+        // This allows derived classes to determine proper parameter dimensions
+        TrainingInputForInitialization = trainingInput;
+
         // Initialize population if it's empty
         if (Population.Count == 0)
         {
