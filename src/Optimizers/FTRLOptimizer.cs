@@ -282,9 +282,9 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _previousParameters = new Vector<T>(parameters);
 
         var alpha = NumOps.FromDouble(_options.Alpha);
+        var beta = NumOps.FromDouble(_options.Beta);
         var lambda1 = NumOps.FromDouble(_options.Lambda1);
         var lambda2 = NumOps.FromDouble(_options.Lambda2);
-        var lambda2Factor = NumOps.FromDouble(_options.Lambda2 * (1 + _options.Beta));
 
         // Vectorized gradient squared calculation
         var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
@@ -310,17 +310,20 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var newCoefficients = new Vector<T>(parameters.Length);
         var absZ = (Vector<T>)Engine.Abs(_z);
         var signZ = (Vector<T>)Engine.Sign(_z);
-        var sqrtNOverAlpha = (Vector<T>)Engine.Divide(sqrtNPlusGradSq, alpha);
 
         for (int i = 0; i < parameters.Length; i++)
         {
             // L1 proximal operator: sparse solution via thresholding
             if (NumOps.GreaterThan(absZ[i], lambda1))
             {
-                // FTRL proximal: numerator = sign(z) * (lambda1 - |z|)
-                var lambda1MinusAbsZ = NumOps.Subtract(lambda1, absZ[i]);
-                var numeratorValue = NumOps.Multiply(lambda1MinusAbsZ, signZ[i]);
-                var denominatorValue = NumOps.Add(lambda2Factor, sqrtNOverAlpha[i]);
+                // FTRL proximal formula (aligned with UpdateParameters):
+                // w = -sign(z) * (|z| - lambda1) / (lambda2 + (sqrt(n) + beta) / alpha)
+                var absZMinusLambda1 = NumOps.Subtract(absZ[i], lambda1);
+                var sqrtNi = NumOps.Sqrt(_n![i]);
+                var sqrtNPlusBeta = NumOps.Add(sqrtNi, beta);
+                var sqrtNPlusBetaOverAlpha = NumOps.Divide(sqrtNPlusBeta, alpha);
+                var denominatorValue = NumOps.Add(lambda2, sqrtNPlusBetaOverAlpha);
+                var numeratorValue = NumOps.Multiply(NumOps.Negate(signZ[i]), absZMinusLambda1);
                 newCoefficients[i] = NumOps.Divide(numeratorValue, denominatorValue);
             }
             else
