@@ -49,11 +49,12 @@ using AiDotNet;
 using AiDotNet.Classification;
 
 // Train a classifier
-var result = await new AiModelBuilder<double, double[], double>()
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
     .ConfigurePreprocessing()
     .ConfigureCrossValidation(new KFoldCrossValidator<double>(k: 5))
-    .BuildAsync(features, labels);
+    .ConfigureDataLoader(new InMemoryDataLoader<double, Matrix<double>, Vector<double>>(features, labels))
+    .BuildAsync();
 
 // Make predictions
 var prediction = result.Predict(newSample);
