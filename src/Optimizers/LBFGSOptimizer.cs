@@ -330,9 +330,10 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
             var s = (Vector<T>)Engine.Subtract(parameters, _lbfgsPreviousParameters);
             var y = (Vector<T>)Engine.Subtract(gradient, _lbfgsPreviousGradient);
 
-            // Only add to memory if the vectors are non-zero (avoid numerical issues)
+            // Only add to memory if curvature condition is satisfied (s^T y > 0)
+            // L-BFGS requires positive curvature to maintain positive-definite Hessian approximation
             var sDotY = s.DotProduct(y);
-            if (NumOps.GreaterThan(NumOps.Abs(sDotY), NumOps.FromDouble(1e-10)))
+            if (NumOps.GreaterThan(sDotY, NumOps.FromDouble(1e-10)))
             {
                 if (_s.Count >= _options.MemorySize)
                 {
