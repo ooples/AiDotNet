@@ -302,6 +302,73 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     }
 
     /// <summary>
+    /// The parameters from the previous iteration for UpdateParameters method.
+    /// </summary>
+    private Vector<T>? _previousParameters;
+
+    /// <summary>
+    /// Updates parameters using the DFP algorithm with inverse Hessian approximation.
+    /// </summary>
+    /// <param name="parameters">The current parameter values.</param>
+    /// <param name="gradient">The gradient at the current parameters.</param>
+    /// <returns>The updated parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method implements the core DFP update formula.
+    /// DFP uses the inverse Hessian approximation to determine a search direction that
+    /// typically converges faster than standard gradient descent.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        // Initialize inverse Hessian as identity on first call
+        if (_inverseHessian.Rows == 0 || _inverseHessian.Rows != parameters.Length)
+        {
+            _inverseHessian = Matrix<T>.CreateIdentity(parameters.Length);
+            _previousGradient = Vector<T>.Empty();
+        }
+
+        // Update inverse Hessian if we have previous state
+        if (_previousGradient.Length > 0 && _previousParameters is not null)
+        {
+            // s = x_k - x_{k-1}
+            var s = (Vector<T>)Engine.Subtract(parameters, _previousParameters);
+            // y = g_k - g_{k-1}
+            var y = (Vector<T>)Engine.Subtract(gradient, _previousGradient);
+
+            var sTy = s.DotProduct(y);
+
+            // Only update if curvature condition is satisfied
+            if (NumOps.GreaterThan(sTy, NumOps.FromDouble(1e-10)))
+            {
+                // DFP update formula: H = H + (s s^T) / (s^T y) - (H y) (H y)^T / (y^T H y)
+                var term1 = Matrix<T>.OuterProduct(s, s).Divide(sTy);
+                var Hy = _inverseHessian.Multiply(y);
+                var yTHy = y.DotProduct(Hy);
+
+                if (NumOps.GreaterThan(NumOps.Abs(yTHy), NumOps.FromDouble(1e-10)))
+                {
+                    var term2 = Matrix<T>.OuterProduct(Hy, Hy).Divide(yTHy);
+                    _inverseHessian = _inverseHessian.Add(term1).Subtract(term2);
+                }
+            }
+        }
+
+        // Compute search direction: d = -H * g
+        var direction = _inverseHessian.Multiply(gradient);
+        direction = (Vector<T>)Engine.Multiply(direction, NumOps.Negate(NumOps.One));
+
+        // Update parameters: x_{k+1} = x_k + lr * d
+        var scaledDirection = (Vector<T>)Engine.Multiply(direction, _adaptiveLearningRate);
+        var newParameters = (Vector<T>)Engine.Add(parameters, scaledDirection);
+
+        // Store state for next iteration
+        _previousParameters = new Vector<T>(parameters);
+        _previousGradient = new Vector<T>(gradient);
+
+        return newParameters;
+    }
+
+    /// <summary>
     /// Updates parameters using GPU-accelerated DFP.
     /// </summary>
     /// <remarks>

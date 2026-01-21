@@ -59,6 +59,16 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     private int _iteration;
 
     /// <summary>
+    /// Stores the previous parameters for computing position differences in UpdateParameters.
+    /// </summary>
+    private Vector<T>? _lbfgsPreviousParameters;
+
+    /// <summary>
+    /// Stores the previous gradient for computing gradient differences in UpdateParameters.
+    /// </summary>
+    private Vector<T>? _lbfgsPreviousGradient;
+
+    /// <summary>
     /// Initializes a new instance of the LBFGSOptimizer class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
@@ -86,6 +96,8 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
         _iteration = 0;
+        _lbfgsPreviousParameters = null;
+        _lbfgsPreviousGradient = null;
     }
 
     /// <summary>
@@ -288,6 +300,65 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 NumOps.FromDouble(_options.MinLearningRate),
                 NumOps.FromDouble(_options.MaxLearningRate));
         }
+    }
+
+    /// <summary>
+    /// Updates parameters using the L-BFGS algorithm.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method implements the L-BFGS two-loop recursion algorithm for computing the search direction.
+    /// It maintains internal state (previous parameters and gradients) to build up the L-BFGS memory
+    /// across successive calls.
+    /// </para>
+    /// <para><b>For Beginners:</b>
+    /// Unlike simple gradient descent that just follows the steepest direction, L-BFGS uses information
+    /// from previous steps to approximate the curvature of the function being optimized. This typically
+    /// leads to faster convergence, especially for problems with many variables.
+    /// </para>
+    /// </remarks>
+    /// <param name="parameters">The current parameter vector to update.</param>
+    /// <param name="gradient">The gradient of the loss function with respect to the parameters.</param>
+    /// <returns>The updated parameter vector.</returns>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        _iteration++;
+
+        // Update L-BFGS memory with the difference between current and previous gradients/parameters
+        if (_lbfgsPreviousParameters is not null && _lbfgsPreviousGradient is not null)
+        {
+            var s = (Vector<T>)Engine.Subtract(parameters, _lbfgsPreviousParameters);
+            var y = (Vector<T>)Engine.Subtract(gradient, _lbfgsPreviousGradient);
+
+            // Only add to memory if the vectors are non-zero (avoid numerical issues)
+            var sDotY = s.DotProduct(y);
+            if (NumOps.GreaterThan(NumOps.Abs(sDotY), NumOps.FromDouble(1e-10)))
+            {
+                if (_s.Count >= _options.MemorySize)
+                {
+                    _s.RemoveAt(0);
+                    _y.RemoveAt(0);
+                }
+
+                _s.Add(s);
+                _y.Add(y);
+            }
+        }
+
+        // Calculate the L-BFGS search direction using two-loop recursion
+        var direction = CalculateDirection(gradient);
+
+        // Apply learning rate to the direction
+        var scaledDirection = (Vector<T>)Engine.Multiply(direction, CurrentLearningRate);
+
+        // Update parameters: new_params = params + direction (direction is already negated in CalculateDirection)
+        var newParameters = (Vector<T>)Engine.Add(parameters, scaledDirection);
+
+        // Store current parameters and gradient for next iteration
+        _lbfgsPreviousParameters = new Vector<T>(parameters);
+        _lbfgsPreviousGradient = new Vector<T>(gradient);
+
+        return newParameters;
     }
 
     /// <summary>

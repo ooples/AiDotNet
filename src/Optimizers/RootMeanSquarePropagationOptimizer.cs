@@ -241,6 +241,12 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        // Lazy initialization of squared gradient state
+        if (_squaredGradient.Length != parameters.Length)
+        {
+            _squaredGradient = new Vector<T>(parameters.Length);
+        }
+
         // === Vectorized RMSProp Update using IEngine ===
         // Phase B: US-GPU-015 - GPU-accelerated gradient updates
 

@@ -263,6 +263,109 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     }
 
     /// <summary>
+    /// Updates parameters using the BFGS algorithm with inverse Hessian approximation.
+    /// </summary>
+    /// <param name="parameters">The current parameter values.</param>
+    /// <param name="gradient">The gradient at the current parameters.</param>
+    /// <returns>The updated parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method implements the core BFGS update formula.
+    /// It uses the inverse Hessian approximation to determine a search direction that
+    /// typically converges faster than standard gradient descent.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        _iteration++;
+
+        // Initialize inverse Hessian as identity on first call
+        if (_inverseHessian is null || _inverseHessian.Rows != parameters.Length)
+        {
+            _inverseHessian = Matrix<T>.CreateIdentity(parameters.Length);
+        }
+
+        // Compute gradient norm for adaptive scaling
+        var gradientNorm = gradient.Norm();
+
+        // Skip update if gradient is near zero
+        if (NumOps.LessThanOrEquals(gradientNorm, NumOps.FromDouble(1e-10)))
+        {
+            return parameters;
+        }
+
+        // Gradient clipping to prevent overshooting on ill-conditioned problems
+        // Clip gradients with norm > 10 to prevent explosive updates
+        var maxGradientNorm = NumOps.FromDouble(10.0);
+        Vector<T> clippedGradient;
+        if (NumOps.GreaterThan(gradientNorm, maxGradientNorm))
+        {
+            var scale = NumOps.Divide(maxGradientNorm, gradientNorm);
+            clippedGradient = (Vector<T>)Engine.Multiply(gradient, scale);
+        }
+        else
+        {
+            clippedGradient = gradient;
+        }
+
+        // Update inverse Hessian if we have previous state
+        if (_previousGradient is not null && _previousParameters is not null)
+        {
+            // s = x_k - x_{k-1}
+            var s = (Vector<T>)Engine.Subtract(parameters, _previousParameters);
+            // y = g_k - g_{k-1}
+            var y = (Vector<T>)Engine.Subtract(clippedGradient, _previousGradient);
+
+            var sDotY = s.DotProduct(y);
+
+            // Only update if curvature condition is satisfied
+            if (NumOps.GreaterThan(sDotY, NumOps.FromDouble(1e-10)))
+            {
+                var rho = NumOps.Divide(NumOps.One, sDotY);
+                var I = Matrix<T>.CreateIdentity(parameters.Length);
+
+                // BFGS update formula:
+                // H_{k+1} = (I - rho * s * y^T) * H_k * (I - rho * y * s^T) + rho * s * s^T
+                var term1 = I.Subtract(s.OuterProduct(y).Multiply(rho));
+                var term2 = I.Subtract(y.OuterProduct(s).Multiply(rho));
+                var term3 = s.OuterProduct(s).Multiply(rho);
+
+                _inverseHessian = term1.Multiply(_inverseHessian).Multiply(term2).Add(term3);
+            }
+        }
+
+        // Compute search direction: d = -H * g
+        var direction = _inverseHessian.Multiply(clippedGradient);
+        direction = (Vector<T>)Engine.Multiply(direction, NumOps.Negate(NumOps.One));
+
+        // Limit step size to prevent overshooting
+        // The maximum step should be proportional to parameter magnitudes
+        var directionNorm = direction.Norm();
+        var parameterNorm = parameters.Norm();
+        var maxStepNorm = NumOps.GreaterThan(parameterNorm, NumOps.FromDouble(1.0))
+            ? NumOps.Multiply(parameterNorm, NumOps.FromDouble(0.5))
+            : NumOps.FromDouble(1.0);
+
+        // Compute the proposed step
+        var scaledDirection = (Vector<T>)Engine.Multiply(direction, CurrentLearningRate);
+        var scaledNorm = scaledDirection.Norm();
+
+        // If step is too large, scale it down
+        if (NumOps.GreaterThan(scaledNorm, maxStepNorm))
+        {
+            var stepScale = NumOps.Divide(maxStepNorm, scaledNorm);
+            scaledDirection = (Vector<T>)Engine.Multiply(scaledDirection, stepScale);
+        }
+
+        var newParameters = (Vector<T>)Engine.Add(parameters, scaledDirection);
+
+        // Store state for next iteration
+        _previousParameters = new Vector<T>(parameters);
+        _previousGradient = new Vector<T>(clippedGradient);
+
+        return newParameters;
+    }
+
+    /// <summary>
     /// Updates parameters using GPU-accelerated BFGS.
     /// </summary>
     /// <remarks>
