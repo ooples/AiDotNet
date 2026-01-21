@@ -113,7 +113,19 @@
 
 	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo) -->
 	<ItemGroup>
-	  <PackageReference Include="AiDotNet.Tensors" Version="0.1.0" />
+	  <PackageReference Include="AiDotNet.Tensors" Version="0.3.0" />
+	</ItemGroup>
+
+	<!--
+	  Optional native acceleration packages.
+	  These provide pre-built native binaries for hardware acceleration.
+	  Users can also install these separately to enable specific accelerators.
+	-->
+	<ItemGroup>
+	  <!-- CPU acceleration via OpenBLAS -->
+	  <PackageReference Include="AiDotNet.Native.OpenBLAS" Version="0.3.0" />
+	  <!-- GPU acceleration via CLBlast (OpenCL-based) -->
+	  <PackageReference Include="AiDotNet.Native.CLBlast" Version="0.3.0" />
 	</ItemGroup>
 
 	<!-- Global usings for AiDotNet.Tensors namespaces -->

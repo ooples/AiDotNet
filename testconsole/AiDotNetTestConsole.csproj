@@ -12,4 +12,16 @@
     <ProjectReference Include="..\src\AiDotNet.csproj" />
   </ItemGroup>
 
+  <!--
+    Exclude GPU tuning test files that use internal AiDotNet.Tensors types.
+    These are developer tools for kernel tuning and not part of regular testing.
+    The internal types (DirectOpenClGpuBuffer, DynamicGemmKernel, GemmTuningDatabase)
+    are not exposed in the NuGet package.
+  -->
+  <ItemGroup>
+    <Compile Remove="TileConfigAbTest.cs" />
+    <Compile Remove="ComprehensiveGemmAbTest.cs" />
+    <Compile Remove="GemmTuningTest.cs" />
+  </ItemGroup>
+
 </Project>
