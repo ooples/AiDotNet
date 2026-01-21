@@ -106,27 +106,14 @@
 	  <None Remove="AiDotNet.Playground\**\*" />
 	</ItemGroup>
 
-	<!-- Exclude the AiDotNet.Tensors project files from this project -->
-	<ItemGroup>
-	  <Compile Remove="AiDotNet.Tensors\**\*.cs" />
-	  <EmbeddedResource Remove="AiDotNet.Tensors\**\*" />
-	  <None Remove="AiDotNet.Tensors\**\*" />
-	</ItemGroup>
-
-	<!-- Exclude the AiDotNet.Native.CLBlast project files from this project -->
-	<ItemGroup>	  
-	  <Compile Remove="AiDotNet.Native.CLBlast/**/*.cs" />	  
-	  <EmbeddedResource Remove="AiDotNet.Native.CLBlast/**/*" />	  
-	  <None Remove="AiDotNet.Native.CLBlast/**/*" />	</ItemGroup>
-
-	<!-- Exclude polyfills that are already provided by AiDotNet.Tensors -->
+	<!-- Exclude polyfills that are already provided by AiDotNet.Tensors NuGet package -->
 	<ItemGroup>
 	  <Compile Remove="Polyfills\LanguageFeaturePolyfills.cs" />
 	</ItemGroup>
 
-	<!-- Add project reference to AiDotNet.Tensors -->
+	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo) -->
 	<ItemGroup>
-	  <ProjectReference Include="AiDotNet.Tensors/AiDotNet.Tensors.csproj" />
+	  <PackageReference Include="AiDotNet.Tensors" Version="0.1.0" />
 	</ItemGroup>
 
 	<!-- Global usings for AiDotNet.Tensors namespaces -->
