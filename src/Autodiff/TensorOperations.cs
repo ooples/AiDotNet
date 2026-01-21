@@ -2079,32 +2079,36 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var half = numOps.FromDouble(0.5);
-        var minusOne = numOps.FromDouble(-1.0);
 
-        // Forward pass: clip((x + 1) / 2, 0, 1)
+        // Standard HardSigmoid: clip(alpha*x + beta, 0, 1) where alpha=0.2, beta=0.5 (PyTorch default)
+        var alpha = numOps.FromDouble(0.2);
+        var beta = numOps.FromDouble(0.5);
+        var lowerBound = numOps.FromDouble(-2.5);  // (0 - beta) / alpha = -2.5
+        var upperBound = numOps.FromDouble(2.5);   // (1 - beta) / alpha = 2.5
+
+        // Forward pass: clip(0.2*x + 0.5, 0, 1)
         var result = a.Value.Transform((x, idx) =>
         {
-            var shifted = numOps.Add(x, numOps.One);
-            var scaled = numOps.Multiply(shifted, half);
+            var linear = numOps.Add(numOps.Multiply(alpha, x), beta);
             // Clamp to [0, 1]
-            if (numOps.LessThan(scaled, numOps.Zero))
+            if (numOps.LessThan(linear, numOps.Zero))
                 return numOps.Zero;
-            if (numOps.GreaterThan(scaled, numOps.One))
+            if (numOps.GreaterThan(linear, numOps.One))
                 return numOps.One;
-            return scaled;
+            return linear;
         });
 
         void BackwardFunction(Tensor<T> gradient)
         {
             if (a.RequiresGradient)
             {
-                // d(HardSigmoid)/dx = 0.5 if -1 < x < 1, else 0
+                // d(HardSigmoid)/dx = alpha if lowerBound < x < upperBound, else 0
+                // Using inclusive check on one side to handle edge cases properly
                 var derivative = a.Value.Transform((x, idx) =>
                 {
-                    if (numOps.GreaterThan(x, minusOne) && numOps.LessThan(x, numOps.One))
+                    if (numOps.GreaterThan(x, lowerBound) && numOps.LessThan(x, upperBound))
                     {
-                        return half;
+                        return alpha;
                     }
                     return numOps.Zero;
                 });
@@ -9750,12 +9754,13 @@ public static class TensorOperations<T>
                 {
                     for (int inner = 0; inner < capturedInnerSize; inner++)
                     {
-                        // Sum of gradients * softmax along axis
+                        // Sum of incoming gradients along axis
+                        // LogSoftmax gradient: dL/dx_i = dL/dy_i - softmax(x)_i * sum_j(dL/dy_j)
                         var gradSum = numOps.Zero;
                         for (int i = 0; i < capturedAxisSize; i++)
                         {
                             int flatIdx = outer * capturedAxisSize * capturedInnerSize + i * capturedInnerSize + inner;
-                            gradSum = numOps.Add(gradSum, numOps.Multiply(gradient[flatIdx], softmaxOutput[flatIdx]));
+                            gradSum = numOps.Add(gradSum, gradient[flatIdx]);
                         }
                         // Gradient: gradient - softmax * sum(gradient)
                         for (int i = 0; i < capturedAxisSize; i++)
