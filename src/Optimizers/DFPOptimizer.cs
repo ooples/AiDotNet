@@ -353,6 +353,12 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
             }
         }
 
+        // Ensure learning rate is initialized (guard against calling UpdateParameters before Optimize)
+        if (NumOps.Equals(_adaptiveLearningRate, NumOps.Zero))
+        {
+            _adaptiveLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+        }
+
         // Compute search direction: d = -H * g
         var direction = _inverseHessian.Multiply(gradient);
         direction = (Vector<T>)Engine.Multiply(direction, NumOps.Negate(NumOps.One));
