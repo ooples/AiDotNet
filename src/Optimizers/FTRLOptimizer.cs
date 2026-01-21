@@ -218,9 +218,11 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
+        // Initialize adaptive parameters first (this resets _z and _n to null)
+        // Then create the state vectors so they're properly initialized
+        InitializeAdaptiveParameters();
         _z = new Vector<T>(parameters.Length);
         _n = new Vector<T>(parameters.Length);
-        InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
         {
