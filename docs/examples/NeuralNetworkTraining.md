@@ -218,6 +218,10 @@ Console.WriteLine($"Rating: {predictions[0][2]:F1}");
 ```csharp
 using AiDotNet;
 
+// Sample training data (e.g., MNIST-like: 784 features per sample, 10 classes)
+double[][] features = /* your feature matrix */;
+double[] labels = /* your label array (0-9 for 10-class classification) */;
+
 var result = await new AiModelBuilder<double, double[][], double[]>()
     .ConfigureNeuralNetwork(config =>
     {

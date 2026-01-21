@@ -1,5 +1,5 @@
 ---
-_layout: landing
+layout: landing
 ---
 
 # AiDotNet

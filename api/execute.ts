@@ -55,34 +55,51 @@ function preprocessCode(code: string): string {
     'using System.Linq;',
   ];
 
-  let processedCode = code;
-
   // Check if the code has a namespace or class declaration
   const hasClass = /class\s+\w+/.test(code);
   const hasMain = /static\s+(void|int|async\s+Task)\s+Main/.test(code);
 
-  // Add missing using statements at the top
-  for (const usingStatement of requiredUsings) {
-    // Check for the actual using statement, not just the namespace
-    if (!code.includes(usingStatement) && !code.includes(usingStatement.replace(';', ''))) {
-      processedCode = usingStatement + '\n' + processedCode;
-    }
-  }
-
   // If no class or Main method, wrap in a simple program
   if (!hasClass && !hasMain) {
-    // This is likely just top-level code
-    processedCode = `using System;
-using System.Collections.Generic;
-using System.Linq;
+    // Extract existing using statements from the user's code
+    const usingRegex = /^using\s+[\w.]+;\s*$/gm;
+    const existingUsings: string[] = [];
+    let codeWithoutUsings = code;
+
+    let match;
+    while ((match = usingRegex.exec(code)) !== null) {
+      existingUsings.push(match[0].trim());
+    }
+
+    // Remove using statements from the code body
+    codeWithoutUsings = code.replace(usingRegex, '').trim();
+
+    // Combine required and existing usings, avoiding duplicates
+    const allUsings = new Set<string>(requiredUsings);
+    for (const existing of existingUsings) {
+      allUsings.add(existing);
+    }
+
+    // Build the wrapped program
+    const usingsBlock = Array.from(allUsings).join('\n');
+    return `${usingsBlock}
 
 class Program
 {
     static void Main()
     {
-        ${code.split('\n').join('\n        ')}
+        ${codeWithoutUsings.split('\n').join('\n        ')}
     }
 }`;
+  }
+
+  // For code with class/Main, just add missing using statements at the top
+  let processedCode = code;
+  for (const usingStatement of requiredUsings) {
+    // Check for the actual using statement, not just the namespace
+    if (!code.includes(usingStatement) && !code.includes(usingStatement.replace(';', ''))) {
+      processedCode = usingStatement + '\n' + processedCode;
+    }
   }
 
   return processedCode;
@@ -127,7 +144,7 @@ async function executeWithPiston(code: string): Promise<ExecuteResponse> {
       };
     }
 
-    const result: PistonExecuteResponse = await response.json();
+    const result = await response.json() as PistonExecuteResponse;
     const executionTime = Date.now() - startTime;
 
     // Check for compilation errors
