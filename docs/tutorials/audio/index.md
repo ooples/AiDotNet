@@ -94,15 +94,15 @@ var whisper = new WhisperModel<float>(new WhisperOptions
 });
 
 // From file
-var result = await whisper.TranscribeAsync("audio.wav");
+var resultFromFile = await whisper.TranscribeAsync("audio.wav");
 
 // From stream
 using var stream = File.OpenRead("audio.wav");
-var result = await whisper.TranscribeAsync(stream);
+var resultFromStream = await whisper.TranscribeAsync(stream);
 
 // From byte array
 var audioData = await File.ReadAllBytesAsync("audio.wav");
-var result = await whisper.TranscribeAsync(audioData);
+var resultFromBytes = await whisper.TranscribeAsync(audioData);
 ```
 
 ### Advanced Options
@@ -516,7 +516,6 @@ var normalized = audio.Normalize();
 
 ## Next Steps
 
-- [Speech Transcription Sample](/samples/audio/Transcription/)
-- [Text-to-Speech Sample](/samples/audio/TTS/)
-- [Speaker Diarization Sample](/samples/audio/Diarization/)
-- [Audio API Reference](/api/AiDotNet.Audio/)
+- [Speech Recognition Sample](../../../samples/audio/SpeechRecognition/)
+- [Text-to-Speech Sample](../../../samples/audio/TextToSpeech/)
+- [Audio API Reference](../../api/)

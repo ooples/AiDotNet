@@ -4,7 +4,7 @@ _layout: landing
 
 # AiDotNet
 
-**The comprehensive .NET machine learning library**
+## The comprehensive .NET machine learning library
 
 AiDotNet provides everything you need to build, train, and deploy machine learning models in .NET applications.
 

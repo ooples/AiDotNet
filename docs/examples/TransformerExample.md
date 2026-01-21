@@ -119,6 +119,7 @@ Console.WriteLine($"Generated: {generated[0]}");
 
 ```csharp
 using AiDotNet;
+using System.Linq;
 
 // Context-question-answer triplets
 var contexts = new string[]
@@ -206,6 +207,10 @@ Console.WriteLine($"Similarity: {comparison[0]:F2}");
 
 ```csharp
 using AiDotNet;
+
+// Sample training data
+var texts = new string[] { "I love this product", "Terrible experience", "Great service", "Waste of money" };
+var labels = new double[] { 1.0, 0.0, 1.0, 0.0 };  // 1.0 = positive, 0.0 = negative
 
 // Full configuration example
 var result = await new AiModelBuilder<double, string[], double[]>()

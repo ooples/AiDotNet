@@ -63,7 +63,8 @@ function preprocessCode(code: string): string {
 
   // Add missing using statements at the top
   for (const usingStatement of requiredUsings) {
-    if (!code.includes(usingStatement.replace('using ', '').replace(';', ''))) {
+    // Check for the actual using statement, not just the namespace
+    if (!code.includes(usingStatement) && !code.includes(usingStatement.replace(';', ''))) {
       processedCode = usingStatement + '\n' + processedCode;
     }
   }
@@ -140,11 +141,11 @@ async function executeWithPiston(code: string): Promise<ExecuteResponse> {
     }
 
     // Check for runtime errors
-    if (result.run.code !== 0 && result.run.stderr) {
+    if (result.run.code !== 0) {
       return {
         success: false,
         output: result.run.stdout,
-        error: result.run.stderr,
+        error: result.run.stderr || `Process exited with code ${result.run.code}`,
         executionTime,
       };
     }
@@ -239,7 +240,10 @@ export default async function handler(
       return;
     }
 
-    // Basic security checks
+    // Defense-in-depth security checks: These regex patterns block common dangerous operations
+    // as an initial gate. The real security boundary is Piston's sandbox (Docker + Isolate with
+    // namespaces, cgroups, chroot). These patterns can be bypassed via reflection, string
+    // concatenation, or encoding tricks, but Piston's isolation handles more determined attempts.
     const dangerousPatterns = [
       /System\.IO\.File/i,
       /System\.Diagnostics\.Process/i,

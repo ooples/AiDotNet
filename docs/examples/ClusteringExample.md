@@ -62,6 +62,13 @@ foreach (var cluster in result.ClusterSummaries)
 ```csharp
 using AiDotNet;
 
+// Sample data: your feature vectors
+var data = new double[][]
+{
+    new[] { 1.0, 2.0 }, new[] { 1.5, 1.8 }, new[] { 5.0, 8.0 },
+    new[] { 8.0, 8.0 }, new[] { 1.0, 0.6 }, new[] { 9.0, 11.0 }
+};
+
 // Let the algorithm find the optimal number of clusters
 var result = await new AiModelBuilder<double, double[][], int[]>()
     .ConfigureClustering(config =>
@@ -92,6 +99,14 @@ foreach (var point in result.ElbowAnalysis)
 
 ```csharp
 using AiDotNet;
+using System.Linq;
+
+// Sample data: your feature vectors
+var data = new double[][]
+{
+    new[] { 1.0, 2.0 }, new[] { 1.5, 1.8 }, new[] { 5.0, 8.0 },
+    new[] { 8.0, 8.0 }, new[] { 1.0, 0.6 }, new[] { 9.0, 11.0 }
+};
 
 // DBSCAN for finding clusters of arbitrary shape
 var result = await new AiModelBuilder<double, double[][], int[]>()

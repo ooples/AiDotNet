@@ -10,6 +10,7 @@ AiDotNet provides powerful neural network capabilities through the `AiModelBuild
 
 ```csharp
 using AiDotNet;
+using System.Linq;
 
 // Load image data (28x28 grayscale images as flat arrays)
 var images = LoadMnistImages();  // double[][] with 784 features each

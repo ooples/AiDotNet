@@ -83,11 +83,10 @@ public class CodeExecutionService
         }
         catch (Exception ex)
         {
-            return new ExecutionResult
-            {
-                Success = false,
-                Output = $"Execution error: {ex.Message}\n\nFalling back to simulation mode."
-            };
+            var fallback = ExecuteSimulation(code);
+            fallback.Success = false;
+            fallback.Output = $"Execution error: {ex.Message}\n\n{fallback.Output}";
+            return fallback;
         }
     }
 
