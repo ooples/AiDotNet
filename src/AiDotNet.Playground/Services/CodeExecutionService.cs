@@ -16,7 +16,7 @@ public class CodeExecutionService
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
 
     // API endpoint - will be set based on environment
-    private const string ProductionApiUrl = "https://aidotnet-playground-api.vercel.app/api/execute";
+    private const string ProductionApiUrl = "https://aidotnet.vercel.app/api/execute";
     private const string LocalApiUrl = "http://localhost:3000/api/execute";
 
     // Patterns for detecting AiDotNet API usage
