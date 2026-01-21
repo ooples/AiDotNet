@@ -565,16 +565,33 @@ jobs:
         run: |
           echo "=== Disk space before cleanup ==="
           df -h /
-          # Remove large pre-installed packages we don't need for docs
+          # Remove Android SDK (~10GB)
+          sudo rm -rf /usr/local/lib/android || true
+          # Remove older .NET SDK versions we don't need
           sudo rm -rf /usr/share/dotnet/shared/Microsoft.AspNetCore.App/6.* || true
           sudo rm -rf /usr/share/dotnet/shared/Microsoft.AspNetCore.App/7.* || true
           sudo rm -rf /usr/share/dotnet/shared/Microsoft.NETCore.App/6.* || true
           sudo rm -rf /usr/share/dotnet/shared/Microsoft.NETCore.App/7.* || true
-          sudo rm -rf /usr/local/lib/android || true
+          # Remove Haskell (~2GB)
           sudo rm -rf /opt/ghc || true
+          # Remove language runtimes we don't need (~3GB combined)
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /usr/share/miniconda || true
+          sudo rm -rf /opt/az || true
+          # Remove CodeQL and other large tools
           sudo rm -rf /opt/hostedtoolcache/CodeQL || true
           sudo rm -rf /usr/local/share/chromium || true
           sudo rm -rf /usr/local/share/powershell || true
+          # Remove pre-installed languages not needed for docs
+          sudo rm -rf /usr/local/go || true
+          sudo rm -rf /usr/local/julia* || true
+          sudo rm -rf /opt/hostedtoolcache/Ruby || true
+          sudo rm -rf /opt/hostedtoolcache/Python || true
+          sudo rm -rf /opt/hostedtoolcache/node || true
+          # Remove docker images
+          docker system prune -af || true
+          # Clean apt cache
+          sudo apt-get clean || true
           echo "=== Disk space after cleanup ==="
           df -h /
 
@@ -599,14 +616,10 @@ jobs:
       - name: Install DocFX
         run: dotnet tool install --global docfx || true
 
-      # Note: We don't download build artifacts from build-windows because:
-      # 1. DocFX builds from source during metadata extraction
-      # 2. Windows build artifacts may have path incompatibilities on Ubuntu
-      # 3. Playground publish also builds from source
-      - name: Restore and build
-        run: |
-          dotnet restore
-          dotnet build -c Release --no-restore -p:TreatWarningsAsErrors=false
+      # Note: DocFX extracts metadata directly from source code, not compiled binaries.
+      # We only need to restore dependencies for the build to succeed during metadata extraction.
+      - name: Restore dependencies
+        run: dotnet restore
 
       - name: Build DocFX documentation
         run: docfx docfx.json
@@ -624,6 +637,20 @@ jobs:
           cp -r _playground/wwwroot/* _site/playground/
           # Update base href for the playground subdirectory
           sed -i 's|<base href="/" />|<base href="/AiDotNet/playground/" />|g' _site/playground/index.html
+
+      - name: Free up disk space before upload
+        run: |
+          echo "=== Disk space before final cleanup ==="
+          df -h /
+          # Remove build artifacts we no longer need (only _site/ is needed for upload)
+          rm -rf _playground || true
+          rm -rf bin obj || true
+          rm -rf src/*/bin src/*/obj || true
+          rm -rf tests/*/bin tests/*/obj || true
+          rm -rf api/.manifest || true
+          rm -rf ~/.nuget/packages || true
+          echo "=== Disk space after final cleanup ==="
+          df -h /
 
       - name: Setup Pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5

@@ -150,7 +150,7 @@ public class AudioProcessingTests
         var magnitude = stft.Magnitude(signal);
 
         // Assert - All magnitudes should be non-negative
-        foreach (var value in magnitude.Data.ToArray())
+        foreach (var value in magnitude.ToArray())
         {
             Assert.True(value >= 0f, "Magnitude should be non-negative");
         }
@@ -462,7 +462,7 @@ public class AudioProcessingTests
         var spectrogram = processor.AudioToSpectrogram(audio);
 
         // Assert - Should be normalized to [0, 1]
-        foreach (var value in spectrogram.Data.ToArray())
+        foreach (var value in spectrogram.ToArray())
         {
             Assert.True(value >= 0f && value <= 1f,
                 $"Spectrogram value {value} should be in [0, 1]");
@@ -508,7 +508,7 @@ public class AudioProcessingTests
 
         // Assert - Find max absolute value
         float maxAbs = 0;
-        foreach (var value in normalized.Data.ToArray())
+        foreach (var value in normalized.ToArray())
         {
             maxAbs = Math.Max(maxAbs, Math.Abs(value));
         }

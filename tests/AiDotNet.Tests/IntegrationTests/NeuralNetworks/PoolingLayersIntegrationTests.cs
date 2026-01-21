@@ -519,7 +519,7 @@ public class PoolingLayersIntegrationTests
 
     private static bool ContainsNaN<T>(Tensor<T> tensor) where T : struct, IComparable<T>
     {
-        foreach (var value in tensor.Data.ToArray())
+        foreach (var value in tensor.ToArray())
         {
             if (value is float f && float.IsNaN(f)) return true;
             if (value is double d && double.IsNaN(d)) return true;

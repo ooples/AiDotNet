@@ -149,7 +149,7 @@ public class MobileNetTests
         var output = network.Predict(input);
 
         // Assert
-        bool hasNonZero = output.Data.ToArray().Any(v => Math.Abs(v) > 1e-10);
+        bool hasNonZero = output.ToArray().Any(v => Math.Abs(v) > 1e-10);
         Assert.True(hasNonZero, "Output should have at least some non-zero values");
     }
 

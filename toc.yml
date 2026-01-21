@@ -3,6 +3,9 @@
 - name: Getting Started
   href: docs/getting-started/
   topicHref: docs/getting-started/index.md
+- name: Try It
+  href: playground/
+  topicHref: playground/index.html
 - name: Tutorials
   href: docs/tutorials/
   topicHref: docs/tutorials/index.md

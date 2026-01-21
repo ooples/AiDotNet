@@ -1770,7 +1770,7 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape, output.Shape);
 
         // Some values should be zeroed out in training mode
-        int zeroCount = output.Data.ToArray().Count(v => v == 0f);
+        int zeroCount = output.ToArray().Count(v => v == 0f);
         // With 50% dropout, we expect roughly half to be zero
         Assert.True(zeroCount > 0, "Dropout should zero some values during training");
     }

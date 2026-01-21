@@ -58,7 +58,7 @@ internal class Program
 
             Console.WriteLine("Running in InProcess mode (native DLLs available)");
 #if !NET471
-            Console.WriteLine("oneDNN: enabled (via AiDotNet.Native.OneDNN package when installed)");
+            Console.WriteLine("oneDNN: available via AiDotNet.Native.OneDNN package (install separately)");
 #endif
         }
         else
