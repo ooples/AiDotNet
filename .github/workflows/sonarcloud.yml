@@ -288,10 +288,7 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.Recovery|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.Concurrency'
-          - name: AiDotNet.Tensors.Tests
-            project: tests/AiDotNet.Tensors.Tests/AiDotNet.Tensors.Tests.csproj
-            framework: net10.0
-            filter: Category!=GPU&Category!=Integration&Category!=Stress
+          # Note: AiDotNet.Tensors.Tests removed - project moved to AiDotNet.Tensors repo
           - name: AiDotNet.Serving.Tests
             project: tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj
             framework: net10.0
