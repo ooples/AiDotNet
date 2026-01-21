@@ -506,7 +506,7 @@ public class PoolingLayersIntegrationTests
     {
         var tensor = new Tensor<T>(shape);
         var random = new Random(42);
-        var span = tensor.Data.Span;
+        var span = tensor.AsSpan();
 
         for (int i = 0; i < span.Length; i++)
         {
@@ -531,10 +531,10 @@ public class PoolingLayersIntegrationTests
         where T : struct, IComparable<T>
     {
         Assert.Equal(expected.Shape, actual.Shape);
-        for (int i = 0; i < expected.Data.Length; i++)
+        for (int i = 0; i < expected.Length; i++)
         {
-            var exp = Convert.ToDouble(expected.Data.Span[i]);
-            var act = Convert.ToDouble(actual.Data.Span[i]);
+            var exp = Convert.ToDouble(expected[i]);
+            var act = Convert.ToDouble(actual[i]);
             Assert.True(Math.Abs(exp - act) < tolerance, $"Tensors differ at index {i}: expected {exp}, got {act}");
         }
     }

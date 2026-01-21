@@ -698,7 +698,7 @@ public class AttentionLayersIntegrationTests
     {
         var tensor = new Tensor<T>(shape);
         var random = new Random(42);
-        var span = tensor.Data.Span;
+        var span = tensor.AsSpan();
 
         for (int i = 0; i < span.Length; i++)
         {

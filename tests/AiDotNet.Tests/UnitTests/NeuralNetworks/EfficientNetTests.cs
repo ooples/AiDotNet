@@ -390,9 +390,9 @@ public class EfficientNetTests
     private static void InitializeWithRandomValues(Tensor<float> tensor)
     {
         var random = new Random(42);
-        for (int i = 0; i < tensor.Data.Length; i++)
+        for (int i = 0; i < tensor.Length; i++)
         {
-            tensor.Data.Span[i] = (float)(random.NextDouble() * 2 - 1);
+            tensor[i] = (float)(random.NextDouble() * 2 - 1);
         }
     }
 

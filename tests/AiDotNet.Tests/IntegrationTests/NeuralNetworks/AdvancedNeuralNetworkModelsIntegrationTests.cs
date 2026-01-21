@@ -67,7 +67,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
     {
         for (int i = 0; i < tensor.Length; i++)
         {
-            if (Math.Abs(tensor.Data.Span[i]) > tolerance)
+            if (Math.Abs(tensor[i]) > tolerance)
                 return true;
         }
         return false;
@@ -141,7 +141,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         bool hasNonZero = false;
         for (int i = 0; i < output.Length; i++)
         {
-            if (Math.Abs(output.Data.Span[i]) > Tolerance)
+            if (Math.Abs(output[i]) > Tolerance)
             {
                 hasNonZero = true;
                 break;
@@ -280,12 +280,12 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
                 var input3D = current.Reshape(new[] { 1, current.Shape[0], current.Shape[1] });
                 debugOutput.AppendLine($"  input3D shape: [{string.Join(", ", input3D.Shape)}]");
                 debugOutput.AppendLine($"  input3D has non-zero: {HasNonZeroValues(input3D)}");
-                debugOutput.AppendLine($"  input3D Data[0-5]: [{input3D.Data.Span[0]}, {input3D.Data.Span[1]}, {input3D.Data.Span[2]}, {input3D.Data.Span[3]}, {input3D.Data.Span[4]}, {input3D.Data.Span[5]}]");
+                debugOutput.AppendLine($"  input3D Data[0-5]: [{input3D[0]}, {input3D[1]}, {input3D[2]}, {input3D[3]}, {input3D[4]}, {input3D[5]}]");
 
                 var xt = input3D.GetSliceAlongDimension(0, 1);
                 debugOutput.AppendLine($"  Slice xt shape: [{string.Join(", ", xt.Shape)}]");
                 debugOutput.AppendLine($"  Slice xt has non-zero: {HasNonZeroValues(xt)}");
-                debugOutput.AppendLine($"  Slice xt Data[0-5]: [{xt.Data.Span[0]}, {xt.Data.Span[1]}, {xt.Data.Span[2]}, {xt.Data.Span[3]}, {xt.Data.Span[4]}, {xt.Data.Span[5]}]");
+                debugOutput.AppendLine($"  Slice xt Data[0-5]: [{xt[0]}, {xt[1]}, {xt[2]}, {xt[3]}, {xt[4]}, {xt[5]}]");
 
                 // Transpose weight and test matmul
                 var engine = new AiDotNet.Tensors.Engines.CpuEngine();
@@ -316,7 +316,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         bool hasNonZero = false;
         for (int i = 0; i < output.Length; i++)
         {
-            if (Math.Abs(output.Data.Span[i]) > Tolerance)
+            if (Math.Abs(output[i]) > Tolerance)
             {
                 hasNonZero = true;
                 break;
@@ -417,7 +417,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         bool hasNonZero = false;
         for (int i = 0; i < output.Length; i++)
         {
-            if (Math.Abs(output.Data.Span[i]) > Tolerance)
+            if (Math.Abs(output[i]) > Tolerance)
             {
                 hasNonZero = true;
                 break;
@@ -516,7 +516,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         bool hasNonZero = false;
         for (int i = 0; i < output.Length; i++)
         {
-            if (Math.Abs(output.Data.Span[i]) > Tolerance)
+            if (Math.Abs(output[i]) > Tolerance)
             {
                 hasNonZero = true;
                 break;

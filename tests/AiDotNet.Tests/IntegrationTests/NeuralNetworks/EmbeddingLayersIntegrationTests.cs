@@ -351,7 +351,7 @@ public class EmbeddingLayersIntegrationTests
         bool anyDifferent = false;
         for (int i = 0; i < output1.Length && !anyDifferent; i++)
         {
-            if (Math.Abs(output1.Data.Span[i] - output2.Data.Span[i]) > 1e-6)
+            if (Math.Abs(output1[i] - output2[i]) > 1e-6)
                 anyDifferent = true;
         }
         Assert.True(anyDifferent, "Outputs should differ for different timesteps");
@@ -436,7 +436,7 @@ public class EmbeddingLayersIntegrationTests
         bool hasNonZero = false;
         for (int i = 0; i < output.Length && !hasNonZero; i++)
         {
-            if (Math.Abs(output.Data.Span[i]) > 1e-10)
+            if (Math.Abs(output[i]) > 1e-10)
                 hasNonZero = true;
         }
         Assert.True(hasNonZero, "Positional encoding should add non-zero values");
@@ -626,7 +626,7 @@ public class EmbeddingLayersIntegrationTests
     {
         var tensor = new Tensor<T>(shape);
         var random = new Random(42);
-        var span = tensor.Data.Span;
+        var span = tensor.AsSpan();
 
         for (int i = 0; i < span.Length; i++)
         {
@@ -644,7 +644,7 @@ public class EmbeddingLayersIntegrationTests
 
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor.Data.Span[i] = random.Next(vocabSize);
+            tensor[i] = random.Next(vocabSize);
         }
 
         return tensor;
@@ -657,7 +657,7 @@ public class EmbeddingLayersIntegrationTests
 
         for (int i = 0; i < tensor.Length; i++)
         {
-            tensor.Data.Span[i] = random.Next(maxTimestep);
+            tensor[i] = random.Next(maxTimestep);
         }
 
         return tensor;

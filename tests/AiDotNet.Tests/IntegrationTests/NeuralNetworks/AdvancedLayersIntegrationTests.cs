@@ -284,7 +284,7 @@ public class AdvancedLayersIntegrationTests
         Assert.NotNull(output);
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(output.Data.Span[i] >= 0, $"Output at index {i} should be non-negative but was {output.Data.Span[i]}");
+            Assert.True(output[i] >= 0, $"Output at index {i} should be non-negative but was {output[i]}");
         }
     }
 
@@ -1047,17 +1047,17 @@ public class AdvancedLayersIntegrationTests
 
         var input1 = new Tensor<float>([1, 2, 2]);
         var input2 = new Tensor<float>([1, 2, 2]);
-        input1.Data.Span[0] = 2; input1.Data.Span[1] = 3; input1.Data.Span[2] = 4; input1.Data.Span[3] = 5;
-        input2.Data.Span[0] = 1; input2.Data.Span[1] = 2; input2.Data.Span[2] = 3; input2.Data.Span[3] = 4;
+        input1[0] = 2; input1[1] = 3; input1[2] = 4; input1[3] = 5;
+        input2[0] = 1; input2[1] = 2; input2[2] = 3; input2[3] = 4;
 
         // Act
         var output = layer.Forward(input1, input2);
 
         // Assert - element-wise multiplication
-        Assert.Equal(2f, output.Data.Span[0]); // 2 * 1
-        Assert.Equal(6f, output.Data.Span[1]); // 3 * 2
-        Assert.Equal(12f, output.Data.Span[2]); // 4 * 3
-        Assert.Equal(20f, output.Data.Span[3]); // 5 * 4
+        Assert.Equal(2f, output[0]); // 2 * 1
+        Assert.Equal(6f, output[1]); // 3 * 2
+        Assert.Equal(12f, output[2]); // 4 * 3
+        Assert.Equal(20f, output[3]); // 5 * 4
     }
 
     [Fact]
@@ -1145,7 +1145,7 @@ public class AdvancedLayersIntegrationTests
         var reconstructed = output.Reshape([2, 32]);
         for (int i = 0; i < input.Length; i++)
         {
-            Assert.Equal(input.Data.Span[i], reconstructed.Data.Span[i]);
+            Assert.Equal(input[i], reconstructed[i]);
         }
     }
 
@@ -1639,7 +1639,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(output.Data.Span[i] >= 0, $"Output at index {i} should be non-negative");
+            Assert.True(output[i] >= 0, $"Output at index {i} should be non-negative");
         }
     }
 
@@ -1795,7 +1795,7 @@ public class AdvancedLayersIntegrationTests
         // In inference mode, output should match input (no dropout applied)
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.Equal(1.0f, output.Data.Span[i]);
+            Assert.Equal(1.0f, output[i]);
         }
     }
 
@@ -1913,7 +1913,7 @@ public class AdvancedLayersIntegrationTests
         // Make some values negative
         for (int i = 0; i < input.Length / 2; i++)
         {
-            input.Data.Span[i] = -Math.Abs(input.Data.Span[i]);
+            input[i] = -Math.Abs(input[i]);
         }
 
         // Act
@@ -1922,7 +1922,7 @@ public class AdvancedLayersIntegrationTests
         // Assert
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(output.Data.Span[i] >= 0, $"ReLU output at {i} should be non-negative");
+            Assert.True(output[i] >= 0, $"ReLU output at {i} should be non-negative");
         }
     }
 
@@ -1941,8 +1941,8 @@ public class AdvancedLayersIntegrationTests
         // Assert
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(output.Data.Span[i] >= 0 && output.Data.Span[i] <= 1,
-                $"Sigmoid output at {i} should be in [0, 1], got {output.Data.Span[i]}");
+            Assert.True(output[i] >= 0 && output[i] <= 1,
+                $"Sigmoid output at {i} should be in [0, 1], got {output[i]}");
         }
     }
 
@@ -1961,8 +1961,8 @@ public class AdvancedLayersIntegrationTests
         // Assert
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(output.Data.Span[i] >= -1 && output.Data.Span[i] <= 1,
-                $"Tanh output at {i} should be in [-1, 1], got {output.Data.Span[i]}");
+            Assert.True(output[i] >= -1 && output[i] <= 1,
+                $"Tanh output at {i} should be in [-1, 1], got {output[i]}");
         }
     }
 
@@ -2026,7 +2026,7 @@ public class AdvancedLayersIntegrationTests
         // InputLayer should pass through without modification
         for (int i = 0; i < input.Length; i++)
         {
-            Assert.Equal(input.Data.Span[i], output.Data.Span[i]);
+            Assert.Equal(input[i], output[i]);
         }
     }
 
@@ -2157,7 +2157,7 @@ public class AdvancedLayersIntegrationTests
         bool hasDifference = false;
         for (int i = 0; i < output.Length; i++)
         {
-            if (Math.Abs(output.Data.Span[i] - 1.0f) > 0.001f)
+            if (Math.Abs(output[i] - 1.0f) > 0.001f)
             {
                 hasDifference = true;
                 break;
@@ -2187,7 +2187,7 @@ public class AdvancedLayersIntegrationTests
         // In inference mode, no noise should be added
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.Equal(1.0f, output.Data.Span[i]);
+            Assert.Equal(1.0f, output[i]);
         }
     }
 
@@ -2627,7 +2627,7 @@ public class AdvancedLayersIntegrationTests
         var rand = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++)
         {
-            input.Data.Span[i] = rand.Next(0, vocabSize);
+            input[i] = rand.Next(0, vocabSize);
         }
 
         // Act
@@ -2651,7 +2651,7 @@ public class AdvancedLayersIntegrationTests
         var rand = RandomHelper.CreateSeededRandom(123);
         for (int i = 0; i < input.Length; i++)
         {
-            input.Data.Span[i] = rand.Next(0, vocabSize);
+            input[i] = rand.Next(0, vocabSize);
         }
 
         // Act

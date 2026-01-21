@@ -325,9 +325,9 @@ public class MemoryManagementTests
         var layers = CreateSimpleLayers(4);
         var shard = new ModelShard<float>(layers, numDevices: 2);
         var input = new Tensor<float>(new[] { 1, 64 });
-        for (int i = 0; i < input.Data.Length; i++)
+        for (int i = 0; i < input.Length; i++)
         {
-            input.Data.Span[i] = 1.0f;
+            input[i] = 1.0f;
         }
 
         // Act
@@ -335,7 +335,7 @@ public class MemoryManagementTests
 
         // Assert - Each dense layer transforms the input
         Assert.NotNull(output);
-        Assert.True(output.Data.Length > 0);
+        Assert.True(output.Length > 0);
     }
 
     [Fact]
@@ -347,17 +347,17 @@ public class MemoryManagementTests
 
         // First do a forward pass
         var input = new Tensor<float>(new[] { 1, 64 });
-        for (int i = 0; i < input.Data.Length; i++)
+        for (int i = 0; i < input.Length; i++)
         {
-            input.Data.Span[i] = 1.0f;
+            input[i] = 1.0f;
         }
         var output = shard.Forward(input);
 
         // Now do backward
         var gradient = new Tensor<float>(output.Shape);
-        for (int i = 0; i < gradient.Data.Length; i++)
+        for (int i = 0; i < gradient.Length; i++)
         {
-            gradient.Data.Span[i] = 1.0f;
+            gradient[i] = 1.0f;
         }
 
         // Act

@@ -454,7 +454,7 @@ public class RecurrentLayersIntegrationTests
         Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
         for (int i = 0; i < originalOutput.Length; i++)
         {
-            Assert.Equal(originalOutput.Data.Span[i], cloneOutput.Data.Span[i], Tolerance);
+            Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);
         }
     }
 
@@ -474,7 +474,7 @@ public class RecurrentLayersIntegrationTests
         Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
         for (int i = 0; i < originalOutput.Length; i++)
         {
-            Assert.Equal(originalOutput.Data.Span[i], cloneOutput.Data.Span[i], Tolerance);
+            Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);
         }
     }
 
@@ -486,8 +486,8 @@ public class RecurrentLayersIntegrationTests
     {
         for (int i = 0; i < tensor.Length; i++)
         {
-            Assert.False(double.IsNaN(tensor.Data.Span[i]), $"Tensor contains NaN at index {i}");
-            Assert.False(double.IsInfinity(tensor.Data.Span[i]), $"Tensor contains Infinity at index {i}");
+            Assert.False(double.IsNaN(tensor[i]), $"Tensor contains NaN at index {i}");
+            Assert.False(double.IsInfinity(tensor[i]), $"Tensor contains Infinity at index {i}");
         }
     }
 

@@ -243,7 +243,7 @@ public class GraphLayersIntegrationTests
         var gradient = new Tensor<float>(output.Shape);
         for (int i = 0; i < gradient.Length; i++)
         {
-            gradient.Data.Span[i] = 1.0f;
+            gradient[i] = 1.0f;
         }
 
         // Act
@@ -368,7 +368,7 @@ public class GraphLayersIntegrationTests
         bool hasNonZero = false;
         for (int i = 0; i < output.Length; i++)
         {
-            if (Math.Abs(output.Data.Span[i]) > Tolerance)
+            if (Math.Abs(output[i]) > Tolerance)
             {
                 hasNonZero = true;
                 break;
@@ -426,7 +426,7 @@ public class GraphLayersIntegrationTests
         var gradient = new Tensor<float>(output.Shape);
         for (int i = 0; i < gradient.Length; i++)
         {
-            gradient.Data.Span[i] = 1.0f;
+            gradient[i] = 1.0f;
         }
 
         // Act
@@ -589,7 +589,7 @@ public class GraphLayersIntegrationTests
         var gradient = new Tensor<float>(output.Shape);
         for (int i = 0; i < gradient.Length; i++)
         {
-            gradient.Data.Span[i] = 1.0f;
+            gradient[i] = 1.0f;
         }
 
         // Act
@@ -804,7 +804,7 @@ public class GraphLayersIntegrationTests
         var gradient = new Tensor<float>(output.Shape);
         for (int i = 0; i < gradient.Length; i++)
         {
-            gradient.Data.Span[i] = 1.0f;
+            gradient[i] = 1.0f;
         }
 
         // Act
@@ -889,7 +889,7 @@ public class GraphLayersIntegrationTests
         bool hasNonZero = false;
         for (int i = 0; i < output.Length; i++)
         {
-            if (Math.Abs(output.Data.Span[i]) > Tolerance)
+            if (Math.Abs(output[i]) > Tolerance)
             {
                 hasNonZero = true;
                 break;
@@ -919,7 +919,7 @@ public class GraphLayersIntegrationTests
         var gradient = new Tensor<float>(output.Shape);
         for (int i = 0; i < gradient.Length; i++)
         {
-            gradient.Data.Span[i] = 1.0f;
+            gradient[i] = 1.0f;
         }
 
         // Act
