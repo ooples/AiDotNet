@@ -528,6 +528,14 @@ public abstract class RegressionBase<T> : IRegression<T>
             // If UseIntercept: coeffCount = parameters.Length - 1
             // If not UseIntercept: coeffCount = parameters.Length
             coefficientCount = Options.UseIntercept ? parameters.Length - 1 : parameters.Length;
+
+            // Guard against invalid parameter count (e.g., empty params with UseIntercept)
+            if (coefficientCount < 0)
+            {
+                throw new ArgumentException(
+                    $"Parameters vector too short: expected at least {(Options.UseIntercept ? 1 : 0)} elements for intercept, but got {parameters.Length}",
+                    nameof(parameters));
+            }
         }
 
         int expectedCount = coefficientCount + (Options.UseIntercept ? 1 : 0);
