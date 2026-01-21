@@ -357,7 +357,7 @@ internal static class CpuNativeBlas
         Log($"Using BLAS {typeLabel} (m={m}, n={n}, k={k}).");
     }
 
-    private static IEnumerable<string> GetCandidates(CpuBlasProvider provider)  
+    private static IEnumerable<string> GetCandidates(CpuBlasProvider provider)
     {
         foreach (var candidate in GetExplicitCandidatePaths(provider))
         {
