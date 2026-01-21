@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
@@ -2573,6 +2574,1408 @@ public class GradientBasedOptimizerIntegrationTests
 
         Assert.True(finalLoss < initialLoss * 0.5,
             $"ADMM should reduce loss. Initial: {initialLoss}, Final: {finalLoss}");
+    }
+
+    #endregion
+
+    #region Serialization Tests
+
+    [Fact]
+    public void SGD_SerializeDeserialize_PreservesState()
+    {
+        var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.01
+        };
+        var optimizer1 = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        // Build state
+        for (int i = 0; i < 5; i++)
+        {
+            parameters = optimizer1.UpdateParameters(parameters, gradient);
+        }
+
+        // Serialize and deserialize
+        var serialized = optimizer1.Serialize();
+        var optimizer2 = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        optimizer2.Deserialize(serialized);
+
+        // Continue updating with both optimizers
+        var result1 = optimizer1.UpdateParameters(parameters, gradient);
+        var result2 = optimizer2.UpdateParameters(parameters, gradient);
+
+        for (int i = 0; i < result1.Length; i++)
+        {
+            Assert.Equal(result1[i], result2[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void Adagrad_SerializeDeserialize_PreservesState()
+    {
+        var options = new AdagradOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1,
+            Epsilon = 1e-8
+        };
+        var optimizer1 = new AdagradOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        // Build state - Adagrad accumulates squared gradients
+        for (int i = 0; i < 5; i++)
+        {
+            parameters = optimizer1.UpdateParameters(parameters, gradient);
+        }
+
+        // Serialize and deserialize
+        var serialized = optimizer1.Serialize();
+        var optimizer2 = new AdagradOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        optimizer2.Deserialize(serialized);
+
+        var result1 = optimizer1.UpdateParameters(parameters, gradient);
+        var result2 = optimizer2.UpdateParameters(parameters, gradient);
+
+        for (int i = 0; i < result1.Length; i++)
+        {
+            Assert.Equal(result1[i], result2[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void AdaDelta_SerializeDeserialize_PreservesState()
+    {
+        var options = new AdaDeltaOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            Rho = 0.95,
+            Epsilon = 1e-6
+        };
+        var optimizer1 = new AdaDeltaOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        // Build state - AdaDelta has running average of gradients and updates
+        for (int i = 0; i < 5; i++)
+        {
+            parameters = optimizer1.UpdateParameters(parameters, gradient);
+        }
+
+        var serialized = optimizer1.Serialize();
+        var optimizer2 = new AdaDeltaOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        optimizer2.Deserialize(serialized);
+
+        var result1 = optimizer1.UpdateParameters(parameters, gradient);
+        var result2 = optimizer2.UpdateParameters(parameters, gradient);
+
+        for (int i = 0; i < result1.Length; i++)
+        {
+            Assert.Equal(result1[i], result2[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void RMSProp_SerializeDeserialize_PreservesState()
+    {
+        var options = new RootMeanSquarePropagationOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.01,
+            Decay = 0.9,
+            Epsilon = 1e-8
+        };
+        var optimizer1 = new RootMeanSquarePropagationOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        // Build state
+        for (int i = 0; i < 5; i++)
+        {
+            parameters = optimizer1.UpdateParameters(parameters, gradient);
+        }
+
+        var serialized = optimizer1.Serialize();
+        var optimizer2 = new RootMeanSquarePropagationOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        optimizer2.Deserialize(serialized);
+
+        var result1 = optimizer1.UpdateParameters(parameters, gradient);
+        var result2 = optimizer2.UpdateParameters(parameters, gradient);
+
+        for (int i = 0; i < result1.Length; i++)
+        {
+            Assert.Equal(result1[i], result2[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void AdaMax_SerializeDeserialize_PreservesState()
+    {
+        var options = new AdaMaxOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.01,
+            Beta1 = 0.9,
+            Beta2 = 0.999
+        };
+        var optimizer1 = new AdaMaxOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        for (int i = 0; i < 5; i++)
+        {
+            parameters = optimizer1.UpdateParameters(parameters, gradient);
+        }
+
+        var serialized = optimizer1.Serialize();
+        var optimizer2 = new AdaMaxOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        optimizer2.Deserialize(serialized);
+
+        var result1 = optimizer1.UpdateParameters(parameters, gradient);
+        var result2 = optimizer2.UpdateParameters(parameters, gradient);
+
+        for (int i = 0; i < result1.Length; i++)
+        {
+            Assert.Equal(result1[i], result2[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void AMSGrad_SerializeDeserialize_PreservesState()
+    {
+        var options = new AMSGradOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.01,
+            Beta1 = 0.9,
+            Beta2 = 0.999
+        };
+        var optimizer1 = new AMSGradOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        for (int i = 0; i < 5; i++)
+        {
+            parameters = optimizer1.UpdateParameters(parameters, gradient);
+        }
+
+        var serialized = optimizer1.Serialize();
+        var optimizer2 = new AMSGradOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        optimizer2.Deserialize(serialized);
+
+        var result1 = optimizer1.UpdateParameters(parameters, gradient);
+        var result2 = optimizer2.UpdateParameters(parameters, gradient);
+
+        for (int i = 0; i < result1.Length; i++)
+        {
+            Assert.Equal(result1[i], result2[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void Nadam_SerializeDeserialize_PreservesState()
+    {
+        var options = new NadamOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.01,
+            Beta1 = 0.9,
+            Beta2 = 0.999
+        };
+        var optimizer1 = new NadamOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        for (int i = 0; i < 5; i++)
+        {
+            parameters = optimizer1.UpdateParameters(parameters, gradient);
+        }
+
+        var serialized = optimizer1.Serialize();
+        var optimizer2 = new NadamOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        optimizer2.Deserialize(serialized);
+
+        var result1 = optimizer1.UpdateParameters(parameters, gradient);
+        var result2 = optimizer2.UpdateParameters(parameters, gradient);
+
+        for (int i = 0; i < result1.Length; i++)
+        {
+            Assert.Equal(result1[i], result2[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void Lion_SerializeDeserialize_PreservesState()
+    {
+        var options = new LionOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.01,
+            Beta1 = 0.9,
+            Beta2 = 0.99
+        };
+        var optimizer1 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        for (int i = 0; i < 5; i++)
+        {
+            parameters = optimizer1.UpdateParameters(parameters, gradient);
+        }
+
+        var serialized = optimizer1.Serialize();
+        var optimizer2 = new LionOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        optimizer2.Deserialize(serialized);
+
+        var result1 = optimizer1.UpdateParameters(parameters, gradient);
+        var result2 = optimizer2.UpdateParameters(parameters, gradient);
+
+        for (int i = 0; i < result1.Length; i++)
+        {
+            Assert.Equal(result1[i], result2[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void Momentum_SerializeDeserialize_PreservesState()
+    {
+        var options = new MomentumOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.01,
+            InitialMomentum = 0.9
+        };
+        var optimizer1 = new MomentumOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        for (int i = 0; i < 5; i++)
+        {
+            parameters = optimizer1.UpdateParameters(parameters, gradient);
+        }
+
+        var serialized = optimizer1.Serialize();
+        var optimizer2 = new MomentumOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        optimizer2.Deserialize(serialized);
+
+        var result1 = optimizer1.UpdateParameters(parameters, gradient);
+        var result2 = optimizer2.UpdateParameters(parameters, gradient);
+
+        for (int i = 0; i < result1.Length; i++)
+        {
+            Assert.Equal(result1[i], result2[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void BFGS_SerializeDeserialize_PreservesState()
+    {
+        var options = new BFGSOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1
+        };
+        var optimizer1 = new BFGSOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        // Build Hessian approximation
+        for (int i = 0; i < 5; i++)
+        {
+            parameters = optimizer1.UpdateParameters(parameters, gradient);
+        }
+
+        var serialized = optimizer1.Serialize();
+        var optimizer2 = new BFGSOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        optimizer2.Deserialize(serialized);
+
+        var result1 = optimizer1.UpdateParameters(parameters, gradient);
+        var result2 = optimizer2.UpdateParameters(parameters, gradient);
+
+        for (int i = 0; i < result1.Length; i++)
+        {
+            Assert.Equal(result1[i], result2[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void LBFGS_SerializeDeserialize_PreservesState()
+    {
+        var options = new LBFGSOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1,
+            MemorySize = 5
+        };
+        var optimizer1 = new LBFGSOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        // Build history for L-BFGS
+        for (int i = 0; i < 5; i++)
+        {
+            parameters = optimizer1.UpdateParameters(parameters, gradient);
+        }
+
+        var serialized = optimizer1.Serialize();
+        var optimizer2 = new LBFGSOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        optimizer2.Deserialize(serialized);
+
+        var result1 = optimizer1.UpdateParameters(parameters, gradient);
+        var result2 = optimizer2.UpdateParameters(parameters, gradient);
+
+        for (int i = 0; i < result1.Length; i++)
+        {
+            Assert.Equal(result1[i], result2[i], Tolerance);
+        }
+    }
+
+    [Theory]
+    [InlineData("SGD")]
+    [InlineData("Adam")]
+    [InlineData("RMSProp")]
+    [InlineData("Adagrad")]
+    [InlineData("Momentum")]
+    public void AllOptimizers_SerializeDeserialize_BytesNonEmpty(string optimizerName)
+    {
+        // All optimizers should produce non-empty serialized data
+        IGradientBasedOptimizer<double, Vector<double>, Vector<double>> optimizer = optimizerName switch
+        {
+            "SGD" => new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null),
+            "Adam" => new AdamOptimizer<double, Vector<double>, Vector<double>>(null),
+            "RMSProp" => new RootMeanSquarePropagationOptimizer<double, Vector<double>, Vector<double>>(null),
+            "Adagrad" => new AdagradOptimizer<double, Vector<double>, Vector<double>>(null),
+            "Momentum" => new MomentumOptimizer<double, Vector<double>, Vector<double>>(null),
+            _ => throw new ArgumentException($"Unknown optimizer: {optimizerName}")
+        };
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        // Build some state
+        for (int i = 0; i < 3; i++)
+        {
+            optimizer.UpdateParameters(parameters, gradient);
+        }
+
+        var serialized = optimizer.Serialize();
+
+        Assert.NotNull(serialized);
+        Assert.True(serialized.Length > 0, $"{optimizerName} should produce non-empty serialized data");
+    }
+
+    #endregion
+
+    #region Edge Case Tests
+
+    [Fact]
+    public void SGD_ZeroGradients_ReturnsUnchangedParameters()
+    {
+        // Zero gradients should not change parameters
+        var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null);
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var zeroGradient = new Vector<double>(new double[] { 0.0, 0.0, 0.0 });
+
+        var result = optimizer.UpdateParameters(parameters, zeroGradient);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            Assert.Equal(parameters[i], result[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void Adam_ZeroGradients_ReturnsUnchangedParameters()
+    {
+        // Zero gradients should not change parameters (after initialization)
+        var optimizer = new AdamOptimizer<double, Vector<double>, Vector<double>>(null);
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var zeroGradient = new Vector<double>(new double[] { 0.0, 0.0, 0.0 });
+
+        var result = optimizer.UpdateParameters(parameters, zeroGradient);
+
+        // Adam might have small numerical differences due to epsilon term
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            Assert.True(Math.Abs(result[i] - parameters[i]) < 0.01,
+                $"Parameter {i} changed significantly with zero gradient: expected {parameters[i]}, got {result[i]}");
+        }
+    }
+
+    [Fact]
+    public void Momentum_ZeroGradients_ReturnsUnchangedParameters()
+    {
+        // Zero gradients should not change parameters
+        var optimizer = new MomentumOptimizer<double, Vector<double>, Vector<double>>(null);
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var zeroGradient = new Vector<double>(new double[] { 0.0, 0.0, 0.0 });
+
+        var result = optimizer.UpdateParameters(parameters, zeroGradient);
+
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            Assert.Equal(parameters[i], result[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void SGD_VerySmallGradients_UpdatesCorrectly()
+    {
+        // Very small gradients should still produce proportionally small updates
+        var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1
+        };
+        var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var smallGradient = new Vector<double>(new double[] { 1e-10, 1e-10, 1e-10 });
+
+        var result = optimizer.UpdateParameters(parameters, smallGradient);
+
+        // Updates should be tiny but non-zero
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            Assert.True(result[i] < parameters[i], $"Parameter should decrease slightly: {result[i]} >= {parameters[i]}");
+            Assert.True(Math.Abs(result[i] - parameters[i]) < 1e-8,
+                $"Update should be very small: diff = {Math.Abs(result[i] - parameters[i])}");
+        }
+    }
+
+    [Fact]
+    public void SGD_LargeGradients_UpdatesWithinReasonableBounds()
+    {
+        // Large gradients should not cause parameters to explode
+        var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.001
+        };
+        var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var largeGradient = new Vector<double>(new double[] { 1000.0, 1000.0, 1000.0 });
+
+        var result = optimizer.UpdateParameters(parameters, largeGradient);
+
+        // Parameters should decrease but not go to extreme values
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            Assert.True(result[i] < parameters[i], "Parameters should decrease with positive gradient");
+            Assert.True(result[i] > -1000, "Parameters should not explode to extreme negative values");
+        }
+    }
+
+    [Fact]
+    public void Adam_VerySmallGradients_UpdatesCorrectly()
+    {
+        // Adam should handle very small gradients without numerical issues
+        var optimizer = new AdamOptimizer<double, Vector<double>, Vector<double>>(null);
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var smallGradient = new Vector<double>(new double[] { 1e-12, 1e-12, 1e-12 });
+
+        // Run multiple steps to test numerical stability
+        var result = parameters;
+        for (int step = 0; step < 10; step++)
+        {
+            result = optimizer.UpdateParameters(result, smallGradient);
+        }
+
+        // Result should not contain NaN or Infinity
+        for (int i = 0; i < result.Length; i++)
+        {
+            Assert.False(double.IsNaN(result[i]), $"Parameter {i} became NaN");
+            Assert.False(double.IsInfinity(result[i]), $"Parameter {i} became Infinity");
+        }
+    }
+
+    [Fact]
+    public void RMSProp_VerySmallGradients_UpdatesCorrectly()
+    {
+        // RMSProp should handle very small gradients without numerical issues
+        var optimizer = new RootMeanSquarePropagationOptimizer<double, Vector<double>, Vector<double>>(null);
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var smallGradient = new Vector<double>(new double[] { 1e-12, 1e-12, 1e-12 });
+
+        // Run multiple steps to test numerical stability
+        var result = parameters;
+        for (int step = 0; step < 10; step++)
+        {
+            result = optimizer.UpdateParameters(result, smallGradient);
+        }
+
+        // Result should not contain NaN or Infinity
+        for (int i = 0; i < result.Length; i++)
+        {
+            Assert.False(double.IsNaN(result[i]), $"Parameter {i} became NaN");
+            Assert.False(double.IsInfinity(result[i]), $"Parameter {i} became Infinity");
+        }
+    }
+
+    [Fact]
+    public void Adagrad_VerySmallGradients_UpdatesCorrectly()
+    {
+        // Adagrad should handle very small gradients without numerical issues
+        var optimizer = new AdagradOptimizer<double, Vector<double>, Vector<double>>(null);
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var smallGradient = new Vector<double>(new double[] { 1e-12, 1e-12, 1e-12 });
+
+        // Run multiple steps to test numerical stability
+        var result = parameters;
+        for (int step = 0; step < 10; step++)
+        {
+            result = optimizer.UpdateParameters(result, smallGradient);
+        }
+
+        // Result should not contain NaN or Infinity
+        for (int i = 0; i < result.Length; i++)
+        {
+            Assert.False(double.IsNaN(result[i]), $"Parameter {i} became NaN");
+            Assert.False(double.IsInfinity(result[i]), $"Parameter {i} became Infinity");
+        }
+    }
+
+    [Fact]
+    public void SGD_MixedSignGradients_UpdatesCorrectly()
+    {
+        // Mixed sign gradients should produce mixed direction updates
+        var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1
+        };
+        var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        var parameters = new Vector<double>(new double[] { 0.0, 0.0, 0.0 });
+        var mixedGradient = new Vector<double>(new double[] { 1.0, -1.0, 0.5 });
+
+        var result = optimizer.UpdateParameters(parameters, mixedGradient);
+
+        // Positive gradient -> negative update (descent)
+        Assert.True(result[0] < 0, "Positive gradient should cause negative update");
+        // Negative gradient -> positive update (descent)
+        Assert.True(result[1] > 0, "Negative gradient should cause positive update");
+        // Small positive gradient -> small negative update
+        Assert.True(result[2] < 0, "Small positive gradient should cause small negative update");
+    }
+
+    [Fact]
+    public void Adam_NegativeGradients_UpdatesCorrectly()
+    {
+        // Negative gradients should cause parameters to increase
+        var optimizer = new AdamOptimizer<double, Vector<double>, Vector<double>>(null);
+        var parameters = new Vector<double>(new double[] { 0.0, 0.0, 0.0 });
+        var negativeGradient = new Vector<double>(new double[] { -1.0, -1.0, -1.0 });
+
+        var result = optimizer.UpdateParameters(parameters, negativeGradient);
+
+        // Negative gradient -> positive update (descent in negative gradient direction)
+        for (int i = 0; i < result.Length; i++)
+        {
+            Assert.True(result[i] > 0, $"Parameter {i} should increase with negative gradient");
+        }
+    }
+
+    [Theory]
+    [InlineData(0.0001)]
+    [InlineData(0.001)]
+    [InlineData(0.01)]
+    [InlineData(0.1)]
+    [InlineData(1.0)]
+    public void SGD_DifferentLearningRates_ScalesUpdateProportionally(double learningRate)
+    {
+        // Update magnitude should scale with learning rate
+        var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = learningRate
+        };
+        var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        var parameters = new Vector<double>(new double[] { 10.0, 10.0, 10.0 });
+        var gradient = new Vector<double>(new double[] { 1.0, 1.0, 1.0 });
+
+        var result = optimizer.UpdateParameters(parameters, gradient);
+
+        // Update = learning_rate * gradient = learningRate * 1.0
+        var expectedUpdate = learningRate;
+        for (int i = 0; i < result.Length; i++)
+        {
+            var actualUpdate = parameters[i] - result[i];
+            Assert.Equal(expectedUpdate, actualUpdate, Tolerance);
+        }
+    }
+
+    [Fact]
+    public void SGD_ConsecutiveUpdates_AccumulatesCorrectly()
+    {
+        // Multiple updates should accumulate correctly
+        var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1
+        };
+        var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        var parameters = new Vector<double>(new double[] { 10.0, 10.0, 10.0 });
+        var gradient = new Vector<double>(new double[] { 1.0, 1.0, 1.0 });
+
+        // Apply 10 updates
+        var result = parameters;
+        for (int i = 0; i < 10; i++)
+        {
+            result = optimizer.UpdateParameters(result, gradient);
+        }
+
+        // Total change should be approximately 10 * 0.1 * 1.0 = 1.0
+        for (int i = 0; i < result.Length; i++)
+        {
+            var totalChange = parameters[i] - result[i];
+            Assert.Equal(1.0, totalChange, 0.001);
+        }
+    }
+
+    [Fact]
+    public void Momentum_BuildsVelocity_OverMultipleSteps()
+    {
+        // Momentum should build up velocity over consistent gradient directions
+        var options = new MomentumOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1,
+            InitialMomentum = 0.9
+        };
+        var optimizer = new MomentumOptimizer<double, Vector<double>, Vector<double>>(null, options);
+        var parameters = new Vector<double>(new double[] { 10.0 });
+        var gradient = new Vector<double>(new double[] { 1.0 });
+
+        // Track the magnitude of updates
+        var updates = new List<double>();
+        var result = parameters;
+        for (int i = 0; i < 5; i++)
+        {
+            var newResult = optimizer.UpdateParameters(result, gradient);
+            updates.Add(result[0] - newResult[0]);
+            result = newResult;
+        }
+
+        // Later updates should be larger due to momentum buildup
+        // (assuming the optimizer correctly accumulates velocity)
+        Assert.True(updates[^1] >= updates[0],
+            $"Later updates should be at least as large as initial: {updates[^1]} vs {updates[0]}");
+    }
+
+    [Fact]
+    public void AllOptimizers_SingleDimensionParameter_WorksCorrectly()
+    {
+        // Test that optimizers work with single-dimension parameters
+        var optimizers = new IGradientBasedOptimizer<double, Vector<double>, Vector<double>>[]
+        {
+            new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null),
+            new AdamOptimizer<double, Vector<double>, Vector<double>>(null),
+            new RootMeanSquarePropagationOptimizer<double, Vector<double>, Vector<double>>(null),
+            new AdagradOptimizer<double, Vector<double>, Vector<double>>(null),
+            new MomentumOptimizer<double, Vector<double>, Vector<double>>(null)
+        };
+
+        var parameter = new Vector<double>(new double[] { 5.0 });
+        var gradient = new Vector<double>(new double[] { 1.0 });
+
+        foreach (var optimizer in optimizers)
+        {
+            var result = optimizer.UpdateParameters(parameter, gradient);
+
+            Assert.False(double.IsNaN(result[0]), $"{optimizer.GetType().Name} produced NaN for single dimension");
+            Assert.False(double.IsInfinity(result[0]), $"{optimizer.GetType().Name} produced Infinity for single dimension");
+        }
+    }
+
+    [Fact]
+    public void AllOptimizers_LargeDimensionParameter_WorksCorrectly()
+    {
+        // Test that optimizers work with large-dimension parameters
+        const int dimensions = 1000;
+        var optimizers = new IGradientBasedOptimizer<double, Vector<double>, Vector<double>>[]
+        {
+            new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null),
+            new AdamOptimizer<double, Vector<double>, Vector<double>>(null),
+            new RootMeanSquarePropagationOptimizer<double, Vector<double>, Vector<double>>(null)
+        };
+
+        var rand = new Random(42);
+        var paramData = new double[dimensions];
+        var gradData = new double[dimensions];
+        for (int i = 0; i < dimensions; i++)
+        {
+            paramData[i] = rand.NextDouble() * 10 - 5;
+            gradData[i] = rand.NextDouble() * 2 - 1;
+        }
+        var parameters = new Vector<double>(paramData);
+        var gradient = new Vector<double>(gradData);
+
+        foreach (var optimizer in optimizers)
+        {
+            var result = optimizer.UpdateParameters(parameters, gradient);
+
+            Assert.Equal(dimensions, result.Length);
+            for (int i = 0; i < dimensions; i++)
+            {
+                Assert.False(double.IsNaN(result[i]), $"{optimizer.GetType().Name} produced NaN at index {i}");
+                Assert.False(double.IsInfinity(result[i]), $"{optimizer.GetType().Name} produced Infinity at index {i}");
+            }
+        }
+    }
+
+    #endregion
+
+    #region Multimodal Function Tests
+
+    [Fact]
+    public void Diagnostic_VectorArithmetic_WorksCorrectly()
+    {
+        // This diagnostic test verifies basic vector operations work correctly
+        // on both net471 and net10.0 frameworks
+
+        // Test 1: Vector multiplication by scalar
+        var v1 = new Vector<double>(new double[] { 4.0, -4.0 });
+        var scalar = 0.01;
+        var multiplied = v1.Multiply(scalar);
+
+        Assert.Equal(0.04, multiplied[0], 1e-10);
+        Assert.Equal(-0.04, multiplied[1], 1e-10);
+
+        // Test 2: Vector subtraction
+        var v2 = new Vector<double>(new double[] { 2.0, -2.0 });
+        var subtracted = v2.Subtract(multiplied);
+
+        Assert.Equal(1.96, subtracted[0], 1e-10);
+        Assert.Equal(-1.96, subtracted[1], 1e-10);
+
+        // Test 3: Chained operation (what UpdateParameters does)
+        var parameters = new Vector<double>(new double[] { 2.0, -2.0 });
+        var gradient = new Vector<double>(new double[] { 4.0, -4.0 });
+        var lr = 0.01;
+        var result = parameters.Subtract(gradient.Multiply(lr));
+
+        Assert.Equal(1.96, result[0], 1e-10);
+        Assert.Equal(-1.96, result[1], 1e-10);
+
+        // Test 4: Verify UpdateParameters produces same result
+        var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.01
+        };
+        var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var p = new Vector<double>(new double[] { 2.0, -2.0 });
+        var g = new Vector<double>(new double[] { 4.0, -4.0 });
+        var updated = optimizer.UpdateParameters(p, g);
+
+        Assert.Equal(1.96, updated[0], 1e-10);
+        Assert.Equal(-1.96, updated[1], 1e-10);
+    }
+
+    [Fact]
+    public void Diagnostic_RastriginGradient_WorksCorrectly()
+    {
+        // Test that Math.Sin and Math.PI work correctly on all frameworks
+        // Rastrigin gradient: grad_i = 2*x_i + 20*pi*sin(2*pi*x_i)
+
+        // At x = [2.0, -2.0], sin(2*pi*2) = sin(4*pi) = 0
+        // So gradient should be [4.0, -4.0]
+        var x1 = new Vector<double>(new double[] { 2.0, -2.0 });
+        var grad1 = BenchmarkFunctions.RastriginGradient(x1);
+
+        Assert.Equal(4.0, grad1[0], 1e-10);
+        Assert.Equal(-4.0, grad1[1], 1e-10);
+
+        // At x = [0.25, -0.25], sin(2*pi*0.25) = sin(pi/2) = 1
+        // gradient = [2*0.25 + 20*pi*1, 2*(-0.25) + 20*pi*(-1)]
+        //          = [0.5 + 20*pi, -0.5 - 20*pi]
+        var x2 = new Vector<double>(new double[] { 0.25, -0.25 });
+        var grad2 = BenchmarkFunctions.RastriginGradient(x2);
+
+        double expectedGrad2_0 = 0.5 + 20.0 * Math.PI;
+        double expectedGrad2_1 = -0.5 - 20.0 * Math.PI;
+
+        Assert.Equal(expectedGrad2_0, grad2[0], 1e-10);
+        Assert.Equal(expectedGrad2_1, grad2[1], 1e-10);
+
+        // Test Rastrigin function at origin (should be 0)
+        var origin = new Vector<double>(new double[] { 0.0, 0.0 });
+        double valueAtOrigin = BenchmarkFunctions.Rastrigin(origin);
+        Assert.Equal(0.0, valueAtOrigin, 1e-10);
+
+        // Test one full iteration of SGD starting at a non-local-minimum point
+        // NOTE: [2.0, -2.0] is a local minimum of Rastrigin (integer coords are local minima)
+        // So we test at [2.5, -2.5] instead to verify optimization can make progress
+        var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.01
+        };
+        var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 2.5, -2.5 });
+        double initialValue = BenchmarkFunctions.Rastrigin(x);
+        var grad = BenchmarkFunctions.RastriginGradient(x);
+
+        var xNew = optimizer.UpdateParameters(x, grad);
+
+        // Verify the UpdateParameters formula is applied correctly: x_new = x - lr * grad
+        double expectedX0 = 2.5 - 0.01 * grad[0];
+        double expectedX1 = -2.5 - 0.01 * grad[1];
+        Assert.Equal(expectedX0, xNew[0], 1e-10);
+        Assert.Equal(expectedX1, xNew[1], 1e-10);
+
+        double newValue = BenchmarkFunctions.Rastrigin(xNew);
+
+        // From a non-local-minimum starting point, value should decrease
+        Assert.True(newValue < initialValue,
+            $"Rastrigin value should decrease from non-local-minimum start. Initial: {initialValue}, New: {newValue}");
+    }
+
+    /// <summary>
+    /// Helper class for multimodal benchmark functions used in optimization testing.
+    /// </summary>
+    private static class BenchmarkFunctions
+    {
+        /// <summary>
+        /// Rastrigin function - a highly multimodal function with many local minima.
+        /// Global minimum at origin with f(0,...,0) = 0.
+        /// </summary>
+        public static double Rastrigin(Vector<double> x)
+        {
+            double sum = 10.0 * x.Length;
+            for (int i = 0; i < x.Length; i++)
+            {
+                sum += x[i] * x[i] - 10.0 * Math.Cos(2.0 * Math.PI * x[i]);
+            }
+            return sum;
+        }
+
+        /// <summary>
+        /// Gradient of the Rastrigin function.
+        /// </summary>
+        public static Vector<double> RastriginGradient(Vector<double> x)
+        {
+            var grad = new double[x.Length];
+            for (int i = 0; i < x.Length; i++)
+            {
+                grad[i] = 2.0 * x[i] + 20.0 * Math.PI * Math.Sin(2.0 * Math.PI * x[i]);
+            }
+            return new Vector<double>(grad);
+        }
+
+        /// <summary>
+        /// Ackley function - bowl-shaped with many local minima.
+        /// Global minimum at origin with f(0,...,0) = 0.
+        /// </summary>
+        public static double Ackley(Vector<double> x)
+        {
+            double sumSq = 0.0;
+            double sumCos = 0.0;
+            for (int i = 0; i < x.Length; i++)
+            {
+                sumSq += x[i] * x[i];
+                sumCos += Math.Cos(2.0 * Math.PI * x[i]);
+            }
+            double n = x.Length;
+            return -20.0 * Math.Exp(-0.2 * Math.Sqrt(sumSq / n))
+                   - Math.Exp(sumCos / n) + 20.0 + Math.E;
+        }
+
+        /// <summary>
+        /// Gradient of the Ackley function.
+        /// </summary>
+        public static Vector<double> AckleyGradient(Vector<double> x)
+        {
+            double sumSq = 0.0;
+            double sumCos = 0.0;
+            for (int i = 0; i < x.Length; i++)
+            {
+                sumSq += x[i] * x[i];
+                sumCos += Math.Cos(2.0 * Math.PI * x[i]);
+            }
+            double n = x.Length;
+            double sqrtTerm = Math.Sqrt(sumSq / n);
+            double expSqrt = Math.Exp(-0.2 * sqrtTerm);
+            double expCos = Math.Exp(sumCos / n);
+
+            var grad = new double[x.Length];
+            for (int i = 0; i < x.Length; i++)
+            {
+                double dSqrt = (sqrtTerm > 1e-10) ? (x[i] / (n * sqrtTerm)) : 0.0;
+                grad[i] = 4.0 * expSqrt * dSqrt
+                         + (2.0 * Math.PI / n) * Math.Sin(2.0 * Math.PI * x[i]) * expCos;
+            }
+            return new Vector<double>(grad);
+        }
+
+        /// <summary>
+        /// Beale function - a 2D function with a flat region and single global minimum.
+        /// Global minimum at (3, 0.5) with f(3, 0.5) = 0.
+        /// </summary>
+        public static double Beale(Vector<double> x)
+        {
+            if (x.Length != 2) throw new ArgumentException("Beale function is 2D only");
+            double a = 1.5 - x[0] + x[0] * x[1];
+            double b = 2.25 - x[0] + x[0] * x[1] * x[1];
+            double c = 2.625 - x[0] + x[0] * x[1] * x[1] * x[1];
+            return a * a + b * b + c * c;
+        }
+
+        /// <summary>
+        /// Gradient of the Beale function.
+        /// </summary>
+        public static Vector<double> BealeGradient(Vector<double> x)
+        {
+            if (x.Length != 2) throw new ArgumentException("Beale function is 2D only");
+            double y = x[1];
+            double y2 = y * y;
+            double y3 = y2 * y;
+
+            double a = 1.5 - x[0] + x[0] * y;
+            double b = 2.25 - x[0] + x[0] * y2;
+            double c = 2.625 - x[0] + x[0] * y3;
+
+            double dadx = -1.0 + y;
+            double dady = x[0];
+            double dbdx = -1.0 + y2;
+            double dbdy = 2.0 * x[0] * y;
+            double dcdx = -1.0 + y3;
+            double dcdy = 3.0 * x[0] * y2;
+
+            var grad = new double[2];
+            grad[0] = 2.0 * a * dadx + 2.0 * b * dbdx + 2.0 * c * dcdx;
+            grad[1] = 2.0 * a * dady + 2.0 * b * dbdy + 2.0 * c * dcdy;
+            return new Vector<double>(grad);
+        }
+
+        /// <summary>
+        /// Sphere function - simple convex function for baseline testing.
+        /// Global minimum at origin with f(0,...,0) = 0.
+        /// </summary>
+        public static double Sphere(Vector<double> x)
+        {
+            double sum = 0.0;
+            for (int i = 0; i < x.Length; i++)
+            {
+                sum += x[i] * x[i];
+            }
+            return sum;
+        }
+
+        /// <summary>
+        /// Gradient of the Sphere function.
+        /// </summary>
+        public static Vector<double> SphereGradient(Vector<double> x)
+        {
+            var grad = new double[x.Length];
+            for (int i = 0; i < x.Length; i++)
+            {
+                grad[i] = 2.0 * x[i];
+            }
+            return new Vector<double>(grad);
+        }
+    }
+
+    [Fact]
+    public void SGD_SphereFunction_ConvergesToMinimum()
+    {
+        // Sphere function is convex, should converge reliably
+        var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1
+        };
+        var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 5.0, -3.0 });
+
+        // Run gradient descent
+        for (int i = 0; i < 100; i++)
+        {
+            var grad = BenchmarkFunctions.SphereGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Sphere(x);
+
+        // Should get close to minimum (0)
+        Assert.True(finalValue < 1e-6, $"Sphere function should converge to near 0, got {finalValue}");
+    }
+
+    [Fact]
+    public void Adam_SphereFunction_ConvergesToMinimum()
+    {
+        // Adam should converge quickly on convex function
+        // Default Adam learning rate (0.001) is designed for neural networks with thousands of iterations.
+        // For this simple benchmark, we use a higher learning rate.
+        var options = new AdamOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1  // Higher LR for simple benchmark function
+        };
+        var optimizer = new AdamOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 5.0, -3.0 });
+
+        // Run Adam
+        for (int i = 0; i < 200; i++)
+        {
+            var grad = BenchmarkFunctions.SphereGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Sphere(x);
+
+        // Should get close to minimum (0)
+        Assert.True(finalValue < 1e-4, $"Sphere function should converge to near 0, got {finalValue}");
+    }
+
+    [Fact]
+    public void Momentum_SphereFunction_ConvergesToMinimum()
+    {
+        // Momentum should accelerate convergence on sphere
+        var options = new MomentumOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1,
+            InitialMomentum = 0.9
+        };
+        var optimizer = new MomentumOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 5.0, -3.0 });
+
+        // Run momentum - use more iterations for tight convergence
+        for (int i = 0; i < 200; i++)
+        {
+            var grad = BenchmarkFunctions.SphereGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Sphere(x);
+
+        // Should get close to minimum (0)
+        Assert.True(finalValue < 1e-4, $"Sphere function should converge to near 0, got {finalValue}");
+    }
+
+    [Fact]
+    public void SGD_RastriginFunction_MakesProgress()
+    {
+        // Rastrigin is multimodal - optimizer should at least make progress
+        // Start at [2.5, -2.5] which is NOT at a local minimum (integer coords are local minima)
+        var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.01  // Small learning rate for stability
+        };
+        var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 2.5, -2.5 });
+        double initialValue = BenchmarkFunctions.Rastrigin(x);
+
+        // Run gradient descent
+        for (int i = 0; i < 100; i++)
+        {
+            var grad = BenchmarkFunctions.RastriginGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Rastrigin(x);
+
+        // Should make some progress (final < initial)
+        Assert.True(finalValue < initialValue,
+            $"Should make progress: initial={initialValue}, final={finalValue}");
+    }
+
+    [Fact]
+    public void Adam_RastriginFunction_MakesProgress()
+    {
+        // Adam should navigate Rastrigin better than vanilla SGD
+        // Use higher learning rate and start at [2.5, -2.5] (not at local minimum)
+        var options = new AdamOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1
+        };
+        var optimizer = new AdamOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 2.5, -2.5 });
+        double initialValue = BenchmarkFunctions.Rastrigin(x);
+
+        // Run Adam
+        for (int i = 0; i < 200; i++)
+        {
+            var grad = BenchmarkFunctions.RastriginGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Rastrigin(x);
+
+        // Should make progress
+        Assert.True(finalValue < initialValue,
+            $"Should make progress: initial={initialValue}, final={finalValue}");
+    }
+
+    [Fact]
+    public void SGD_AckleyFunction_MakesProgress()
+    {
+        // Ackley has many local minima
+        var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1
+        };
+        var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 3.0, -3.0 });
+        double initialValue = BenchmarkFunctions.Ackley(x);
+
+        // Run gradient descent
+        for (int i = 0; i < 100; i++)
+        {
+            var grad = BenchmarkFunctions.AckleyGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Ackley(x);
+
+        // Should make progress
+        Assert.True(finalValue < initialValue,
+            $"Should make progress: initial={initialValue}, final={finalValue}");
+    }
+
+    [Fact]
+    public void Adam_AckleyFunction_MakesProgress()
+    {
+        // Use higher learning rate for this simple benchmark
+        var options = new AdamOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1
+        };
+        var optimizer = new AdamOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 3.0, -3.0 });
+        double initialValue = BenchmarkFunctions.Ackley(x);
+
+        // Run Adam
+        for (int i = 0; i < 200; i++)
+        {
+            var grad = BenchmarkFunctions.AckleyGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Ackley(x);
+
+        // Should make progress
+        Assert.True(finalValue < initialValue,
+            $"Should make progress: initial={initialValue}, final={finalValue}");
+    }
+
+    [Fact]
+    public void SGD_BealeFunction_MakesProgress()
+    {
+        // Beale function has a flat region that can be challenging
+        var options = new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.001  // Small learning rate for stability
+        };
+        var optimizer = new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 0.0, 0.0 });
+        double initialValue = BenchmarkFunctions.Beale(x);
+
+        // Run gradient descent
+        for (int i = 0; i < 500; i++)
+        {
+            var grad = BenchmarkFunctions.BealeGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Beale(x);
+
+        // Should make progress toward minimum at (3, 0.5)
+        Assert.True(finalValue < initialValue,
+            $"Should make progress: initial={initialValue}, final={finalValue}");
+    }
+
+    [Fact]
+    public void Adam_BealeFunction_MakesProgress()
+    {
+        // Use higher learning rate for this benchmark
+        var options = new AdamOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1
+        };
+        var optimizer = new AdamOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 0.0, 0.0 });
+        double initialValue = BenchmarkFunctions.Beale(x);
+
+        // Run Adam
+        for (int i = 0; i < 500; i++)
+        {
+            var grad = BenchmarkFunctions.BealeGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Beale(x);
+
+        // Should make progress
+        Assert.True(finalValue < initialValue,
+            $"Should make progress: initial={initialValue}, final={finalValue}");
+    }
+
+    [Fact]
+    public void RMSProp_SphereFunction_ConvergesToMinimum()
+    {
+        // RMSProp normalizes by running average of squared gradients, which stabilizes training
+        // but can cause oscillation around a fixed point on simple quadratic functions.
+        // Use lower learning rate for more stable convergence.
+        var options = new RootMeanSquarePropagationOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1  // Lower LR for stable convergence
+        };
+        var optimizer = new RootMeanSquarePropagationOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 5.0, -3.0 });
+
+        // RMSProp converges slower than pure SGD - use more iterations
+        for (int i = 0; i < 2000; i++)
+        {
+            var grad = BenchmarkFunctions.SphereGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Sphere(x);
+        // RMSProp has inherent oscillation on simple quadratics; use looser tolerance
+        Assert.True(finalValue < 1e-2, $"Sphere function should converge to near 0, got {finalValue}");
+    }
+
+    [Fact]
+    public void Adagrad_SphereFunction_ConvergesToMinimum()
+    {
+        // Adagrad accumulates squared gradients, causing diminishing learning rates.
+        // Use a higher initial learning rate to compensate for this characteristic.
+        var options = new AdagradOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 1.0  // Higher LR to compensate for Adagrad's diminishing rates
+        };
+        var optimizer = new AdagradOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 5.0, -3.0 });
+
+        for (int i = 0; i < 200; i++)
+        {
+            var grad = BenchmarkFunctions.SphereGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Sphere(x);
+        Assert.True(finalValue < 1e-2, $"Sphere function should converge to near 0, got {finalValue}");
+    }
+
+    [Theory]
+    [InlineData("SGD")]
+    [InlineData("Adam")]
+    [InlineData("RMSProp")]
+    [InlineData("Momentum")]
+    public void AllOptimizers_HighDimensionalSphere_MakesProgress(string optimizerName)
+    {
+        // Test on higher dimensional sphere
+        // All optimizers use lr=0.1 for consistent comparison on this simple benchmark
+        const int dimensions = 10;
+        IGradientBasedOptimizer<double, Vector<double>, Vector<double>> optimizer = optimizerName switch
+        {
+            "SGD" => new StochasticGradientDescentOptimizer<double, Vector<double>, Vector<double>>(null,
+                new StochasticGradientDescentOptimizerOptions<double, Vector<double>, Vector<double>> { InitialLearningRate = 0.1 }),
+            "Adam" => new AdamOptimizer<double, Vector<double>, Vector<double>>(null,
+                new AdamOptimizerOptions<double, Vector<double>, Vector<double>> { InitialLearningRate = 0.1 }),
+            "RMSProp" => new RootMeanSquarePropagationOptimizer<double, Vector<double>, Vector<double>>(null,
+                new RootMeanSquarePropagationOptimizerOptions<double, Vector<double>, Vector<double>> { InitialLearningRate = 0.1 }),
+            "Momentum" => new MomentumOptimizer<double, Vector<double>, Vector<double>>(null,
+                new MomentumOptimizerOptions<double, Vector<double>, Vector<double>> { InitialLearningRate = 0.1, InitialMomentum = 0.9 }),
+            _ => throw new ArgumentException($"Unknown optimizer: {optimizerName}")
+        };
+
+        var rand = new Random(42);
+        var initData = new double[dimensions];
+        for (int i = 0; i < dimensions; i++)
+        {
+            initData[i] = rand.NextDouble() * 10 - 5;  // Random in [-5, 5]
+        }
+        var x = new Vector<double>(initData);
+        double initialValue = BenchmarkFunctions.Sphere(x);
+
+        // Run optimization
+        for (int i = 0; i < 200; i++)
+        {
+            var grad = BenchmarkFunctions.SphereGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Sphere(x);
+
+        // Should make significant progress
+        Assert.True(finalValue < initialValue * 0.01,
+            $"{optimizerName} should reduce sphere by 99%: initial={initialValue}, final={finalValue}");
+    }
+
+    [Fact]
+    public void Nadam_SphereFunction_ConvergesToMinimum()
+    {
+        // Nadam default lr (0.002) is designed for neural networks. Use higher lr for simple benchmark.
+        var options = new NadamOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1
+        };
+        var optimizer = new NadamOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 5.0, -3.0 });
+
+        for (int i = 0; i < 200; i++)
+        {
+            var grad = BenchmarkFunctions.SphereGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Sphere(x);
+        Assert.True(finalValue < 1e-4, $"Sphere function should converge to near 0, got {finalValue}");
+    }
+
+    [Fact]
+    public void AMSGrad_SphereFunction_ConvergesToMinimum()
+    {
+        // AMSGrad default lr (0.001) is designed for neural networks. Use higher lr for simple benchmark.
+        var options = new AMSGradOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.1
+        };
+        var optimizer = new AMSGradOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 5.0, -3.0 });
+
+        for (int i = 0; i < 200; i++)
+        {
+            var grad = BenchmarkFunctions.SphereGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Sphere(x);
+        Assert.True(finalValue < 1e-4, $"Sphere function should converge to near 0, got {finalValue}");
+    }
+
+    [Fact]
+    public void AdaDelta_SphereFunction_ConvergesToMinimum()
+    {
+        // AdaDelta has a cold-start problem: initial updates are tiny because
+        // _accumulatedSquaredUpdates starts at zero. Use a moderate learning rate
+        // as a scaling factor to compensate (too high causes NaN).
+        var options = new AdaDeltaOptimizerOptions<double, Vector<double>, Vector<double>>
+        {
+            InitialLearningRate = 10.0  // Moderate scale factor to avoid NaN
+        };
+        var optimizer = new AdaDeltaOptimizer<double, Vector<double>, Vector<double>>(null, options);
+
+        var x = new Vector<double>(new double[] { 5.0, -3.0 });
+
+        for (int i = 0; i < 1000; i++)
+        {
+            var grad = BenchmarkFunctions.SphereGradient(x);
+            x = optimizer.UpdateParameters(x, grad);
+        }
+
+        double finalValue = BenchmarkFunctions.Sphere(x);
+        // AdaDelta may converge slower, allow higher tolerance
+        Assert.True(finalValue < 1.0, $"Sphere function should converge toward 0, got {finalValue}");
     }
 
     #endregion

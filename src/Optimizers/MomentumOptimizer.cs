@@ -397,6 +397,18 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             string optionsJson = JsonConvert.SerializeObject(_options);
             writer.Write(optionsJson);
 
+            // Serialize velocity vector
+            bool hasVelocity = _velocity is not null;
+            writer.Write(hasVelocity);
+            if (hasVelocity)
+            {
+                writer.Write(_velocity!.Length);
+                for (int i = 0; i < _velocity.Length; i++)
+                {
+                    writer.Write(NumOps.ToDouble(_velocity[i]));
+                }
+            }
+
             return ms.ToArray();
         }
     }
@@ -428,6 +440,23 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             string optionsJson = reader.ReadString();
             _options = JsonConvert.DeserializeObject<MomentumOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+
+            // Deserialize velocity vector
+            bool hasVelocity = reader.ReadBoolean();
+            if (hasVelocity)
+            {
+                int velocityLength = reader.ReadInt32();
+                T[] velocityData = new T[velocityLength];
+                for (int i = 0; i < velocityLength; i++)
+                {
+                    velocityData[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
+                _velocity = new Vector<T>(velocityData);
+            }
+            else
+            {
+                _velocity = null;
+            }
         }
     }
 
