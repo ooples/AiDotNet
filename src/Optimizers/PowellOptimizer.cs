@@ -182,8 +182,9 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        int n = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        // Use model's parameter count instead of input size for direction dimensions
+        int n = currentSolution.ParameterCount;
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 

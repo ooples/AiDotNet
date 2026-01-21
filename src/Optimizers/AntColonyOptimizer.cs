@@ -239,7 +239,9 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
 
         // Create a base model with InitializeRandomSolution
         var model = InitializeRandomSolution(xTrain);
-        var parameters = new Vector<T>(dimensions);
+        // Parameters should match the model's expected parameter count (features + intercept)
+        int paramCount = model.ParameterCount;
+        var parameters = new Vector<T>(paramCount);
 
         var visited = new bool[dimensions];
         int current = Random.Next(dimensions);
@@ -348,6 +350,8 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         }
 
         // Deposit - partially vectorized
+        // Use pheromone matrix dimensions (features), not parameter count (which includes intercept)
+        int pheromoneSize = pheromones.Rows;
         for (int k = 0; k < solutions.Count; k++)
         {
             var model = solutions[k];
@@ -357,10 +361,13 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
             // Vectorized absolute value of parameters
             var absParams = (Vector<T>)AiDotNetEngine.Current.Abs(parameters);
 
-            for (int i = 0; i < parameters.Length; i++)
+            // Only iterate up to pheromone matrix size, not parameter length
+            // Parameters may include intercept which is not a feature
+            int paramLimit = Math.Min(pheromoneSize, parameters.Length);
+            for (int i = 0; i < paramLimit; i++)
             {
                 var depositScaled = NumOps.Multiply(deposit, absParams[i]);
-                for (int j = 0; j < parameters.Length; j++)
+                for (int j = 0; j < paramLimit; j++)
                 {
                     if (i != j)
                     {

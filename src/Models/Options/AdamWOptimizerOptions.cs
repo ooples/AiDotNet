@@ -40,7 +40,7 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// AdamW typically uses similar learning rates to Adam (0.001 is a good starting point).
     /// For fine-tuning pre-trained models, smaller values like 2e-5 to 5e-5 are common.</para>
     /// </remarks>
-    public new double InitialLearningRate { get; set; } = 0.001;
+    public override double InitialLearningRate { get; set; } = 0.001;
 
     /// <summary>
     /// Gets or sets the exponential decay rate for the first moment estimates (momentum).

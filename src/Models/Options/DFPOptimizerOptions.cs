@@ -46,7 +46,7 @@ public class DFPOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOpt
     /// you might decrease it to take smaller, more careful steps. For DFP specifically, you can often use a larger
     /// initial learning rate than with simpler methods because it's better at adjusting its step size automatically.</para>
     /// </remarks>
-    public new double InitialLearningRate { get; set; } = 1.0;
+    public override double InitialLearningRate { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets the minimum allowed learning rate during optimization.

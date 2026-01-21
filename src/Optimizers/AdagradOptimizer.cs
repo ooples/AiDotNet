@@ -431,6 +431,18 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
             string optionsJson = JsonConvert.SerializeObject(_options);
             writer.Write(optionsJson);
 
+            // Serialize accumulated squared gradients
+            bool hasAccumulatedGradients = _accumulatedSquaredGradients is not null;
+            writer.Write(hasAccumulatedGradients);
+            if (hasAccumulatedGradients)
+            {
+                writer.Write(_accumulatedSquaredGradients!.Length);
+                for (int i = 0; i < _accumulatedSquaredGradients.Length; i++)
+                {
+                    writer.Write(NumOps.ToDouble(_accumulatedSquaredGradients[i]));
+                }
+            }
+
             return ms.ToArray();
         }
     }
@@ -446,12 +458,12 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// and specific options. It's used to restore a previously serialized optimizer state.
     /// </para>
     /// <para><b>For Beginners:</b> This is like recreating your learning assistant from a saved snapshot.
-    /// 
+    ///
     /// The process:
     /// 1. Reads the basic information (for the parent class)
     /// 2. Recreates the parent class state
     /// 3. Reads and recreates the specific Adagrad settings
-    /// 
+    ///
     /// This allows you to continue using the optimizer from exactly where you left off,
     /// with all its learned information and settings intact.
     /// </para>
@@ -468,6 +480,23 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
             string optionsJson = reader.ReadString();
             _options = JsonConvert.DeserializeObject<AdagradOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+
+            // Deserialize accumulated squared gradients
+            bool hasAccumulatedGradients = reader.ReadBoolean();
+            if (hasAccumulatedGradients)
+            {
+                int length = reader.ReadInt32();
+                T[] dataArray = new T[length];
+                for (int i = 0; i < length; i++)
+                {
+                    dataArray[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
+                _accumulatedSquaredGradients = new Vector<T>(dataArray);
+            }
+            else
+            {
+                _accumulatedSquaredGradients = null;
+            }
         }
     }
 

@@ -512,8 +512,44 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
             writer.Write(_t);
 
+            // Serialize state vectors
+            SerializeVector(writer, _m);
+            SerializeVector(writer, _v);
+            SerializeVector(writer, _previousM);
+            SerializeVector(writer, _previousV);
+
             return ms.ToArray();
         }
+    }
+
+    private void SerializeVector(BinaryWriter writer, Vector<T>? vector)
+    {
+        bool hasVector = vector is not null;
+        writer.Write(hasVector);
+        if (hasVector)
+        {
+            writer.Write(vector!.Length);
+            for (int i = 0; i < vector.Length; i++)
+            {
+                writer.Write(NumOps.ToDouble(vector[i]));
+            }
+        }
+    }
+
+    private Vector<T>? DeserializeVector(BinaryReader reader)
+    {
+        bool hasVector = reader.ReadBoolean();
+        if (hasVector)
+        {
+            int length = reader.ReadInt32();
+            T[] data = new T[length];
+            for (int i = 0; i < length; i++)
+            {
+                data[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            return new Vector<T>(data);
+        }
+        return null;
     }
 
     /// <summary>
@@ -521,11 +557,11 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method takes a byte array (previously created by Serialize) and uses it to restore the optimizer's state, 
+    /// This method takes a byte array (previously created by Serialize) and uses it to restore the optimizer's state,
     /// including its base class state, options, and time step.
     /// </para>
     /// <para><b>For Beginners:</b>
-    /// This is like using a detailed blueprint to recreate your smart ball rolling experiment exactly as it was at a certain point. 
+    /// This is like using a detailed blueprint to recreate your smart ball rolling experiment exactly as it was at a certain point.
     /// It allows you to set up the experiment to match a previous state, with all the same rules and conditions.
     /// </para>
     /// </remarks>
@@ -545,6 +581,12 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _t = reader.ReadInt32();
+
+            // Deserialize state vectors
+            _m = DeserializeVector(reader);
+            _v = DeserializeVector(reader);
+            _previousM = DeserializeVector(reader);
+            _previousV = DeserializeVector(reader);
         }
     }
 

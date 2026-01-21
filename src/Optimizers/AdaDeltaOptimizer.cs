@@ -318,18 +318,23 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         var accSqGradPlusEps = (Vector<T>)Engine.Add(_accumulatedSquaredGradients, epsilonVec);
         var rmsGrad = (Vector<T>)Engine.Sqrt(accSqGradPlusEps);
 
-        // Compute update: update = (RMS[Δ] / RMS[g]) * gradient
+        // Compute unscaled update: updateUnscaled = (RMS[Δ] / RMS[g]) * gradient
         var ratio = (Vector<T>)Engine.Divide(rmsUpdate, rmsGrad);
-        var update = (Vector<T>)Engine.Multiply(ratio, gradient);
+        var updateUnscaled = (Vector<T>)Engine.Multiply(ratio, gradient);
 
-        // Update accumulated squared updates: accSqUpd = rho * accSqUpd + (1 - rho) * update^2
-        var updateSquared = (Vector<T>)Engine.Multiply(update, update);
+        // Update accumulated squared updates using UNSCALED update to preserve AdaDelta's
+        // self-tuning property: accSqUpd = rho * accSqUpd + (1 - rho) * updateUnscaled^2
+        var updateUnscaledSquared = (Vector<T>)Engine.Multiply(updateUnscaled, updateUnscaled);
         var rhoTimesAccSqUpd = (Vector<T>)Engine.Multiply(_accumulatedSquaredUpdates, rho);
-        var oneMinusRhoTimesUpdSq = (Vector<T>)Engine.Multiply(updateSquared, oneMinusRho);
+        var oneMinusRhoTimesUpdSq = (Vector<T>)Engine.Multiply(updateUnscaledSquared, oneMinusRho);
         _accumulatedSquaredUpdates = (Vector<T>)Engine.Add(rhoTimesAccSqUpd, oneMinusRhoTimesUpdSq);
 
-        // Update parameters: params = params - update
-        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
+        // Apply learning rate as scaling factor for parameter update only
+        // The learning rate serves as a scaling factor as documented in AdaDeltaOptimizerOptions
+        var scaledUpdate = (Vector<T>)Engine.Multiply(updateUnscaled, CurrentLearningRate);
+
+        // Update parameters: params = params - lr * updateUnscaled
+        var updatedParams = (Vector<T>)Engine.Subtract(parameters, scaledUpdate);
 
         return updatedParams;
     }
@@ -451,7 +456,8 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         var rmsGrad = (Vector<T>)Engine.Sqrt(accGradPlusEps);
 
         var ratio = (Vector<T>)Engine.Divide(rmsUpdate, rmsGrad);
-        var update = (Vector<T>)Engine.Multiply(ratio, appliedGradients);
+        var updateUnscaled = (Vector<T>)Engine.Multiply(ratio, appliedGradients);
+        var update = (Vector<T>)Engine.Multiply(updateUnscaled, CurrentLearningRate);
 
         // Reverse: original = updated + update
         var original = (Vector<T>)Engine.Add(updatedParameters, update);
@@ -580,8 +586,44 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             string optionsJson = JsonConvert.SerializeObject(_options);
             writer.Write(optionsJson);
 
+            // Serialize state vectors
+            SerializeVector(writer, _accumulatedSquaredGradients);
+            SerializeVector(writer, _accumulatedSquaredUpdates);
+            SerializeVector(writer, _previousAccumulatedSquaredGradients);
+            SerializeVector(writer, _previousAccumulatedSquaredUpdates);
+
             return ms.ToArray();
         }
+    }
+
+    private void SerializeVector(BinaryWriter writer, Vector<T>? vector)
+    {
+        bool hasVector = vector is not null;
+        writer.Write(hasVector);
+        if (hasVector)
+        {
+            writer.Write(vector!.Length);
+            for (int i = 0; i < vector.Length; i++)
+            {
+                writer.Write(NumOps.ToDouble(vector[i]));
+            }
+        }
+    }
+
+    private Vector<T>? DeserializeVector(BinaryReader reader)
+    {
+        bool hasVector = reader.ReadBoolean();
+        if (hasVector)
+        {
+            int length = reader.ReadInt32();
+            T[] data = new T[length];
+            for (int i = 0; i < length; i++)
+            {
+                data[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            return new Vector<T>(data);
+        }
+        return null;
     }
 
     /// <summary>
@@ -594,12 +636,12 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// This method reconstructs the optimizer's state from a byte array, including its base class state and options.
     /// </para>
     /// <para><b>For Beginners:</b> This is like unpacking the optimizer from its compact form.
-    /// 
+    ///
     /// Continuing the suitcase analogy:
     /// 1. You check how much basic stuff was packed
     /// 2. You unpack the basic stuff (base class data)
     /// 3. You unpack and set up your special AdaDelta stuff (options)
-    /// 
+    ///
     /// If there's a problem unpacking the special stuff, it will let you know with an error message.
     /// </para>
     /// </remarks>
@@ -615,6 +657,12 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             string optionsJson = reader.ReadString();
             _options = JsonConvert.DeserializeObject<AdaDeltaOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
+
+            // Deserialize state vectors
+            _accumulatedSquaredGradients = DeserializeVector(reader);
+            _accumulatedSquaredUpdates = DeserializeVector(reader);
+            _previousAccumulatedSquaredGradients = DeserializeVector(reader);
+            _previousAccumulatedSquaredUpdates = DeserializeVector(reader);
         }
     }
 

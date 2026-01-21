@@ -69,14 +69,12 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         // If no genetic algorithm is provided, create a default StandardGeneticAlgorithm
         if (geneticAlgorithm == null)
         {
-            // Need to provide a model factory - use a simple model as default
-            static IFullModel<T, TInput, TOutput> modelFactory()
-            {
-                return (IFullModel<T, TInput, TOutput>)new SimpleRegression<T>();
-            }
+            // Create a model factory that clones the provided model
+            // This ensures we use the same model type as was passed to the optimizer
+            IFullModel<T, TInput, TOutput> ModelFactory() => model.DeepCopy();
 
             _geneticAlgorithm = new StandardGeneticAlgorithm<T, TInput, TOutput>(
-                modelFactory,
+                ModelFactory,
                 fitnessCalculator ?? new MeanSquaredErrorFitnessCalculator<T, TInput, TOutput>(),
                 modelEvaluator ?? new DefaultModelEvaluator<T, TInput, TOutput>());
         }

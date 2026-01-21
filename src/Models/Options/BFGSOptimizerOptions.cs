@@ -44,7 +44,7 @@ public class BFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// lowest point. The algorithm will adjust this value as it runs, but setting a good starting point can help it 
     /// find the solution faster.</para>
     /// </remarks>
-    public new double InitialLearningRate { get; set; } = 1.0;
+    public override double InitialLearningRate { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets the minimum allowed learning rate during optimization.

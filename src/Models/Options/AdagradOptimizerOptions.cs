@@ -53,7 +53,7 @@ public class AdagradOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimize
     /// parameters that are updated frequently. It's like having a smart walking assistant that helps you
     /// take appropriate steps based on the terrain - bigger steps on flat ground, smaller steps on rocky terrain.</para>
     /// </remarks>
-    public new double InitialLearningRate { get; set; } = 0.01;
+    public override double InitialLearningRate { get; set; } = 0.01;
 
     /// <summary>
     /// Gets or sets the factor by which the learning rate increases when performance improves.

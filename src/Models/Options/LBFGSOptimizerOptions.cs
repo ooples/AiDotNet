@@ -98,7 +98,7 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// Note: This property uses the "new" keyword because it overrides the base class property with a
     /// different default value that's more appropriate for L-BFGS.</para>
     /// </remarks>
-    public new double InitialLearningRate { get; set; } = 1.0;
+    public override double InitialLearningRate { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets the minimum learning rate allowed during optimization, preventing the learning
