@@ -118,6 +118,14 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
+        // Validate parameters and gradient lengths match
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameters size ({parameters.Length}) must match gradient size ({gradient.Length})",
+                nameof(gradient));
+        }
+
         _t++;
 
         // Initialize state vectors if needed
