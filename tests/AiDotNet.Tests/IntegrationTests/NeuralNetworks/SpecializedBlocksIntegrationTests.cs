@@ -583,12 +583,11 @@ public class SpecializedBlocksIntegrationTests
     {
         var tensor = new Tensor<T>(shape);
         var random = new Random(42);
-        var span = tensor.AsSpan();
 
-        for (int i = 0; i < span.Length; i++)
+        for (int i = 0; i < tensor.Length; i++)
         {
             double value = random.NextDouble() * 2 - 1; // [-1, 1]
-            span[i] = (T)Convert.ChangeType(value, typeof(T));
+            tensor[i] = (T)Convert.ChangeType(value, typeof(T));
         }
 
         return tensor;
