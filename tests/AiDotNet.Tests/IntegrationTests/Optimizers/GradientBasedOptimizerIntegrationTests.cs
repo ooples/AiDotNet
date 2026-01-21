@@ -3979,4 +3979,243 @@ public class GradientBasedOptimizerIntegrationTests
     }
 
     #endregion
+
+    #region Modified Gradient Descent Optimizer Tests
+
+    /// <summary>
+    /// Tests for ModifiedGradientDescentOptimizer - a specialized optimizer for Hope architecture
+    /// based on the "Nested Learning" paper (Equations 27-29).
+    ///
+    /// This optimizer has a different interface than standard gradient-based optimizers:
+    /// - UpdateVector: w_{t+1} = w_t - x_t*dot(w_t,x_t) - η*gradient
+    /// - UpdateMatrix: W_{t+1} = W_t * (I - x_t*x_t^T) - η * (∇_y L ⊗ x_t)
+    /// </summary>
+    [Fact]
+    public void ModifiedGD_CanInstantiate()
+    {
+        var optimizer = new ModifiedGradientDescentOptimizer<double>(0.01);
+        Assert.NotNull(optimizer);
+        Assert.Equal(0.01, optimizer.LearningRate);
+    }
+
+    [Fact]
+    public void ModifiedGD_UpdateVector_BasicOperation()
+    {
+        // Test the basic vector update operation
+        var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var input = new Vector<double>(new double[] { 0.5, 0.5, 0.5 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        var updated = optimizer.UpdateVector(parameters, input, gradient);
+
+        // Verify the update produces valid output
+        Assert.Equal(parameters.Length, updated.Length);
+
+        // The update should modify the parameters
+        bool anyChanged = false;
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            if (Math.Abs(updated[i] - parameters[i]) > 1e-10)
+            {
+                anyChanged = true;
+                break;
+            }
+        }
+        Assert.True(anyChanged, "Parameters should be modified by the update");
+    }
+
+    [Fact]
+    public void ModifiedGD_UpdateVector_ZeroGradient_StillProjectsParameters()
+    {
+        // With zero gradient, the modified GD still projects parameters
+        // w_{t+1} = w_t - x_t*dot(w_t,x_t) - η*0 = w_t - x_t*dot(w_t,x_t)
+        var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var input = new Vector<double>(new double[] { 0.5, 0.5, 0.5 });
+        var zeroGradient = new Vector<double>(new double[] { 0.0, 0.0, 0.0 });
+
+        var updated = optimizer.UpdateVector(parameters, input, zeroGradient);
+
+        // dot(w, x) = 1*0.5 + 2*0.5 + 3*0.5 = 3.0
+        // projection = x * dot(w,x) = [1.5, 1.5, 1.5]
+        // updated = w - projection = [-0.5, 0.5, 1.5]
+        Assert.Equal(-0.5, updated[0], 6);
+        Assert.Equal(0.5, updated[1], 6);
+        Assert.Equal(1.5, updated[2], 6);
+    }
+
+    [Fact]
+    public void ModifiedGD_UpdateVector_LearningRateAffectsGradientTerm()
+    {
+        // Verify learning rate scales the gradient term
+        var optimizerSmall = new ModifiedGradientDescentOptimizer<double>(0.01);
+        var optimizerLarge = new ModifiedGradientDescentOptimizer<double>(1.0);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var input = new Vector<double>(new double[] { 0.0, 0.0, 0.0 }); // Zero input to eliminate projection term
+        var gradient = new Vector<double>(new double[] { 1.0, 1.0, 1.0 });
+
+        var updatedSmall = optimizerSmall.UpdateVector(parameters, input, gradient);
+        var updatedLarge = optimizerLarge.UpdateVector(parameters, input, gradient);
+
+        // With zero input, projection term is zero
+        // updatedSmall = [1.0, 2.0, 3.0] - 0.01 * [1,1,1] = [0.99, 1.99, 2.99]
+        // updatedLarge = [1.0, 2.0, 3.0] - 1.0 * [1,1,1] = [0.0, 1.0, 2.0]
+        Assert.Equal(0.99, updatedSmall[0], 6);
+        Assert.Equal(0.0, updatedLarge[0], 6);
+    }
+
+    [Fact]
+    public void ModifiedGD_UpdateMatrix_BasicOperation()
+    {
+        // Test the matrix update operation
+        var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
+
+        var parameters = new Matrix<double>(2, 3);
+        parameters[0, 0] = 1.0; parameters[0, 1] = 2.0; parameters[0, 2] = 3.0;
+        parameters[1, 0] = 4.0; parameters[1, 1] = 5.0; parameters[1, 2] = 6.0;
+
+        var input = new Vector<double>(new double[] { 0.5, 0.5, 0.5 });
+        var outputGradient = new Vector<double>(new double[] { 0.1, 0.2 });
+
+        var updated = optimizer.UpdateMatrix(parameters, input, outputGradient);
+
+        // Verify dimensions are preserved
+        Assert.Equal(parameters.Rows, updated.Rows);
+        Assert.Equal(parameters.Columns, updated.Columns);
+
+        // Verify the update modified the parameters
+        bool anyChanged = false;
+        for (int i = 0; i < parameters.Rows; i++)
+        {
+            for (int j = 0; j < parameters.Columns; j++)
+            {
+                if (Math.Abs(updated[i, j] - parameters[i, j]) > 1e-10)
+                {
+                    anyChanged = true;
+                    break;
+                }
+            }
+        }
+        Assert.True(anyChanged, "Matrix parameters should be modified by the update");
+    }
+
+    [Fact]
+    public void ModifiedGD_UpdateVector_DimensionMismatch_ThrowsException()
+    {
+        var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var input = new Vector<double>(new double[] { 0.5, 0.5 }); // Wrong size
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2, 0.3 });
+
+        Assert.Throws<ArgumentException>(() => optimizer.UpdateVector(parameters, input, gradient));
+    }
+
+    [Fact]
+    public void ModifiedGD_UpdateVector_GradientDimensionMismatch_ThrowsException()
+    {
+        var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var input = new Vector<double>(new double[] { 0.5, 0.5, 0.5 });
+        var gradient = new Vector<double>(new double[] { 0.1, 0.2 }); // Wrong size
+
+        Assert.Throws<ArgumentException>(() => optimizer.UpdateVector(parameters, input, gradient));
+    }
+
+    [Fact]
+    public void ModifiedGD_UpdateVector_OrthogonalInput_NoProjection()
+    {
+        // When input is orthogonal to parameters, projection term is zero
+        var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
+
+        // Parameters in one direction
+        var parameters = new Vector<double>(new double[] { 1.0, 0.0, 0.0 });
+        // Input orthogonal to parameters
+        var input = new Vector<double>(new double[] { 0.0, 1.0, 0.0 });
+        var gradient = new Vector<double>(new double[] { 0.0, 0.0, 0.0 });
+
+        var updated = optimizer.UpdateVector(parameters, input, gradient);
+
+        // dot(w, x) = 0, so projection is zero
+        // updated = parameters (no change when gradient is also zero)
+        Assert.Equal(parameters[0], updated[0], 6);
+        Assert.Equal(parameters[1], updated[1], 6);
+        Assert.Equal(parameters[2], updated[2], 6);
+    }
+
+    [Fact]
+    public void ModifiedGD_UpdateVector_HighDimensional_WorksCorrectly()
+    {
+        var optimizer = new ModifiedGradientDescentOptimizer<double>(0.01);
+
+        int dim = 100;
+        var parametersData = new double[dim];
+        var inputData = new double[dim];
+        var gradientData = new double[dim];
+
+        var rand = new Random(42);
+        for (int i = 0; i < dim; i++)
+        {
+            parametersData[i] = rand.NextDouble() * 2 - 1;
+            inputData[i] = rand.NextDouble() * 2 - 1;
+            gradientData[i] = rand.NextDouble() * 0.1;
+        }
+
+        var parameters = new Vector<double>(parametersData);
+        var input = new Vector<double>(inputData);
+        var gradient = new Vector<double>(gradientData);
+
+        var updated = optimizer.UpdateVector(parameters, input, gradient);
+
+        Assert.Equal(dim, updated.Length);
+        // Just verify it completes without error on high-dimensional data
+    }
+
+    [Fact]
+    public void ModifiedGD_MultipleUpdates_AccumulatesChanges()
+    {
+        var optimizer = new ModifiedGradientDescentOptimizer<double>(0.1);
+
+        var parameters = new Vector<double>(new double[] { 5.0, 5.0, 5.0 });
+
+        // Simulate multiple update steps
+        for (int i = 0; i < 10; i++)
+        {
+            // Use a consistent input and decreasing gradient
+            var input = new Vector<double>(new double[] { 0.1, 0.1, 0.1 });
+            var gradient = new Vector<double>(new double[] { 0.5, 0.5, 0.5 });
+            parameters = optimizer.UpdateVector(parameters, input, gradient);
+        }
+
+        // Parameters should have moved significantly from initial values
+        double totalChange = 0;
+        for (int i = 0; i < 3; i++)
+        {
+            totalChange += Math.Abs(parameters[i] - 5.0);
+        }
+        Assert.True(totalChange > 1.0, $"Parameters should change significantly over multiple updates, total change: {totalChange}");
+    }
+
+    [Fact]
+    public void ModifiedGD_FloatType_WorksCorrectly()
+    {
+        // Verify the optimizer works with float type as well
+        var optimizer = new ModifiedGradientDescentOptimizer<float>(0.1f);
+
+        var parameters = new Vector<float>(new float[] { 1.0f, 2.0f, 3.0f });
+        var input = new Vector<float>(new float[] { 0.5f, 0.5f, 0.5f });
+        var gradient = new Vector<float>(new float[] { 0.1f, 0.2f, 0.3f });
+
+        var updated = optimizer.UpdateVector(parameters, input, gradient);
+
+        Assert.Equal(parameters.Length, updated.Length);
+        Assert.NotEqual(parameters[0], updated[0]);
+    }
+
+    #endregion
 }
