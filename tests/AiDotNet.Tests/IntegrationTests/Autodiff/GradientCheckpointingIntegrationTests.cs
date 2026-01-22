@@ -106,7 +106,7 @@ public class GradientCheckpointingIntegrationTests
         Assert.NotNull(input.Gradient);
         for (int i = 0; i < 4; i++)
         {
-            Assert.Equal(1.0, input.Gradient.Data.Span[i], Tolerance);
+            Assert.Equal(1.0, input.Gradient[i], Tolerance);
         }
     }
 
