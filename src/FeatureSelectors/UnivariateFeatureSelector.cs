@@ -148,6 +148,12 @@ public class UnivariateFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInpu
             .OrderBy(idx => idx) // Sort indices for consistent output
             .ToList();
 
+        // Safety check: ensure at least one feature is selected
+        if (selectedIndices.Count == 0 && featureScores.Count > 0)
+        {
+            selectedIndices.Add(featureScores[0].index);
+        }
+
         return selectedIndices;
     }
 

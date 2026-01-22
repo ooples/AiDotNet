@@ -96,6 +96,7 @@ public class CorrelationFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInp
         var selectedFeatureIndices = new List<int>();
 
         // Process each feature to determine if it should be kept
+        // Note: The first feature is always kept since it has nothing to correlate with
         for (int i = 0; i < numFeatures; i++)
         {
             bool isIndependent = true;
@@ -118,6 +119,12 @@ public class CorrelationFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInp
             {
                 selectedFeatureIndices.Add(i);
             }
+        }
+
+        // Safety check: ensure at least one feature is selected (first feature as fallback)
+        if (selectedFeatureIndices.Count == 0 && numFeatures > 0)
+        {
+            selectedFeatureIndices.Add(0);
         }
 
         return selectedFeatureIndices;

@@ -120,9 +120,9 @@ public class FeatureSelectorsIntegrationTests
     }
 
     [Fact]
-    public void VarianceThresholdFeatureSelector_AllConstant_ThrowsException()
+    public void VarianceThresholdFeatureSelector_AllConstant_ReturnsOneFeature()
     {
-        // Arrange - All columns are constant
+        // Arrange - All columns are constant (variance = 0 for both)
         var data = CreateTestMatrix(new double[,]
         {
             { 5.0, 3.0 },
@@ -132,8 +132,12 @@ public class FeatureSelectorsIntegrationTests
         // Use small positive threshold to require some variance (removes zero-variance features)
         var selector = new VarianceThresholdFeatureSelector<double, Matrix<double>>(threshold: 1e-10);
 
-        // Act & Assert - When all features are removed, Matrix creation throws since empty matrices aren't supported
-        Assert.Throws<ArgumentException>(() => selector.SelectFeatures(data));
+        // Act - When no features pass threshold, selector keeps the one with highest variance (first one when tied)
+        var result = selector.SelectFeatures(data);
+
+        // Assert - At least one feature is always kept (safety behavior)
+        Assert.Equal(3, result.Rows);
+        Assert.Equal(1, result.Columns);
     }
 
     [Fact]

@@ -84,8 +84,9 @@ public class VarianceThresholdFeatureSelector<T, TInput> : FeatureSelectorBase<T
     /// </remarks>
     protected override List<int> SelectFeatureIndices(TInput allFeatures, int numSamples, int numFeatures)
     {
-        // Track which features to keep
+        // Track which features to keep and their variances for fallback
         var selectedFeatureIndices = new List<int>();
+        var featureVariances = new List<(int index, T variance)>();
 
         // Analyze each feature for variance
         for (int i = 0; i < numFeatures; i++)
@@ -97,11 +98,28 @@ public class VarianceThresholdFeatureSelector<T, TInput> : FeatureSelectorBase<T
             var mean = StatisticsHelper<T>.CalculateMean(featureVector);
             var variance = StatisticsHelper<T>.CalculateVariance(featureVector, mean);
 
+            // Track all variances for potential fallback
+            featureVariances.Add((i, variance));
+
             // Keep features with variance above threshold
             if (NumOps.GreaterThanOrEquals(variance, _threshold))
             {
                 selectedFeatureIndices.Add(i);
             }
+        }
+
+        // Ensure at least one feature is selected - pick the one with highest variance
+        if (selectedFeatureIndices.Count == 0 && featureVariances.Count > 0)
+        {
+            var bestFeature = featureVariances
+                .OrderByDescending(fv => fv.variance, Comparer<T>.Create((a, b) =>
+                {
+                    if (NumOps.GreaterThan(a, b)) return 1;
+                    if (NumOps.LessThan(a, b)) return -1;
+                    return 0;
+                }))
+                .First();
+            selectedFeatureIndices.Add(bestFeature.index);
         }
 
         return selectedFeatureIndices;
