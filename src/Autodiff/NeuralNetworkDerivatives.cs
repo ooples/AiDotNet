@@ -66,6 +66,16 @@ namespace AiDotNet.Autodiff
             T[] inputs,
             int outputDim)
         {
+            if (network == null)
+            {
+                throw new ArgumentNullException(nameof(network));
+            }
+
+            if (inputs == null)
+            {
+                throw new ArgumentNullException(nameof(inputs));
+            }
+
             if (TryComputeGradientViaAutodiff(network, inputs, outputDim, out var gradients))
             {
                 return gradients;
@@ -264,7 +274,11 @@ namespace AiDotNet.Autodiff
                 var outputNode = BuildGraph(network, inputNode);
                 var outputShape = outputNode.Value.Shape;
 
-                if (outputShape.Length != 2 || outputShape[0] != 1 || outputShape[1] != outputDim)
+                // Handle 1D output [outputDim] or 2D batched output [1, outputDim]
+                bool is1D = outputShape.Length == 1 && outputShape[0] == outputDim;
+                bool is2DBatched = outputShape.Length == 2 && outputShape[0] == 1 && outputShape[1] == outputDim;
+
+                if (!is1D && !is2DBatched)
                 {
                     return false;
                 }
@@ -275,7 +289,14 @@ namespace AiDotNet.Autodiff
                 {
                     var maskTensor = new Tensor<T>(outputShape);
                     maskTensor.Fill(numOps.Zero);
-                    maskTensor[0, outIdx] = numOps.One;
+                    if (is1D)
+                    {
+                        maskTensor[outIdx] = numOps.One;
+                    }
+                    else
+                    {
+                        maskTensor[0, outIdx] = numOps.One;
+                    }
                     var maskNode = TensorOperations<T>.Constant(maskTensor, $"mask_{outIdx}");
                     var masked = TensorOperations<T>.ElementwiseMultiply(outputNode, maskNode);
                     var scalar = TensorOperations<T>.Sum(masked);
@@ -287,9 +308,10 @@ namespace AiDotNet.Autodiff
                         return false;
                     }
 
+                    // Read gradient from 1D tensor
                     for (int i = 0; i < inputs.Length; i++)
                     {
-                        gradients[outIdx, i] = inputNode.Gradient[0, i];
+                        gradients[outIdx, i] = inputNode.Gradient[i];
                     }
                 }
 
@@ -467,10 +489,12 @@ namespace AiDotNet.Autodiff
 
         private static Tensor<T> CreateInputTensor(T[] inputs)
         {
-            var inputTensor = new Tensor<T>(new int[] { 1, inputs.Length });
+            // Create 1D unbatched tensor to match NeuralNetworkArchitecture.GetInputShape()
+            // for InputType.OneDimensional configurations
+            var inputTensor = new Tensor<T>(new int[] { inputs.Length });
             for (int i = 0; i < inputs.Length; i++)
             {
-                inputTensor[0, i] = inputs[i];
+                inputTensor[i] = inputs[i];
             }
 
             return inputTensor;
