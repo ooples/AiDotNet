@@ -263,7 +263,7 @@ public class GradientBasedOptimizerIntegrationTests
         double updateSmall = Math.Abs(parameters[0] - resultSmall[0]);
         double updateLarge = Math.Abs(parameters[0] - resultLarge[0]);
 
-        Assert.Equal(updateLarge / updateSmall, 10.0, Tolerance); // 0.1 / 0.01 = 10
+        Assert.Equal(10.0, updateLarge / updateSmall, Tolerance); // 0.1 / 0.01 = 10
     }
 
     #endregion

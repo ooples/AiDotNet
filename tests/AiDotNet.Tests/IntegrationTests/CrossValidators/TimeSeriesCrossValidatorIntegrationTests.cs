@@ -356,7 +356,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
         var result = validator.Validate(model, X, y, optimizer);
 
         // Assert - Should only have 1 fold (train 0-39, val 40-44)
-        Assert.Equal(1, result.FoldResults.Count);
+        Assert.Single(result.FoldResults);
     }
 
     #endregion
