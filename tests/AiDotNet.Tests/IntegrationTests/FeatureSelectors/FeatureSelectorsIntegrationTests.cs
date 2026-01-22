@@ -454,7 +454,7 @@ public class FeatureSelectorsIntegrationTests
     }
 
     [Fact]
-    public void NoFeatureSelector_EmptyMatrix_ThrowsException()
+    public void Matrix_EmptyMatrix_ThrowsException()
     {
         // Arrange & Act & Assert
         // The Matrix constructor doesn't allow empty matrices
@@ -1401,9 +1401,9 @@ public class FeatureSelectorsIntegrationTests
         // Act - Should not crash
         var result = selector.SelectFeatures(data);
 
-        // Assert - Should still return at least 1 feature
+        // Assert - Should return exactly 1 feature (k=1)
         Assert.Equal(3, result.Rows);
-        Assert.True(result.Columns >= 1);
+        Assert.Equal(1, result.Columns);
     }
 
     #endregion
