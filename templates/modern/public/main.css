@@ -1,0 +1,248 @@
+/* AiDotNet Documentation - Mobile Responsive Styles */
+
+/* ============================================
+   Responsive Tables
+   ============================================ */
+
+/* Wrap all tables in a scrollable container on mobile */
+article table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+article table thead,
+article table tbody,
+article table tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+/* On small screens, allow tables to be wider than viewport with scroll */
+@media (max-width: 768px) {
+  article table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  article table thead,
+  article table tbody,
+  article table tr {
+    display: table;
+    width: max-content;
+    min-width: 100%;
+    table-layout: auto;
+  }
+
+  article table th,
+  article table td {
+    white-space: nowrap;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  /* Visual indicator for scrollable tables */
+  article table::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 20px;
+    background: linear-gradient(to right, transparent, rgba(0,0,0,0.05));
+    pointer-events: none;
+  }
+}
+
+/* Ensure table cells don't get too cramped */
+article table th,
+article table td {
+  min-width: 80px;
+}
+
+/* ============================================
+   Responsive Code Blocks
+   ============================================ */
+
+article pre {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+article pre code {
+  white-space: pre;
+  word-wrap: normal;
+}
+
+@media (max-width: 768px) {
+  article pre {
+    font-size: 0.8125rem;
+    padding: 0.75rem;
+    border-radius: 0.375rem;
+  }
+
+  article pre code {
+    font-size: inherit;
+  }
+}
+
+/* ============================================
+   Mobile Navigation Improvements
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Improve tap targets */
+  .navbar-brand {
+    padding: 0.5rem 0;
+  }
+
+  /* Better spacing for mobile menu */
+  #navpanel {
+    padding: 1rem 0;
+  }
+
+  /* Make TOC more accessible */
+  .toc-offcanvas .offcanvas-body {
+    padding: 1rem;
+  }
+
+  .toc a {
+    padding: 0.5rem 0.75rem;
+    display: block;
+  }
+}
+
+/* ============================================
+   Mobile Content Spacing
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Reduce horizontal padding on small screens */
+  .container-xxl {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* Better heading sizes on mobile */
+  article h1 {
+    font-size: 1.75rem;
+  }
+
+  article h2 {
+    font-size: 1.5rem;
+  }
+
+  article h3 {
+    font-size: 1.25rem;
+  }
+
+  /* Improve list readability */
+  article ul,
+  article ol {
+    padding-left: 1.25rem;
+  }
+
+  article li {
+    margin-bottom: 0.5rem;
+  }
+}
+
+/* ============================================
+   Mobile Link Styling
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Better touch targets for links in content */
+  article a {
+    padding: 0.125rem 0;
+  }
+
+  /* Button-like link styling for CTAs */
+  article p > a:first-child:last-child {
+    display: inline-block;
+    padding: 0.375rem 0;
+  }
+}
+
+/* ============================================
+   Mobile Table Visual Improvements
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Add subtle borders for better readability */
+  article table {
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 0.375rem;
+  }
+
+  article table th {
+    background-color: var(--bs-tertiary-bg, #f8f9fa);
+    font-weight: 600;
+    font-size: 0.8125rem;
+  }
+
+  article table td {
+    vertical-align: top;
+  }
+
+  /* Alternate row colors for readability */
+  article table tbody tr:nth-child(even) {
+    background-color: var(--bs-tertiary-bg, rgba(0,0,0,0.02));
+  }
+}
+
+/* ============================================
+   Scrollbar Styling for Tables
+   ============================================ */
+
+article table::-webkit-scrollbar {
+  height: 6px;
+}
+
+article table::-webkit-scrollbar-track {
+  background: var(--bs-tertiary-bg, #f1f1f1);
+  border-radius: 3px;
+}
+
+article table::-webkit-scrollbar-thumb {
+  background: var(--bs-secondary-color, #888);
+  border-radius: 3px;
+}
+
+article table::-webkit-scrollbar-thumb:hover {
+  background: var(--bs-primary, #555);
+}
+
+/* ============================================
+   Playground Embed Responsive
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* If playground is embedded as iframe */
+  iframe[src*="playground"] {
+    width: 100%;
+    min-height: 400px;
+  }
+}
+
+/* ============================================
+   Print Styles - Tables
+   ============================================ */
+
+@media print {
+  article table {
+    display: table;
+    overflow: visible;
+    font-size: 9pt;
+  }
+
+  article table th,
+  article table td {
+    white-space: normal;
+    word-wrap: break-word;
+  }
+}
