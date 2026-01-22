@@ -629,4 +629,476 @@ public class PreprocessingPipelineIntegrationTests
     }
 
     #endregion
+
+    #region Nested Pipeline Tests - Pipeline with ColumnTransformer
+
+    [Fact]
+    public void Pipeline_WithColumnTransformer_TransformsCorrectly()
+    {
+        // Arrange - Pipeline containing a ColumnTransformer
+        var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+
+        var columnTransformer = new ColumnTransformer<double>();
+        columnTransformer.Add("scale_first", new StandardScaler<double>(), new[] { 0 });
+        columnTransformer.Add("scale_second", new MinMaxScaler<double>(), new[] { 1 });
+
+        pipeline.Add("column_transformer", columnTransformer);
+
+        var data = CreateTestMatrix(new double[,] { { 1, 0 }, { 2, 5 }, { 3, 10 } });
+
+        // Act
+        var result = pipeline.FitTransform(data);
+
+        // Assert - Should have 2 columns
+        Assert.Equal(3, result.Rows);
+        Assert.Equal(2, result.Columns);
+
+        // Column 0 should be standardized (mean ~0)
+        double col0Mean = (result[0, 0] + result[1, 0] + result[2, 0]) / 3;
+        Assert.True(Math.Abs(col0Mean) < Tolerance, "Column 0 should be centered");
+
+        // Column 1 should be min-max scaled to [0, 1]
+        Assert.True(Math.Abs(result[0, 1] - 0) < Tolerance, "Min value should be 0");
+        Assert.True(Math.Abs(result[2, 1] - 1) < Tolerance, "Max value should be 1");
+    }
+
+    [Fact]
+    public void Pipeline_WithColumnTransformer_DoesNotSupportInverseTransform()
+    {
+        // Arrange - ColumnTransformer does not support inverse transform
+        var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+
+        var columnTransformer = new ColumnTransformer<double>();
+        columnTransformer.Add("scaler", new StandardScaler<double>(), new[] { 0, 1 });
+
+        pipeline.Add(columnTransformer);
+
+        var data = CreateTestMatrix(new double[,] { { 1, 10 }, { 2, 20 }, { 3, 30 } });
+
+        // Act
+        var transformed = pipeline.FitTransform(data);
+
+        // Assert - ColumnTransformer doesn't support inverse transform
+        Assert.False(pipeline.SupportsInverseTransform);
+        Assert.Throws<NotSupportedException>(() => pipeline.InverseTransform(transformed));
+    }
+
+    #endregion
+
+    #region Nested Pipeline Tests - Pipeline with FeatureUnion
+
+    [Fact]
+    public void Pipeline_WithFeatureUnion_ConcatenatesFeatures()
+    {
+        // Arrange - Pipeline containing a FeatureUnion
+        var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+
+        var featureUnion = new FeatureUnion<double>();
+        featureUnion.Add("standard", new StandardScaler<double>());
+        featureUnion.Add("minmax", new MinMaxScaler<double>());
+
+        pipeline.Add("feature_union", featureUnion);
+
+        var data = CreateTestMatrix(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+
+        // Act
+        var result = pipeline.FitTransform(data);
+
+        // Assert - Should have 4 columns (2 from StandardScaler + 2 from MinMaxScaler)
+        Assert.Equal(3, result.Rows);
+        Assert.Equal(4, result.Columns);
+    }
+
+    [Fact]
+    public void Pipeline_WithFeatureUnion_InverseTransformNotSupported()
+    {
+        // Arrange - FeatureUnion doesn't support inverse transform
+        var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+
+        var featureUnion = new FeatureUnion<double>();
+        featureUnion.Add("standard", new StandardScaler<double>());
+
+        pipeline.Add(featureUnion);
+
+        var data = CreateTestMatrix(new double[,] { { 1, 2 }, { 3, 4 } });
+        var transformed = pipeline.FitTransform(data);
+
+        // Assert - Should not support inverse transform
+        Assert.False(pipeline.SupportsInverseTransform);
+    }
+
+    #endregion
+
+    #region Complex Nested Pipeline Tests
+
+    [Fact]
+    public void Pipeline_MultipleStepsWithColumnTransformer_TransformsSequentially()
+    {
+        // Arrange - Pipeline with multiple steps including ColumnTransformer
+        var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+
+        // First step: StandardScaler on all columns
+        pipeline.Add("global_scaler", new StandardScaler<double>());
+
+        // Second step: ColumnTransformer for ALL columns to preserve output width
+        var columnTransformer = new ColumnTransformer<double>();
+        columnTransformer.Add("rescale", new MinMaxScaler<double>(), new[] { 0, 1 }); // Both columns
+
+        pipeline.Add("column_transformer", columnTransformer);
+
+        var data = CreateTestMatrix(new double[,] { { 1, 10 }, { 2, 20 }, { 3, 30 } });
+
+        // Act
+        var result = pipeline.FitTransform(data);
+
+        // Assert - Should process both steps sequentially
+        Assert.Equal(3, result.Rows);
+        Assert.Equal(2, result.Columns);
+    }
+
+    [Fact]
+    public void Pipeline_NestedPipelineInPipeline_TransformsCorrectly()
+    {
+        // Arrange - A pipeline containing another pipeline
+        var innerPipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        innerPipeline.Add("inner_scaler", new StandardScaler<double>());
+
+        var outerPipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        outerPipeline.Add("inner_pipeline", innerPipeline);
+        outerPipeline.Add("outer_scaler", new MinMaxScaler<double>());
+
+        var data = CreateTestMatrix(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 } });
+
+        // Act
+        var result = outerPipeline.FitTransform(data);
+
+        // Assert - Should process inner pipeline first, then outer scaler
+        Assert.Equal(3, result.Rows);
+        Assert.Equal(2, result.Columns);
+
+        // After StandardScaler + MinMaxScaler, values should be in [0, 1]
+        for (int i = 0; i < result.Rows; i++)
+        {
+            for (int j = 0; j < result.Columns; j++)
+            {
+                Assert.True(result[i, j] >= -Tolerance && result[i, j] <= 1 + Tolerance,
+                    $"Value at [{i},{j}] = {result[i, j]} should be in [0, 1]");
+            }
+        }
+    }
+
+    #endregion
+
+    #region PreprocessingInfo Tests
+
+    [Fact]
+    public void PreprocessingInfo_DefaultConstructor_CreatesUnfittedInstance()
+    {
+        // Act
+        var info = new PreprocessingInfo<double, Matrix<double>, Vector<double>>();
+
+        // Assert
+        Assert.Null(info.Pipeline);
+        Assert.Null(info.TargetPipeline);
+        Assert.False(info.IsFitted);
+        Assert.False(info.IsTargetFitted);
+    }
+
+    [Fact]
+    public void PreprocessingInfo_WithPipeline_StoresPipelineCorrectly()
+    {
+        // Arrange
+        var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        pipeline.Add(new StandardScaler<double>());
+
+        var data = CreateTestMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
+        pipeline.Fit(data);
+
+        // Act
+        var info = new PreprocessingInfo<double, Matrix<double>, Vector<double>>(pipeline);
+
+        // Assert
+        Assert.NotNull(info.Pipeline);
+        Assert.True(info.IsFitted);
+        Assert.Null(info.TargetPipeline);
+        Assert.False(info.IsTargetFitted);
+    }
+
+    [Fact]
+    public void PreprocessingInfo_TransformFeatures_TransformsCorrectly()
+    {
+        // Arrange
+        var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        pipeline.Add(new StandardScaler<double>());
+
+        var trainData = CreateTestMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
+        pipeline.Fit(trainData);
+
+        var info = new PreprocessingInfo<double, Matrix<double>, Vector<double>>(pipeline);
+
+        var testData = CreateTestMatrix(new double[,] { { 2 } }); // Mean value
+
+        // Act
+        var result = info.TransformFeatures(testData);
+
+        // Assert - Mean value (2) should transform to ~0
+        Assert.True(Math.Abs(result[0, 0]) < Tolerance);
+    }
+
+    [Fact]
+    public void PreprocessingInfo_TransformFeaturesWithoutFit_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        pipeline.Add(new StandardScaler<double>());
+        // Note: Not fitted
+
+        var info = new PreprocessingInfo<double, Matrix<double>, Vector<double>>(pipeline);
+        var data = CreateTestMatrix(new double[,] { { 1 } });
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() => info.TransformFeatures(data));
+    }
+
+    [Fact]
+    public void PreprocessingInfo_TransformFeaturesWithNullPipeline_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var info = new PreprocessingInfo<double, Matrix<double>, Vector<double>>();
+        var data = CreateTestMatrix(new double[,] { { 1 } });
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() => info.TransformFeatures(data));
+    }
+
+    [Fact]
+    public void PreprocessingInfo_InverseTransformPredictions_WithNoTargetPipeline_ReturnsInput()
+    {
+        // Arrange
+        var pipeline = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        pipeline.Add(new StandardScaler<double>());
+        var trainData = CreateTestMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
+        pipeline.Fit(trainData);
+
+        var info = new PreprocessingInfo<double, Matrix<double>, Vector<double>>(pipeline);
+        var predictions = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+
+        // Act - No target pipeline, should return input unchanged
+        var result = info.InverseTransformPredictions(predictions);
+
+        // Assert
+        Assert.Equal(predictions.Length, result.Length);
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.Equal(predictions[i], result[i]);
+        }
+    }
+
+    #endregion
+
+    #region Serialization Tests (Clone Functionality)
+
+    [Fact]
+    public void Clone_IsShallowClone_SharesTransformerInstances()
+    {
+        // Arrange
+        var original = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        var scaler = new StandardScaler<double>();
+        original.Add("scaler", scaler);
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert - Clone is shallow, so transformers are the same instance
+        // (Note: Clone creates a shallow copy as documented)
+        Assert.Equal(original.Count, clone.Count);
+        Assert.False(clone.IsFitted); // Clone is not fitted
+    }
+
+    [Fact]
+    public void Clone_ProducesSameResultsWhenFittedOnSameData()
+    {
+        // Arrange
+        var original = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        original.Add("scaler1", new StandardScaler<double>());
+        original.Add("scaler2", new MinMaxScaler<double>());
+
+        var data = CreateTestMatrix(new double[,] { { 1, 10 }, { 2, 20 }, { 3, 30 } });
+
+        // Act
+        original.Fit(data);
+        var clone = original.Clone();
+        clone.Fit(data); // Fit on same data
+
+        var originalResult = original.Transform(data);
+        var cloneResult = clone.Transform(data);
+
+        // Assert - Should produce identical results
+        AssertMatrixEqual(originalResult, cloneResult);
+    }
+
+    [Fact]
+    public void Clone_WithMultipleTransformerTypes_PreservesStructure()
+    {
+        // Arrange
+        var original = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        original.Add("standard", new StandardScaler<double>());
+        original.Add("minmax", new MinMaxScaler<double>());
+
+        // Act
+        var clone = original.Clone();
+
+        // Assert - Structure is preserved
+        Assert.Equal(original.Count, clone.Count);
+        Assert.Equal(original.Steps[0].Name, clone.Steps[0].Name);
+        Assert.Equal(original.Steps[1].Name, clone.Steps[1].Name);
+        // Note: Clone is shallow, so transformer instances are the same
+        Assert.Same(original.GetStep("standard"), clone.GetStep("standard"));
+        Assert.Same(original.GetStep("minmax"), clone.GetStep("minmax"));
+    }
+
+    [Fact]
+    public void Clone_PreservesSupportsInverseTransformFlag()
+    {
+        // Arrange
+        var pipeline1 = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        pipeline1.Add(new StandardScaler<double>()); // Supports inverse
+
+        var pipeline2 = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        pipeline2.Add(new Normalizer<double>()); // Does not support inverse
+
+        // Act
+        var clone1 = pipeline1.Clone();
+        var clone2 = pipeline2.Clone();
+
+        // Assert
+        Assert.True(clone1.SupportsInverseTransform);
+        Assert.False(clone2.SupportsInverseTransform);
+    }
+
+    [Fact]
+    public void Clone_OriginalModificationDoesNotAffectClone()
+    {
+        // Arrange
+        var original = new PreprocessingPipeline<double, Matrix<double>, Matrix<double>>();
+        original.Add("scaler1", new StandardScaler<double>());
+
+        var clone = original.Clone();
+
+        // Act - Modify original after cloning
+        original.Add("scaler2", new MinMaxScaler<double>());
+
+        // Assert - Clone should not be affected
+        Assert.Equal(2, original.Count);
+        Assert.Equal(1, clone.Count);
+    }
+
+    #endregion
+
+    #region TransformerBase Tests (via concrete implementations)
+
+    [Fact]
+    public void TransformerBase_Fit_SetsIsFittedToTrue()
+    {
+        // Arrange
+        var scaler = new StandardScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
+
+        // Act
+        scaler.Fit(data);
+
+        // Assert
+        Assert.True(scaler.IsFitted);
+    }
+
+    [Fact]
+    public void TransformerBase_FitTransform_SetsIsFittedToTrue()
+    {
+        // Arrange
+        var scaler = new StandardScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
+
+        // Act
+        scaler.FitTransform(data);
+
+        // Assert
+        Assert.True(scaler.IsFitted);
+    }
+
+    [Fact]
+    public void TransformerBase_TransformBeforeFit_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var scaler = new StandardScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() => scaler.Transform(data));
+    }
+
+    [Fact]
+    public void TransformerBase_InverseTransformBeforeFit_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var scaler = new StandardScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
+
+        // Act & Assert
+        Assert.Throws<InvalidOperationException>(() => scaler.InverseTransform(data));
+    }
+
+    [Fact]
+    public void TransformerBase_ColumnIndices_LimitsTransformation()
+    {
+        // Arrange - Only transform column 0
+        var scaler = new StandardScaler<double>(columnIndices: new[] { 0 });
+        var data = CreateTestMatrix(new double[,] { { 1, 100 }, { 2, 200 }, { 3, 300 } });
+
+        // Act
+        var result = scaler.FitTransform(data);
+
+        // Assert - Column 0 should be transformed, column 1 should be unchanged
+        Assert.Equal(3, result.Rows);
+        Assert.Equal(2, result.Columns);
+
+        // Column 0 should be centered
+        double col0Mean = (result[0, 0] + result[1, 0] + result[2, 0]) / 3;
+        Assert.True(Math.Abs(col0Mean) < Tolerance);
+
+        // Column 1 should be unchanged
+        Assert.Equal(100, result[0, 1]);
+        Assert.Equal(200, result[1, 1]);
+        Assert.Equal(300, result[2, 1]);
+    }
+
+    [Fact]
+    public void TransformerBase_GetFeatureNamesOut_ReturnsInputNamesWhenProvided()
+    {
+        // Arrange
+        var scaler = new StandardScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { 1, 2 }, { 3, 4 } });
+        scaler.Fit(data);
+
+        var inputNames = new[] { "feature_a", "feature_b" };
+
+        // Act
+        var outputNames = scaler.GetFeatureNamesOut(inputNames);
+
+        // Assert
+        Assert.Equal(2, outputNames.Length);
+        Assert.Equal("feature_a", outputNames[0]);
+        Assert.Equal("feature_b", outputNames[1]);
+    }
+
+    [Fact]
+    public void TransformerBase_NullData_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var scaler = new StandardScaler<double>();
+
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => scaler.Fit(null!));
+    }
+
+    #endregion
 }

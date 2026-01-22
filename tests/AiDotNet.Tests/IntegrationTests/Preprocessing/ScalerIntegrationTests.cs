@@ -527,4 +527,330 @@ public class ScalerIntegrationTests
     }
 
     #endregion
+
+    #region RobustScaler Tests
+
+    [Fact]
+    public void RobustScaler_DefaultParameters_CentersAndScalesData()
+    {
+        // Arrange
+        var scaler = new RobustScaler<double>();
+        // Data with some outliers: [1, 2, 3, 4, 100]
+        var data = CreateTestMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 100 } });
+
+        // Act
+        var result = scaler.FitTransform(data);
+
+        // Assert - Median should be 3, IQR should be Q3-Q1
+        // The median value (3) should be centered to 0
+        Assert.Equal(5, result.Rows);
+        Assert.Equal(1, result.Columns);
+
+        // Find the index of the original median value (3)
+        // After centering by median, 3 should become 0
+        Assert.True(Math.Abs(result[2, 0]) < 0.5, "Median value should be centered close to 0");
+    }
+
+    [Fact]
+    public void RobustScaler_WithCenteringOnly_CentersButDoesNotScale()
+    {
+        // Arrange
+        var scaler = new RobustScaler<double>(withCentering: true, withScaling: false);
+        var data = CreateTestMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
+
+        // Act
+        var result = scaler.FitTransform(data);
+
+        // Assert - Median is 3, so values become [-2, -1, 0, 1, 2]
+        Assert.True(Math.Abs(result[0, 0] - (-2)) < Tolerance);
+        Assert.True(Math.Abs(result[2, 0] - 0) < Tolerance);
+        Assert.True(Math.Abs(result[4, 0] - 2) < Tolerance);
+    }
+
+    [Fact]
+    public void RobustScaler_InverseTransform_RecoversOriginalData()
+    {
+        // Arrange
+        var scaler = new RobustScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { 1, 10 }, { 2, 20 }, { 3, 30 }, { 4, 40 }, { 5, 50 } });
+
+        // Act
+        var transformed = scaler.FitTransform(data);
+        var inversed = scaler.InverseTransform(transformed);
+
+        // Assert
+        AssertMatrixEqual(data, inversed, 1e-9);
+    }
+
+    [Fact]
+    public void RobustScaler_MedianProperty_ReturnsCorrectValues()
+    {
+        // Arrange
+        var scaler = new RobustScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
+
+        // Act
+        scaler.Fit(data);
+
+        // Assert - Median of [1,2,3,4,5] is 3
+        Assert.NotNull(scaler.Median);
+        Assert.True(Math.Abs(scaler.Median![0] - 3.0) < Tolerance);
+    }
+
+    [Fact]
+    public void RobustScaler_SupportsInverseTransform_ReturnsTrue()
+    {
+        // Arrange
+        var scaler = new RobustScaler<double>();
+
+        // Assert
+        Assert.True(scaler.SupportsInverseTransform);
+    }
+
+    #endregion
+
+    #region MaxAbsScaler Tests
+
+    [Fact]
+    public void MaxAbsScaler_DefaultParameters_ScalesToNegativeOneToOne()
+    {
+        // Arrange
+        var scaler = new MaxAbsScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { -5 }, { 0 }, { 10 } });
+
+        // Act
+        var result = scaler.FitTransform(data);
+
+        // Assert - Max abs is 10, so values become [-0.5, 0, 1]
+        Assert.True(Math.Abs(result[0, 0] - (-0.5)) < Tolerance);
+        Assert.True(Math.Abs(result[1, 0] - 0) < Tolerance);
+        Assert.True(Math.Abs(result[2, 0] - 1.0) < Tolerance);
+    }
+
+    [Fact]
+    public void MaxAbsScaler_PreservesSparsity()
+    {
+        // Arrange
+        var scaler = new MaxAbsScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { 0, 0 }, { 5, 0 }, { 0, 10 } });
+
+        // Act
+        var result = scaler.FitTransform(data);
+
+        // Assert - Zero values should remain zero
+        Assert.True(Math.Abs(result[0, 0]) < Tolerance);
+        Assert.True(Math.Abs(result[0, 1]) < Tolerance);
+        Assert.True(Math.Abs(result[1, 1]) < Tolerance);
+        Assert.True(Math.Abs(result[2, 0]) < Tolerance);
+    }
+
+    [Fact]
+    public void MaxAbsScaler_InverseTransform_RecoversOriginalData()
+    {
+        // Arrange
+        var scaler = new MaxAbsScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { -5, 10 }, { 0, 20 }, { 10, -30 } });
+
+        // Act
+        var transformed = scaler.FitTransform(data);
+        var inversed = scaler.InverseTransform(transformed);
+
+        // Assert
+        AssertMatrixEqual(data, inversed, 1e-9);
+    }
+
+    [Fact]
+    public void MaxAbsScaler_MaxAbsoluteProperty_ReturnsCorrectValues()
+    {
+        // Arrange
+        var scaler = new MaxAbsScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { -5, 10 }, { 3, -20 } });
+
+        // Act
+        scaler.Fit(data);
+
+        // Assert - Max abs of column 0 is 5, column 1 is 20
+        Assert.NotNull(scaler.MaxAbsolute);
+        Assert.True(Math.Abs(scaler.MaxAbsolute![0] - 5.0) < Tolerance);
+        Assert.True(Math.Abs(scaler.MaxAbsolute![1] - 20.0) < Tolerance);
+    }
+
+    [Fact]
+    public void MaxAbsScaler_SupportsInverseTransform_ReturnsTrue()
+    {
+        // Arrange
+        var scaler = new MaxAbsScaler<double>();
+
+        // Assert
+        Assert.True(scaler.SupportsInverseTransform);
+    }
+
+    #endregion
+
+    #region Normalizer Tests
+
+    [Fact]
+    public void Normalizer_L2Norm_NormalizesRowsToUnitLength()
+    {
+        // Arrange
+        var normalizer = new Normalizer<double>(NormType.L2);
+        // Row [3, 4] has L2 norm = 5, should become [0.6, 0.8]
+        var data = CreateTestMatrix(new double[,] { { 3, 4 }, { 6, 8 } });
+
+        // Act
+        var result = normalizer.FitTransform(data);
+
+        // Assert - Each row should have L2 norm = 1
+        Assert.True(Math.Abs(result[0, 0] - 0.6) < Tolerance);
+        Assert.True(Math.Abs(result[0, 1] - 0.8) < Tolerance);
+        Assert.True(Math.Abs(result[1, 0] - 0.6) < Tolerance);
+        Assert.True(Math.Abs(result[1, 1] - 0.8) < Tolerance);
+    }
+
+    [Fact]
+    public void Normalizer_L1Norm_NormalizesRowsToSumOne()
+    {
+        // Arrange
+        var normalizer = new Normalizer<double>(NormType.L1);
+        // Row [2, 3] has L1 norm = 5, should become [0.4, 0.6]
+        var data = CreateTestMatrix(new double[,] { { 2, 3 } });
+
+        // Act
+        var result = normalizer.FitTransform(data);
+
+        // Assert - Sum of absolute values should be 1
+        Assert.True(Math.Abs(result[0, 0] - 0.4) < Tolerance);
+        Assert.True(Math.Abs(result[0, 1] - 0.6) < Tolerance);
+    }
+
+    [Fact]
+    public void Normalizer_MaxNorm_NormalizesRowsByMaxValue()
+    {
+        // Arrange
+        var normalizer = new Normalizer<double>(NormType.Max);
+        // Row [2, 4] has max abs = 4, should become [0.5, 1]
+        var data = CreateTestMatrix(new double[,] { { 2, 4 } });
+
+        // Act
+        var result = normalizer.FitTransform(data);
+
+        // Assert - Max absolute value should be 1
+        Assert.True(Math.Abs(result[0, 0] - 0.5) < Tolerance);
+        Assert.True(Math.Abs(result[0, 1] - 1.0) < Tolerance);
+    }
+
+    [Fact]
+    public void Normalizer_SupportsInverseTransform_ReturnsFalse()
+    {
+        // Arrange
+        var normalizer = new Normalizer<double>();
+
+        // Assert - Normalizer doesn't support inverse transform
+        Assert.False(normalizer.SupportsInverseTransform);
+    }
+
+    [Fact]
+    public void Normalizer_InverseTransform_ThrowsNotSupportedException()
+    {
+        // Arrange
+        var normalizer = new Normalizer<double>();
+        var data = CreateTestMatrix(new double[,] { { 3, 4 } });
+        var transformed = normalizer.FitTransform(data);
+
+        // Act & Assert
+        Assert.Throws<NotSupportedException>(() => normalizer.InverseTransform(transformed));
+    }
+
+    #endregion
+
+    #region Additional Edge Cases
+
+    [Fact]
+    public void Scaler_SingleFeature_TransformsCorrectly()
+    {
+        // Arrange
+        var scaler = new StandardScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { 1 }, { 2 }, { 3 } });
+
+        // Act
+        var result = scaler.FitTransform(data);
+
+        // Assert - Should handle single feature without issues
+        Assert.Equal(3, result.Rows);
+        Assert.Equal(1, result.Columns);
+
+        // Mean should be centered to 0
+        double mean = (result[0, 0] + result[1, 0] + result[2, 0]) / 3;
+        Assert.True(Math.Abs(mean) < Tolerance);
+    }
+
+    [Fact]
+    public void Scaler_SingleSample_HandlesGracefully()
+    {
+        // Arrange
+        var scaler = new MinMaxScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { 5, 10 } }); // Single sample
+
+        // Act
+        var result = scaler.FitTransform(data);
+
+        // Assert - Single sample should not cause errors
+        Assert.Equal(1, result.Rows);
+        Assert.Equal(2, result.Columns);
+    }
+
+    [Fact]
+    public void Scaler_AllSameValues_HandlesConstantFeature()
+    {
+        // Arrange
+        var scaler = new StandardScaler<double>();
+        var data = CreateTestMatrix(new double[,] { { 5, 1 }, { 5, 2 }, { 5, 3 } }); // First column is constant
+
+        // Act
+        var result = scaler.FitTransform(data);
+
+        // Assert - Constant feature should not cause NaN or infinity
+        Assert.Equal(3, result.Rows);
+        Assert.Equal(2, result.Columns);
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.False(double.IsNaN(result[i, 0]), $"NaN at [{i},0]");
+            Assert.False(double.IsInfinity(result[i, 0]), $"Infinity at [{i},0]");
+        }
+    }
+
+    [Fact]
+    public void Scaler_NullData_ThrowsArgumentNullException()
+    {
+        // Arrange
+        var scaler = new StandardScaler<double>();
+
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => scaler.Fit(null!));
+    }
+
+    [Fact]
+    public void RobustScaler_WithOutliers_IsRobust()
+    {
+        // Arrange
+        var robustScaler = new RobustScaler<double>();
+        var standardScaler = new StandardScaler<double>();
+
+        // Data with extreme outlier
+        var data = CreateTestMatrix(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 1000 } });
+
+        // Act
+        var robustResult = robustScaler.FitTransform(data);
+        var standardResult = standardScaler.FitTransform(data);
+
+        // Assert - RobustScaler should be less affected by outlier
+        // The first four values should be closer together in robust scaling
+        double robustRange = Math.Abs(robustResult[3, 0] - robustResult[0, 0]);
+        double standardRange = Math.Abs(standardResult[3, 0] - standardResult[0, 0]);
+
+        // In robust scaling, normal values should have a larger relative spread
+        Assert.True(robustRange > standardRange, "RobustScaler should preserve relative distances of non-outlier data");
+    }
+
+    #endregion
 }
