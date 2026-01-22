@@ -661,13 +661,14 @@ public class TensorOperationsIntegrationTests
         var gradA = grads[a];
         Assert.NotNull(gradA);
 
-        // HardSigmoid: max(0, min(1, 0.2*x + 0.5))
-        // Derivative: 0.2 if -2.5 < x < 2.5, else 0
-        Assert.Equal(0.0, gradA[0], Tolerance);   // x = -3, saturated
-        Assert.Equal(0.2, gradA[1], Tolerance);   // x = -1, linear
-        Assert.Equal(0.2, gradA[2], Tolerance);   // x = 0, linear
-        Assert.Equal(0.2, gradA[3], Tolerance);   // x = 1, linear
-        Assert.Equal(0.0, gradA[4], Tolerance);   // x = 3, saturated
+        // HardSigmoid (aligned with JIT IR): clip((x + 3) / 6, 0, 1)
+        // Derivative: 1/6 if -3 < x < 3, else 0
+        double expectedGrad = 1.0 / 6.0;
+        Assert.Equal(0.0, gradA[0], Tolerance);           // x = -3, at boundary (saturated)
+        Assert.Equal(expectedGrad, gradA[1], Tolerance);  // x = -1, linear region
+        Assert.Equal(expectedGrad, gradA[2], Tolerance);  // x = 0, linear region
+        Assert.Equal(expectedGrad, gradA[3], Tolerance);  // x = 1, linear region
+        Assert.Equal(0.0, gradA[4], Tolerance);           // x = 3, at boundary (saturated)
     }
 
     [Fact]

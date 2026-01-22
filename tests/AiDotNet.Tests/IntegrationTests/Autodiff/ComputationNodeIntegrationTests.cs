@@ -506,7 +506,6 @@ public class ComputationNodeIntegrationTests
             var prevNode = nodes[i - 1];
             var tensor = new Tensor<double>(new[] { 1 });
             tensor[0] = 1.0;
-            int capturedI = i;
             var node = new ComputationNode<double>(
                 tensor,
                 requiresGradient: true,

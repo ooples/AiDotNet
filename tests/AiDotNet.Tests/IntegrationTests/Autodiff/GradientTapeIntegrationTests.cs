@@ -329,11 +329,6 @@ public class GradientTapeIntegrationTests
 
             // Verify with numerical gradient
             double h = NumericalEpsilon;
-            var x_plus = TensorOperations<double>.Variable(new Tensor<double>(new[] { 1 }), "x_plus");
-            var x_minus = TensorOperations<double>.Variable(new Tensor<double>(new[] { 1 }), "x_minus");
-            x_plus.Value[0] = 0.5 + h;
-            x_minus.Value[0] = 0.5 - h;
-
             double f_plus = Math.Tanh(1.0 / (1.0 + Math.Exp(-(0.5 + h))));
             double f_minus = Math.Tanh(1.0 / (1.0 + Math.Exp(-(0.5 - h))));
             double numericalGradient = (f_plus - f_minus) / (2.0 * h);

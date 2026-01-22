@@ -2061,14 +2061,14 @@ public static class TensorOperations<T>
     }
 
     /// <summary>
-    /// Applies the Hard Sigmoid activation function element-wise: f(x) = clip((x + 1) / 2, 0, 1).
+    /// Applies the Hard Sigmoid activation function element-wise: f(x) = clip((x + 3) / 6, 0, 1).
     /// </summary>
     /// <param name="a">The input computation node.</param>
     /// <returns>A new computation node with HardSigmoid applied.</returns>
     /// <remarks>
     /// <para>
     /// HardSigmoid is a piecewise linear approximation of sigmoid that is computationally efficient.
-    /// The gradient is 0.5 when -1 &lt; x &lt; 1, and 0 otherwise.
+    /// The gradient is 1/6 when -3 &lt; x &lt; 3, and 0 otherwise.
     /// </para>
     /// <para><b>For Beginners:</b> HardSigmoid uses straight lines instead of curves,
     /// making it faster to compute while still mapping inputs to the [0, 1] range.
@@ -2080,13 +2080,14 @@ public static class TensorOperations<T>
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        // Standard HardSigmoid: clip(alpha*x + beta, 0, 1) where alpha=0.2, beta=0.5 (PyTorch default)
-        var alpha = numOps.FromDouble(0.2);
+        // HardSigmoid aligned with JIT IR/codegen: clip((x + 3) / 6, 0, 1)
+        // This is equivalent to clip(alpha * x + beta, 0, 1) where alpha = 1/6, beta = 0.5
+        var alpha = numOps.FromDouble(1.0 / 6.0);
         var beta = numOps.FromDouble(0.5);
-        var lowerBound = numOps.FromDouble(-2.5);  // (0 - beta) / alpha = -2.5
-        var upperBound = numOps.FromDouble(2.5);   // (1 - beta) / alpha = 2.5
+        var lowerBound = numOps.FromDouble(-3.0);  // (0 - beta) / alpha = -3
+        var upperBound = numOps.FromDouble(3.0);   // (1 - beta) / alpha = 3
 
-        // Forward pass: clip(0.2*x + 0.5, 0, 1)
+        // Forward pass: clip((x + 3) / 6, 0, 1)
         var result = a.Value.Transform((x, idx) =>
         {
             var linear = numOps.Add(numOps.Multiply(alpha, x), beta);
@@ -2102,8 +2103,8 @@ public static class TensorOperations<T>
         {
             if (a.RequiresGradient)
             {
-                // d(HardSigmoid)/dx = alpha if lowerBound < x < upperBound, else 0
-                // Using inclusive check on one side to handle edge cases properly
+                // d(HardSigmoid)/dx = alpha (1/6) if lowerBound < x < upperBound, else 0
+                // Using strict inequality on both sides (open interval)
                 var derivative = a.Value.Transform((x, idx) =>
                 {
                     if (numOps.GreaterThan(x, lowerBound) && numOps.LessThan(x, upperBound))
@@ -9678,7 +9679,8 @@ public static class TensorOperations<T>
     /// LogSoftmax(x) = log(softmax(x)) = x - log(sum(exp(x)))
     /// More numerically stable than computing log(softmax(x)) separately.
     /// </para>
-    /// <para><b>Gradient:</b> d(LogSoftmax)/dx_i = 1 - softmax(x)_i for the target class.</para>
+    /// <para><b>Gradient:</b> dL/dx_i = dL/dy_i - softmax(x)_i * sum_j(dL/dy_j)
+    /// where y = LogSoftmax(x) and dL/dy is the incoming gradient.</para>
     /// </remarks>
     public static ComputationNode<T> LogSoftmax(ComputationNode<T> a, int axis = -1)
     {
