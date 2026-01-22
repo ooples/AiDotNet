@@ -101,9 +101,11 @@ public class ScalerIntegrationTests
         var result = scaler.FitTransform(data);
 
         // Assert - Values should be scaled but not centered
-        // Original mean = 10, std = sqrt((100+0+100)/3) = sqrt(66.67)
+        // Original mean = 10, sample std = sqrt((100+0+100)/2) = sqrt(100) = 10
         // Values should be: 0/std, 10/std, 20/std (no mean subtraction)
-        Assert.True(Math.Abs(result[0, 0]) < 1e-10); // 0 / anything = 0
+        Assert.True(Math.Abs(result[0, 0]) < 1e-10); // 0 / 10 = 0
+        Assert.True(Math.Abs(result[1, 0] - 1.0) < 1e-10); // 10 / 10 = 1
+        Assert.True(Math.Abs(result[2, 0] - 2.0) < 1e-10); // 20 / 10 = 2
     }
 
     [Fact]
