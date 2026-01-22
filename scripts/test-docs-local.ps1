@@ -98,6 +98,16 @@ try {
         }
 
         Copy-Item -Path "$playgroundDir/wwwroot/*" -Destination $playgroundDest -Recurse -Force
+
+        # Update base href for local playground subdirectory (matches production structure)
+        $playgroundIndex = Join-Path $playgroundDest "index.html"
+        if (Test-Path $playgroundIndex) {
+            $content = Get-Content -Path $playgroundIndex -Raw
+            $content = $content -replace '<base href="/" />', '<base href="/playground/" />'
+            Set-Content -Path $playgroundIndex -Value $content -NoNewline
+            Write-Host "  Updated base href for local playground" -ForegroundColor Gray
+        }
+
         Write-Host "  Playground integrated successfully" -ForegroundColor Green
     }
     else {

@@ -2,7 +2,7 @@
 
 The most comprehensive AI/ML framework for .NET with 4,300+ implementations across 60+ feature categories.
 
-[Get Started](getting-started/index.md) | [View on GitHub](https://github.com/ooples/AiDotNet) | [Interactive Playground](https://ooples.github.io/AiDotNet/playground/)
+[Get Started](getting-started/index.md) | [View on GitHub](https://github.com/ooples/AiDotNet) | [Interactive Playground](../playground/index.html)
 
 ---
 

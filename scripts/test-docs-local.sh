@@ -82,6 +82,13 @@ if [ "$SKIP_PLAYGROUND" = false ] && [ "$SERVE_ONLY" = false ]; then
     echo "  Copying Playground to _site/playground..."
     mkdir -p _site/playground
     cp -r _playground/wwwroot/* _site/playground/
+
+    # Update base href for local playground subdirectory (matches production structure)
+    if [ -f "_site/playground/index.html" ]; then
+        sed -i 's|<base href="/" />|<base href="/playground/" />|g' _site/playground/index.html
+        echo "  Updated base href for local playground"
+    fi
+
     echo "  Playground integrated successfully"
 else
     echo "[4/6] Skipping Playground build (--skip-playground or --serve-only)"
