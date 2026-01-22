@@ -3831,7 +3831,10 @@ public static class StatisticsHelper<T>
 
         if (residualList.Count < 2)
         {
-            throw new ArgumentException("Durbin-Watson statistic requires at least 2 residuals.", nameof(residualList));
+            // Return neutral value of 2.0 (indicating no autocorrelation) for edge cases
+            // like Leave-One-Out cross-validation where validation set has only 1 sample.
+            // The Durbin-Watson statistic is undefined for fewer than 2 residuals.
+            return _numOps.FromDouble(2.0);
         }
 
         T sumSquaredDifferences = _numOps.Zero;
