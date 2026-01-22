@@ -64,7 +64,8 @@ public class ScalerIntegrationTests
             {
                 variance += Math.Pow(result[i, j] - mean, 2);
             }
-            // Use sample variance (N-1) to match sklearn's StandardScaler behavior
+            // AiDotNet uses sample variance (N-1 denominator, Bessel's correction)
+            // Note: This differs from sklearn which uses population variance (N denominator, ddof=0)
             variance /= (result.Rows - 1);
             double std = Math.Sqrt(variance);
 
@@ -196,7 +197,8 @@ public class ScalerIntegrationTests
         // Act
         scaler.Fit(data);
 
-        // Assert - StandardScaler uses sample std (N-1 denominator), matching sklearn
+        // Assert - AiDotNet StandardScaler uses sample std (N-1 denominator, Bessel's correction)
+        // Note: This differs from sklearn which uses population variance (N denominator, ddof=0)
         Assert.NotNull(scaler.StandardDeviation);
         double expectedStd = 1.0; // Sample std of [0, 1, 2] = sqrt(2/2) = 1
         Assert.True(Math.Abs(scaler.StandardDeviation[0] - expectedStd) < 1e-10,
