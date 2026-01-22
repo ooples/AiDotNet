@@ -122,7 +122,7 @@ public class PointCloudIntegrationTests
     {
         for (int i = 0; i < tensor.Length; i++)
         {
-            double value = tensor.Data.Span[i];
+            double value = tensor[i];
             Assert.False(double.IsNaN(value));
             Assert.False(double.IsInfinity(value));
         }

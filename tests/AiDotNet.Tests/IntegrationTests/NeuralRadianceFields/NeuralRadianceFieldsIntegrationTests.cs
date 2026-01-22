@@ -50,7 +50,7 @@ public class NeuralRadianceFieldsIntegrationTests
 
         for (int i = 0; i < output.Length; i++)
         {
-            double value = output.Data.Span[i];
+            double value = output[i];
             Assert.False(double.IsNaN(value));
             Assert.False(double.IsInfinity(value));
             Assert.True(value >= 0.0);
@@ -284,7 +284,7 @@ public class NeuralRadianceFieldsIntegrationTests
         var data = new double[image.Length];
         for (int i = 0; i < image.Length; i++)
         {
-            double value = image.Data.Span[i];
+            double value = image[i];
             data[i] = Clamp01(1.0 - value);
         }
 
@@ -301,7 +301,7 @@ public class NeuralRadianceFieldsIntegrationTests
         double total = 0.0;
         for (int i = 0; i < a.Length; i++)
         {
-            total += Math.Abs(a.Data.Span[i] - b.Data.Span[i]);
+            total += Math.Abs(a[i] - b[i]);
         }
 
         return total;
@@ -343,7 +343,7 @@ public class NeuralRadianceFieldsIntegrationTests
     {
         for (int i = 0; i < tensor.Length; i++)
         {
-            double value = tensor.Data.Span[i];
+            double value = tensor[i];
             Assert.False(double.IsNaN(value));
             Assert.False(double.IsInfinity(value));
         }
