@@ -111,7 +111,7 @@ public class GpuExecutionOptionsIntegrationTests
     [Fact]
     public void GpuExecutionMode_EnumValuesAreDistinct()
     {
-        var values = Enum.GetValues<GpuExecutionMode>();
+        var values = (GpuExecutionMode[])Enum.GetValues(typeof(GpuExecutionMode));
         var uniqueValues = values.Distinct().ToArray();
 
         Assert.Equal(values.Length, uniqueValues.Length);
@@ -121,7 +121,7 @@ public class GpuExecutionOptionsIntegrationTests
     public void GpuExecutionMode_HasExpectedCount()
     {
         // 4 modes: Eager, Deferred, ScopedDeferred, Auto
-        var values = Enum.GetValues<GpuExecutionMode>();
+        var values = (GpuExecutionMode[])Enum.GetValues(typeof(GpuExecutionMode));
         Assert.Equal(4, values.Length);
     }
 

@@ -119,7 +119,7 @@ public class GpuAccelerationConfigIntegrationTests
     public void GpuDeviceType_EnumValuesAreDistinct()
     {
         // Verify all enum values are unique
-        var values = Enum.GetValues<GpuDeviceType>();
+        var values = (GpuDeviceType[])Enum.GetValues(typeof(GpuDeviceType));
         var uniqueValues = values.Distinct().ToArray();
 
         Assert.Equal(values.Length, uniqueValues.Length);
@@ -129,7 +129,7 @@ public class GpuAccelerationConfigIntegrationTests
     public void GpuDeviceType_HasExpectedCount()
     {
         // 4 device types: Auto, CUDA, OpenCL, CPU
-        var values = Enum.GetValues<GpuDeviceType>();
+        var values = (GpuDeviceType[])Enum.GetValues(typeof(GpuDeviceType));
         Assert.Equal(4, values.Length);
     }
 
@@ -155,7 +155,7 @@ public class GpuAccelerationConfigIntegrationTests
     [Fact]
     public void GpuUsageLevel_EnumValuesAreDistinct()
     {
-        var values = Enum.GetValues<GpuUsageLevel>();
+        var values = (GpuUsageLevel[])Enum.GetValues(typeof(GpuUsageLevel));
         var uniqueValues = values.Distinct().ToArray();
 
         Assert.Equal(values.Length, uniqueValues.Length);
@@ -165,7 +165,7 @@ public class GpuAccelerationConfigIntegrationTests
     public void GpuUsageLevel_HasExpectedCount()
     {
         // 5 usage levels: Conservative, Default, Aggressive, AlwaysGpu, AlwaysCpu
-        var values = Enum.GetValues<GpuUsageLevel>();
+        var values = (GpuUsageLevel[])Enum.GetValues(typeof(GpuUsageLevel));
         Assert.Equal(5, values.Length);
     }
 
@@ -190,7 +190,7 @@ public class GpuAccelerationConfigIntegrationTests
     [Fact]
     public void GpuExecutionModeConfig_EnumValuesAreDistinct()
     {
-        var values = Enum.GetValues<GpuExecutionModeConfig>();
+        var values = (GpuExecutionModeConfig[])Enum.GetValues(typeof(GpuExecutionModeConfig));
         var uniqueValues = values.Distinct().ToArray();
 
         Assert.Equal(values.Length, uniqueValues.Length);
@@ -200,7 +200,7 @@ public class GpuAccelerationConfigIntegrationTests
     public void GpuExecutionModeConfig_HasExpectedCount()
     {
         // 4 modes: Auto, Eager, Deferred, ScopedDeferred
-        var values = Enum.GetValues<GpuExecutionModeConfig>();
+        var values = (GpuExecutionModeConfig[])Enum.GetValues(typeof(GpuExecutionModeConfig));
         Assert.Equal(4, values.Length);
     }
 
