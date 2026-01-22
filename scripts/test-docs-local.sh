@@ -85,7 +85,12 @@ if [ "$SKIP_PLAYGROUND" = false ] && [ "$SERVE_ONLY" = false ]; then
 
     # Update base href for local playground subdirectory (matches production structure)
     if [ -f "_site/playground/index.html" ]; then
-        sed -i 's|<base href="/" />|<base href="/playground/" />|g' _site/playground/index.html
+        # Handle sed -i portability between macOS (BSD) and Linux (GNU)
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' 's|<base href="/" />|<base href="/playground/" />|g' _site/playground/index.html
+        else
+            sed -i 's|<base href="/" />|<base href="/playground/" />|g' _site/playground/index.html
+        fi
         echo "  Updated base href for local playground"
     fi
 
