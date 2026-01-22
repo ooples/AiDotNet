@@ -1326,33 +1326,40 @@ Console.WriteLine(""  5. Train: agent.Replay()"");
                     Tags = ["rl", "ppo", "policy-gradient", "continuous"],
                     Code = @"// PPO Agent with AiModelBuilder
 using AiDotNet;
-using AiDotNet.ReinforcementLearning;
-using AiDotNet.ReinforcementLearning.Agents;
+using AiDotNet.Models.Options;
+using AiDotNet.ReinforcementLearning.Agents.PPO;
 
 // Continuous action space environment
 var stateSize = 8;
 var actionSize = 2;
 
+// Configure PPO options
+var options = new PPOOptions<double>
+{
+    StateSize = stateSize,
+    ActionSize = actionSize,
+    IsContinuous = true,
+    PolicyHiddenLayers = new List<int> { 64, 64 },
+    ValueHiddenLayers = new List<int> { 64, 64 },
+    PolicyLearningRate = 0.0003,
+    ValueLearningRate = 0.001,
+    DiscountFactor = 0.99,
+    GaeLambda = 0.95,
+    ClipEpsilon = 0.2,
+    EntropyCoefficient = 0.01,
+    TrainingEpochs = 10,
+    MiniBatchSize = 64
+};
+
 var result = await new AiModelBuilder<double, double[], double[]>()
-    .ConfigureModel(new PPOAgent<double>(
-        stateSize: stateSize,
-        actionSize: actionSize,
-        hiddenSizes: new[] { 64, 64 },
-        actorLearningRate: 0.0003,
-        criticLearningRate: 0.001,
-        gamma: 0.99,
-        gaeλ: 0.95,
-        clipEpsilon: 0.2,
-        entropyCoeff: 0.01,
-        epochs: 10,
-        batchSize: 64))
+    .ConfigureModel(new PPOAgent<double>(options))
     .BuildAsync();
 
 Console.WriteLine(""PPO Agent Created:"");
 Console.WriteLine($""  State size: {stateSize}"");
 Console.WriteLine($""  Action size: {actionSize} (continuous)"");
-Console.WriteLine($""  Clip epsilon: 0.2"");
-Console.WriteLine($""  GAE λ: 0.95"");
+Console.WriteLine($""  Clip epsilon: {options.ClipEpsilon}"");
+Console.WriteLine($""  GAE lambda: {options.GaeLambda}"");
 
 // Get action for a state
 var state = new double[] { 0.1, -0.2, 0.3, 0.4, -0.1, 0.2, 0.0, 0.5 };

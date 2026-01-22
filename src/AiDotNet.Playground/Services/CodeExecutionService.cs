@@ -19,9 +19,9 @@ public class CodeExecutionService
     private const string ProductionApiUrl = "https://aidotnet.vercel.app/api/execute";
     private const string LocalApiUrl = "http://localhost:3000/api/execute";
 
-    // Set to false to skip API calls entirely (useful when no backend exists)
-    // This prevents console errors from failed network requests
-    private const bool EnableApiCalls = true;
+    // Controls whether to attempt API calls for real code execution
+    // Set to false to use simulation-only mode (no network requests)
+    public static bool EnableApiCalls { get; set; } = true;
 
     // Patterns for detecting AiDotNet API usage
     private static readonly string[] AiDotNetPatterns = new[]
@@ -565,8 +565,9 @@ public class CodeExecutionService
             return value.ToString();
         }
 
-        // Clusters
-        if (lowerVar.Contains("cluster") || lowerVar.Contains("k"))
+        // Clusters (k as standalone or in cluster-related names)
+        if (lowerVar.Contains("cluster") || lowerVar.Contains("numk") ||
+            lowerVar.Contains("n_clusters") || lowerVar == "k" || lowerVar.EndsWith("_k"))
         {
             var value = (int)(2 + GetHashBasedVariation(varName) * 8); // 2 - 10
             return value.ToString();
@@ -632,11 +633,31 @@ public class CodeExecutionService
     /// <summary>
     /// Gets a deterministic variation (0-1) based on variable name hash.
     /// This ensures the same variable always gets the same simulated value.
+    /// Uses a deterministic hash (FNV-1a) instead of String.GetHashCode() which
+    /// is randomized per-process in modern .NET.
     /// </summary>
     private static double GetHashBasedVariation(string varName)
     {
-        var hash = Math.Abs(varName.GetHashCode());
+        var hash = GetDeterministicHash(varName);
         return (hash % 1000) / 1000.0;
+    }
+
+    /// <summary>
+    /// Computes a deterministic hash for a string using FNV-1a algorithm.
+    /// Unlike String.GetHashCode(), this produces consistent results across processes.
+    /// </summary>
+    private static uint GetDeterministicHash(string str)
+    {
+        const uint fnvPrime = 16777619;
+        const uint fnvOffsetBasis = 2166136261;
+
+        uint hash = fnvOffsetBasis;
+        foreach (char c in str)
+        {
+            hash ^= c;
+            hash *= fnvPrime;
+        }
+        return hash;
     }
 
     /// <summary>

@@ -52,7 +52,6 @@
             if (typeof monaco === 'undefined' && monacoModule) {
                 window.monaco = monacoModule;
             }
-            console.log('Monaco Editor loaded successfully, monaco global:', typeof monaco);
             Blazor.start().catch(function(error) {
                 console.error('Blazor startup error:', error);
                 var errorUI = document.getElementById('blazor-error-ui');

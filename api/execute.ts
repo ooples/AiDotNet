@@ -8,6 +8,8 @@ interface PistonExecuteRequest {
   args?: string[];
   compile_timeout?: number;
   run_timeout?: number;
+  compile_memory_limit?: number;
+  run_memory_limit?: number;
 }
 
 interface PistonExecuteResponse {
@@ -121,9 +123,8 @@ async function executeWithPiston(code: string): Promise<ExecuteResponse> {
       ],
       compile_timeout: 10000, // 10 seconds
       run_timeout: 5000, // 5 seconds
-      // Note: C# compiler (Roslyn) needs significant memory to compile
-      // Removed memory limits as they were causing OOM errors
-      // Piston's sandbox provides its own resource limits
+      compile_memory_limit: 1024000000, // 1GB - Roslyn needs significant memory
+      run_memory_limit: 512000000, // 512MB for runtime
     };
 
     const response = await fetch(`${PISTON_API}/execute`, {
