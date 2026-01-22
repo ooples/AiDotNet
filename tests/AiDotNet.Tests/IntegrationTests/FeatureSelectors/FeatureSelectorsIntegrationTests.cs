@@ -1,6 +1,9 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.FeatureSelectors;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -804,4 +807,987 @@ public class FeatureSelectorsIntegrationTests
     }
 
     #endregion
+
+    #region RecursiveFeatureElimination (RFE) Tests
+
+    [Fact]
+    public void RecursiveFeatureElimination_SelectsTopFeatures()
+    {
+        // Arrange - Use model that assigns different weights to features
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 0.1, 0.01 },
+            { 2.0, 0.2, 0.02 },
+            { 3.0, 0.3, 0.03 },
+            { 4.0, 0.4, 0.04 }
+        });
+
+        var model = new RFEMockModel(featureCount: 3);
+        var selector = new RecursiveFeatureElimination<double, Matrix<double>, Vector<double>>(
+            model,
+            createDummyTarget: numSamples => new Vector<double>(numSamples),
+            numFeaturesToSelect: 2
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - Should select 2 features
+        Assert.Equal(4, result.Rows);
+        Assert.Equal(2, result.Columns);
+    }
+
+    [Fact]
+    public void RecursiveFeatureElimination_DefaultNumFeatures_SelectsHalf()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 3.0, 4.0 },
+            { 5.0, 6.0, 7.0, 8.0 },
+            { 9.0, 10.0, 11.0, 12.0 }
+        });
+
+        var model = new RFEMockModel(featureCount: 4);
+        var selector = new RecursiveFeatureElimination<double, Matrix<double>, Vector<double>>(
+            model,
+            createDummyTarget: numSamples => new Vector<double>(numSamples)
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - Default should select 50% = 2 features
+        Assert.Equal(3, result.Rows);
+        Assert.Equal(2, result.Columns);
+    }
+
+    [Fact]
+    public void RecursiveFeatureElimination_SingleFeature_SelectsOne()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 3.0 },
+            { 4.0, 5.0, 6.0 },
+            { 7.0, 8.0, 9.0 }
+        });
+
+        var model = new RFEMockModel(featureCount: 3);
+        var selector = new RecursiveFeatureElimination<double, Matrix<double>, Vector<double>>(
+            model,
+            createDummyTarget: numSamples => new Vector<double>(numSamples),
+            numFeaturesToSelect: 1
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert
+        Assert.Equal(3, result.Rows);
+        Assert.Equal(1, result.Columns);
+    }
+
+    [Fact]
+    public void RecursiveFeatureElimination_NumFeaturesGreaterThanTotal_SelectsAll()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0 },
+            { 3.0, 4.0 }
+        });
+
+        var model = new RFEMockModel(featureCount: 2);
+        var selector = new RecursiveFeatureElimination<double, Matrix<double>, Vector<double>>(
+            model,
+            createDummyTarget: numSamples => new Vector<double>(numSamples),
+            numFeaturesToSelect: 100
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - Should select all features (2)
+        Assert.Equal(2, result.Rows);
+        Assert.Equal(2, result.Columns);
+    }
+
+    #endregion
+
+    #region SelectFromModel Tests
+
+    [Fact]
+    public void SelectFromModel_MeanThreshold_SelectsAboveMean()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 3.0, 4.0 },
+            { 5.0, 6.0, 7.0, 8.0 },
+            { 9.0, 10.0, 11.0, 12.0 }
+        });
+
+        // Feature importances: 0.1, 0.2, 0.3, 0.4 (mean = 0.25)
+        var importances = new Dictionary<string, double>
+        {
+            { "Feature_0", 0.1 },
+            { "Feature_1", 0.2 },
+            { "Feature_2", 0.3 },
+            { "Feature_3", 0.4 }
+        };
+
+        var model = new MockFeatureImportanceModel(importances);
+        var selector = new SelectFromModel<double, Matrix<double>>(
+            model,
+            ImportanceThresholdStrategy.Mean
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - Features 2 and 3 should be selected (>= mean of 0.25)
+        Assert.Equal(3, result.Rows);
+        Assert.Equal(2, result.Columns);
+    }
+
+    [Fact]
+    public void SelectFromModel_MedianThreshold_SelectsAboveMedian()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 3.0, 4.0 },
+            { 5.0, 6.0, 7.0, 8.0 }
+        });
+
+        // Feature importances: 0.1, 0.2, 0.3, 0.4 (median = 0.25)
+        var importances = new Dictionary<string, double>
+        {
+            { "Feature_0", 0.1 },
+            { "Feature_1", 0.2 },
+            { "Feature_2", 0.3 },
+            { "Feature_3", 0.4 }
+        };
+
+        var model = new MockFeatureImportanceModel(importances);
+        var selector = new SelectFromModel<double, Matrix<double>>(
+            model,
+            ImportanceThresholdStrategy.Median
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - Top 50% features should be selected
+        Assert.Equal(2, result.Rows);
+        Assert.Equal(2, result.Columns);
+    }
+
+    [Fact]
+    public void SelectFromModel_CustomThreshold_SelectsAboveThreshold()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 3.0, 4.0 },
+            { 5.0, 6.0, 7.0, 8.0 }
+        });
+
+        var importances = new Dictionary<string, double>
+        {
+            { "Feature_0", 0.1 },
+            { "Feature_1", 0.2 },
+            { "Feature_2", 0.3 },
+            { "Feature_3", 0.4 }
+        };
+
+        var model = new MockFeatureImportanceModel(importances);
+        var selector = new SelectFromModel<double, Matrix<double>>(
+            model,
+            threshold: 0.35
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - Only feature 3 should be selected (>= 0.35)
+        Assert.Equal(2, result.Rows);
+        Assert.Equal(1, result.Columns);
+    }
+
+    [Fact]
+    public void SelectFromModel_TopK_SelectsExactlyKFeatures()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 3.0, 4.0, 5.0 },
+            { 6.0, 7.0, 8.0, 9.0, 10.0 }
+        });
+
+        var importances = new Dictionary<string, double>
+        {
+            { "Feature_0", 0.1 },
+            { "Feature_1", 0.5 },
+            { "Feature_2", 0.2 },
+            { "Feature_3", 0.4 },
+            { "Feature_4", 0.3 }
+        };
+
+        var model = new MockFeatureImportanceModel(importances);
+        var selector = new SelectFromModel<double, Matrix<double>>(
+            model,
+            k: 3
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - Top 3 features by importance
+        Assert.Equal(2, result.Rows);
+        Assert.Equal(3, result.Columns);
+    }
+
+    [Fact]
+    public void SelectFromModel_MaxFeaturesLimit_LimitsSelection()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 3.0, 4.0 },
+            { 5.0, 6.0, 7.0, 8.0 }
+        });
+
+        var importances = new Dictionary<string, double>
+        {
+            { "Feature_0", 0.1 },
+            { "Feature_1", 0.2 },
+            { "Feature_2", 0.3 },
+            { "Feature_3", 0.4 }
+        };
+
+        var model = new MockFeatureImportanceModel(importances);
+        var selector = new SelectFromModel<double, Matrix<double>>(
+            model,
+            ImportanceThresholdStrategy.Mean,
+            maxFeatures: 1
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - Limited to 1 feature
+        Assert.Equal(2, result.Rows);
+        Assert.Equal(1, result.Columns);
+    }
+
+    [Fact]
+    public void SelectFromModel_NoFeaturesAboveThreshold_SelectsBest()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 3.0 },
+            { 4.0, 5.0, 6.0 }
+        });
+
+        var importances = new Dictionary<string, double>
+        {
+            { "Feature_0", 0.1 },
+            { "Feature_1", 0.2 },
+            { "Feature_2", 0.15 }
+        };
+
+        var model = new MockFeatureImportanceModel(importances);
+        var selector = new SelectFromModel<double, Matrix<double>>(
+            model,
+            threshold: 1.0 // Very high threshold
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - At least one feature selected (safety behavior)
+        Assert.Equal(2, result.Rows);
+        Assert.Equal(1, result.Columns);
+    }
+
+    [Fact]
+    public void SelectFromModel_ZeroImportances_SelectsAllFeatures()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 3.0 },
+            { 4.0, 5.0, 6.0 }
+        });
+
+        var importances = new Dictionary<string, double>
+        {
+            { "Feature_0", 0.0 },
+            { "Feature_1", 0.0 },
+            { "Feature_2", 0.0 }
+        };
+
+        var model = new MockFeatureImportanceModel(importances);
+        var selector = new SelectFromModel<double, Matrix<double>>(
+            model,
+            ImportanceThresholdStrategy.Mean
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - All features >= mean (0.0)
+        Assert.Equal(2, result.Rows);
+        Assert.Equal(3, result.Columns);
+    }
+
+    #endregion
+
+    #region SequentialFeatureSelector Tests
+
+    [Fact]
+    public void SequentialFeatureSelector_ForwardSelection_SelectsFeatures()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 0.1, 0.01 },
+            { 2.0, 0.2, 0.02 },
+            { 8.0, 3.0, 0.03 },
+            { 9.0, 4.0, 0.04 }
+        });
+        var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
+
+        var model = new SequentialMockModel();
+        var selector = new SequentialFeatureSelector<double, Matrix<double>, Vector<double>>(
+            model,
+            target,
+            CalculateAccuracy,
+            SequentialFeatureSelectionDirection.Forward,
+            numFeaturesToSelect: 2
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert
+        Assert.Equal(4, result.Rows);
+        Assert.Equal(2, result.Columns);
+    }
+
+    [Fact]
+    public void SequentialFeatureSelector_BackwardElimination_SelectsFeatures()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 0.1, 0.01 },
+            { 2.0, 0.2, 0.02 },
+            { 8.0, 3.0, 0.03 },
+            { 9.0, 4.0, 0.04 }
+        });
+        var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
+
+        var model = new SequentialMockModel();
+        var selector = new SequentialFeatureSelector<double, Matrix<double>, Vector<double>>(
+            model,
+            target,
+            CalculateAccuracy,
+            SequentialFeatureSelectionDirection.Backward,
+            numFeaturesToSelect: 2
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert
+        Assert.Equal(4, result.Rows);
+        Assert.Equal(2, result.Columns);
+    }
+
+    [Fact]
+    public void SequentialFeatureSelector_DefaultNumFeatures_SelectsHalf()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 0.1, 0.01, 0.001 },
+            { 2.0, 0.2, 0.02, 0.002 },
+            { 8.0, 3.0, 0.03, 0.003 },
+            { 9.0, 4.0, 0.04, 0.004 }
+        });
+        var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
+
+        var model = new SequentialMockModel();
+        var selector = new SequentialFeatureSelector<double, Matrix<double>, Vector<double>>(
+            model,
+            target,
+            CalculateAccuracy,
+            SequentialFeatureSelectionDirection.Forward
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - Default should select 50% = 2 features
+        Assert.Equal(4, result.Rows);
+        Assert.Equal(2, result.Columns);
+    }
+
+    [Fact]
+    public void SequentialFeatureSelector_SingleFeature_SelectsOne()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 0.1, 0.01 },
+            { 2.0, 0.2, 0.02 },
+            { 8.0, 3.0, 0.03 },
+            { 9.0, 4.0, 0.04 }
+        });
+        var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
+
+        var model = new SequentialMockModel();
+        var selector = new SequentialFeatureSelector<double, Matrix<double>, Vector<double>>(
+            model,
+            target,
+            CalculateAccuracy,
+            SequentialFeatureSelectionDirection.Forward,
+            numFeaturesToSelect: 1
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert
+        Assert.Equal(4, result.Rows);
+        Assert.Equal(1, result.Columns);
+    }
+
+    [Fact]
+    public void SequentialFeatureSelector_NumFeaturesGreaterThanTotal_SelectsAll()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 0.1 },
+            { 2.0, 0.2 },
+            { 8.0, 3.0 },
+            { 9.0, 4.0 }
+        });
+        var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
+
+        var model = new SequentialMockModel();
+        var selector = new SequentialFeatureSelector<double, Matrix<double>, Vector<double>>(
+            model,
+            target,
+            CalculateAccuracy,
+            SequentialFeatureSelectionDirection.Forward,
+            numFeaturesToSelect: 100
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - All features
+        Assert.Equal(4, result.Rows);
+        Assert.Equal(2, result.Columns);
+    }
+
+    /// <summary>
+    /// Simple accuracy scorer for testing.
+    /// </summary>
+    private static double CalculateAccuracy(Vector<double> predictions, Vector<double> actual)
+    {
+        int correct = 0;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            if (Math.Abs(predictions[i] - actual[i]) < 0.5)
+            {
+                correct++;
+            }
+        }
+        return (double)correct / predictions.Length;
+    }
+
+    #endregion
+
+    #region UnivariateFeatureSelector Chi-Squared Tests
+
+    [Fact]
+    public void UnivariateFeatureSelector_ChiSquared_SelectsFeatures()
+    {
+        // Arrange - Feature 0 is correlated with target (categorical), feature 1 is not
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 0.0, 5.0 },
+            { 0.0, 6.0 },
+            { 1.0, 5.0 },
+            { 1.0, 6.0 }
+        });
+        var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
+        var selector = new UnivariateFeatureSelector<double, Matrix<double>>(
+            target: target,
+            scoringFunction: UnivariateScoringFunction.ChiSquared,
+            k: 1
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - Should select 1 feature
+        Assert.Equal(4, result.Rows);
+        Assert.Equal(1, result.Columns);
+    }
+
+    [Fact]
+    public void UnivariateFeatureSelector_ChiSquared_WithMultipleClasses()
+    {
+        // Arrange - 3 classes
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 0.0, 5.0, 1.0 },
+            { 0.0, 6.0, 2.0 },
+            { 1.0, 5.0, 1.0 },
+            { 1.0, 6.0, 2.0 },
+            { 2.0, 5.0, 1.0 },
+            { 2.0, 6.0, 2.0 }
+        });
+        var target = new Vector<double>(new double[] { 0, 0, 1, 1, 2, 2 });
+        var selector = new UnivariateFeatureSelector<double, Matrix<double>>(
+            target: target,
+            scoringFunction: UnivariateScoringFunction.ChiSquared,
+            k: 2
+        );
+
+        // Act
+        var result = selector.SelectFeatures(data);
+
+        // Assert - Should select 2 features
+        Assert.Equal(6, result.Rows);
+        Assert.Equal(2, result.Columns);
+    }
+
+    [Fact]
+    public void UnivariateFeatureSelector_ChiSquared_AllSameClass_HandlesGracefully()
+    {
+        // Arrange - All samples have the same class
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 0.0, 5.0 },
+            { 1.0, 6.0 },
+            { 2.0, 7.0 }
+        });
+        var target = new Vector<double>(new double[] { 0, 0, 0 }); // Single class
+        var selector = new UnivariateFeatureSelector<double, Matrix<double>>(
+            target: target,
+            scoringFunction: UnivariateScoringFunction.ChiSquared,
+            k: 1
+        );
+
+        // Act - Should not crash
+        var result = selector.SelectFeatures(data);
+
+        // Assert - Should still return at least 1 feature
+        Assert.Equal(3, result.Rows);
+        Assert.True(result.Columns >= 1);
+    }
+
+    #endregion
+
+    #region Consistency and Reproducibility Tests
+
+    [Fact]
+    public void VarianceThresholdFeatureSelector_MultipleCallsProduceSameResult()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 5.0, 2.0 },
+            { 2.0, 5.0, 3.0 },
+            { 3.0, 5.0, 4.0 },
+            { 4.0, 5.0, 5.0 }
+        });
+        var selector = new VarianceThresholdFeatureSelector<double, Matrix<double>>(threshold: 0.5);
+
+        // Act
+        var result1 = selector.SelectFeatures(data);
+        var result2 = selector.SelectFeatures(data);
+
+        // Assert - results should be identical
+        Assert.Equal(result1.Rows, result2.Rows);
+        Assert.Equal(result1.Columns, result2.Columns);
+        for (int i = 0; i < result1.Rows; i++)
+        {
+            for (int j = 0; j < result1.Columns; j++)
+            {
+                Assert.Equal(result1[i, j], result2[i, j]);
+            }
+        }
+    }
+
+    [Fact]
+    public void CorrelationFeatureSelector_MultipleCallsProduceSameResult()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 10.0 },
+            { 2.0, 4.0, 20.0 },
+            { 3.0, 6.0, 30.0 },
+            { 4.0, 8.0, 40.0 }
+        });
+        var selector = new CorrelationFeatureSelector<double, Matrix<double>>(threshold: 0.9);
+
+        // Act
+        var result1 = selector.SelectFeatures(data);
+        var result2 = selector.SelectFeatures(data);
+
+        // Assert - results should be identical
+        Assert.Equal(result1.Rows, result2.Rows);
+        Assert.Equal(result1.Columns, result2.Columns);
+        for (int i = 0; i < result1.Rows; i++)
+        {
+            for (int j = 0; j < result1.Columns; j++)
+            {
+                Assert.Equal(result1[i, j], result2[i, j]);
+            }
+        }
+    }
+
+    [Fact]
+    public void UnivariateFeatureSelector_MultipleCallsProduceSameResult()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 5.0, 2.0, 8.0 },
+            { 2.0, 5.0, 3.0, 7.0 },
+            { 3.0, 5.0, 4.0, 6.0 },
+            { 4.0, 5.0, 5.0, 5.0 }
+        });
+        var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
+        var selector = new UnivariateFeatureSelector<double, Matrix<double>>(target, UnivariateScoringFunction.FValue, k: 2);
+
+        // Act
+        var result1 = selector.SelectFeatures(data);
+        var result2 = selector.SelectFeatures(data);
+
+        // Assert - results should be identical
+        Assert.Equal(result1.Rows, result2.Rows);
+        Assert.Equal(result1.Columns, result2.Columns);
+        for (int i = 0; i < result1.Rows; i++)
+        {
+            for (int j = 0; j < result1.Columns; j++)
+            {
+                Assert.Equal(result1[i, j], result2[i, j]);
+            }
+        }
+    }
+
+    [Fact]
+    public void VarianceThresholdFeatureSelector_NewInstanceWithSameConfigProducesSameResult()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 5.0, 2.0 },
+            { 2.0, 5.0, 3.0 },
+            { 3.0, 5.0, 4.0 },
+            { 4.0, 5.0, 5.0 }
+        });
+        var selector1 = new VarianceThresholdFeatureSelector<double, Matrix<double>>(threshold: 0.5);
+        var selector2 = new VarianceThresholdFeatureSelector<double, Matrix<double>>(threshold: 0.5);
+
+        // Act
+        var result1 = selector1.SelectFeatures(data);
+        var result2 = selector2.SelectFeatures(data);
+
+        // Assert - different instances with same config produce identical results
+        Assert.Equal(result1.Rows, result2.Rows);
+        Assert.Equal(result1.Columns, result2.Columns);
+        for (int i = 0; i < result1.Rows; i++)
+        {
+            for (int j = 0; j < result1.Columns; j++)
+            {
+                Assert.Equal(result1[i, j], result2[i, j]);
+            }
+        }
+    }
+
+    [Fact]
+    public void CorrelationFeatureSelector_NewInstanceWithSameConfigProducesSameResult()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 10.0 },
+            { 2.0, 4.0, 20.0 },
+            { 3.0, 6.0, 30.0 },
+            { 4.0, 8.0, 40.0 }
+        });
+        var selector1 = new CorrelationFeatureSelector<double, Matrix<double>>(threshold: 0.9);
+        var selector2 = new CorrelationFeatureSelector<double, Matrix<double>>(threshold: 0.9);
+
+        // Act
+        var result1 = selector1.SelectFeatures(data);
+        var result2 = selector2.SelectFeatures(data);
+
+        // Assert - different instances with same config produce identical results
+        Assert.Equal(result1.Rows, result2.Rows);
+        Assert.Equal(result1.Columns, result2.Columns);
+        for (int i = 0; i < result1.Rows; i++)
+        {
+            for (int j = 0; j < result1.Columns; j++)
+            {
+                Assert.Equal(result1[i, j], result2[i, j]);
+            }
+        }
+    }
+
+    [Fact]
+    public void UnivariateFeatureSelector_NewInstanceWithSameConfigProducesSameResult()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 5.0, 2.0, 8.0 },
+            { 2.0, 5.0, 3.0, 7.0 },
+            { 3.0, 5.0, 4.0, 6.0 },
+            { 4.0, 5.0, 5.0, 5.0 }
+        });
+        var target = new Vector<double>(new double[] { 0, 0, 1, 1 });
+        var selector1 = new UnivariateFeatureSelector<double, Matrix<double>>(target, UnivariateScoringFunction.FValue, k: 2);
+        var selector2 = new UnivariateFeatureSelector<double, Matrix<double>>(target, UnivariateScoringFunction.FValue, k: 2);
+
+        // Act
+        var result1 = selector1.SelectFeatures(data);
+        var result2 = selector2.SelectFeatures(data);
+
+        // Assert - different instances with same config produce identical results
+        Assert.Equal(result1.Rows, result2.Rows);
+        Assert.Equal(result1.Columns, result2.Columns);
+        for (int i = 0; i < result1.Rows; i++)
+        {
+            for (int j = 0; j < result1.Columns; j++)
+            {
+                Assert.Equal(result1[i, j], result2[i, j]);
+            }
+        }
+    }
+
+    [Fact]
+    public void RFE_NewInstanceWithSameConfigProducesSameResult()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 3.0, 4.0 },
+            { 2.0, 3.0, 4.0, 5.0 },
+            { 3.0, 4.0, 5.0, 6.0 },
+            { 4.0, 5.0, 6.0, 7.0 }
+        });
+        var model1 = new RFEMockModel(featureCount: 4);
+        var model2 = new RFEMockModel(featureCount: 4);
+        var selector1 = new RecursiveFeatureElimination<double, Matrix<double>, Vector<double>>(
+            model1,
+            createDummyTarget: numSamples => new Vector<double>(numSamples),
+            numFeaturesToSelect: 2
+        );
+        var selector2 = new RecursiveFeatureElimination<double, Matrix<double>, Vector<double>>(
+            model2,
+            createDummyTarget: numSamples => new Vector<double>(numSamples),
+            numFeaturesToSelect: 2
+        );
+
+        // Act
+        var result1 = selector1.SelectFeatures(data);
+        var result2 = selector2.SelectFeatures(data);
+
+        // Assert - same number of features selected
+        Assert.Equal(result1.Columns, result2.Columns);
+    }
+
+    [Fact]
+    public void SelectFromModel_NewInstanceWithSameConfigProducesSameResult()
+    {
+        // Arrange
+        var data = CreateTestMatrix(new double[,]
+        {
+            { 1.0, 2.0, 3.0, 4.0 },
+            { 2.0, 3.0, 4.0, 5.0 },
+            { 3.0, 4.0, 5.0, 6.0 },
+            { 4.0, 5.0, 6.0, 7.0 }
+        });
+        var importances = new Dictionary<string, double>
+        {
+            { "Feature_0", 0.1 },
+            { "Feature_1", 0.5 },
+            { "Feature_2", 0.3 },
+            { "Feature_3", 0.8 }
+        };
+        var model1 = new MockFeatureImportanceModel(importances);
+        var model2 = new MockFeatureImportanceModel(importances);
+        var selector1 = new SelectFromModel<double, Matrix<double>>(model1, ImportanceThresholdStrategy.Mean);
+        var selector2 = new SelectFromModel<double, Matrix<double>>(model2, ImportanceThresholdStrategy.Mean);
+
+        // Act
+        var result1 = selector1.SelectFeatures(data);
+        var result2 = selector2.SelectFeatures(data);
+
+        // Assert - same features selected
+        Assert.Equal(result1.Rows, result2.Rows);
+        Assert.Equal(result1.Columns, result2.Columns);
+        for (int i = 0; i < result1.Rows; i++)
+        {
+            for (int j = 0; j < result1.Columns; j++)
+            {
+                Assert.Equal(result1[i, j], result2[i, j]);
+            }
+        }
+    }
+
+    #endregion
 }
+
+#region Mock Models for Feature Selector Tests
+
+/// <summary>
+/// Mock model for RFE testing that returns predictable parameters.
+/// </summary>
+internal class RFEMockModel : IFullModel<double, Matrix<double>, Vector<double>>
+{
+    private int _currentFeatureCount;
+    private Vector<double> _parameters;
+
+    public RFEMockModel(int featureCount)
+    {
+        _currentFeatureCount = featureCount;
+        _parameters = CreateParameters(featureCount);
+    }
+
+    private static Vector<double> CreateParameters(int count)
+    {
+        // Parameters decrease in importance: [1.0, 0.5, 0.25, 0.125, ...]
+        var parameters = new Vector<double>(count);
+        for (int i = 0; i < count; i++)
+        {
+            parameters[i] = 1.0 / Math.Pow(2, i);
+        }
+        return parameters;
+    }
+
+    public void Train(Matrix<double> input, Vector<double> expectedOutput)
+    {
+        // Update current feature count based on input
+        _currentFeatureCount = input.Columns;
+        _parameters = CreateParameters(_currentFeatureCount);
+    }
+
+    public Vector<double> Predict(Matrix<double> input)
+    {
+        var predictions = new Vector<double>(input.Rows);
+        for (int i = 0; i < input.Rows; i++)
+        {
+            predictions[i] = 0;
+        }
+        return predictions;
+    }
+
+    public Vector<double> GetParameters() => _parameters.Clone();
+    public void SetParameters(Vector<double> parameters) => _parameters = parameters.Clone();
+    public int ParameterCount => _parameters.Length;
+
+    public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
+    {
+        var newModel = new RFEMockModel(parameters.Length);
+        newModel.SetParameters(parameters);
+        return newModel;
+    }
+
+    public ModelMetadata<double> GetModelMetadata() => new() { Name = "RFEMockModel" };
+    public byte[] Serialize() => Array.Empty<byte>();
+    public void Deserialize(byte[] data) { }
+    public void SaveModel(string filePath) { }
+    public void LoadModel(string filePath) { }
+    public void SaveState(Stream stream) { }
+    public void LoadState(Stream stream) { }
+    public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _parameters.Length);
+    public void SetActiveFeatureIndices(IEnumerable<int> indices) { }
+    public bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _parameters.Length;
+    public Dictionary<string, double> GetFeatureImportance() => new();
+    public IFullModel<double, Matrix<double>, Vector<double>> Clone() => new RFEMockModel(_currentFeatureCount);
+    public IFullModel<double, Matrix<double>, Vector<double>> DeepCopy() => Clone();
+    public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+    public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(ParameterCount);
+    public void ApplyGradients(Vector<double> gradients, double learningRate) { }
+    public bool SupportsJitCompilation => false;
+    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes) => throw new NotSupportedException();
+}
+
+/// <summary>
+/// Mock model that provides feature importances for SelectFromModel testing.
+/// </summary>
+internal class MockFeatureImportanceModel : IFeatureImportance<double>
+{
+    private readonly Dictionary<string, double> _importances;
+
+    public MockFeatureImportanceModel(Dictionary<string, double> importances)
+    {
+        _importances = importances;
+    }
+
+    public Dictionary<string, double> GetFeatureImportance() => _importances;
+}
+
+/// <summary>
+/// Mock model for SequentialFeatureSelector testing.
+/// </summary>
+internal class SequentialMockModel : IFullModel<double, Matrix<double>, Vector<double>>
+{
+    public void Train(Matrix<double> input, Vector<double> expectedOutput) { }
+
+    public Vector<double> Predict(Matrix<double> input)
+    {
+        // Simple prediction based on sum of features
+        var predictions = new Vector<double>(input.Rows);
+        for (int i = 0; i < input.Rows; i++)
+        {
+            double sum = 0;
+            for (int j = 0; j < input.Columns; j++)
+            {
+                sum += input[i, j];
+            }
+            predictions[i] = sum > 5 ? 1.0 : 0.0;
+        }
+        return predictions;
+    }
+
+    public Vector<double> GetParameters() => new Vector<double>(0);
+    public void SetParameters(Vector<double> parameters) { }
+    public int ParameterCount => 0;
+    public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters) => new SequentialMockModel();
+    public ModelMetadata<double> GetModelMetadata() => new() { Name = "SequentialMockModel" };
+    public byte[] Serialize() => Array.Empty<byte>();
+    public void Deserialize(byte[] data) { }
+    public void SaveModel(string filePath) { }
+    public void LoadModel(string filePath) { }
+    public void SaveState(Stream stream) { }
+    public void LoadState(Stream stream) { }
+    public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Empty<int>();
+    public void SetActiveFeatureIndices(IEnumerable<int> indices) { }
+    public bool IsFeatureUsed(int featureIndex) => true;
+    public Dictionary<string, double> GetFeatureImportance() => new();
+    public IFullModel<double, Matrix<double>, Vector<double>> Clone() => new SequentialMockModel();
+    public IFullModel<double, Matrix<double>, Vector<double>> DeepCopy() => new SequentialMockModel();
+    public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+    public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null) => new Vector<double>(ParameterCount);
+    public void ApplyGradients(Vector<double> gradients, double learningRate) { }
+    public bool SupportsJitCompilation => false;
+    public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes) => throw new NotSupportedException();
+}
+
+#endregion
