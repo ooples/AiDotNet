@@ -205,10 +205,11 @@ public class FeatureSelectorsIntegrationTests
         // Act
         var result = selector.SelectFeatures(data);
 
-        // Assert - Column 0 and 2 should remain, column 1 removed (correlated with 0)
-        // Column 2 is also correlated with 0 and 1, but selector adds first, then checks
+        // Assert - Only column 0 should remain
+        // Column 1 (2x of column 0) and column 2 (100x of column 0) are both perfectly correlated with column 0
+        // CorrelationFeatureSelector iterates in order: adds 0, skips 1 (correlated with 0), skips 2 (correlated with 0)
         Assert.Equal(4, result.Rows);
-        Assert.True(result.Columns < 3); // At least one correlated feature removed
+        Assert.Equal(1, result.Columns);
     }
 
     [Fact]
@@ -604,17 +605,20 @@ public class FeatureSelectorsIntegrationTests
         Assert.Equal(4, afterVariance.Rows);
         Assert.Equal(3, afterVariance.Columns);
 
-        // After correlation: correlated columns should be reduced
+        // After correlation: columns 0, 2, 3 from original are all perfectly correlated (10x and 2x relationships)
+        // In the 3-column afterVariance matrix: column 1 (original 2) and column 2 (original 3) are correlated with column 0
+        // CorrelationFeatureSelector adds column 0, skips others due to correlation > 0.9
         Assert.Equal(4, afterCorrelation.Rows);
-        Assert.True(afterCorrelation.Columns < 3);
+        Assert.Equal(1, afterCorrelation.Columns);
     }
 
     [Fact]
     public void VarianceThreshold_VerySmallVariance_HandledCorrectly()
     {
         // Arrange - The 1e-15 variation results in variance ~1e-30 which is below 1e-20
-        // Column 0: variance from 1e-15 changes is ~(1e-15)^2 / 2 ≈ 5e-31 (below 1e-20)
-        // Column 1: variance from [1, 2, 3] is ~1.0 (above 1e-20)
+        // Column 0: values [1.0, 1.0+1e-15, 1.0-1e-15], mean=1.0
+        //           variance = ((0)^2 + (1e-15)^2 + (-1e-15)^2) / 3 = 2e-30/3 ≈ 6.7e-31 (below 1e-20)
+        // Column 1: variance from [1, 2, 3] is ~0.67 (well above 1e-20)
         var data = CreateTestMatrix(new double[,]
         {
             { 1.0, 1.0 },
@@ -635,6 +639,8 @@ public class FeatureSelectorsIntegrationTests
     public void CorrelationFeatureSelector_ZeroVarianceFeature_HandlesGracefully()
     {
         // Arrange - One feature has zero variance (constant)
+        // Column 0: [1, 2, 3] - has variance
+        // Column 1: [5, 5, 5] - zero variance (constant)
         var data = CreateTestMatrix(new double[,]
         {
             { 1.0, 5.0 },
@@ -646,15 +652,18 @@ public class FeatureSelectorsIntegrationTests
         // Act - Should not crash on zero-variance feature
         var result = selector.SelectFeatures(data);
 
-        // Assert
+        // Assert - Both columns should be kept:
+        // Column 0 is always added first
+        // Column 1's correlation with Column 0 is undefined (NaN) due to zero variance
+        // NaN correlation comparisons return false, so Column 1 is not filtered out
         Assert.Equal(3, result.Rows);
-        Assert.True(result.Columns >= 1);
+        Assert.Equal(2, result.Columns);
     }
 
     [Fact]
     public void UnivariateFeatureSelector_SingleClass_HandlesGracefully()
     {
-        // Arrange - All samples have the same class
+        // Arrange - All samples have the same class (no between-group variance)
         var data = CreateTestMatrix(new double[,]
         {
             { 1.0, 2.0 },
@@ -668,12 +677,13 @@ public class FeatureSelectorsIntegrationTests
             k: 1
         );
 
-        // Act - Should not crash, scores may be zero
+        // Act - Should not crash, scores are zero for all features (need 2+ classes for F-value)
         var result = selector.SelectFeatures(data);
 
-        // Assert - Should still return at least 1 feature
+        // Assert - With k=1, exactly 1 feature should be selected
+        // All features score 0, so the first one is chosen (index 0)
         Assert.Equal(3, result.Rows);
-        Assert.True(result.Columns >= 1);
+        Assert.Equal(1, result.Columns);
     }
 
     [Fact]
