@@ -49,7 +49,7 @@ echo "  .NET SDK: $DOTNET_VERSION"
 if [ "$SKIP_BUILD" = false ] && [ "$SERVE_ONLY" = false ]; then
     echo ""
     echo "[2/6] Building AiDotNet..."
-    dotnet build src/AiDotNet.csproj -c Release --framework net8.0
+    dotnet build src/AiDotNet.csproj -c Release --framework net10.0
     echo "  Build successful"
 else
     echo "[2/6] Skipping build (--skip-build or --serve-only)"

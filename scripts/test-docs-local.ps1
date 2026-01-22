@@ -45,7 +45,7 @@ try {
     if (-not $SkipBuild -and -not $ServeOnly) {
         Write-Host ""
         Write-Host "[2/6] Building AiDotNet..." -ForegroundColor Yellow
-        dotnet build src/AiDotNet.csproj -c Release --framework net8.0
+        dotnet build src/AiDotNet.csproj -c Release --framework net10.0
         if ($LASTEXITCODE -ne 0) {
             throw "Build failed!"
         }
