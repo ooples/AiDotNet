@@ -148,6 +148,20 @@ public class UnivariateFeatureSelector<T, TInput> : FeatureSelectorBase<T, TInpu
             .OrderBy(idx => idx) // Sort indices for consistent output
             .ToList();
 
+        // Safety check: ensure at least one feature is selected - pick the top-scoring feature
+        if (selectedIndices.Count == 0 && featureScores.Count > 0)
+        {
+            var bestFeature = featureScores
+                .OrderByDescending(fs => fs.score, Comparer<T>.Create((a, b) =>
+                {
+                    if (NumOps.GreaterThan(a, b)) return 1;
+                    if (NumOps.LessThan(a, b)) return -1;
+                    return 0;
+                }))
+                .First();
+            selectedIndices.Add(bestFeature.index);
+        }
+
         return selectedIndices;
     }
 
