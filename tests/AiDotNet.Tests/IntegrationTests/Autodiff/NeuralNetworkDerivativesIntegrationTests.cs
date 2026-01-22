@@ -591,16 +591,25 @@ public class NeuralNetworkDerivativesIntegrationTests
 
     private static NeuralNetworkBase<double> CreateNetwork(int[] layerSizes, bool useReLU)
     {
-        // Use NeuralNetworkArchitecture to create the network
-        var inputSize = layerSizes[0];
-        var outputSize = layerSizes[^1];
+        // Create layers with the specified activation function
+        var layers = new List<ILayer<double>>();
+        IActivationFunction<double> activation = useReLU
+            ? new ReLUActivation<double>()
+            : new IdentityActivation<double>();
+
+        // Create a dense layer for each layer transition
+        for (int i = 0; i < layerSizes.Length - 1; i++)
+        {
+            layers.Add(new DenseLayer<double>(layerSizes[i], layerSizes[i + 1], activation));
+        }
 
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             complexity: NetworkComplexity.Simple,
-            inputSize: inputSize,
-            outputSize: outputSize);
+            inputSize: layerSizes[0],
+            outputSize: layerSizes[^1],
+            layers: layers);
 
         return new FeedForwardNeuralNetwork<double>(architecture);
     }
@@ -609,16 +618,22 @@ public class NeuralNetworkDerivativesIntegrationTests
         int[] layerSizes,
         IActivationFunction<double> activation)
     {
-        // Use NeuralNetworkArchitecture to create the network
-        var inputSize = layerSizes[0];
-        var outputSize = layerSizes[^1];
+        // Create layers with the specified activation function
+        var layers = new List<ILayer<double>>();
+
+        // Create a dense layer for each layer transition with the specified activation
+        for (int i = 0; i < layerSizes.Length - 1; i++)
+        {
+            layers.Add(new DenseLayer<double>(layerSizes[i], layerSizes[i + 1], activation));
+        }
 
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             complexity: NetworkComplexity.Simple,
-            inputSize: inputSize,
-            outputSize: outputSize);
+            inputSize: layerSizes[0],
+            outputSize: layerSizes[^1],
+            layers: layers);
 
         return new FeedForwardNeuralNetwork<double>(architecture);
     }
@@ -632,16 +647,21 @@ public class NeuralNetworkDerivativesIntegrationTests
             throw new ArgumentException("Must have one activation per layer transition");
         }
 
-        // Use NeuralNetworkArchitecture to create the network
-        var inputSize = layerSizes[0];
-        var outputSize = layerSizes[^1];
+        // Create layers with different activation functions for each layer transition
+        var layers = new List<ILayer<double>>();
+
+        for (int i = 0; i < layerSizes.Length - 1; i++)
+        {
+            layers.Add(new DenseLayer<double>(layerSizes[i], layerSizes[i + 1], activations[i]));
+        }
 
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             complexity: NetworkComplexity.Medium,
-            inputSize: inputSize,
-            outputSize: outputSize);
+            inputSize: layerSizes[0],
+            outputSize: layerSizes[^1],
+            layers: layers);
 
         return new FeedForwardNeuralNetwork<double>(architecture);
     }
