@@ -49,7 +49,7 @@ echo "  .NET SDK: $DOTNET_VERSION"
 if [ "$SKIP_BUILD" = false ] && [ "$SERVE_ONLY" = false ]; then
     echo ""
     echo "[2/6] Building AiDotNet..."
-    dotnet build src/AiDotNet.csproj -c Release --framework net8.0
+    dotnet build src/AiDotNet.csproj -c Release --framework net10.0
     echo "  Build successful"
 else
     echo "[2/6] Skipping build (--skip-build or --serve-only)"
@@ -82,6 +82,18 @@ if [ "$SKIP_PLAYGROUND" = false ] && [ "$SERVE_ONLY" = false ]; then
     echo "  Copying Playground to _site/playground..."
     mkdir -p _site/playground
     cp -r _playground/wwwroot/* _site/playground/
+
+    # Update base href for local playground subdirectory (matches production structure)
+    if [ -f "_site/playground/index.html" ]; then
+        # Handle sed -i portability between macOS (BSD) and Linux (GNU)
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' 's|<base href="/" />|<base href="/playground/" />|g' _site/playground/index.html
+        else
+            sed -i 's|<base href="/" />|<base href="/playground/" />|g' _site/playground/index.html
+        fi
+        echo "  Updated base href for local playground"
+    fi
+
     echo "  Playground integrated successfully"
 else
     echo "[4/6] Skipping Playground build (--skip-playground or --serve-only)"

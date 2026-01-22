@@ -45,9 +45,11 @@
                 <span>Code Editor</span>
                 <span class="file-name">Program.cs</span>
             </div>
-            <StandaloneCodeEditor @ref="editor"
-                                  ConstructionOptions="EditorConstructionOptions"
-                                  OnDidInit="OnEditorInit" />
+            <div class="editor-wrapper">
+                <StandaloneCodeEditor @ref="editor"
+                                      ConstructionOptions="EditorConstructionOptions"
+                                      OnDidInit="OnEditorInit" />
+            </div>
         </div>
 
         <div class="output-panel">
@@ -171,6 +173,21 @@
         display: flex;
         flex-direction: column;
         border-right: 1px solid var(--border-color);
+        min-height: 0; /* Required for flex child to shrink */
+    }
+
+    .editor-wrapper {
+        flex: 1;
+        min-height: 400px;
+        position: relative;
+    }
+
+    .editor-wrapper > * {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
     }
 
     .output-panel {
@@ -359,14 +376,34 @@ Console.WriteLine(""Check out the examples dropdown for more complex scenarios."
     private async Task OnExampleChanged(ChangeEventArgs e)
     {
         var exampleId = e.Value?.ToString();
-        if (string.IsNullOrEmpty(exampleId) || editor == null) return;
+
+        if (string.IsNullOrEmpty(exampleId))
+        {
+            return;
+        }
+
+        if (editor == null)
+        {
+            output = "Error: Editor not initialized";
+            hasError = true;
+            StateHasChanged();
+            return;
+        }
 
         var example = ExampleService.GetExample(exampleId);
+
         if (example != null)
         {
             await editor.SetValue(example.Code);
-            output = "";
+            output = $"Loaded example: {example.Name}";
             hasError = false;
+            StateHasChanged();
+        }
+        else
+        {
+            output = $"Example not found: {exampleId}";
+            hasError = true;
+            StateHasChanged();
         }
     }
 }

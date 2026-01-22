@@ -45,7 +45,7 @@ try {
     if (-not $SkipBuild -and -not $ServeOnly) {
         Write-Host ""
         Write-Host "[2/6] Building AiDotNet..." -ForegroundColor Yellow
-        dotnet build src/AiDotNet.csproj -c Release --framework net8.0
+        dotnet build src/AiDotNet.csproj -c Release --framework net10.0
         if ($LASTEXITCODE -ne 0) {
             throw "Build failed!"
         }
@@ -98,6 +98,16 @@ try {
         }
 
         Copy-Item -Path "$playgroundDir/wwwroot/*" -Destination $playgroundDest -Recurse -Force
+
+        # Update base href for local playground subdirectory (matches production structure)
+        $playgroundIndex = Join-Path $playgroundDest "index.html"
+        if (Test-Path $playgroundIndex) {
+            $content = Get-Content -Path $playgroundIndex -Raw
+            $content = $content -replace '<base href="/" />', '<base href="/playground/" />'
+            Set-Content -Path $playgroundIndex -Value $content -NoNewline -Encoding UTF8
+            Write-Host "  Updated base href for local playground" -ForegroundColor Gray
+        }
+
         Write-Host "  Playground integrated successfully" -ForegroundColor Green
     }
     else {

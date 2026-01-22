@@ -123,8 +123,8 @@ async function executeWithPiston(code: string): Promise<ExecuteResponse> {
       ],
       compile_timeout: 10000, // 10 seconds
       run_timeout: 5000, // 5 seconds
-      compile_memory_limit: 256000000, // 256MB
-      run_memory_limit: 128000000, // 128MB
+      compile_memory_limit: 1024000000, // 1GB - Roslyn needs significant memory
+      run_memory_limit: 512000000, // 512MB for runtime
     };
 
     const response = await fetch(`${PISTON_API}/execute`, {
