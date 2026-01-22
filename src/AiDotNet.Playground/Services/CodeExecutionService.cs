@@ -166,25 +166,40 @@ public class CodeExecutionService
                 return null;
             }
 
-            // If result is null or execution failed, fall back to simulation
-            if (result is null || !result.Success)
+            if (result is null)
             {
-                // Log error to console for debugging
-                if (result is not null && !string.IsNullOrEmpty(result.Error))
-                {
-                    Console.WriteLine($"API execution failed: {result.Error}");
-                }
                 return null;
             }
 
-            // Only return result for successful executions
+            // Build output - show both successful and failed executions from API
+            // (Don't mask real compile/runtime errors with simulation)
             var output = new StringBuilder();
 
             output.AppendLine("=== Real Code Execution ===");
             output.AppendLine();
-            output.AppendLine("Output:");
-            output.AppendLine("-------");
-            output.AppendLine(result.Output ?? "(No output)");
+
+            if (result.Success)
+            {
+                output.AppendLine("Output:");
+                output.AppendLine("-------");
+                output.AppendLine(result.Output ?? "(No output)");
+            }
+            else
+            {
+                // Show real compilation/runtime errors to user
+                output.AppendLine("Execution Failed:");
+                output.AppendLine("-----------------");
+                if (!string.IsNullOrEmpty(result.Error))
+                {
+                    output.AppendLine(result.Error);
+                }
+                if (!string.IsNullOrEmpty(result.CompilationOutput))
+                {
+                    output.AppendLine();
+                    output.AppendLine("Compiler Output:");
+                    output.AppendLine(result.CompilationOutput);
+                }
+            }
 
             if (result.ExecutionTime.HasValue)
             {
@@ -194,7 +209,7 @@ public class CodeExecutionService
 
             return new ExecutionResult
             {
-                Success = true,
+                Success = result.Success,
                 Output = output.ToString()
             };
         }

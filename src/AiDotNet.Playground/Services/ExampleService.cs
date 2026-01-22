@@ -877,8 +877,12 @@ var normalData = new double[100, 2];
 var rng = new Random(42);
 for (int i = 0; i < 100; i++)
 {
-    normalData[i, 0] = rng.NextGaussian(0, 1);
-    normalData[i, 1] = rng.NextGaussian(0, 1);
+    // Box-Muller transform for Gaussian random numbers
+    double u1 = 1.0 - rng.NextDouble();
+    double u2 = 1.0 - rng.NextDouble();
+    double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+    normalData[i, 0] = randStdNormal;
+    normalData[i, 1] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
 }
 
 var result = await new AiModelBuilder<double, double[], int>()
@@ -1601,6 +1605,14 @@ foreach (var (text, score) in matches)
                     Code = @"// LoRA Fine-tuning with AiModelBuilder
 using AiDotNet;
 using AiDotNet.LoRA;
+
+// Prepare training data (instruction-response pairs)
+var trainingData = new[]
+{
+    (""Explain quantum computing"", ""Quantum computing uses qubits...""),
+    (""What is machine learning?"", ""Machine learning is a subset of AI...""),
+    (""Define neural network"", ""A neural network is a computational model..."")
+};
 
 // Load base model and apply LoRA
 var result = await new AiModelBuilder<double, string, string>()

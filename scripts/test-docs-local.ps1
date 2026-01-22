@@ -104,7 +104,7 @@ try {
         if (Test-Path $playgroundIndex) {
             $content = Get-Content -Path $playgroundIndex -Raw
             $content = $content -replace '<base href="/" />', '<base href="/playground/" />'
-            Set-Content -Path $playgroundIndex -Value $content -NoNewline
+            Set-Content -Path $playgroundIndex -Value $content -NoNewline -Encoding UTF8
             Write-Host "  Updated base href for local playground" -ForegroundColor Gray
         }
 
