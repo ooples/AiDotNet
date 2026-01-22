@@ -20,7 +20,7 @@ public class GemmKernelValidationTests
         var expected = NaiveGemm(a, b);
 
         Assert.Equal(expected.Shape, actual.Shape);
-        Assert.Equal(expected.Data.ToArray(), actual.Data.ToArray());
+        Assert.Equal(expected.ToArray(), actual.ToArray());
     }
 
     [Fact]
@@ -37,7 +37,7 @@ public class GemmKernelValidationTests
         var expected = NaiveGemmTransposeB(a, b);
 
         Assert.Equal(expected.Shape, actual.Shape);
-        Assert.Equal(expected.Data.ToArray(), actual.Data.ToArray());
+        Assert.Equal(expected.ToArray(), actual.ToArray());
     }
 
     private static Tensor<float> NaiveGemm(Tensor<float> a, Tensor<float> b)
@@ -55,10 +55,10 @@ public class GemmKernelValidationTests
                 float sum = 0f;
                 for (int t = 0; t < k; t++)
                 {
-                    sum += a.Data.Span[i * k + t] * b.Data.Span[t * n + j];
+                    sum += a[i * k + t] * b[t * n + j];
                 }
 
-                c.Data.Span[i * n + j] = sum;
+                c[i * n + j] = sum;
             }
         }
 
@@ -80,10 +80,10 @@ public class GemmKernelValidationTests
                 float sum = 0f;
                 for (int t = 0; t < k; t++)
                 {
-                    sum += a.Data.Span[i * k + t] * b.Data.Span[j * k + t];
+                    sum += a[i * k + t] * b[j * k + t];
                 }
 
-                c.Data.Span[i * n + j] = sum;
+                c[i * n + j] = sum;
             }
         }
 
@@ -93,8 +93,8 @@ public class GemmKernelValidationTests
     private static Tensor<float> CreateTensor(int[] shape, float[] data)
     {
         var t = new Tensor<float>(shape);
-        Assert.Equal(t.Data.Length, data.Length);
-        data.AsSpan().CopyTo(t.Data.Span);
+        Assert.Equal(t.Length, data.Length);
+        t.CopyFromArray(data);
         return t;
     }
 }

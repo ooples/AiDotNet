@@ -106,27 +106,28 @@
 	  <None Remove="AiDotNet.Playground\**\*" />
 	</ItemGroup>
 
-	<!-- Exclude the AiDotNet.Tensors project files from this project -->
-	<ItemGroup>
-	  <Compile Remove="AiDotNet.Tensors\**\*.cs" />
-	  <EmbeddedResource Remove="AiDotNet.Tensors\**\*" />
-	  <None Remove="AiDotNet.Tensors\**\*" />
-	</ItemGroup>
-
-	<!-- Exclude the AiDotNet.Native.CLBlast project files from this project -->
-	<ItemGroup>	  
-	  <Compile Remove="AiDotNet.Native.CLBlast/**/*.cs" />	  
-	  <EmbeddedResource Remove="AiDotNet.Native.CLBlast/**/*" />	  
-	  <None Remove="AiDotNet.Native.CLBlast/**/*" />	</ItemGroup>
-
-	<!-- Exclude polyfills that are already provided by AiDotNet.Tensors -->
+	<!-- Exclude polyfills that are already provided by AiDotNet.Tensors NuGet package -->
 	<ItemGroup>
 	  <Compile Remove="Polyfills\LanguageFeaturePolyfills.cs" />
 	</ItemGroup>
 
-	<!-- Add project reference to AiDotNet.Tensors -->
+	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo) -->
 	<ItemGroup>
-	  <ProjectReference Include="AiDotNet.Tensors/AiDotNet.Tensors.csproj" />
+	  <PackageReference Include="AiDotNet.Tensors" Version="0.4.0" />
+	</ItemGroup>
+
+	<!--
+	  Optional native acceleration packages.
+	  These provide pre-built native binaries for hardware acceleration.
+	  Users can also install these separately to enable specific accelerators.
+	-->
+	<ItemGroup>
+	  <!-- CPU acceleration via OpenBLAS -->
+	  <PackageReference Include="AiDotNet.Native.OpenBLAS" Version="0.4.0" />
+	  <!-- GPU acceleration via CLBlast (OpenCL-based) -->
+	  <PackageReference Include="AiDotNet.Native.CLBlast" Version="0.4.0" />
+	  <!-- CPU acceleration via Intel OneDNN -->
+	  <PackageReference Include="AiDotNet.Native.OneDNN" Version="0.4.0" />
 	</ItemGroup>
 
 	<!-- Global usings for AiDotNet.Tensors namespaces -->

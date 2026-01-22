@@ -506,12 +506,11 @@ public class PoolingLayersIntegrationTests
     {
         var tensor = new Tensor<T>(shape);
         var random = new Random(42);
-        var span = tensor.Data.Span;
 
-        for (int i = 0; i < span.Length; i++)
+        for (int i = 0; i < tensor.Length; i++)
         {
             double value = random.NextDouble() * 2 - 1; // [-1, 1]
-            span[i] = (T)Convert.ChangeType(value, typeof(T));
+            tensor[i] = (T)Convert.ChangeType(value, typeof(T));
         }
 
         return tensor;
@@ -519,7 +518,7 @@ public class PoolingLayersIntegrationTests
 
     private static bool ContainsNaN<T>(Tensor<T> tensor) where T : struct, IComparable<T>
     {
-        foreach (var value in tensor.Data.ToArray())
+        foreach (var value in tensor.ToArray())
         {
             if (value is float f && float.IsNaN(f)) return true;
             if (value is double d && double.IsNaN(d)) return true;
@@ -531,10 +530,10 @@ public class PoolingLayersIntegrationTests
         where T : struct, IComparable<T>
     {
         Assert.Equal(expected.Shape, actual.Shape);
-        for (int i = 0; i < expected.Data.Length; i++)
+        for (int i = 0; i < expected.Length; i++)
         {
-            var exp = Convert.ToDouble(expected.Data.Span[i]);
-            var act = Convert.ToDouble(actual.Data.Span[i]);
+            var exp = Convert.ToDouble(expected[i]);
+            var act = Convert.ToDouble(actual[i]);
             Assert.True(Math.Abs(exp - act) < tolerance, $"Tensors differ at index {i}: expected {exp}, got {act}");
         }
     }

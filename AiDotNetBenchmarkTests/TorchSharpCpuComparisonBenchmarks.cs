@@ -54,8 +54,7 @@ public class TorchSharpCpuComparisonBenchmarks
         torch.set_grad_enabled(false);
         _torchDevice = torch.CPU;
         Console.WriteLine("TorchSharp device: CPU (forced)");
-        Console.WriteLine($"AiDotNet BLAS available: {AiDotNet.Tensors.Helpers.BlasProvider.IsAvailable}");
-        Console.WriteLine($"AiDotNet BLAS backend: {AiDotNet.Tensors.Helpers.BlasProvider.BackendName}");
+        Console.WriteLine("AiDotNet BLAS: OpenBLAS package referenced (runtime load required)");
 
         foreach (var size in MatrixSizes)
         {
