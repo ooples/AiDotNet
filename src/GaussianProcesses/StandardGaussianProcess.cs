@@ -110,6 +110,15 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
         _X = X;
         _y = y;
         _K = CalculateKernelMatrix(X, X);
+
+        // Add small jitter term to diagonal for numerical stability
+        // This prevents the kernel matrix from being singular or nearly singular
+        // when data points are close together, which would cause Cholesky decomposition to fail
+        var jitter = _numOps.FromDouble(1e-6);
+        for (int i = 0; i < _K.Rows; i++)
+        {
+            _K[i, i] = _numOps.Add(_K[i, i], jitter);
+        }
     }
 
     /// <summary>

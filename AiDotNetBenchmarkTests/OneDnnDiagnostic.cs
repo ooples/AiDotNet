@@ -91,7 +91,8 @@ public static class OneDnnDiagnostic
 
         // Check AiDotNet oneDNN availability
         Console.WriteLine("\n=== Checking AiDotNet oneDNN availability ===");
-        Console.WriteLine($"OneDnnProvider.IsAvailable: {AiDotNet.Tensors.Helpers.OneDnnProvider.IsAvailable}");
+        // Note: OneDnnProvider is internal to AiDotNet.Tensors - check via dnnl.dll loading above
+        Console.WriteLine("OneDnnProvider availability check: See dnnl.dll loading results above");
 
         // Check for API version by checking function exports
         Console.WriteLine("\n=== Checking oneDNN API exports ===");

@@ -59,7 +59,8 @@
     "fileMetadataFiles": [],
     "template": [
       "default",
-      "modern"
+      "modern",
+      "templates/modern"
     ],
     "postProcessors": [],
     "markdownEngineName": "markdig",
@@ -70,8 +71,8 @@
     "globalMetadata": {
       "_appTitle": "AiDotNet API Documentation",
       "_appName": "AiDotNet",
-      "_appLogoPath": "docs/images/logo.png",
-      "_appFaviconPath": "docs/images/favicon.ico",
+      "_appLogoPath": "docs/images/logo.svg",
+      "_appFaviconPath": "docs/images/favicon.svg",
       "_enableSearch": true,
       "_enableNewTab": true,
       "_disableContribution": false,

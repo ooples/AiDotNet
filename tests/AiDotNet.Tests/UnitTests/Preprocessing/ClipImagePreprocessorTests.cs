@@ -372,18 +372,18 @@ public class ClipImagePreprocessorTests
 
     private static void FillWithValue(Tensor<float> tensor, float value)
     {
-        for (int i = 0; i < tensor.Data.Length; i++)
+        for (int i = 0; i < tensor.Length; i++)
         {
-            tensor.Data.Span[i] = value;
+            tensor[i] = value;
         }
     }
 
     private static void FillWithRandomValues(Tensor<float> tensor, int seed)
     {
         var random = new Random(seed);
-        for (int i = 0; i < tensor.Data.Length; i++)
+        for (int i = 0; i < tensor.Length; i++)
         {
-            tensor.Data.Span[i] = (float)(random.NextDouble() * 255);
+            tensor[i] = (float)(random.NextDouble() * 255);
         }
     }
 

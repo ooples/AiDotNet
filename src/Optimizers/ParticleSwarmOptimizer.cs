@@ -88,14 +88,15 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// <returns>An optimization result containing the best solution found and associated metrics.</returns>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
-
         // Initialize particles using InitializeRandomSolution
         var swarm = new List<IFullModel<T, TInput, TOutput>>();
         for (int i = 0; i < _psoOptions.SwarmSize; i++)
         {
             swarm.Add(InitializeRandomSolution(inputData.XTrain));
         }
+
+        // Use model's parameter count instead of input size for velocity dimensions
+        int dimensions = swarm.Count > 0 ? swarm[0].ParameterCount : InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
 
         // Initialize velocities for each particle
         var velocities = new List<Vector<T>>();
@@ -111,17 +112,21 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
 
         // Initialize personal bests with current particles
         var personalBests = new List<OptimizationStepData<T, TInput, TOutput>>();
-        var globalBest = new OptimizationStepData<T, TInput, TOutput>();
 
-        // First evaluate all particles and initialize personal/global bests
-        for (int i = 0; i < _psoOptions.SwarmSize; i++)
+        // Evaluate first particle to initialize globalBest properly
+        // (Can't use default OptimizationStepData because its FitnessScore of 0 is "perfect" for MSE)
+        var firstStepData = EvaluateSolution(swarm[0], inputData);
+        personalBests.Add(firstStepData);
+        var globalBest = firstStepData;
+
+        // Evaluate remaining particles and initialize personal/global bests
+        for (int i = 1; i < _psoOptions.SwarmSize; i++)
         {
             var stepData = EvaluateSolution(swarm[i], inputData);
             personalBests.Add(stepData);
 
-            // Update global best if needed
-            if (globalBest.Solution == null ||
-                FitnessCalculator.IsBetterFitness(stepData.FitnessScore, globalBest.FitnessScore))
+            // Update global best if this particle is better
+            if (FitnessCalculator.IsBetterFitness(stepData.FitnessScore, globalBest.FitnessScore))
             {
                 globalBest = stepData;
             }

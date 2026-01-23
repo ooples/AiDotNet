@@ -4,10 +4,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AiDotNet Playground - Interactive AI/ML Development</title>
+    <!-- Monaco Editor loader - must load BEFORE base href and save require before it gets overwritten -->
+    <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/loader.js"></script>
+    <script>
+        // Save Monaco's require before it gets overwritten by other scripts
+        window.monacoRequire = require;
+        // Get the base path dynamically for subdirectory deployment
+        var basePath = document.location.pathname.substring(0, document.location.pathname.lastIndexOf('/') + 1);
+        if (basePath === '/') basePath = '';
+        window.monacoRequire.config({ paths: { 'vs': basePath + '_content/BlazorMonaco/lib/monaco-editor/min/vs' } });
+    </script>
     <base href="/" />
-    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link href="css/app.css" rel="stylesheet" />
-    <link href="AiDotNet.Playground.styles.css" rel="stylesheet" />
 </head>
 <body>
     <div id="app">
@@ -33,10 +42,24 @@
         <a href="" style="color: white; text-decoration: underline;" onclick="location.reload()">Reload</a>
     </div>
 
-    <script src="_framework/blazor.webassembly.js"></script>
+    <script src="_framework/blazor.webassembly.js" autostart="false"></script>
+    <script src="_content/BlazorMonaco/jsInterop.js"></script>
     <script>
-        window.addEventListener('error', function(e) {
-            document.getElementById('blazor-error-ui').style.display = 'block';
+        // Load Monaco Editor first, then start Blazor
+        // Use monacoRequire which we saved before it got overwritten
+        window.monacoRequire(['vs/editor/editor.main'], function(monacoModule) {
+            // Ensure monaco is available globally for BlazorMonaco
+            if (typeof monaco === 'undefined' && monacoModule) {
+                window.monaco = monacoModule;
+            }
+            Blazor.start().catch(function(error) {
+                console.error('Blazor startup error:', error);
+                var errorUI = document.getElementById('blazor-error-ui');
+                errorUI.innerHTML = 'Failed to load the playground. ' +
+                    '<a href="" style="color: white; text-decoration: underline;" onclick="location.reload()">Reload</a>' +
+                    '<br><small style="opacity: 0.7;">Error: ' + (error.message || 'Unknown error') + '</small>';
+                errorUI.style.display = 'block';
+            });
         });
     </script>
 </body>

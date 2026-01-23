@@ -55,6 +55,16 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     private int _iteration;
 
     /// <summary>
+    /// The previous parameters, used for trust region update computation.
+    /// </summary>
+    private Vector<T>? _trustRegionPreviousParameters;
+
+    /// <summary>
+    /// The previous gradient, used for trust region update computation.
+    /// </summary>
+    private Vector<T>? _trustRegionPreviousGradient;
+
+    /// <summary>
     /// Initializes a new instance of the TrustRegionOptimizer class.
     /// </summary>
     /// <param name="model">The model to optimize.</param>
@@ -81,6 +91,105 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
 
         _trustRegionRadius = NumOps.FromDouble(_options.InitialTrustRegionRadius);
         _iteration = 0;
+        _trustRegionPreviousParameters = null;
+        _trustRegionPreviousGradient = null;
+    }
+
+    /// <summary>
+    /// Updates parameters using a simplified Cauchy-point Trust Region step.
+    /// </summary>
+    /// <param name="parameters">The current parameters.</param>
+    /// <param name="gradient">The gradient at the current parameters.</param>
+    /// <returns>The updated parameters.</returns>
+    /// <remarks>
+    /// This implements a simplified Trust Region step based on the Cauchy point,
+    /// which uses only gradient information. The step is constrained to lie within
+    /// the trust region radius. The trust region radius is adapted based on the
+    /// success of previous steps.
+    /// </remarks>
+    public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        _iteration++;
+
+        // Initialize trust region radius if needed
+        if (NumOps.Equals(_trustRegionRadius, NumOps.Zero))
+        {
+            _trustRegionRadius = NumOps.FromDouble(_options.InitialTrustRegionRadius);
+        }
+
+        // Compute gradient norm
+        var gradientNorm = gradient.Norm();
+
+        // Avoid division by zero
+        if (NumOps.LessThanOrEquals(gradientNorm, NumOps.FromDouble(1e-10)))
+        {
+            return parameters;
+        }
+
+        // Cauchy point computation:
+        // The optimal step along the steepest descent direction is:
+        // alpha = min(trust_radius / ||g||, ||g||^2 / (g^T B g))
+        // For gradient-only case (assuming B = I), this simplifies to:
+        // alpha = min(trust_radius / ||g||, 1)
+        // Then: step = -alpha * g
+
+        var alpha = NumOps.Divide(_trustRegionRadius, gradientNorm);
+
+        // Cap alpha at learning rate for stability
+        var maxAlpha = CurrentLearningRate;
+        if (NumOps.GreaterThan(alpha, maxAlpha))
+        {
+            alpha = maxAlpha;
+        }
+
+        // Compute the descent direction (negative gradient normalized, then scaled)
+        var direction = (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
+        var normalizedDirection = (Vector<T>)Engine.Divide(direction, gradientNorm);
+
+        // Step is alpha * ||g|| in the normalized direction = alpha * (-g/||g||) * ||g|| = -alpha * g
+        var stepSize = NumOps.Multiply(alpha, gradientNorm);
+        var step = (Vector<T>)Engine.Multiply(normalizedDirection, stepSize);
+
+        // New parameters
+        var newParameters = (Vector<T>)Engine.Add(parameters, step);
+
+        // Adapt trust region radius based on gradient change (proxy for step success)
+        if (_trustRegionPreviousGradient is not null && _trustRegionPreviousParameters is not null)
+        {
+            // Compute the gradient difference to estimate curvature
+            var gradDiff = (Vector<T>)Engine.Subtract(gradient, _trustRegionPreviousGradient);
+            var paramDiff = (Vector<T>)Engine.Subtract(parameters, _trustRegionPreviousParameters);
+            var paramDiffNorm = paramDiff.Norm();
+
+            if (NumOps.GreaterThan(paramDiffNorm, NumOps.FromDouble(1e-10)))
+            {
+                // If gradient is decreasing in magnitude, step was likely successful
+                var prevGradNorm = _trustRegionPreviousGradient.Norm();
+
+                if (NumOps.LessThan(gradientNorm, prevGradNorm))
+                {
+                    // Successful step - expand trust region
+                    _trustRegionRadius = NumOps.Multiply(_trustRegionRadius, NumOps.FromDouble(_options.ExpansionFactor));
+                }
+                else
+                {
+                    // Unsuccessful step - contract trust region
+                    _trustRegionRadius = NumOps.Multiply(_trustRegionRadius, NumOps.FromDouble(_options.ContractionFactor));
+                }
+
+                // Clamp trust region radius
+                _trustRegionRadius = MathHelper.Clamp(
+                    _trustRegionRadius,
+                    NumOps.FromDouble(_options.MinTrustRegionRadius),
+                    NumOps.FromDouble(_options.MaxTrustRegionRadius));
+            }
+        }
+
+        // Store current state for next iteration
+        _trustRegionPreviousParameters = new Vector<T>(parameters);
+        _trustRegionPreviousGradient = new Vector<T>(gradient);
+
+        return newParameters;
     }
 
     /// <summary>

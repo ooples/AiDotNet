@@ -1120,12 +1120,12 @@ public class DirectGpuTests
         _output.WriteLine("- If dynamic ~ static, Bayesian search should find better configs");
     }
 
-    [Fact]
+    [Fact(Skip = "Test uses internal types from AiDotNet.Tensors package")]
     [Trait("Category", "GPU")]
     public void DirectGpuEngine_ClBlast_HeadToHead_Comparison()
     {
-        // Enable diagnostics to see which kernels are being selected
-        AiDotNet.Tensors.Engines.DirectGpu.OpenCL.DynamicGemmKernel.EnableDiagnostics = true;
+        // Note: DynamicGemmKernel is internal to AiDotNet.Tensors and not accessible from NuGet package
+        // AiDotNet.Tensors.Engines.DirectGpu.OpenCL.DynamicGemmKernel.EnableDiagnostics = true;
 
         // Head-to-head comparison: Our kernel vs CLBlast library
         using var engine = new DirectGpuEngine();

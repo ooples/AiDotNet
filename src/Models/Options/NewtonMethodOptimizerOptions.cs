@@ -92,7 +92,7 @@ public class NewtonMethodOptimizerOptions<T, TInput, TOutput> : GradientBasedOpt
     /// instability when the quadratic approximation isn't perfect.
     /// </para>
     /// </remarks>
-    public new double InitialLearningRate { get; set; } = 0.1;
+    public override double InitialLearningRate { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the factor by which the learning rate is increased when the algorithm

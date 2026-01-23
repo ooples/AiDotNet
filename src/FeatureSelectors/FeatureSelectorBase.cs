@@ -99,8 +99,26 @@ public abstract class FeatureSelectorBase<T, TInput> : IFeatureSelector<T, TInpu
         int numSamples = InputHelper<T, TInput>.GetBatchSize(allFeaturesMatrix);
         int numFeatures = InputHelper<T, TInput>.GetInputSize(allFeaturesMatrix);
 
+        // Validate input has features
+        if (numFeatures == 0)
+        {
+            throw new ArgumentException(
+                "Input data has no features to select from. Ensure your data has at least one feature (column).",
+                nameof(allFeaturesMatrix));
+        }
+
         // Determine which features to select using the derived class's logic
         var selectedFeatureIndices = SelectFeatureIndices(allFeaturesMatrix, numSamples, numFeatures);
+
+        // Safety check: ensure at least one feature is selected
+        // Individual selectors should handle this, but this provides a safety net
+        if (selectedFeatureIndices.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "No features passed the selection criteria. This typically means the threshold is too strict. " +
+                "Consider lowering the threshold value or using a different feature selection strategy. " +
+                $"Total features analyzed: {numFeatures}.");
+        }
 
         // Create result with only the selected features
         return FeatureSelectorHelper<T, TInput>.CreateFilteredData(allFeaturesMatrix, selectedFeatureIndices);

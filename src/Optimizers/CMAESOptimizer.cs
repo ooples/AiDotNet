@@ -127,10 +127,12 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
-        int dimensions = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         // Always use a deep copy of Model to avoid mutating the original during optimization
         var initialSolution = InitializeRandomSolution(inputData.XTrain);
         _mean = initialSolution.GetParameters();
+        // Use parameter count (coefficients + intercept), not input size (features only)
+        // This ensures covariance matrix dimensions match the mean vector length
+        int dimensions = _mean.Length;
         _C = Matrix<T>.CreateIdentity(dimensions);
         _pc = new Vector<T>(dimensions);
         _ps = new Vector<T>(dimensions);

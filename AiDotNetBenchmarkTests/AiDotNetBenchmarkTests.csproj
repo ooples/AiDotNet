@@ -33,12 +33,11 @@
     <ProjectReference Include="..\src\AiDotNet.csproj" />
   </ItemGroup>
 
-  <!-- Intel oneDNN native DLLs for benchmarking (Windows x64 only, .NET Core+) -->
-  <!-- Using vcomp variant which uses Visual C++ OpenMP (fewer dependency issues) -->
-  <ItemGroup Condition="'$(TargetFramework)' != 'net471' AND $([MSBuild]::IsOSPlatform('Windows'))">
-    <PackageReference Include="onednn.cpu_vcomp.redist.win-x64" Version="2023.2.0.49513" GeneratePathProperty="true" />
-    <Content Include="$(Pkgonednn_cpu_vcomp_redist_win-x64)\runtimes\native\dnnl.dll" CopyToOutputDirectory="Always" Link="dnnl.dll" CopyToPublishDirectory="Always" />
-  </ItemGroup>
+  <!--
+    Native acceleration packages are now provided via NuGet.
+    OpenBLAS and CLBlast are included via AiDotNet's transitive dependencies.
+    OneDNN will be added once the AiDotNet.Native.OneDNN package is published.
+  -->
 
 </Project>
 

@@ -51,8 +51,33 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
         {
             var model = _modelFactory();
 
-            // Initialize parameters based on the initialization method
+            // Get model parameters - if insufficient (untrained model), determine correct dimensions
             var parameters = model.GetParameters();
+
+            // Check if model is untrained by comparing parameter count to expected count based on input
+            // For untrained models with UseIntercept=true, GetParameters() returns just [intercept] (length 1)
+            // For untrained models with UseIntercept=false, GetParameters() returns empty (length 0)
+            // We need: numFeatures coefficients + optional intercept
+            if (TrainingInputForInitialization is not null)
+            {
+                int inputDimensions = InputHelper<T, TInput>.GetInputSize(TrainingInputForInitialization);
+                // For most regression models: numFeatures + 1 intercept (assuming UseIntercept=true as default)
+                int expectedParameterCount = inputDimensions + 1;
+
+                // If parameters don't match expected count, model is likely untrained - recreate with correct size
+                if (parameters.Length != expectedParameterCount)
+                {
+                    parameters = new Vector<T>(expectedParameterCount);
+                }
+            }
+            else if (parameters.Length == 0)
+            {
+                // Fallback: no training input available and parameters are empty
+                // This shouldn't happen in normal flow but prevents crashes
+                parameters = new Vector<T>(1);
+            }
+
+            // Initialize parameters based on the initialization method
             InitializeParameters(parameters, model, initializationMethod);
             model = model.WithParameters(parameters);
 

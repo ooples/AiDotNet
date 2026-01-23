@@ -99,7 +99,7 @@ public class ConvolutionalLayersIntegrationTests
         Assert.Equal(originalOutput.Shape, cloneOutput.Shape);
         for (int i = 0; i < originalOutput.Length; i++)
         {
-            Assert.Equal(originalOutput.Data.Span[i], cloneOutput.Data.Span[i], Tolerance);
+            Assert.Equal(originalOutput[i], cloneOutput[i], Tolerance);
         }
     }
 
@@ -470,7 +470,7 @@ public class ConvolutionalLayersIntegrationTests
         // Assert - all values should be non-negative after ReLU
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(output.Data.Span[i] >= 0, $"ReLU output should be non-negative at index {i}");
+            Assert.True(output[i] >= 0, $"ReLU output should be non-negative at index {i}");
         }
     }
 
@@ -491,7 +491,7 @@ public class ConvolutionalLayersIntegrationTests
         // Assert - all values should be in [-1, 1] after tanh
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.True(output.Data.Span[i] >= -1 && output.Data.Span[i] <= 1,
+            Assert.True(output[i] >= -1 && output[i] <= 1,
                 $"Tanh output should be in [-1, 1] at index {i}");
         }
     }
@@ -504,8 +504,8 @@ public class ConvolutionalLayersIntegrationTests
     {
         for (int i = 0; i < tensor.Length; i++)
         {
-            Assert.False(double.IsNaN(tensor.Data.Span[i]), $"Tensor contains NaN at index {i}");
-            Assert.False(double.IsInfinity(tensor.Data.Span[i]), $"Tensor contains Infinity at index {i}");
+            Assert.False(double.IsNaN(tensor[i]), $"Tensor contains NaN at index {i}");
+            Assert.False(double.IsInfinity(tensor[i]), $"Tensor contains Infinity at index {i}");
         }
     }
 

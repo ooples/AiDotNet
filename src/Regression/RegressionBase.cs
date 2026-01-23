@@ -520,17 +520,36 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        if (parameters.Length != ExpectedParameterCount)
+        // Handle untrained models: if Coefficients are empty, infer coefficient count from parameters
+        int coefficientCount = Coefficients.Length;
+        if (coefficientCount == 0)
         {
-            throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but got {parameters.Length}", nameof(parameters));
+            // For untrained model, infer coefficient count from parameters
+            // If UseIntercept: coeffCount = parameters.Length - 1
+            // If not UseIntercept: coeffCount = parameters.Length
+            coefficientCount = Options.UseIntercept ? parameters.Length - 1 : parameters.Length;
+
+            // Guard against invalid parameter count (e.g., empty params with UseIntercept)
+            if (coefficientCount < 0)
+            {
+                throw new ArgumentException(
+                    $"Parameters vector too short: expected at least {(Options.UseIntercept ? 1 : 0)} elements for intercept, but got {parameters.Length}",
+                    nameof(parameters));
+            }
+        }
+
+        int expectedCount = coefficientCount + (Options.UseIntercept ? 1 : 0);
+        if (parameters.Length != expectedCount)
+        {
+            throw new ArgumentException($"Expected {expectedCount} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
         // Create a new instance of the model
         var newModel = (RegressionBase<T>)Clone();
 
         // Extract coefficients
-        Vector<T> newCoefficients = new Vector<T>(Coefficients.Length);
-        for (int i = 0; i < Coefficients.Length; i++)
+        Vector<T> newCoefficients = new Vector<T>(coefficientCount);
+        for (int i = 0; i < coefficientCount; i++)
         {
             newCoefficients[i] = parameters[i];
         }
@@ -541,7 +560,7 @@ public abstract class RegressionBase<T> : IRegression<T>
         // Set the intercept if used
         if (Options.UseIntercept)
         {
-            newModel.Intercept = parameters[Coefficients.Length];
+            newModel.Intercept = parameters[coefficientCount];
         }
         else
         {
@@ -641,13 +660,26 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// </remarks>
     public virtual void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != ExpectedParameterCount)
+        // Handle untrained models: if Coefficients are empty, infer coefficient count from parameters
+        int coefficientCount = Coefficients.Length;
+        if (coefficientCount == 0)
         {
-            throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, but got {parameters.Length}", nameof(parameters));
+            // For untrained model, infer coefficient count from parameters
+            // If UseIntercept: coeffCount = parameters.Length - 1
+            // If not UseIntercept: coeffCount = parameters.Length
+            coefficientCount = Options.UseIntercept ? parameters.Length - 1 : parameters.Length;
+            // Resize the Coefficients vector to fit
+            Coefficients = new Vector<T>(coefficientCount);
+        }
+
+        int expectedCount = coefficientCount + (Options.UseIntercept ? 1 : 0);
+        if (parameters.Length != expectedCount)
+        {
+            throw new ArgumentException($"Expected {expectedCount} parameters, but got {parameters.Length}", nameof(parameters));
         }
 
         // Extract and set coefficients
-        for (int i = 0; i < Coefficients.Length; i++)
+        for (int i = 0; i < coefficientCount; i++)
         {
             Coefficients[i] = parameters[i];
         }
@@ -655,7 +687,7 @@ public abstract class RegressionBase<T> : IRegression<T>
         // Set the intercept if used
         if (Options.UseIntercept)
         {
-            Intercept = parameters[Coefficients.Length];
+            Intercept = parameters[coefficientCount];
         }
     }
 

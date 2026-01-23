@@ -15,13 +15,17 @@ dotnet run -c Release --project tests/AiDotNet.Tests --filter "*GpuAccelerationB
 ## TensorFlow.NET comparison benchmarks
 
 Location:
-- `AiDotNetBenchmarkTests/TensorFlowComparisonBenchmarks.cs`
+- `AiDotNetBenchmarkTests/TensorFlowComparisonBenchmarks.cs` (GPU vs GPU)
+- `AiDotNetBenchmarkTests/TensorFlowCpuComparisonBenchmarks.cs` (CPU vs CPU)
 
 Run:
 ```bash
 cd AiDotNetBenchmarkTests
-dotnet run -c Release -f net8.0 -- --filter *TensorFlowComparison*
+dotnet run -c Release -f net8.0 -- --filter *TensorFlowComparison*        # GPU vs GPU
+dotnet run -c Release -f net8.0 -- --filter *TensorFlowCpuComparison*     # CPU vs CPU
 ```
+
+Historical note: the results below predate the CPU/GPU split and compared AiDotNet GPU to TensorFlow.NET CPU.
 
 Latest run (2025-12-28, short-run config: IterationCount=5, WarmupCount=3, LaunchCount=1):
 - Host: AMD Ryzen 7 4800H, Windows 11, .NET 8.0.22
@@ -46,13 +50,17 @@ Mean time (ms):
 ## TorchSharp comparison benchmarks
 
 Location:
-- `AiDotNetBenchmarkTests/TorchSharpComparisonBenchmarks.cs`
+- `AiDotNetBenchmarkTests/TorchSharpComparisonBenchmarks.cs` (GPU vs GPU)
+- `AiDotNetBenchmarkTests/TorchSharpCpuComparisonBenchmarks.cs` (CPU vs CPU)
 
 Run:
 ```bash
 cd AiDotNetBenchmarkTests
-dotnet run -c Release -f net8.0 -- --filter *TorchSharpComparison*
+dotnet run -c Release -f net8.0 -- --filter *TorchSharpComparison*        # GPU vs GPU
+dotnet run -c Release -f net8.0 -- --filter *TorchSharpCpuComparison*     # CPU vs CPU
 ```
+
+Historical note: the results below predate the CPU/GPU split and compared AiDotNet GPU to TorchSharp CPU.
 
 Latest run (2025-12-28, short-run config: IterationCount=5, WarmupCount=3, LaunchCount=1):
 - Host: AMD Ryzen 7 4800H, Windows 11, .NET 8.0.22
@@ -77,6 +85,17 @@ Mean time (ms):
 
 Notes:
 - 2025-12-28: Re-ran after removing duplicate kernel launches and explicit accelerator synchronizations; results were within noise of the prior run (transfer overhead still dominates).
+
+## ML.NET CPU comparison benchmarks
+
+Location:
+- `AiDotNetBenchmarkTests/MlNetCpuComparisonBenchmarks.cs`
+
+Run:
+```bash
+cd AiDotNetBenchmarkTests
+dotnet run -c Release -f net8.0 -- --filter *MlNetCpuComparison*
+```
 
 
 ## Expected trends

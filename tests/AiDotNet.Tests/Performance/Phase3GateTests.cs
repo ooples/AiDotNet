@@ -325,11 +325,11 @@ public class Phase3GateTests
         var rand = new Random(42);
         for (int i = 0; i < query.Length; i++)
         {
-            query.Data.Span[i] = (float)(rand.NextDouble() - 0.5);
+            query[i] = (float)(rand.NextDouble() - 0.5);
         }
         for (int i = 0; i < context.Length; i++)
         {
-            context.Data.Span[i] = (float)(rand.NextDouble() - 0.5);
+            context[i] = (float)(rand.NextDouble() - 0.5);
         }
 
         // Forward takes (query, context) as parameters
@@ -359,11 +359,11 @@ public class Phase3GateTests
         var rand = new Random(42);
         for (int i = 0; i < query.Length; i++)
         {
-            query.Data.Span[i] = (float)(rand.NextDouble() - 0.5);
+            query[i] = (float)(rand.NextDouble() - 0.5);
         }
         for (int i = 0; i < context.Length; i++)
         {
-            context.Data.Span[i] = (float)(rand.NextDouble() - 0.5);
+            context[i] = (float)(rand.NextDouble() - 0.5);
         }
 
         var output = layer.Forward(query, context);
@@ -386,11 +386,11 @@ public class Phase3GateTests
         var rand = new Random(42);
         for (int i = 0; i < query.Length; i++)
         {
-            query.Data.Span[i] = (float)(rand.NextDouble() - 0.5);
+            query[i] = (float)(rand.NextDouble() - 0.5);
         }
         for (int i = 0; i < context.Length; i++)
         {
-            context.Data.Span[i] = (float)(rand.NextDouble() - 0.5);
+            context[i] = (float)(rand.NextDouble() - 0.5);
         }
 
         // Two forward passes with same input should produce same output
@@ -399,7 +399,7 @@ public class Phase3GateTests
 
         for (int i = 0; i < output1.Length; i++)
         {
-            Assert.Equal(output1.Data.Span[i], output2.Data.Span[i], 5);
+            Assert.Equal(output1[i], output2[i], 5);
         }
     }
 
@@ -424,7 +424,7 @@ public class Phase3GateTests
         var rand = new Random(42);
         for (int i = 0; i < input.Length; i++)
         {
-            input.Data.Span[i] = (float)(rand.NextDouble() - 0.5);
+            input[i] = (float)(rand.NextDouble() - 0.5);
         }
 
         var output = layer.Forward(input);
@@ -451,7 +451,7 @@ public class Phase3GateTests
         var rand = new Random(42);
         for (int i = 0; i < input.Length; i++)
         {
-            input.Data.Span[i] = (float)(rand.NextDouble() - 0.5);
+            input[i] = (float)(rand.NextDouble() - 0.5);
         }
 
         // Two forward passes with same input should produce same output
@@ -460,7 +460,7 @@ public class Phase3GateTests
 
         for (int i = 0; i < output1.Length; i++)
         {
-            Assert.Equal(output1.Data.Span[i], output2.Data.Span[i], 5);
+            Assert.Equal(output1[i], output2[i], 5);
         }
     }
 
@@ -485,7 +485,7 @@ public class Phase3GateTests
         var rand = new Random(42);
         for (int i = 0; i < input.Length; i++)
         {
-            input.Data.Span[i] = (float)(rand.NextDouble() - 0.5);
+            input[i] = (float)(rand.NextDouble() - 0.5);
         }
         // Create a sparse adjacency matrix with self-loops and neighbor connections
         for (int i = 0; i < 10; i++)
@@ -596,11 +596,11 @@ public class Phase3GateTests
         var rand = new Random(42);
         for (int i = 0; i < query.Length; i++)
         {
-            query.Data.Span[i] = (float)(rand.NextDouble() - 0.5);
+            query[i] = (float)(rand.NextDouble() - 0.5);
         }
         for (int i = 0; i < context.Length; i++)
         {
-            context.Data.Span[i] = (float)(rand.NextDouble() - 0.5);
+            context[i] = (float)(rand.NextDouble() - 0.5);
         }
 
         // Warmup

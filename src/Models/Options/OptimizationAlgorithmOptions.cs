@@ -99,7 +99,7 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     /// A higher rate means bigger steps (faster learning but might overshoot), while a lower rate means smaller steps
     /// (more precise but slower learning). Think of it like adjusting the speed of learning.</para>
     /// </remarks>
-    public double InitialLearningRate { get; set; } = 0.01;
+    public virtual double InitialLearningRate { get; set; } = 0.01;
 
     /// <summary>
     /// Gets or sets whether to automatically adjust the learning rate during training.

@@ -6,8 +6,8 @@
 
 **4,300+ implementations across 60+ feature categories - bringing cutting-edge AI to the .NET ecosystem**
 
-[![Build Status](https://github.com/ooples/AiDotNet/actions/workflows/ci.yml/badge.svg)](https://github.com/ooples/AiDotNet/actions/workflows/ci.yml)
-[![CodeQL Analysis](https://github.com/ooples/AiDotNet/actions/workflows/codeql.yml/badge.svg)](https://github.com/ooples/AiDotNet/actions/workflows/codeql.yml)
+[![Build Status](https://github.com/ooples/AiDotNet/actions/workflows/sonarcloud.yml/badge.svg)](https://github.com/ooples/AiDotNet/actions/workflows/sonarcloud.yml)
+[![CodeQL](https://github.com/ooples/AiDotNet/security/code-scanning/badge.svg)](https://github.com/ooples/AiDotNet/security/code-scanning)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/59242b2fb53c4ffc871212d346de752f)](https://app.codacy.com/gh/ooples/AiDotNet/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![NuGet](https://img.shields.io/nuget/v/AiDotNet.svg)](https://www.nuget.org/packages/AiDotNet/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -24,10 +24,10 @@
 ![HuggingFace](https://img.shields.io/badge/HuggingFace-Compatible-ff6f00)
 ![Multi-GPU](https://img.shields.io/badge/Multi--GPU-DDP|FSDP|ZeRO-00bcd4)
 
-[Getting Started](#getting-started) •
-[Samples](samples/) •
-[Documentation](docs/) •
-[API Reference](#api-reference) •
+[Getting Started](#installation) •
+[Samples](https://github.com/ooples/AiDotNet/tree/master/samples) •
+[Documentation](https://ooples.github.io/AiDotNet/) •
+[API Reference](https://ooples.github.io/AiDotNet/api/) •
 [Contributing](#contributing)
 
 </div>
@@ -36,19 +36,22 @@
 
 ## Why AiDotNet?
 
-| Feature | AiDotNet | ML.NET | Accord.NET |
-|---------|----------|--------|------------|
-| Neural Network Architectures | **100+** | ~10 | ~20 |
-| Classical ML Algorithms | **106+** | ~30 | ~50 |
-| Computer Vision Models | **50+** | Limited | Limited |
-| Audio Processing | **90+** | None | Basic |
-| Reinforcement Learning | **80+ agents** | None | None |
-| Diffusion Models | **20+** | None | None |
-| LoRA Fine-tuning | **37 adapters** | None | None |
-| RAG Components | **50+** | None | None |
-| Distributed Training | **DDP, FSDP, ZeRO** | None | None |
-| HuggingFace Integration | **Full** | None | None |
-| GPU Acceleration | **CUDA, OpenCL** | Limited | None |
+| Feature | AiDotNet | TorchSharp | TensorFlow.NET | ML.NET | Accord.NET |
+|---------|----------|------------|----------------|--------|------------|
+| Neural Network Architectures | **100+** | 50+ | 30+ | ~10 | ~20 |
+| Classical ML Algorithms | **106+** | None | None | ~30 | ~50 |
+| Computer Vision Models | **50+** | Via PyTorch | Via TF | Limited | Limited |
+| Audio Processing | **90+** | Limited | Limited | None | Basic |
+| Reinforcement Learning | **80+ agents** | Manual | Limited | None | None |
+| Diffusion Models | **20+** | Manual | None | None | None |
+| LoRA Fine-tuning | **37 adapters** | Manual | None | None | None |
+| RAG Components | **50+** | None | None | None | None |
+| Distributed Training | **DDP, FSDP, ZeRO** | DDP only | MirroredStrategy | None | None |
+| HuggingFace Integration | **Native** | Partial | Partial | None | None |
+| GPU Acceleration | **CUDA, OpenCL** | Via LibTorch | Via TF Runtime | Limited | None |
+| Pure .NET (No Runtime) | **Yes** | No (LibTorch) | No (TF Runtime) | Yes | Yes |
+| Startup Time | **Fast** | Slow | Slow | Fast | Fast |
+| Memory<T>/Span<T> Support | **Full** | Limited | Limited | Limited | None |
 
 ---
 
@@ -78,7 +81,7 @@
 dotnet add package AiDotNet
 ```
 
-**Requirements:** .NET 8.0+ (or .NET Framework 4.6.2+)
+**Requirements:** .NET 10.0 / .NET 8.0+ (or .NET Framework 4.7.1+)
 
 ---
 
@@ -94,8 +97,8 @@ var result = await new AiModelBuilder<double, double[], double>()
     .ConfigurePreprocessing()  // Auto-applies StandardScaler + Imputer
     .BuildAsync(features, labels);
 
-// Make predictions
-var prediction = result.Model.Predict(newSample);
+// Make predictions using the facade pattern
+var prediction = result.Predict(newSample);
 ```
 
 ---
@@ -1141,7 +1144,7 @@ See the [samples/](samples/) directory for complete, runnable examples:
 
 ## API Reference
 
-Full API documentation is available at [docs.aidotnet.dev](https://docs.aidotnet.dev).
+Full API documentation is available at [ooples.github.io/AiDotNet](https://ooples.github.io/AiDotNet/).
 
 Key namespaces:
 - `AiDotNet` - Core builder and result types
@@ -1169,8 +1172,9 @@ Key namespaces:
 | Windows | ✅ Full support |
 | Linux | ✅ Full support |
 | macOS | ✅ Full support |
-| .NET 8.0+ | ✅ Primary target |
-| .NET Framework 4.6.2+ | ✅ Supported |
+| .NET 10.0 | ✅ Primary target |
+| .NET 8.0+ | ✅ Supported |
+| .NET Framework 4.7.1+ | ✅ Supported |
 
 ### GPU Acceleration
 

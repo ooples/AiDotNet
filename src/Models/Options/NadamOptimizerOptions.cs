@@ -81,7 +81,7 @@ public class NadamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// but this initial value still significantly influences the overall training dynamics.
     /// </para>
     /// </remarks>
-    public new double InitialLearningRate { get; set; } = 0.002;
+    public override double InitialLearningRate { get; set; } = 0.002;
 
     /// <summary>
     /// Gets or sets the exponential decay rate for the first moment estimates (momentum).

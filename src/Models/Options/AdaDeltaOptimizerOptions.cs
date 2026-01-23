@@ -120,5 +120,5 @@ public class AdaDeltaOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimiz
     /// that automatically adjust how it learns, making it less sensitive to this initial setting.
     /// In most cases, you won't need to change this value.</para>
     /// </remarks>
-    public new double InitialLearningRate { get; set; } = 1.0;
+    public override double InitialLearningRate { get; set; } = 1.0;
 }

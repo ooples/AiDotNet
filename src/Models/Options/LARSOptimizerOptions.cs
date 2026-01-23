@@ -58,7 +58,7 @@ public class LARSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// The default of 0.3 works well for most SSL tasks. Use linear scaling: LR = base_lr * batch_size / 256.
     /// </para>
     /// </remarks>
-    public new double InitialLearningRate { get; set; } = 0.3;
+    public override double InitialLearningRate { get; set; } = 0.3;
 
     /// <summary>
     /// Gets or sets the momentum coefficient for the optimizer.

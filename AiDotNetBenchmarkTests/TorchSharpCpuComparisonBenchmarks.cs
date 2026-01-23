@@ -19,6 +19,11 @@ public class TorchSharpCpuComparisonBenchmarks
     private readonly Dictionary<int, Tensor<float>> _aiVectorsA = new();
     private readonly Dictionary<int, Tensor<float>> _aiVectorsB = new();
 
+    // Raw arrays for direct TensorPrimitives comparison
+    private readonly Dictionary<int, float[]> _rawArraysA = new();
+    private readonly Dictionary<int, float[]> _rawArraysB = new();
+    private readonly Dictionary<int, float[]> _rawDestination = new();
+
     private readonly Dictionary<int, TorchTensor> _torchMatricesA = new();
     private readonly Dictionary<int, TorchTensor> _torchMatricesB = new();
     private readonly Dictionary<int, TorchTensor> _torchVectorsA = new();
@@ -26,6 +31,7 @@ public class TorchSharpCpuComparisonBenchmarks
 
     private Tensor<float>? _aiConvInput;
     private Tensor<float>? _aiConvKernel;
+    private Tensor<float>? _aiConvOutput; // Pre-allocated for zero-allocation benchmark
     private TorchTensor? _torchConvInput;
     private TorchTensor? _torchConvKernel;
 
@@ -48,8 +54,7 @@ public class TorchSharpCpuComparisonBenchmarks
         torch.set_grad_enabled(false);
         _torchDevice = torch.CPU;
         Console.WriteLine("TorchSharp device: CPU (forced)");
-        Console.WriteLine($"AiDotNet BLAS available: {AiDotNet.Tensors.Helpers.BlasProvider.IsAvailable}");
-        Console.WriteLine($"AiDotNet BLAS backend: {AiDotNet.Tensors.Helpers.BlasProvider.BackendName}");
+        Console.WriteLine("AiDotNet BLAS: OpenBLAS package referenced (runtime load required)");
 
         foreach (var size in MatrixSizes)
         {
@@ -70,6 +75,11 @@ public class TorchSharpCpuComparisonBenchmarks
 
             _aiVectorsA[size] = new Tensor<float>(dataA, new[] { size });
             _aiVectorsB[size] = new Tensor<float>(dataB, new[] { size });
+
+            // Also store raw arrays for direct comparison
+            _rawArraysA[size] = (float[])dataA.Clone();
+            _rawArraysB[size] = (float[])dataB.Clone();
+            _rawDestination[size] = new float[size]; // Separate destination to avoid modifying source data
 
             _torchVectorsA[size] = torch.tensor(dataA, new long[] { size }, device: _torchDevice);
             _torchVectorsB[size] = torch.tensor(dataB, new long[] { size }, device: _torchDevice);
@@ -145,6 +155,10 @@ public class TorchSharpCpuComparisonBenchmarks
         _aiConvInput = new Tensor<float>(inputData, new[] { batch, inChannels, height, width });
         _aiConvKernel = new Tensor<float>(kernelData, new[] { outChannels, inChannels, kernelSize, kernelSize });
 
+        // Pre-allocate output for zero-allocation benchmark
+        // Output shape: (64 + 2*1 - 3) / 1 + 1 = 64
+        _aiConvOutput = new Tensor<float>(new[] { batch, outChannels, height, width });
+
         _torchConvInput = torch.tensor(inputData, new long[] { batch, inChannels, height, width }, device: _torchDevice);
         _torchConvKernel = torch.tensor(kernelData, new long[] { outChannels, inChannels, kernelSize, kernelSize }, device: _torchDevice);
 
@@ -202,6 +216,17 @@ public class TorchSharpCpuComparisonBenchmarks
     {
         _cpuEngine.TensorAddInPlace(_aiVectorsA[size], _aiVectorsB[size]);
         return _aiVectorsA[size];
+    }
+
+    [Benchmark]
+    [Arguments(100_000)]
+    [Arguments(1_000_000)]
+    public void RawTensorPrimitives_Add(int size)
+    {
+        System.Numerics.Tensors.TensorPrimitives.Add(
+            _rawArraysA[size].AsSpan(),
+            _rawArraysB[size].AsSpan(),
+            _rawDestination[size].AsSpan());
     }
 
     [Benchmark]
@@ -266,6 +291,12 @@ public class TorchSharpCpuComparisonBenchmarks
     }
 
     [Benchmark]
+    public float RawTensorPrimitives_Sum()
+    {
+        return System.Numerics.Tensors.TensorPrimitives.Sum(_rawArraysA[VectorSizes[1]].AsSpan());
+    }
+
+    [Benchmark]
     public void TorchSharp_Sum()
     {
         using var result = torch.sum(_torchVectorsA[VectorSizes[1]]);
@@ -289,6 +320,12 @@ public class TorchSharpCpuComparisonBenchmarks
     public Tensor<float> AiDotNet_Conv2D()
     {
         return AiDotNetEngine.Current.Conv2D(_aiConvInput!, _aiConvKernel!, _convStride, _convPadding, _convDilation);
+    }
+
+    [Benchmark]
+    public void AiDotNet_Conv2D_ZeroAlloc()
+    {
+        _cpuEngine.Conv2DInto(_aiConvOutput!, _aiConvInput!, _aiConvKernel!, _convStride, _convPadding, _convDilation);
     }
 
     [Benchmark]

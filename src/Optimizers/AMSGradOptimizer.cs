@@ -431,8 +431,43 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
 
             writer.Write(_t);
 
+            // Serialize state vectors
+            SerializeVector(writer, _m);
+            SerializeVector(writer, _v);
+            SerializeVector(writer, _vHat);
+
             return ms.ToArray();
         }
+    }
+
+    private void SerializeVector(BinaryWriter writer, Vector<T>? vector)
+    {
+        bool hasVector = vector is not null;
+        writer.Write(hasVector);
+        if (hasVector)
+        {
+            writer.Write(vector!.Length);
+            for (int i = 0; i < vector.Length; i++)
+            {
+                writer.Write(NumOps.ToDouble(vector[i]));
+            }
+        }
+    }
+
+    private Vector<T>? DeserializeVector(BinaryReader reader)
+    {
+        bool hasVector = reader.ReadBoolean();
+        if (hasVector)
+        {
+            int length = reader.ReadInt32();
+            T[] data = new T[length];
+            for (int i = 0; i < length; i++)
+            {
+                data[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            return new Vector<T>(data);
+        }
+        return null;
     }
 
     /// <summary>
@@ -459,6 +494,11 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _t = reader.ReadInt32();
+
+            // Deserialize state vectors
+            _m = DeserializeVector(reader);
+            _v = DeserializeVector(reader);
+            _vHat = DeserializeVector(reader);
         }
     }
 

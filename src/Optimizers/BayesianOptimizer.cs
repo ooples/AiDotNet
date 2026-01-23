@@ -99,15 +99,30 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
 
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var inputSize = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
 
         InitializeAdaptiveParameters();
 
-        // Initial random sampling
-        _sampledPoints = new Matrix<T>(_options.InitialSamples, inputSize);
+        // Get the parameter count from a random solution (includes coefficients + intercept)
+        // This is different from inputSize which is just the feature count
+        var firstSolution = InitializeRandomSolution(inputData.XTrain);
+        int paramCount = firstSolution.ParameterCount;
+
+        // Initial random sampling - use paramCount (model parameters), not inputSize (features)
+        _sampledPoints = new Matrix<T>(_options.InitialSamples, paramCount);
         _sampledValues = new Vector<T>(_options.InitialSamples);
 
-        for (int i = 0; i < _options.InitialSamples; i++)
+        // Evaluate the first solution we already created
+        var firstStepData = EvaluateSolution(firstSolution, inputData);
+        UpdateBestSolution(firstStepData, ref bestStepData);
+        var firstParams = firstSolution.GetParameters();
+        for (int j = 0; j < firstParams.Length; j++)
+        {
+            _sampledPoints[0, j] = firstParams[j];
+        }
+        _sampledValues[0] = firstStepData.FitnessScore;
+
+        // Continue with remaining initial samples
+        for (int i = 1; i < _options.InitialSamples; i++)
         {
             var randomSolution = InitializeRandomSolution(inputData.XTrain);
             var stepData = EvaluateSolution(randomSolution, inputData);
@@ -128,8 +143,8 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
             // Fit Gaussian Process to observed data
             _gaussianProcess.Fit(_sampledPoints, _sampledValues);
 
-            // Find next point to sample using acquisition function
-            var nextPoint = OptimizeAcquisitionFunction(inputSize);
+            // Find next point to sample using acquisition function - use paramCount, not inputSize
+            var nextPoint = OptimizeAcquisitionFunction(paramCount);
             var baseSolution = InitializeRandomSolution(inputData.XTrain);
             var currentSolution = baseSolution.WithParameters(nextPoint);
 
@@ -138,7 +153,8 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
 
             // Resize _sampledPoints and _sampledValues
             int newSize = _sampledPoints.Rows + 1;
-            var newSampledPoints = new Matrix<T>(newSize, inputSize);
+            // Use existing matrix column count (paramCount) for consistency
+            var newSampledPoints = new Matrix<T>(newSize, _sampledPoints.Columns);
             var newSampledValues = new Vector<T>(newSize);
 
             // Copy existing data

@@ -58,7 +58,7 @@ public class LAMBOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// square root scaling: LR = base_lr * sqrt(batch_size / 256). The default of 0.001 is a
     /// good starting point for transformer models.</para>
     /// </remarks>
-    public new double InitialLearningRate { get; set; } = 0.001;
+    public override double InitialLearningRate { get; set; } = 0.001;
 
     /// <summary>
     /// Gets or sets the exponential decay rate for the first moment estimates (momentum).

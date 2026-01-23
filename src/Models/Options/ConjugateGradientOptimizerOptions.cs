@@ -43,7 +43,7 @@ public class ConjugateGradientOptimizerOptions<T, TInput, TOutput> : GradientBas
     /// right over the lowest point; if too low (like 0.001), it will take a very long time to reach the bottom.
     /// This value overrides the one from the parent class to provide a more appropriate default for the conjugate gradient method.</para>
     /// </remarks>
-    public new double InitialLearningRate { get; set; } = 0.1;
+    public override double InitialLearningRate { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the minimum learning rate, which prevents the steps from becoming too small.
