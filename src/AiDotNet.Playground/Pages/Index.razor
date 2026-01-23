@@ -245,6 +245,94 @@
     :deep(.monaco-editor) {
         height: 100% !important;
     }
+
+    /* Mobile responsive styles */
+    @@media (max-width: 768px) {
+        .toolbar {
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px 12px;
+        }
+
+        .toolbar-left, .toolbar-right {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .toolbar-right {
+            flex-wrap: wrap;
+        }
+
+        .example-select {
+            min-width: 100%;
+            width: 100%;
+        }
+
+        .btn {
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            flex: 1;
+            justify-content: center;
+            min-width: 0;
+        }
+
+        .editor-container {
+            flex-direction: column;
+        }
+
+        .editor-panel {
+            border-right: none;
+            border-bottom: 1px solid var(--border-color);
+            min-height: 250px;
+            max-height: 45vh;
+        }
+
+        .editor-wrapper {
+            min-height: 200px;
+        }
+
+        .output-panel {
+            width: 100%;
+            min-height: 150px;
+            flex: 1;
+        }
+
+        .panel-header {
+            padding: 8px 12px;
+            font-size: 0.8rem;
+        }
+
+        .output-content {
+            padding: 12px;
+            font-size: 0.85rem;
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .toolbar {
+            padding: 8px;
+        }
+
+        .btn {
+            padding: 6px 10px;
+            font-size: 0.8rem;
+        }
+
+        /* Hide less critical buttons on very small screens */
+        .btn-secondary:nth-child(3),
+        .btn-secondary:nth-child(4) {
+            display: none;
+        }
+
+        .editor-panel {
+            min-height: 200px;
+            max-height: 40vh;
+        }
+
+        .editor-wrapper {
+            min-height: 150px;
+        }
+    }
 </style>
 
 @code {
