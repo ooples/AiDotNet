@@ -457,12 +457,13 @@ public class LoRAIntegrationTests
         double initialLoss = 0;
         double finalLoss = 0;
 
-        // Simple training loop with synthetic data
+        // Create fixed training data outside the loop for meaningful loss reduction
+        var input = CreateTensor(1, InputSize);
+        var target = CreateTensor(1, OutputSize);
+
+        // Simple training loop with fixed synthetic data
         for (int epoch = 0; epoch < 10; epoch++)
         {
-            var input = CreateTensor(1, InputSize);
-            var target = CreateTensor(1, OutputSize);
-
             var output = adapter.Forward(input);
 
             // Compute MSE loss gradient
@@ -483,8 +484,7 @@ public class LoRAIntegrationTests
             adapter.UpdateParameters(LearningRate);
         }
 
-        // Loss should have decreased (not guaranteed with random data, but usually happens)
-        // At minimum, verify no NaN/Inf
+        // Loss should have decreased with fixed training data
         Assert.False(double.IsNaN(finalLoss), "Final loss should not be NaN");
         Assert.False(double.IsInfinity(finalLoss), "Final loss should not be Infinity");
     }
