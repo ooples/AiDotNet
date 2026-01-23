@@ -634,6 +634,8 @@ jobs:
           cp -r _playground/wwwroot/* _site/playground/
           # Update base href for the playground subdirectory
           sed -i 's|<base href="/" />|<base href="/AiDotNet/playground/" />|g' _site/playground/index.html
+          # Create .nojekyll to prevent GitHub Pages from ignoring _framework and _content folders
+          touch _site/.nojekyll
 
       - name: Free up disk space before upload
         run: |

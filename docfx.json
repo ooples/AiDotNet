@@ -59,7 +59,8 @@
     "fileMetadataFiles": [],
     "template": [
       "default",
-      "modern"
+      "modern",
+      "templates/modern"
     ],
     "postProcessors": [],
     "markdownEngineName": "markdig",
