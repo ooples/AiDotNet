@@ -390,3 +390,4 @@ _playground/
 # Node modules for Vercel API
 api/node_modules/
 _playground_new/
+_playground_test/

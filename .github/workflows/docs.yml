@@ -75,6 +75,12 @@ jobs:
         cp -r _playground/wwwroot/* _site/playground/
         # Update base href for the playground subdirectory
         sed -i 's|<base href="/" />|<base href="/AiDotNet/playground/" />|g' _site/playground/index.html
+        # Create .nojekyll to prevent GitHub Pages from ignoring _framework and _content folders
+        touch _site/.nojekyll
+
+    - name: Create .nojekyll if playground was skipped
+      if: ${{ inputs.skip_playground == true }}
+      run: touch _site/.nojekyll
 
     - name: Setup Pages
       uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
