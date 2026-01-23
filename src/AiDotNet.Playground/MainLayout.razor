@@ -52,12 +52,15 @@
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         background: var(--bg-dark);
         color: var(--text-primary);
+        overflow-x: hidden;
+        max-width: 100vw;
     }
 
     .playground-layout {
         display: flex;
         flex-direction: column;
         height: 100vh;
+        height: 100dvh; /* Use dynamic viewport height for mobile */
     }
 
     .playground-header {
@@ -66,8 +69,10 @@
         align-items: center;
         padding: 0 24px;
         height: 60px;
+        min-height: 60px;
         background: var(--bg-darker);
         border-bottom: 1px solid var(--border-color);
+        flex-shrink: 0;
     }
 
     .header-brand {
@@ -101,6 +106,7 @@
     .playground-main {
         flex: 1;
         overflow: hidden;
+        min-height: 0; /* Required for flex child to shrink properly */
     }
 
     .playground-footer {
@@ -113,6 +119,7 @@
         border-top: 1px solid var(--border-color);
         font-size: 0.85rem;
         color: var(--text-secondary);
+        flex-shrink: 0;
     }
 
     .playground-footer a {
@@ -122,5 +129,69 @@
 
     .playground-footer a:hover {
         text-decoration: underline;
+    }
+
+    /* Mobile responsive styles */
+    @@media (max-width: 768px) {
+        html, body, #app, .playground-layout {
+            max-width: 100vw !important;
+            overflow-x: hidden !important;
+        }
+
+        .playground-header {
+            padding: 0 12px;
+            height: 50px;
+            min-height: 50px;
+            max-width: 100vw;
+        }
+
+        .header-brand {
+            font-size: 1rem;
+            gap: 6px;
+        }
+
+        .brand-icon {
+            font-size: 1.25rem;
+        }
+
+        .brand-text {
+            display: none; /* Hide text on very small screens */
+        }
+
+        .header-nav {
+            gap: 12px;
+        }
+
+        .nav-link {
+            font-size: 0.8rem;
+        }
+
+        .playground-footer {
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 8px 12px;
+            font-size: 0.75rem;
+            text-align: center;
+        }
+
+        .playground-footer span:nth-child(2),
+        .playground-footer span:nth-child(4) {
+            display: none; /* Hide separator pipes on mobile */
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .header-nav {
+            gap: 8px;
+        }
+
+        .nav-link {
+            font-size: 0.75rem;
+        }
+
+        /* Hide less important nav links on very small screens */
+        .nav-link:nth-child(3) {
+            display: none;
+        }
     }
 </style>
