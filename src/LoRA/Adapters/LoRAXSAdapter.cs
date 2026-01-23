@@ -247,6 +247,13 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
+            // Handle case where R matrix hasn't been initialized yet
+            // (called from base constructor before derived constructor runs)
+            if (_trainableR == null)
+            {
+                return Rank * Rank;
+            }
+
             return _trainableR.Rows * _trainableR.Rows;
         }
     }

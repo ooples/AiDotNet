@@ -239,23 +239,27 @@ public class LoRAIntegrationTests
         Assert.Equal(baseParamCount + loraParamCount, adapter.ParameterCount);
     }
 
-    // Note: MergeToOriginalLayer has a bug with matrix indices - skipping until fixed
-    // The bug is in StandardLoRAAdapter.MergeToOriginalLayer() at line 129
-    // [Fact]
-    // public void StandardLoRAAdapter_MergeToOriginalLayer_ProducesFunctionalLayer()
-    // {
-    //     var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
-    //     var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha);
-    //     var input = CreateTensor(1, InputSize);
-    //     var adapterOutput = adapter.Forward(input);
-    //     var mergedLayer = adapter.MergeToOriginalLayer();
-    //     var mergedOutput = mergedLayer.Forward(input);
-    //     Assert.Equal(adapterOutput.Length, mergedOutput.Length);
-    //     for (int i = 0; i < adapterOutput.Length; i++)
-    //     {
-    //         Assert.Equal(adapterOutput[i], mergedOutput[i], 4);
-    //     }
-    // }
+    [Fact]
+    public void StandardLoRAAdapter_MergeToOriginalLayer_ProducesFunctionalLayer()
+    {
+        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha);
+        var input = CreateTensor(1, InputSize);
+
+        // Get output from adapter
+        var adapterOutput = adapter.Forward(input);
+
+        // Merge and get output from merged layer
+        var mergedLayer = adapter.MergeToOriginalLayer();
+        var mergedOutput = mergedLayer.Forward(input);
+
+        // Outputs should be similar (within numerical precision)
+        Assert.Equal(adapterOutput.Length, mergedOutput.Length);
+        for (int i = 0; i < adapterOutput.Length; i++)
+        {
+            Assert.Equal(adapterOutput[i], mergedOutput[i], 4);
+        }
+    }
 
     [Fact]
     public void StandardLoRAAdapter_Backward_PropagatesGradients()
@@ -338,17 +342,18 @@ public class LoRAIntegrationTests
         Assert.Equal(Rank, adapter.Rank);
     }
 
-    // Note: DoRAAdapter has a bug in Forward method with matrix indices - skipping until fixed
-    // [Fact]
-    // public void DoRAAdapter_Forward_ProducesValidOutput()
-    // {
-    //     var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
-    //     var adapter = new DoRAAdapter<double>(baseLayer, Rank, Alpha);
-    //     var input = CreateTensor(1, InputSize);
-    //     var output = adapter.Forward(input);
-    //     Assert.Equal(OutputSize, output.Shape[1]);
-    //     AssertTensorFinite(output);
-    // }
+    [Fact]
+    public void DoRAAdapter_Forward_ProducesValidOutput()
+    {
+        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var adapter = new DoRAAdapter<double>(baseLayer, Rank, Alpha);
+        var input = CreateTensor(1, InputSize);
+
+        var output = adapter.Forward(input);
+
+        Assert.Equal(OutputSize, output.Shape[1]);
+        AssertTensorFinite(output);
+    }
 
     [Fact]
     public void AdaLoRAAdapter_Initialize_CorrectlyWrapsLayer()
@@ -373,14 +378,17 @@ public class LoRAIntegrationTests
         AssertTensorFinite(output);
     }
 
-    // Note: VeRAAdapter has a bug in ParameterCount property - skipping until fixed
-    // [Fact]
-    // public void VeRAAdapter_Initialize_CorrectlyWrapsLayer()
-    // {
-    //     var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
-    //     var adapter = new VeRAAdapter<double>(baseLayer, Rank, Alpha);
-    //     Assert.Same(baseLayer, adapter.BaseLayer);
-    // }
+    [Fact]
+    public void VeRAAdapter_Initialize_CorrectlyWrapsLayer()
+    {
+        // VeRA requires shared matrices to be initialized first
+        VeRAAdapter<double>.InitializeSharedMatrices(InputSize, OutputSize, Rank);
+
+        var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
+        var adapter = new VeRAAdapter<double>(baseLayer, Rank, Alpha);
+
+        Assert.Same(baseLayer, adapter.BaseLayer);
+    }
 
     [Fact]
     public void LoKrAdapter_Initialize_CorrectlyWrapsLayer()
@@ -551,10 +559,17 @@ public class LoRAIntegrationTests
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
         var input = CreateTensor(1, InputSize);
 
-        // Note: DoRA, VeRA, LoRAXS have bugs; MoRA requires square layers; DVoRA requires initialization
+        // Initialize shared matrices for VeRA and DVoRA
+        VeRAAdapter<double>.InitializeSharedMatrices(InputSize, OutputSize, Rank);
+        DVoRAAdapter<double>.InitializeSharedMatrices(InputSize, OutputSize, Rank);
+
+        // Note: MoRA requires square layers; LoRAXS requires SVD initialization with pretrained weights
         var adapters = new List<(string Name, LoRAAdapterBase<double> Adapter, int ExpectedOutputSize)>
         {
             ("Standard", new StandardLoRAAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
+            ("DoRA", new DoRAAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
+            ("VeRA", new VeRAAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
+            ("DVoRA", new DVoRAAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
             ("LoKr", new LoKrAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
             ("LoHa", new LoHaAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
             ("LoRAFA", new LoRAFAAdapter<double>(new DenseLayer<double>(InputSize, OutputSize), Rank, Alpha), OutputSize),
