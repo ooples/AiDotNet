@@ -4,33 +4,18 @@
    Responsive Tables
    ============================================ */
 
-/* Wrap all tables in a scrollable container on mobile */
-article table {
-  display: block;
-  width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-article table thead,
-article table tbody,
-article table tr {
-  display: table;
-  width: 100%;
-  table-layout: fixed;
-}
-
 /* On small screens, allow tables to be wider than viewport with scroll */
 @media (max-width: 768px) {
   article table {
     display: block;
     max-width: 100%;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    position: relative;
   }
 
   article table thead,
-  article table tbody,
-  article table tr {
+  article table tbody {
     display: table;
     width: max-content;
     min-width: 100%;
@@ -243,6 +228,6 @@ article table::-webkit-scrollbar-thumb:hover {
   article table th,
   article table td {
     white-space: normal;
-    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
 }

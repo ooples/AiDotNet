@@ -80,7 +80,9 @@ jobs:
 
     - name: Create .nojekyll if playground was skipped
       if: ${{ inputs.skip_playground == true }}
-      run: touch _site/.nojekyll
+      run: |
+        mkdir -p _site
+        touch _site/.nojekyll
 
     - name: Setup Pages
       uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
