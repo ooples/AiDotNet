@@ -71,6 +71,31 @@ public class CacheConfig
     public int TimeToLiveSeconds { get; set; } = 3600;
 
     /// <summary>
+    /// Gets or sets the cache entry time-to-live as a TimeSpan (default: 1 hour).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A more convenient way to specify the cache duration.
+    /// This is equivalent to TimeToLiveSeconds but uses the TimeSpan type for clarity.
+    /// </para>
+    /// </remarks>
+    public TimeSpan DefaultTTL
+    {
+        get => TimeSpan.FromSeconds(TimeToLiveSeconds);
+        set => TimeToLiveSeconds = (int)value.TotalSeconds;
+    }
+
+    /// <summary>
+    /// Gets or sets the maximum cache size in megabytes (default: 100.0 MB).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Memory-based limit for the cache. When total cached model
+    /// size exceeds this, older models are evicted. Use in addition to MaxCacheSize for
+    /// more precise memory control.
+    /// </para>
+    /// </remarks>
+    public double MaxSizeMB { get; set; } = 100.0;
+
+    /// <summary>
     /// Gets or sets whether to preload models on startup (default: false).
     /// </summary>
     /// <remarks>

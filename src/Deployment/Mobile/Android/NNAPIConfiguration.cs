@@ -23,7 +23,17 @@ public class NNAPIConfiguration
     /// <summary>
     /// Gets or sets the execution preference.
     /// </summary>
-    public NNAPIExecutionPreference ExecutionPreference { get; set; } = NNAPIExecutionPreference.FastSingleAnswer;
+    public NNAPIExecutionPreference ExecutionPreference { get; set; } = NNAPIExecutionPreference.Default;
+
+    /// <summary>
+    /// Gets or sets whether to allow FP16 precision for faster inference (default: true).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> FP16 (16-bit floating point) uses less memory and can be faster
+    /// than FP32 on many devices. Most models work well with FP16 with minimal accuracy loss.
+    /// </para>
+    /// </remarks>
+    public bool AllowFp16 { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the maximum number of concurrent executions (default: 1).

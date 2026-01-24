@@ -16,14 +16,31 @@ public class TensorRTConfiguration
     public long MaxWorkspaceSize { get; set; } = 1L << 30; // 1 GB
 
     /// <summary>
-    /// Gets or sets whether to use FP16 precision (default: true).
+    /// Gets or sets the inference precision mode (default: FP32).
     /// </summary>
-    public bool UseFp16 { get; set; } = true;
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Controls the numeric precision for inference:
+    /// - FP32: Full precision, most accurate, slowest
+    /// - FP16: Half precision, good balance of speed and accuracy
+    /// - INT8: Quantized, fastest, requires calibration data
+    /// </para>
+    /// </remarks>
+    public TensorRTPrecision Precision { get; set; } = TensorRTPrecision.FP32;
 
     /// <summary>
-    /// Gets or sets whether to use INT8 precision (requires calibration, default: false).
+    /// Gets or sets whether to enable Deep Learning Accelerator (DLA) on Jetson devices.
     /// </summary>
-    public bool UseInt8 { get; set; } = false;
+    /// <remarks>
+    /// <para><b>For Beginners:</b> DLA is a dedicated AI accelerator on NVIDIA Jetson devices.
+    /// Enables lower power consumption but may not support all operations.
+    /// </para>
+    /// </remarks>
+    public bool EnableDLA { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the DLA core to use when EnableDLA is true (-1 = disabled, 0+ = specific core).
+    /// </summary>
+    public int DLACore { get; set; } = -1;
 
     /// <summary>
     /// Gets or sets whether to enable strict type constraints (default: false).
@@ -39,11 +56,6 @@ public class TensorRTConfiguration
     /// Gets or sets the GPU device ID to use (default: 0).
     /// </summary>
     public int DeviceId { get; set; } = 0;
-
-    /// <summary>
-    /// Gets or sets the DLA core to use (null for GPU only, default: null).
-    /// </summary>
-    public int? DlaCore { get; set; } = null;
 
     /// <summary>
     /// Gets or sets optimization profiles for dynamic shapes.
@@ -104,8 +116,7 @@ public class TensorRTConfiguration
         {
             MaxBatchSize = 32,
             MaxWorkspaceSize = 4L << 30, // 4 GB
-            UseFp16 = true,
-            UseInt8 = false,
+            Precision = TensorRTPrecision.FP16,
             EnableMultiStream = true,
             NumStreams = 4,
             EnableCudaGraphs = true,
@@ -122,8 +133,7 @@ public class TensorRTConfiguration
         {
             MaxBatchSize = 1,
             MaxWorkspaceSize = 1L << 30, // 1 GB
-            UseFp16 = true,
-            UseInt8 = false,
+            Precision = TensorRTPrecision.FP16,
             EnableMultiStream = false,
             EnableCudaGraphs = true,
             BuilderOptimizationLevel = 5
@@ -137,14 +147,13 @@ public class TensorRTConfiguration
     /// <param name="calibrationDataPath">Optional path to calibration data for INT8 quantization. If provided, INT8 will be enabled.</param>
     public static TensorRTConfiguration ForHighThroughput(int batchSize = 64, string? calibrationDataPath = null)
     {
-        var useInt8 = !string.IsNullOrEmpty(calibrationDataPath);
+        var precision = string.IsNullOrEmpty(calibrationDataPath) ? TensorRTPrecision.FP16 : TensorRTPrecision.INT8;
 
         return new TensorRTConfiguration
         {
             MaxBatchSize = batchSize,
             MaxWorkspaceSize = 8L << 30, // 8 GB
-            UseFp16 = true,
-            UseInt8 = useInt8,
+            Precision = precision,
             CalibrationDataPath = calibrationDataPath,
             EnableMultiStream = true,
             NumStreams = 8,
@@ -167,8 +176,7 @@ public class TensorRTConfiguration
         {
             MaxBatchSize = 8,
             MaxWorkspaceSize = 2L << 30, // 2 GB
-            UseFp16 = false,
-            UseInt8 = true,
+            Precision = TensorRTPrecision.INT8,
             CalibrationDataPath = calibrationDataPath,
             BuilderOptimizationLevel = 4
         };
@@ -182,11 +190,11 @@ public class TensorRTConfiguration
     public void Validate()
     {
         // Validate INT8 requires calibration data
-        if (UseInt8 && string.IsNullOrWhiteSpace(CalibrationDataPath))
+        if (Precision == TensorRTPrecision.INT8 && string.IsNullOrWhiteSpace(CalibrationDataPath))
         {
             throw new InvalidOperationException(
-                "INT8 quantization is enabled but CalibrationDataPath is not provided. " +
-                "Either provide calibration data or set UseInt8 = false.");
+                "INT8 precision requires CalibrationDataPath to be provided. " +
+                "Either provide calibration data or use a different Precision mode.");
         }
 
         // Validate calibration data file exists if path is provided

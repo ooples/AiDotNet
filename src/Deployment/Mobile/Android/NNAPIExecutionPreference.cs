@@ -5,6 +5,9 @@ namespace AiDotNet.Deployment.Mobile.Android;
 /// </summary>
 public enum NNAPIExecutionPreference
 {
+    /// <summary>Default preference (let the system decide)</summary>
+    Default,
+
     /// <summary>Prefer fast single answer</summary>
     FastSingleAnswer,
 
