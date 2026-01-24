@@ -1,0 +1,65 @@
+name: Deploy Playground Functions to Azure
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - 'src/AiDotNet.Playground.Functions/**'
+      - '.github/workflows/azure-functions-deploy.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  AZURE_FUNCTIONAPP_NAME: aidotnet-playground
+  AZURE_FUNCTIONAPP_PACKAGE_PATH: src/AiDotNet.Playground.Functions
+  DOTNET_VERSION: '10.0.x'
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        run: dotnet restore ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+
+      - name: Build
+        run: dotnet build ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }} -c Release --no-restore
+
+      - name: Publish
+        run: dotnet publish ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }} -c Release -o ./publish --no-build
+
+      - name: Deploy to Azure Functions
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          package: ./publish
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "## Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Azure Functions deployed to:" >> $GITHUB_STEP_SUMMARY
+          echo "- **App Name**: ${{ env.AZURE_FUNCTIONAPP_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net" >> $GITHUB_STEP_SUMMARY
+          echo "- **API Endpoint**: https://aidotnet-playground-emfxa0abhzdqfyh3.westeurope-01.azurewebsites.net/api/execute" >> $GITHUB_STEP_SUMMARY
