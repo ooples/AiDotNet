@@ -177,7 +177,8 @@ public class HyperparameterOptimizationIntegrationTests
         var str = state.ToString();
 
         Assert.Contains("RUNNING", str);
-        Assert.Contains("0.85", str);
+        // Check for "85" which should appear regardless of culture (0.85 or 0,85)
+        Assert.Contains("85", str);
     }
 
     #endregion
