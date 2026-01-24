@@ -35,11 +35,27 @@ public static class MemoryTracker
     private static readonly object _lock = new();
     private static bool _enabled = false;
     private static DateTime _startTime = DateTime.UtcNow;
+    private static int _maxHistorySize = 10000; // Prevent unbounded memory growth
 
     /// <summary>
     /// Gets whether memory tracking is enabled.
     /// </summary>
     public static bool IsEnabled => _enabled;
+
+    /// <summary>
+    /// Gets or sets the maximum history size (default: 10000).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Limits how many snapshots are kept in history to prevent
+    /// unbounded memory growth in long-running applications. When the limit is reached,
+    /// older snapshots are removed to make room for new ones.
+    /// </para>
+    /// </remarks>
+    public static int MaxHistorySize
+    {
+        get { lock (_lock) return _maxHistorySize; }
+        set { lock (_lock) _maxHistorySize = Math.Max(1, value); }
+    }
 
     /// <summary>
     /// Enables memory tracking.
@@ -132,6 +148,11 @@ public static class MemoryTracker
         {
             lock (_lock)
             {
+                // Enforce maximum history size to prevent unbounded memory growth
+                while (_history.Count >= _maxHistorySize)
+                {
+                    _history.RemoveAt(0);
+                }
                 _history.Add(snapshot);
             }
         }

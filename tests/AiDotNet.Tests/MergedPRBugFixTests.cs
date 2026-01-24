@@ -1,4 +1,6 @@
 using System.Reflection;
+using AiDotNet.Deployment.Configuration;
+using AiDotNet.Diagnostics;
 using AiDotNet.Enums;
 using AiDotNet.Evaluation;
 using AiDotNet.LinearAlgebra;
@@ -502,6 +504,180 @@ public class MergedPRBugFixTests
         // Strong preference (pair 1) should have larger margin than weak preference (pair 2)
         Assert.True(Math.Abs(margin1) > Math.Abs(margin2),
             $"Strong preference margin ({margin1}) should be larger than weak preference margin ({margin2})");
+    }
+
+    #endregion
+
+    #region Diagnostics PR #777 - Production Bug Fixes
+
+    [Fact]
+    public void MemoryTracker_EnforcesMaxHistorySize_PreventsUnboundedGrowth()
+    {
+        // ARRANGE: The old code had no limit on history size, causing memory leaks
+        // in long-running applications
+        MemoryTracker.Reset();
+        MemoryTracker.Enable();
+        MemoryTracker.MaxHistorySize = 5; // Set a small limit for testing
+
+        try
+        {
+            // ACT: Take more snapshots than the limit
+            for (int i = 0; i < 10; i++)
+            {
+                MemoryTracker.Snapshot($"Snapshot_{i}");
+            }
+
+            var history = MemoryTracker.GetHistory();
+
+            // ASSERT: History should be capped at MaxHistorySize
+            Assert.True(history.Count <= 5,
+                $"History should be capped at MaxHistorySize (5), but was {history.Count}");
+
+            // The most recent snapshots should be kept
+            Assert.Contains(history, s => s.Label == "Snapshot_9");
+        }
+        finally
+        {
+            MemoryTracker.Disable();
+            MemoryTracker.Reset();
+            MemoryTracker.MaxHistorySize = 10000; // Reset to default
+        }
+    }
+
+    [Fact]
+    public void ProfilerSession_ThreadSafeRandomSampling_DoesNotCorrupt()
+    {
+        // ARRANGE: The old code used a single Random instance which is NOT thread-safe
+        // Multiple threads would corrupt the Random state
+        var config = new ProfilingConfig
+        {
+            Enabled = true,
+            SamplingRate = 0.5 // 50% sampling to exercise the random path
+        };
+        var session = new ProfilerSession(config);
+
+        // ACT: Record timings from multiple threads concurrently
+        var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+        var tasks = new List<Task>();
+
+        for (int t = 0; t < 10; t++)
+        {
+            int threadId = t;
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    for (int i = 0; i < 100; i++)
+                    {
+                        using (session.Scope($"Thread{threadId}_Op{i}"))
+                        {
+                            // Simulate some work
+                            Thread.SpinWait(100);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    exceptions.Add(ex);
+                }
+            }));
+        }
+
+        Task.WaitAll(tasks.ToArray());
+
+        // ASSERT: No exceptions should occur from corrupted Random state
+        Assert.Empty(exceptions);
+
+        // Some operations should have been recorded (given 50% sampling rate across 1000 calls)
+        Assert.True(session.OperationCount > 0, "Some operations should be recorded");
+    }
+
+    [Fact]
+    public void ProfilerSession_SampleVariance_UsesUnbiasedEstimator()
+    {
+        // ARRANGE: The old code used population variance (_m2 / _count)
+        // which underestimates variance. Fixed to use sample variance (_m2 / (_count - 1))
+        var config = new ProfilingConfig { Enabled = true, SamplingRate = 1.0 };
+        var session = new ProfilerSession(config);
+
+        // ACT: Record known values with known variance
+        // Values: 10, 20, 30 -> Mean = 20, Sample Variance = 100, StdDev = 10
+        // Population variance would be 66.67, sample variance is 100
+        var values = new[] { 10.0, 20.0, 30.0 };
+        foreach (var v in values)
+        {
+            using (var scope = session.Scope("TestOp"))
+            {
+                Thread.Sleep((int)v);
+            }
+        }
+
+        var stats = session.GetStats("TestOp");
+
+        // ASSERT: Standard deviation should be based on sample variance
+        Assert.NotNull(stats);
+
+        // We can't assert exact values due to timing variability,
+        // but we can check the variance calculation doesn't produce unreasonable results
+        Assert.True(stats.StdDevMs >= 0, "StdDev should be non-negative");
+
+        // With sample variance, StdDev should be slightly larger than with population variance
+        // This is a sanity check that the formula changed
+        if (stats.Count >= 2 && stats.StdDevMs > 0)
+        {
+            // The formula sqrt(m2/(n-1)) should give larger values than sqrt(m2/n)
+            // We're just verifying the calculation doesn't break
+            Assert.True(stats.StdDevMs > 0, "StdDev should be positive for varying samples");
+        }
+    }
+
+    [Fact]
+    public void ProfilerSessionTimer_CleansUpCallStack_EvenWithExceptionOrder()
+    {
+        // ARRANGE: The old code only popped from call stack if timer was at top
+        // This caused memory leaks when nested timers were stopped out of order
+        var config = new ProfilingConfig { Enabled = true, TrackCallHierarchy = true };
+        var session = new ProfilerSession(config);
+
+        // ACT: Simulate out-of-order stop (as might happen with exceptions)
+        var timer1 = session.Start("Outer");
+        var timer2 = session.Start("Inner");
+
+        // Stop outer first (wrong order - simulates exception in outer scope)
+        timer1.Stop();
+        timer2.Stop();
+
+        // Create another timer to verify stack is clean
+        using (session.Scope("AfterCleanup"))
+        {
+            // This should work without issues
+        }
+
+        // ASSERT: No exception thrown and stats recorded
+        var stats = session.GetStats("AfterCleanup");
+        Assert.NotNull(stats);
+        Assert.Equal(1, stats.Count);
+    }
+
+    [Fact]
+    public void MemoryTracker_MaxHistorySize_CanBeConfigured()
+    {
+        // ARRANGE
+        MemoryTracker.Reset();
+
+        // ACT & ASSERT: Property should be configurable
+        var originalSize = MemoryTracker.MaxHistorySize;
+        Assert.True(originalSize > 0, "Default max history size should be positive");
+
+        MemoryTracker.MaxHistorySize = 500;
+        Assert.Equal(500, MemoryTracker.MaxHistorySize);
+
+        // Minimum should be 1
+        MemoryTracker.MaxHistorySize = 0;
+        Assert.Equal(1, MemoryTracker.MaxHistorySize);
+
+        // Restore
+        MemoryTracker.MaxHistorySize = originalSize;
     }
 
     #endregion

@@ -52,7 +52,6 @@ public class ProfilerSession
     private readonly ConcurrentDictionary<int, Stack<ProfilerSessionTimer>> _callStacks = new();
     private readonly object _lock = new();
     private readonly DateTime _startTime;
-    private readonly Random _samplingRandom = new();
     private bool _enabled;
 
     /// <summary>
@@ -149,8 +148,8 @@ public class ProfilerSession
     {
         if (!_enabled) return;
 
-        // Apply sampling rate
-        if (_config.SamplingRate < 1.0 && _samplingRandom.NextDouble() > _config.SamplingRate)
+        // Apply sampling rate (using thread-safe RandomHelper from AiDotNet.Tensors)
+        if (_config.SamplingRate < 1.0 && RandomHelper.ThreadSafeRandom.NextDouble() > _config.SamplingRate)
         {
             return;
         }
@@ -382,8 +381,10 @@ public class ProfilerSessionEntry : IProfilerEntry
                 };
             }
 
-            // Variance from Welford's algorithm
-            double variance = _count > 1 ? _m2 / _count : 0;
+            // Sample variance from Welford's algorithm (using n-1 for unbiased estimator)
+            // Population variance would be _m2 / _count, but sample variance is more appropriate
+            // for statistical analysis of profiling data
+            double variance = _count > 1 ? _m2 / (_count - 1) : 0;
 
             // Get percentiles from reservoir sample
             int sampleSize = Math.Min(_count, _reservoirSize);
@@ -466,10 +467,40 @@ public class ProfilerSessionTimer : IDisposable
         _stopwatch.Stop();
         _session.RecordTiming(_name, _stopwatch.Elapsed, _parentName);
 
+        // Clean up from call stack - handle case where nested timers were not stopped in order
+        // (e.g., due to exceptions causing early exit)
         var stack = _session.GetCallStack();
-        if (stack.Count > 0 && stack.Peek() == this)
+        if (stack.Count > 0)
         {
-            stack.Pop();
+            if (stack.Peek() == this)
+            {
+                // Normal case: we're at the top
+                stack.Pop();
+            }
+            else
+            {
+                // Abnormal case: something above us wasn't stopped (likely due to exception)
+                // Search for ourselves in the stack and remove to prevent memory leak
+                var tempStack = new Stack<ProfilerSessionTimer>();
+                bool found = false;
+                while (stack.Count > 0)
+                {
+                    var item = stack.Pop();
+                    if (item == this)
+                    {
+                        found = true;
+                        break;
+                    }
+                    tempStack.Push(item);
+                }
+                // Restore items that were above us (if any)
+                while (tempStack.Count > 0)
+                {
+                    stack.Push(tempStack.Pop());
+                }
+                // If not found, we were already removed or never added (shouldn't happen)
+                _ = found; // Suppress unused variable warning
+            }
         }
     }
 
