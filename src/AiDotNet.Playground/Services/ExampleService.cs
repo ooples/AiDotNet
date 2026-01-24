@@ -2658,6 +2658,1212 @@ Console.WriteLine($""  Best accuracy: {result.BestScore:P2}"");
 Console.WriteLine($""  Iterations: {result.Iterations}"");
 "
                 }
+            },
+
+            ["Loss Functions"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "mse-loss",
+                    Name = "Mean Squared Error Loss",
+                    Description = "Common loss function for regression tasks",
+                    Difficulty = "Beginner",
+                    Tags = ["loss", "mse", "regression"],
+                    Code = @"// Mean Squared Error Loss Function
+using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create predicted and actual values
+var predicted = new Vector<double>(new double[] { 2.5, 0.0, 2.1, 7.8 });
+var actual = new Vector<double>(new double[] { 3.0, -0.5, 2.0, 7.5 });
+
+// Create MSE loss function
+var mseLoss = new MeanSquaredErrorLoss<double>();
+
+// Calculate the loss
+var loss = mseLoss.CalculateLoss(predicted, actual);
+
+// Calculate the derivative (gradient)
+var gradient = mseLoss.CalculateDerivative(predicted, actual);
+
+Console.WriteLine(""Mean Squared Error Loss:"");
+Console.WriteLine($""  Predicted: [{string.Join("", "", predicted.ToArray())}]"");
+Console.WriteLine($""  Actual:    [{string.Join("", "", actual.ToArray())}]"");
+Console.WriteLine($""  Loss:      {loss:F6}"");
+Console.WriteLine($""  Gradient:  [{string.Join("", "", gradient.ToArray().Select(g => g.ToString(""F4"")))}]"");
+Console.WriteLine();
+Console.WriteLine(""MSE penalizes larger errors more due to squaring"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "cross-entropy-loss",
+                    Name = "Cross Entropy Loss",
+                    Description = "Loss function for classification tasks",
+                    Difficulty = "Intermediate",
+                    Tags = ["loss", "cross-entropy", "classification"],
+                    Code = @"// Cross Entropy Loss for Classification
+using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Predicted probabilities (after softmax)
+var predicted = new Vector<double>(new double[] { 0.7, 0.2, 0.1 });
+// One-hot encoded actual class (class 0)
+var actual = new Vector<double>(new double[] { 1.0, 0.0, 0.0 });
+
+// Create Cross Entropy loss
+var ceLoss = new CrossEntropyLoss<double>();
+
+var loss = ceLoss.CalculateLoss(predicted, actual);
+var gradient = ceLoss.CalculateDerivative(predicted, actual);
+
+Console.WriteLine(""Cross Entropy Loss:"");
+Console.WriteLine($""  Predicted probs: [{string.Join("", "", predicted.ToArray().Select(p => p.ToString(""F2"")))}]"");
+Console.WriteLine($""  Actual (one-hot): [{string.Join("", "", actual.ToArray().Select(a => a.ToString(""F0"")))}]"");
+Console.WriteLine($""  Loss: {loss:F6}"");
+Console.WriteLine($""  Gradient: [{string.Join("", "", gradient.ToArray().Select(g => g.ToString(""F4"")))}]"");
+Console.WriteLine();
+Console.WriteLine(""Cross entropy measures the difference between probability distributions"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "huber-loss",
+                    Name = "Huber Loss",
+                    Description = "Robust loss function combining MSE and MAE",
+                    Difficulty = "Intermediate",
+                    Tags = ["loss", "huber", "robust"],
+                    Code = @"// Huber Loss - Robust to Outliers
+using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Data with an outlier
+var predicted = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 10.0 });
+var actual = new Vector<double>(new double[] { 1.1, 2.1, 3.0, 3.5 }); // Last one is outlier
+
+var huberLoss = new HuberLoss<double>();
+var mseLoss = new MeanSquaredErrorLoss<double>();
+var maeLoss = new MeanAbsoluteErrorLoss<double>();
+
+var huber = huberLoss.CalculateLoss(predicted, actual);
+var mse = mseLoss.CalculateLoss(predicted, actual);
+var mae = maeLoss.CalculateLoss(predicted, actual);
+
+Console.WriteLine(""Comparing Loss Functions (with outlier):"");
+Console.WriteLine($""  Huber Loss: {huber:F4}"");
+Console.WriteLine($""  MSE Loss:   {mse:F4}"");
+Console.WriteLine($""  MAE Loss:   {mae:F4}"");
+Console.WriteLine();
+Console.WriteLine(""Huber is quadratic for small errors, linear for large errors"");
+Console.WriteLine(""This makes it less sensitive to outliers than MSE"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "focal-loss",
+                    Name = "Focal Loss",
+                    Description = "Loss function for imbalanced classification",
+                    Difficulty = "Advanced",
+                    Tags = ["loss", "focal", "imbalanced"],
+                    Code = @"// Focal Loss for Imbalanced Datasets
+using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Simulating imbalanced classification
+// Easy example (high confidence correct prediction)
+var easyPred = new Vector<double>(new double[] { 0.95, 0.05 });
+var easyActual = new Vector<double>(new double[] { 1.0, 0.0 });
+
+// Hard example (low confidence)
+var hardPred = new Vector<double>(new double[] { 0.55, 0.45 });
+var hardActual = new Vector<double>(new double[] { 1.0, 0.0 });
+
+var focalLoss = new FocalLoss<double>();
+var ceLoss = new CrossEntropyLoss<double>();
+
+Console.WriteLine(""Focal vs Cross Entropy Loss:"");
+Console.WriteLine();
+Console.WriteLine(""Easy example (95% confident):"");
+Console.WriteLine($""  Cross Entropy: {ceLoss.CalculateLoss(easyPred, easyActual):F4}"");
+Console.WriteLine($""  Focal Loss:    {focalLoss.CalculateLoss(easyPred, easyActual):F4}"");
+Console.WriteLine();
+Console.WriteLine(""Hard example (55% confident):"");
+Console.WriteLine($""  Cross Entropy: {ceLoss.CalculateLoss(hardPred, hardActual):F4}"");
+Console.WriteLine($""  Focal Loss:    {focalLoss.CalculateLoss(hardPred, hardActual):F4}"");
+Console.WriteLine();
+Console.WriteLine(""Focal loss down-weights easy examples to focus on hard ones"");
+"
+                }
+            },
+
+            ["Activation Functions"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "relu-activation",
+                    Name = "ReLU Activation",
+                    Description = "Most popular activation function for neural networks",
+                    Difficulty = "Beginner",
+                    Tags = ["activation", "relu", "neural-network"],
+                    Code = @"// ReLU (Rectified Linear Unit) Activation
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var relu = new ReLUActivation<double>();
+
+// Test values
+var inputs = new Vector<double>(new double[] { -2.0, -1.0, 0.0, 1.0, 2.0 });
+var outputs = relu.Activate(inputs);
+
+Console.WriteLine(""ReLU Activation: f(x) = max(0, x)"");
+Console.WriteLine();
+Console.WriteLine(""Input  -> Output"");
+for (int i = 0; i < inputs.Length; i++)
+{
+    Console.WriteLine($""{inputs[i],6:F1} -> {outputs[i],6:F1}"");
+}
+Console.WriteLine();
+Console.WriteLine(""ReLU is simple but effective:"");
+Console.WriteLine(""- Outputs input directly if positive"");
+Console.WriteLine(""- Outputs zero for negative inputs"");
+Console.WriteLine(""- Fast to compute and good gradients"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "gelu-activation",
+                    Name = "GELU Activation",
+                    Description = "Used in transformers like BERT and GPT",
+                    Difficulty = "Intermediate",
+                    Tags = ["activation", "gelu", "transformer"],
+                    Code = @"// GELU (Gaussian Error Linear Unit) Activation
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var gelu = new GELUActivation<double>();
+var relu = new ReLUActivation<double>();
+
+var inputs = new Vector<double>(new double[] { -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0 });
+var geluOutputs = gelu.Activate(inputs);
+var reluOutputs = relu.Activate(inputs);
+
+Console.WriteLine(""GELU vs ReLU Comparison:"");
+Console.WriteLine();
+Console.WriteLine(""Input   GELU    ReLU"");
+for (int i = 0; i < inputs.Length; i++)
+{
+    Console.WriteLine($""{inputs[i],6:F1} {geluOutputs[i],7:F3} {reluOutputs[i],7:F3}"");
+}
+Console.WriteLine();
+Console.WriteLine(""GELU is smoother than ReLU:"");
+Console.WriteLine(""- Used in BERT, GPT, and modern transformers"");
+Console.WriteLine(""- Allows small negative values through"");
+Console.WriteLine(""- Better gradient flow for deep networks"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "sigmoid-softmax",
+                    Name = "Sigmoid and Softmax",
+                    Description = "Output activations for classification",
+                    Difficulty = "Beginner",
+                    Tags = ["activation", "sigmoid", "softmax"],
+                    Code = @"// Sigmoid and Softmax for Classification Outputs
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var sigmoid = new SigmoidActivation<double>();
+var softmax = new SoftmaxActivation<double>();
+
+// Binary classification logits
+var binaryLogits = new Vector<double>(new double[] { 2.0 });
+var binaryProb = sigmoid.Activate(binaryLogits);
+
+// Multi-class classification logits
+var multiLogits = new Vector<double>(new double[] { 2.0, 1.0, 0.1 });
+var multiProbs = softmax.Activate(multiLogits);
+
+Console.WriteLine(""Sigmoid (Binary Classification):"");
+Console.WriteLine($""  Logit: {binaryLogits[0]:F1} -> Probability: {binaryProb[0]:F4}"");
+Console.WriteLine();
+Console.WriteLine(""Softmax (Multi-class Classification):"");
+Console.WriteLine($""  Logits: [{string.Join("", "", multiLogits.ToArray().Select(l => l.ToString(""F1"")))}]"");
+Console.WriteLine($""  Probs:  [{string.Join("", "", multiProbs.ToArray().Select(p => p.ToString(""F4"")))}]"");
+Console.WriteLine($""  Sum:    {multiProbs.ToArray().Sum():F4} (always sums to 1)"");
+Console.WriteLine();
+Console.WriteLine(""Sigmoid: Squashes to [0,1] for binary"");
+Console.WriteLine(""Softmax: Converts to probability distribution"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "swish-mish",
+                    Name = "Swish and Mish",
+                    Description = "Modern self-gated activation functions",
+                    Difficulty = "Intermediate",
+                    Tags = ["activation", "swish", "mish"],
+                    Code = @"// Swish and Mish - Modern Activation Functions
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var silu = new SiLUActivation<double>(); // SiLU = Swish
+var mish = new MishActivation<double>();
+var relu = new ReLUActivation<double>();
+
+var inputs = new Vector<double>(new double[] { -2.0, -1.0, 0.0, 1.0, 2.0 });
+
+var siluOut = silu.Activate(inputs);
+var mishOut = mish.Activate(inputs);
+var reluOut = relu.Activate(inputs);
+
+Console.WriteLine(""Modern Activation Functions:"");
+Console.WriteLine();
+Console.WriteLine(""Input   SiLU/Swish  Mish     ReLU"");
+for (int i = 0; i < inputs.Length; i++)
+{
+    Console.WriteLine($""{inputs[i],6:F1} {siluOut[i],10:F4} {mishOut[i],8:F4} {reluOut[i],8:F4}"");
+}
+Console.WriteLine();
+Console.WriteLine(""SiLU (Swish): f(x) = x * sigmoid(x)"");
+Console.WriteLine(""Mish: f(x) = x * tanh(softplus(x))"");
+Console.WriteLine(""Both are smooth, non-monotonic, and self-gated"");
+"
+                }
+            },
+
+            ["Learning Rate Schedulers"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "step-lr-scheduler",
+                    Name = "Step Learning Rate Scheduler",
+                    Description = "Decay learning rate at fixed intervals",
+                    Difficulty = "Beginner",
+                    Tags = ["scheduler", "learning-rate", "training"],
+                    Code = @"// Step Learning Rate Scheduler
+using AiDotNet.LearningRateSchedulers;
+
+// Reduce LR by 10x every 30 steps
+var scheduler = new StepLRScheduler(
+    baseLearningRate: 0.1,
+    stepSize: 30,
+    gamma: 0.1
+);
+
+Console.WriteLine(""Step LR Scheduler (decay by 10x every 30 steps):"");
+Console.WriteLine(""Step | Learning Rate"");
+Console.WriteLine(""-----+--------------"");
+
+for (int step = 0; step <= 100; step += 10)
+{
+    // Set the step
+    for (int i = 0; i < step; i++) scheduler.Step();
+
+    Console.WriteLine($""{step,4} | {scheduler.CurrentLearningRate:E2}"");
+
+    // Reset for next iteration
+    scheduler = new StepLRScheduler(0.1, 30, 0.1);
+}
+
+Console.WriteLine();
+Console.WriteLine(""Step scheduler is simple and predictable"");
+Console.WriteLine(""Good for transfer learning and fine-tuning"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "cosine-annealing-scheduler",
+                    Name = "Cosine Annealing Scheduler",
+                    Description = "Smooth cosine decay for learning rate",
+                    Difficulty = "Intermediate",
+                    Tags = ["scheduler", "cosine", "training"],
+                    Code = @"// Cosine Annealing Learning Rate Scheduler
+using AiDotNet.LearningRateSchedulers;
+
+var scheduler = new CosineAnnealingLRScheduler(
+    baseLearningRate: 0.1,
+    tMax: 100,       // Total steps
+    etaMin: 0.001    // Minimum LR
+);
+
+Console.WriteLine(""Cosine Annealing Scheduler:"");
+Console.WriteLine(""Step | Learning Rate | Visual"");
+Console.WriteLine(""-----+--------------+--------"");
+
+for (int step = 0; step <= 100; step += 10)
+{
+    var lr = scheduler.GetLearningRate(step);
+    int bars = (int)(lr / 0.1 * 20);
+    Console.WriteLine($""{step,4} | {lr:F5}     | {new string('█', bars)}"");
+}
+
+Console.WriteLine();
+Console.WriteLine(""Cosine annealing provides smooth decay"");
+Console.WriteLine(""Popular in computer vision (ResNets, ViT)"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "one-cycle-scheduler",
+                    Name = "One Cycle Scheduler",
+                    Description = "Super-convergence training strategy",
+                    Difficulty = "Advanced",
+                    Tags = ["scheduler", "one-cycle", "super-convergence"],
+                    Code = @"// One Cycle Learning Rate Scheduler
+using AiDotNet.LearningRateSchedulers;
+
+var scheduler = new OneCycleLRScheduler(
+    maxLearningRate: 0.1,
+    totalSteps: 100,
+    percentStart: 0.3,    // Warmup for 30% of training
+    percentAnneal: 0.7    // Anneal for 70%
+);
+
+Console.WriteLine(""One Cycle Scheduler (Super-Convergence):"");
+Console.WriteLine(""Step | Learning Rate | Phase"");
+Console.WriteLine(""-----+--------------+--------"");
+
+for (int step = 0; step <= 100; step += 10)
+{
+    var lr = scheduler.GetLearningRate(step);
+    string phase = step < 30 ? ""Warmup"" : ""Anneal"";
+    Console.WriteLine($""{step,4} | {lr:F5}     | {phase}"");
+}
+
+Console.WriteLine();
+Console.WriteLine(""One Cycle training strategy:"");
+Console.WriteLine(""1. Warmup: Gradually increase LR"");
+Console.WriteLine(""2. Anneal: Decrease to find sharp minimum"");
+Console.WriteLine(""Enables training with higher max LR"");
+"
+                }
+            },
+
+            ["Regularization"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "l1-regularization",
+                    Name = "L1 (Lasso) Regularization",
+                    Description = "Promotes sparse solutions by zeroing coefficients",
+                    Difficulty = "Intermediate",
+                    Tags = ["regularization", "l1", "lasso", "sparsity"],
+                    Code = @"// L1 Regularization (Lasso)
+using AiDotNet.Regularization;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create L1 regularization with strength 0.1
+var l1Reg = new L1Regularization<double, Matrix<double>, Vector<double>>(
+    new RegularizationOptions { Strength = 0.1 }
+);
+
+// Sample coefficients
+var coefficients = new Vector<double>(new double[] { 0.5, -0.3, 0.8, -0.1, 0.02 });
+var gradient = new Vector<double>(new double[] { 0.1, 0.2, -0.1, 0.05, 0.01 });
+
+var regularizedGrad = l1Reg.Regularize(gradient, coefficients);
+
+Console.WriteLine(""L1 (Lasso) Regularization:"");
+Console.WriteLine(""Adds penalty = λ * |coefficients|"");
+Console.WriteLine();
+Console.WriteLine(""Coefficient | Original Grad | Regularized Grad"");
+for (int i = 0; i < coefficients.Length; i++)
+{
+    Console.WriteLine($""{coefficients[i],11:F2} | {gradient[i],13:F4} | {regularizedGrad[i],16:F4}"");
+}
+Console.WriteLine();
+Console.WriteLine(""L1 pushes small coefficients to exactly zero"");
+Console.WriteLine(""This performs automatic feature selection!"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "l2-regularization",
+                    Name = "L2 (Ridge) Regularization",
+                    Description = "Prevents large weights with smooth penalty",
+                    Difficulty = "Intermediate",
+                    Tags = ["regularization", "l2", "ridge", "weight-decay"],
+                    Code = @"// L2 Regularization (Ridge / Weight Decay)
+using AiDotNet.Regularization;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var l2Reg = new L2Regularization<double, Matrix<double>, Vector<double>>(
+    new RegularizationOptions { Strength = 0.01 }
+);
+
+var coefficients = new Vector<double>(new double[] { 1.0, 5.0, -3.0, 0.1 });
+var gradient = new Vector<double>(new double[] { 0.1, 0.1, 0.1, 0.1 });
+
+var regularizedGrad = l2Reg.Regularize(gradient, coefficients);
+
+Console.WriteLine(""L2 (Ridge) Regularization:"");
+Console.WriteLine(""Adds penalty = λ * coefficients²"");
+Console.WriteLine();
+Console.WriteLine(""Coefficient | Original Grad | Regularized Grad"");
+for (int i = 0; i < coefficients.Length; i++)
+{
+    Console.WriteLine($""{coefficients[i],11:F2} | {gradient[i],13:F4} | {regularizedGrad[i],16:F4}"");
+}
+Console.WriteLine();
+Console.WriteLine(""L2 penalizes large weights proportionally"");
+Console.WriteLine(""Also known as 'weight decay' in deep learning"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "elastic-net-regularization",
+                    Name = "Elastic Net Regularization",
+                    Description = "Combines L1 and L2 regularization benefits",
+                    Difficulty = "Advanced",
+                    Tags = ["regularization", "elastic-net", "combined"],
+                    Code = @"// Elastic Net Regularization (L1 + L2)
+using AiDotNet.Regularization;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var elasticNet = new ElasticRegularization<double, Matrix<double>, Vector<double>>(
+    new RegularizationOptions
+    {
+        Strength = 0.1,
+        L1Ratio = 0.5  // 50% L1, 50% L2
+    }
+);
+
+var l1Reg = new L1Regularization<double, Matrix<double>, Vector<double>>(
+    new RegularizationOptions { Strength = 0.1 }
+);
+
+var l2Reg = new L2Regularization<double, Matrix<double>, Vector<double>>(
+    new RegularizationOptions { Strength = 0.1 }
+);
+
+var coefficients = new Vector<double>(new double[] { 0.5, 2.0, -0.01, 0.8 });
+var gradient = new Vector<double>(new double[] { 0.1, 0.1, 0.1, 0.1 });
+
+Console.WriteLine(""Elastic Net = α*L1 + (1-α)*L2"");
+Console.WriteLine(""With α (L1Ratio) = 0.5"");
+Console.WriteLine();
+Console.WriteLine(""Coeff  | L1 Grad | L2 Grad | Elastic"");
+for (int i = 0; i < coefficients.Length; i++)
+{
+    var l1Grad = l1Reg.Regularize(gradient, coefficients);
+    var l2Grad = l2Reg.Regularize(gradient, coefficients);
+    var elGrad = elasticNet.Regularize(gradient, coefficients);
+    Console.WriteLine($""{coefficients[i],6:F2} | {l1Grad[i],7:F4} | {l2Grad[i],7:F4} | {elGrad[i],7:F4}"");
+}
+Console.WriteLine();
+Console.WriteLine(""Elastic Net: Sparsity (L1) + Stability (L2)"");
+"
+                }
+            },
+
+            ["Kernels"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "gaussian-kernel",
+                    Name = "Gaussian (RBF) Kernel",
+                    Description = "Most popular kernel for measuring similarity",
+                    Difficulty = "Intermediate",
+                    Tags = ["kernel", "rbf", "gaussian", "similarity"],
+                    Code = @"// Gaussian (RBF) Kernel
+using AiDotNet.Kernels;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var rbfKernel = new GaussianKernel<double>(sigma: 1.0);
+
+// Create sample points
+var point1 = new Vector<double>(new double[] { 0.0, 0.0 });
+var point2 = new Vector<double>(new double[] { 1.0, 0.0 });
+var point3 = new Vector<double>(new double[] { 2.0, 0.0 });
+var point4 = new Vector<double>(new double[] { 5.0, 0.0 });
+
+Console.WriteLine(""Gaussian (RBF) Kernel: K(x,y) = exp(-||x-y||²/2σ²)"");
+Console.WriteLine(""Sigma = 1.0"");
+Console.WriteLine();
+Console.WriteLine(""Comparing point (0,0) to other points:"");
+Console.WriteLine($""  Distance 0: K = {rbfKernel.Calculate(point1, point1):F4} (identical)"");
+Console.WriteLine($""  Distance 1: K = {rbfKernel.Calculate(point1, point2):F4}"");
+Console.WriteLine($""  Distance 2: K = {rbfKernel.Calculate(point1, point3):F4}"");
+Console.WriteLine($""  Distance 5: K = {rbfKernel.Calculate(point1, point4):F4} (far apart)"");
+Console.WriteLine();
+Console.WriteLine(""RBF kernel: 1 = identical, 0 = infinitely far"");
+Console.WriteLine(""Used in SVM, GP regression, and many ML algorithms"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "polynomial-kernel",
+                    Name = "Polynomial Kernel",
+                    Description = "Captures polynomial relationships between features",
+                    Difficulty = "Intermediate",
+                    Tags = ["kernel", "polynomial", "svm"],
+                    Code = @"// Polynomial Kernel
+using AiDotNet.Kernels;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var linearKernel = new LinearKernel<double>();
+var polyKernel2 = new PolynomialKernel<double>(degree: 2);
+var polyKernel3 = new PolynomialKernel<double>(degree: 3);
+
+var x = new Vector<double>(new double[] { 1.0, 2.0 });
+var y = new Vector<double>(new double[] { 3.0, 4.0 });
+
+Console.WriteLine(""Polynomial Kernel: K(x,y) = (x·y + c)^d"");
+Console.WriteLine();
+Console.WriteLine($""Points: x = [{string.Join("", "", x.ToArray())}], y = [{string.Join("", "", y.ToArray())}]"");
+Console.WriteLine();
+Console.WriteLine($""Linear (degree 1):    K = {linearKernel.Calculate(x, y):F4}"");
+Console.WriteLine($""Polynomial (degree 2): K = {polyKernel2.Calculate(x, y):F4}"");
+Console.WriteLine($""Polynomial (degree 3): K = {polyKernel3.Calculate(x, y):F4}"");
+Console.WriteLine();
+Console.WriteLine(""Polynomial kernels implicitly map data to"");
+Console.WriteLine(""higher-dimensional spaces without explicit computation"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "matern-kernel",
+                    Name = "Matérn Kernel",
+                    Description = "Flexible kernel for Gaussian processes",
+                    Difficulty = "Advanced",
+                    Tags = ["kernel", "matern", "gaussian-process"],
+                    Code = @"// Matérn Kernel for Gaussian Processes
+using AiDotNet.Kernels;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var rbfKernel = new GaussianKernel<double>(sigma: 1.0);
+var matern = new MaternKernel<double>(lengthScale: 1.0, nu: 2.5);
+var laplacian = new LaplacianKernel<double>(sigma: 1.0);
+
+var origin = new Vector<double>(new double[] { 0.0 });
+
+Console.WriteLine(""Kernel Comparison at Various Distances:"");
+Console.WriteLine(""Distance | RBF    | Matérn | Laplacian"");
+Console.WriteLine(""---------+--------+--------+----------"");
+
+foreach (var dist in new[] { 0.0, 0.5, 1.0, 2.0, 3.0 })
+{
+    var point = new Vector<double>(new double[] { dist });
+    var rbf = rbfKernel.Calculate(origin, point);
+    var mat = matern.Calculate(origin, point);
+    var lap = laplacian.Calculate(origin, point);
+    Console.WriteLine($""{dist,8:F1} | {rbf,6:F4} | {mat,6:F4} | {lap,6:F4}"");
+}
+
+Console.WriteLine();
+Console.WriteLine(""Matérn kernel allows controlling smoothness via nu"");
+Console.WriteLine(""nu=0.5: Equivalent to Laplacian (rough functions)"");
+Console.WriteLine(""nu=∞: Equivalent to RBF (very smooth functions)"");
+"
+                }
+            },
+
+            ["Normalizers"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "minmax-normalizer",
+                    Name = "Min-Max Normalization",
+                    Description = "Scale features to [0, 1] range",
+                    Difficulty = "Beginner",
+                    Tags = ["normalization", "minmax", "scaling"],
+                    Code = @"// Min-Max Normalization
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Sample data with different scales
+var data = new Vector<double>(new double[] { 10, 20, 30, 40, 50, 100 });
+
+// Manual min-max normalization: (x - min) / (max - min)
+var min = data.Min();
+var max = data.Max();
+var normalized = data.Transform(x => (x - min) / (max - min));
+
+Console.WriteLine(""Min-Max Normalization: x' = (x - min) / (max - min)"");
+Console.WriteLine();
+Console.WriteLine($""Original data: [{string.Join("", "", data.ToArray())}]"");
+Console.WriteLine($""Min: {min}, Max: {max}"");
+Console.WriteLine();
+Console.WriteLine(""Original -> Normalized"");
+for (int i = 0; i < data.Length; i++)
+{
+    Console.WriteLine($""{data[i],8:F0} -> {normalized[i],8:F4}"");
+}
+Console.WriteLine();
+Console.WriteLine(""Min-Max scales all values to [0, 1] range"");
+Console.WriteLine(""Useful when you need bounded values"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "zscore-normalizer",
+                    Name = "Z-Score Normalization",
+                    Description = "Standardize to zero mean and unit variance",
+                    Difficulty = "Beginner",
+                    Tags = ["normalization", "zscore", "standardization"],
+                    Code = @"// Z-Score (Standard) Normalization
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Helpers;
+
+var data = new Vector<double>(new double[] { 10, 20, 30, 40, 50 });
+
+// Calculate mean and std
+var mean = StatisticsHelper<double>.CalculateMean(data);
+var std = Math.Sqrt(StatisticsHelper<double>.CalculateVariance(data, mean));
+
+// Z-score: (x - mean) / std
+var normalized = data.Transform(x => (x - mean) / std);
+
+Console.WriteLine(""Z-Score Normalization: x' = (x - μ) / σ"");
+Console.WriteLine();
+Console.WriteLine($""Original: [{string.Join("", "", data.ToArray())}]"");
+Console.WriteLine($""Mean (μ): {mean:F2}, Std (σ): {std:F2}"");
+Console.WriteLine();
+Console.WriteLine(""Original -> Z-Score"");
+for (int i = 0; i < data.Length; i++)
+{
+    Console.WriteLine($""{data[i],8:F0} -> {normalized[i],8:F4}"");
+}
+
+// Verify
+var newMean = StatisticsHelper<double>.CalculateMean(normalized);
+var newVar = StatisticsHelper<double>.CalculateVariance(normalized, newMean);
+Console.WriteLine();
+Console.WriteLine($""New mean: {newMean:F4} (should be ~0)"");
+Console.WriteLine($""New variance: {newVar:F4} (should be ~1)"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "robust-scaler",
+                    Name = "Robust Scaler",
+                    Description = "Scale using median and IQR (outlier resistant)",
+                    Difficulty = "Intermediate",
+                    Tags = ["normalization", "robust", "outliers"],
+                    Code = @"// Robust Scaling (Resistant to Outliers)
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Data with outliers
+var data = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 100 }); // 100 is outlier
+
+// Sort for percentile calculation
+var sorted = data.ToArray().OrderBy(x => x).ToArray();
+var median = sorted[sorted.Length / 2];
+var q1 = sorted[sorted.Length / 4];
+var q3 = sorted[3 * sorted.Length / 4];
+var iqr = q3 - q1;
+
+// Robust scaling: (x - median) / IQR
+var robustScaled = data.Transform(x => (x - median) / iqr);
+
+// Compare with z-score
+var mean = data.ToArray().Average();
+var std = Math.Sqrt(data.ToArray().Select(x => Math.Pow(x - mean, 2)).Average());
+var zScaled = data.Transform(x => (x - mean) / std);
+
+Console.WriteLine(""Robust Scaling vs Z-Score (with outlier):"");
+Console.WriteLine($""Data: [{string.Join("", "", data.ToArray())}]"");
+Console.WriteLine();
+Console.WriteLine($""Median: {median}, IQR: {iqr}"");
+Console.WriteLine($""Mean: {mean:F1}, Std: {std:F1}"");
+Console.WriteLine();
+Console.WriteLine(""Value  | Robust  | Z-Score"");
+for (int i = 0; i < data.Length; i++)
+{
+    Console.WriteLine($""{data[i],6:F0} | {robustScaled[i],7:F3} | {zScaled[i],7:F3}"");
+}
+Console.WriteLine();
+Console.WriteLine(""Robust scaling: Outliers have less impact"");
+"
+                }
+            },
+
+            ["Statistics"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "basic-statistics",
+                    Name = "Basic Descriptive Statistics",
+                    Description = "Calculate mean, variance, std, and more",
+                    Difficulty = "Beginner",
+                    Tags = ["statistics", "descriptive", "mean", "variance"],
+                    Code = @"// Basic Descriptive Statistics
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Helpers;
+
+var data = new Vector<double>(new double[] {
+    23, 45, 67, 32, 89, 12, 56, 78, 43, 91, 34, 67, 55, 38, 72
+});
+
+var mean = StatisticsHelper<double>.CalculateMean(data);
+var variance = StatisticsHelper<double>.CalculateVariance(data, mean);
+var std = Math.Sqrt(variance);
+var min = data.Min();
+var max = data.Max();
+
+Console.WriteLine(""Descriptive Statistics:"");
+Console.WriteLine($""  Data points: {data.Length}"");
+Console.WriteLine($""  Mean:        {mean:F2}"");
+Console.WriteLine($""  Variance:    {variance:F2}"");
+Console.WriteLine($""  Std Dev:     {std:F2}"");
+Console.WriteLine($""  Min:         {min:F2}"");
+Console.WriteLine($""  Max:         {max:F2}"");
+Console.WriteLine($""  Range:       {max - min:F2}"");
+Console.WriteLine();
+
+// Coefficient of variation
+var cv = (std / mean) * 100;
+Console.WriteLine($""  Coef. of Variation: {cv:F1}%"");
+Console.WriteLine(""  (Lower CV = more consistent data)"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "correlation",
+                    Name = "Correlation Analysis",
+                    Description = "Measure linear relationship between variables",
+                    Difficulty = "Intermediate",
+                    Tags = ["statistics", "correlation", "relationship"],
+                    Code = @"// Correlation Analysis
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Helpers;
+
+// Strongly correlated data (y ≈ 2x)
+var x = new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 });
+var y = new Vector<double>(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1, 12.0, 14.2, 15.9, 18.0, 20.1 });
+
+// Negatively correlated data
+var z = new Vector<double>(new double[] { 20, 18, 16, 14, 12, 10, 8, 6, 4, 2 });
+
+// Calculate correlation
+double CalcCorrelation(Vector<double> a, Vector<double> b)
+{
+    var meanA = StatisticsHelper<double>.CalculateMean(a);
+    var meanB = StatisticsHelper<double>.CalculateMean(b);
+    var stdA = Math.Sqrt(StatisticsHelper<double>.CalculateVariance(a, meanA));
+    var stdB = Math.Sqrt(StatisticsHelper<double>.CalculateVariance(b, meanB));
+
+    double sum = 0;
+    for (int i = 0; i < a.Length; i++)
+        sum += (a[i] - meanA) * (b[i] - meanB);
+
+    return sum / (a.Length * stdA * stdB);
+}
+
+var corrXY = CalcCorrelation(x, y);
+var corrXZ = CalcCorrelation(x, z);
+
+Console.WriteLine(""Pearson Correlation Coefficient:"");
+Console.WriteLine();
+Console.WriteLine($""X vs Y (positive): r = {corrXY:F4}"");
+Console.WriteLine($""X vs Z (negative): r = {corrXZ:F4}"");
+Console.WriteLine();
+Console.WriteLine(""Interpretation:"");
+Console.WriteLine(""  r ≈ +1: Strong positive correlation"");
+Console.WriteLine(""  r ≈  0: No linear correlation"");
+Console.WriteLine(""  r ≈ -1: Strong negative correlation"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "mse-rmse-mae",
+                    Name = "Error Metrics (MSE, RMSE, MAE)",
+                    Description = "Common metrics for regression evaluation",
+                    Difficulty = "Beginner",
+                    Tags = ["statistics", "metrics", "error", "evaluation"],
+                    Code = @"// Error Metrics for Regression
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Helpers;
+
+var actual = new Vector<double>(new double[] { 3, -0.5, 2, 7 });
+var predicted = new Vector<double>(new double[] { 2.5, 0.0, 2, 8 });
+
+// Calculate metrics
+var mse = StatisticsHelper<double>.CalculateMeanSquaredError(predicted, actual);
+var rmse = Math.Sqrt(mse);
+var mae = StatisticsHelper<double>.CalculateMeanAbsoluteError(predicted, actual);
+
+// Manual R² calculation
+var meanActual = StatisticsHelper<double>.CalculateMean(actual);
+double ssTot = 0, ssRes = 0;
+for (int i = 0; i < actual.Length; i++)
+{
+    ssTot += Math.Pow(actual[i] - meanActual, 2);
+    ssRes += Math.Pow(actual[i] - predicted[i], 2);
+}
+var r2 = 1 - (ssRes / ssTot);
+
+Console.WriteLine(""Regression Error Metrics:"");
+Console.WriteLine();
+Console.WriteLine($""Actual:    [{string.Join("", "", actual.ToArray().Select(x => x.ToString(""F1"")))}]"");
+Console.WriteLine($""Predicted: [{string.Join("", "", predicted.ToArray().Select(x => x.ToString(""F1"")))}]"");
+Console.WriteLine();
+Console.WriteLine($""MSE (Mean Squared Error):      {mse:F4}"");
+Console.WriteLine($""RMSE (Root MSE):               {rmse:F4}"");
+Console.WriteLine($""MAE (Mean Absolute Error):     {mae:F4}"");
+Console.WriteLine($""R² (Coefficient of Determination): {r2:F4}"");
+Console.WriteLine();
+Console.WriteLine(""RMSE penalizes large errors more than MAE"");
+Console.WriteLine(""R² of 1.0 means perfect predictions"");
+"
+                }
+            },
+
+            ["Gaussian Processes"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "gp-regression",
+                    Name = "Gaussian Process Regression",
+                    Description = "Probabilistic regression with uncertainty estimates",
+                    Difficulty = "Advanced",
+                    Tags = ["gaussian-process", "regression", "uncertainty"],
+                    Code = @"// Gaussian Process Regression
+using AiDotNet.GaussianProcesses;
+using AiDotNet.Kernels;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create training data
+var xTrain = new Matrix<double>(5, 1);
+xTrain[0, 0] = 1.0; xTrain[1, 0] = 2.0; xTrain[2, 0] = 3.0;
+xTrain[3, 0] = 4.0; xTrain[4, 0] = 5.0;
+
+var yTrain = new Vector<double>(new double[] { 1.1, 1.9, 3.1, 4.0, 5.2 });
+
+// Create GP with RBF kernel
+var kernel = new GaussianKernel<double>(sigma: 1.0);
+var gp = new StandardGaussianProcess<double>(kernel);
+
+// Train
+gp.Fit(xTrain, yTrain);
+
+// Predict with uncertainty
+Console.WriteLine(""Gaussian Process Regression:"");
+Console.WriteLine(""Training: y ≈ x (with noise)"");
+Console.WriteLine();
+Console.WriteLine(""Predictions with Uncertainty:"");
+Console.WriteLine(""   X   | Mean ± Std"");
+Console.WriteLine(""-------+-----------"");
+
+foreach (var x in new[] { 0.5, 2.5, 3.5, 6.0 })
+{
+    var testPoint = new Matrix<double>(1, 1);
+    testPoint[0, 0] = x;
+
+    var (mean, variance) = gp.Predict(testPoint);
+    var std = Math.Sqrt(variance[0]);
+
+    Console.WriteLine($""{x,6:F1} | {mean[0]:F2} ± {std:F2}"");
+}
+
+Console.WriteLine();
+Console.WriteLine(""GP provides uncertainty estimates"");
+Console.WriteLine(""Higher uncertainty far from training data"");
+"
+                }
+            },
+
+            ["Interpolation"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "linear-interpolation",
+                    Name = "Linear Interpolation",
+                    Description = "Estimate values between known points",
+                    Difficulty = "Beginner",
+                    Tags = ["interpolation", "linear", "estimation"],
+                    Code = @"// Linear Interpolation
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Known data points
+var xKnown = new double[] { 0, 1, 2, 3, 4 };
+var yKnown = new double[] { 0, 1, 4, 9, 16 }; // y = x²
+
+// Linear interpolation function
+double LinearInterp(double x, double[] xs, double[] ys)
+{
+    for (int i = 0; i < xs.Length - 1; i++)
+    {
+        if (x >= xs[i] && x <= xs[i + 1])
+        {
+            double t = (x - xs[i]) / (xs[i + 1] - xs[i]);
+            return ys[i] + t * (ys[i + 1] - ys[i]);
+        }
+    }
+    return double.NaN;
+}
+
+Console.WriteLine(""Linear Interpolation:"");
+Console.WriteLine(""Known points: (0,0), (1,1), (2,4), (3,9), (4,16)"");
+Console.WriteLine(""True function: y = x²"");
+Console.WriteLine();
+Console.WriteLine(""   X   | Interp | True  | Error"");
+Console.WriteLine(""-------+--------+-------+-------"");
+
+foreach (var x in new[] { 0.5, 1.5, 2.5, 3.5 })
+{
+    var interp = LinearInterp(x, xKnown, yKnown);
+    var trueVal = x * x;
+    var error = Math.Abs(interp - trueVal);
+    Console.WriteLine($""{x,6:F1} | {interp,6:F2} | {trueVal,5:F2} | {error,5:F3}"");
+}
+
+Console.WriteLine();
+Console.WriteLine(""Linear interpolation: Simple but may miss curves"");
+"
+                }
+            },
+
+            ["Decomposition Methods"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "svd-decomposition",
+                    Name = "SVD Decomposition",
+                    Description = "Singular Value Decomposition for matrix analysis",
+                    Difficulty = "Advanced",
+                    Tags = ["decomposition", "svd", "linear-algebra"],
+                    Code = @"// Singular Value Decomposition (SVD)
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.LinearAlgebra;
+
+// Create a sample matrix
+var A = new Matrix<double>(3, 2);
+A[0, 0] = 1; A[0, 1] = 2;
+A[1, 0] = 3; A[1, 1] = 4;
+A[2, 0] = 5; A[2, 1] = 6;
+
+Console.WriteLine(""Singular Value Decomposition (SVD):"");
+Console.WriteLine(""A = U × Σ × V^T"");
+Console.WriteLine();
+Console.WriteLine(""Original Matrix A:"");
+for (int i = 0; i < 3; i++)
+    Console.WriteLine($""  [{A[i, 0],6:F2}, {A[i, 1],6:F2}]"");
+
+// Perform SVD
+var svd = new SingularValueDecomposition<double>(A);
+var singularValues = svd.GetSingularValues();
+
+Console.WriteLine();
+Console.WriteLine(""Singular Values:"");
+for (int i = 0; i < singularValues.Length; i++)
+    Console.WriteLine($""  σ{i + 1} = {singularValues[i]:F4}"");
+
+Console.WriteLine();
+Console.WriteLine(""Applications of SVD:"");
+Console.WriteLine(""  - Dimensionality reduction (keep top k values)"");
+Console.WriteLine(""  - Matrix rank computation"");
+Console.WriteLine(""  - Pseudoinverse calculation"");
+Console.WriteLine(""  - Image compression"");
+Console.WriteLine(""  - Recommendation systems"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "eigenvalue-decomposition",
+                    Name = "Eigenvalue Decomposition",
+                    Description = "Find eigenvalues and eigenvectors",
+                    Difficulty = "Advanced",
+                    Tags = ["decomposition", "eigenvalue", "pca"],
+                    Code = @"// Eigenvalue Decomposition
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.LinearAlgebra;
+
+// Create a symmetric matrix (covariance-like)
+var A = new Matrix<double>(2, 2);
+A[0, 0] = 4; A[0, 1] = 2;
+A[1, 0] = 2; A[1, 1] = 3;
+
+Console.WriteLine(""Eigenvalue Decomposition:"");
+Console.WriteLine(""A × v = λ × v"");
+Console.WriteLine();
+Console.WriteLine(""Matrix A:"");
+Console.WriteLine($""  [{A[0, 0],6:F2}, {A[0, 1],6:F2}]"");
+Console.WriteLine($""  [{A[1, 0],6:F2}, {A[1, 1],6:F2}]"");
+
+// Perform eigen decomposition
+var eigen = new EigenDecomposition<double>(A);
+var eigenvalues = eigen.GetEigenvalues();
+var eigenvectors = eigen.GetEigenvectors();
+
+Console.WriteLine();
+Console.WriteLine(""Eigenvalues:"");
+for (int i = 0; i < eigenvalues.Length; i++)
+    Console.WriteLine($""  λ{i + 1} = {eigenvalues[i]:F4}"");
+
+Console.WriteLine();
+Console.WriteLine(""Eigenvectors (columns):"");
+for (int i = 0; i < eigenvectors.Rows; i++)
+{
+    Console.Write(""  ["");
+    for (int j = 0; j < eigenvectors.Columns; j++)
+        Console.Write($""{eigenvectors[i, j],7:F4}"");
+    Console.WriteLine(""]"");
+}
+
+Console.WriteLine();
+Console.WriteLine(""Eigendecomposition is the basis of PCA"");
+"
+                }
+            },
+
+            ["Window Functions"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "window-functions",
+                    Name = "Signal Processing Windows",
+                    Description = "Hann, Hamming, and other window functions",
+                    Difficulty = "Intermediate",
+                    Tags = ["signal", "window", "fft", "audio"],
+                    Code = @"// Window Functions for Signal Processing
+using AiDotNet.WindowFunctions;
+using AiDotNet.Tensors.LinearAlgebra;
+
+int windowSize = 16;
+
+// Create different windows
+var hann = new HannWindow<double>();
+var hamming = new HammingWindow<double>();
+var blackman = new BlackmanWindow<double>();
+
+var hannCoeffs = hann.Generate(windowSize);
+var hammingCoeffs = hamming.Generate(windowSize);
+var blackmanCoeffs = blackman.Generate(windowSize);
+
+Console.WriteLine(""Window Functions (size = {0}):"", windowSize);
+Console.WriteLine(""Used to reduce spectral leakage in FFT"");
+Console.WriteLine();
+Console.WriteLine("" Pos | Hann   | Hamming | Blackman"");
+Console.WriteLine(""-----+--------+---------+----------"");
+
+for (int i = 0; i < windowSize; i++)
+{
+    Console.WriteLine($""{i,4} | {hannCoeffs[i],6:F4} | {hammingCoeffs[i],7:F4} | {blackmanCoeffs[i],8:F4}"");
+}
+
+Console.WriteLine();
+Console.WriteLine(""Hann: General purpose, good frequency resolution"");
+Console.WriteLine(""Hamming: Similar but doesn't go to zero at edges"");
+Console.WriteLine(""Blackman: Best sidelobe suppression"");
+"
+                }
+            },
+
+            ["Feature Selection"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "variance-threshold",
+                    Name = "Variance Threshold Selection",
+                    Description = "Remove low-variance features",
+                    Difficulty = "Intermediate",
+                    Tags = ["feature-selection", "variance", "preprocessing"],
+                    Code = @"// Variance Threshold Feature Selection
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Helpers;
+
+// Simulate features with different variances
+// Feature 0: Constant (no variance) - should be removed
+// Feature 1: Low variance
+// Feature 2: High variance - should be kept
+
+var features = new Matrix<double>(5, 3);
+// Constant feature
+features[0, 0] = 1; features[1, 0] = 1; features[2, 0] = 1;
+features[3, 0] = 1; features[4, 0] = 1;
+// Low variance feature
+features[0, 1] = 5.0; features[1, 1] = 5.1; features[2, 1] = 4.9;
+features[3, 1] = 5.0; features[4, 1] = 5.0;
+// High variance feature
+features[0, 2] = 1; features[1, 2] = 10; features[2, 2] = 5;
+features[3, 2] = 15; features[4, 2] = 2;
+
+Console.WriteLine(""Variance Threshold Feature Selection:"");
+Console.WriteLine(""Remove features with low variance"");
+Console.WriteLine();
+
+double threshold = 0.1;
+Console.WriteLine($""Threshold: {threshold}"");
+Console.WriteLine();
+Console.WriteLine(""Feature | Variance | Keep?"");
+Console.WriteLine(""--------+----------+------"");
+
+for (int f = 0; f < 3; f++)
+{
+    var col = new Vector<double>(5);
+    for (int i = 0; i < 5; i++) col[i] = features[i, f];
+
+    var mean = StatisticsHelper<double>.CalculateMean(col);
+    var variance = StatisticsHelper<double>.CalculateVariance(col, mean);
+    var keep = variance > threshold ? ""Yes"" : ""No"";
+
+    Console.WriteLine($""{f,7} | {variance,8:F4} | {keep}"");
+}
+
+Console.WriteLine();
+Console.WriteLine(""Features with variance <= threshold are removed"");
+Console.WriteLine(""This removes uninformative features automatically"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "correlation-selection",
+                    Name = "Correlation-Based Selection",
+                    Description = "Remove highly correlated features",
+                    Difficulty = "Intermediate",
+                    Tags = ["feature-selection", "correlation", "redundancy"],
+                    Code = @"// Correlation-Based Feature Selection
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Helpers;
+
+// Three features: Feature 0 and 1 are highly correlated
+var features = new Matrix<double>(5, 3);
+// Feature 0
+features[0, 0] = 1; features[1, 0] = 2; features[2, 0] = 3;
+features[3, 0] = 4; features[4, 0] = 5;
+// Feature 1 (highly correlated with 0)
+features[0, 1] = 2; features[1, 1] = 4; features[2, 1] = 6;
+features[3, 1] = 8; features[4, 1] = 10;
+// Feature 2 (independent)
+features[0, 2] = 5; features[1, 2] = 2; features[2, 2] = 8;
+features[3, 2] = 1; features[4, 2] = 6;
+
+Console.WriteLine(""Correlation-Based Feature Selection:"");
+Console.WriteLine(""Remove redundant (highly correlated) features"");
+Console.WriteLine();
+
+double CalcCorr(Matrix<double> mat, int col1, int col2)
+{
+    var a = new Vector<double>(mat.Rows);
+    var b = new Vector<double>(mat.Rows);
+    for (int i = 0; i < mat.Rows; i++) { a[i] = mat[i, col1]; b[i] = mat[i, col2]; }
+
+    var meanA = StatisticsHelper<double>.CalculateMean(a);
+    var meanB = StatisticsHelper<double>.CalculateMean(b);
+    var stdA = Math.Sqrt(StatisticsHelper<double>.CalculateVariance(a, meanA));
+    var stdB = Math.Sqrt(StatisticsHelper<double>.CalculateVariance(b, meanB));
+
+    double sum = 0;
+    for (int i = 0; i < a.Length; i++) sum += (a[i] - meanA) * (b[i] - meanB);
+    return sum / (a.Length * stdA * stdB);
+}
+
+Console.WriteLine(""Correlation Matrix:"");
+Console.WriteLine(""      | F0    | F1    | F2"");
+Console.WriteLine(""------+-------+-------+------"");
+for (int i = 0; i < 3; i++)
+{
+    Console.Write($""  F{i}  |"");
+    for (int j = 0; j < 3; j++)
+        Console.Write($"" {CalcCorr(features, i, j),5:F2} |"");
+    Console.WriteLine();
+}
+
+Console.WriteLine();
+Console.WriteLine(""F0 and F1 have correlation ≈ 1.0 (redundant)"");
+Console.WriteLine(""Keep only one of the highly correlated features"");
+"
+                }
             }
         };
     }
