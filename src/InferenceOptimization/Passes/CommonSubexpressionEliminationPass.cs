@@ -59,7 +59,7 @@ public class CommonSubexpressionEliminationPass<T> : OptimizationPassBase<T> whe
     {
         // Create a signature based on:
         // 1. Operation type
-        // 2. Input node IDs (sorted for determinism)
+        // 2. Input node IDs (sorted only for commutative operations)
         // 3. Key parameters
 
         var parts = new List<string>
@@ -67,8 +67,11 @@ public class CommonSubexpressionEliminationPass<T> : OptimizationPassBase<T> whe
             node.OperationType.ToString()
         };
 
-        // Add sorted input IDs
-        var inputIds = node.Inputs.Select(n => n.Id).OrderBy(id => id);
+        // For commutative operations (Add, Multiply), sort input IDs so a+b == b+a
+        // For non-commutative operations (Subtract, Divide, MatMul, Power), preserve order
+        var inputIds = IsCommutativeOperation(node.OperationType)
+            ? node.Inputs.Select(n => n.Id).OrderBy(id => id)
+            : node.Inputs.Select(n => n.Id);
         parts.AddRange(inputIds);
 
         // Add key parameters (if any)
@@ -103,6 +106,30 @@ public class CommonSubexpressionEliminationPass<T> : OptimizationPassBase<T> whe
         };
 
         return computationalKeys.Contains(key.ToLower());
+    }
+
+    /// <summary>
+    /// Determines if an operation is commutative (operand order doesn't matter).
+    /// For commutative operations like Add and Multiply, a+b == b+a, so input IDs can be sorted.
+    /// For non-commutative operations like Subtract and Divide, a-b != b-a, so order must be preserved.
+    /// </summary>
+    private static bool IsCommutativeOperation(OperationType opType)
+    {
+        return opType switch
+        {
+            // Commutative operations (order doesn't matter)
+            OperationType.Add => true,
+            OperationType.Multiply => true,
+            // Non-commutative operations (order matters)
+            OperationType.Subtract => false,
+            OperationType.Divide => false,
+            OperationType.Power => false,
+            OperationType.MatMul => false,
+            OperationType.Convolution2D => false,
+            OperationType.BatchNorm => false,
+            // Default to non-commutative (safer - preserves operand order)
+            _ => false
+        };
     }
 
     public override bool CanApply(IOptimizationGraph<T> graph)

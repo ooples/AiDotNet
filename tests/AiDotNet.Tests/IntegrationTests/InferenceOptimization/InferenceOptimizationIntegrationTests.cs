@@ -1093,6 +1093,165 @@ public class InferenceOptimizationIntegrationTests
         Assert.Equal("Common Subexpression Elimination", pass.Name);
     }
 
+    [Fact]
+    public void CommonSubexpressionEliminationPass_EliminatesIdenticalAddOperations()
+    {
+        var pass = new CommonSubexpressionEliminationPass<double>();
+        var graph = new OptimizationGraph<double>();
+
+        var input1 = new OptimizationNode<double> { OperationType = OperationType.Input, Name = "a" };
+        var input2 = new OptimizationNode<double> { OperationType = OperationType.Input, Name = "b" };
+        var add1 = new OptimizationNode<double> { OperationType = OperationType.Add, Name = "add1" };
+        var add2 = new OptimizationNode<double> { OperationType = OperationType.Add, Name = "add2" };
+        var output = new OptimizationNode<double> { OperationType = OperationType.Output, Name = "out" };
+
+        graph.AddNode(input1);
+        graph.AddNode(input2);
+        graph.AddNode(add1);
+        graph.AddNode(add2);
+        graph.AddNode(output);
+
+        // Both add operations use the same inputs (a + b and a + b)
+        add1.AddInput(input1);
+        add1.AddInput(input2);
+        add2.AddInput(input1);
+        add2.AddInput(input2);
+        output.AddInput(add1);
+
+        bool modified = pass.Apply(graph);
+
+        // Should eliminate one of the duplicate add operations
+        Assert.True(modified);
+    }
+
+    /// <summary>
+    /// BUG TEST: CSE should NOT eliminate non-commutative operations with reversed operands.
+    /// The current implementation incorrectly sorts input IDs which would merge a-b and b-a.
+    /// </summary>
+    [Fact]
+    public void CommonSubexpressionEliminationPass_PreservesNonCommutativeOperations()
+    {
+        var pass = new CommonSubexpressionEliminationPass<double>();
+        var graph = new OptimizationGraph<double>();
+
+        var inputA = new OptimizationNode<double> { OperationType = OperationType.Input, Name = "a" };
+        var inputB = new OptimizationNode<double> { OperationType = OperationType.Input, Name = "b" };
+        var sub1 = new OptimizationNode<double> { OperationType = OperationType.Subtract, Name = "a_minus_b" };
+        var sub2 = new OptimizationNode<double> { OperationType = OperationType.Subtract, Name = "b_minus_a" };
+        var add = new OptimizationNode<double> { OperationType = OperationType.Add, Name = "result" };
+        var output = new OptimizationNode<double> { OperationType = OperationType.Output, Name = "out" };
+
+        graph.AddNode(inputA);
+        graph.AddNode(inputB);
+        graph.AddNode(sub1);
+        graph.AddNode(sub2);
+        graph.AddNode(add);
+        graph.AddNode(output);
+
+        // sub1 = a - b
+        sub1.AddInput(inputA);
+        sub1.AddInput(inputB);
+
+        // sub2 = b - a (DIFFERENT from a - b!)
+        sub2.AddInput(inputB);
+        sub2.AddInput(inputA);
+
+        // result = (a - b) + (b - a)
+        add.AddInput(sub1);
+        add.AddInput(sub2);
+        output.AddInput(add);
+
+        // Count subtraction nodes before
+        int subCountBefore = graph.Nodes.Count(n => n.OperationType == OperationType.Subtract);
+        Assert.Equal(2, subCountBefore);
+
+        bool modified = pass.Apply(graph);
+
+        // Count subtraction nodes after
+        int subCountAfter = graph.Nodes.Count(n => n.OperationType == OperationType.Subtract);
+
+        // Both subtraction nodes should be preserved because a-b ≠ b-a
+        Assert.Equal(2, subCountAfter);
+        Assert.False(modified, "Non-commutative operations with different operand order should NOT be merged");
+    }
+
+    /// <summary>
+    /// BUG TEST: CSE should NOT eliminate division operations with reversed operands.
+    /// a/b ≠ b/a, so these should not be merged.
+    /// </summary>
+    [Fact]
+    public void CommonSubexpressionEliminationPass_PreservesDivisionOperandOrder()
+    {
+        var pass = new CommonSubexpressionEliminationPass<double>();
+        var graph = new OptimizationGraph<double>();
+
+        var inputA = new OptimizationNode<double> { OperationType = OperationType.Input, Name = "a" };
+        var inputB = new OptimizationNode<double> { OperationType = OperationType.Input, Name = "b" };
+        var div1 = new OptimizationNode<double> { OperationType = OperationType.Divide, Name = "a_div_b" };
+        var div2 = new OptimizationNode<double> { OperationType = OperationType.Divide, Name = "b_div_a" };
+        var multiply = new OptimizationNode<double> { OperationType = OperationType.Multiply, Name = "result" };
+        var output = new OptimizationNode<double> { OperationType = OperationType.Output, Name = "out" };
+
+        graph.AddNode(inputA);
+        graph.AddNode(inputB);
+        graph.AddNode(div1);
+        graph.AddNode(div2);
+        graph.AddNode(multiply);
+        graph.AddNode(output);
+
+        // div1 = a / b
+        div1.AddInput(inputA);
+        div1.AddInput(inputB);
+
+        // div2 = b / a (DIFFERENT from a / b!)
+        div2.AddInput(inputB);
+        div2.AddInput(inputA);
+
+        // result = (a / b) * (b / a)
+        multiply.AddInput(div1);
+        multiply.AddInput(div2);
+        output.AddInput(multiply);
+
+        // Count division nodes before
+        int divCountBefore = graph.Nodes.Count(n => n.OperationType == OperationType.Divide);
+        Assert.Equal(2, divCountBefore);
+
+        bool modified = pass.Apply(graph);
+
+        // Count division nodes after
+        int divCountAfter = graph.Nodes.Count(n => n.OperationType == OperationType.Divide);
+
+        // Both division nodes should be preserved because a/b ≠ b/a
+        Assert.Equal(2, divCountAfter);
+        Assert.False(modified, "Division operations with different operand order should NOT be merged");
+    }
+
+    [Fact]
+    public void CommonSubexpressionEliminationPass_CanApply_ReturnsTrueForGraphWithMultipleNodes()
+    {
+        var pass = new CommonSubexpressionEliminationPass<double>();
+        var graph = new OptimizationGraph<double>();
+
+        var node1 = new OptimizationNode<double> { OperationType = OperationType.Add };
+        var node2 = new OptimizationNode<double> { OperationType = OperationType.Add };
+        graph.AddNode(node1);
+        graph.AddNode(node2);
+
+        Assert.True(pass.CanApply(graph));
+    }
+
+    [Fact]
+    public void CommonSubexpressionEliminationPass_CanApply_ReturnsFalseForSingleNodeGraph()
+    {
+        var pass = new CommonSubexpressionEliminationPass<double>();
+        var graph = new OptimizationGraph<double>();
+
+        var node = new OptimizationNode<double>();
+        graph.AddNode(node);
+
+        Assert.False(pass.CanApply(graph));
+    }
+
     #endregion
 
     #region StrengthReductionPass Tests
