@@ -414,6 +414,231 @@ for (int i = 0; i < data.Rows; i++)
                 },
                 new CodeExample
                 {
+                    Id = "hdbscan",
+                    Name = "HDBSCAN",
+                    Description = "Hierarchical density-based clustering with automatic cluster detection",
+                    Difficulty = "Intermediate",
+                    Tags = ["clustering", "density", "hierarchical", "unsupervised"],
+                    Code = @"// HDBSCAN - Hierarchical DBSCAN with AiDotNet
+using AiDotNet.Clustering.Density;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create sample data with varying density clusters
+var data = new Matrix<double>(12, 2);
+// Dense cluster (points close together)
+data[0, 0] = 0.0; data[0, 1] = 0.0;
+data[1, 0] = 0.1; data[1, 1] = 0.1;
+data[2, 0] = 0.2; data[2, 1] = 0.0;
+data[3, 0] = 0.1; data[3, 1] = 0.2;
+// Sparse cluster (points farther apart)
+data[4, 0] = 5.0; data[4, 1] = 5.0;
+data[5, 0] = 5.5; data[5, 1] = 5.0;
+data[6, 0] = 5.0; data[6, 1] = 5.5;
+data[7, 0] = 5.5; data[7, 1] = 5.5;
+// Another cluster
+data[8, 0] = 10.0; data[8, 1] = 0.0;
+data[9, 0] = 10.2; data[9, 1] = 0.1;
+data[10, 0] = 10.1; data[10, 1] = 0.2;
+// Noise point
+data[11, 0] = 20.0; data[11, 1] = 20.0;
+
+// Configure HDBSCAN - no epsilon needed!
+var options = new HDBSCANOptions<double>
+{
+    MinClusterSize = 3,  // Minimum points to form a cluster
+    MinSamples = 2       // Controls noise sensitivity
+};
+var hdbscan = new HDBSCAN<double>(options);
+
+// Train the model
+hdbscan.Train(data, new Vector<double>(data.Rows));
+
+Console.WriteLine(""HDBSCAN Clustering Results:"");
+Console.WriteLine($""MinClusterSize: {options.MinClusterSize}"");
+Console.WriteLine($""Clusters found: {hdbscan.NumClusters}"");
+Console.WriteLine();
+Console.WriteLine(""Cluster assignments (-1 = noise):"");
+for (int i = 0; i < data.Rows; i++)
+{
+    var label = (int)hdbscan.Labels[i];
+    Console.WriteLine($""  Point ({data[i, 0]:F1}, {data[i, 1]:F1}) -> Cluster {label}"");
+}
+Console.WriteLine();
+Console.WriteLine(""HDBSCAN advantages over DBSCAN:"");
+Console.WriteLine(""  - No epsilon parameter to tune"");
+Console.WriteLine(""  - Handles varying density clusters"");
+Console.WriteLine(""  - Provides cluster hierarchy"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "fuzzy-cmeans",
+                    Name = "Fuzzy C-Means",
+                    Description = "Soft clustering where points can belong to multiple clusters",
+                    Difficulty = "Intermediate",
+                    Tags = ["clustering", "fuzzy", "soft-clustering", "unsupervised"],
+                    Code = @"// Fuzzy C-Means Soft Clustering with AiDotNet
+using AiDotNet.Clustering.Partitioning;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create sample data
+var data = new Matrix<double>(6, 2);
+data[0, 0] = 1.0; data[0, 1] = 1.0;  // Clearly cluster 1
+data[1, 0] = 1.2; data[1, 1] = 1.1;  // Clearly cluster 1
+data[2, 0] = 5.0; data[2, 1] = 5.0;  // Clearly cluster 2
+data[3, 0] = 5.2; data[3, 1] = 5.1;  // Clearly cluster 2
+data[4, 0] = 3.0; data[4, 1] = 3.0;  // Between clusters!
+data[5, 0] = 3.2; data[5, 1] = 3.1;  // Between clusters!
+
+// Configure Fuzzy C-Means
+var options = new FuzzyCMeansOptions<double>
+{
+    NumClusters = 2,
+    Fuzziness = 2.0,     // Standard fuzziness (1.5-3.0 typical)
+    MaxIterations = 300,
+    Tolerance = 1e-4
+};
+var fcm = new FuzzyCMeans<double>(options);
+
+// Train the model
+fcm.Train(data, new Vector<double>(data.Rows));
+
+Console.WriteLine(""Fuzzy C-Means Clustering Results:"");
+Console.WriteLine($""Clusters: {options.NumClusters}"");
+Console.WriteLine($""Fuzziness: {options.Fuzziness}"");
+Console.WriteLine();
+Console.WriteLine(""Membership degrees (point belongs to each cluster with probability):"");
+for (int i = 0; i < data.Rows; i++)
+{
+    Console.WriteLine($""  Point ({data[i, 0]:F1}, {data[i, 1]:F1}):"");
+    for (int k = 0; k < options.NumClusters; k++)
+    {
+        var membership = fcm.MembershipMatrix[i, k];
+        Console.WriteLine($""    Cluster {k}: {membership:P1}"");
+    }
+}
+Console.WriteLine();
+Console.WriteLine(""Points at (3, 3) have mixed membership - they're between clusters!"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "meanshift",
+                    Name = "Mean Shift",
+                    Description = "Find clusters without specifying number of clusters",
+                    Difficulty = "Intermediate",
+                    Tags = ["clustering", "density", "mode-seeking", "unsupervised"],
+                    Code = @"// Mean Shift Clustering with AiDotNet
+using AiDotNet.Clustering.Density;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create sample data with natural clusters
+var data = new Matrix<double>(9, 2);
+// Cluster 1 (dense region)
+data[0, 0] = 1.0; data[0, 1] = 1.0;
+data[1, 0] = 1.2; data[1, 1] = 1.1;
+data[2, 0] = 0.9; data[2, 1] = 1.2;
+// Cluster 2 (another dense region)
+data[3, 0] = 5.0; data[3, 1] = 5.0;
+data[4, 0] = 5.2; data[4, 1] = 5.1;
+data[5, 0] = 4.9; data[5, 1] = 5.2;
+// Cluster 3
+data[6, 0] = 8.0; data[6, 1] = 1.0;
+data[7, 0] = 8.2; data[7, 1] = 1.1;
+data[8, 0] = 7.9; data[8, 1] = 0.9;
+
+// Configure Mean Shift - bandwidth is auto-estimated!
+var options = new MeanShiftOptions<double>
+{
+    Bandwidth = null,  // Auto-estimate from data
+    BandwidthQuantile = 0.3,
+    BinSeeding = true,
+    MaxIterations = 300
+};
+var meanshift = new MeanShift<double>(options);
+
+// Train the model
+meanshift.Train(data, new Vector<double>(data.Rows));
+
+Console.WriteLine(""Mean Shift Clustering Results:"");
+Console.WriteLine($""Bandwidth (auto-estimated): {meanshift.Bandwidth:F2}"");
+Console.WriteLine($""Clusters found automatically: {meanshift.NumClusters}"");
+Console.WriteLine();
+Console.WriteLine(""Cluster assignments:"");
+for (int i = 0; i < data.Rows; i++)
+{
+    var label = (int)meanshift.Labels[i];
+    Console.WriteLine($""  Point ({data[i, 0]:F1}, {data[i, 1]:F1}) -> Cluster {label}"");
+}
+Console.WriteLine();
+Console.WriteLine(""Mean Shift advantages:"");
+Console.WriteLine(""  - No need to specify number of clusters"");
+Console.WriteLine(""  - Finds natural cluster shapes"");
+Console.WriteLine(""  - Robust to outliers"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "spectral-clustering",
+                    Name = "Spectral Clustering",
+                    Description = "Graph-based clustering for complex cluster shapes",
+                    Difficulty = "Advanced",
+                    Tags = ["clustering", "spectral", "graph", "unsupervised"],
+                    Code = @"// Spectral Clustering with AiDotNet
+using AiDotNet.Clustering.Spectral;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create sample data - spectral clustering works well for non-spherical clusters
+var data = new Matrix<double>(8, 2);
+// First ring/arc
+data[0, 0] = 0.0; data[0, 1] = 1.0;
+data[1, 0] = 0.5; data[1, 1] = 0.9;
+data[2, 0] = 1.0; data[2, 1] = 0.5;
+data[3, 0] = 1.2; data[3, 1] = 0.0;
+// Second ring/arc
+data[4, 0] = 2.0; data[4, 1] = 1.0;
+data[5, 0] = 2.5; data[5, 1] = 0.9;
+data[6, 0] = 3.0; data[6, 1] = 0.5;
+data[7, 0] = 3.2; data[7, 1] = 0.0;
+
+// Configure Spectral Clustering
+var options = new SpectralOptions<double>
+{
+    NumClusters = 2,
+    Affinity = AffinityType.RBF,      // Radial Basis Function kernel
+    Gamma = 1.0,                       // RBF kernel parameter
+    Normalization = LaplacianNormalization.Normalized,
+    AssignLabels = SpectralAssignment.KMeans
+};
+var spectral = new SpectralClustering<double>(options);
+
+// Train the model
+spectral.Train(data, new Vector<double>(data.Rows));
+
+Console.WriteLine(""Spectral Clustering Results:"");
+Console.WriteLine($""Clusters: {options.NumClusters}"");
+Console.WriteLine($""Affinity: {options.Affinity}"");
+Console.WriteLine($""Normalization: {options.Normalization}"");
+Console.WriteLine();
+Console.WriteLine(""Cluster assignments:"");
+for (int i = 0; i < data.Rows; i++)
+{
+    var label = (int)spectral.Labels[i];
+    Console.WriteLine($""  Point ({data[i, 0]:F1}, {data[i, 1]:F1}) -> Cluster {label}"");
+}
+Console.WriteLine();
+Console.WriteLine(""Spectral Clustering advantages:"");
+Console.WriteLine(""  - Finds non-spherical clusters (moons, spirals)"");
+Console.WriteLine(""  - Based on graph connectivity, not just distance"");
+Console.WriteLine(""  - Works better than K-Means for complex shapes"");
+"
+                },
+                new CodeExample
+                {
                     Id = "kmeans-advanced",
                     Name = "K-Means with Options",
                     Description = "K-Means with K-Means++ initialization",
@@ -460,6 +685,55 @@ for (int k = 0; k < options.NumClusters; k++)
 {
     Console.WriteLine($""  Cluster {k}: ({kmeans.ClusterCenters[k, 0]:F2}, {kmeans.ClusterCenters[k, 1]:F2})"");
 }
+"
+                },
+                new CodeExample
+                {
+                    Id = "silhouette-score",
+                    Name = "Cluster Evaluation",
+                    Description = "Evaluate clustering quality with Silhouette Score",
+                    Difficulty = "Intermediate",
+                    Tags = ["clustering", "evaluation", "metrics", "silhouette"],
+                    Code = @"// Cluster Evaluation with Silhouette Score
+using AiDotNet.Clustering.Partitioning;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Clustering.Evaluation;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create well-separated clusters
+var data = new Matrix<double>(6, 2);
+data[0, 0] = 0.0; data[0, 1] = 0.0;
+data[1, 0] = 0.1; data[1, 1] = 0.1;
+data[2, 0] = 0.2; data[2, 1] = 0.0;
+data[3, 0] = 5.0; data[3, 1] = 5.0;
+data[4, 0] = 5.1; data[4, 1] = 5.1;
+data[5, 0] = 5.0; data[5, 1] = 5.2;
+
+// Test different numbers of clusters
+Console.WriteLine(""Silhouette Score Analysis:"");
+Console.WriteLine(""(Higher is better, range -1 to +1)"");
+Console.WriteLine();
+
+for (int k = 2; k <= 4; k++)
+{
+    var options = new KMeansOptions<double> { NumClusters = k, RandomState = 42 };
+    var kmeans = new KMeans<double>(options);
+    kmeans.Train(data, new Vector<double>(data.Rows));
+
+    // Calculate Silhouette Score
+    var silhouette = new SilhouetteScore<double>();
+    var score = silhouette.Compute(data, kmeans.Labels);
+
+    Console.WriteLine($""  K={k}: Silhouette Score = {score:F4}"");
+}
+
+Console.WriteLine();
+Console.WriteLine(""Interpretation:"");
+Console.WriteLine(""  +1: Perfect clustering (points clearly in right cluster)"");
+Console.WriteLine(""   0: Points are on cluster boundaries"");
+Console.WriteLine(""  -1: Points may be in wrong clusters"");
+Console.WriteLine();
+Console.WriteLine(""Best K is the one with highest Silhouette Score!"");
 "
                 }
             },
@@ -804,6 +1078,388 @@ foreach (var detection in result.Detections)
     Console.WriteLine($""  {detection.ClassName}: {detection.Confidence:P1}"");
     Console.WriteLine($""    Box: ({detection.X}, {detection.Y}, {detection.Width}, {detection.Height})"");
 }
+"
+                }
+            },
+
+            ["Tensors & Linear Algebra"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "tensor-basics",
+                    Name = "Tensor Basics",
+                    Description = "Create and manipulate tensors (multi-dimensional arrays)",
+                    Difficulty = "Beginner",
+                    Tags = ["tensor", "matrix", "vector", "linear-algebra"],
+                    Code = @"// Tensor Basics with AiDotNet
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create a Vector (1D tensor)
+var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
+Console.WriteLine($""Vector: [{string.Join("", "", vector)}]"");
+Console.WriteLine($""Length: {vector.Length}"");
+Console.WriteLine($""Sum: {vector.Sum():F2}"");
+Console.WriteLine();
+
+// Create a Matrix (2D tensor)
+var matrix = new Matrix<double>(3, 3);
+matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
+matrix[1, 0] = 4; matrix[1, 1] = 5; matrix[1, 2] = 6;
+matrix[2, 0] = 7; matrix[2, 1] = 8; matrix[2, 2] = 9;
+
+Console.WriteLine(""Matrix (3x3):"");
+for (int i = 0; i < matrix.Rows; i++)
+{
+    Console.Write(""  ["");
+    for (int j = 0; j < matrix.Columns; j++)
+    {
+        Console.Write($""{matrix[i, j],3}"");
+        if (j < matrix.Columns - 1) Console.Write("", "");
+    }
+    Console.WriteLine(""]"");
+}
+Console.WriteLine($""Shape: ({matrix.Rows}, {matrix.Columns})"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "matrix-operations",
+                    Name = "Matrix Operations",
+                    Description = "Perform matrix arithmetic and transformations",
+                    Difficulty = "Beginner",
+                    Tags = ["tensor", "matrix", "operations", "linear-algebra"],
+                    Code = @"// Matrix Operations with AiDotNet
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create two matrices
+var A = new Matrix<double>(2, 3);
+A[0, 0] = 1; A[0, 1] = 2; A[0, 2] = 3;
+A[1, 0] = 4; A[1, 1] = 5; A[1, 2] = 6;
+
+var B = new Matrix<double>(2, 3);
+B[0, 0] = 7; B[0, 1] = 8; B[0, 2] = 9;
+B[1, 0] = 10; B[1, 1] = 11; B[1, 2] = 12;
+
+Console.WriteLine(""Matrix A (2x3):"");
+PrintMatrix(A);
+
+Console.WriteLine(""Matrix B (2x3):"");
+PrintMatrix(B);
+
+// Element-wise addition
+var C = A.Add(B);
+Console.WriteLine(""A + B:"");
+PrintMatrix(C);
+
+// Scalar multiplication
+var D = A.Multiply(2.0);
+Console.WriteLine(""A * 2:"");
+PrintMatrix(D);
+
+// Transpose
+var AT = A.Transpose();
+Console.WriteLine(""A transposed (3x2):"");
+PrintMatrix(AT);
+
+void PrintMatrix(Matrix<double> m)
+{
+    for (int i = 0; i < m.Rows; i++)
+    {
+        Console.Write(""  ["");
+        for (int j = 0; j < m.Columns; j++)
+        {
+            Console.Write($""{m[i, j],5:F1}"");
+            if (j < m.Columns - 1) Console.Write("", "");
+        }
+        Console.WriteLine(""]"");
+    }
+    Console.WriteLine();
+}
+"
+                },
+                new CodeExample
+                {
+                    Id = "matrix-multiplication",
+                    Name = "Matrix Multiplication",
+                    Description = "Multiply matrices (the core of neural networks)",
+                    Difficulty = "Intermediate",
+                    Tags = ["tensor", "matrix", "matmul", "linear-algebra"],
+                    Code = @"// Matrix Multiplication with AiDotNet
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create matrices for multiplication
+// A is 2x3, B is 3x2, result will be 2x2
+var A = new Matrix<double>(2, 3);
+A[0, 0] = 1; A[0, 1] = 2; A[0, 2] = 3;
+A[1, 0] = 4; A[1, 1] = 5; A[1, 2] = 6;
+
+var B = new Matrix<double>(3, 2);
+B[0, 0] = 7; B[0, 1] = 8;
+B[1, 0] = 9; B[1, 1] = 10;
+B[2, 0] = 11; B[2, 1] = 12;
+
+Console.WriteLine(""Matrix A (2x3):"");
+PrintMatrix(A);
+
+Console.WriteLine(""Matrix B (3x2):"");
+PrintMatrix(B);
+
+// Matrix multiplication: C = A @ B
+var C = A.Multiply(B);
+
+Console.WriteLine(""C = A @ B (2x2):"");
+PrintMatrix(C);
+
+// Verify: C[0,0] = 1*7 + 2*9 + 3*11 = 7 + 18 + 33 = 58
+Console.WriteLine(""Verification:"");
+Console.WriteLine($""  C[0,0] = 1*7 + 2*9 + 3*11 = {1*7 + 2*9 + 3*11}"");
+Console.WriteLine($""  Matches matrix result: {C[0, 0]}"");
+
+void PrintMatrix(Matrix<double> m)
+{
+    for (int i = 0; i < m.Rows; i++)
+    {
+        Console.Write(""  ["");
+        for (int j = 0; j < m.Columns; j++)
+        {
+            Console.Write($""{m[i, j],5:F0}"");
+            if (j < m.Columns - 1) Console.Write("", "");
+        }
+        Console.WriteLine(""]"");
+    }
+    Console.WriteLine();
+}
+"
+                },
+                new CodeExample
+                {
+                    Id = "vector-operations",
+                    Name = "Vector Operations",
+                    Description = "Perform vector arithmetic and common operations",
+                    Difficulty = "Beginner",
+                    Tags = ["tensor", "vector", "operations", "linear-algebra"],
+                    Code = @"// Vector Operations with AiDotNet
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create vectors
+var v1 = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+var v2 = new Vector<double>(new double[] { 4.0, 5.0, 6.0 });
+
+Console.WriteLine($""Vector v1: [{string.Join("", "", v1)}]"");
+Console.WriteLine($""Vector v2: [{string.Join("", "", v2)}]"");
+Console.WriteLine();
+
+// Vector addition
+var vSum = v1.Add(v2);
+Console.WriteLine($""v1 + v2 = [{string.Join("", "", vSum)}]"");
+
+// Scalar multiplication
+var vScaled = v1.Multiply(2.0);
+Console.WriteLine($""v1 * 2 = [{string.Join("", "", vScaled)}]"");
+
+// Dot product
+var dotProduct = v1.DotProduct(v2);
+Console.WriteLine($""v1 . v2 = {dotProduct}"");
+Console.WriteLine($""  (1*4 + 2*5 + 3*6 = {1*4 + 2*5 + 3*6})"");
+
+// Euclidean norm (length)
+var norm = v1.Norm();
+Console.WriteLine($""||v1|| = {norm:F4}"");
+Console.WriteLine($""  (sqrt(1^2 + 2^2 + 3^2) = sqrt({1+4+9}) = {Math.Sqrt(14):F4})"");
+
+// Min, Max, Sum
+Console.WriteLine();
+Console.WriteLine($""Min(v1): {v1.Min()}"");
+Console.WriteLine($""Max(v1): {v1.Max()}"");
+Console.WriteLine($""Sum(v1): {v1.Sum()}"");
+Console.WriteLine($""Mean(v1): {v1.Mean():F4}"");
+"
+                }
+            },
+
+            ["Distance Metrics"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "euclidean-distance",
+                    Name = "Euclidean Distance",
+                    Description = "Measure straight-line distance between points",
+                    Difficulty = "Beginner",
+                    Tags = ["distance", "metrics", "euclidean", "clustering"],
+                    Code = @"// Distance Metrics with AiDotNet
+using AiDotNet.Clustering.DistanceMetrics;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create two points
+var point1 = new Vector<double>(new double[] { 0.0, 0.0 });
+var point2 = new Vector<double>(new double[] { 3.0, 4.0 });
+
+Console.WriteLine($""Point 1: ({point1[0]}, {point1[1]})"");
+Console.WriteLine($""Point 2: ({point2[0]}, {point2[1]})"");
+Console.WriteLine();
+
+// Euclidean Distance (straight-line distance)
+var euclidean = new EuclideanDistance<double>();
+var eucDist = euclidean.Compute(point1, point2);
+Console.WriteLine($""Euclidean Distance: {eucDist}"");
+Console.WriteLine($""  Formula: sqrt((3-0)^2 + (4-0)^2) = sqrt(9+16) = sqrt(25) = 5"");
+Console.WriteLine();
+
+// This is the classic 3-4-5 right triangle!
+Console.WriteLine(""This is the famous 3-4-5 right triangle:"");
+Console.WriteLine(""  The distance from (0,0) to (3,4) is exactly 5"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "manhattan-distance",
+                    Name = "Manhattan Distance",
+                    Description = "City-block distance (sum of absolute differences)",
+                    Difficulty = "Beginner",
+                    Tags = ["distance", "metrics", "manhattan", "l1"],
+                    Code = @"// Manhattan (City-Block) Distance
+using AiDotNet.Clustering.DistanceMetrics;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var point1 = new Vector<double>(new double[] { 0.0, 0.0 });
+var point2 = new Vector<double>(new double[] { 3.0, 4.0 });
+
+Console.WriteLine($""Point 1: ({point1[0]}, {point1[1]})"");
+Console.WriteLine($""Point 2: ({point2[0]}, {point2[1]})"");
+Console.WriteLine();
+
+// Manhattan Distance
+var manhattan = new ManhattanDistance<double>();
+var manDist = manhattan.Compute(point1, point2);
+Console.WriteLine($""Manhattan Distance: {manDist}"");
+Console.WriteLine($""  Formula: |3-0| + |4-0| = 3 + 4 = 7"");
+Console.WriteLine();
+
+Console.WriteLine(""Like walking city blocks:"");
+Console.WriteLine(""  You walk 3 blocks east, then 4 blocks north"");
+Console.WriteLine(""  Total: 7 blocks (not 5 'as the crow flies')"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "cosine-distance",
+                    Name = "Cosine Similarity",
+                    Description = "Measure angle between vectors (great for text/embeddings)",
+                    Difficulty = "Intermediate",
+                    Tags = ["distance", "metrics", "cosine", "similarity"],
+                    Code = @"// Cosine Similarity/Distance
+using AiDotNet.Clustering.DistanceMetrics;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Cosine similarity measures the angle between vectors
+// Useful for text embeddings where direction matters more than magnitude
+
+var vec1 = new Vector<double>(new double[] { 1.0, 0.0 });  // East direction
+var vec2 = new Vector<double>(new double[] { 0.0, 1.0 });  // North direction
+var vec3 = new Vector<double>(new double[] { 1.0, 1.0 });  // Northeast
+
+Console.WriteLine(""Cosine Distance measures angle between vectors"");
+Console.WriteLine($""vec1 (East):      [{string.Join("", "", vec1)}]"");
+Console.WriteLine($""vec2 (North):     [{string.Join("", "", vec2)}]"");
+Console.WriteLine($""vec3 (Northeast): [{string.Join("", "", vec3)}]"");
+Console.WriteLine();
+
+var cosine = new CosineDistance<double>();
+
+var dist12 = cosine.Compute(vec1, vec2);
+var dist13 = cosine.Compute(vec1, vec3);
+var dist23 = cosine.Compute(vec2, vec3);
+
+Console.WriteLine($""Distance(East, North): {dist12:F4}"");
+Console.WriteLine($""  (90 degrees apart = maximum distance)"");
+Console.WriteLine();
+Console.WriteLine($""Distance(East, Northeast): {dist13:F4}"");
+Console.WriteLine($""  (45 degrees apart = partial similarity)"");
+Console.WriteLine();
+Console.WriteLine($""Distance(North, Northeast): {dist23:F4}"");
+Console.WriteLine($""  (Also 45 degrees apart)"");
+Console.WriteLine();
+Console.WriteLine(""Use Cases:"");
+Console.WriteLine(""  - Document similarity (TF-IDF vectors)"");
+Console.WriteLine(""  - Word/sentence embeddings"");
+Console.WriteLine(""  - Recommendation systems"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "minkowski-distance",
+                    Name = "Minkowski Distance",
+                    Description = "Generalized distance (includes Euclidean and Manhattan)",
+                    Difficulty = "Intermediate",
+                    Tags = ["distance", "metrics", "minkowski", "general"],
+                    Code = @"// Minkowski Distance (Generalized Lp-norm)
+using AiDotNet.Clustering.DistanceMetrics;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var point1 = new Vector<double>(new double[] { 0.0, 0.0 });
+var point2 = new Vector<double>(new double[] { 3.0, 4.0 });
+
+Console.WriteLine($""Point 1: ({point1[0]}, {point1[1]})"");
+Console.WriteLine($""Point 2: ({point2[0]}, {point2[1]})"");
+Console.WriteLine();
+
+Console.WriteLine(""Minkowski Distance with different p values:"");
+Console.WriteLine(""  d(x,y) = (sum(|xi - yi|^p))^(1/p)"");
+Console.WriteLine();
+
+// p=1 is Manhattan distance
+var mink1 = new MinkowskiDistance<double>(1.0);
+Console.WriteLine($""p=1 (Manhattan): {mink1.Compute(point1, point2):F4}"");
+
+// p=2 is Euclidean distance
+var mink2 = new MinkowskiDistance<double>(2.0);
+Console.WriteLine($""p=2 (Euclidean): {mink2.Compute(point1, point2):F4}"");
+
+// p=3
+var mink3 = new MinkowskiDistance<double>(3.0);
+Console.WriteLine($""p=3:             {mink3.Compute(point1, point2):F4}"");
+
+// Higher p approaches Chebyshev (max difference)
+var mink10 = new MinkowskiDistance<double>(10.0);
+Console.WriteLine($""p=10:            {mink10.Compute(point1, point2):F4}"");
+
+Console.WriteLine();
+Console.WriteLine(""As p increases, the distance approaches max(|x2-x1|, |y2-y1|) = 4"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "chebyshev-distance",
+                    Name = "Chebyshev Distance",
+                    Description = "Maximum difference along any dimension",
+                    Difficulty = "Intermediate",
+                    Tags = ["distance", "metrics", "chebyshev", "chess"],
+                    Code = @"// Chebyshev Distance (Maximum/Chessboard Distance)
+using AiDotNet.Clustering.DistanceMetrics;
+using AiDotNet.Tensors.LinearAlgebra;
+
+var point1 = new Vector<double>(new double[] { 0.0, 0.0 });
+var point2 = new Vector<double>(new double[] { 3.0, 7.0 });
+
+Console.WriteLine($""Point 1: ({point1[0]}, {point1[1]})"");
+Console.WriteLine($""Point 2: ({point2[0]}, {point2[1]})"");
+Console.WriteLine();
+
+var chebyshev = new ChebyshevDistance<double>();
+var dist = chebyshev.Compute(point1, point2);
+
+Console.WriteLine($""Chebyshev Distance: {dist}"");
+Console.WriteLine($""  Formula: max(|3-0|, |7-0|) = max(3, 7) = 7"");
+Console.WriteLine();
+Console.WriteLine(""Also called 'Chessboard Distance':"");
+Console.WriteLine(""  - A king can move diagonally"");
+Console.WriteLine(""  - From (0,0) to (3,7), it takes 7 moves"");
+Console.WriteLine(""  - Move diagonally 3 times, then up 4 more times"");
+Console.WriteLine();
+Console.WriteLine(""Use Cases:"");
+Console.WriteLine(""  - Game AI (chess, checkers)"");
+Console.WriteLine(""  - Warehouse robot navigation"");
+Console.WriteLine(""  - Image processing (maximum color difference)"");
 "
                 }
             },
