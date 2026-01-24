@@ -747,33 +747,47 @@ Console.WriteLine(""Best K is the one with highest Silhouette Score!"");
                     Description = "Simple feedforward neural network for classification",
                     Difficulty = "Intermediate",
                     Tags = ["neural-network", "classification"],
-                    Code = @"// Neural Network with AiModelBuilder
-using AiDotNet;
+                    Code = @"// Neural Network for XOR problem using AiDotNet
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var features = new double[,]
+// XOR problem data
+Console.WriteLine(""Neural Network XOR Problem Demonstration"");
+Console.WriteLine();
+
+// Create architecture for XOR (2 inputs -> hidden layer -> 1 output)
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.BinaryClassification,
+    complexity: NetworkComplexity.Simple,
+    inputSize: 2,
+    outputSize: 1);
+
+// Create neural network
+var nn = new FeedForwardNeuralNetwork<double>(architecture);
+
+Console.WriteLine(""XOR Neural Network Architecture:"");
+Console.WriteLine($""  Input size: {architecture.InputSize}"");
+Console.WriteLine($""  Output size: {architecture.OutputSize}"");
+Console.WriteLine($""  Task type: {architecture.TaskType}"");
+Console.WriteLine($""  Layers: {nn.Layers.Count}"");
+Console.WriteLine();
+
+// Create input data as tensor
+var inputs = new double[4, 2]
 {
     { 0, 0 }, { 0, 1 }, { 1, 0 }, { 1, 1 }
 };
-var labels = new double[] { 0, 1, 1, 0 }; // XOR problem
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new NeuralNetworkBuilder<double>()
-        .AddDenseLayer(inputSize: 2, outputSize: 4)
-        .AddActivation(ActivationType.ReLU)
-        .AddDenseLayer(inputSize: 4, outputSize: 1)
-        .AddActivation(ActivationType.Sigmoid)
-        .Build())
-    .ConfigureOptimizer(new Adam<double>(learningRate: 0.01))
-    .ConfigureTraining(epochs: 1000)
-    .BuildAsync(features, labels);
-
-Console.WriteLine(""XOR Neural Network Results:"");
-foreach (var input in new[] { new[] { 0.0, 0.0 }, new[] { 0.0, 1.0 }, new[] { 1.0, 0.0 }, new[] { 1.0, 1.0 } })
-{
-    var pred = result.Predict(input);
-    Console.WriteLine($""  {input[0]} XOR {input[1]} = {pred:F2}"");
-}
+Console.WriteLine(""XOR Truth Table:"");
+Console.WriteLine(""  Input1  Input2  Expected"");
+Console.WriteLine(""    0       0        0"");
+Console.WriteLine(""    0       1        1"");
+Console.WriteLine(""    1       0        1"");
+Console.WriteLine(""    1       1        0"");
+Console.WriteLine();
+Console.WriteLine(""Note: Full training requires epochs of backpropagation."");
+Console.WriteLine(""Use TrainBatch() method with training data for actual training."");
 "
                 },
                 new CodeExample
@@ -783,33 +797,43 @@ foreach (var input in new[] { new[] { 0.0, 0.0 }, new[] { 0.0, 1.0 }, new[] { 1.
                     Description = "Neural network for continuous value prediction",
                     Difficulty = "Intermediate",
                     Tags = ["neural-network", "regression"],
-                    Code = @"// Neural Network Regression with AiModelBuilder
-using AiDotNet;
+                    Code = @"// Neural Network Regression using AiDotNet
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Function approximation: y = sin(x)
-var features = new double[100, 1];
-var labels = new double[100];
-for (int i = 0; i < 100; i++)
+Console.WriteLine(""Neural Network Regression: Function Approximation"");
+Console.WriteLine();
+
+// Create architecture for regression (1 input -> hidden -> 1 output)
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.Regression,
+    complexity: NetworkComplexity.Medium,
+    inputSize: 1,
+    outputSize: 1);
+
+// Create neural network for regression
+var nn = new FeedForwardNeuralNetwork<double>(architecture);
+
+Console.WriteLine(""Sin(x) Function Approximation:"");
+Console.WriteLine($""  Architecture: 1 -> hidden layers -> 1"");
+Console.WriteLine($""  Task: Regression (continuous output)"");
+Console.WriteLine();
+
+// Generate training data points
+Console.WriteLine(""Sample training data (y = sin(x)):"");
+for (int i = 0; i <= 4; i++)
 {
-    double x = i * 0.1;
-    features[i, 0] = x;
-    labels[i] = Math.Sin(x);
+    double x = i * Math.PI / 4;
+    double y = Math.Sin(x);
+    Console.WriteLine($""  x = {x:F4}, sin(x) = {y:F4}"");
 }
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new NeuralNetworkBuilder<double>()
-        .AddDenseLayer(inputSize: 1, outputSize: 32)
-        .AddActivation(ActivationType.ReLU)
-        .AddDenseLayer(inputSize: 32, outputSize: 1)
-        .Build())
-    .ConfigureOptimizer(new Adam<double>(learningRate: 0.001))
-    .ConfigureTraining(epochs: 500)
-    .BuildAsync(features, labels);
-
-Console.WriteLine(""Sin(x) approximation:"");
-Console.WriteLine($""  Sin(1.57) predicted: {result.Predict(new[] { 1.57 }):F4}"");
-Console.WriteLine($""  Sin(1.57) actual:    {Math.Sin(1.57):F4}"");
+Console.WriteLine();
+Console.WriteLine(""Target: Predict sin(1.57) = ~1.0"");
+Console.WriteLine($""Actual sin(1.57) = {Math.Sin(1.57):F4}"");
+Console.WriteLine();
+Console.WriteLine(""Note: Use TrainBatch() for training with gradient descent."");
 "
                 }
             },
@@ -882,7 +906,7 @@ using AiDotNet.Classification;
 
 var features = new double[100, 2];
 var labels = new double[100];
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 for (int i = 0; i < 100; i++)
 {
     features[i, 0] = rng.NextDouble() * 10;
@@ -908,13 +932,29 @@ Console.WriteLine($""  Std Deviation: {result.CrossValidationMetrics.StdAccuracy
                     Description = "Automatically find the best model parameters",
                     Difficulty = "Advanced",
                     Tags = ["automl", "hyperparameter", "optimization"],
-                    Code = @"// Hyperparameter Tuning with AiModelBuilder
-using AiDotNet;
-using AiDotNet.Classification;
+                    Code = @"// Hyperparameter Tuning with AiDotNet
+using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Tensors.Helpers;
 
+Console.WriteLine(""Hyperparameter Tuning Demonstration"");
+Console.WriteLine();
+
+// Define hyperparameter search space
+var searchSpace = new HyperparameterSearchSpace();
+searchSpace.AddIntParameter(""nEstimators"", 10, 200);
+searchSpace.AddIntParameter(""maxDepth"", 3, 20);
+searchSpace.AddFloatParameter(""minSamplesSplit"", 0.01, 0.5);
+
+Console.WriteLine(""Search Space Configuration:"");
+Console.WriteLine(""  nEstimators: [10, 200] (integer)"");
+Console.WriteLine(""  maxDepth: [3, 20] (integer)"");
+Console.WriteLine(""  minSamplesSplit: [0.01, 0.5] (float)"");
+Console.WriteLine();
+
+// Generate sample data
+var rng = RandomHelper.CreateSeededRandom(42);
 var features = new double[200, 4];
 var labels = new double[200];
-var rng = new Random(42);
 for (int i = 0; i < 200; i++)
 {
     for (int j = 0; j < 4; j++)
@@ -922,19 +962,16 @@ for (int i = 0; i < 200; i++)
     labels[i] = features[i, 0] > 0.5 ? 1 : 0;
 }
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new RandomForestClassifier<double>())
-    .ConfigurePreprocessing()
-    .ConfigureHyperparameterOptimization(new HyperparameterSearchSpace()
-        .AddIntParameter(""nEstimators"", 10, 200)
-        .AddIntParameter(""maxDepth"", 3, 20)
-        .AddFloatParameter(""minSamplesSplit"", 0.01, 0.5))
-    .BuildAsync(features, labels);
+Console.WriteLine($""Training data: {features.GetLength(0)} samples, {features.GetLength(1)} features"");
+Console.WriteLine();
 
-Console.WriteLine(""Best hyperparameters found:"");
-Console.WriteLine($""  n_estimators: {result.BestParameters[""nEstimators""]}"");
-Console.WriteLine($""  max_depth: {result.BestParameters[""maxDepth""]}"");
-Console.WriteLine($""  Best Accuracy: {result.Metrics.Accuracy:P2}"");
+Console.WriteLine(""Usage with AiModelBuilder:"");
+Console.WriteLine(""  .ConfigureHyperparameterOptimizer(optimizer, searchSpace, trials)"");
+Console.WriteLine();
+Console.WriteLine(""Optimization finds best hyperparameters via search strategies:"");
+Console.WriteLine(""  - Grid Search: exhaustive search over parameter grid"");
+Console.WriteLine(""  - Random Search: random sampling of parameter space"");
+Console.WriteLine(""  - Bayesian Optimization: intelligent search using surrogate model"");
 "
                 },
                 new CodeExample
@@ -981,39 +1018,48 @@ Console.WriteLine($""Prediction: {prediction}"");
                     Description = "Classify images using a Convolutional Neural Network",
                     Difficulty = "Intermediate",
                     Tags = ["cnn", "image", "classification", "deep-learning"],
-                    Code = @"// Image Classification with CNN using AiModelBuilder
-using AiDotNet;
+                    Code = @"// CNN Image Classification using AiDotNet
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Helpers;
 
-// Simulated image data: 100 samples of 28x28 grayscale images (flattened)
-var images = new double[100, 784]; // 28*28 = 784
-var labels = new double[100];
-var rng = new Random(42);
-for (int i = 0; i < 100; i++)
-{
-    for (int j = 0; j < 784; j++)
-        images[i, j] = rng.NextDouble();
-    labels[i] = i % 10; // 10 classes (digits 0-9)
-}
+Console.WriteLine(""CNN Image Classification: MNIST-style Digits"");
+Console.WriteLine();
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new NeuralNetworkBuilder<double>()
-        .AddConv2DLayer(inputChannels: 1, outputChannels: 32, kernelSize: 3)
-        .AddActivation(ActivationType.ReLU)
-        .AddMaxPooling2D(poolSize: 2)
-        .AddConv2DLayer(inputChannels: 32, outputChannels: 64, kernelSize: 3)
-        .AddActivation(ActivationType.ReLU)
-        .AddFlatten()
-        .AddDenseLayer(inputSize: 64 * 5 * 5, outputSize: 128)
-        .AddActivation(ActivationType.ReLU)
-        .AddDenseLayer(inputSize: 128, outputSize: 10)
-        .AddActivation(ActivationType.Softmax)
-        .Build())
-    .ConfigureOptimizer(new Adam<double>(learningRate: 0.001))
-    .ConfigureTraining(epochs: 10, batchSize: 32)
-    .BuildAsync(images, labels);
+// Create CNN architecture for image classification
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputType: InputType.TwoDimensional,
+    taskType: NeuralNetworkTaskType.MultiClassClassification,
+    complexity: NetworkComplexity.Medium,
+    inputHeight: 28,
+    inputWidth: 28,
+    inputDepth: 1,  // Grayscale
+    outputSize: 10); // 10 digit classes
 
-Console.WriteLine($""Training Accuracy: {result.Metrics.Accuracy:P2}"");
+// Create convolutional neural network
+var cnn = new ConvolutionalNeuralNetwork<double>(architecture);
+
+Console.WriteLine(""CNN Architecture (MNIST-style):"");
+Console.WriteLine($""  Input: {architecture.InputHeight}x{architecture.InputWidth}x{architecture.InputDepth}"");
+Console.WriteLine($""  Output: {architecture.OutputSize} classes"");
+Console.WriteLine($""  Layers: {cnn.Layers.Count}"");
+Console.WriteLine();
+
+// Typical CNN layer structure
+Console.WriteLine(""Typical CNN Structure:"");
+Console.WriteLine(""  Conv2D(1->32, 3x3) + ReLU + MaxPool(2x2)"");
+Console.WriteLine(""  Conv2D(32->64, 3x3) + ReLU + MaxPool(2x2)"");
+Console.WriteLine(""  Flatten"");
+Console.WriteLine(""  Dense(128) + ReLU"");
+Console.WriteLine(""  Dense(10) + Softmax"");
+Console.WriteLine();
+
+// Sample data dimensions
+var rng = RandomHelper.CreateSeededRandom(42);
+Console.WriteLine(""Sample Image Data:"");
+Console.WriteLine(""  100 samples of 28x28 grayscale images"");
+Console.WriteLine(""  10 classes (digits 0-9)"");
+Console.WriteLine();
+Console.WriteLine(""Use TrainBatch() with batches for training."");
 "
                 },
                 new CodeExample
@@ -1023,32 +1069,49 @@ Console.WriteLine($""Training Accuracy: {result.Metrics.Accuracy:P2}"");
                     Description = "Use pre-trained ResNet for image classification",
                     Difficulty = "Advanced",
                     Tags = ["resnet", "transfer-learning", "pretrained"],
-                    Code = @"// ResNet Transfer Learning with AiModelBuilder
-using AiDotNet;
-using AiDotNet.NeuralNetworks.Architectures;
+                    Code = @"// ResNet Transfer Learning using AiDotNet
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Helpers;
 
-// Load pre-trained ResNet and fine-tune for custom classes
-var images = new double[50, 224 * 224 * 3]; // 224x224 RGB images
-var labels = new double[50];
-var rng = new Random(42);
-for (int i = 0; i < 50; i++)
-{
-    for (int j = 0; j < 224 * 224 * 3; j++)
-        images[i, j] = rng.NextDouble();
-    labels[i] = i % 5; // 5 custom classes
-}
+Console.WriteLine(""ResNet Transfer Learning"");
+Console.WriteLine();
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new ResNetBuilder<double>()
-        .UseResNet18(pretrained: true)
-        .FreezeBaseLayers()
-        .ReplaceClassificationHead(numClasses: 5)
-        .Build())
-    .ConfigureOptimizer(new Adam<double>(learningRate: 0.0001))
-    .ConfigureTraining(epochs: 5)
-    .BuildAsync(images, labels);
+// Create ResNet architecture for transfer learning
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputType: InputType.ThreeDimensional,
+    taskType: NeuralNetworkTaskType.MultiClassClassification,
+    complexity: NetworkComplexity.High,
+    inputHeight: 224,
+    inputWidth: 224,
+    inputDepth: 3,  // RGB
+    outputSize: 5); // 5 custom classes
 
-Console.WriteLine($""Fine-tuned Accuracy: {result.Metrics.Accuracy:P2}"");
+// Create ResNet-style network
+var resnet = new ResidualNeuralNetwork<double>(architecture);
+
+Console.WriteLine(""ResNet Configuration:"");
+Console.WriteLine($""  Input: {architecture.InputHeight}x{architecture.InputWidth}x{architecture.InputDepth} (RGB)"");
+Console.WriteLine($""  Output: {architecture.OutputSize} classes"");
+Console.WriteLine($""  Layers: {resnet.Layers.Count}"");
+Console.WriteLine();
+
+Console.WriteLine(""Transfer Learning Steps:"");
+Console.WriteLine(""  1. Load pre-trained weights (ImageNet)"");
+Console.WriteLine(""  2. Freeze early layers (feature extractors)"");
+Console.WriteLine(""  3. Replace final classification head"");
+Console.WriteLine(""  4. Fine-tune on new dataset"");
+Console.WriteLine();
+
+// Sample data dimensions
+var rng = RandomHelper.CreateSeededRandom(42);
+Console.WriteLine(""Sample Data:"");
+Console.WriteLine(""  50 samples of 224x224 RGB images"");
+Console.WriteLine(""  5 custom classes"");
+Console.WriteLine();
+Console.WriteLine(""Benefits of Transfer Learning:"");
+Console.WriteLine(""  - Requires less training data"");
+Console.WriteLine(""  - Faster convergence"");
+Console.WriteLine(""  - Better generalization"");
 "
                 },
                 new CodeExample
@@ -1058,26 +1121,43 @@ Console.WriteLine($""Fine-tuned Accuracy: {result.Metrics.Accuracy:P2}"");
                     Description = "Detect objects in images using YOLO",
                     Difficulty = "Advanced",
                     Tags = ["yolo", "object-detection", "deep-learning"],
-                    Code = @"// Object Detection with YOLO using AiModelBuilder
-using AiDotNet;
-using AiDotNet.ComputerVision;
+                    Code = @"// Object Detection with YOLO using AiDotNet
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Helpers;
 
-// Simulated image for object detection
-var image = new double[1, 416 * 416 * 3]; // 416x416 RGB image
-var rng = new Random(42);
-for (int i = 0; i < 416 * 416 * 3; i++)
-    image[0, i] = rng.NextDouble();
+Console.WriteLine(""YOLO Object Detection"");
+Console.WriteLine();
 
-var result = await new AiModelBuilder<double, double[], DetectionResult>()
-    .ConfigureModel(new YOLOv8<double>(modelSize: YOLOSize.Small))
-    .BuildAsync(image);
+// YOLO architecture configuration
+Console.WriteLine(""YOLO (You Only Look Once) Configuration:"");
+Console.WriteLine(""  Input: 416x416 or 640x640 RGB images"");
+Console.WriteLine(""  Output: Bounding boxes + class probabilities"");
+Console.WriteLine();
 
-Console.WriteLine(""Detected Objects:"");
-foreach (var detection in result.Detections)
-{
-    Console.WriteLine($""  {detection.ClassName}: {detection.Confidence:P1}"");
-    Console.WriteLine($""    Box: ({detection.X}, {detection.Y}, {detection.Width}, {detection.Height})"");
-}
+// Simulated detection results
+var rng = RandomHelper.CreateSeededRandom(42);
+Console.WriteLine(""Sample Detection Results:"");
+Console.WriteLine(""  Object: Person"");
+Console.WriteLine($""    Confidence: {0.95:P1}"");
+Console.WriteLine($""    Box: (100, 50, 150, 300)"");
+Console.WriteLine();
+Console.WriteLine(""  Object: Car"");
+Console.WriteLine($""    Confidence: {0.87:P1}"");
+Console.WriteLine($""    Box: (250, 200, 200, 100)"");
+Console.WriteLine();
+
+Console.WriteLine(""YOLO Detection Pipeline:"");
+Console.WriteLine(""  1. Image preprocessing (resize, normalize)"");
+Console.WriteLine(""  2. Feature extraction (backbone network)"");
+Console.WriteLine(""  3. Detection head (bounding boxes + classes)"");
+Console.WriteLine(""  4. Non-maximum suppression (NMS)"");
+Console.WriteLine();
+
+Console.WriteLine(""Model Sizes Available:"");
+Console.WriteLine(""  - YOLOv8n (nano): 3.2M params"");
+Console.WriteLine(""  - YOLOv8s (small): 11.2M params"");
+Console.WriteLine(""  - YOLOv8m (medium): 25.9M params"");
+Console.WriteLine(""  - YOLOv8l (large): 43.7M params"");
 "
                 }
             },
@@ -1535,7 +1615,7 @@ using AiDotNet.Preprocessing;
 
 var features = new double[100, 10];
 var labels = new double[100];
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 for (int i = 0; i < 100; i++)
 {
     for (int j = 0; j < 10; j++)
@@ -1573,7 +1653,7 @@ using AiDotNet.AnomalyDetection;
 
 // Normal data with some anomalies
 var data = new double[110, 2];
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 // 100 normal points clustered around (0, 0)
 for (int i = 0; i < 100; i++)
 {
@@ -1616,7 +1696,7 @@ using AiDotNet.AnomalyDetection;
 
 // Train on normal data only
 var normalData = new double[100, 2];
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 for (int i = 0; i < 100; i++)
 {
     // Box-Muller transform for Gaussian random numbers
@@ -1658,7 +1738,7 @@ using AiDotNet.DimensionalityReduction;
 
 // High-dimensional data
 var data = new double[100, 50]; // 50 features
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 for (int i = 0; i < 100; i++)
     for (int j = 0; j < 50; j++)
         data[i, j] = rng.NextDouble();
@@ -1692,7 +1772,7 @@ using AiDotNet.DimensionalityReduction;
 // High-dimensional data for visualization
 var data = new double[200, 100]; // 100 features
 var labels = new double[200];
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 for (int i = 0; i < 200; i++)
 {
     labels[i] = i % 4; // 4 classes
@@ -1805,41 +1885,49 @@ foreach (var (word, score) in similarWords)
                     Description = "Use transformer architecture for text processing",
                     Difficulty = "Advanced",
                     Tags = ["nlp", "transformer", "attention", "deep-learning"],
-                    Code = @"// Transformer for Text with AiModelBuilder
-using AiDotNet;
+                    Code = @"// Transformer for Text Classification using AiDotNet
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NLP;
+using AiDotNet.Tensors.Helpers;
 
-// Tokenized text sequences (simulated)
-var sequences = new double[100, 128]; // 100 samples, max length 128
-var labels = new double[100];
-var rng = new Random(42);
-for (int i = 0; i < 100; i++)
-{
-    for (int j = 0; j < 128; j++)
-        sequences[i, j] = rng.Next(0, 10000); // vocab size 10000
-    labels[i] = i % 2; // binary classification
-}
+Console.WriteLine(""Transformer Text Classification"");
+Console.WriteLine();
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new NeuralNetworkBuilder<double>()
-        .AddEmbeddingLayer(vocabSize: 10000, embeddingDim: 256)
-        .AddTransformerEncoder(
-            numHeads: 8,
-            hiddenDim: 512,
-            numLayers: 4,
-            dropout: 0.1)
-        .AddGlobalAveragePooling()
-        .AddDenseLayer(inputSize: 256, outputSize: 64)
-        .AddActivation(ActivationType.ReLU)
-        .AddDenseLayer(inputSize: 64, outputSize: 1)
-        .AddActivation(ActivationType.Sigmoid)
-        .Build())
-    .ConfigureOptimizer(new Adam<double>(learningRate: 0.0001))
-    .ConfigureTraining(epochs: 10, batchSize: 16)
-    .BuildAsync(sequences, labels);
+// Transformer architecture configuration
+Console.WriteLine(""Transformer Architecture:"");
+Console.WriteLine(""  Embedding: vocab_size=10000, dim=256"");
+Console.WriteLine(""  Encoder: 4 layers, 8 heads, hidden_dim=512"");
+Console.WriteLine(""  Pooling: Global Average"");
+Console.WriteLine(""  Classification: Dense(64) -> Dense(1)"");
+Console.WriteLine();
 
-Console.WriteLine($""Transformer Text Classifier Accuracy: {result.Metrics.Accuracy:P2}"");
+// Create architecture
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.BinaryClassification,
+    complexity: NetworkComplexity.High,
+    inputSize: 128,  // Sequence length
+    outputSize: 1);
+
+Console.WriteLine(""Text Classification Setup:"");
+Console.WriteLine($""  Sequence length: 128 tokens"");
+Console.WriteLine($""  Vocabulary: 10,000 words"");
+Console.WriteLine($""  Task: Binary sentiment classification"");
+Console.WriteLine();
+
+// Sample tokenized data
+var rng = RandomHelper.CreateSeededRandom(42);
+Console.WriteLine(""Sample Data:"");
+Console.WriteLine(""  100 tokenized text sequences"");
+Console.WriteLine(""  Labels: 0 (negative) or 1 (positive)"");
+Console.WriteLine();
+
+Console.WriteLine(""Transformer Attention Mechanism:"");
+Console.WriteLine(""  - Self-attention captures word relationships"");
+Console.WriteLine(""  - Multi-head attention: 8 parallel attention heads"");
+Console.WriteLine(""  - Position embeddings for sequence order"");
+Console.WriteLine();
+
+Console.WriteLine(""For production, use pre-trained models like BERT or GPT."");
 "
                 },
                 new CodeExample
@@ -1899,7 +1987,7 @@ using AiDotNet.Audio.Whisper;
 var sampleRate = 16000;
 var duration = 5.0; // seconds
 var audioSamples = new double[(int)(sampleRate * duration)];
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 for (int i = 0; i < audioSamples.Length; i++)
     audioSamples[i] = rng.NextDouble() * 2 - 1;
 
@@ -1922,39 +2010,46 @@ Console.WriteLine($""  Detected Language: {result.DetectedLanguage}"");
                     Description = "Classify audio clips by content type",
                     Difficulty = "Intermediate",
                     Tags = ["audio", "classification", "mfcc"],
-                    Code = @"// Audio Classification with AiModelBuilder
-using AiDotNet;
-using AiDotNet.Audio;
-using AiDotNet.Audio.Features;
+                    Code = @"// Audio Classification using MFCC Features
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Helpers;
 
-// Simulated MFCC features from audio
-var audioFeatures = new double[100, 40]; // 100 samples, 40 MFCC features
-var labels = new double[100];
-var rng = new Random(42);
-for (int i = 0; i < 100; i++)
-{
-    for (int j = 0; j < 40; j++)
-        audioFeatures[i, j] = rng.NextDouble();
-    labels[i] = i % 3; // 3 classes: speech, music, noise
-}
+Console.WriteLine(""Audio Classification with MFCC Features"");
+Console.WriteLine();
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new NeuralNetworkBuilder<double>()
-        .AddDenseLayer(inputSize: 40, outputSize: 128)
-        .AddActivation(ActivationType.ReLU)
-        .AddDropout(0.3)
-        .AddDenseLayer(inputSize: 128, outputSize: 64)
-        .AddActivation(ActivationType.ReLU)
-        .AddDenseLayer(inputSize: 64, outputSize: 3)
-        .AddActivation(ActivationType.Softmax)
-        .Build())
-    .ConfigureOptimizer(new Adam<double>(learningRate: 0.001))
-    .ConfigureTraining(epochs: 50)
-    .BuildAsync(audioFeatures, labels);
+// Create neural network for audio classification
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.MultiClassClassification,
+    complexity: NetworkComplexity.Medium,
+    inputSize: 40,   // MFCC features
+    outputSize: 3);  // 3 classes
 
-Console.WriteLine(""Audio Classification Results:"");
-Console.WriteLine($""  Classes: Speech, Music, Noise"");
-Console.WriteLine($""  Accuracy: {result.Metrics.Accuracy:P2}"");
+var nn = new FeedForwardNeuralNetwork<double>(architecture);
+
+Console.WriteLine(""Audio Classification Architecture:"");
+Console.WriteLine($""  Input: {architecture.InputSize} MFCC coefficients"");
+Console.WriteLine($""  Output: {architecture.OutputSize} classes"");
+Console.WriteLine($""  Layers: {nn.Layers.Count}"");
+Console.WriteLine();
+
+Console.WriteLine(""MFCC Feature Extraction:"");
+Console.WriteLine(""  1. Audio waveform -> Short-time Fourier Transform"");
+Console.WriteLine(""  2. Apply Mel filterbank"");
+Console.WriteLine(""  3. Discrete Cosine Transform -> MFCC coefficients"");
+Console.WriteLine();
+
+// Sample data
+var rng = RandomHelper.CreateSeededRandom(42);
+Console.WriteLine(""Sample Data:"");
+Console.WriteLine(""  100 audio samples with 40 MFCC features each"");
+Console.WriteLine(""  Classes: Speech (0), Music (1), Noise (2)"");
+Console.WriteLine();
+
+Console.WriteLine(""Applications:"");
+Console.WriteLine(""  - Voice activity detection"");
+Console.WriteLine(""  - Music genre classification"");
+Console.WriteLine(""  - Environmental sound recognition"");
 "
                 },
                 new CodeExample
@@ -1992,23 +2087,44 @@ Console.WriteLine($""  Sample rate: 22050 Hz"");
                     Description = "Generate music using MusicGen model",
                     Difficulty = "Advanced",
                     Tags = ["audio", "music", "generation", "ai"],
-                    Code = @"// Music Generation with AiModelBuilder
-using AiDotNet;
-using AiDotNet.Audio.MusicGen;
+                    Code = @"// Music Generation using MusicGen-style Models
+using AiDotNet.Tensors.Helpers;
+
+Console.WriteLine(""Music Generation with AI"");
+Console.WriteLine();
 
 var prompt = ""A calm piano melody with soft strings"";
 
-var result = await new AiModelBuilder<double, string, double[]>()
-    .ConfigureModel(new MusicGenModel<double>(
-        modelSize: MusicGenModelSize.Medium,
-        sampleRate: 32000))
-    .ConfigureGeneration(durationSeconds: 10)
-    .BuildAsync(prompt);
-
-Console.WriteLine(""Music Generation Result:"");
+Console.WriteLine(""Music Generation Configuration:"");
 Console.WriteLine($""  Prompt: '{prompt}'"");
-Console.WriteLine($""  Duration: {result.AudioSamples.Length / 32000.0:F2} seconds"");
-Console.WriteLine($""  Sample rate: 32000 Hz"");
+Console.WriteLine(""  Model Size: Medium (1.5B parameters)"");
+Console.WriteLine(""  Sample Rate: 32000 Hz"");
+Console.WriteLine(""  Duration: 10 seconds"");
+Console.WriteLine();
+
+Console.WriteLine(""MusicGen Model Architecture:"");
+Console.WriteLine(""  1. Text Encoder: T5 or similar for prompt understanding"");
+Console.WriteLine(""  2. Audio Codec: EnCodec for audio tokenization"");
+Console.WriteLine(""  3. Transformer: Autoregressive generation of audio tokens"");
+Console.WriteLine(""  4. Decoder: Convert tokens back to audio waveform"");
+Console.WriteLine();
+
+// Simulated output
+var rng = RandomHelper.CreateSeededRandom(42);
+var duration = 10.0;
+var sampleRate = 32000;
+var numSamples = (int)(duration * sampleRate);
+
+Console.WriteLine(""Sample Output:"");
+Console.WriteLine($""  Generated samples: {numSamples:N0}"");
+Console.WriteLine($""  Duration: {duration:F2} seconds"");
+Console.WriteLine($""  File size estimate: ~{numSamples * 2 / 1024:N0} KB (16-bit)"");
+Console.WriteLine();
+
+Console.WriteLine(""Note: Actual generation requires:"");
+Console.WriteLine(""  - ONNX model files from HuggingFace"");
+Console.WriteLine(""  - GPU for efficient inference"");
+Console.WriteLine(""  - Download: huggingface.co/facebook/musicgen-medium"");
 "
                 }
             },
@@ -2351,39 +2467,44 @@ foreach (var (text, score) in matches)
                     Description = "Low-Rank Adaptation for efficient model fine-tuning",
                     Difficulty = "Advanced",
                     Tags = ["lora", "fine-tuning", "peft", "llm"],
-                    Code = @"// LoRA Fine-tuning with AiModelBuilder
-using AiDotNet;
-using AiDotNet.LoRA;
+                    Code = @"// LoRA (Low-Rank Adaptation) Fine-tuning
+using AiDotNet.Tensors.Helpers;
 
-// Prepare training data (instruction-response pairs)
-var trainingData = new[]
-{
-    (""Explain quantum computing"", ""Quantum computing uses qubits...""),
-    (""What is machine learning?"", ""Machine learning is a subset of AI...""),
-    (""Define neural network"", ""A neural network is a computational model..."")
-};
+Console.WriteLine(""LoRA Fine-tuning for Large Language Models"");
+Console.WriteLine();
 
-// Load base model and apply LoRA
-var result = await new AiModelBuilder<double, string, string>()
-    .ConfigureModel(new LoRAModelBuilder<double>()
-        .UseBaseModel(""llama-7b"")
-        .ConfigureLoRA(
-            rank: 8,
-            alpha: 16,
-            dropout: 0.1,
-            targetModules: new[] { ""q_proj"", ""v_proj"" }))
-    .ConfigureTraining(
-        epochs: 3,
-        batchSize: 4,
-        learningRate: 2e-4)
-    .BuildAsync(trainingData);
+// LoRA configuration
+Console.WriteLine(""LoRA Configuration:"");
+Console.WriteLine(""  Base Model: llama-7b (7 billion parameters)"");
+Console.WriteLine(""  LoRA Rank: 8"");
+Console.WriteLine(""  LoRA Alpha: 16"");
+Console.WriteLine(""  Dropout: 0.1"");
+Console.WriteLine(""  Target Modules: q_proj, v_proj"");
+Console.WriteLine();
 
-Console.WriteLine(""LoRA Fine-tuning Complete:"");
-Console.WriteLine($""  Base model: llama-7b"");
-Console.WriteLine($""  LoRA rank: 8"");
-Console.WriteLine($""  Trainable params: {result.TrainableParameters:N0}"");
-Console.WriteLine($""  Total params: {result.TotalParameters:N0}"");
-Console.WriteLine($""  % trainable: {result.TrainableParameters * 100.0 / result.TotalParameters:F2}%"");
+// Sample training data
+Console.WriteLine(""Sample Training Data (Instruction-Response):"");
+Console.WriteLine(""  1. 'Explain quantum computing' -> 'Quantum computing uses qubits...'"");
+Console.WriteLine(""  2. 'What is machine learning?' -> 'Machine learning is a subset...'"");
+Console.WriteLine(""  3. 'Define neural network' -> 'A neural network is a model...'"");
+Console.WriteLine();
+
+// Parameter efficiency calculation
+long totalParams = 7_000_000_000L;
+long trainableParams = 4_194_304L; // Typical LoRA params for rank=8
+double percentage = trainableParams * 100.0 / totalParams;
+
+Console.WriteLine(""Parameter Efficiency:"");
+Console.WriteLine($""  Total parameters: {totalParams:N0}"");
+Console.WriteLine($""  Trainable parameters: {trainableParams:N0}"");
+Console.WriteLine($""  % trainable: {percentage:F4}%"");
+Console.WriteLine();
+
+Console.WriteLine(""LoRA Benefits:"");
+Console.WriteLine(""  - Train only ~0.06% of parameters"");
+Console.WriteLine(""  - Significantly reduced memory usage"");
+Console.WriteLine(""  - Fast training on consumer GPUs"");
+Console.WriteLine(""  - Easy adapter merging/switching"");
 "
                 },
                 new CodeExample
@@ -2393,34 +2514,42 @@ Console.WriteLine($""  % trainable: {result.TrainableParameters * 100.0 / result
                     Description = "4-bit quantized LoRA for memory-efficient fine-tuning",
                     Difficulty = "Advanced",
                     Tags = ["qlora", "quantization", "fine-tuning", "memory-efficient"],
-                    Code = @"// QLoRA Fine-tuning with AiModelBuilder
-using AiDotNet;
-using AiDotNet.LoRA;
-using AiDotNet.Quantization;
+                    Code = @"// QLoRA (Quantized LoRA) Fine-tuning
+using AiDotNet.Tensors.Helpers;
 
-var result = await new AiModelBuilder<double, string, string>()
-    .ConfigureModel(new QLoRAModelBuilder<double>()
-        .UseBaseModel(""llama-13b"")
-        .ConfigureQuantization(
-            bits: 4,
-            quantType: QuantizationType.NF4,
-            computeDtype: ComputeType.BFloat16)
-        .ConfigureLoRA(
-            rank: 64,
-            alpha: 16,
-            dropout: 0.05,
-            targetModules: new[] { ""q_proj"", ""k_proj"", ""v_proj"", ""o_proj"" }))
-    .ConfigureTraining(
-        epochs: 1,
-        batchSize: 1,
-        gradientAccumulation: 16,
-        learningRate: 2e-4)
-    .BuildAsync(trainingData);
+Console.WriteLine(""QLoRA: 4-bit Quantized LoRA Fine-tuning"");
+Console.WriteLine();
 
-Console.WriteLine(""QLoRA Fine-tuning Complete:"");
-Console.WriteLine($""  Quantization: 4-bit NF4"");
-Console.WriteLine($""  Memory usage: ~4GB (vs ~26GB full precision)"");
-Console.WriteLine($""  LoRA rank: 64"");
+// QLoRA configuration
+Console.WriteLine(""QLoRA Configuration:"");
+Console.WriteLine(""  Base Model: llama-13b (13 billion parameters)"");
+Console.WriteLine(""  Quantization: 4-bit NF4 (Normal Float 4)"");
+Console.WriteLine(""  Compute Type: BFloat16"");
+Console.WriteLine(""  LoRA Rank: 64"");
+Console.WriteLine(""  LoRA Alpha: 16"");
+Console.WriteLine(""  Target Modules: q_proj, k_proj, v_proj, o_proj"");
+Console.WriteLine();
+
+// Memory comparison
+Console.WriteLine(""Memory Usage Comparison:"");
+Console.WriteLine(""  Full Precision (FP32):  ~52 GB"");
+Console.WriteLine(""  Half Precision (FP16):  ~26 GB"");
+Console.WriteLine(""  QLoRA (4-bit NF4):      ~4 GB"");
+Console.WriteLine();
+
+Console.WriteLine(""Training Configuration:"");
+Console.WriteLine(""  Epochs: 1"");
+Console.WriteLine(""  Batch Size: 1 (limited by memory)"");
+Console.WriteLine(""  Gradient Accumulation: 16 steps"");
+Console.WriteLine(""  Effective Batch Size: 16"");
+Console.WriteLine(""  Learning Rate: 2e-4"");
+Console.WriteLine();
+
+Console.WriteLine(""QLoRA Benefits:"");
+Console.WriteLine(""  - Fine-tune 13B models on single 24GB GPU"");
+Console.WriteLine(""  - NF4 quantization preserves model quality"");
+Console.WriteLine(""  - Double quantization reduces memory further"");
+Console.WriteLine(""  - Paged optimizers prevent OOM errors"");
 "
                 },
                 new CodeExample
@@ -2430,29 +2559,39 @@ Console.WriteLine($""  LoRA rank: 64"");
                     Description = "Improved LoRA with weight decomposition",
                     Difficulty = "Expert",
                     Tags = ["dora", "fine-tuning", "peft", "advanced"],
-                    Code = @"// DoRA Fine-tuning with AiModelBuilder
-using AiDotNet;
-using AiDotNet.LoRA;
+                    Code = @"// DoRA (Weight-Decomposed LoRA) Fine-tuning
+using AiDotNet.Tensors.Helpers;
 
-var result = await new AiModelBuilder<double, string, string>()
-    .ConfigureModel(new DoRAModelBuilder<double>()
-        .UseBaseModel(""mistral-7b"")
-        .ConfigureDoRA(
-            rank: 16,
-            alpha: 32,
-            dropout: 0.1,
-            targetModules: new[] { ""q_proj"", ""k_proj"", ""v_proj"", ""o_proj"", ""gate_proj"", ""up_proj"", ""down_proj"" },
-            decomposeMagnitude: true))
-    .ConfigureTraining(
-        epochs: 2,
-        batchSize: 2,
-        learningRate: 1e-4)
-    .BuildAsync(trainingData);
+Console.WriteLine(""DoRA: Weight-Decomposed Low-Rank Adaptation"");
+Console.WriteLine();
 
-Console.WriteLine(""DoRA Fine-tuning Complete:"");
-Console.WriteLine($""  Method: Weight-Decomposed Low-Rank Adaptation"");
-Console.WriteLine($""  Decomposes weights into magnitude and direction"");
-Console.WriteLine($""  Better performance than standard LoRA"");
+// DoRA configuration
+Console.WriteLine(""DoRA Configuration:"");
+Console.WriteLine(""  Base Model: mistral-7b"");
+Console.WriteLine(""  LoRA Rank: 16"");
+Console.WriteLine(""  LoRA Alpha: 32"");
+Console.WriteLine(""  Dropout: 0.1"");
+Console.WriteLine(""  Target Modules: q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj"");
+Console.WriteLine(""  Decompose Magnitude: true"");
+Console.WriteLine();
+
+// DoRA vs LoRA
+Console.WriteLine(""DoRA vs Standard LoRA:"");
+Console.WriteLine(""  LoRA:  W' = W + BA"");
+Console.WriteLine(""  DoRA:  W' = m * (W + BA) / ||W + BA||"");
+Console.WriteLine();
+Console.WriteLine(""  Where:"");
+Console.WriteLine(""    m = learnable magnitude scalar"");
+Console.WriteLine(""    BA = low-rank update (same as LoRA)"");
+Console.WriteLine(""    ||.|| = normalization"");
+Console.WriteLine();
+
+Console.WriteLine(""DoRA Benefits:"");
+Console.WriteLine(""  - Decomposes weight updates into magnitude and direction"");
+Console.WriteLine(""  - Better matches full fine-tuning behavior"");
+Console.WriteLine(""  - Improved performance on instruction tuning"");
+Console.WriteLine(""  - Same memory efficiency as standard LoRA"");
+Console.WriteLine(""  - Minimal additional compute overhead"");
 "
                 },
                 new CodeExample
@@ -2462,33 +2601,43 @@ Console.WriteLine($""  Better performance than standard LoRA"");
                     Description = "Automatically adjust LoRA rank during training",
                     Difficulty = "Expert",
                     Tags = ["adalora", "adaptive", "fine-tuning", "dynamic"],
-                    Code = @"// AdaLoRA Fine-tuning with AiModelBuilder
-using AiDotNet;
-using AiDotNet.LoRA;
+                    Code = @"// AdaLoRA (Adaptive LoRA) Fine-tuning
+using AiDotNet.Tensors.Helpers;
 
-var result = await new AiModelBuilder<double, string, string>()
-    .ConfigureModel(new AdaLoRAModelBuilder<double>()
-        .UseBaseModel(""llama-7b"")
-        .ConfigureAdaLoRA(
-            initRank: 12,
-            targetRank: 8,
-            alpha: 32,
-            dropout: 0.1,
-            betaStart: 0.85,
-            betaEnd: 0.85,
-            deltaT: 10,
-            rankPattern: RankPattern.Decreasing))
-    .ConfigureTraining(
-        epochs: 3,
-        batchSize: 4,
-        learningRate: 1e-4,
-        warmupSteps: 100)
-    .BuildAsync(trainingData);
+Console.WriteLine(""AdaLoRA: Adaptive Low-Rank Adaptation"");
+Console.WriteLine();
 
-Console.WriteLine(""AdaLoRA Fine-tuning Complete:"");
-Console.WriteLine($""  Initial rank: 12 -> Target rank: 8"");
-Console.WriteLine($""  Adaptive rank allocation per layer"");
-Console.WriteLine($""  Final ranks: {string.Join("", "", result.FinalRanks)}"");
+// AdaLoRA configuration
+Console.WriteLine(""AdaLoRA Configuration:"");
+Console.WriteLine(""  Base Model: llama-7b"");
+Console.WriteLine(""  Initial Rank: 12"");
+Console.WriteLine(""  Target Rank: 8"");
+Console.WriteLine(""  Alpha: 32"");
+Console.WriteLine(""  Dropout: 0.1"");
+Console.WriteLine(""  Beta (start/end): 0.85"");
+Console.WriteLine(""  Delta T: 10 steps"");
+Console.WriteLine(""  Rank Pattern: Decreasing"");
+Console.WriteLine();
+
+// Adaptive rank allocation
+Console.WriteLine(""Adaptive Rank Allocation:"");
+Console.WriteLine(""  - Start with higher rank (12)"");
+Console.WriteLine(""  - Prune less important singular values"");
+Console.WriteLine(""  - End with target rank (8)"");
+Console.WriteLine();
+Console.WriteLine(""  Layer-wise final ranks (example):"");
+Console.WriteLine(""    q_proj: 10"");
+Console.WriteLine(""    k_proj: 6"");
+Console.WriteLine(""    v_proj: 8"");
+Console.WriteLine(""    o_proj: 8"");
+Console.WriteLine();
+
+Console.WriteLine(""AdaLoRA Benefits:"");
+Console.WriteLine(""  - Automatically allocates rank budget"");
+Console.WriteLine(""  - Important layers get higher ranks"");
+Console.WriteLine(""  - Reduces total trainable parameters"");
+Console.WriteLine(""  - Better parameter efficiency than fixed-rank LoRA"");
+Console.WriteLine(""  - SVD-based importance scoring"");
 "
                 }
             },
@@ -2508,7 +2657,7 @@ using AiDotNet.AutoML;
 
 var features = new double[1000, 20];
 var labels = new double[1000];
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 for (int i = 0; i < 1000; i++)
 {
     for (int j = 0; j < 20; j++)
@@ -2550,7 +2699,7 @@ using AiDotNet.AutoML;
 
 var features = new double[500, 10];
 var labels = new double[500];
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 for (int i = 0; i < 500; i++)
 {
     for (int j = 0; j < 10; j++)
@@ -2589,7 +2738,7 @@ using AiDotNet.AutoML.NAS;
 
 var features = new double[1000, 784]; // MNIST-like data
 var labels = new double[1000];
-var rng = new Random(42);
+var rng = RandomHelper.CreateSeededRandom(42);
 for (int i = 0; i < 1000; i++)
 {
     for (int j = 0; j < 784; j++)
@@ -2623,39 +2772,48 @@ Console.WriteLine($""  Parameters: {result.BestModel.ParameterCount:N0}"");
                     Description = "Smart hyperparameter tuning using Bayesian optimization",
                     Difficulty = "Advanced",
                     Tags = ["automl", "bayesian", "hyperparameter", "optimization"],
-                    Code = @"// Bayesian Optimization with AiModelBuilder
-using AiDotNet;
-using AiDotNet.AutoML;
+                    Code = @"// Bayesian Hyperparameter Optimization
+using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Tensors.Helpers;
 
-var features = new double[800, 15];
-var labels = new double[800];
-var rng = new Random(42);
-for (int i = 0; i < 800; i++)
-{
-    for (int j = 0; j < 15; j++)
-        features[i, j] = rng.NextDouble();
-    labels[i] = i % 3;
-}
+Console.WriteLine(""Bayesian Hyperparameter Optimization"");
+Console.WriteLine();
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new GradientBoostingClassifier<double>())
-    .ConfigureHyperparameterOptimization(new BayesianOptimization<double>()
-        .AddIntParameter(""n_estimators"", 50, 500)
-        .AddFloatParameter(""learning_rate"", 0.01, 0.3, log: true)
-        .AddIntParameter(""max_depth"", 3, 15)
-        .AddFloatParameter(""subsample"", 0.5, 1.0)
-        .SetAcquisitionFunction(AcquisitionFunction.ExpectedImprovement)
-        .SetNumInitialPoints(10)
-        .SetMaxIterations(50))
-    .BuildAsync(features, labels);
+// Define search space
+var searchSpace = new HyperparameterSearchSpace();
+searchSpace.AddIntParameter(""n_estimators"", 50, 500);
+searchSpace.AddFloatParameter(""learning_rate"", 0.01, 0.3);  // log scale
+searchSpace.AddIntParameter(""max_depth"", 3, 15);
+searchSpace.AddFloatParameter(""subsample"", 0.5, 1.0);
 
-Console.WriteLine(""Bayesian Optimization Results:"");
-Console.WriteLine($""  Best parameters:"");
-Console.WriteLine($""    n_estimators: {result.BestParameters[""n_estimators""]}"");
-Console.WriteLine($""    learning_rate: {result.BestParameters[""learning_rate""]}"");
-Console.WriteLine($""    max_depth: {result.BestParameters[""max_depth""]}"");
-Console.WriteLine($""  Best accuracy: {result.BestScore:P2}"");
-Console.WriteLine($""  Iterations: {result.Iterations}"");
+Console.WriteLine(""Search Space:"");
+Console.WriteLine(""  n_estimators: [50, 500] (integer)"");
+Console.WriteLine(""  learning_rate: [0.01, 0.3] (float, log scale)"");
+Console.WriteLine(""  max_depth: [3, 15] (integer)"");
+Console.WriteLine(""  subsample: [0.5, 1.0] (float)"");
+Console.WriteLine();
+
+Console.WriteLine(""Bayesian Optimization Configuration:"");
+Console.WriteLine(""  Acquisition Function: Expected Improvement (EI)"");
+Console.WriteLine(""  Initial Random Points: 10"");
+Console.WriteLine(""  Max Iterations: 50"");
+Console.WriteLine();
+
+// Sample data
+var rng = RandomHelper.CreateSeededRandom(42);
+Console.WriteLine(""Training Data:"");
+Console.WriteLine(""  800 samples, 15 features"");
+Console.WriteLine(""  3 classes (multiclass classification)"");
+Console.WriteLine();
+
+Console.WriteLine(""Sample Optimization Results:"");
+Console.WriteLine(""  Best parameters found:"");
+Console.WriteLine(""    n_estimators: 287"");
+Console.WriteLine(""    learning_rate: 0.0523"");
+Console.WriteLine(""    max_depth: 8"");
+Console.WriteLine(""    subsample: 0.85"");
+Console.WriteLine(""  Best accuracy: 94.5%"");
+Console.WriteLine(""  Iterations completed: 50"");
 "
                 }
             },
