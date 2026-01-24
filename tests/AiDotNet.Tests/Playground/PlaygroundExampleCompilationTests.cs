@@ -33,7 +33,16 @@ public class PlaygroundExampleCompilationTests
         var exampleServicePath = FindExampleServicePath();
         if (string.IsNullOrEmpty(exampleServicePath))
         {
-            _output.WriteLine("WARNING: Could not find ExampleService.cs - skipping test");
+            // In CI environments, fail the test if the file is not found
+            // This prevents silent pass when paths are misconfigured
+            var isCi = Environment.GetEnvironmentVariable("CI") is not null ||
+                       Environment.GetEnvironmentVariable("TF_BUILD") is not null ||
+                       Environment.GetEnvironmentVariable("GITHUB_ACTIONS") is not null;
+            if (isCi)
+            {
+                Assert.Fail("Could not find ExampleService.cs - this should not happen in CI");
+            }
+            _output.WriteLine("WARNING: Could not find ExampleService.cs - skipping test in local environment");
             return;
         }
 
@@ -255,9 +264,10 @@ public class PlaygroundExampleCompilationTests
         sb.AppendLine("using AiDotNet.Tensors.LinearAlgebra;");
 
         // User usings (deduplicated)
+        // Only skip exact "using System;" to avoid filtering System.* namespaces
         foreach (var u in usings.Distinct())
         {
-            if (!u.Contains("using System;"))
+            if (!u.Trim().Equals("using System;", StringComparison.Ordinal))
             {
                 sb.AppendLine(u);
             }
@@ -403,11 +413,11 @@ public class PlaygroundExampleCompilationTests
             dir = dir.Parent;
         }
 
-        // Fallback: try common development paths
+        // Fallback: try common relative development paths
         var fallbackPaths = new[]
         {
-            @"C:\Users\cheat\source\repos\AiDotNet\src\AiDotNet.Playground\Services\ExampleService.cs",
-            "../../../../../src/AiDotNet.Playground/Services/ExampleService.cs"
+            "../../../../../src/AiDotNet.Playground/Services/ExampleService.cs",
+            "../../../../../../src/AiDotNet.Playground/Services/ExampleService.cs"
         };
 
         foreach (var path in fallbackPaths)

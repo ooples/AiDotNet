@@ -557,8 +557,11 @@ public class CodeExecutionService
                 }
             }
 
-            output.AppendLine();
-            output.AppendLine($"Execution time: {result.ExecutionTime}ms");
+            if (result.ExecutionTime > 0)
+            {
+                output.AppendLine();
+                output.AppendLine($"Execution time: {result.ExecutionTime}ms");
+            }
 
             return new ExecutionResult
             {

@@ -15,10 +15,10 @@
     <PackageReference Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.50.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
-    <!-- Roslyn for runtime compilation - use compatible versions -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.11.0" />
-    <PackageReference Include="Basic.Reference.Assemblies.Net80" Version="1.7.9" />
+    <!-- Roslyn for runtime compilation - use versions compatible with .NET 10 / C# 14 -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" Version="4.14.0" />
+    <PackageReference Include="Basic.Reference.Assemblies.Net100" Version="1.8.3" />
   </ItemGroup>
 
   <!-- AiDotNet packages for runtime code execution -->

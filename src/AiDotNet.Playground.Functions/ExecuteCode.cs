@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.Loader;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
@@ -59,7 +60,8 @@ public class ExecuteCode
 
         try
         {
-            var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            using var reader = new StreamReader(req.Body);
+            var requestBody = await reader.ReadToEndAsync();
             var request = JsonSerializer.Deserialize<CodeExecutionRequest>(requestBody, JsonOptions);
 
             if (request?.Code is null || string.IsNullOrWhiteSpace(request.Code))
@@ -190,9 +192,10 @@ public class ExecuteCode
         sb.AppendLine("using System.IO;");
 
         // User usings (deduplicated)
+        // Only skip exact "using System;" to avoid filtering System.* namespaces
         foreach (var u in usings.Distinct())
         {
-            if (!u.Contains("using System;"))
+            if (!u.Trim().Equals("using System;", StringComparison.Ordinal))
             {
                 sb.AppendLine(u);
             }
@@ -280,14 +283,29 @@ public class ExecuteCode
         return references;
     }
 
+    /// <summary>
+    /// Executes the compiled assembly in a collectible AssemblyLoadContext to allow unloading.
+    /// </summary>
+    /// <remarks>
+    /// Note: The timeout implementation detects when execution exceeds the limit but cannot
+    /// forcibly cancel the user's task since it doesn't receive a CancellationToken.
+    /// Timed-out tasks will continue running in the background until they complete naturally.
+    /// For true cancellation, process isolation would be required.
+    /// </remarks>
     private async Task<string> ExecuteAssemblyAsync(MemoryStream assemblyStream)
     {
         // Create a cancellation token for timeout
         using var cts = new CancellationTokenSource(ExecutionTimeout);
 
+        // Use a collectible AssemblyLoadContext to allow unloading after execution
+        // This prevents memory leaks from repeated code executions
+        var loadContext = new CollectibleAssemblyLoadContext();
+
         try
         {
-            var assembly = Assembly.Load(assemblyStream.ToArray());
+            // Load assembly into the collectible context
+            assemblyStream.Seek(0, SeekOrigin.Begin);
+            var assembly = loadContext.LoadFromStream(assemblyStream);
             var type = assembly.GetType("UserProgram");
 
             if (type is null)
@@ -303,6 +321,8 @@ public class ExecuteCode
             }
 
             // Execute with timeout
+            // Note: Task.WhenAny detects timeout but cannot cancel the user's task
+            // since user code doesn't receive a CancellationToken
             var task = (Task<string>?)method.Invoke(null, null);
 
             if (task is null)
@@ -332,6 +352,28 @@ public class ExecuteCode
         catch (Exception ex)
         {
             return $"Execution error: {ex.Message}";
+        }
+        finally
+        {
+            // Unload the assembly context to free memory
+            loadContext.Unload();
+        }
+    }
+
+    /// <summary>
+    /// A collectible AssemblyLoadContext that allows assemblies to be unloaded after execution.
+    /// This prevents memory leaks from repeatedly loading compiled user code.
+    /// </summary>
+    private class CollectibleAssemblyLoadContext : AssemblyLoadContext
+    {
+        public CollectibleAssemblyLoadContext() : base(isCollectible: true)
+        {
+        }
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            // Return null to fall back to default loading behavior for dependencies
+            return null;
         }
     }
 }
