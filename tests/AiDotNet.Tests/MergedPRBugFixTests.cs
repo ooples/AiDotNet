@@ -1059,4 +1059,150 @@ public class MergedPRBugFixTests
     }
 
     #endregion
+
+    #region Logging PR #772 - Production Bug Fixes
+
+    [Fact]
+    public void SummaryWriter_AddScalars_ValidatesNullDictionary()
+    {
+        // ARRANGE: The old code didn't validate null arguments
+        var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
+        try
+        {
+            using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
+
+            // ACT & ASSERT
+            Assert.Throws<ArgumentNullException>(() => writer.AddScalars("test", null!));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void SummaryWriter_AddHistogram_ValidatesNullArray()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
+        try
+        {
+            using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
+
+            // ACT & ASSERT
+            Assert.Throws<ArgumentNullException>(() => writer.AddHistogram("test", (float[])null!));
+            Assert.Throws<ArgumentNullException>(() => writer.AddHistogram("test", (float[,])null!));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void SummaryWriter_AddImage_ValidatesDataformats()
+    {
+        // ARRANGE: The old code silently used HWC for any invalid dataformats value
+        var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
+        try
+        {
+            using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
+            var imageData = new float[3, 2, 2]; // CHW format
+
+            // ACT & ASSERT: Invalid dataformats should throw
+            Assert.Throws<ArgumentException>(() => writer.AddImage("test", imageData, dataformats: "INVALID"));
+            Assert.Throws<ArgumentException>(() => writer.AddImage("test", imageData, dataformats: "cwh"));
+            Assert.Throws<ArgumentException>(() => writer.AddImage("test", imageData, dataformats: ""));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void SummaryWriter_AddImages_ValidatesNullArray()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
+        try
+        {
+            using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
+
+            // ACT & ASSERT
+            Assert.Throws<ArgumentNullException>(() => writer.AddImages("test", null!));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void SummaryWriter_AddPrCurve_ValidatesArguments()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
+        try
+        {
+            using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
+
+            // ACT & ASSERT: Null checks
+            Assert.Throws<ArgumentNullException>(() => writer.AddPrCurve("test", null!, new float[] { 0.5f }));
+            Assert.Throws<ArgumentNullException>(() => writer.AddPrCurve("test", new int[] { 1 }, null!));
+
+            // ACT & ASSERT: Length mismatch
+            Assert.Throws<ArgumentException>(() => writer.AddPrCurve("test", new int[] { 1, 0 }, new float[] { 0.5f }));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void SummaryWriter_LogWeights_ValidatesNullArray()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
+        try
+        {
+            using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
+
+            // ACT & ASSERT
+            Assert.Throws<ArgumentNullException>(() => writer.LogWeights("layer1", null!));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void SummaryWriter_LogWeights_HandlesEmptyArray()
+    {
+        // ARRANGE: The old code would throw InvalidOperationException on Average() for empty array
+        var tempDir = Path.Combine(Path.GetTempPath(), $"tensorboard_test_{Guid.NewGuid():N}");
+        try
+        {
+            using var writer = new AiDotNet.Logging.SummaryWriter(tempDir);
+
+            // ACT & ASSERT: Should not throw for empty array - just return silently
+            var exception = Record.Exception(() => writer.LogWeights("layer1", Array.Empty<float>()));
+            Assert.Null(exception);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    #endregion
 }

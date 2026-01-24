@@ -263,13 +263,21 @@ public class TensorBoardWriter : IDisposable
     /// <param name="step">The global step number.</param>
     public void WriteEmbedding(string tag, float[,] embeddings, string[]? metadata, long step)
     {
+        if (embeddings == null) throw new ArgumentNullException(nameof(embeddings));
+
+        int samples = embeddings.GetLength(0);
+        int dims = embeddings.GetLength(1);
+
+        if (samples == 0 || dims == 0) return; // Nothing to write
+
+        if (metadata != null && metadata.Length != samples)
+            throw new ArgumentException($"Metadata length ({metadata.Length}) must match embeddings sample count ({samples})", nameof(metadata));
+
         // TensorBoard embeddings require writing separate files
         // Save embeddings as TSV
         var embeddingsPath = Path.Combine(_logDir, $"{tag}_embeddings.tsv");
         using (var writer = new StreamWriter(embeddingsPath))
         {
-            int samples = embeddings.GetLength(0);
-            int dims = embeddings.GetLength(1);
 
             for (int i = 0; i < samples; i++)
             {
@@ -457,6 +465,11 @@ public class TensorBoardWriter : IDisposable
 
     private static byte[] EncodePng(byte[] pixels, int height, int width, int channels)
     {
+        // Validate pixel array length
+        int expectedLength = height * width * channels;
+        if (pixels.Length < expectedLength)
+            throw new ArgumentException($"Pixel array too short: expected at least {expectedLength} bytes, got {pixels.Length}", nameof(pixels));
+
         // Minimal PNG encoder for uncompressed data
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
@@ -589,10 +602,21 @@ public class TensorBoardWriter : IDisposable
         var configPath = Path.Combine(_logDir, "projector_config.pbtxt");
         var configBuilder = new StringBuilder();
 
-        // Read existing config if present
-        if (File.Exists(configPath))
+        // Read existing config if present, with retry for race conditions
+        try
         {
-            configBuilder.Append(File.ReadAllText(configPath));
+            if (File.Exists(configPath))
+            {
+                configBuilder.Append(File.ReadAllText(configPath));
+            }
+        }
+        catch (IOException)
+        {
+            // File may have been deleted between exists check and read - ignore and start fresh
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // File may be locked by another process - ignore and start fresh
         }
 
         // Append new embedding config
