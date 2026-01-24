@@ -3864,6 +3864,1912 @@ Console.WriteLine(""F0 and F1 have correlation ≈ 1.0 (redundant)"");
 Console.WriteLine(""Keep only one of the highly correlated features"");
 "
                 }
+            },
+            ["Agents"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "react-agent",
+                    Name = "ReAct Agent",
+                    Description = "Reasoning and Acting agent pattern",
+                    Difficulty = "Advanced",
+                    Tags = ["agent", "reasoning", "llm"],
+                    Code = @"// ReAct Agent Pattern
+using AiDotNet.Agents;
+
+Console.WriteLine(""ReAct Agent Demo"");
+Console.WriteLine(""----------------"");
+Console.WriteLine();
+Console.WriteLine(""Task: Find the capital of France"");
+Console.WriteLine();
+Console.WriteLine(""Agent Execution:"");
+Console.WriteLine(""  Thought 1: I need to find the capital"");
+Console.WriteLine(""  Action: Search(capital of France)"");
+Console.WriteLine(""  Observation: Paris is the capital"");
+Console.WriteLine(""  Thought 2: I found the answer"");
+Console.WriteLine(""  Final Answer: Paris"");
+Console.WriteLine();
+Console.WriteLine(""ReAct combines reasoning with actions"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "plan-execute-agent",
+                    Name = "Plan and Execute Agent",
+                    Description = "Agent that plans then executes",
+                    Difficulty = "Advanced",
+                    Tags = ["agent", "planning", "execution"],
+                    Code = @"// Plan and Execute Agent
+using AiDotNet.Agents;
+
+Console.WriteLine(""Plan and Execute Agent"");
+Console.WriteLine(""----------------------"");
+Console.WriteLine();
+Console.WriteLine(""Goal: Write a research report"");
+Console.WriteLine();
+Console.WriteLine(""Planning Phase:"");
+Console.WriteLine(""  Step 1: Search for sources"");
+Console.WriteLine(""  Step 2: Summarize sources"");
+Console.WriteLine(""  Step 3: Create outline"");
+Console.WriteLine(""  Step 4: Write draft"");
+Console.WriteLine(""  Step 5: Review and finalize"");
+Console.WriteLine();
+Console.WriteLine(""Execution Phase:"");
+Console.WriteLine(""  [*] Step 1: Complete"");
+Console.WriteLine(""  [*] Step 2: Complete"");
+Console.WriteLine(""  [*] Step 3: Complete"");
+Console.WriteLine(""  [ ] Step 4: In progress"");
+Console.WriteLine();
+Console.WriteLine(""Plan-Execute separates planning from action"");
+"
+                }
+            },
+            ["Optimizers"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "adam-optimizer",
+                    Name = "Adam Optimizer",
+                    Description = "Adaptive Moment Estimation",
+                    Difficulty = "Intermediate",
+                    Tags = ["optimizer", "adam", "training"],
+                    Code = @"// Adam Optimizer
+using AiDotNet.Optimizers;
+
+Console.WriteLine(""Adam Optimizer"");
+Console.WriteLine(""--------------"");
+Console.WriteLine();
+Console.WriteLine(""Configuration:"");
+Console.WriteLine(""  Learning Rate: 0.001"");
+Console.WriteLine(""  Beta1: 0.9 (momentum)"");
+Console.WriteLine(""  Beta2: 0.999 (RMSprop)"");
+Console.WriteLine(""  Epsilon: 1e-8"");
+Console.WriteLine();
+Console.WriteLine(""Training Progress:"");
+Console.WriteLine(""  Epoch 1: Loss = 2.5000"");
+Console.WriteLine(""  Epoch 2: Loss = 1.8000"");
+Console.WriteLine(""  Epoch 3: Loss = 1.2000"");
+Console.WriteLine(""  Epoch 4: Loss = 0.8000"");
+Console.WriteLine(""  Epoch 5: Loss = 0.5000"");
+Console.WriteLine();
+Console.WriteLine(""Adam combines momentum and adaptive rates"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "sgd-momentum",
+                    Name = "SGD with Momentum",
+                    Description = "Stochastic Gradient Descent",
+                    Difficulty = "Intermediate",
+                    Tags = ["optimizer", "sgd", "momentum"],
+                    Code = @"// SGD with Momentum
+using AiDotNet.Optimizers;
+
+Console.WriteLine(""SGD with Momentum"");
+Console.WriteLine(""-----------------"");
+Console.WriteLine();
+Console.WriteLine(""Configuration:"");
+Console.WriteLine(""  Learning Rate: 0.01"");
+Console.WriteLine(""  Momentum: 0.9"");
+Console.WriteLine();
+Console.WriteLine(""Update Rule:"");
+Console.WriteLine(""  v = momentum * v - lr * gradient"");
+Console.WriteLine(""  w = w + v"");
+Console.WriteLine();
+Console.WriteLine(""Training Progress:"");
+Console.WriteLine(""  Epoch 1: Loss = 2.3000"");
+Console.WriteLine(""  Epoch 2: Loss = 1.9000"");
+Console.WriteLine(""  Epoch 3: Loss = 1.5000"");
+Console.WriteLine(""  Epoch 4: Loss = 1.1000"");
+Console.WriteLine(""  Epoch 5: Loss = 0.8000"");
+Console.WriteLine();
+Console.WriteLine(""Momentum helps escape local minima"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "adamw-optimizer",
+                    Name = "AdamW Optimizer",
+                    Description = "Adam with weight decay",
+                    Difficulty = "Advanced",
+                    Tags = ["optimizer", "adamw", "weight-decay"],
+                    Code = @"// AdamW Optimizer
+using AiDotNet.Optimizers;
+
+Console.WriteLine(""AdamW Optimizer"");
+Console.WriteLine(""---------------"");
+Console.WriteLine();
+Console.WriteLine(""AdamW vs Adam:"");
+Console.WriteLine(""  Adam: L2 in gradient"");
+Console.WriteLine(""  AdamW: Decoupled weight decay"");
+Console.WriteLine();
+Console.WriteLine(""Configuration:"");
+Console.WriteLine(""  Learning Rate: 0.001"");
+Console.WriteLine(""  Weight Decay: 0.01"");
+Console.WriteLine(""  Beta1: 0.9"");
+Console.WriteLine(""  Beta2: 0.999"");
+Console.WriteLine();
+Console.WriteLine(""Training Progress:"");
+Console.WriteLine(""  Epoch 1: Loss = 2.4000"");
+Console.WriteLine(""  Epoch 2: Loss = 1.7000"");
+Console.WriteLine(""  Epoch 3: Loss = 1.1000"");
+Console.WriteLine(""  Epoch 4: Loss = 0.7000"");
+Console.WriteLine(""  Epoch 5: Loss = 0.4000"");
+Console.WriteLine();
+Console.WriteLine(""AdamW preferred for transformers"");
+"
+                }
+            },
+            ["Cross Validation"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "kfold-cv",
+                    Name = "K-Fold Cross Validation",
+                    Description = "Split data into K folds",
+                    Difficulty = "Intermediate",
+                    Tags = ["validation", "kfold", "evaluation"],
+                    Code = @"// K-Fold Cross Validation
+using AiDotNet.CrossValidators;
+
+Console.WriteLine(""K-Fold Cross Validation"");
+Console.WriteLine(""-----------------------"");
+Console.WriteLine();
+Console.WriteLine(""With k=5 folds:"");
+Console.WriteLine();
+Console.WriteLine(""Fold 1: [TEST] [Train] [Train] [Train] [Train]"");
+Console.WriteLine(""Fold 2: [Train] [TEST] [Train] [Train] [Train]"");
+Console.WriteLine(""Fold 3: [Train] [Train] [TEST] [Train] [Train]"");
+Console.WriteLine(""Fold 4: [Train] [Train] [Train] [TEST] [Train]"");
+Console.WriteLine(""Fold 5: [Train] [Train] [Train] [Train] [TEST]"");
+Console.WriteLine();
+Console.WriteLine(""Results:"");
+Console.WriteLine(""  Fold 1: Accuracy = 0.92"");
+Console.WriteLine(""  Fold 2: Accuracy = 0.89"");
+Console.WriteLine(""  Fold 3: Accuracy = 0.91"");
+Console.WriteLine(""  Fold 4: Accuracy = 0.90"");
+Console.WriteLine(""  Fold 5: Accuracy = 0.88"");
+Console.WriteLine(""  Mean:   0.90 +/- 0.015"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "stratified-kfold",
+                    Name = "Stratified K-Fold",
+                    Description = "Preserve class distribution",
+                    Difficulty = "Intermediate",
+                    Tags = ["validation", "stratified", "classification"],
+                    Code = @"// Stratified K-Fold Cross Validation
+using AiDotNet.CrossValidators;
+
+Console.WriteLine(""Stratified K-Fold"");
+Console.WriteLine(""-----------------"");
+Console.WriteLine();
+Console.WriteLine(""Dataset: 100 samples"");
+Console.WriteLine(""  Class A: 70 samples (70 pct)"");
+Console.WriteLine(""  Class B: 30 samples (30 pct)"");
+Console.WriteLine();
+Console.WriteLine(""Regular K-Fold may be unbalanced:"");
+Console.WriteLine(""  Fold 1: A=16, B=4"");
+Console.WriteLine(""  Fold 2: A=12, B=8"");
+Console.WriteLine();
+Console.WriteLine(""Stratified K-Fold - balanced:"");
+Console.WriteLine(""  Fold 1: A=14, B=6 (70/30)"");
+Console.WriteLine(""  Fold 2: A=14, B=6 (70/30)"");
+Console.WriteLine(""  Fold 3: A=14, B=6 (70/30)"");
+Console.WriteLine();
+Console.WriteLine(""Stratified preserves class ratios"");
+"
+                }
+            },
+            ["Genetic Algorithms"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "simple-ga",
+                    Name = "Simple Genetic Algorithm",
+                    Description = "Evolutionary optimization",
+                    Difficulty = "Advanced",
+                    Tags = ["genetics", "optimization", "evolutionary"],
+                    Code = @"// Simple Genetic Algorithm
+using AiDotNet.Genetics;
+
+Console.WriteLine(""Genetic Algorithm"");
+Console.WriteLine(""-----------------"");
+Console.WriteLine();
+Console.WriteLine(""Goal: Maximize f(x) = -x^2 + 4x"");
+Console.WriteLine(""Peak at x=2, max value=4"");
+Console.WriteLine();
+Console.WriteLine(""Configuration:"");
+Console.WriteLine(""  Population: 20"");
+Console.WriteLine(""  Generations: 10"");
+Console.WriteLine(""  Mutation Rate: 0.1"");
+Console.WriteLine();
+Console.WriteLine(""Evolution Progress:"");
+Console.WriteLine(""  Gen 1: Best x=0.5, f(x)=1.75"");
+Console.WriteLine(""  Gen 3: Best x=1.2, f(x)=3.36"");
+Console.WriteLine(""  Gen 5: Best x=1.7, f(x)=3.91"");
+Console.WriteLine(""  Gen 8: Best x=1.9, f(x)=3.99"");
+Console.WriteLine(""  Gen 10: Best x=2.0, f(x)=4.00"");
+Console.WriteLine();
+Console.WriteLine(""GA found optimal through evolution"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "nsga-ii",
+                    Name = "NSGA-II Multi-Objective",
+                    Description = "Multi-objective optimization",
+                    Difficulty = "Expert",
+                    Tags = ["genetics", "multi-objective", "pareto"],
+                    Code = @"// NSGA-II Multi-Objective
+using AiDotNet.Genetics;
+
+Console.WriteLine(""NSGA-II Multi-Objective"");
+Console.WriteLine(""-----------------------"");
+Console.WriteLine();
+Console.WriteLine(""Objectives (trade-off):"");
+Console.WriteLine(""  1. Minimize cost"");
+Console.WriteLine(""  2. Maximize quality"");
+Console.WriteLine();
+Console.WriteLine(""Pareto Front (non-dominated):"");
+Console.WriteLine(""  Solution A: Cost=10, Quality=90"");
+Console.WriteLine(""  Solution B: Cost=20, Quality=95"");
+Console.WriteLine(""  Solution C: Cost=30, Quality=98"");
+Console.WriteLine(""  Solution D: Cost=50, Quality=99"");
+Console.WriteLine();
+Console.WriteLine(""No single best solution"");
+Console.WriteLine(""NSGA-II finds Pareto-optimal front"");
+"
+                }
+            },
+            ["Interpretability"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "lime-explanation",
+                    Name = "LIME Explanations",
+                    Description = "Local Interpretable Explanations",
+                    Difficulty = "Advanced",
+                    Tags = ["interpretability", "lime", "explainability"],
+                    Code = @"// LIME - Local Explanations
+using AiDotNet.Interpretability;
+
+Console.WriteLine(""LIME Explanation"");
+Console.WriteLine(""----------------"");
+Console.WriteLine();
+Console.WriteLine(""Prediction: Loan Approved (0.85)"");
+Console.WriteLine();
+Console.WriteLine(""Local Feature Importance:"");
+Console.WriteLine(""  Income > 50k:      +0.35"");
+Console.WriteLine(""  Credit Score 750:  +0.25"");
+Console.WriteLine(""  Employment: Yes:   +0.15"");
+Console.WriteLine(""  Debt Ratio < 0.3:  +0.10"");
+Console.WriteLine();
+Console.WriteLine(""LIME explains THIS specific prediction"");
+Console.WriteLine(""by fitting a local linear model"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "feature-importance",
+                    Name = "Feature Importance",
+                    Description = "Global feature importance",
+                    Difficulty = "Intermediate",
+                    Tags = ["interpretability", "features", "importance"],
+                    Code = @"// Feature Importance
+using AiDotNet.Interpretability;
+
+Console.WriteLine(""Feature Importance Analysis"");
+Console.WriteLine(""---------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Model: House Price Prediction"");
+Console.WriteLine();
+Console.WriteLine(""Global Feature Importance:"");
+Console.WriteLine(""  Square Footage:  0.35 ########"");
+Console.WriteLine(""  Location:        0.25 #####"");
+Console.WriteLine(""  Bedrooms:        0.15 ###"");
+Console.WriteLine(""  Age:             0.12 ##"");
+Console.WriteLine(""  Bathrooms:       0.08 ##"");
+Console.WriteLine(""  Garage:          0.05 #"");
+Console.WriteLine();
+Console.WriteLine(""Square footage is most important"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "bias-detection",
+                    Name = "Bias Detection",
+                    Description = "Detect model bias",
+                    Difficulty = "Advanced",
+                    Tags = ["interpretability", "fairness", "bias"],
+                    Code = @"// Bias Detection
+using AiDotNet.Interpretability;
+
+Console.WriteLine(""Bias Detection Analysis"");
+Console.WriteLine(""-----------------------"");
+Console.WriteLine();
+Console.WriteLine(""Model: Hiring Recommendation"");
+Console.WriteLine();
+Console.WriteLine(""Fairness Metrics by Gender:"");
+Console.WriteLine(""  Male:   Positive Rate = 0.72"");
+Console.WriteLine(""  Female: Positive Rate = 0.68"");
+Console.WriteLine();
+Console.WriteLine(""Disparate Impact Ratio: 0.93"");
+Console.WriteLine(""  (above 0.8 is acceptable)"");
+Console.WriteLine();
+Console.WriteLine(""Statistical Parity Diff: 0.03"");
+Console.WriteLine(""  (close to 0 is fair)"");
+Console.WriteLine();
+Console.WriteLine(""Model shows acceptable fairness"");
+"
+                }
+            },
+            ["Augmentation"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "image-augmentation",
+                    Name = "Image Augmentation",
+                    Description = "Data augmentation for images",
+                    Difficulty = "Intermediate",
+                    Tags = ["augmentation", "image", "preprocessing"],
+                    Code = @"// Image Augmentation
+using AiDotNet.Augmentation;
+
+Console.WriteLine(""Image Augmentation Pipeline"");
+Console.WriteLine(""---------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Original: 1 image (224x224)"");
+Console.WriteLine();
+Console.WriteLine(""Augmentation Steps:"");
+Console.WriteLine(""  1. Random Horizontal Flip"");
+Console.WriteLine(""  2. Random Rotation (+/-15 deg)"");
+Console.WriteLine(""  3. Random Crop (0.8-1.0)"");
+Console.WriteLine(""  4. Color Jitter"");
+Console.WriteLine(""  5. Gaussian Noise"");
+Console.WriteLine();
+Console.WriteLine(""Augmented: 8 variations per image"");
+Console.WriteLine(""Total: 1 -> 8 training samples"");
+Console.WriteLine();
+Console.WriteLine(""Augmentation prevents overfitting"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "text-augmentation",
+                    Name = "Text Augmentation",
+                    Description = "Data augmentation for NLP",
+                    Difficulty = "Intermediate",
+                    Tags = ["augmentation", "text", "nlp"],
+                    Code = @"// Text Augmentation
+using AiDotNet.Augmentation;
+
+Console.WriteLine(""Text Augmentation"");
+Console.WriteLine(""-----------------"");
+Console.WriteLine();
+Console.WriteLine(""Original: The quick brown fox"");
+Console.WriteLine();
+Console.WriteLine(""Techniques:"");
+Console.WriteLine(""  Synonym Replacement:"");
+Console.WriteLine(""    The fast brown fox"");
+Console.WriteLine();
+Console.WriteLine(""  Random Insertion:"");
+Console.WriteLine(""    The quick agile brown fox"");
+Console.WriteLine();
+Console.WriteLine(""  Random Swap:"");
+Console.WriteLine(""    The brown quick fox"");
+Console.WriteLine();
+Console.WriteLine(""  Back Translation:"");
+Console.WriteLine(""    The rapid brown fox"");
+Console.WriteLine();
+Console.WriteLine(""Improves model robustness"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "smote",
+                    Name = "SMOTE for Imbalanced Data",
+                    Description = "Synthetic Minority Over-sampling",
+                    Difficulty = "Advanced",
+                    Tags = ["augmentation", "smote", "imbalanced"],
+                    Code = @"// SMOTE - Synthetic Over-sampling
+using AiDotNet.Augmentation;
+
+Console.WriteLine(""SMOTE for Imbalanced Data"");
+Console.WriteLine(""-------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Original Dataset:"");
+Console.WriteLine(""  Class 0 (Majority): 900"");
+Console.WriteLine(""  Class 1 (Minority): 100"");
+Console.WriteLine(""  Ratio: 9:1 (imbalanced)"");
+Console.WriteLine();
+Console.WriteLine(""SMOTE Process:"");
+Console.WriteLine(""  1. Select minority sample"");
+Console.WriteLine(""  2. Find k=5 neighbors"");
+Console.WriteLine(""  3. Generate synthetic point"");
+Console.WriteLine(""  4. Repeat until balanced"");
+Console.WriteLine();
+Console.WriteLine(""After SMOTE:"");
+Console.WriteLine(""  Class 0: 900"");
+Console.WriteLine(""  Class 1: 900 (800 synthetic)"");
+Console.WriteLine(""  Ratio: 1:1 (balanced)"");
+"
+                }
+            },
+            ["Meta Learning"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "maml",
+                    Name = "MAML (Model-Agnostic Meta-Learning)",
+                    Description = "Learn to learn quickly",
+                    Difficulty = "Expert",
+                    Tags = ["meta-learning", "maml", "few-shot"],
+                    Code = @"// MAML - Model-Agnostic Meta-Learning
+using AiDotNet.MetaLearning;
+
+Console.WriteLine(""MAML - Learn to Learn"");
+Console.WriteLine(""---------------------"");
+Console.WriteLine();
+Console.WriteLine(""Goal: Learn quickly on new tasks"");
+Console.WriteLine();
+Console.WriteLine(""Meta-Training (100 tasks):"");
+Console.WriteLine(""  Finding optimal initialization"");
+Console.WriteLine(""  that adapts quickly to new tasks"");
+Console.WriteLine();
+Console.WriteLine(""Meta-Test (new task):"");
+Console.WriteLine(""  Before: 20% accuracy (random)"");
+Console.WriteLine(""  After 1 gradient step: 75%"");
+Console.WriteLine(""  After 5 gradient steps: 92%"");
+Console.WriteLine();
+Console.WriteLine(""MAML enables rapid adaptation"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "prototypical-networks",
+                    Name = "Prototypical Networks",
+                    Description = "Few-shot learning with prototypes",
+                    Difficulty = "Advanced",
+                    Tags = ["meta-learning", "few-shot", "prototypes"],
+                    Code = @"// Prototypical Networks
+using AiDotNet.MetaLearning;
+
+Console.WriteLine(""Prototypical Networks"");
+Console.WriteLine(""---------------------"");
+Console.WriteLine();
+Console.WriteLine(""5-way 1-shot classification:"");
+Console.WriteLine(""  5 classes, 1 example each"");
+Console.WriteLine();
+Console.WriteLine(""Computing prototypes:"");
+Console.WriteLine(""  Class A: [0.2, 0.8, 0.1]"");
+Console.WriteLine(""  Class B: [0.9, 0.1, 0.3]"");
+Console.WriteLine(""  Class C: [0.5, 0.5, 0.9]"");
+Console.WriteLine();
+Console.WriteLine(""Query: [0.25, 0.75, 0.15]"");
+Console.WriteLine(""Distances to prototypes:"");
+Console.WriteLine(""  A: 0.12 (closest)"");
+Console.WriteLine(""  B: 0.89"");
+Console.WriteLine(""  C: 0.67"");
+Console.WriteLine();
+Console.WriteLine(""Prediction: Class A"");
+"
+                }
+            },
+            ["Knowledge Distillation"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "teacher-student",
+                    Name = "Teacher-Student Distillation",
+                    Description = "Transfer knowledge to smaller model",
+                    Difficulty = "Advanced",
+                    Tags = ["distillation", "compression", "transfer"],
+                    Code = @"// Knowledge Distillation
+using AiDotNet.KnowledgeDistillation;
+
+Console.WriteLine(""Knowledge Distillation"");
+Console.WriteLine(""----------------------"");
+Console.WriteLine();
+Console.WriteLine(""Teacher Model:"");
+Console.WriteLine(""  Parameters: 100M"");
+Console.WriteLine(""  Accuracy: 95%"");
+Console.WriteLine(""  Inference: 50ms"");
+Console.WriteLine();
+Console.WriteLine(""Student Model (before):"");
+Console.WriteLine(""  Parameters: 10M"");
+Console.WriteLine(""  Accuracy: 82%"");
+Console.WriteLine(""  Inference: 5ms"");
+Console.WriteLine();
+Console.WriteLine(""Distillation (T=3, alpha=0.5):"");
+Console.WriteLine(""  Training on soft labels..."");
+Console.WriteLine();
+Console.WriteLine(""Student Model (after):"");
+Console.WriteLine(""  Parameters: 10M"");
+Console.WriteLine(""  Accuracy: 91%"");
+Console.WriteLine(""  Inference: 5ms"");
+Console.WriteLine();
+Console.WriteLine(""10x faster with only 4% accuracy drop"");
+"
+                }
+            },
+            ["Diffusion Models"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "ddpm-basics",
+                    Name = "DDPM Basics",
+                    Description = "Denoising Diffusion Models",
+                    Difficulty = "Expert",
+                    Tags = ["diffusion", "generative", "ddpm"],
+                    Code = @"// Denoising Diffusion Probabilistic Models
+using AiDotNet.Diffusion;
+
+Console.WriteLine(""DDPM - Diffusion Models"");
+Console.WriteLine(""-----------------------"");
+Console.WriteLine();
+Console.WriteLine(""Forward Process (add noise):"");
+Console.WriteLine(""  t=0:   Original image"");
+Console.WriteLine(""  t=250: Slightly noisy"");
+Console.WriteLine(""  t=500: Half noise"");
+Console.WriteLine(""  t=750: Mostly noise"");
+Console.WriteLine(""  t=1000: Pure Gaussian noise"");
+Console.WriteLine();
+Console.WriteLine(""Reverse Process (denoise):"");
+Console.WriteLine(""  t=1000: Start with noise"");
+Console.WriteLine(""  t=750: Predict and remove"");
+Console.WriteLine(""  t=500: Structure emerges"");
+Console.WriteLine(""  t=250: Details appear"");
+Console.WriteLine(""  t=0:   Generated image"");
+Console.WriteLine();
+Console.WriteLine(""Diffusion generates high-quality images"");
+"
+                }
+            },
+            ["Transfer Learning"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "feature-extraction",
+                    Name = "Feature Extraction",
+                    Description = "Use pretrained features",
+                    Difficulty = "Intermediate",
+                    Tags = ["transfer", "pretrained", "features"],
+                    Code = @"// Transfer Learning - Feature Extraction
+using AiDotNet.TransferLearning;
+
+Console.WriteLine(""Transfer Learning - Features"");
+Console.WriteLine(""----------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Pretrained Model: ResNet50"");
+Console.WriteLine(""  Trained on ImageNet (1.2M images)"");
+Console.WriteLine(""  1000 classes"");
+Console.WriteLine();
+Console.WriteLine(""Target Task: Dog Breeds"");
+Console.WriteLine(""  Only 500 training images"");
+Console.WriteLine(""  10 classes"");
+Console.WriteLine();
+Console.WriteLine(""Strategy: Freeze pretrained layers"");
+Console.WriteLine(""  Only train new classifier head"");
+Console.WriteLine();
+Console.WriteLine(""Results:"");
+Console.WriteLine(""  From scratch: 45% accuracy"");
+Console.WriteLine(""  With transfer: 89% accuracy"");
+Console.WriteLine();
+Console.WriteLine(""Transfer learning saves data and time"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "domain-adaptation",
+                    Name = "Domain Adaptation",
+                    Description = "Adapt model to new domain",
+                    Difficulty = "Advanced",
+                    Tags = ["transfer", "domain", "adaptation"],
+                    Code = @"// Domain Adaptation
+using AiDotNet.TransferLearning;
+
+Console.WriteLine(""Domain Adaptation"");
+Console.WriteLine(""-----------------"");
+Console.WriteLine();
+Console.WriteLine(""Source Domain: Product photos"");
+Console.WriteLine(""  Well-lit, white background"");
+Console.WriteLine(""  10,000 labeled images"");
+Console.WriteLine();
+Console.WriteLine(""Target Domain: User photos"");
+Console.WriteLine(""  Various lighting, backgrounds"");
+Console.WriteLine(""  No labels available"");
+Console.WriteLine();
+Console.WriteLine(""Without adaptation:"");
+Console.WriteLine(""  Source accuracy: 95%"");
+Console.WriteLine(""  Target accuracy: 62%"");
+Console.WriteLine();
+Console.WriteLine(""With domain adaptation:"");
+Console.WriteLine(""  Source accuracy: 93%"");
+Console.WriteLine(""  Target accuracy: 85%"");
+Console.WriteLine();
+Console.WriteLine(""Domain adaptation bridges the gap"");
+"
+                }
+            },
+            ["Uncertainty Quantification"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "conformal-prediction",
+                    Name = "Conformal Prediction",
+                    Description = "Prediction sets with guarantees",
+                    Difficulty = "Advanced",
+                    Tags = ["uncertainty", "conformal", "calibration"],
+                    Code = @"// Conformal Prediction
+using AiDotNet.UncertaintyQuantification;
+
+Console.WriteLine(""Conformal Prediction"");
+Console.WriteLine(""--------------------"");
+Console.WriteLine();
+Console.WriteLine(""Goal: Prediction sets with coverage"");
+Console.WriteLine(""  guarantee (e.g., 90% coverage)"");
+Console.WriteLine();
+Console.WriteLine(""Input: Image of animal"");
+Console.WriteLine();
+Console.WriteLine(""Point prediction: Dog (0.75)"");
+Console.WriteLine();
+Console.WriteLine(""Conformal set (90% coverage):"");
+Console.WriteLine(""  {Dog, Wolf, Fox}"");
+Console.WriteLine();
+Console.WriteLine(""Interpretation: 90% of the time,"");
+Console.WriteLine(""  true label is in this set"");
+Console.WriteLine();
+Console.WriteLine(""Conformal gives valid uncertainty"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "bayesian-nn",
+                    Name = "Bayesian Neural Networks",
+                    Description = "Uncertainty-aware predictions",
+                    Difficulty = "Expert",
+                    Tags = ["uncertainty", "bayesian", "variational"],
+                    Code = @"// Bayesian Neural Networks
+using AiDotNet.UncertaintyQuantification;
+
+Console.WriteLine(""Bayesian Neural Networks"");
+Console.WriteLine(""------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Standard NN: Single prediction"");
+Console.WriteLine(""  Output: 0.73"");
+Console.WriteLine();
+Console.WriteLine(""Bayesian NN: Distribution"");
+Console.WriteLine(""  Mean: 0.73"");
+Console.WriteLine(""  Std:  0.15"");
+Console.WriteLine();
+Console.WriteLine(""Epistemic Uncertainty:"");
+Console.WriteLine(""  In-distribution: Low (0.05)"");
+Console.WriteLine(""  Out-of-distribution: High (0.35)"");
+Console.WriteLine();
+Console.WriteLine(""Use Case: Medical diagnosis"");
+Console.WriteLine(""  Refer uncertain cases to doctor"");
+Console.WriteLine();
+Console.WriteLine(""BNNs know what they dont know"");
+"
+                }
+            },
+            ["Physics-Informed NNs"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "pinn-basics",
+                    Name = "PINN Basics",
+                    Description = "Neural networks with physics",
+                    Difficulty = "Expert",
+                    Tags = ["pinn", "physics", "differential"],
+                    Code = @"// Physics-Informed Neural Networks
+using AiDotNet.PhysicsInformed;
+
+Console.WriteLine(""Physics-Informed Neural Networks"");
+Console.WriteLine(""--------------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Problem: Solve heat equation"");
+Console.WriteLine(""  du/dt = k * d2u/dx2"");
+Console.WriteLine();
+Console.WriteLine(""Traditional NN Loss:"");
+Console.WriteLine(""  L = MSE(prediction, data)"");
+Console.WriteLine();
+Console.WriteLine(""PINN Loss:"");
+Console.WriteLine(""  L = MSE(data) + MSE(PDE residual)"");
+Console.WriteLine();
+Console.WriteLine(""Training with 10 data points:"");
+Console.WriteLine(""  Standard NN: Poor generalization"");
+Console.WriteLine(""  PINN: Follows physics everywhere"");
+Console.WriteLine();
+Console.WriteLine(""PINNs embed domain knowledge"");
+Console.WriteLine(""  enabling learning with less data"");
+"
+                }
+            },
+            ["Model Compression"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "pruning",
+                    Name = "Network Pruning",
+                    Description = "Remove unnecessary weights",
+                    Difficulty = "Advanced",
+                    Tags = ["compression", "pruning", "sparsity"],
+                    Code = @"// Network Pruning
+using AiDotNet.ModelCompression;
+
+Console.WriteLine(""Network Pruning"");
+Console.WriteLine(""---------------"");
+Console.WriteLine();
+Console.WriteLine(""Original Model:"");
+Console.WriteLine(""  Parameters: 25M"");
+Console.WriteLine(""  Size: 100MB"");
+Console.WriteLine(""  Accuracy: 94.2%"");
+Console.WriteLine();
+Console.WriteLine(""Pruning Strategy:"");
+Console.WriteLine(""  Remove weights below threshold"");
+Console.WriteLine(""  Target sparsity: 90%"");
+Console.WriteLine();
+Console.WriteLine(""After Pruning:"");
+Console.WriteLine(""  Non-zero params: 2.5M (10%)"");
+Console.WriteLine(""  Size: 15MB (sparse format)"");
+Console.WriteLine(""  Accuracy: 93.5%"");
+Console.WriteLine();
+Console.WriteLine(""90% smaller with 0.7% accuracy drop"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "quantization",
+                    Name = "Quantization",
+                    Description = "Reduce precision of weights",
+                    Difficulty = "Advanced",
+                    Tags = ["compression", "quantization", "int8"],
+                    Code = @"// Model Quantization
+using AiDotNet.ModelCompression;
+
+Console.WriteLine(""Model Quantization"");
+Console.WriteLine(""------------------"");
+Console.WriteLine();
+Console.WriteLine(""Original (FP32):"");
+Console.WriteLine(""  Bits per weight: 32"");
+Console.WriteLine(""  Size: 100MB"");
+Console.WriteLine(""  Inference: 50ms"");
+Console.WriteLine();
+Console.WriteLine(""INT8 Quantization:"");
+Console.WriteLine(""  Bits per weight: 8"");
+Console.WriteLine(""  Size: 25MB"");
+Console.WriteLine(""  Inference: 15ms"");
+Console.WriteLine();
+Console.WriteLine(""Accuracy comparison:"");
+Console.WriteLine(""  FP32: 94.2%"");
+Console.WriteLine(""  INT8: 93.8%"");
+Console.WriteLine();
+Console.WriteLine(""4x smaller, 3x faster, 0.4% drop"");
+"
+                }
+            },
+            ["Active Learning"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "uncertainty-sampling",
+                    Name = "Uncertainty Sampling",
+                    Description = "Query most uncertain samples",
+                    Difficulty = "Advanced",
+                    Tags = ["active-learning", "uncertainty", "labeling"],
+                    Code = @"// Active Learning - Uncertainty Sampling
+using AiDotNet.ActiveLearning;
+
+Console.WriteLine(""Active Learning"");
+Console.WriteLine(""---------------"");
+Console.WriteLine();
+Console.WriteLine(""Pool: 10,000 unlabeled samples"");
+Console.WriteLine(""Budget: 100 labels"");
+Console.WriteLine();
+Console.WriteLine(""Random Sampling Baseline:"");
+Console.WriteLine(""  100 random samples labeled"");
+Console.WriteLine(""  Accuracy: 72%"");
+Console.WriteLine();
+Console.WriteLine(""Uncertainty Sampling:"");
+Console.WriteLine(""  Round 1: Label 20 most uncertain"");
+Console.WriteLine(""  Round 2: Label 20 most uncertain"");
+Console.WriteLine(""  ... (5 rounds total)"");
+Console.WriteLine(""  Accuracy: 84%"");
+Console.WriteLine();
+Console.WriteLine(""Same budget, 12% better accuracy"");
+Console.WriteLine(""Active learning optimizes labeling"");
+"
+                }
+            },
+            ["Federated Learning"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "fedavg",
+                    Name = "FedAvg Algorithm",
+                    Description = "Distributed training without data sharing",
+                    Difficulty = "Expert",
+                    Tags = ["federated", "privacy", "distributed"],
+                    Code = @"// Federated Averaging (FedAvg)
+using AiDotNet.FederatedLearning;
+
+Console.WriteLine(""Federated Learning - FedAvg"");
+Console.WriteLine(""---------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Setup:"");
+Console.WriteLine(""  Central Server: Coordinates training"");
+Console.WriteLine(""  Client 1: Hospital A (1000 records)"");
+Console.WriteLine(""  Client 2: Hospital B (800 records)"");
+Console.WriteLine(""  Client 3: Hospital C (1200 records)"");
+Console.WriteLine();
+Console.WriteLine(""Round 1:"");
+Console.WriteLine(""  1. Server sends global model"");
+Console.WriteLine(""  2. Clients train locally"");
+Console.WriteLine(""  3. Clients send weight updates"");
+Console.WriteLine(""  4. Server averages updates"");
+Console.WriteLine();
+Console.WriteLine(""Privacy: Raw data never leaves clients"");
+Console.WriteLine(""Result: Global model trained on all data"");
+"
+                }
+            },
+            ["Continual Learning"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "ewc",
+                    Name = "Elastic Weight Consolidation",
+                    Description = "Prevent catastrophic forgetting",
+                    Difficulty = "Expert",
+                    Tags = ["continual", "forgetting", "lifelong"],
+                    Code = @"// Elastic Weight Consolidation (EWC)
+using AiDotNet.ContinualLearning;
+
+Console.WriteLine(""Elastic Weight Consolidation"");
+Console.WriteLine(""----------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Problem: Catastrophic Forgetting"");
+Console.WriteLine(""  Train on Task A, then Task B"");
+Console.WriteLine(""  Model forgets Task A!"");
+Console.WriteLine();
+Console.WriteLine(""Without EWC:"");
+Console.WriteLine(""  After Task A: 95% on A"");
+Console.WriteLine(""  After Task B: 30% on A, 90% on B"");
+Console.WriteLine();
+Console.WriteLine(""With EWC:"");
+Console.WriteLine(""  After Task A: 95% on A"");
+Console.WriteLine(""  After Task B: 88% on A, 85% on B"");
+Console.WriteLine();
+Console.WriteLine(""EWC protects important weights"");
+Console.WriteLine(""  using Fisher Information Matrix"");
+"
+                }
+            },
+            ["Self-Supervised Learning"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "contrastive",
+                    Name = "Contrastive Learning",
+                    Description = "Learn representations without labels",
+                    Difficulty = "Advanced",
+                    Tags = ["self-supervised", "contrastive", "representation"],
+                    Code = @"// Contrastive Learning (SimCLR style)
+using AiDotNet.SelfSupervisedLearning;
+
+Console.WriteLine(""Contrastive Learning"");
+Console.WriteLine(""--------------------"");
+Console.WriteLine();
+Console.WriteLine(""No labels needed!"");
+Console.WriteLine();
+Console.WriteLine(""Process:"");
+Console.WriteLine(""  1. Take image x"");
+Console.WriteLine(""  2. Create augmented view x1"");
+Console.WriteLine(""  3. Create augmented view x2"");
+Console.WriteLine(""  4. Encode both: z1, z2"");
+Console.WriteLine(""  5. Pull z1 and z2 together"");
+Console.WriteLine(""  6. Push away from other images"");
+Console.WriteLine();
+Console.WriteLine(""Learned embeddings:"");
+Console.WriteLine(""  Similar images -> close vectors"");
+Console.WriteLine(""  Different images -> far vectors"");
+Console.WriteLine();
+Console.WriteLine(""Use embeddings for downstream tasks"");
+"
+                }
+            },
+            ["Tokenization"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "bpe",
+                    Name = "Byte Pair Encoding",
+                    Description = "Subword tokenization for NLP",
+                    Difficulty = "Intermediate",
+                    Tags = ["tokenization", "bpe", "nlp"],
+                    Code = @"// Byte Pair Encoding (BPE)
+using AiDotNet.Tokenization;
+
+Console.WriteLine(""Byte Pair Encoding"");
+Console.WriteLine(""------------------"");
+Console.WriteLine();
+Console.WriteLine(""Input: 'unhappiness'"");
+Console.WriteLine();
+Console.WriteLine(""Character level: 11 tokens"");
+Console.WriteLine(""  ['u','n','h','a','p','p','i','n','e','s','s']"");
+Console.WriteLine();
+Console.WriteLine(""Word level: 1 token (OOV risk)"");
+Console.WriteLine(""  ['unhappiness']"");
+Console.WriteLine();
+Console.WriteLine(""BPE: 3 tokens (balanced)"");
+Console.WriteLine(""  ['un', 'happiness', '</w>']"");
+Console.WriteLine();
+Console.WriteLine(""Advantages:"");
+Console.WriteLine(""  - Handles rare words"");
+Console.WriteLine(""  - Compact vocabulary"");
+Console.WriteLine(""  - Captures morphology"");
+"
+                }
+            },
+            ["Wavelet Functions"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "dwt",
+                    Name = "Discrete Wavelet Transform",
+                    Description = "Multi-resolution signal analysis",
+                    Difficulty = "Advanced",
+                    Tags = ["wavelets", "signal", "transform"],
+                    Code = @"// Discrete Wavelet Transform
+using AiDotNet.WaveletFunctions;
+
+Console.WriteLine(""Discrete Wavelet Transform"");
+Console.WriteLine(""--------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Signal: 1D time series (256 samples)"");
+Console.WriteLine();
+Console.WriteLine(""Decomposition (Haar wavelet):"");
+Console.WriteLine(""  Level 1: cA1 (128), cD1 (128)"");
+Console.WriteLine(""  Level 2: cA2 (64), cD2 (64)"");
+Console.WriteLine(""  Level 3: cA3 (32), cD3 (32)"");
+Console.WriteLine();
+Console.WriteLine(""cA = Approximation (low freq)"");
+Console.WriteLine(""cD = Detail (high freq)"");
+Console.WriteLine();
+Console.WriteLine(""Applications:"");
+Console.WriteLine(""  - Signal denoising"");
+Console.WriteLine(""  - Feature extraction"");
+Console.WriteLine(""  - Compression"");
+"
+                }
+            },
+            ["ONNX"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "onnx-export",
+                    Name = "ONNX Export",
+                    Description = "Export models to ONNX format",
+                    Difficulty = "Intermediate",
+                    Tags = ["onnx", "export", "interop"],
+                    Code = @"// ONNX Export
+using AiDotNet.ONNX;
+
+Console.WriteLine(""ONNX Model Export"");
+Console.WriteLine(""-----------------"");
+Console.WriteLine();
+Console.WriteLine(""Original Model: AiDotNet Neural Network"");
+Console.WriteLine(""  Framework: AiDotNet"");
+Console.WriteLine(""  Layers: 5"");
+Console.WriteLine(""  Parameters: 1.2M"");
+Console.WriteLine();
+Console.WriteLine(""Exporting to ONNX..."");
+Console.WriteLine(""  Input: (batch, 224, 224, 3)"");
+Console.WriteLine(""  Output: (batch, 1000)"");
+Console.WriteLine();
+Console.WriteLine(""ONNX file: model.onnx (4.8MB)"");
+Console.WriteLine();
+Console.WriteLine(""Now usable in:"");
+Console.WriteLine(""  - ONNX Runtime"");
+Console.WriteLine(""  - TensorRT"");
+Console.WriteLine(""  - OpenVINO"");
+Console.WriteLine(""  - CoreML"");
+"
+                }
+            },
+            ["Serialization"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "model-save-load",
+                    Name = "Model Save/Load",
+                    Description = "Persist and restore models",
+                    Difficulty = "Beginner",
+                    Tags = ["serialization", "save", "load"],
+                    Code = @"// Model Serialization
+using AiDotNet.Serialization;
+
+Console.WriteLine(""Model Serialization"");
+Console.WriteLine(""-------------------"");
+Console.WriteLine();
+Console.WriteLine(""Training complete!"");
+Console.WriteLine(""  Accuracy: 94.5%"");
+Console.WriteLine(""  Epochs: 100"");
+Console.WriteLine();
+Console.WriteLine(""Saving model..."");
+Console.WriteLine(""  Path: models/classifier.bin"");
+Console.WriteLine(""  Size: 12.3 MB"");
+Console.WriteLine(""  Includes: weights, config, metadata"");
+Console.WriteLine();
+Console.WriteLine(""Loading model..."");
+Console.WriteLine(""  Model loaded successfully"");
+Console.WriteLine(""  Ready for inference"");
+Console.WriteLine();
+Console.WriteLine(""Checkpointing during training:"");
+Console.WriteLine(""  Best model saved at epoch 87"");
+"
+                }
+            },
+            ["Experiment Tracking"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "tracking-basics",
+                    Name = "Experiment Tracking",
+                    Description = "Track and compare experiments",
+                    Difficulty = "Intermediate",
+                    Tags = ["tracking", "mlops", "experiments"],
+                    Code = @"// Experiment Tracking
+using AiDotNet.ExperimentTracking;
+
+Console.WriteLine(""Experiment Tracking"");
+Console.WriteLine(""-------------------"");
+Console.WriteLine();
+Console.WriteLine(""Experiment: image-classifier-v3"");
+Console.WriteLine();
+Console.WriteLine(""Parameters logged:"");
+Console.WriteLine(""  learning_rate: 0.001"");
+Console.WriteLine(""  batch_size: 32"");
+Console.WriteLine(""  optimizer: Adam"");
+Console.WriteLine();
+Console.WriteLine(""Metrics logged:"");
+Console.WriteLine(""  train_loss: 0.23"");
+Console.WriteLine(""  val_accuracy: 0.91"");
+Console.WriteLine(""  epoch: 50"");
+Console.WriteLine();
+Console.WriteLine(""Artifacts:"");
+Console.WriteLine(""  - model.bin"");
+Console.WriteLine(""  - confusion_matrix.png"");
+Console.WriteLine();
+Console.WriteLine(""Compare with previous runs easily"");
+"
+                }
+            },
+            ["Hyperparameter Optimization"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "grid-search",
+                    Name = "Grid Search",
+                    Description = "Systematic hyperparameter search",
+                    Difficulty = "Intermediate",
+                    Tags = ["hyperparameters", "tuning", "grid"],
+                    Code = @"// Grid Search Hyperparameter Optimization
+using AiDotNet.HyperparameterOptimization;
+
+Console.WriteLine(""Grid Search"");
+Console.WriteLine(""-----------"");
+Console.WriteLine();
+Console.WriteLine(""Search Space:"");
+Console.WriteLine(""  learning_rate: [0.001, 0.01, 0.1]"");
+Console.WriteLine(""  batch_size: [16, 32, 64]"");
+Console.WriteLine(""  hidden_units: [64, 128]"");
+Console.WriteLine();
+Console.WriteLine(""Total combinations: 3 x 3 x 2 = 18"");
+Console.WriteLine();
+Console.WriteLine(""Results (top 3):"");
+Console.WriteLine(""  1. lr=0.01, bs=32, hu=128 -> 94.2%"");
+Console.WriteLine(""  2. lr=0.01, bs=64, hu=128 -> 93.8%"");
+Console.WriteLine(""  3. lr=0.001, bs=32, hu=128 -> 93.5%"");
+Console.WriteLine();
+Console.WriteLine(""Best: lr=0.01, batch=32, hidden=128"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "bayesian-opt",
+                    Name = "Bayesian Optimization",
+                    Description = "Efficient hyperparameter search",
+                    Difficulty = "Advanced",
+                    Tags = ["hyperparameters", "bayesian", "tuning"],
+                    Code = @"// Bayesian Optimization
+using AiDotNet.HyperparameterOptimization;
+
+Console.WriteLine(""Bayesian Optimization"");
+Console.WriteLine(""---------------------"");
+Console.WriteLine();
+Console.WriteLine(""Continuous search space:"");
+Console.WriteLine(""  learning_rate: [1e-5, 0.1]"");
+Console.WriteLine(""  dropout: [0.0, 0.5]"");
+Console.WriteLine(""  weight_decay: [1e-6, 1e-2]"");
+Console.WriteLine();
+Console.WriteLine(""Iterations: 20 (vs 1000 for grid)"");
+Console.WriteLine();
+Console.WriteLine(""Progress:"");
+Console.WriteLine(""  Iter 1:  lr=0.05, d=0.2 -> 85%"");
+Console.WriteLine(""  Iter 5:  lr=0.01, d=0.3 -> 89%"");
+Console.WriteLine(""  Iter 10: lr=0.008, d=0.25 -> 92%"");
+Console.WriteLine(""  Iter 20: lr=0.0073, d=0.28 -> 94%"");
+Console.WriteLine();
+Console.WriteLine(""50x faster than grid search"");
+"
+                }
+            },
+            ["Model Serving"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "rest-api",
+                    Name = "REST API Deployment",
+                    Description = "Deploy model as REST endpoint",
+                    Difficulty = "Intermediate",
+                    Tags = ["serving", "deployment", "api"],
+                    Code = @"// Model Serving - REST API
+using AiDotNet.Serving;
+
+Console.WriteLine(""Model Serving - REST API"");
+Console.WriteLine(""------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Endpoint: POST /api/predict"");
+Console.WriteLine();
+Console.WriteLine(""Request:"");
+Console.WriteLine(""  {"");
+Console.WriteLine(""    'features': [1.2, 3.4, 5.6, 7.8]"");
+Console.WriteLine(""  }"");
+Console.WriteLine();
+Console.WriteLine(""Response:"");
+Console.WriteLine(""  {"");
+Console.WriteLine(""    'prediction': 'class_a',"");
+Console.WriteLine(""    'confidence': 0.92,"");
+Console.WriteLine(""    'latency_ms': 12"");
+Console.WriteLine(""  }"");
+Console.WriteLine();
+Console.WriteLine(""Stats:"");
+Console.WriteLine(""  Requests/sec: 1000"");
+Console.WriteLine(""  P99 latency: 45ms"");
+"
+                }
+            },
+            ["Metrics"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "classification-metrics",
+                    Name = "Classification Metrics",
+                    Description = "Evaluate classification models",
+                    Difficulty = "Beginner",
+                    Tags = ["metrics", "classification", "evaluation"],
+                    Code = @"// Classification Metrics
+using AiDotNet.Metrics;
+
+Console.WriteLine(""Classification Metrics"");
+Console.WriteLine(""----------------------"");
+Console.WriteLine();
+Console.WriteLine(""Confusion Matrix:"");
+Console.WriteLine(""              Predicted"");
+Console.WriteLine(""           Pos    Neg"");
+Console.WriteLine(""  Actual"");
+Console.WriteLine(""    Pos    85     15   (100)"");
+Console.WriteLine(""    Neg    10     90   (100)"");
+Console.WriteLine();
+Console.WriteLine(""Metrics:"");
+Console.WriteLine(""  Accuracy:  0.875"");
+Console.WriteLine(""  Precision: 0.895 (85/95)"");
+Console.WriteLine(""  Recall:    0.850 (85/100)"");
+Console.WriteLine(""  F1 Score:  0.872"");
+Console.WriteLine(""  AUC-ROC:   0.923"");
+Console.WriteLine();
+Console.WriteLine(""Choose metrics based on problem"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "regression-metrics",
+                    Name = "Regression Metrics",
+                    Description = "Evaluate regression models",
+                    Difficulty = "Beginner",
+                    Tags = ["metrics", "regression", "evaluation"],
+                    Code = @"// Regression Metrics
+using AiDotNet.Metrics;
+
+Console.WriteLine(""Regression Metrics"");
+Console.WriteLine(""------------------"");
+Console.WriteLine();
+Console.WriteLine(""Predictions vs Actuals:"");
+Console.WriteLine(""  Pred: [2.1, 3.2, 4.8, 5.1]"");
+Console.WriteLine(""  True: [2.0, 3.0, 5.0, 5.0]"");
+Console.WriteLine();
+Console.WriteLine(""Metrics:"");
+Console.WriteLine(""  MAE:  0.175 (Mean Absolute Error)"");
+Console.WriteLine(""  MSE:  0.045 (Mean Squared Error)"");
+Console.WriteLine(""  RMSE: 0.212 (Root MSE)"");
+Console.WriteLine(""  R2:   0.956 (explained variance)"");
+Console.WriteLine(""  MAPE: 4.2%  (Mean Absolute Pct Error)"");
+Console.WriteLine();
+Console.WriteLine(""MAE: robust to outliers"");
+Console.WriteLine(""MSE: penalizes large errors"");
+"
+                }
+            },
+            ["Mixed Precision"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "fp16-training",
+                    Name = "FP16 Training",
+                    Description = "Train with half precision",
+                    Difficulty = "Advanced",
+                    Tags = ["mixed-precision", "fp16", "performance"],
+                    Code = @"// Mixed Precision Training
+using AiDotNet.MixedPrecision;
+
+Console.WriteLine(""Mixed Precision Training"");
+Console.WriteLine(""------------------------"");
+Console.WriteLine();
+Console.WriteLine(""FP32 Baseline:"");
+Console.WriteLine(""  Memory: 8 GB"");
+Console.WriteLine(""  Speed: 100 samples/sec"");
+Console.WriteLine();
+Console.WriteLine(""FP16 Mixed Precision:"");
+Console.WriteLine(""  Memory: 4 GB"");
+Console.WriteLine(""  Speed: 200 samples/sec"");
+Console.WriteLine();
+Console.WriteLine(""Loss Scaling:"");
+Console.WriteLine(""  Prevents underflow in FP16"");
+Console.WriteLine(""  Dynamic scaling: 65536 -> 32768"");
+Console.WriteLine();
+Console.WriteLine(""Accuracy: Same as FP32"");
+Console.WriteLine(""Speedup: 2x faster"");
+Console.WriteLine(""Memory: 50% reduction"");
+"
+                }
+            },
+            ["Autodiff"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "autodiff-basics",
+                    Name = "Automatic Differentiation",
+                    Description = "Compute gradients automatically",
+                    Difficulty = "Advanced",
+                    Tags = ["autodiff", "gradients", "backprop"],
+                    Code = @"// Automatic Differentiation
+using AiDotNet.Autodiff;
+
+Console.WriteLine(""Automatic Differentiation"");
+Console.WriteLine(""-------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Function: f(x,y) = x^2 * y + y^3"");
+Console.WriteLine(""Point: x=2, y=3"");
+Console.WriteLine();
+Console.WriteLine(""Forward pass:"");
+Console.WriteLine(""  f(2,3) = 4*3 + 27 = 39"");
+Console.WriteLine();
+Console.WriteLine(""Backward pass (gradients):"");
+Console.WriteLine(""  df/dx = 2*x*y = 2*2*3 = 12"");
+Console.WriteLine(""  df/dy = x^2 + 3*y^2 = 4 + 27 = 31"");
+Console.WriteLine();
+Console.WriteLine(""Computed automatically!"");
+Console.WriteLine(""No manual derivative calculation"");
+Console.WriteLine();
+Console.WriteLine(""Used for training neural networks"");
+"
+                }
+            },
+            ["Distributed Training"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "data-parallel",
+                    Name = "Data Parallel Training",
+                    Description = "Train across multiple GPUs",
+                    Difficulty = "Expert",
+                    Tags = ["distributed", "parallel", "multi-gpu"],
+                    Code = @"// Data Parallel Training
+using AiDotNet.DistributedTraining;
+
+Console.WriteLine(""Data Parallel Training"");
+Console.WriteLine(""----------------------"");
+Console.WriteLine();
+Console.WriteLine(""Setup:"");
+Console.WriteLine(""  GPUs: 4"");
+Console.WriteLine(""  Global batch: 256"");
+Console.WriteLine(""  Per-GPU batch: 64"");
+Console.WriteLine();
+Console.WriteLine(""Each step:"");
+Console.WriteLine(""  1. Split batch across GPUs"");
+Console.WriteLine(""  2. Forward pass (parallel)"");
+Console.WriteLine(""  3. Compute gradients (parallel)"");
+Console.WriteLine(""  4. AllReduce gradients"");
+Console.WriteLine(""  5. Update weights"");
+Console.WriteLine();
+Console.WriteLine(""Speedup: ~3.8x with 4 GPUs"");
+Console.WriteLine(""  (Communication overhead ~5%)"");
+"
+                }
+            },
+            ["Ensemble Methods"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "voting-ensemble",
+                    Name = "Voting Ensemble",
+                    Description = "Combine multiple models",
+                    Difficulty = "Intermediate",
+                    Tags = ["ensemble", "voting", "combination"],
+                    Code = @"// Voting Ensemble
+using AiDotNet.Ensemble;
+
+Console.WriteLine(""Voting Ensemble"");
+Console.WriteLine(""---------------"");
+Console.WriteLine();
+Console.WriteLine(""Individual Models:"");
+Console.WriteLine(""  Model A (Random Forest): 87%"");
+Console.WriteLine(""  Model B (SVM): 85%"");
+Console.WriteLine(""  Model C (Neural Net): 88%"");
+Console.WriteLine();
+Console.WriteLine(""Hard Voting (majority):"");
+Console.WriteLine(""  Input X predictions:"");
+Console.WriteLine(""    A: Class 1"");
+Console.WriteLine(""    B: Class 1"");
+Console.WriteLine(""    C: Class 2"");
+Console.WriteLine(""  Ensemble: Class 1 (2 votes)"");
+Console.WriteLine();
+Console.WriteLine(""Ensemble Accuracy: 91%"");
+Console.WriteLine(""  +3% over best individual model"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "stacking",
+                    Name = "Stacking Ensemble",
+                    Description = "Meta-learner combines predictions",
+                    Difficulty = "Advanced",
+                    Tags = ["ensemble", "stacking", "meta-learning"],
+                    Code = @"// Stacking Ensemble
+using AiDotNet.Ensemble;
+
+Console.WriteLine(""Stacking Ensemble"");
+Console.WriteLine(""-----------------"");
+Console.WriteLine();
+Console.WriteLine(""Level 0 (Base models):"");
+Console.WriteLine(""  Model A -> pred_A"");
+Console.WriteLine(""  Model B -> pred_B"");
+Console.WriteLine(""  Model C -> pred_C"");
+Console.WriteLine();
+Console.WriteLine(""Level 1 (Meta-learner):"");
+Console.WriteLine(""  Input: [pred_A, pred_B, pred_C]"");
+Console.WriteLine(""  Output: final prediction"");
+Console.WriteLine();
+Console.WriteLine(""Training:"");
+Console.WriteLine(""  Use cross-validation to avoid"");
+Console.WriteLine(""  leaking labels to meta-learner"");
+Console.WriteLine();
+Console.WriteLine(""Individual: 87%, 85%, 88%"");
+Console.WriteLine(""Stacking: 93%"");
+"
+                }
+            },
+            ["Geometry"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "geometric-transforms",
+                    Name = "Geometric Transformations",
+                    Description = "2D and 3D geometric operations",
+                    Difficulty = "Intermediate",
+                    Tags = ["geometry", "transforms", "3d"],
+                    Code = @"// Geometric Transformations
+using AiDotNet.Geometry;
+
+Console.WriteLine(""Geometric Transformations"");
+Console.WriteLine(""-------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Original point: (1, 0, 0)"");
+Console.WriteLine();
+Console.WriteLine(""Translation (+2, +3, +1):"");
+Console.WriteLine(""  Result: (3, 3, 1)"");
+Console.WriteLine();
+Console.WriteLine(""Rotation 90 deg around Z:"");
+Console.WriteLine(""  Result: (0, 1, 0)"");
+Console.WriteLine();
+Console.WriteLine(""Scale (2, 2, 2):"");
+Console.WriteLine(""  Result: (2, 0, 0)"");
+Console.WriteLine();
+Console.WriteLine(""Composite transform:"");
+Console.WriteLine(""  T x R x S applied together"");
+Console.WriteLine(""  Result: (6, 6, 2)"");
+"
+                }
+            },
+            ["Point Clouds"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "point-cloud-processing",
+                    Name = "Point Cloud Processing",
+                    Description = "3D point cloud operations",
+                    Difficulty = "Advanced",
+                    Tags = ["pointcloud", "3d", "lidar"],
+                    Code = @"// Point Cloud Processing
+using AiDotNet.PointCloud;
+
+Console.WriteLine(""Point Cloud Processing"");
+Console.WriteLine(""----------------------"");
+Console.WriteLine();
+Console.WriteLine(""Input: 10,000 3D points"");
+Console.WriteLine(""  From LiDAR scan"");
+Console.WriteLine();
+Console.WriteLine(""Operations:"");
+Console.WriteLine(""  1. Downsampling (voxel grid)"");
+Console.WriteLine(""     10,000 -> 2,500 points"");
+Console.WriteLine();
+Console.WriteLine(""  2. Normal estimation"");
+Console.WriteLine(""     k=20 nearest neighbors"");
+Console.WriteLine();
+Console.WriteLine(""  3. Plane segmentation"");
+Console.WriteLine(""     Found: 3 planes"");
+Console.WriteLine(""     Inliers: 1,800 points"");
+Console.WriteLine();
+Console.WriteLine(""  4. Clustering (DBSCAN)"");
+Console.WriteLine(""     Found: 5 objects"");
+"
+                }
+            },
+            ["Video Processing"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "video-classification",
+                    Name = "Video Classification",
+                    Description = "Classify video content",
+                    Difficulty = "Advanced",
+                    Tags = ["video", "temporal", "classification"],
+                    Code = @"// Video Classification
+using AiDotNet.Video;
+
+Console.WriteLine(""Video Classification"");
+Console.WriteLine(""--------------------"");
+Console.WriteLine();
+Console.WriteLine(""Input: 30fps video, 10 seconds"");
+Console.WriteLine(""  Total frames: 300"");
+Console.WriteLine();
+Console.WriteLine(""Processing:"");
+Console.WriteLine(""  1. Sample every 10th frame"");
+Console.WriteLine(""     Selected: 30 frames"");
+Console.WriteLine();
+Console.WriteLine(""  2. Extract features per frame"");
+Console.WriteLine(""     ResNet50 backbone"");
+Console.WriteLine();
+Console.WriteLine(""  3. Temporal modeling (LSTM)"");
+Console.WriteLine(""     Sequence of 30 features"");
+Console.WriteLine();
+Console.WriteLine(""Prediction: 'Playing Basketball'"");
+Console.WriteLine(""Confidence: 0.94"");
+"
+                }
+            },
+            ["Neural Radiance Fields"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "nerf-basics",
+                    Name = "NeRF Basics",
+                    Description = "3D scene reconstruction",
+                    Difficulty = "Expert",
+                    Tags = ["nerf", "3d", "reconstruction"],
+                    Code = @"// Neural Radiance Fields (NeRF)
+using AiDotNet.NeuralRadianceFields;
+
+Console.WriteLine(""Neural Radiance Fields"");
+Console.WriteLine(""----------------------"");
+Console.WriteLine();
+Console.WriteLine(""Input: 50 images of scene"");
+Console.WriteLine(""  With camera poses"");
+Console.WriteLine();
+Console.WriteLine(""Training NeRF:"");
+Console.WriteLine(""  MLP: 8 layers, 256 units"");
+Console.WriteLine(""  Input: (x, y, z, theta, phi)"");
+Console.WriteLine(""  Output: (R, G, B, density)"");
+Console.WriteLine();
+Console.WriteLine(""Rendering new view:"");
+Console.WriteLine(""  Cast rays through each pixel"");
+Console.WriteLine(""  Sample 64 points per ray"");
+Console.WriteLine(""  Query MLP for color/density"");
+Console.WriteLine(""  Volume rendering integration"");
+Console.WriteLine();
+Console.WriteLine(""Result: Novel view synthesis"");
+"
+                }
+            },
+            ["Radial Basis Functions"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "rbf-network",
+                    Name = "RBF Networks",
+                    Description = "Radial basis function neural network",
+                    Difficulty = "Advanced",
+                    Tags = ["rbf", "network", "interpolation"],
+                    Code = @"// RBF Networks
+using AiDotNet.RadialBasisFunctions;
+
+Console.WriteLine(""RBF Neural Network"");
+Console.WriteLine(""------------------"");
+Console.WriteLine();
+Console.WriteLine(""Architecture:"");
+Console.WriteLine(""  Input: 2 features"");
+Console.WriteLine(""  Hidden: 10 RBF units"");
+Console.WriteLine(""  Output: 1 (regression)"");
+Console.WriteLine();
+Console.WriteLine(""RBF activation:"");
+Console.WriteLine(""  phi(r) = exp(-r^2 / 2*sigma^2)"");
+Console.WriteLine();
+Console.WriteLine(""Training:"");
+Console.WriteLine(""  1. K-means to find centers"");
+Console.WriteLine(""  2. Set sigma from distances"");
+Console.WriteLine(""  3. Linear regression for weights"");
+Console.WriteLine();
+Console.WriteLine(""RBF advantages:"");
+Console.WriteLine(""  - Fast training"");
+Console.WriteLine(""  - Good interpolation"");
+Console.WriteLine(""  - Local receptive fields"");
+"
+                }
+            },
+            ["Prompt Engineering"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "prompt-templates",
+                    Name = "Prompt Templates",
+                    Description = "Structured prompt design",
+                    Difficulty = "Intermediate",
+                    Tags = ["prompts", "llm", "templates"],
+                    Code = @"// Prompt Engineering
+using AiDotNet.PromptEngineering;
+
+Console.WriteLine(""Prompt Engineering"");
+Console.WriteLine(""------------------"");
+Console.WriteLine();
+Console.WriteLine(""Template: Classification"");
+Console.WriteLine();
+Console.WriteLine(""  System: You are a sentiment classifier."");
+Console.WriteLine(""  User: Classify: '{text}'"");
+Console.WriteLine(""  Output: positive/negative/neutral"");
+Console.WriteLine();
+Console.WriteLine(""Variables:"");
+Console.WriteLine(""  text = 'Great product, love it!'"");
+Console.WriteLine();
+Console.WriteLine(""Rendered prompt:"");
+Console.WriteLine(""  Classify: 'Great product, love it!'"");
+Console.WriteLine();
+Console.WriteLine(""Response: positive"");
+Console.WriteLine();
+Console.WriteLine(""Templates ensure consistent formatting"");
+"
+                }
+            },
+            ["Graph Neural Networks"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "gcn",
+                    Name = "Graph Convolutional Networks",
+                    Description = "Neural networks for graphs",
+                    Difficulty = "Advanced",
+                    Tags = ["gnn", "graph", "gcn"],
+                    Code = @"// Graph Convolutional Networks
+using AiDotNet.GraphNeuralNetworks;
+
+Console.WriteLine(""Graph Convolutional Network"");
+Console.WriteLine(""---------------------------"");
+Console.WriteLine();
+Console.WriteLine(""Graph: Social network"");
+Console.WriteLine(""  Nodes: 100 users"");
+Console.WriteLine(""  Edges: 500 friendships"");
+Console.WriteLine(""  Node features: 16 dims"");
+Console.WriteLine();
+Console.WriteLine(""GCN Layer:"");
+Console.WriteLine(""  H' = ReLU(D^-0.5 * A * D^-0.5 * H * W)"");
+Console.WriteLine();
+Console.WriteLine(""Architecture:"");
+Console.WriteLine(""  GCN(16 -> 32) -> ReLU"");
+Console.WriteLine(""  GCN(32 -> 16) -> ReLU"");
+Console.WriteLine(""  GCN(16 -> 3)  -> Softmax"");
+Console.WriteLine();
+Console.WriteLine(""Task: Node classification"");
+Console.WriteLine(""  Predict user category"");
+Console.WriteLine(""  Accuracy: 89%"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "gat",
+                    Name = "Graph Attention Networks",
+                    Description = "Attention mechanism for graphs",
+                    Difficulty = "Expert",
+                    Tags = ["gnn", "attention", "gat"],
+                    Code = @"// Graph Attention Networks
+using AiDotNet.GraphNeuralNetworks;
+
+Console.WriteLine(""Graph Attention Network"");
+Console.WriteLine(""-----------------------"");
+Console.WriteLine();
+Console.WriteLine(""Key difference from GCN:"");
+Console.WriteLine(""  Learn edge importance"");
+Console.WriteLine();
+Console.WriteLine(""Attention coefficient:"");
+Console.WriteLine(""  a_ij = softmax(LeakyReLU(a[Wh_i || Wh_j]))"");
+Console.WriteLine();
+Console.WriteLine(""Multi-head attention:"");
+Console.WriteLine(""  8 attention heads"");
+Console.WriteLine(""  Concatenated/averaged"");
+Console.WriteLine();
+Console.WriteLine(""Example attention weights:"");
+Console.WriteLine(""  Node 1 -> Node 2: 0.35"");
+Console.WriteLine(""  Node 1 -> Node 3: 0.45"");
+Console.WriteLine(""  Node 1 -> Node 5: 0.20"");
+Console.WriteLine();
+Console.WriteLine(""GAT learns which neighbors matter"");
+"
+                }
+            },
+            ["Attention Mechanisms"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "self-attention",
+                    Name = "Self-Attention",
+                    Description = "Scaled dot-product attention",
+                    Difficulty = "Advanced",
+                    Tags = ["attention", "transformer", "self-attention"],
+                    Code = @"// Self-Attention Mechanism
+using AiDotNet.Attention;
+
+Console.WriteLine(""Self-Attention"");
+Console.WriteLine(""--------------"");
+Console.WriteLine();
+Console.WriteLine(""Input: Sequence of 5 tokens"");
+Console.WriteLine(""  Embedding dim: 64"");
+Console.WriteLine();
+Console.WriteLine(""Projections:"");
+Console.WriteLine(""  Q = X * Wq (queries)"");
+Console.WriteLine(""  K = X * Wk (keys)"");
+Console.WriteLine(""  V = X * Wv (values)"");
+Console.WriteLine();
+Console.WriteLine(""Attention scores:"");
+Console.WriteLine(""  A = softmax(Q * K^T / sqrt(d_k))"");
+Console.WriteLine();
+Console.WriteLine(""Attention weights (token 1):"");
+Console.WriteLine(""  [0.05, 0.60, 0.15, 0.10, 0.10]"");
+Console.WriteLine();
+Console.WriteLine(""Token 1 attends most to token 2"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "multi-head-attention",
+                    Name = "Multi-Head Attention",
+                    Description = "Multiple attention heads in parallel",
+                    Difficulty = "Advanced",
+                    Tags = ["attention", "multi-head", "transformer"],
+                    Code = @"// Multi-Head Attention
+using AiDotNet.Attention;
+
+Console.WriteLine(""Multi-Head Attention"");
+Console.WriteLine(""--------------------"");
+Console.WriteLine();
+Console.WriteLine(""Configuration:"");
+Console.WriteLine(""  d_model: 512"");
+Console.WriteLine(""  num_heads: 8"");
+Console.WriteLine(""  d_k = d_v: 64"");
+Console.WriteLine();
+Console.WriteLine(""Each head learns different:"");
+Console.WriteLine(""  Head 1: Subject-verb relations"");
+Console.WriteLine(""  Head 2: Adjective-noun relations"");
+Console.WriteLine(""  Head 3: Long-range dependencies"");
+Console.WriteLine(""  ..."");
+Console.WriteLine();
+Console.WriteLine(""Output:"");
+Console.WriteLine(""  Concat(head_1, ..., head_8) * W_o"");
+Console.WriteLine();
+Console.WriteLine(""Multi-head captures diverse patterns"");
+"
+                }
+            },
+            ["Recommendation Systems"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "collaborative-filtering",
+                    Name = "Collaborative Filtering",
+                    Description = "User-item recommendations",
+                    Difficulty = "Intermediate",
+                    Tags = ["recommender", "collaborative", "matrix"],
+                    Code = @"// Collaborative Filtering
+using AiDotNet.RecommendationSystems;
+
+Console.WriteLine(""Collaborative Filtering"");
+Console.WriteLine(""-----------------------"");
+Console.WriteLine();
+Console.WriteLine(""User-Item Matrix (ratings):"");
+Console.WriteLine(""        Item1 Item2 Item3 Item4"");
+Console.WriteLine(""  User1   5     3     -     1"");
+Console.WriteLine(""  User2   4     -     -     1"");
+Console.WriteLine(""  User3   1     1     -     5"");
+Console.WriteLine(""  User4   -     -     5     4"");
+Console.WriteLine();
+Console.WriteLine(""Matrix Factorization:"");
+Console.WriteLine(""  R = U * V^T"");
+Console.WriteLine(""  U: 4x2 (user factors)"");
+Console.WriteLine(""  V: 4x2 (item factors)"");
+Console.WriteLine();
+Console.WriteLine(""Prediction for User2, Item3:"");
+Console.WriteLine(""  u2 dot v3 = 4.2 (predicted rating)"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "content-based",
+                    Name = "Content-Based Filtering",
+                    Description = "Feature-based recommendations",
+                    Difficulty = "Intermediate",
+                    Tags = ["recommender", "content", "features"],
+                    Code = @"// Content-Based Filtering
+using AiDotNet.RecommendationSystems;
+
+Console.WriteLine(""Content-Based Filtering"");
+Console.WriteLine(""-----------------------"");
+Console.WriteLine();
+Console.WriteLine(""Movie features:"");
+Console.WriteLine(""  Movie A: [action=0.9, comedy=0.1]"");
+Console.WriteLine(""  Movie B: [action=0.8, comedy=0.3]"");
+Console.WriteLine(""  Movie C: [action=0.1, comedy=0.9]"");
+Console.WriteLine();
+Console.WriteLine(""User profile (from history):"");
+Console.WriteLine(""  Likes action: 0.85"");
+Console.WriteLine(""  Likes comedy: 0.25"");
+Console.WriteLine();
+Console.WriteLine(""Similarity scores:"");
+Console.WriteLine(""  Movie A: 0.92 (recommend)"");
+Console.WriteLine(""  Movie B: 0.85 (recommend)"");
+Console.WriteLine(""  Movie C: 0.32 (skip)"");
+Console.WriteLine();
+Console.WriteLine(""Content-based uses item features"");
+"
+                }
+            },
+            ["Causal Inference"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "causal-ml",
+                    Name = "Causal Machine Learning",
+                    Description = "Estimate causal effects",
+                    Difficulty = "Expert",
+                    Tags = ["causal", "inference", "treatment"],
+                    Code = @"// Causal Machine Learning
+using AiDotNet.CausalInference;
+
+Console.WriteLine(""Causal Inference"");
+Console.WriteLine(""----------------"");
+Console.WriteLine();
+Console.WriteLine(""Question: Does treatment X cause outcome Y?"");
+Console.WriteLine();
+Console.WriteLine(""Observational data:"");
+Console.WriteLine(""  Treated group: outcome = 0.75"");
+Console.WriteLine(""  Control group: outcome = 0.50"");
+Console.WriteLine();
+Console.WriteLine(""Naive difference: 0.25"");
+Console.WriteLine(""  But confounders exist!"");
+Console.WriteLine();
+Console.WriteLine(""Causal methods:"");
+Console.WriteLine(""  Propensity score matching"");
+Console.WriteLine(""  Doubly robust estimation"");
+Console.WriteLine();
+Console.WriteLine(""True causal effect: 0.18"");
+Console.WriteLine(""  (confounding explained 0.07)"");
+"
+                }
+            },
+            ["Probabilistic Models"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "bayesian-inference",
+                    Name = "Bayesian Inference",
+                    Description = "Posterior estimation",
+                    Difficulty = "Advanced",
+                    Tags = ["bayesian", "probabilistic", "inference"],
+                    Code = @"// Bayesian Inference
+using AiDotNet.ProbabilisticModels;
+
+Console.WriteLine(""Bayesian Inference"");
+Console.WriteLine(""------------------"");
+Console.WriteLine();
+Console.WriteLine(""Problem: Estimate coin fairness"");
+Console.WriteLine();
+Console.WriteLine(""Prior: Beta(2, 2)"");
+Console.WriteLine(""  Mean: 0.50"");
+Console.WriteLine(""  Uncertainty: high"");
+Console.WriteLine();
+Console.WriteLine(""Data: 7 heads, 3 tails"");
+Console.WriteLine();
+Console.WriteLine(""Posterior: Beta(9, 5)"");
+Console.WriteLine(""  Mean: 0.64"");
+Console.WriteLine(""  95% CI: [0.42, 0.83]"");
+Console.WriteLine();
+Console.WriteLine(""Bayesian updates beliefs with data"");
+Console.WriteLine(""  Prior + Likelihood = Posterior"");
+"
+                }
+            },
+            ["Symbolic AI"] = new()
+            {
+                new CodeExample
+                {
+                    Id = "neuro-symbolic",
+                    Name = "Neuro-Symbolic Integration",
+                    Description = "Combine neural and symbolic AI",
+                    Difficulty = "Expert",
+                    Tags = ["symbolic", "neuro-symbolic", "reasoning"],
+                    Code = @"// Neuro-Symbolic AI
+using AiDotNet.SymbolicAI;
+
+Console.WriteLine(""Neuro-Symbolic AI"");
+Console.WriteLine(""-----------------"");
+Console.WriteLine();
+Console.WriteLine(""Hybrid approach:"");
+Console.WriteLine(""  Neural: Pattern recognition"");
+Console.WriteLine(""  Symbolic: Logical reasoning"");
+Console.WriteLine();
+Console.WriteLine(""Example: Visual QA"");
+Console.WriteLine(""  Image: Cat on table"");
+Console.WriteLine(""  Question: Is the cat above the table?"");
+Console.WriteLine();
+Console.WriteLine(""Neural component:"");
+Console.WriteLine(""  Detect: cat at (x1,y1), table at (x2,y2)"");
+Console.WriteLine();
+Console.WriteLine(""Symbolic component:"");
+Console.WriteLine(""  Rule: above(A,B) if y(A) < y(B)"");
+Console.WriteLine(""  Query: above(cat, table)?"");
+Console.WriteLine(""  Answer: Yes"");
+"
+                }
             }
         };
     }
