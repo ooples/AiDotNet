@@ -247,24 +247,40 @@ Console.WriteLine($""Expected: ~12.0"");
                     Description = "Binary classification with logistic regression",
                     Difficulty = "Beginner",
                     Tags = ["classification", "logistic", "binary"],
-                    Code = @"// Logistic Regression with AiModelBuilder
+                    Code = @"// Logistic Regression Classification with AiDotNet
 using AiDotNet;
-using AiDotNet.Classification;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
+// Training data: features and binary labels
 var features = new double[,]
 {
-    { 1.0, 2.0 }, { 2.0, 1.0 }, { 3.0, 3.0 }, { 4.0, 2.0 }
+    { 1.0, 2.0 }, { 2.0, 1.0 }, { 3.0, 3.0 }, { 4.0, 2.0 },
+    { 1.5, 1.5 }, { 3.5, 3.0 }
 };
-var labels = new double[] { 0, 0, 1, 1 };
+var labels = new double[] { 0, 0, 1, 1, 0, 1 };
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new LogisticRegression<double>())
-    .ConfigurePreprocessing()
-    .BuildAsync(features, labels);
+// Create data loader and model
+var loader = DataLoaders.FromArrays(features, labels);
+var model = new LogisticRegression<double>();
 
-var prediction = result.Predict(new double[] { 3.5, 2.5 });
-Console.WriteLine($""Predicted class: {prediction}"");
-Console.WriteLine($""Accuracy: {result.Metrics.Accuracy:P2}"");
+// Build using AiModelBuilder facade pattern
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(model)
+    .BuildAsync();
+
+// Make prediction on new data
+var testData = new Matrix<double>(1, 2);
+testData[0, 0] = 3.5; testData[0, 1] = 2.5;
+var predictions = result.Model.Predict(testData);
+
+Console.WriteLine(""Logistic Regression Results:"");
+Console.WriteLine($""  Prediction for (3.5, 2.5): {predictions[0]:F4}"");
+Console.WriteLine($""  Predicted class: {(predictions[0] > 0.5 ? 1 : 0)}"");
+Console.WriteLine($""  Coefficients: [{string.Join("", "", result.Model.Coefficients.Select(c => c.ToString(""F4"")))}]"");
+Console.WriteLine($""  Intercept: {result.Model.Intercept:F4}"");
 "
                 },
                 new CodeExample
@@ -274,23 +290,47 @@ Console.WriteLine($""Accuracy: {result.Metrics.Accuracy:P2}"");
                     Description = "SVM classifier for classification tasks",
                     Difficulty = "Intermediate",
                     Tags = ["classification", "svm"],
-                    Code = @"// SVM Classification with AiModelBuilder
+                    Code = @"// SVM Classification with AiDotNet
 using AiDotNet;
 using AiDotNet.Classification.SVM;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
+// Training data
 var features = new double[,]
 {
-    { 1.0, 1.0 }, { 1.5, 2.0 }, { 3.0, 3.0 }, { 3.5, 3.5 }
+    { 1.0, 1.0 }, { 1.5, 2.0 }, { 2.0, 1.5 },
+    { 4.0, 4.0 }, { 4.5, 3.5 }, { 5.0, 4.5 }
 };
-var labels = new double[] { 0, 0, 1, 1 };
+var labels = new double[] { 0, 0, 0, 1, 1, 1 };
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new SupportVectorClassifier<double>(kernel: ""rbf""))
-    .ConfigurePreprocessing()
-    .BuildAsync(features, labels);
+// Create data loader and SVM with RBF kernel options
+var loader = DataLoaders.FromArrays(features, labels);
+var options = new SVMOptions<double>
+{
+    Kernel = KernelType.RBF,
+    Gamma = 0.5,
+    C = 1.0
+};
+var model = new SupportVectorClassifier<double>(options);
 
-var prediction = result.Predict(new double[] { 2.5, 2.5 });
-Console.WriteLine($""Predicted class: {prediction}"");
+// Build using AiModelBuilder facade pattern
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(model)
+    .BuildAsync();
+
+// Make predictions
+var testData = new Matrix<double>(1, 2);
+testData[0, 0] = 2.5; testData[0, 1] = 2.5;
+var predictions = result.Model.Predict(testData);
+
+Console.WriteLine(""SVM Classification Results:"");
+Console.WriteLine($""  Kernel: RBF (Gamma={options.Gamma})"");
+Console.WriteLine($""  C parameter: {options.C}"");
+Console.WriteLine($""  Prediction for (2.5, 2.5): {predictions[0]:F4}"");
+Console.WriteLine($""  Predicted class: {(predictions[0] > 0 ? 1 : 0)}"");
 "
                 },
                 new CodeExample
@@ -300,23 +340,39 @@ Console.WriteLine($""Predicted class: {prediction}"");
                     Description = "Probabilistic classifier using Bayes theorem",
                     Difficulty = "Beginner",
                     Tags = ["classification", "probabilistic"],
-                    Code = @"// Naive Bayes Classification with AiModelBuilder
+                    Code = @"// Gaussian Naive Bayes Classification with AiDotNet
 using AiDotNet;
 using AiDotNet.Classification.NaiveBayes;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Tensors.LinearAlgebra;
 
+// Training data
 var features = new double[,]
 {
-    { 1.0, 2.0 }, { 1.5, 1.8 }, { 5.0, 8.0 }, { 6.0, 9.0 }
+    { 1.0, 2.0 }, { 1.5, 1.8 }, { 2.0, 2.2 },
+    { 5.0, 8.0 }, { 6.0, 9.0 }, { 5.5, 7.5 }
 };
-var labels = new double[] { 0, 0, 1, 1 };
+var labels = new double[] { 0, 0, 0, 1, 1, 1 };
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new GaussianNaiveBayes<double>())
-    .ConfigurePreprocessing()
-    .BuildAsync(features, labels);
+// Create data loader and model
+var loader = DataLoaders.FromArrays(features, labels);
+var model = new GaussianNaiveBayes<double>();
 
-var prediction = result.Predict(new double[] { 3.0, 4.0 });
-Console.WriteLine($""Predicted class: {prediction}"");
+// Build using AiModelBuilder facade pattern
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(model)
+    .BuildAsync();
+
+// Make prediction
+var testData = new Matrix<double>(1, 2);
+testData[0, 0] = 3.0; testData[0, 1] = 4.0;
+var predictions = result.Model.Predict(testData);
+
+Console.WriteLine(""Gaussian Naive Bayes Results:"");
+Console.WriteLine($""  Prediction for (3.0, 4.0): {predictions[0]:F4}"");
+Console.WriteLine($""  Predicted class: {(predictions[0] > 0.5 ? 1 : 0)}"");
+Console.WriteLine(""  Classes learned: 2"");
 "
                 }
             },
@@ -847,23 +903,44 @@ Console.WriteLine(""Note: Use TrainBatch() for training with gradient descent.""
                     Description = "Time series forecasting with ARIMA",
                     Difficulty = "Intermediate",
                     Tags = ["time-series", "forecasting", "arima"],
-                    Code = @"// ARIMA Time Series Forecasting with AiModelBuilder
-using AiDotNet;
+                    Code = @"// ARIMA Time Series Forecasting with AiDotNet
 using AiDotNet.TimeSeries;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
 // Monthly sales data
 var data = new double[] { 100, 120, 130, 125, 140, 150, 160, 155, 170, 180, 190, 200 };
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new ARIMA<double>(p: 1, d: 1, q: 1))
-    .BuildAsync(data);
-
-Console.WriteLine(""ARIMA Forecast (next 3 periods):"");
-var forecast = result.Forecast(steps: 3);
-for (int i = 0; i < forecast.Length; i++)
+// Create ARIMA model with options
+var options = new ARIMAOptions<double>
 {
-    Console.WriteLine($""  Period {data.Length + i + 1}: {forecast[i]:F2}"");
+    P = 1,  // AutoRegressive order
+    D = 1,  // Differencing order
+    Q = 1   // Moving Average order
+};
+var arima = new ARIMAModel<double>(options);
+
+// Convert data to Matrix and dummy Vector for Train
+var features = new Matrix<double>(data.Length, 1);
+for (int i = 0; i < data.Length; i++)
+    features[i, 0] = i;  // Time index
+var labels = new Vector<double>(data);
+
+// Train the model
+arima.Train(features, labels);
+
+Console.WriteLine(""ARIMA Time Series Model:"");
+Console.WriteLine($""  Parameters: P={options.P}, D={options.D}, Q={options.Q}"");
+Console.WriteLine($""  Training data: {data.Length} observations"");
+Console.WriteLine();
+Console.WriteLine(""Training data:"");
+for (int i = 0; i < data.Length; i++)
+{
+    Console.WriteLine($""  Month {i + 1}: {data[i]:F0}"");
 }
+Console.WriteLine();
+Console.WriteLine(""ARIMA is used for forecasting future values based on"");
+Console.WriteLine(""autoregressive patterns, trends, and moving averages."");
 "
                 },
                 new CodeExample
@@ -873,20 +950,42 @@ for (int i = 0; i < forecast.Length; i++)
                     Description = "Simple exponential smoothing for forecasting",
                     Difficulty = "Beginner",
                     Tags = ["time-series", "forecasting", "smoothing"],
-                    Code = @"// Exponential Smoothing with AiModelBuilder
-using AiDotNet;
+                    Code = @"// Exponential Smoothing with AiDotNet
 using AiDotNet.TimeSeries;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
+// Time series data
 var data = new double[] { 10, 12, 13, 15, 14, 16, 18, 17, 19, 20 };
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new ExponentialSmoothing<double>(alpha: 0.3))
-    .BuildAsync(data);
+// Create Exponential Smoothing model with options
+var options = new ExponentialSmoothingOptions<double>
+{
+    InitialAlpha = 0.3  // Smoothing factor (0-1)
+};
+var model = new ExponentialSmoothingModel<double>(options);
 
-Console.WriteLine(""Smoothed values and forecast:"");
-var smoothed = result.Transform(data);
-Console.WriteLine($""  Last smoothed: {smoothed[^1]:F2}"");
-Console.WriteLine($""  Next forecast: {result.Forecast(steps: 1)[0]:F2}"");
+// Convert data to Matrix and Vector for Train
+var features = new Matrix<double>(data.Length, 1);
+for (int i = 0; i < data.Length; i++)
+    features[i, 0] = i;  // Time index
+var labels = new Vector<double>(data);
+
+// Train the model
+model.Train(features, labels);
+
+Console.WriteLine(""Exponential Smoothing Model:"");
+Console.WriteLine($""  Alpha (smoothing factor): {options.InitialAlpha}"");
+Console.WriteLine($""  Training data: {data.Length} observations"");
+Console.WriteLine();
+Console.WriteLine(""Original data:"");
+for (int i = 0; i < data.Length; i++)
+{
+    Console.WriteLine($""  t={i}: {data[i]:F1}"");
+}
+Console.WriteLine();
+Console.WriteLine(""Higher alpha = more weight on recent observations"");
+Console.WriteLine(""Lower alpha = smoother forecasts, less reactive to changes"");
 "
                 }
             },
@@ -900,13 +999,19 @@ Console.WriteLine($""  Next forecast: {result.Forecast(steps: 1)[0]:F2}"");
                     Description = "Evaluate model performance with K-Fold cross-validation",
                     Difficulty = "Intermediate",
                     Tags = ["validation", "evaluation"],
-                    Code = @"// Cross-Validation with AiModelBuilder
+                    Code = @"// Cross-Validation with AiDotNet
 using AiDotNet;
-using AiDotNet.Classification;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.CrossValidators;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
+// Generate sample data
+var rng = RandomHelper.CreateSeededRandom(42);
 var features = new double[100, 2];
 var labels = new double[100];
-var rng = RandomHelper.CreateSeededRandom(42);
 for (int i = 0; i < 100; i++)
 {
     features[i, 0] = rng.NextDouble() * 10;
@@ -914,15 +1019,32 @@ for (int i = 0; i < 100; i++)
     labels[i] = features[i, 0] + features[i, 1] > 10 ? 1 : 0;
 }
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 50))
-    .ConfigurePreprocessing()
-    .ConfigureCrossValidation(new KFoldCrossValidator<double>(k: 5))
-    .BuildAsync(features, labels);
+// Create data loader and model
+var loader = DataLoaders.FromArrays(features, labels);
+var rfOptions = new RandomForestClassifierOptions<double> { NEstimators = 50 };
+var model = new RandomForestClassifier<double>(rfOptions);
 
-Console.WriteLine(""5-Fold Cross-Validation Results:"");
-Console.WriteLine($""  Mean Accuracy: {result.CrossValidationMetrics.MeanAccuracy:P2}"");
-Console.WriteLine($""  Std Deviation: {result.CrossValidationMetrics.StdAccuracy:F4}"");
+// Create cross-validator
+var cvOptions = new CrossValidationOptions { NumFolds = 5, Shuffle = true };
+var crossValidator = new KFoldCrossValidator<double, Matrix<double>, Vector<double>>(cvOptions);
+
+// Build with cross-validation
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(model)
+    .ConfigureCrossValidation(crossValidator)
+    .BuildAsync();
+
+Console.WriteLine(""Random Forest with 5-Fold Cross-Validation:"");
+Console.WriteLine($""  Number of trees: {rfOptions.NEstimators}"");
+Console.WriteLine($""  Training samples: {features.GetLength(0)}"");
+Console.WriteLine($""  Features: {features.GetLength(1)}"");
+Console.WriteLine();
+Console.WriteLine(""Cross-validation evaluates model performance by:"");
+Console.WriteLine(""  1. Splitting data into 5 equal folds"");
+Console.WriteLine(""  2. Training on 4 folds, validating on 1"");
+Console.WriteLine(""  3. Repeating for each fold"");
+Console.WriteLine(""  4. Averaging results for robust estimate"");
 "
                 },
                 new CodeExample
@@ -966,7 +1088,7 @@ Console.WriteLine($""Training data: {features.GetLength(0)} samples, {features.G
 Console.WriteLine();
 
 Console.WriteLine(""Usage with AiModelBuilder:"");
-Console.WriteLine(""  .ConfigureHyperparameterOptimizer(optimizer, searchSpace, trials)"");
+Console.WriteLine(""  .ConfigureHyperparameterOptimizer(optimizer)"");
 Console.WriteLine();
 Console.WriteLine(""Optimization finds best hyperparameters via search strategies:"");
 Console.WriteLine(""  - Grid Search: exhaustive search over parameter grid"");
@@ -981,30 +1103,49 @@ Console.WriteLine(""  - Bayesian Optimization: intelligent search using surrogat
                     Description = "Persist trained models for later use",
                     Difficulty = "Beginner",
                     Tags = ["persistence", "save", "load"],
-                    Code = @"// Model Persistence with AiModelBuilder
+                    Code = @"// Model Persistence with AiDotNet
 using AiDotNet;
-using AiDotNet.Classification;
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Data.Loaders;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Train a model
-var features = new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 } };
-var labels = new double[] { 0, 0, 1, 1 };
+// Create training data
+var features = new double[,]
+{
+    { 1, 2 }, { 2, 1 }, { 3, 4 }, { 4, 3 },
+    { 5, 6 }, { 6, 5 }, { 7, 8 }, { 8, 7 }
+};
+var labels = new double[] { 0, 0, 0, 0, 1, 1, 1, 1 };
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 50))
-    .BuildAsync(features, labels);
+// Create data loader and model
+var loader = DataLoaders.FromArrays(features, labels);
+var options = new RandomForestClassifierOptions<double> { NEstimators = 50 };
+var model = new RandomForestClassifier<double>(options);
 
-// Save the trained model
-await result.SaveAsync(""my_model.aidotnet"");
-Console.WriteLine(""Model saved to my_model.aidotnet"");
+// Build and train
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(model)
+    .BuildAsync();
 
-// Load the model later
-var loadedResult = await AiModelResult<double, double[], double>
-    .LoadAsync(""my_model.aidotnet"");
-Console.WriteLine(""Model loaded successfully"");
+Console.WriteLine(""Random Forest Model Trained:"");
+Console.WriteLine($""  Number of trees: {options.NEstimators}"");
+Console.WriteLine($""  Training samples: {features.GetLength(0)}"");
+Console.WriteLine();
 
-// Use the loaded model
-var prediction = loadedResult.Predict(new double[] { 6, 7 });
-Console.WriteLine($""Prediction: {prediction}"");
+// Make prediction
+var testData = new Matrix<double>(1, 2);
+testData[0, 0] = 6.0; testData[0, 1] = 7.0;
+var predictions = result.Model.Predict(testData);
+
+Console.WriteLine($""Prediction for (6, 7): {predictions[0]:F4}"");
+Console.WriteLine($""Predicted class: {(predictions[0] > 0.5 ? 1 : 0)}"");
+Console.WriteLine();
+Console.WriteLine(""Model persistence features:"");
+Console.WriteLine(""  - Save models using model.Serialize()"");
+Console.WriteLine(""  - Load models using deserialization"");
+Console.WriteLine(""  - Full model state preserved including weights"");
 "
                 }
             },
@@ -1553,25 +1694,39 @@ Console.WriteLine(""  - Image processing (maximum color difference)"");
                     Description = "Normalize features to zero mean and unit variance",
                     Difficulty = "Beginner",
                     Tags = ["preprocessing", "scaling", "normalization"],
-                    Code = @"// Standard Scaling with AiModelBuilder
-using AiDotNet;
-using AiDotNet.Preprocessing;
+                    Code = @"// Standard Scaling with AiDotNet
+using AiDotNet.Preprocessing.Scalers;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var features = new double[,]
-{
-    { 100, 0.001 }, { 200, 0.002 }, { 150, 0.0015 }, { 300, 0.003 }
-};
-var labels = new double[] { 1, 2, 1.5, 3 };
+// Data with very different scales
+// Feature 1: Large values (100-300)
+// Feature 2: Tiny values (0.001-0.003)
+var features = new Matrix<double>(4, 2);
+features[0, 0] = 100; features[0, 1] = 0.001;
+features[1, 0] = 200; features[1, 1] = 0.002;
+features[2, 0] = 150; features[2, 1] = 0.0015;
+features[3, 0] = 300; features[3, 1] = 0.003;
 
-// StandardScaler normalizes to mean=0, std=1
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new LinearRegression<double>())
-    .ConfigurePreprocessing(new PreprocessingPipeline<double>()
-        .AddScaler(new StandardScaler<double>()))
-    .BuildAsync(features, labels);
+Console.WriteLine(""Original Data:"");
+Console.WriteLine($""  Feature 1: 100, 200, 150, 300 (large scale)"");
+Console.WriteLine($""  Feature 2: 0.001, 0.002, 0.0015, 0.003 (tiny scale)"");
+Console.WriteLine();
 
-Console.WriteLine(""Model trained with standardized features"");
-Console.WriteLine($""R² Score: {result.Metrics.RSquared:F4}"");
+// Create and fit StandardScaler
+var scaler = new StandardScaler<double>();
+scaler.Fit(features);
+
+// Transform the data
+var scaled = scaler.Transform(features);
+
+Console.WriteLine(""StandardScaler transforms to mean=0, std=1:"");
+Console.WriteLine($""  Feature 1 mean: {scaler.Mean![0]:F4}"");
+Console.WriteLine($""  Feature 1 std:  {scaler.StandardDeviation![0]:F4}"");
+Console.WriteLine($""  Feature 2 mean: {scaler.Mean![1]:F6}"");
+Console.WriteLine($""  Feature 2 std:  {scaler.StandardDeviation![1]:F6}"");
+Console.WriteLine();
+Console.WriteLine(""After scaling, both features are comparable."");
+Console.WriteLine(""This helps algorithms converge faster and work better!"");
 "
                 },
                 new CodeExample
@@ -1581,25 +1736,37 @@ Console.WriteLine($""R² Score: {result.Metrics.RSquared:F4}"");
                     Description = "Scale features to a specified range [0, 1]",
                     Difficulty = "Beginner",
                     Tags = ["preprocessing", "scaling", "minmax"],
-                    Code = @"// Min-Max Scaling with AiModelBuilder
-using AiDotNet;
-using AiDotNet.Preprocessing;
+                    Code = @"// Min-Max Scaling with AiDotNet
+using AiDotNet.Preprocessing.Scalers;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var features = new double[,]
+// Data with different ranges
+var features = new Matrix<double>(4, 2);
+features[0, 0] = 10; features[0, 1] = 100;
+features[1, 0] = 20; features[1, 1] = 200;
+features[2, 0] = 15; features[2, 1] = 150;
+features[3, 0] = 30; features[3, 1] = 300;
+
+Console.WriteLine(""Original Data:"");
+Console.WriteLine($""  Feature 1: 10, 20, 15, 30 (range 10-30)"");
+Console.WriteLine($""  Feature 2: 100, 200, 150, 300 (range 100-300)"");
+Console.WriteLine();
+
+// Create MinMaxScaler
+var scaler = new MinMaxScaler<double>();
+scaler.Fit(features);
+
+// Transform the data
+var scaled = scaler.Transform(features);
+
+Console.WriteLine(""MinMaxScaler transforms to [0, 1] range:"");
+for (int i = 0; i < scaled.Rows; i++)
 {
-    { 10, 100 }, { 20, 200 }, { 15, 150 }, { 30, 300 }
-};
-var labels = new double[] { 0, 1, 0, 1 };
-
-// MinMaxScaler scales to [0, 1] range
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new LogisticRegression<double>())
-    .ConfigurePreprocessing(new PreprocessingPipeline<double>()
-        .AddScaler(new MinMaxScaler<double>(featureRange: (0, 1))))
-    .BuildAsync(features, labels);
-
-Console.WriteLine(""Model trained with min-max scaled features"");
-Console.WriteLine($""Accuracy: {result.Metrics.Accuracy:P2}"");
+    Console.WriteLine($""  Row {i}: ({scaled[i, 0]:F2}, {scaled[i, 1]:F2})"");
+}
+Console.WriteLine();
+Console.WriteLine(""Min-Max scaling preserves the relative distribution"");
+Console.WriteLine(""while putting all features on the same 0-1 scale."");
 "
                 },
                 new CodeExample
@@ -1609,31 +1776,50 @@ Console.WriteLine($""Accuracy: {result.Metrics.Accuracy:P2}"");
                     Description = "Chain multiple preprocessing steps together",
                     Difficulty = "Intermediate",
                     Tags = ["preprocessing", "pipeline", "feature-engineering"],
-                    Code = @"// Preprocessing Pipeline with AiModelBuilder
-using AiDotNet;
+                    Code = @"// Preprocessing Pipeline with AiDotNet
 using AiDotNet.Preprocessing;
+using AiDotNet.Preprocessing.Scalers;
+using AiDotNet.Preprocessing.Imputers;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
-var features = new double[100, 10];
-var labels = new double[100];
+// Generate sample data with missing values
+var features = new Matrix<double>(100, 10);
 var rng = RandomHelper.CreateSeededRandom(42);
 for (int i = 0; i < 100; i++)
 {
     for (int j = 0; j < 10; j++)
-        features[i, j] = rng.NextDouble() * 100;
-    labels[i] = features[i, 0] > 50 ? 1 : 0;
+    {
+        // 10% chance of missing value (represented as NaN)
+        features[i, j] = rng.NextDouble() < 0.1 ? double.NaN : rng.NextDouble() * 100;
+    }
 }
 
-// Chain multiple preprocessing steps
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new RandomForestClassifier<double>())
-    .ConfigurePreprocessing(new PreprocessingPipeline<double>()
-        .AddImputer(new SimpleImputer<double>(strategy: ImputeStrategy.Mean))
-        .AddScaler(new StandardScaler<double>())
-        .AddFeatureSelector(new VarianceThreshold<double>(threshold: 0.01)))
-    .BuildAsync(features, labels);
+Console.WriteLine(""Preprocessing Pipeline Demonstration"");
+Console.WriteLine($""  Original data: {features.Rows} samples, {features.Columns} features"");
+Console.WriteLine();
 
-Console.WriteLine(""Pipeline: Impute -> Scale -> Feature Selection"");
-Console.WriteLine($""Accuracy: {result.Metrics.Accuracy:P2}"");
+// Step 1: Impute missing values
+var imputer = new SimpleImputer<double>(ImputationStrategy.Mean);
+imputer.Fit(features);
+var imputed = imputer.Transform(features);
+Console.WriteLine(""Step 1: Mean Imputation"");
+Console.WriteLine(""  Replaced NaN values with feature means"");
+
+// Step 2: Standard scaling
+var scaler = new StandardScaler<double>();
+scaler.Fit(imputed);
+var scaled = scaler.Transform(imputed);
+Console.WriteLine();
+Console.WriteLine(""Step 2: Standard Scaling"");
+Console.WriteLine(""  Transformed to mean=0, std=1"");
+
+Console.WriteLine();
+Console.WriteLine(""Pipeline steps executed:"");
+Console.WriteLine(""  1. Mean Imputation: Handle missing values"");
+Console.WriteLine(""  2. Standard Scaling: Normalize features"");
+Console.WriteLine();
+Console.WriteLine(""Result: Clean, normalized data ready for ML!"");
 "
                 }
             },
@@ -1643,82 +1829,196 @@ Console.WriteLine($""Accuracy: {result.Metrics.Accuracy:P2}"");
                 new CodeExample
                 {
                     Id = "isolation-forest",
-                    Name = "Isolation Forest",
-                    Description = "Detect anomalies using isolation-based method",
+                    Name = "Time Series Isolation Forest",
+                    Description = "Detect anomalies in time series using isolation-based method with AiModelBuilder",
                     Difficulty = "Intermediate",
-                    Tags = ["anomaly", "outlier", "isolation-forest"],
-                    Code = @"// Isolation Forest with AiModelBuilder
+                    Tags = ["anomaly", "outlier", "isolation-forest", "time-series"],
+                    Code = @"// Time Series Isolation Forest with AiModelBuilder
 using AiDotNet;
-using AiDotNet.AnomalyDetection;
+using AiDotNet.TimeSeries.AnomalyDetection;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Normal data with some anomalies
-var data = new double[110, 2];
+// Create time series data with anomalies
 var rng = RandomHelper.CreateSeededRandom(42);
-// 100 normal points clustered around (0, 0)
+var timeSeriesData = new double[100];
+
+// Normal seasonal pattern with some anomalies
 for (int i = 0; i < 100; i++)
 {
-    data[i, 0] = rng.NextDouble() * 2 - 1;
-    data[i, 1] = rng.NextDouble() * 2 - 1;
-}
-// 10 anomalies far from the cluster
-for (int i = 100; i < 110; i++)
-{
-    data[i, 0] = rng.NextDouble() * 10 + 5;
-    data[i, 1] = rng.NextDouble() * 10 + 5;
+    timeSeriesData[i] = 10 + 5 * Math.Sin(2 * Math.PI * i / 24) + rng.NextDouble() * 2;
 }
 
-var result = await new AiModelBuilder<double, double[], int>()
-    .ConfigureModel(new IsolationForest<double>(
-        nEstimators: 100,
-        contamination: 0.1))
-    .BuildAsync(data);
+// Inject anomalies at specific points
+timeSeriesData[25] = 50;  // Spike anomaly
+timeSeriesData[50] = -10; // Drop anomaly
+timeSeriesData[75] = 45;  // Another spike
 
-Console.WriteLine(""Anomaly Detection Results:"");
-int anomalyCount = 0;
-for (int i = 0; i < 110; i++)
+// Prepare data for AiModelBuilder
+var features = new double[100, 1];
+var labels = new double[100];
+for (int i = 0; i < 100; i++)
 {
-    var pred = result.Predict(new[] { data[i, 0], data[i, 1] });
-    if (pred == -1) anomalyCount++;
+    features[i, 0] = timeSeriesData[i];
+    labels[i] = timeSeriesData[i];
 }
-Console.WriteLine($""  Detected {anomalyCount} anomalies out of 110 samples"");
+
+// Configure Isolation Forest options
+var options = new TimeSeriesIsolationForestOptions<double>
+{
+    NumTrees = 100,
+    ContaminationRate = 0.05,
+    LagFeatures = 5,
+    RollingWindowSize = 10,
+    UseTrendFeatures = true,
+    RandomSeed = 42
+};
+
+// Build model with AiModelBuilder facade
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new TimeSeriesIsolationForest<double>(options))
+    .BuildAsync();
+
+// Use the trained model for anomaly detection
+var timeSeries = new Vector<double>(timeSeriesData);
+var model = (TimeSeriesIsolationForest<double>)result.Model;
+var anomalyScores = model.DetectAnomalies(timeSeries);
+var anomalyIndices = model.GetAnomalyIndices(timeSeries);
+
+Console.WriteLine(""Time Series Isolation Forest Results:"");
+Console.WriteLine($""  Total data points: {timeSeriesData.Length}"");
+Console.WriteLine($""  Anomalies detected: {anomalyIndices.Count}"");
+Console.WriteLine($""  Anomaly indices: [{string.Join("", "", anomalyIndices.Take(10))}]"");
+
+// Show top anomaly scores
+var topAnomalies = Enumerable.Range(0, timeSeriesData.Length)
+    .OrderByDescending(i => anomalyScores[i])
+    .Take(5);
+
+Console.WriteLine(""  Top 5 anomaly scores:"");
+foreach (var idx in topAnomalies)
+{
+    Console.WriteLine($""    Index {idx}: score={anomalyScores[idx]:F3}, value={timeSeriesData[idx]:F2}"");
+}
 "
                 },
                 new CodeExample
                 {
-                    Id = "one-class-svm",
-                    Name = "One-Class SVM",
-                    Description = "Novelty detection using One-Class SVM",
-                    Difficulty = "Intermediate",
-                    Tags = ["anomaly", "svm", "novelty"],
-                    Code = @"// One-Class SVM with AiModelBuilder
+                    Id = "zscore-outlier",
+                    Name = "Z-Score Outlier Removal",
+                    Description = "Remove outliers using Z-Score method with AiModelBuilder",
+                    Difficulty = "Beginner",
+                    Tags = ["anomaly", "outlier", "zscore", "statistics"],
+                    Code = @"// Z-Score Outlier Removal with AiModelBuilder
 using AiDotNet;
-using AiDotNet.AnomalyDetection;
+using AiDotNet.OutlierRemoval;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Train on normal data only
-var normalData = new double[100, 2];
+// Create dataset with some outliers
 var rng = RandomHelper.CreateSeededRandom(42);
-for (int i = 0; i < 100; i++)
+var features = new double[50, 2];
+var labels = new double[50];
+
+// Normal data points
+for (int i = 0; i < 45; i++)
 {
-    // Box-Muller transform for Gaussian random numbers
-    double u1 = 1.0 - rng.NextDouble();
-    double u2 = 1.0 - rng.NextDouble();
-    double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-    normalData[i, 0] = randStdNormal;
-    normalData[i, 1] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+    features[i, 0] = 5 + rng.NextDouble() * 2;  // Feature 1: centered around 5
+    features[i, 1] = 10 + rng.NextDouble() * 3; // Feature 2: centered around 10
+    labels[i] = features[i, 0] * 2 + features[i, 1] * 0.5 + rng.NextDouble();
 }
 
-var result = await new AiModelBuilder<double, double[], int>()
-    .ConfigureModel(new OneClassSVM<double>(
-        kernel: ""rbf"",
-        nu: 0.1))
-    .BuildAsync(normalData);
+// Inject outliers that would corrupt the model
+features[45, 0] = 100; features[45, 1] = 10; labels[45] = 110;
+features[46, 0] = 5; features[46, 1] = 200; labels[46] = 205;
+features[47, 0] = -50; features[47, 1] = -50; labels[47] = -100;
+features[48, 0] = 6; features[48, 1] = 11; labels[48] = 17.5;  // Normal
+features[49, 0] = 500; features[49, 1] = 500; labels[49] = 1000;
 
-// Test on new data
-var normalTest = new double[] { 0.5, 0.3 };
-var anomalyTest = new double[] { 10.0, 10.0 };
+// Build model with AiModelBuilder + outlier removal
+var loader = DataLoaders.FromArrays(features, labels);
+var outlierRemover = new ZScoreOutlierRemoval<double, Matrix<double>, Vector<double>>(threshold: 3.0);
 
-Console.WriteLine($""Normal point (0.5, 0.3): {(result.Predict(normalTest) == 1 ? ""Normal"" : ""Anomaly"")}"");
-Console.WriteLine($""Anomaly point (10, 10): {(result.Predict(anomalyTest) == 1 ? ""Normal"" : ""Anomaly"")}"");
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureOutlierRemoval(outlierRemover)
+    .ConfigureModel(new SimpleRegression<double>())
+    .BuildAsync();
+
+Console.WriteLine(""Z-Score Outlier Removal with Regression:"");
+Console.WriteLine($""  Original samples: 50"");
+Console.WriteLine($""  Model trained after outlier removal"");
+
+// Test predictions with clean data
+var testFeatures = new Matrix<double>(new double[,] { { 6.0, 11.0 }, { 5.5, 10.5 }, { 7.0, 12.0 } });
+var predictions = result.Model.Predict(testFeatures);
+
+Console.WriteLine(""  Predictions on test data:"");
+for (int i = 0; i < predictions.Length; i++)
+{
+    Console.WriteLine($""    Input: [{testFeatures[i, 0]:F1}, {testFeatures[i, 1]:F1}] -> Prediction: {predictions[i]:F2}"");
+}
+"
+                },
+                new CodeExample
+                {
+                    Id = "iqr-outlier",
+                    Name = "IQR Outlier Removal",
+                    Description = "Remove outliers using IQR method with AiModelBuilder",
+                    Difficulty = "Beginner",
+                    Tags = ["anomaly", "outlier", "iqr", "statistics"],
+                    Code = @"// IQR Outlier Removal with AiModelBuilder
+using AiDotNet;
+using AiDotNet.OutlierRemoval;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create dataset with outliers
+var rng = RandomHelper.CreateSeededRandom(42);
+var features = new double[60, 3];
+var labels = new double[60];
+
+// Generate normal data
+for (int i = 0; i < 55; i++)
+{
+    features[i, 0] = 50 + rng.NextDouble() * 20;  // Range: 50-70
+    features[i, 1] = 100 + rng.NextDouble() * 30; // Range: 100-130
+    features[i, 2] = 25 + rng.NextDouble() * 10;  // Range: 25-35
+    labels[i] = features[i, 0] + features[i, 1] * 0.5 + features[i, 2] * 2;
+}
+
+// Add outliers
+features[55, 0] = 200; features[55, 1] = 110; features[55, 2] = 30; labels[55] = 500;
+features[56, 0] = 60; features[56, 1] = 500; features[56, 2] = 30; labels[56] = 600;
+features[57, 0] = 60; features[57, 1] = 110; features[57, 2] = 150; labels[57] = 400;
+features[58, 0] = -100; features[58, 1] = -200; features[58, 2] = -50; labels[58] = -500;
+features[59, 0] = 60; features[59, 1] = 115; features[59, 2] = 28; labels[59] = 173.5; // Normal
+
+// Build model with AiModelBuilder + IQR outlier removal
+var loader = DataLoaders.FromArrays(features, labels);
+var outlierRemover = new IQROutlierRemoval<double, Matrix<double>, Vector<double>>(iqrMultiplier: 1.5);
+
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureOutlierRemoval(outlierRemover)
+    .ConfigureModel(new SimpleRegression<double>())
+    .BuildAsync();
+
+Console.WriteLine(""IQR Outlier Removal with Regression:"");
+Console.WriteLine($""  Original samples: 60"");
+Console.WriteLine($""  Model trained after IQR outlier removal"");
+
+// Test predictions
+var testFeatures = new Matrix<double>(new double[,] { { 60.0, 115.0, 30.0 }, { 55.0, 110.0, 28.0 } });
+var predictions = result.Model.Predict(testFeatures);
+
+Console.WriteLine(""  Test predictions:"");
+for (int i = 0; i < predictions.Length; i++)
+{
+    Console.WriteLine($""    Input: [{testFeatures[i, 0]:F0}, {testFeatures[i, 1]:F0}, {testFeatures[i, 2]:F0}] -> Pred: {predictions[i]:F2}"");
+}
 "
                 }
             },
@@ -1728,69 +2028,204 @@ Console.WriteLine($""Anomaly point (10, 10): {(result.Predict(anomalyTest) == 1 
                 new CodeExample
                 {
                     Id = "pca",
-                    Name = "Principal Component Analysis",
-                    Description = "Reduce dimensionality while preserving variance",
+                    Name = "PCA with AiModelBuilder",
+                    Description = "Reduce dimensionality using PCA preprocessing with AiModelBuilder",
                     Difficulty = "Intermediate",
-                    Tags = ["pca", "dimensionality", "feature-extraction"],
-                    Code = @"// PCA with AiModelBuilder
+                    Tags = ["pca", "dimensionality", "feature-extraction", "preprocessing"],
+                    Code = @"// PCA as Preprocessing Step with AiModelBuilder
 using AiDotNet;
-using AiDotNet.DimensionalityReduction;
+using AiDotNet.Preprocessing.DimensionalityReduction;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// High-dimensional data
-var data = new double[100, 50]; // 50 features
+// Create high-dimensional data (100 samples, 20 features)
 var rng = RandomHelper.CreateSeededRandom(42);
+var features = new double[100, 20];
+var labels = new double[100];
+
+// Generate correlated features with a target
 for (int i = 0; i < 100; i++)
-    for (int j = 0; j < 50; j++)
-        data[i, j] = rng.NextDouble();
+{
+    double base1 = rng.NextDouble() * 10;
+    double base2 = rng.NextDouble() * 5;
 
-var result = await new AiModelBuilder<double, double[], double[]>()
-    .ConfigureModel(new PCA<double>(nComponents: 10))
-    .BuildAsync(data);
+    // Features with correlations
+    features[i, 0] = base1 + rng.NextDouble() * 0.5;
+    features[i, 1] = base1 * 0.9 + rng.NextDouble() * 0.5;
+    features[i, 2] = base1 * 0.8 + rng.NextDouble() * 0.5;
+    features[i, 3] = base2 + rng.NextDouble() * 0.3;
+    features[i, 4] = base2 * 1.1 + rng.NextDouble() * 0.3;
 
-Console.WriteLine(""PCA Results:"");
-Console.WriteLine($""  Original dimensions: 50"");
-Console.WriteLine($""  Reduced dimensions: 10"");
-Console.WriteLine($""  Explained variance ratio: {result.Metrics.ExplainedVarianceRatio:P1}"");
+    // Independent noise features
+    for (int j = 5; j < 20; j++)
+        features[i, j] = rng.NextDouble() * 2;
 
-// Transform new data
-var newSample = new double[50];
-var transformed = result.Transform(newSample);
-Console.WriteLine($""  New sample transformed: {transformed.Length} dimensions"");
+    // Target depends on the base values
+    labels[i] = base1 * 2 + base2 * 1.5 + rng.NextDouble();
+}
+
+// Build model with PCA preprocessing (reduce 20 features to 5)
+var loader = DataLoaders.FromArrays(features, labels);
+var pca = new PCA<double>(nComponents: 5);
+
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigurePreprocessing(pca)
+    .ConfigureModel(new SimpleRegression<double>())
+    .BuildAsync();
+
+Console.WriteLine(""PCA with AiModelBuilder Results:"");
+Console.WriteLine($""  Original dimensions: 20"");
+Console.WriteLine($""  Reduced dimensions: {pca.NComponentsOut}"");
+
+// Show explained variance
+if (pca.ExplainedVarianceRatio != null)
+{
+    double totalVariance = 0;
+    Console.WriteLine(""  Explained variance by component:"");
+    for (int i = 0; i < Math.Min(5, pca.ExplainedVarianceRatio.Length); i++)
+    {
+        totalVariance += pca.ExplainedVarianceRatio[i];
+        Console.WriteLine($""    PC{i + 1}: {pca.ExplainedVarianceRatio[i]:P2} (cumulative: {totalVariance:P2})"");
+    }
+}
+
+// Test prediction - input is automatically preprocessed through PCA
+var testFeatures = new Matrix<double>(1, 20);
+for (int j = 0; j < 20; j++)
+    testFeatures[0, j] = rng.NextDouble() * 5;
+
+var predictions = result.Model.Predict(pca.Transform(testFeatures));
+Console.WriteLine($""  Test prediction: {predictions[0]:F2}"");
 "
                 },
                 new CodeExample
                 {
-                    Id = "tsne",
-                    Name = "t-SNE Visualization",
-                    Description = "Visualize high-dimensional data in 2D",
-                    Difficulty = "Advanced",
-                    Tags = ["tsne", "visualization", "embedding"],
-                    Code = @"// t-SNE with AiModelBuilder
+                    Id = "pca-pipeline",
+                    Name = "PCA in Preprocessing Pipeline",
+                    Description = "Combine multiple preprocessing steps including PCA with AiModelBuilder",
+                    Difficulty = "Intermediate",
+                    Tags = ["pca", "pipeline", "preprocessing", "scaling"],
+                    Code = @"// PCA in Multi-Step Preprocessing Pipeline
 using AiDotNet;
-using AiDotNet.DimensionalityReduction;
+using AiDotNet.Preprocessing;
+using AiDotNet.Preprocessing.DimensionalityReduction;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// High-dimensional data for visualization
-var data = new double[200, 100]; // 100 features
-var labels = new double[200];
+// Create high-dimensional data with different scales
 var rng = RandomHelper.CreateSeededRandom(42);
-for (int i = 0; i < 200; i++)
+var features = new double[80, 15];
+var labels = new double[80];
+
+for (int i = 0; i < 80; i++)
 {
-    labels[i] = i % 4; // 4 classes
-    double offset = labels[i] * 2;
-    for (int j = 0; j < 100; j++)
-        data[i, j] = rng.NextDouble() + offset;
+    // Different scale features
+    features[i, 0] = rng.NextDouble() * 1000;  // Large scale
+    features[i, 1] = rng.NextDouble() * 500;
+    features[i, 2] = rng.NextDouble() * 10;    // Small scale
+    features[i, 3] = rng.NextDouble() * 5;
+
+    // Noise features
+    for (int j = 4; j < 15; j++)
+        features[i, j] = rng.NextDouble() * 2;
+
+    labels[i] = features[i, 0] * 0.01 + features[i, 2] * 2 + rng.NextDouble();
 }
 
-var result = await new AiModelBuilder<double, double[], double[]>()
-    .ConfigureModel(new TSNE<double>(
-        nComponents: 2,
-        perplexity: 30,
-        learningRate: 200))
-    .BuildAsync(data);
+// Build with preprocessing pipeline: StandardScaler -> PCA
+var loader = DataLoaders.FromArrays(features, labels);
 
-Console.WriteLine(""t-SNE Embedding Results:"");
-Console.WriteLine($""  Reduced to 2D for visualization"");
-Console.WriteLine($""  KL Divergence: {result.Metrics.KLDivergence:F4}"");
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigurePreprocessing(pipeline => pipeline
+        .Add(new StandardScaler<double>())  // First normalize scales
+        .Add(new PCA<double>(nComponents: 5)))  // Then reduce dimensions
+    .ConfigureModel(new SimpleRegression<double>())
+    .BuildAsync();
+
+Console.WriteLine(""PCA Pipeline with AiModelBuilder:"");
+Console.WriteLine($""  Original features: 15"");
+Console.WriteLine($""  Pipeline: StandardScaler -> PCA(5 components)"");
+Console.WriteLine($""  Model trained successfully"");
+
+// Test prediction
+var testFeatures = new Matrix<double>(new double[,] {
+    { 500, 250, 5, 2.5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
+});
+Console.WriteLine($""  Test input (first 4 features): [{testFeatures[0, 0]:F0}, {testFeatures[0, 1]:F0}, {testFeatures[0, 2]:F0}, {testFeatures[0, 3]:F1}]"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "pca-variance-threshold",
+                    Name = "PCA with Variance Threshold",
+                    Description = "Automatically determine components to keep based on variance",
+                    Difficulty = "Intermediate",
+                    Tags = ["pca", "variance", "dimensionality", "auto"],
+                    Code = @"// PCA with Variance Ratio Threshold via AiModelBuilder
+using AiDotNet;
+using AiDotNet.Preprocessing.DimensionalityReduction;
+using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Create data with varying importance features
+var rng = RandomHelper.CreateSeededRandom(42);
+var features = new double[80, 15];
+var labels = new double[80];
+
+for (int i = 0; i < 80; i++)
+{
+    // High variance features (important)
+    features[i, 0] = rng.NextDouble() * 100;
+    features[i, 1] = rng.NextDouble() * 80;
+    features[i, 2] = rng.NextDouble() * 60;
+
+    // Medium variance features
+    features[i, 3] = rng.NextDouble() * 20;
+    features[i, 4] = rng.NextDouble() * 15;
+
+    // Low variance features (noise)
+    for (int j = 5; j < 15; j++)
+        features[i, j] = 50 + rng.NextDouble() * 2;
+
+    labels[i] = features[i, 0] * 0.5 + features[i, 1] * 0.3 + rng.NextDouble() * 5;
+}
+
+// Build with PCA keeping 95% variance
+var loader = DataLoaders.FromArrays(features, labels);
+var pca95 = new PCA<double>(varianceRatio: 0.95);
+
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigurePreprocessing(pca95)
+    .ConfigureModel(new SimpleRegression<double>())
+    .BuildAsync();
+
+Console.WriteLine(""PCA with 95% Variance Threshold:"");
+Console.WriteLine($""  Original features: 15"");
+Console.WriteLine($""  Components kept: {pca95.NComponentsOut}"");
+Console.WriteLine($""  Automatic reduction based on explained variance"");
+
+// Show variance distribution
+if (pca95.ExplainedVarianceRatio != null)
+{
+    Console.WriteLine(""  Variance by component:"");
+    double cumulative = 0;
+    for (int i = 0; i < Math.Min(5, pca95.ExplainedVarianceRatio.Length); i++)
+    {
+        cumulative += pca95.ExplainedVarianceRatio[i];
+        Console.WriteLine($""    PC{i + 1}: {pca95.ExplainedVarianceRatio[i]:P1} | Cumulative: {cumulative:P1}"");
+    }
+}
+
+// Test prediction
+var testFeatures = new Matrix<double>(new double[,] {
+    { 50, 40, 30, 10, 7.5, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50 }
+});
+var transformed = pca95.Transform(testFeatures);
+var predictions = result.Model.Predict(transformed);
+Console.WriteLine($""  Test prediction: {predictions[0]:F2}"");
 "
                 }
             },
@@ -1799,15 +2234,16 @@ Console.WriteLine($""  KL Divergence: {result.Metrics.KLDivergence:F4}"");
             {
                 new CodeExample
                 {
-                    Id = "text-classification",
-                    Name = "Text Classification",
-                    Description = "Classify text documents using TF-IDF and machine learning",
+                    Id = "tfidf-vectorizer",
+                    Name = "TF-IDF Text Vectorization",
+                    Description = "Convert text documents to TF-IDF weighted vectors",
                     Difficulty = "Intermediate",
-                    Tags = ["nlp", "text", "classification", "tfidf"],
-                    Code = @"// Text Classification with AiModelBuilder
+                    Tags = ["nlp", "text", "tfidf", "vectorization"],
+                    Code = @"// TF-IDF Text Vectorization for Classification
 using AiDotNet;
-using AiDotNet.NLP;
+using AiDotNet.Preprocessing.TextVectorizers;
 using AiDotNet.Classification;
+using AiDotNet.Tensors.LinearAlgebra;
 
 // Sample text documents
 var documents = new string[]
@@ -1821,151 +2257,341 @@ var documents = new string[]
 };
 var labels = new double[] { 1, 1, 0, 0, 1, 0 }; // 1 = positive, 0 = negative
 
-var result = await new AiModelBuilder<double, string, double>()
+// Create TF-IDF vectorizer
+var tfidf = new TfidfVectorizer<double>(
+    maxFeatures: 50,
+    minDf: 1,
+    lowercase: true
+);
+
+// Transform documents to feature matrix
+var features = tfidf.FitTransform(documents);
+
+Console.WriteLine(""TF-IDF Vectorization Results:"");
+Console.WriteLine($""  Documents: {documents.Length}"");
+Console.WriteLine($""  Vocabulary size: {tfidf.Vocabulary?.Count ?? 0}"");
+Console.WriteLine($""  Feature matrix shape: {features.Rows} x {features.Columns}"");
+
+// Now use with AiModelBuilder
+var loader = DataLoaders.FromMatrixVector(features, new Vector<double>(labels));
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
     .ConfigureModel(new LogisticRegression<double>())
-    .ConfigurePreprocessing(new TextPreprocessingPipeline<double>()
-        .AddTokenizer(new WordTokenizer())
-        .AddVectorizer(new TfidfVectorizer<double>(maxFeatures: 1000)))
-    .BuildAsync(documents, labels);
+    .BuildAsync();
+
+Console.WriteLine();
+Console.WriteLine(""  Model trained on TF-IDF features"");
 
 // Classify new text
-var newReview = ""This is an excellent product!"";
-var prediction = result.Predict(newReview);
-Console.WriteLine($""Review: '{newReview}'"");
-Console.WriteLine($""Sentiment: {(prediction == 1 ? ""Positive"" : ""Negative"")}"");
+var newDoc = new[] { ""This is an excellent product!"" };
+var newFeatures = tfidf.Transform(newDoc);
+var prediction = result.Model.Predict(newFeatures);
+
+Console.WriteLine($""  New review: '{newDoc[0]}'"");
+Console.WriteLine($""  Prediction: {(prediction[0] > 0.5 ? ""Positive"" : ""Negative"")}"");
 "
                 },
                 new CodeExample
                 {
-                    Id = "word-embeddings",
-                    Name = "Word Embeddings",
-                    Description = "Create and use word embeddings for semantic similarity",
+                    Id = "word2vec",
+                    Name = "Word2Vec Embeddings",
+                    Description = "Train Word2Vec word embeddings with AiModelBuilder",
                     Difficulty = "Intermediate",
-                    Tags = ["nlp", "embeddings", "word2vec"],
-                    Code = @"// Word Embeddings with AiModelBuilder
+                    Tags = ["nlp", "embeddings", "word2vec", "neural-network"],
+                    Code = @"// Word2Vec Word Embeddings with AiModelBuilder
 using AiDotNet;
-using AiDotNet.NLP.Embeddings;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tokenization.Algorithms;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Training corpus
-var corpus = new string[]
+// Training corpus - tokenized sentences
+var sentences = new string[]
 {
     ""The cat sat on the mat"",
     ""The dog ran in the park"",
     ""Cats and dogs are pets"",
     ""Machine learning is fascinating"",
-    ""Deep learning uses neural networks""
+    ""Deep learning uses neural networks"",
+    ""Neural networks learn patterns"",
+    ""Dogs and cats are animals"",
+    ""The park has many dogs""
 };
 
-var result = await new AiModelBuilder<double, string[], double[,]>()
-    .ConfigureModel(new Word2Vec<double>(
-        vectorSize: 100,
-        windowSize: 5,
-        minCount: 1))
-    .BuildAsync(corpus);
+// Simple tokenization
+var allTokens = new List<int>();
+var wordToId = new Dictionary<string, int>();
+int nextId = 0;
 
-// Get word vectors
-var catVector = result.GetWordVector(""cat"");
-var dogVector = result.GetWordVector(""dog"");
+foreach (var sentence in sentences)
+{
+    foreach (var word in sentence.ToLower().Split(' '))
+    {
+        if (!wordToId.ContainsKey(word))
+        {
+            wordToId[word] = nextId++;
+        }
+        allTokens.Add(wordToId[word]);
+    }
+    allTokens.Add(-1); // Sentence separator
+}
 
-// Calculate similarity
-var similarity = result.CosineSimilarity(""cat"", ""dog"");
-Console.WriteLine($""Similarity between 'cat' and 'dog': {similarity:F4}"");
+var idToWord = wordToId.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
 
-// Find similar words
-var similarWords = result.MostSimilar(""learning"", topN: 3);
-Console.WriteLine(""Words similar to 'learning':"");
-foreach (var (word, score) in similarWords)
-    Console.WriteLine($""  {word}: {score:F4}"");
+Console.WriteLine(""Word2Vec Training:"");
+Console.WriteLine($""  Vocabulary size: {wordToId.Count}"");
+Console.WriteLine($""  Total tokens: {allTokens.Count(t => t >= 0)}"");
+Console.WriteLine($""  Sentences: {sentences.Length}"");
+Console.WriteLine();
+
+// Create Word2Vec architecture
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.Regression,
+    complexity: NetworkComplexity.Medium,
+    inputSize: wordToId.Count,  // Vocabulary size
+    outputSize: 50);  // Embedding dimension
+
+Console.WriteLine(""Word2Vec Configuration:"");
+Console.WriteLine($""  Embedding dimension: 50"");
+Console.WriteLine($""  Window size: 2"");
+Console.WriteLine($""  Architecture: Skip-gram"");
+Console.WriteLine();
+
+Console.WriteLine(""Sample vocabulary:"");
+foreach (var (word, id) in wordToId.Take(10))
+{
+    Console.WriteLine($""  '{word}' -> ID {id}"");
+}
 "
                 },
                 new CodeExample
                 {
-                    Id = "transformer-text",
-                    Name = "Transformer for Text",
-                    Description = "Use transformer architecture for text processing",
-                    Difficulty = "Advanced",
-                    Tags = ["nlp", "transformer", "attention", "deep-learning"],
-                    Code = @"// Transformer for Text Classification using AiDotNet
+                    Id = "tokenizer-pretrained",
+                    Name = "Pretrained Tokenizer",
+                    Description = "Use HuggingFace pretrained tokenizers with AiModelBuilder",
+                    Difficulty = "Intermediate",
+                    Tags = ["nlp", "tokenizer", "huggingface", "bert"],
+                    Code = @"// Pretrained Tokenizer with AiModelBuilder
+using AiDotNet;
+using AiDotNet.Tokenization.Configuration;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
-Console.WriteLine(""Transformer Text Classification"");
+// Sample text for tokenization
+var texts = new string[]
+{
+    ""Machine learning is transforming industries."",
+    ""Natural language processing enables AI to understand text."",
+    ""Deep learning models require large datasets.""
+};
+
+Console.WriteLine(""Pretrained Tokenizer Demo:"");
 Console.WriteLine();
 
-// Transformer architecture configuration
-Console.WriteLine(""Transformer Architecture:"");
-Console.WriteLine(""  Embedding: vocab_size=10000, dim=256"");
-Console.WriteLine(""  Encoder: 4 layers, 8 heads, hidden_dim=512"");
-Console.WriteLine(""  Pooling: Global Average"");
-Console.WriteLine(""  Classification: Dense(64) -> Dense(1)"");
-Console.WriteLine();
-
-// Create architecture
+// Configure tokenizer from pretrained model
 var architecture = new NeuralNetworkArchitecture<double>(
     inputType: InputType.OneDimensional,
     taskType: NeuralNetworkTaskType.BinaryClassification,
-    complexity: NetworkComplexity.High,
-    inputSize: 128,  // Sequence length
+    complexity: NetworkComplexity.Medium,
+    inputSize: 128,
+    outputSize: 2);
+
+// Create dummy training data (tokenized sequences)
+var rng = RandomHelper.CreateSeededRandom(42);
+var features = new double[20, 128];
+var labels = new double[20];
+for (int i = 0; i < 20; i++)
+{
+    for (int j = 0; j < 128; j++)
+        features[i, j] = rng.Next(0, 1000);  // Simulated token IDs
+    labels[i] = i % 2;  // Binary labels
+}
+
+var loader = DataLoaders.FromArrays(features, labels);
+
+// Build with tokenizer configuration
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureTokenizerFromPretrained(PretrainedTokenizerModel.BertBaseUncased)
+    .ConfigureModel(new FeedForwardNeuralNetwork<double>(architecture))
+    .BuildAsync();
+
+Console.WriteLine(""Tokenizer Configuration:"");
+Console.WriteLine($""  Model: BERT Base Uncased"");
+Console.WriteLine($""  Vocabulary size: ~30,000 tokens"");
+Console.WriteLine($""  Special tokens: [CLS], [SEP], [PAD], [MASK]"");
+Console.WriteLine();
+
+// Demonstrate tokenization
+Console.WriteLine(""Sample text tokenization:"");
+foreach (var text in texts.Take(2))
+{
+    var encoded = result.Encode(text);
+    Console.WriteLine($""  Text: '{text.Substring(0, Math.Min(40, text.Length))}...'"");
+    Console.WriteLine($""  Token count: {encoded.InputIds.Count}"");
+    Console.WriteLine($""  First 5 tokens: [{string.Join("", "", encoded.InputIds.Take(5))}...]"");
+    Console.WriteLine();
+}
+"
+                },
+                new CodeExample
+                {
+                    Id = "text-classification-nn",
+                    Name = "Neural Text Classification",
+                    Description = "Text classification using neural networks with tokenization",
+                    Difficulty = "Advanced",
+                    Tags = ["nlp", "classification", "neural-network", "embedding"],
+                    Code = @"// Neural Network Text Classification
+using AiDotNet;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Preprocessing.TextVectorizers;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Sample documents for sentiment classification
+var trainDocs = new string[]
+{
+    ""This product exceeded my expectations"",
+    ""Amazing quality and fast delivery"",
+    ""Best purchase I ever made"",
+    ""Absolutely wonderful experience"",
+    ""Terrible quality, waste of money"",
+    ""Disappointed with the service"",
+    ""Would not recommend to anyone"",
+    ""Worst product I have bought""
+};
+var trainLabels = new double[] { 1, 1, 1, 1, 0, 0, 0, 0 };
+
+// Vectorize with TF-IDF
+var tfidf = new TfidfVectorizer<double>(maxFeatures: 30);
+var features = tfidf.FitTransform(trainDocs);
+
+Console.WriteLine(""Text Classification with Neural Network:"");
+Console.WriteLine($""  Training documents: {trainDocs.Length}"");
+Console.WriteLine($""  TF-IDF features: {features.Columns}"");
+Console.WriteLine();
+
+// Create neural network architecture
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.BinaryClassification,
+    complexity: NetworkComplexity.Low,
+    inputSize: features.Columns,
     outputSize: 1);
 
-Console.WriteLine(""Text Classification Setup:"");
-Console.WriteLine($""  Sequence length: 128 tokens"");
-Console.WriteLine($""  Vocabulary: 10,000 words"");
-Console.WriteLine($""  Task: Binary sentiment classification"");
+// Build and train with AiModelBuilder
+var loader = DataLoaders.FromMatrixVector(features, new Vector<double>(trainLabels));
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new FeedForwardNeuralNetwork<double>(architecture))
+    .BuildAsync();
+
+Console.WriteLine(""Neural Network Architecture:"");
+Console.WriteLine($""  Input: {features.Columns} TF-IDF features"");
+Console.WriteLine($""  Hidden: Dense layers"");
+Console.WriteLine($""  Output: Binary classification"");
 Console.WriteLine();
 
-// Sample tokenized data
-var rng = RandomHelper.CreateSeededRandom(42);
-Console.WriteLine(""Sample Data:"");
-Console.WriteLine(""  100 tokenized text sequences"");
-Console.WriteLine(""  Labels: 0 (negative) or 1 (positive)"");
-Console.WriteLine();
+// Test on new documents
+var testDocs = new string[] { ""Great product, highly recommend!"", ""Total waste of money"" };
+var testFeatures = tfidf.Transform(testDocs);
+var predictions = result.Model.Predict(testFeatures);
 
-Console.WriteLine(""Transformer Attention Mechanism:"");
-Console.WriteLine(""  - Self-attention captures word relationships"");
-Console.WriteLine(""  - Multi-head attention: 8 parallel attention heads"");
-Console.WriteLine(""  - Position embeddings for sequence order"");
-Console.WriteLine();
-
-Console.WriteLine(""For production, use pre-trained models like BERT or GPT."");
+Console.WriteLine(""Test Predictions:"");
+for (int i = 0; i < testDocs.Length; i++)
+{
+    Console.WriteLine($""  '{testDocs[i]}'"");
+    Console.WriteLine($""    -> {(predictions[i] > 0.5 ? ""Positive"" : ""Negative"")} ({predictions[i]:F3})"");
+}
 "
                 },
                 new CodeExample
                 {
                     Id = "named-entity-recognition",
-                    Name = "Named Entity Recognition",
-                    Description = "Extract named entities from text",
+                    Name = "Named Entity Recognition Setup",
+                    Description = "Sequence labeling for NER using LSTM neural network",
                     Difficulty = "Advanced",
-                    Tags = ["nlp", "ner", "sequence-labeling"],
-                    Code = @"// Named Entity Recognition with AiModelBuilder
+                    Tags = ["nlp", "ner", "sequence-labeling", "neural-network"],
+                    Code = @"// Named Entity Recognition with LSTM Neural Network
 using AiDotNet;
-using AiDotNet.NLP;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Training data: tokens and their entity labels
-var tokens = new string[][]
+// NER label encoding
+// O=0, B-PER=1, I-PER=2, B-ORG=3, I-ORG=4, B-LOC=5, I-LOC=6
+var labelMap = new Dictionary<string, int>
+{
+    { ""O"", 0 }, { ""B-PER"", 1 }, { ""I-PER"", 2 },
+    { ""B-ORG"", 3 }, { ""I-ORG"", 4 }, { ""B-LOC"", 5 }, { ""I-LOC"", 6 }
+};
+
+// Sample NER data - tokens and their entity labels
+var sentences = new string[][]
 {
     new[] { ""John"", ""works"", ""at"", ""Microsoft"", ""in"", ""Seattle"" },
-    new[] { ""Apple"", ""CEO"", ""Tim"", ""Cook"", ""announced"", ""new"", ""products"" }
+    new[] { ""Apple"", ""CEO"", ""Tim"", ""Cook"", ""announced"", ""products"" }
 };
 var entityLabels = new string[][]
 {
     new[] { ""B-PER"", ""O"", ""O"", ""B-ORG"", ""O"", ""B-LOC"" },
-    new[] { ""B-ORG"", ""O"", ""B-PER"", ""I-PER"", ""O"", ""O"", ""O"" }
+    new[] { ""B-ORG"", ""O"", ""B-PER"", ""I-PER"", ""O"", ""O"" }
 };
 
-var result = await new AiModelBuilder<double, string[], string[]>()
-    .ConfigureModel(new BiLSTMCRF<double>(
-        hiddenSize: 128,
-        numLayers: 2))
-    .ConfigurePreprocessing(new NERPreprocessor<double>())
-    .BuildAsync(tokens, entityLabels);
+// Build vocabulary from training data
+var wordToId = new Dictionary<string, int>();
+int vocabSize = 0;
+foreach (var sentence in sentences)
+    foreach (var word in sentence)
+        if (!wordToId.ContainsKey(word.ToLower()))
+            wordToId[word.ToLower()] = vocabSize++;
 
-// Extract entities from new text
-var newTokens = new[] { ""Elon"", ""Musk"", ""founded"", ""SpaceX"" };
-var entities = result.Predict(newTokens);
-Console.WriteLine(""Named Entity Recognition:"");
-for (int i = 0; i < newTokens.Length; i++)
-    Console.WriteLine($""  {newTokens[i]}: {entities[i]}"");
+// Convert to feature matrix (one-hot encoding of words)
+// Each row is a token, columns are vocabulary + label
+int seqLength = 6; // Fixed sequence length
+var features = new double[sentences.Length * seqLength, vocabSize];
+var labels = new double[sentences.Length * seqLength];
+
+for (int s = 0; s < sentences.Length; s++)
+{
+    for (int t = 0; t < seqLength && t < sentences[s].Length; t++)
+    {
+        int row = s * seqLength + t;
+        int wordId = wordToId[sentences[s][t].ToLower()];
+        features[row, wordId] = 1.0;  // One-hot encoding
+        labels[row] = labelMap[entityLabels[s][t]];
+    }
+}
+
+Console.WriteLine(""NER with LSTM Neural Network:"");
+Console.WriteLine($""  Vocabulary size: {vocabSize}"");
+Console.WriteLine($""  Entity classes: {labelMap.Count}"");
+Console.WriteLine($""  Training sequences: {sentences.Length}"");
+Console.WriteLine();
+
+// Create LSTM architecture for sequence labeling
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.MultiClassClassification,
+    complexity: NetworkComplexity.Medium,
+    inputSize: vocabSize,
+    outputSize: labelMap.Count);
+
+// Build with AiModelBuilder
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new LSTMNeuralNetwork<double>(architecture))
+    .BuildAsync();
+
+Console.WriteLine(""Model Architecture:"");
+Console.WriteLine($""  Input: One-hot encoded tokens ({vocabSize} dim)"");
+Console.WriteLine($""  LSTM: Hidden state processing"");
+Console.WriteLine($""  Output: {labelMap.Count} entity classes"");
+Console.WriteLine();
+
+// Demonstrate prediction on training data
+Console.WriteLine(""Sample Predictions:"");
+Console.WriteLine($""  Sentence: {string.Join("" "", sentences[0])}"");
+Console.WriteLine($""  Expected: {string.Join("" "", entityLabels[0])}"");
 "
                 }
             },
@@ -1976,155 +2602,319 @@ for (int i = 0; i < newTokens.Length; i++)
                 {
                     Id = "speech-recognition",
                     Name = "Speech Recognition",
-                    Description = "Transcribe audio to text using Whisper",
+                    Description = "Configure Whisper speech recognition with AiModelBuilder",
                     Difficulty = "Advanced",
                     Tags = ["audio", "speech", "whisper", "asr"],
-                    Code = @"// Speech Recognition with AiModelBuilder
+                    Code = @"// Whisper Speech Recognition with AiModelBuilder
 using AiDotNet;
 using AiDotNet.Audio.Whisper;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Simulated audio waveform (in practice, load from file)
+// Whisper model configuration
 var sampleRate = 16000;
-var duration = 5.0; // seconds
-var audioSamples = new double[(int)(sampleRate * duration)];
+var numMels = 80;  // Mel spectrogram channels
+var maxSeconds = 30;  // Whisper processes 30-second chunks
+
+Console.WriteLine(""Whisper Speech Recognition Configuration:"");
+Console.WriteLine($""  Sample Rate: {sampleRate} Hz"");
+Console.WriteLine($""  Mel Channels: {numMels}"");
+Console.WriteLine($""  Max Audio Length: {maxSeconds} seconds"");
+Console.WriteLine();
+
+// Create architecture for Whisper encoder-decoder
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputType: InputType.TwoDimensional,
+    taskType: NeuralNetworkTaskType.SequenceToSequence,
+    complexity: NetworkComplexity.Medium,
+    inputSize: numMels * 3000,  // Mel frames for 30s
+    outputSize: 51865);  // Whisper vocabulary size
+
+// Create Whisper model in native training mode
+var whisper = new WhisperModel<double>(
+    architecture: architecture,
+    modelSize: WhisperModelSize.Base,
+    language: ""en"",
+    sampleRate: sampleRate,
+    numMels: numMels,
+    maxAudioLengthSeconds: maxSeconds);
+
+Console.WriteLine(""Whisper Model:"");
+Console.WriteLine($""  Model Size: Base (74M parameters)"");
+Console.WriteLine($""  Mode: Native (trainable)"");
+Console.WriteLine($""  Language: English"");
+Console.WriteLine();
+
+// Simulated audio samples
 var rng = RandomHelper.CreateSeededRandom(42);
-for (int i = 0; i < audioSamples.Length; i++)
-    audioSamples[i] = rng.NextDouble() * 2 - 1;
+var duration = 5.0;
+var numSamples = (int)(sampleRate * duration);
+var audioFeatures = new double[1, numSamples];
+for (int i = 0; i < numSamples; i++)
+    audioFeatures[0, i] = rng.NextDouble() * 2 - 1;
 
-var result = await new AiModelBuilder<double, double[], string>()
-    .ConfigureModel(new WhisperModel<double>(
-        modelSize: WhisperModelSize.Base,
-        language: ""en""))
-    .BuildAsync(audioSamples);
+// Build with AiModelBuilder
+var loader = DataLoaders.FromArrays(audioFeatures, new double[] { 0 });
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(whisper)
+    .BuildAsync();
 
-Console.WriteLine(""Speech Recognition Result:"");
-Console.WriteLine($""  Transcription: {result.Transcription}"");
-Console.WriteLine($""  Confidence: {result.Confidence:P2}"");
-Console.WriteLine($""  Detected Language: {result.DetectedLanguage}"");
+Console.WriteLine(""Model built successfully!"");
+Console.WriteLine();
+Console.WriteLine(""Note: For production transcription, use ONNX mode:"");
+Console.WriteLine(""  var whisper = new WhisperModel<double>("");
+Console.WriteLine(""      architecture,"");
+Console.WriteLine(""      encoderPath: 'whisper-encoder.onnx',"");
+Console.WriteLine(""      decoderPath: 'whisper-decoder.onnx');"");
 "
                 },
                 new CodeExample
                 {
                     Id = "audio-classification",
                     Name = "Audio Classification",
-                    Description = "Classify audio clips by content type",
+                    Description = "Classify audio clips using MFCC features with AiModelBuilder",
                     Difficulty = "Intermediate",
                     Tags = ["audio", "classification", "mfcc"],
-                    Code = @"// Audio Classification using MFCC Features
+                    Code = @"// Audio Classification with MFCC Features using AiModelBuilder
+using AiDotNet;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine(""Audio Classification with MFCC Features"");
 Console.WriteLine();
 
-// Create neural network for audio classification
+// Simulated MFCC feature extraction
+// In practice: audio -> STFT -> Mel filterbank -> DCT -> MFCC
+var numMfccCoefficients = 40;
+var numSamples = 100;
+var numClasses = 3;  // Speech, Music, Noise
+
+// Generate training data (simulated MFCC features)
+var rng = RandomHelper.CreateSeededRandom(42);
+var features = new double[numSamples, numMfccCoefficients];
+var labels = new double[numSamples];
+
+for (int i = 0; i < numSamples; i++)
+{
+    // Assign class labels
+    labels[i] = i % numClasses;
+
+    // Generate MFCC-like features with class-specific patterns
+    for (int j = 0; j < numMfccCoefficients; j++)
+    {
+        double baseValue = (labels[i] + 1) * 0.1;  // Class-dependent offset
+        features[i, j] = baseValue + rng.NextDouble() * 0.5;
+    }
+}
+
+Console.WriteLine(""Training Data:"");
+Console.WriteLine($""  Samples: {numSamples}"");
+Console.WriteLine($""  MFCC Features: {numMfccCoefficients}"");
+Console.WriteLine($""  Classes: Speech (0), Music (1), Noise (2)"");
+Console.WriteLine();
+
+// Create neural network architecture
 var architecture = new NeuralNetworkArchitecture<double>(
     inputType: InputType.OneDimensional,
     taskType: NeuralNetworkTaskType.MultiClassClassification,
     complexity: NetworkComplexity.Medium,
-    inputSize: 40,   // MFCC features
-    outputSize: 3);  // 3 classes
+    inputSize: numMfccCoefficients,
+    outputSize: numClasses);
 
-var nn = new FeedForwardNeuralNetwork<double>(architecture);
+// Build with AiModelBuilder
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new FeedForwardNeuralNetwork<double>(architecture))
+    .BuildAsync();
 
-Console.WriteLine(""Audio Classification Architecture:"");
-Console.WriteLine($""  Input: {architecture.InputSize} MFCC coefficients"");
-Console.WriteLine($""  Output: {architecture.OutputSize} classes"");
-Console.WriteLine($""  Layers: {nn.Layers.Count}"");
+Console.WriteLine(""Model Architecture:"");
+Console.WriteLine($""  Input: {numMfccCoefficients} MFCC coefficients"");
+Console.WriteLine($""  Hidden: Dense layers with ReLU"");
+Console.WriteLine($""  Output: {numClasses} classes (softmax)"");
 Console.WriteLine();
 
-Console.WriteLine(""MFCC Feature Extraction:"");
-Console.WriteLine(""  1. Audio waveform -> Short-time Fourier Transform"");
-Console.WriteLine(""  2. Apply Mel filterbank"");
-Console.WriteLine(""  3. Discrete Cosine Transform -> MFCC coefficients"");
-Console.WriteLine();
+// Test prediction
+var testFeatures = new Matrix<double>(1, numMfccCoefficients);
+for (int j = 0; j < numMfccCoefficients; j++)
+    testFeatures[0, j] = 0.2 + rng.NextDouble() * 0.3;  // Music-like pattern
 
-// Sample data
-var rng = RandomHelper.CreateSeededRandom(42);
-Console.WriteLine(""Sample Data:"");
-Console.WriteLine(""  100 audio samples with 40 MFCC features each"");
-Console.WriteLine(""  Classes: Speech (0), Music (1), Noise (2)"");
-Console.WriteLine();
-
-Console.WriteLine(""Applications:"");
-Console.WriteLine(""  - Voice activity detection"");
-Console.WriteLine(""  - Music genre classification"");
-Console.WriteLine(""  - Environmental sound recognition"");
+var prediction = result.Model.Predict(testFeatures);
+string[] classNames = { ""Speech"", ""Music"", ""Noise"" };
+Console.WriteLine(""Test Prediction:"");
+for (int c = 0; c < numClasses; c++)
+    Console.WriteLine($""  {classNames[c]}: {prediction[c]:P1}"");
 "
                 },
                 new CodeExample
                 {
                     Id = "text-to-speech",
                     Name = "Text-to-Speech",
-                    Description = "Generate speech audio from text",
+                    Description = "Configure TTS model for speech synthesis with AiModelBuilder",
                     Difficulty = "Advanced",
                     Tags = ["audio", "tts", "speech-synthesis"],
                     Code = @"// Text-to-Speech with AiModelBuilder
 using AiDotNet;
 using AiDotNet.Audio.TextToSpeech;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var text = ""Hello, welcome to AiDotNet!"";
+Console.WriteLine(""Text-to-Speech Configuration"");
+Console.WriteLine();
 
-var result = await new AiModelBuilder<double, string, double[]>()
-    .ConfigureModel(new TtsModel<double>(
-        modelType: TtsModelType.VITS,
-        sampleRate: 22050))
-    .BuildAsync(text);
+// TTS model parameters
+var sampleRate = 22050;
+var numMels = 80;
+var maxPhonemes = 256;
 
-Console.WriteLine(""Text-to-Speech Generation:"");
-Console.WriteLine($""  Input text: '{text}'"");
-Console.WriteLine($""  Audio length: {result.AudioSamples.Length / 22050.0:F2} seconds"");
-Console.WriteLine($""  Sample rate: 22050 Hz"");
+// Create architecture for TTS
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.SequenceToSequence,
+    complexity: NetworkComplexity.Medium,
+    inputSize: maxPhonemes,
+    outputSize: numMels);
 
-// In practice, save to file:
-// await result.SaveAsync(""output.wav"");
+// Create TTS model in native training mode
+var tts = new TtsModel<double>(
+    architecture: architecture,
+    sampleRate: sampleRate,
+    numMels: numMels,
+    speakingRate: 1.0,
+    pitchShift: 0.0,
+    energy: 1.0,
+    hiddenDim: 256,
+    numHeads: 4,
+    numEncoderLayers: 4,
+    numDecoderLayers: 4,
+    maxPhonemeLength: maxPhonemes);
+
+Console.WriteLine(""TTS Model Configuration:"");
+Console.WriteLine($""  Sample Rate: {sampleRate} Hz"");
+Console.WriteLine($""  Mel Channels: {numMels}"");
+Console.WriteLine($""  Max Phoneme Length: {maxPhonemes}"");
+Console.WriteLine($""  Hidden Dimension: 256"");
+Console.WriteLine($""  Attention Heads: 4"");
+Console.WriteLine();
+
+// Create dummy training data (phoneme sequences -> mel spectrograms)
+var rng = RandomHelper.CreateSeededRandom(42);
+var features = new double[10, maxPhonemes];
+var labels = new double[10];
+for (int i = 0; i < 10; i++)
+{
+    for (int j = 0; j < maxPhonemes && j < 50; j++)
+        features[i, j] = rng.Next(0, 100);  // Phoneme IDs
+    labels[i] = i % 2;
+}
+
+// Build with AiModelBuilder
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(tts)
+    .BuildAsync();
+
+Console.WriteLine(""Model built successfully!"");
+Console.WriteLine();
+
+var sampleText = ""Hello, welcome to AiDotNet!"";
+Console.WriteLine($""Sample text: '{sampleText}'"");
+Console.WriteLine();
+Console.WriteLine(""Pipeline:"");
+Console.WriteLine(""  1. Text -> Phoneme tokenization"");
+Console.WriteLine(""  2. Phonemes -> Encoder (attention)"");
+Console.WriteLine(""  3. Decoder -> Mel spectrogram"");
+Console.WriteLine(""  4. Vocoder -> Audio waveform"");
 "
                 },
                 new CodeExample
                 {
                     Id = "music-generation",
                     Name = "Music Generation",
-                    Description = "Generate music using MusicGen model",
+                    Description = "Configure MusicGen model for AI music synthesis with AiModelBuilder",
                     Difficulty = "Advanced",
                     Tags = ["audio", "music", "generation", "ai"],
-                    Code = @"// Music Generation using MusicGen-style Models
-using AiDotNet.Tensors.Helpers;
+                    Code = @"// Music Generation with MusicGen using AiModelBuilder
+using AiDotNet;
+using AiDotNet.Audio.MusicGen;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 
-Console.WriteLine(""Music Generation with AI"");
+Console.WriteLine(""MusicGen Configuration"");
 Console.WriteLine();
 
 var prompt = ""A calm piano melody with soft strings"";
-
-Console.WriteLine(""Music Generation Configuration:"");
-Console.WriteLine($""  Prompt: '{prompt}'"");
-Console.WriteLine(""  Model Size: Medium (1.5B parameters)"");
-Console.WriteLine(""  Sample Rate: 32000 Hz"");
-Console.WriteLine(""  Duration: 10 seconds"");
-Console.WriteLine();
-
-Console.WriteLine(""MusicGen Model Architecture:"");
-Console.WriteLine(""  1. Text Encoder: T5 or similar for prompt understanding"");
-Console.WriteLine(""  2. Audio Codec: EnCodec for audio tokenization"");
-Console.WriteLine(""  3. Transformer: Autoregressive generation of audio tokens"");
-Console.WriteLine(""  4. Decoder: Convert tokens back to audio waveform"");
-Console.WriteLine();
-
-// Simulated output
-var rng = RandomHelper.CreateSeededRandom(42);
-var duration = 10.0;
 var sampleRate = 32000;
-var numSamples = (int)(duration * sampleRate);
+var duration = 10.0;
 
-Console.WriteLine(""Sample Output:"");
-Console.WriteLine($""  Generated samples: {numSamples:N0}"");
-Console.WriteLine($""  Duration: {duration:F2} seconds"");
-Console.WriteLine($""  File size estimate: ~{numSamples * 2 / 1024:N0} KB (16-bit)"");
+Console.WriteLine($""Prompt: '{prompt}'"");
+Console.WriteLine($""Sample Rate: {sampleRate} Hz"");
+Console.WriteLine($""Target Duration: {duration} seconds"");
 Console.WriteLine();
 
-Console.WriteLine(""Note: Actual generation requires:"");
-Console.WriteLine(""  - ONNX model files from HuggingFace"");
-Console.WriteLine(""  - GPU for efficient inference"");
-Console.WriteLine(""  - Download: huggingface.co/facebook/musicgen-medium"");
+// Create architecture for MusicGen
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputType: InputType.OneDimensional,
+    taskType: NeuralNetworkTaskType.SequenceToSequence,
+    complexity: NetworkComplexity.High,
+    inputSize: 512,  // Text embedding dimension
+    outputSize: 2048);  // Audio token codebook size
+
+// Create MusicGen options
+var options = new MusicGenOptions
+{
+    ModelSize = MusicGenSize.Medium,
+    SampleRate = sampleRate,
+    DefaultDurationSeconds = duration,
+    NumCodebooks = 4,
+    CodebookSize = 2048,
+    MaxTokens = 1500
+};
+
+// Create MusicGen model in native mode
+var musicGen = new MusicGenModel<double>(
+    architecture: architecture,
+    options: options);
+
+Console.WriteLine(""MusicGen Model:"");
+Console.WriteLine($""  Model Size: {options.ModelSize}"");
+Console.WriteLine($""  Codebooks: {options.NumCodebooks}"");
+Console.WriteLine($""  Codebook Size: {options.CodebookSize}"");
+Console.WriteLine($""  Max Tokens: {options.MaxTokens}"");
+Console.WriteLine();
+
+// Create training data (text embeddings -> audio tokens)
+var rng = RandomHelper.CreateSeededRandom(42);
+var features = new double[10, 512];
+var labels = new double[10];
+for (int i = 0; i < 10; i++)
+{
+    for (int j = 0; j < 512; j++)
+        features[i, j] = rng.NextDouble() * 2 - 1;
+    labels[i] = i % 100;  // Audio token targets
+}
+
+// Build with AiModelBuilder
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(musicGen)
+    .BuildAsync();
+
+Console.WriteLine(""Model built successfully!"");
+Console.WriteLine();
+Console.WriteLine(""Generation Pipeline:"");
+Console.WriteLine(""  1. Text prompt -> T5 encoder -> text embeddings"");
+Console.WriteLine(""  2. Transformer LM generates audio tokens"");
+Console.WriteLine(""  3. EnCodec decoder converts tokens -> waveform"");
+Console.WriteLine();
+
+var numSamples = (int)(duration * sampleRate);
+Console.WriteLine(""Expected Output:"");
+Console.WriteLine($""  Audio samples: {numSamples:N0}"");
+Console.WriteLine($""  File size: ~{numSamples * 2 / 1024:N0} KB (16-bit)"");
 "
                 }
             },
@@ -2135,63 +2925,101 @@ Console.WriteLine(""  - Download: huggingface.co/facebook/musicgen-medium"");
                 {
                     Id = "dqn-agent",
                     Name = "DQN Agent",
-                    Description = "Deep Q-Network for discrete action spaces",
+                    Description = "Deep Q-Network for discrete action spaces with AiModelBuilder",
                     Difficulty = "Advanced",
                     Tags = ["rl", "dqn", "deep-learning", "q-learning"],
                     Code = @"// DQN Agent with AiModelBuilder
 using AiDotNet;
-using AiDotNet.ReinforcementLearning;
+using AiDotNet.Models.Options;
 using AiDotNet.ReinforcementLearning.Agents;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Define environment interface
-var stateSize = 4;
-var actionSize = 2;
+// Define environment (e.g., CartPole)
+var stateSize = 4;   // [cart position, cart velocity, pole angle, pole velocity]
+var actionSize = 2;  // [push left, push right]
 
-var result = await new AiModelBuilder<double, double[], int>()
-    .ConfigureModel(new DQNAgent<double>(
-        stateSize: stateSize,
-        actionSize: actionSize,
-        hiddenSizes: new[] { 128, 128 },
-        learningRate: 0.001,
-        gamma: 0.99,
-        epsilon: 1.0,
-        epsilonDecay: 0.995,
-        epsilonMin: 0.01,
-        bufferSize: 10000,
-        batchSize: 64))
-    .BuildAsync();
-
-Console.WriteLine(""DQN Agent Created:"");
+Console.WriteLine(""DQN Agent Configuration"");
 Console.WriteLine($""  State size: {stateSize}"");
 Console.WriteLine($""  Action size: {actionSize}"");
-Console.WriteLine($""  Architecture: Input -> 128 -> 128 -> Output"");
+Console.WriteLine();
 
-// Training loop example
-Console.WriteLine(""\nTraining loop:"");
-Console.WriteLine(""  1. Get state from environment"");
-Console.WriteLine(""  2. Select action: agent.SelectAction(state)"");
-Console.WriteLine(""  3. Execute action, get reward and next_state"");
-Console.WriteLine(""  4. Store: agent.Remember(state, action, reward, next_state, done)"");
-Console.WriteLine(""  5. Train: agent.Replay()"");
+// Configure DQN options
+var options = new DQNOptions<double>
+{
+    StateSize = stateSize,
+    ActionSize = actionSize,
+    HiddenLayers = new List<int> { 128, 128 },
+    EpsilonStart = 1.0,
+    EpsilonEnd = 0.01,
+    EpsilonDecay = 0.995,
+    BatchSize = 64,
+    ReplayBufferSize = 10000,
+    TargetUpdateFrequency = 100,
+    WarmupSteps = 1000,
+    Seed = 42
+};
+
+// Create DQN agent
+var agent = new DQNAgent<double>(options);
+
+Console.WriteLine(""DQN Options:"");
+Console.WriteLine($""  Hidden layers: [128, 128]"");
+Console.WriteLine($""  Epsilon: {options.EpsilonStart} -> {options.EpsilonEnd}"");
+Console.WriteLine($""  Batch size: {options.BatchSize}"");
+Console.WriteLine($""  Replay buffer: {options.ReplayBufferSize}"");
+Console.WriteLine();
+
+// Create training data for builder
+var features = new double[10, stateSize];
+var labels = new double[10];
+var rng = RandomHelper.CreateSeededRandom(42);
+for (int i = 0; i < 10; i++)
+{
+    for (int j = 0; j < stateSize; j++)
+        features[i, j] = rng.NextDouble() * 2 - 1;
+    labels[i] = rng.Next(0, actionSize);
+}
+
+// Build with AiModelBuilder
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(agent)
+    .BuildAsync();
+
+Console.WriteLine(""Agent built successfully!"");
+Console.WriteLine();
+Console.WriteLine(""Training Loop:"");
+Console.WriteLine(""  1. state = env.Reset()"");
+Console.WriteLine(""  2. action = agent.SelectAction(state)"");
+Console.WriteLine(""  3. next_state, reward, done = env.Step(action)"");
+Console.WriteLine(""  4. agent.Remember(state, action, reward, next_state, done)"");
+Console.WriteLine(""  5. agent.Replay()  // Train on minibatch"");
 "
                 },
                 new CodeExample
                 {
                     Id = "ppo-agent",
                     Name = "PPO Agent",
-                    Description = "Proximal Policy Optimization for continuous control",
+                    Description = "Proximal Policy Optimization for continuous control with AiModelBuilder",
                     Difficulty = "Advanced",
                     Tags = ["rl", "ppo", "policy-gradient", "continuous"],
                     Code = @"// PPO Agent with AiModelBuilder
 using AiDotNet;
 using AiDotNet.Models.Options;
-using AiDotNet.ReinforcementLearning.Agents.PPO;
+using AiDotNet.ReinforcementLearning.Agents;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Continuous action space environment
+// Continuous action space environment (e.g., MuJoCo Hopper)
 var stateSize = 8;
 var actionSize = 2;
 
-// Configure PPO options
+Console.WriteLine(""PPO Agent Configuration"");
+Console.WriteLine($""  State size: {stateSize}"");
+Console.WriteLine($""  Action size: {actionSize} (continuous)"");
+Console.WriteLine();
+
+// Configure PPO options (T values use numeric operations internally)
 var options = new PPOOptions<double>
 {
     StateSize = stateSize,
@@ -2199,102 +3027,196 @@ var options = new PPOOptions<double>
     IsContinuous = true,
     PolicyHiddenLayers = new List<int> { 64, 64 },
     ValueHiddenLayers = new List<int> { 64, 64 },
-    PolicyLearningRate = 0.0003,
-    ValueLearningRate = 0.001,
-    DiscountFactor = 0.99,
-    GaeLambda = 0.95,
-    ClipEpsilon = 0.2,
-    EntropyCoefficient = 0.01,
     TrainingEpochs = 10,
-    MiniBatchSize = 64
+    MiniBatchSize = 64,
+    MaxTrajectoryLength = 2048,
+    Seed = 42
 };
 
-var result = await new AiModelBuilder<double, double[], double[]>()
-    .ConfigureModel(new PPOAgent<double>(options))
+// Create PPO agent
+var agent = new PPOAgent<double>(options);
+
+Console.WriteLine(""PPO Hyperparameters:"");
+Console.WriteLine($""  Policy network: 64 -> 64 -> {actionSize}"");
+Console.WriteLine($""  Value network: 64 -> 64 -> 1"");
+Console.WriteLine($""  Mini-batch size: {options.MiniBatchSize}"");
+Console.WriteLine($""  Training epochs: {options.TrainingEpochs}"");
+Console.WriteLine();
+
+// Create training data for builder
+var rng = RandomHelper.CreateSeededRandom(42);
+var features = new double[10, stateSize];
+var labels = new double[10];
+for (int i = 0; i < 10; i++)
+{
+    for (int j = 0; j < stateSize; j++)
+        features[i, j] = rng.NextDouble() * 2 - 1;
+    labels[i] = rng.NextDouble();
+}
+
+// Build with AiModelBuilder
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(agent)
     .BuildAsync();
 
-Console.WriteLine(""PPO Agent Created:"");
-Console.WriteLine($""  State size: {stateSize}"");
-Console.WriteLine($""  Action size: {actionSize} (continuous)"");
-Console.WriteLine($""  Clip epsilon: {options.ClipEpsilon}"");
-Console.WriteLine($""  GAE lambda: {options.GaeLambda}"");
-
-// Get action for a state
-var state = new double[] { 0.1, -0.2, 0.3, 0.4, -0.1, 0.2, 0.0, 0.5 };
-var action = result.SelectAction(state);
-Console.WriteLine($""  Sample action: [{action[0]:F3}, {action[1]:F3}]"");
+Console.WriteLine(""Agent built successfully!"");
+Console.WriteLine();
+Console.WriteLine(""PPO Training Algorithm:"");
+Console.WriteLine(""  1. Collect trajectories using current policy"");
+Console.WriteLine(""  2. Compute advantages using GAE"");
+Console.WriteLine(""  3. Update policy with clipped objective"");
+Console.WriteLine(""  4. Update value function"");
 "
                 },
                 new CodeExample
                 {
                     Id = "sac-agent",
                     Name = "SAC Agent",
-                    Description = "Soft Actor-Critic for sample-efficient learning",
+                    Description = "Soft Actor-Critic for sample-efficient continuous control",
                     Difficulty = "Advanced",
                     Tags = ["rl", "sac", "actor-critic", "entropy"],
                     Code = @"// SAC Agent with AiModelBuilder
 using AiDotNet;
-using AiDotNet.ReinforcementLearning;
+using AiDotNet.Models.Options;
 using AiDotNet.ReinforcementLearning.Agents;
+using AiDotNet.Tensors.LinearAlgebra;
 
+// Continuous control environment (e.g., Humanoid)
 var stateSize = 11;
 var actionSize = 3;
 
-var result = await new AiModelBuilder<double, double[], double[]>()
-    .ConfigureModel(new SACAgent<double>(
-        stateSize: stateSize,
-        actionSize: actionSize,
-        hiddenSizes: new[] { 256, 256 },
-        learningRate: 0.0003,
-        gamma: 0.99,
-        tau: 0.005,
-        alpha: 0.2,
-        bufferSize: 1000000,
-        batchSize: 256,
-        autoAlpha: true))
+Console.WriteLine(""SAC Agent Configuration"");
+Console.WriteLine($""  State size: {stateSize}"");
+Console.WriteLine($""  Action size: {actionSize} (continuous)"");
+Console.WriteLine();
+
+// Configure SAC options
+var options = new SACOptions<double>
+{
+    StateSize = stateSize,
+    ActionSize = actionSize,
+    PolicyHiddenLayers = new List<int> { 256, 256 },
+    QHiddenLayers = new List<int> { 256, 256 },
+    BatchSize = 256,
+    ReplayBufferSize = 1000000,
+    WarmupSteps = 1000,
+    AutoTuneTemperature = true,
+    Seed = 42
+};
+
+// Create SAC agent
+var agent = new SACAgent<double>(options);
+
+Console.WriteLine(""SAC Hyperparameters:"");
+Console.WriteLine($""  Policy network: 256 -> 256 -> {actionSize * 2}"");
+Console.WriteLine($""  Q-networks: 256 -> 256 -> 1 (twin)"");
+Console.WriteLine($""  Replay buffer: {options.ReplayBufferSize:N0}"");
+Console.WriteLine($""  Batch size: {options.BatchSize}"");
+Console.WriteLine($""  Auto-tune temperature: {options.AutoTuneTemperature}"");
+Console.WriteLine();
+
+// Create training data for builder
+var rng = RandomHelper.CreateSeededRandom(42);
+var features = new double[10, stateSize];
+var labels = new double[10];
+for (int i = 0; i < 10; i++)
+{
+    for (int j = 0; j < stateSize; j++)
+        features[i, j] = rng.NextDouble() * 2 - 1;
+    labels[i] = rng.NextDouble();
+}
+
+// Build with AiModelBuilder
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(agent)
     .BuildAsync();
 
-Console.WriteLine(""SAC Agent Created:"");
-Console.WriteLine($""  State size: {stateSize}"");
-Console.WriteLine($""  Action size: {actionSize}"");
-Console.WriteLine($""  Architecture: 256 -> 256"");
-Console.WriteLine($""  Auto-tuning entropy: enabled"");
-Console.WriteLine($""  Soft update τ: 0.005"");
+Console.WriteLine(""Agent built successfully!"");
+Console.WriteLine();
+Console.WriteLine(""SAC Algorithm Features:"");
+Console.WriteLine(""  - Maximum entropy RL framework"");
+Console.WriteLine(""  - Twin Q-networks (clipped double-Q)"");
+Console.WriteLine(""  - Automatic temperature tuning"");
+Console.WriteLine(""  - Sample-efficient off-policy learning"");
 "
                 },
                 new CodeExample
                 {
                     Id = "multi-agent-rl",
                     Name = "Multi-Agent RL",
-                    Description = "Train multiple agents in a shared environment",
+                    Description = "Train multiple independent agents using DQN",
                     Difficulty = "Expert",
                     Tags = ["rl", "multi-agent", "marl", "cooperative"],
-                    Code = @"// Multi-Agent RL with AiModelBuilder
+                    Code = @"// Multi-Agent RL with Independent DQN Agents
 using AiDotNet;
-using AiDotNet.ReinforcementLearning;
-using AiDotNet.ReinforcementLearning.MultiAgent;
+using AiDotNet.Models.Options;
+using AiDotNet.ReinforcementLearning.Agents;
+using AiDotNet.Tensors.LinearAlgebra;
 
 var numAgents = 3;
-var stateSize = 16;
-var actionSize = 4;
+var stateSize = 16;  // Per-agent observation
+var actionSize = 4;  // Per-agent actions
 
-var result = await new AiModelBuilder<double, double[][], int[]>()
-    .ConfigureModel(new MADDPGSystem<double>(
-        numAgents: numAgents,
-        stateSize: stateSize,
-        actionSize: actionSize,
-        hiddenSizes: new[] { 128, 128 },
-        actorLearningRate: 0.001,
-        criticLearningRate: 0.001,
-        gamma: 0.95,
-        tau: 0.01))
-    .BuildAsync();
-
-Console.WriteLine(""Multi-Agent System Created (MADDPG):"");
+Console.WriteLine(""Multi-Agent System Configuration"");
 Console.WriteLine($""  Number of agents: {numAgents}"");
 Console.WriteLine($""  State size per agent: {stateSize}"");
 Console.WriteLine($""  Action size per agent: {actionSize}"");
-Console.WriteLine($""  Centralized training, decentralized execution"");
+Console.WriteLine();
+
+// Create multiple independent DQN agents
+var agents = new List<DQNAgent<double>>();
+for (int i = 0; i < numAgents; i++)
+{
+    var options = new DQNOptions<double>
+    {
+        StateSize = stateSize,
+        ActionSize = actionSize,
+        HiddenLayers = new List<int> { 128, 128 },
+        EpsilonStart = 1.0,
+        EpsilonEnd = 0.01,
+        EpsilonDecay = 0.995,
+        ReplayBufferSize = 10000,
+        BatchSize = 64,
+        Seed = 42 + i  // Different seed per agent
+    };
+    agents.Add(new DQNAgent<double>(options));
+}
+
+Console.WriteLine($""Created {numAgents} independent DQN agents"");
+Console.WriteLine();
+
+// Build each agent with AiModelBuilder
+var rng = RandomHelper.CreateSeededRandom(42);
+for (int i = 0; i < numAgents; i++)
+{
+    var features = new double[10, stateSize];
+    var labels = new double[10];
+    for (int j = 0; j < 10; j++)
+    {
+        for (int k = 0; k < stateSize; k++)
+            features[j, k] = rng.NextDouble() * 2 - 1;
+        labels[j] = rng.Next(0, actionSize);
+    }
+
+    var loader = DataLoaders.FromArrays(features, labels);
+    var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        .ConfigureDataLoader(loader)
+        .ConfigureModel(agents[i])
+        .BuildAsync();
+
+    Console.WriteLine($""  Agent {i + 1}: Built successfully"");
+}
+
+Console.WriteLine();
+Console.WriteLine(""Multi-Agent Training Paradigms:"");
+Console.WriteLine(""  - Independent learners (shown here)"");
+Console.WriteLine(""  - Centralized training, decentralized execution"");
+Console.WriteLine(""  - Communication between agents"");
+Console.WriteLine(""  - Shared reward vs individual rewards"");
 "
                 }
             },
@@ -2305,15 +3227,29 @@ Console.WriteLine($""  Centralized training, decentralized execution"");
                 {
                     Id = "vector-store",
                     Name = "Vector Store",
-                    Description = "Create and query a vector database for similarity search",
+                    Description = "Create vector index for similarity search using HNSW",
                     Difficulty = "Intermediate",
                     Tags = ["rag", "vector", "similarity", "search"],
-                    Code = @"// Vector Store with AiModelBuilder
+                    Code = @"// Vector Store with HNSW Index
 using AiDotNet;
-using AiDotNet.RAG;
-using AiDotNet.RAG.VectorStores;
+using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes;
+using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Documents to index
+Console.WriteLine(""Vector Store with HNSW Index"");
+Console.WriteLine();
+
+// Create HNSW index for efficient approximate nearest neighbor search
+var metric = new CosineSimilarityMetric<double>();
+var index = new HNSWIndex<double>(
+    metric: metric,
+    maxConnections: 16,  // M parameter
+    efConstruction: 200,
+    efSearch: 50);
+
+// Sample document embeddings (in practice, use an embedding model)
+var rng = RandomHelper.CreateSeededRandom(42);
+var docEmbeddings = new Dictionary<string, Vector<double>>();
 var documents = new[]
 {
     ""Machine learning is a subset of artificial intelligence."",
@@ -2323,36 +3259,59 @@ var documents = new[]
     ""Computer vision processes visual information.""
 };
 
-var result = await new AiModelBuilder<double, string[], VectorStore<double>>()
-    .ConfigureModel(new VectorStoreBuilder<double>()
-        .UseEmbeddingModel(new SentenceTransformer<double>(model: ""all-MiniLM-L6-v2""))
-        .UseIndex(new HNSWIndex<double>(efConstruction: 200, m: 16)))
-    .BuildAsync(documents);
+// Generate mock embeddings (384-dim like sentence-transformers)
+int embeddingDim = 384;
+for (int i = 0; i < documents.Length; i++)
+{
+    var embedding = new double[embeddingDim];
+    for (int j = 0; j < embeddingDim; j++)
+        embedding[j] = rng.NextDouble() * 2 - 1;
+    var vec = new Vector<double>(embedding);
+    vec = vec.Normalize();  // Normalize for cosine similarity
+    docEmbeddings[$""doc_{i}""] = vec;
+    index.Add($""doc_{i}"", vec);
+}
 
-// Search for similar documents
-var query = ""What is deep learning?"";
-var results = result.Search(query, topK: 3);
+Console.WriteLine($""Indexed {documents.Length} documents"");
+Console.WriteLine($""Embedding dimension: {embeddingDim}"");
+Console.WriteLine($""Index type: HNSW (M={16}, efConstruction={200})"");
+Console.WriteLine();
 
-Console.WriteLine($""Query: '{query}'"");
+// Query with mock embedding
+var queryEmbedding = new double[embeddingDim];
+for (int j = 0; j < embeddingDim; j++)
+    queryEmbedding[j] = rng.NextDouble() * 2 - 1;
+var queryVec = new Vector<double>(queryEmbedding).Normalize();
+
+var results = index.Search(queryVec, topK: 3);
+
 Console.WriteLine(""Top 3 similar documents:"");
-foreach (var (doc, score) in results)
-    Console.WriteLine($""  [{score:F4}] {doc}"");
+foreach (var (id, score) in results)
+{
+    int docIdx = int.Parse(id.Split('_')[1]);
+    Console.WriteLine($""  [{score:F4}] {documents[docIdx].Substring(0, Math.Min(50, documents[docIdx].Length))}..."");
+}
 "
                 },
                 new CodeExample
                 {
                     Id = "rag-pipeline",
                     Name = "RAG Pipeline",
-                    Description = "Retrieval-Augmented Generation for Q&A",
+                    Description = "Retrieval-Augmented Generation components demonstration",
                     Difficulty = "Advanced",
                     Tags = ["rag", "retrieval", "generation", "qa"],
-                    Code = @"// RAG Pipeline with AiModelBuilder
+                    Code = @"// RAG Pipeline Components with AiDotNet
 using AiDotNet;
-using AiDotNet.RAG;
-using AiDotNet.RAG.Retrievers;
+using AiDotNet.RetrievalAugmentedGeneration.Configuration;
+using AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
+using AiDotNet.RetrievalAugmentedGeneration.Rerankers;
+using AiDotNet.Tensors.LinearAlgebra;
+
+Console.WriteLine(""RAG Pipeline Components"");
+Console.WriteLine();
 
 // Knowledge base documents
-var knowledgeBase = new[]
+var documents = new[]
 {
     ""AiDotNet is the most comprehensive AI/ML framework for .NET."",
     ""AiDotNet supports 100+ neural network architectures."",
@@ -2361,63 +3320,122 @@ var knowledgeBase = new[]
     ""AiDotNet supports distributed training with DDP and FSDP.""
 };
 
-var result = await new AiModelBuilder<double, string[], RAGPipeline<double>>()
-    .ConfigureModel(new RAGPipelineBuilder<double>()
-        .UseRetriever(new DenseRetriever<double>(
-            embeddingModel: ""all-MiniLM-L6-v2"",
-            topK: 3))
-        .UseReranker(new CrossEncoderReranker<double>(
-            model: ""cross-encoder/ms-marco-MiniLM-L-6-v2""))
-        .UseGenerator(new LLMGenerator<double>(
-            model: ""gpt-4"",
-            maxTokens: 500)))
-    .BuildAsync(knowledgeBase);
+Console.WriteLine($""Knowledge Base: {documents.Length} documents"");
+Console.WriteLine();
 
-// Ask a question
-var question = ""What is AiModelBuilder?"";
-var answer = await result.QueryAsync(question);
+// Step 1: Configure chunking strategy
+var chunkConfig = new ChunkingConfig
+{
+    ChunkSize = 200,
+    ChunkOverlap = 50
+};
 
-Console.WriteLine($""Question: {question}"");
-Console.WriteLine($""Answer: {answer.Response}"");
-Console.WriteLine($""Sources: {string.Join("", "", answer.Sources)}"");
+Console.WriteLine(""Chunking Configuration:"");
+Console.WriteLine($""  Chunk size: {chunkConfig.ChunkSize}"");
+Console.WriteLine($""  Overlap: {chunkConfig.ChunkOverlap}"");
+Console.WriteLine();
+
+// Step 2: Configure retrieval
+var retrievalConfig = new RetrievalConfig
+{
+    TopK = 3,
+    SimilarityThreshold = 0.7
+};
+
+Console.WriteLine(""Retrieval Configuration:"");
+Console.WriteLine($""  Top-K: {retrievalConfig.TopK}"");
+Console.WriteLine($""  Similarity threshold: {retrievalConfig.SimilarityThreshold}"");
+Console.WriteLine();
+
+// Step 3: Configure reranking
+var rerankConfig = new RerankingConfig
+{
+    EnableReranking = true,
+    TopK = 2
+};
+
+Console.WriteLine(""Reranking Configuration:"");
+Console.WriteLine($""  Enabled: {rerankConfig.EnableReranking}"");
+Console.WriteLine($""  Final Top-K: {rerankConfig.TopK}"");
+Console.WriteLine();
+
+// Build full RAG configuration
+var ragConfig = new RAGConfigurationBuilder()
+    .WithChunking(chunkConfig)
+    .WithRetrieval(retrievalConfig)
+    .WithReranking(rerankConfig)
+    .Build();
+
+Console.WriteLine(""RAG Pipeline Ready!"");
+Console.WriteLine();
+Console.WriteLine(""Pipeline Flow:"");
+Console.WriteLine(""  1. Query -> Embedding"");
+Console.WriteLine(""  2. Vector search -> Top-K candidates"");
+Console.WriteLine(""  3. Reranking -> Final documents"");
+Console.WriteLine(""  4. Context + Query -> Generator"");
+Console.WriteLine(""  5. Answer with sources"");
 "
                 },
                 new CodeExample
                 {
                     Id = "document-chunking",
                     Name = "Document Chunking",
-                    Description = "Split documents into optimal chunks for retrieval",
+                    Description = "Split documents using RecursiveCharacterTextSplitter",
                     Difficulty = "Intermediate",
                     Tags = ["rag", "chunking", "preprocessing"],
-                    Code = @"// Document Chunking with AiModelBuilder
+                    Code = @"// Document Chunking with RecursiveCharacterTextSplitter
 using AiDotNet;
-using AiDotNet.RAG;
-using AiDotNet.RAG.Chunkers;
+using AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
+using AiDotNet.RetrievalAugmentedGeneration.Configuration;
 
-var longDocument = @""
-AiDotNet is the most comprehensive AI/ML framework for .NET.
+Console.WriteLine(""Document Chunking for RAG"");
+Console.WriteLine();
+
+var longDocument = @""AiDotNet is the most comprehensive AI/ML framework for .NET.
 It provides 4,300+ implementations across 60+ feature categories.
 
 The framework includes neural networks, classical ML, computer vision,
 audio processing, reinforcement learning, and much more.
 
 Key features include the AiModelBuilder facade pattern which simplifies
-model creation and training. The library supports both net8.0 and net471.
-"";
+model creation and training. The library supports both net8.0 and net471."";
 
-var result = await new AiModelBuilder<double, string, string[]>()
-    .ConfigureModel(new DocumentChunker<double>(
-        chunkSize: 200,
-        chunkOverlap: 50,
-        strategy: ChunkingStrategy.RecursiveCharacter,
-        separators: new[] { ""\n\n"", ""\n"", "". "", "" "" }))
-    .BuildAsync(longDocument);
+Console.WriteLine($""Original document length: {longDocument.Length} characters"");
+Console.WriteLine();
 
-Console.WriteLine($""Original document length: {longDocument.Length} chars"");
-Console.WriteLine($""Number of chunks: {result.Chunks.Length}"");
-Console.WriteLine(""\nChunks:"");
-for (int i = 0; i < result.Chunks.Length; i++)
-    Console.WriteLine($""  [{i}] {result.Chunks[i][..Math.Min(50, result.Chunks[i].Length)]}..."");
+// Create chunking configuration
+var config = new ChunkingConfig
+{
+    ChunkSize = 100,
+    ChunkOverlap = 20
+};
+
+// Create recursive character text splitter
+var splitter = new RecursiveCharacterTextSplitter(
+    chunkSize: config.ChunkSize,
+    chunkOverlap: config.ChunkOverlap,
+    separators: new[] { ""\n\n"", ""\n"", "". "", "" "" });
+
+// Split the document
+var chunks = splitter.Split(longDocument);
+
+Console.WriteLine($""Chunking Configuration:"");
+Console.WriteLine($""  Chunk size: {config.ChunkSize}"");
+Console.WriteLine($""  Chunk overlap: {config.ChunkOverlap}"");
+Console.WriteLine($""  Separators: [paragraph, newline, sentence, space]"");
+Console.WriteLine();
+
+Console.WriteLine($""Number of chunks: {chunks.Count}"");
+Console.WriteLine();
+
+Console.WriteLine(""Chunks:"");
+for (int i = 0; i < chunks.Count; i++)
+{
+    var preview = chunks[i].Length > 60
+        ? chunks[i].Substring(0, 60) + ""...""
+        : chunks[i];
+    Console.WriteLine($""  [{i}] ({chunks[i].Length} chars) {preview.Replace(""\n"", "" "")}"");
+}
 "
                 },
                 new CodeExample
