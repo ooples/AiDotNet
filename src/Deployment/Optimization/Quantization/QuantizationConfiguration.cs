@@ -14,6 +14,26 @@ public class QuantizationConfiguration
     public QuantizationMode Mode { get; set; } = QuantizationMode.Int8;
 
     /// <summary>
+    /// Gets the bit width for the current quantization mode.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is computed automatically based on the Mode:
+    /// - Int8: 8 bits (smallest, fastest, some accuracy loss)
+    /// - Float16: 16 bits (balanced speed and accuracy)
+    /// - Float32: 32 bits (full precision, no compression)
+    /// - Dynamic: 8 bits (dynamic range quantization)
+    /// </para>
+    /// </remarks>
+    public int BitWidth => Mode switch
+    {
+        QuantizationMode.Int8 => 8,
+        QuantizationMode.Float16 => 16,
+        QuantizationMode.Float32 => 32,
+        QuantizationMode.Dynamic => 8,
+        _ => 32
+    };
+
+    /// <summary>
     /// Gets or sets whether to use symmetric quantization (default: true).
     /// </summary>
     public bool UseSymmetricQuantization { get; set; } = true;

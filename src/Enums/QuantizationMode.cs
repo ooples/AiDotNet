@@ -14,6 +14,9 @@ public enum QuantizationMode
     /// <summary>16-bit floating point quantization</summary>
     Float16,
 
+    /// <summary>32-bit floating point (full precision, no quantization)</summary>
+    Float32,
+
     /// <summary>Dynamic quantization (quantize at runtime)</summary>
     Dynamic,
 

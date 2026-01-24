@@ -1,4 +1,5 @@
 using AiDotNet.Deployment.Export;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Deployment.Mobile.TensorFlowLite;
 
@@ -13,14 +14,14 @@ public class TFLiteConfiguration
     public bool UseQuantization { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the quantization type.
+    /// Gets or sets the quantization mode.
     /// </summary>
-    public QuantizationMode QuantizationType { get; set; } = QuantizationMode.Int8;
+    public QuantizationMode QuantizationMode { get; set; } = Enums.QuantizationMode.Int8;
 
     /// <summary>
-    /// Gets or sets whether to use GPU delegate (default: false).
+    /// Gets or sets whether to enable GPU delegate (default: false).
     /// </summary>
-    public bool UseGpuDelegate { get; set; } = false;
+    public bool EnableGpuDelegate { get; set; } = false;
 
     /// <summary>
     /// Gets or sets whether to use NNAPI delegate for Android (default: false).
@@ -68,9 +69,9 @@ public class TFLiteConfiguration
     public bool UseIntegerOnlyQuantization { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the target spec for compatibility.
+    /// Gets or sets the target specification for compatibility.
     /// </summary>
-    public TFLiteTargetSpec TargetSpec { get; set; } = TFLiteTargetSpec.Default;
+    public TFLiteTargetSpec TargetSpec { get; set; } = new TFLiteTargetSpec();
 
     /// <summary>
     /// Converts to ExportConfiguration.
@@ -81,7 +82,7 @@ public class TFLiteConfiguration
         {
             TargetPlatform = TargetPlatform.Mobile,
             OptimizeModel = EnableOperatorFusion || EnableConstantFolding,
-            QuantizationMode = UseQuantization ? QuantizationType : QuantizationMode.None,
+            QuantizationMode = UseQuantization ? QuantizationMode : Enums.QuantizationMode.None,
             ModelName = ModelName,
             ModelDescription = ModelDescription,
             BatchSize = 1
@@ -96,7 +97,7 @@ public class TFLiteConfiguration
         return new TFLiteConfiguration
         {
             UseQuantization = true,
-            QuantizationType = QuantizationMode.Int8,
+            QuantizationMode = Enums.QuantizationMode.Int8,
             UseNnapiDelegate = true,
             UseXnnpackDelegate = true,
             NumThreads = 4,
@@ -113,8 +114,8 @@ public class TFLiteConfiguration
         return new TFLiteConfiguration
         {
             UseQuantization = true,
-            QuantizationType = QuantizationMode.Int8,
-            UseGpuDelegate = true,
+            QuantizationMode = Enums.QuantizationMode.Int8,
+            EnableGpuDelegate = true,
             UseXnnpackDelegate = true,
             NumThreads = 4,
             EnableOperatorFusion = true,
@@ -130,8 +131,8 @@ public class TFLiteConfiguration
         return new TFLiteConfiguration
         {
             UseQuantization = true,
-            QuantizationType = QuantizationMode.Int8,
-            UseGpuDelegate = false,
+            QuantizationMode = Enums.QuantizationMode.Int8,
+            EnableGpuDelegate = false,
             UseNnapiDelegate = false,
             UseXnnpackDelegate = true,
             NumThreads = numThreads,
@@ -148,7 +149,7 @@ public class TFLiteConfiguration
         return new TFLiteConfiguration
         {
             UseQuantization = true,
-            QuantizationType = QuantizationMode.Int8,
+            QuantizationMode = Enums.QuantizationMode.Int8,
             UseIntegerOnlyQuantization = true,
             UseDynamicRangeQuantization = false,
             EnableOperatorFusion = true,
