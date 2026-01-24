@@ -5,10 +5,12 @@ using AiDotNet.Enums;
 using AiDotNet.Evaluation;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Metrics;
 using AiDotNet.ModelRegistry;
 using AiDotNet.Models;
 using AiDotNet.PromptEngineering.Optimization;
 using AiDotNet.PromptEngineering.Templates;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TrainingMonitoring;
 using Xunit;
 
@@ -927,6 +929,134 @@ public class MergedPRBugFixTests
     }
 
     private class MockModelMetadata { }
+
+    #endregion
+
+    #region Metrics PR #773 - Production Bug Fixes
+
+    [Fact]
+    public void PSNR_ComputeBatch_ValidatesNullArguments()
+    {
+        // ARRANGE: The old code didn't validate null arguments in ComputeBatch
+        var psnr = new PeakSignalToNoiseRatio<double>();
+        var validTensor = new Tensor<double>([1, 2, 2, 1]);
+
+        // ACT & ASSERT: Null arguments should throw ArgumentNullException
+        Assert.Throws<ArgumentNullException>(() => psnr.ComputeBatch(null!, validTensor));
+        Assert.Throws<ArgumentNullException>(() => psnr.ComputeBatch(validTensor, null!));
+    }
+
+    [Fact]
+    public void STOI_Compute_ValidatesNullArguments()
+    {
+        // ARRANGE: Missing null checks could cause NullReferenceException
+        var stoi = new ShortTimeObjectiveIntelligibility<double>();
+        var validTensor = new Tensor<double>([1000]);
+
+        // ACT & ASSERT
+        Assert.Throws<ArgumentNullException>(() => stoi.Compute(null!, validTensor));
+        Assert.Throws<ArgumentNullException>(() => stoi.Compute(validTensor, null!));
+    }
+
+    [Fact]
+    public void SISDR_Compute_ValidatesNullArguments()
+    {
+        // ARRANGE: Missing null checks could cause NullReferenceException
+        var sisdr = new ScaleInvariantSignalToDistortionRatio<double>();
+        var validTensor = new Tensor<double>([100]);
+
+        // ACT & ASSERT
+        Assert.Throws<ArgumentNullException>(() => sisdr.Compute(null!, validTensor));
+        Assert.Throws<ArgumentNullException>(() => sisdr.Compute(validTensor, null!));
+    }
+
+    [Fact]
+    public void SISDR_Compute_HandlesEmptyTensors()
+    {
+        // ARRANGE: The old code would divide by zero in ComputeMean for empty tensors
+        var sisdr = new ScaleInvariantSignalToDistortionRatio<double>();
+        var emptyTensor = new Tensor<double>([0]);
+
+        // ACT: Should not throw, should return sentinel value
+        var result = sisdr.Compute(emptyTensor, emptyTensor);
+
+        // ASSERT: Should return a very low SI-SDR value for empty signals
+        Assert.Equal(-100.0, result, 5);
+    }
+
+    [Fact]
+    public void SNR_Compute_ValidatesNullArguments()
+    {
+        // ARRANGE: Missing null checks could cause NullReferenceException
+        var snr = new SignalToNoiseRatio<double>();
+        var validTensor = new Tensor<double>([100]);
+
+        // ACT & ASSERT
+        Assert.Throws<ArgumentNullException>(() => snr.Compute(null!, validTensor));
+        Assert.Throws<ArgumentNullException>(() => snr.Compute(validTensor, null!));
+    }
+
+    [Fact]
+    public void IoU3D_ComputeBoxIoU_ValidatesBoxCoordinates()
+    {
+        // ARRANGE: The old code didn't validate that min <= max for each dimension
+        // This could produce negative volumes and incorrect IoU
+        var iou3d = new IoU3D<double>();
+
+        // Create invalid boxes where min > max
+        var invalidBoxA = new double[] { 10, 10, 10, 0, 0, 0 }; // x_min > x_max, etc.
+        var validBoxB = new double[] { 0, 0, 0, 5, 5, 5 };
+
+        // ACT & ASSERT: Should throw for invalid coordinates
+        Assert.Throws<ArgumentException>(() => iou3d.ComputeBoxIoU(invalidBoxA, validBoxB));
+        Assert.Throws<ArgumentException>(() => iou3d.ComputeBoxIoU(validBoxB, invalidBoxA));
+    }
+
+    [Fact]
+    public void IoU3D_ComputeBoxIoU_ValidatesNullArguments()
+    {
+        // ARRANGE
+        var iou3d = new IoU3D<double>();
+        var validBox = new double[] { 0, 0, 0, 5, 5, 5 };
+
+        // ACT & ASSERT
+        Assert.Throws<ArgumentNullException>(() => iou3d.ComputeBoxIoU(null!, validBox));
+        Assert.Throws<ArgumentNullException>(() => iou3d.ComputeBoxIoU(validBox, null!));
+    }
+
+    [Fact]
+    public void ChamferDistance_ComputeOneWay_ThrowsForEmptyTargetWithNonEmptySource()
+    {
+        // ARRANGE: The old code returned 0 for empty target, which is semantically wrong
+        // If source has points but target is empty, there's nothing to match to
+        var chamfer = new ChamferDistance<double>();
+
+        // Create non-empty source (2 points in 3D) and empty target
+        var source = new Tensor<double>([2, 3]);
+        for (int i = 0; i < 6; i++) source[i] = i * 0.5;
+
+        var target = new Tensor<double>([0, 3]);
+
+        // ACT & ASSERT: Should throw because you can't compute distance to nothing
+        Assert.Throws<ArgumentException>(() => chamfer.ComputeOneWay(source, target));
+    }
+
+    [Fact]
+    public void ChamferDistance_ComputeOneWay_ReturnsZeroForEmptySource()
+    {
+        // ARRANGE: Empty source is fine - no points to match means zero distance (vacuously true)
+        var chamfer = new ChamferDistance<double>();
+
+        var source = new Tensor<double>([0, 3]);
+        var target = new Tensor<double>([2, 3]);
+        for (int i = 0; i < 6; i++) target[i] = i * 0.5;
+
+        // ACT
+        var result = chamfer.ComputeOneWay(source, target);
+
+        // ASSERT: Should return 0 for empty source
+        Assert.Equal(0.0, result, 10);
+    }
 
     #endregion
 }
