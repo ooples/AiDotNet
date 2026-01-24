@@ -57,30 +57,33 @@ Console.WriteLine(""  - Cross-platform: Windows, Linux, macOS"");
                     Description = "Train a simple linear regression model",
                     Difficulty = "Beginner",
                     Tags = ["regression", "linear", "basics"],
-                    Code = @"// Simple Linear Regression with AiDotNet
+                    Code = @"// Simple Linear Regression with AiModelBuilder
+using AiDotNet;
+using AiDotNet.DataLoaders;
 using AiDotNet.Regression;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Training data: X = input features (single column), y = target values
-var features = new Matrix<double>(5, 1);
-features[0, 0] = 1.0; features[1, 0] = 2.0; features[2, 0] = 3.0;
-features[3, 0] = 4.0; features[4, 0] = 5.0;
+var features = new double[,] { { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 }, { 5.0 } };
+var labels = new double[] { 2.1, 4.0, 5.9, 8.1, 10.0 };
 
-var labels = new Vector<double>(new double[] { 2.1, 4.0, 5.9, 8.1, 10.0 });
-
-// Create and train the model
-var model = new SimpleRegression<double>();
-model.Train(features, labels);
+// Build using AiModelBuilder facade pattern
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new SimpleRegression<double>())
+    .BuildAsync();
 
 // Make predictions
 var testData = new Matrix<double>(1, 1);
 testData[0, 0] = 6.0;
-var predictions = model.Predict(testData);
+var predictions = result.Model.Predict(testData);
 
 Console.WriteLine($""Prediction for x=6: {predictions[0]:F2}"");
 Console.WriteLine($""Expected: ~12.0 (based on y ≈ 2x)"");
-Console.WriteLine($""Coefficients: {model.Coefficients[0]:F4}"");
-Console.WriteLine($""Intercept: {model.Intercept:F4}"");
+Console.WriteLine($""Coefficients: {result.Model.Coefficients[0]:F4}"");
+Console.WriteLine($""Intercept: {result.Model.Intercept:F4}"");
 "
                 },
                 new CodeExample
@@ -90,29 +93,30 @@ Console.WriteLine($""Intercept: {model.Intercept:F4}"");
                     Description = "L2 regularized linear regression",
                     Difficulty = "Beginner",
                     Tags = ["regression", "regularization", "basics"],
-                    Code = @"// Ridge Regression (L2 Regularized) with AiDotNet
+                    Code = @"// Ridge Regression (L2 Regularized) with AiModelBuilder
+using AiDotNet;
+using AiDotNet.DataLoaders;
 using AiDotNet.Regression;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Training data with 2 features
-var features = new Matrix<double>(4, 2);
-features[0, 0] = 1.0; features[0, 1] = 2.0;
-features[1, 0] = 2.0; features[1, 1] = 3.0;
-features[2, 0] = 3.0; features[2, 1] = 4.0;
-features[3, 0] = 4.0; features[3, 1] = 5.0;
+var features = new double[,] { { 1.0, 2.0 }, { 2.0, 3.0 }, { 3.0, 4.0 }, { 4.0, 5.0 } };
+var labels = new double[] { 3.0, 5.0, 7.0, 9.0 };
 
-var labels = new Vector<double>(new double[] { 3.0, 5.0, 7.0, 9.0 });
-
-// Create Ridge Regression with custom alpha (regularization strength)
+// Build using AiModelBuilder facade pattern
 var options = new RidgeRegressionOptions<double> { Alpha = 1.0 };
-var model = new RidgeRegression<double>(options);
-model.Train(features, labels);
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new RidgeRegression<double>(options))
+    .BuildAsync();
 
 // Make predictions
 var testData = new Matrix<double>(1, 2);
 testData[0, 0] = 5.0; testData[0, 1] = 6.0;
-var predictions = model.Predict(testData);
+var predictions = result.Model.Predict(testData);
 
 Console.WriteLine($""Prediction for (5, 6): {predictions[0]:F2}"");
 Console.WriteLine($""Ridge Regression trained with alpha={options.Alpha}"");
@@ -129,27 +133,30 @@ Console.WriteLine($""Ridge Regression trained with alpha={options.Alpha}"");
                     Description = "Fit non-linear data with polynomial features",
                     Difficulty = "Intermediate",
                     Tags = ["regression", "polynomial"],
-                    Code = @"// Polynomial Regression with AiDotNet
+                    Code = @"// Polynomial Regression with AiModelBuilder
+using AiDotNet;
+using AiDotNet.DataLoaders;
 using AiDotNet.Regression;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Non-linear data (quadratic relationship: y = x²)
-var features = new Matrix<double>(5, 1);
-features[0, 0] = 1.0; features[1, 0] = 2.0; features[2, 0] = 3.0;
-features[3, 0] = 4.0; features[4, 0] = 5.0;
+var features = new double[,] { { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 }, { 5.0 } };
+var labels = new double[] { 1.0, 4.0, 9.0, 16.0, 25.0 };
 
-var labels = new Vector<double>(new double[] { 1.0, 4.0, 9.0, 16.0, 25.0 });
-
-// Create polynomial regression with degree 2
+// Build using AiModelBuilder facade pattern
 var options = new PolynomialRegressionOptions<double> { Degree = 2 };
-var model = new PolynomialRegression<double>(options);
-model.Train(features, labels);
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new PolynomialRegression<double>(options))
+    .BuildAsync();
 
 // Make predictions
 var testData = new Matrix<double>(1, 1);
 testData[0, 0] = 6.0;
-var predictions = model.Predict(testData);
+var predictions = result.Model.Predict(testData);
 
 Console.WriteLine($""Prediction for x=6: {predictions[0]:F2}"");
 Console.WriteLine($""Expected (6²): 36.00"");
@@ -163,35 +170,42 @@ Console.WriteLine($""Polynomial degree: {options.Degree}"");
                     Description = "L1 regularized regression for sparse solutions",
                     Difficulty = "Intermediate",
                     Tags = ["regression", "regularization", "lasso"],
-                    Code = @"// Lasso Regression (L1 Regularized) with AiDotNet
+                    Code = @"// Lasso Regression (L1 Regularized) with AiModelBuilder
+using AiDotNet;
+using AiDotNet.DataLoaders;
 using AiDotNet.Regression;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Training data with multiple features
-var features = new Matrix<double>(5, 3);
-features[0, 0] = 1.0; features[0, 1] = 2.0; features[0, 2] = 0.5;
-features[1, 0] = 2.0; features[1, 1] = 3.0; features[1, 2] = 1.0;
-features[2, 0] = 3.0; features[2, 1] = 4.0; features[2, 2] = 1.5;
-features[3, 0] = 4.0; features[3, 1] = 5.0; features[3, 2] = 2.0;
-features[4, 0] = 5.0; features[4, 1] = 6.0; features[4, 2] = 2.5;
+var features = new double[,]
+{
+    { 1.0, 2.0, 0.5 },
+    { 2.0, 3.0, 1.0 },
+    { 3.0, 4.0, 1.5 },
+    { 4.0, 5.0, 2.0 },
+    { 5.0, 6.0, 2.5 }
+};
+var labels = new double[] { 3.5, 5.5, 7.5, 9.5, 11.5 };
 
-var labels = new Vector<double>(new double[] { 3.5, 5.5, 7.5, 9.5, 11.5 });
-
-// Create Lasso regression (promotes sparse coefficients)
+// Build using AiModelBuilder facade pattern
 var options = new LassoRegressionOptions<double> { Alpha = 0.1 };
-var model = new LassoRegression<double>(options);
-model.Train(features, labels);
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new LassoRegression<double>(options))
+    .BuildAsync();
 
 // Show coefficients (some may be zero due to L1 regularization)
 Console.WriteLine(""Lasso Regression Results:"");
 Console.WriteLine($""Alpha (regularization): {options.Alpha}"");
 Console.WriteLine(""Coefficients:"");
-for (int i = 0; i < model.Coefficients.Length; i++)
+for (int i = 0; i < result.Model.Coefficients.Length; i++)
 {
-    Console.WriteLine($""  Feature {i}: {model.Coefficients[i]:F4}"");
+    Console.WriteLine($""  Feature {i}: {result.Model.Coefficients[i]:F4}"");
 }
-Console.WriteLine($""Intercept: {model.Intercept:F4}"");
+Console.WriteLine($""Intercept: {result.Model.Intercept:F4}"");
 "
                 },
                 new CodeExample
@@ -201,34 +215,34 @@ Console.WriteLine($""Intercept: {model.Intercept:F4}"");
                     Description = "Combined L1 and L2 regularization",
                     Difficulty = "Intermediate",
                     Tags = ["regression", "regularization", "elastic-net"],
-                    Code = @"// Elastic Net Regression with AiDotNet
+                    Code = @"// Elastic Net Regression with AiModelBuilder
+using AiDotNet;
+using AiDotNet.DataLoaders;
 using AiDotNet.Regression;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Training data
-var features = new Matrix<double>(5, 2);
-features[0, 0] = 1.0; features[0, 1] = 1.0;
-features[1, 0] = 2.0; features[1, 1] = 2.0;
-features[2, 0] = 3.0; features[2, 1] = 3.0;
-features[3, 0] = 4.0; features[3, 1] = 4.0;
-features[4, 0] = 5.0; features[4, 1] = 5.0;
+var features = new double[,] { { 1.0, 1.0 }, { 2.0, 2.0 }, { 3.0, 3.0 }, { 4.0, 4.0 }, { 5.0, 5.0 } };
+var labels = new double[] { 2.0, 4.0, 6.0, 8.0, 10.0 };
 
-var labels = new Vector<double>(new double[] { 2.0, 4.0, 6.0, 8.0, 10.0 });
-
-// Create Elastic Net (combines L1 and L2 regularization)
+// Build using AiModelBuilder facade pattern
 var options = new ElasticNetRegressionOptions<double>
 {
     Alpha = 0.1,        // Overall regularization strength
     L1Ratio = 0.5       // Balance between L1 (Lasso) and L2 (Ridge)
 };
-var model = new ElasticNetRegression<double>(options);
-model.Train(features, labels);
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new ElasticNetRegression<double>(options))
+    .BuildAsync();
 
 // Make prediction
 var testData = new Matrix<double>(1, 2);
 testData[0, 0] = 6.0; testData[0, 1] = 6.0;
-var predictions = model.Predict(testData);
+var predictions = result.Model.Predict(testData);
 
 Console.WriteLine(""Elastic Net Results:"");
 Console.WriteLine($""Alpha: {options.Alpha}, L1 Ratio: {options.L1Ratio}"");
