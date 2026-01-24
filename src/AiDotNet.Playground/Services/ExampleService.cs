@@ -1339,7 +1339,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 
 // Create a Vector (1D tensor)
 var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
-Console.WriteLine($""Vector: [{string.Join("", "", vector)}]"");
+Console.WriteLine($""Vector: [{string.Join("", "", vector.ToArray())}]"");
 Console.WriteLine($""Length: {vector.Length}"");
 Console.WriteLine($""Sum: {vector.Sum():F2}"");
 Console.WriteLine();
@@ -1488,17 +1488,17 @@ using AiDotNet.Tensors.LinearAlgebra;
 var v1 = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
 var v2 = new Vector<double>(new double[] { 4.0, 5.0, 6.0 });
 
-Console.WriteLine($""Vector v1: [{string.Join("", "", v1)}]"");
-Console.WriteLine($""Vector v2: [{string.Join("", "", v2)}]"");
+Console.WriteLine($""Vector v1: [{string.Join("", "", v1.ToArray())}]"");
+Console.WriteLine($""Vector v2: [{string.Join("", "", v2.ToArray())}]"");
 Console.WriteLine();
 
 // Vector addition
 var vSum = v1.Add(v2);
-Console.WriteLine($""v1 + v2 = [{string.Join("", "", vSum)}]"");
+Console.WriteLine($""v1 + v2 = [{string.Join("", "", vSum.ToArray())}]"");
 
 // Scalar multiplication
 var vScaled = v1.Multiply(2.0);
-Console.WriteLine($""v1 * 2 = [{string.Join("", "", vScaled)}]"");
+Console.WriteLine($""v1 * 2 = [{string.Join("", "", vScaled.ToArray())}]"");
 
 // Dot product
 var dotProduct = v1.DotProduct(v2);
@@ -1602,9 +1602,9 @@ var vec2 = new Vector<double>(new double[] { 0.0, 1.0 });  // North direction
 var vec3 = new Vector<double>(new double[] { 1.0, 1.0 });  // Northeast
 
 Console.WriteLine(""Cosine Distance measures angle between vectors"");
-Console.WriteLine($""vec1 (East):      [{string.Join("", "", vec1)}]"");
-Console.WriteLine($""vec2 (North):     [{string.Join("", "", vec2)}]"");
-Console.WriteLine($""vec3 (Northeast): [{string.Join("", "", vec3)}]"");
+Console.WriteLine($""vec1 (East):      [{string.Join("", "", vec1.ToArray())}]"");
+Console.WriteLine($""vec2 (North):     [{string.Join("", "", vec2.ToArray())}]"");
+Console.WriteLine($""vec3 (Northeast): [{string.Join("", "", vec3.ToArray())}]"");
 Console.WriteLine();
 
 var cosine = new CosineDistance<double>();

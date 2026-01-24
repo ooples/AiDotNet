@@ -294,10 +294,12 @@ public class PlaygroundExampleCompilationTests
 
     /// <summary>
     /// Gets metadata references for compilation.
+    /// Includes core runtime assemblies, loaded assemblies, and AiDotNet assemblies from the output directory.
     /// </summary>
     private static List<MetadataReference> GetMetadataReferences()
     {
         var references = new List<MetadataReference>();
+        var addedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // Get the runtime directory
         var runtimeDir = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
@@ -323,7 +325,7 @@ public class PlaygroundExampleCompilationTests
         foreach (var assembly in coreAssemblies)
         {
             var path = Path.Combine(runtimeDir, assembly);
-            if (File.Exists(path))
+            if (File.Exists(path) && addedPaths.Add(path))
             {
                 references.Add(MetadataReference.CreateFromFile(path));
             }
@@ -334,7 +336,7 @@ public class PlaygroundExampleCompilationTests
         {
             try
             {
-                if (!assembly.IsDynamic && !string.IsNullOrEmpty(assembly.Location))
+                if (!assembly.IsDynamic && !string.IsNullOrEmpty(assembly.Location) && addedPaths.Add(assembly.Location))
                 {
                     references.Add(MetadataReference.CreateFromFile(assembly.Location));
                 }
@@ -343,6 +345,31 @@ public class PlaygroundExampleCompilationTests
             {
                 // Skip assemblies that can't be loaded
             }
+        }
+
+        // Scan the output directory for AiDotNet assemblies that may not be loaded yet
+        // This ensures all AiDotNet types are available for compilation even if not yet used
+        var outputDir = AppDomain.CurrentDomain.BaseDirectory;
+        try
+        {
+            foreach (var dllPath in Directory.GetFiles(outputDir, "AiDotNet*.dll"))
+            {
+                if (addedPaths.Add(dllPath))
+                {
+                    try
+                    {
+                        references.Add(MetadataReference.CreateFromFile(dllPath));
+                    }
+                    catch
+                    {
+                        // Skip assemblies that can't be loaded as metadata references
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Skip if we can't access the output directory
         }
 
         return references;

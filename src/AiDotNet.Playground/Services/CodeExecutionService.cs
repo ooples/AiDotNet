@@ -147,7 +147,8 @@ public class CodeExecutionService
 
     /// <summary>
     /// Executes C# code and returns the result.
-    /// Uses smart routing: AiDotNet code goes to simulation, pure C# goes to Piston API.
+    /// Uses smart routing: AiDotNet code goes to Azure Functions (with AiDotNet installed) first,
+    /// then falls back to simulation. Pure C# goes to Piston API first, then falls back to simulation.
     /// </summary>
     public async Task<ExecutionResult> ExecuteAsync(string code)
     {
@@ -231,14 +232,19 @@ public class CodeExecutionService
 
             // Look for the pattern with code-like context (not inside strings)
             // Pattern followed by <, (, ., or = indicates actual API usage
-            var searchPatterns = new[]
+            var searchPatterns = new List<string>();
+
+            // Only add generic pattern if the pattern doesn't already end with '<'
+            // (e.g., "Tensor<" already ends with '<', so don't create "Tensor<<")
+            if (!pattern.EndsWith('<'))
             {
-                pattern + "<",   // Generic type: Tensor<double>
-                pattern + "(",   // Constructor or method: KMeans()
-                pattern + ".",   // Instance method: kmeans.Fit()
-                pattern + " ",   // Declaration: KMeans kmeans
-                "new " + pattern // Constructor: new KMeans()
-            };
+                searchPatterns.Add(pattern + "<");   // Generic type: Tensor<double>
+            }
+
+            searchPatterns.Add(pattern + "(");   // Constructor or method: KMeans()
+            searchPatterns.Add(pattern + ".");   // Instance method: kmeans.Fit()
+            searchPatterns.Add(pattern + " ");   // Declaration: KMeans kmeans
+            searchPatterns.Add("new " + pattern); // Constructor: new KMeans()
 
             foreach (var searchPattern in searchPatterns)
             {
