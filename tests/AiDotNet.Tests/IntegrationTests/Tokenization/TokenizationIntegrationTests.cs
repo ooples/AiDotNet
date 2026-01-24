@@ -1141,7 +1141,7 @@ public class TokenizationIntegrationTests
     }
 
     [Fact]
-    public void PhonemeTokenizer_Tokenize_ConvertsToPhonesmes()
+    public void PhonemeTokenizer_Tokenize_ConvertsToPhonemes()
     {
         var tokenizer = PhonemeTokenizer.CreateARPAbet();
 
