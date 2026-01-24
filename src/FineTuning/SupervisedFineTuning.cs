@@ -34,11 +34,25 @@ public class SupervisedFineTuning<T, TInput, TOutput> : FineTuningBase<T, TInput
     private readonly ILossFunction<T>? _customLossFunction;
 
     /// <summary>
-    /// Initializes a new instance of SFT.
+    /// Initializes a new instance of SFT with default loss function.
     /// </summary>
     /// <param name="options">The fine-tuning configuration options.</param>
-    /// <param name="lossFunction">Optional custom loss function. Uses model default if not provided.</param>
-    public SupervisedFineTuning(FineTuningOptions<T> options, ILossFunction<T>? lossFunction = null)
+    /// <remarks>
+    /// This constructor is provided for compatibility with Activator.CreateInstance
+    /// and other reflection-based instantiation that requires a single-parameter constructor.
+    /// The model's default loss function will be used during training.
+    /// </remarks>
+    public SupervisedFineTuning(FineTuningOptions<T> options)
+        : this(options, null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of SFT with a custom loss function.
+    /// </summary>
+    /// <param name="options">The fine-tuning configuration options.</param>
+    /// <param name="lossFunction">Custom loss function. Uses model default if null.</param>
+    public SupervisedFineTuning(FineTuningOptions<T> options, ILossFunction<T>? lossFunction)
         : base(options)
     {
         _customLossFunction = lossFunction;

@@ -223,11 +223,245 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
     /// <param name="prediction">The model's prediction.</param>
     /// <param name="target">The target output.</param>
     /// <returns>The log probability.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method computes a log probability score that measures how well the model's
+    /// prediction matches the target. Higher values indicate better match.
+    /// </para>
+    /// <para>
+    /// The implementation handles different output types:
+    /// - Arrays/IEnumerable: Computes cross-entropy-like score for probability distributions
+    /// - Numeric types: Computes negative squared error converted to log probability
+    /// - Other types: Uses equality-based scoring
+    /// </para>
+    /// <para><b>For Beginners:</b> This is like a "similarity score" between what the model
+    /// predicted and what we wanted it to predict. A score of 0 means perfect match,
+    /// negative values indicate worse matches. The more negative, the worse the match.
+    /// </para>
+    /// </remarks>
     protected virtual double ComputeLogProbabilityFromPrediction(TOutput prediction, TOutput target)
     {
-        // Default implementation for vector-based outputs
-        // Subclasses should override for specific output types
-        return 0.0;
+        if (prediction == null || target == null)
+        {
+            return double.NegativeInfinity;
+        }
+
+        // Handle array types (probability distributions, embeddings)
+        if (prediction is Array predArray && target is Array targetArray)
+        {
+            return ComputeArrayLogProbability(predArray, targetArray);
+        }
+
+        // Handle IEnumerable types
+        if (prediction is System.Collections.IEnumerable predEnum && target is System.Collections.IEnumerable targetEnum)
+        {
+            var predList = predEnum.Cast<object>().ToArray();
+            var targetList = targetEnum.Cast<object>().ToArray();
+            if (predList.Length > 0 && targetList.Length > 0)
+            {
+                return ComputeEnumerableLogProbability(predList, targetList);
+            }
+        }
+
+        // Handle numeric types directly
+        if (IsNumericType(prediction.GetType()))
+        {
+            double predVal = Convert.ToDouble(prediction);
+            double targetVal = Convert.ToDouble(target);
+            return ComputeScalarLogProbability(predVal, targetVal);
+        }
+
+        // Handle string/text outputs (sequence matching)
+        if (prediction is string predStr && target is string targetStr)
+        {
+            return ComputeStringLogProbability(predStr, targetStr);
+        }
+
+        // Default: exact match gives 0 (log(1)), mismatch gives large negative
+        return prediction.Equals(target) ? 0.0 : -10.0;
+    }
+
+    /// <summary>
+    /// Computes log probability for array outputs (probability distributions or embeddings).
+    /// </summary>
+    private double ComputeArrayLogProbability(Array predArray, Array targetArray)
+    {
+        if (predArray.Length == 0 || targetArray.Length == 0)
+        {
+            return double.NegativeInfinity;
+        }
+
+        // Convert to double arrays
+        var pred = new double[predArray.Length];
+        var target = new double[targetArray.Length];
+
+        try
+        {
+            for (int i = 0; i < predArray.Length; i++)
+            {
+                pred[i] = Convert.ToDouble(predArray.GetValue(i));
+            }
+            for (int i = 0; i < targetArray.Length; i++)
+            {
+                target[i] = Convert.ToDouble(targetArray.GetValue(i));
+            }
+        }
+        catch
+        {
+            // If conversion fails, fall back to equality check
+            return predArray.Equals(targetArray) ? 0.0 : -10.0;
+        }
+
+        // If lengths differ, use the minimum length and penalize
+        int minLen = Math.Min(pred.Length, target.Length);
+        double lengthPenalty = Math.Abs(pred.Length - target.Length) * -0.1;
+
+        // Special case: single-element arrays should be treated as scalars
+        // because cosine similarity is always 1.0 for same-sign single values
+        if (minLen == 1)
+        {
+            return ComputeScalarLogProbability(pred[0], target[0]) + lengthPenalty;
+        }
+
+        // Check if prediction looks like a probability distribution (sums close to 1, all non-negative)
+        double predSum = pred.Take(minLen).Sum();
+        bool isProbDist = pred.Take(minLen).All(p => p >= 0) && Math.Abs(predSum - 1.0) < 0.1;
+
+        if (isProbDist)
+        {
+            // Cross-entropy style: -sum(target * log(pred))
+            // This is the standard log probability for probability distributions
+            double logProb = 0.0;
+            for (int i = 0; i < minLen; i++)
+            {
+                double p = Math.Max(pred[i], 1e-10); // Avoid log(0)
+                double t = target[i];
+                if (t > 0)
+                {
+                    logProb += t * Math.Log(p);
+                }
+            }
+            return logProb + lengthPenalty;
+        }
+        else
+        {
+            // Cosine similarity converted to log probability for embeddings
+            double dotProduct = 0.0;
+            double predNorm = 0.0;
+            double targetNorm = 0.0;
+
+            for (int i = 0; i < minLen; i++)
+            {
+                dotProduct += pred[i] * target[i];
+                predNorm += pred[i] * pred[i];
+                targetNorm += target[i] * target[i];
+            }
+
+            predNorm = Math.Sqrt(predNorm);
+            targetNorm = Math.Sqrt(targetNorm);
+
+            if (predNorm < 1e-10 || targetNorm < 1e-10)
+            {
+                return -10.0 + lengthPenalty;
+            }
+
+            double cosineSim = dotProduct / (predNorm * targetNorm);
+            // Convert cosine similarity [-1, 1] to log probability
+            // cosineSim = 1 -> log(1) = 0, cosineSim = -1 -> log(~0) = -inf
+            double prob = (cosineSim + 1.0) / 2.0; // Map to [0, 1]
+            return Math.Log(Math.Max(prob, 1e-10)) + lengthPenalty;
+        }
+    }
+
+    /// <summary>
+    /// Computes log probability for IEnumerable outputs.
+    /// </summary>
+    private double ComputeEnumerableLogProbability(object[] pred, object[] target)
+    {
+        // Try to convert to numeric arrays
+        try
+        {
+            var predDouble = pred.Select(p => Convert.ToDouble(p)).ToArray();
+            var targetDouble = target.Select(t => Convert.ToDouble(t)).ToArray();
+
+            // Use the array method
+            return ComputeArrayLogProbability(predDouble, targetDouble);
+        }
+        catch
+        {
+            // Fall back to sequence matching
+            int matches = 0;
+            int minLen = Math.Min(pred.Length, target.Length);
+            for (int i = 0; i < minLen; i++)
+            {
+                if (pred[i]?.Equals(target[i]) == true)
+                {
+                    matches++;
+                }
+            }
+
+            double matchRatio = minLen > 0 ? (double)matches / minLen : 0.0;
+            double lengthPenalty = Math.Abs(pred.Length - target.Length) * -0.1;
+            return Math.Log(Math.Max(matchRatio, 1e-10)) + lengthPenalty;
+        }
+    }
+
+    /// <summary>
+    /// Computes log probability for scalar numeric outputs.
+    /// </summary>
+    private static double ComputeScalarLogProbability(double pred, double target)
+    {
+        // Use negative squared error converted to log probability
+        // Perfect match -> 0, worse match -> more negative
+        double squaredError = (pred - target) * (pred - target);
+
+        // Convert to probability using Gaussian-like function
+        // P = exp(-squaredError / (2 * sigma^2))
+        // log(P) = -squaredError / (2 * sigma^2)
+        // Using sigma = 1.0 as default scale
+        const double sigma = 1.0;
+        return -squaredError / (2.0 * sigma * sigma);
+    }
+
+    /// <summary>
+    /// Computes log probability for string outputs using character-level matching.
+    /// </summary>
+    private static double ComputeStringLogProbability(string pred, string target)
+    {
+        if (string.IsNullOrEmpty(pred) || string.IsNullOrEmpty(target))
+        {
+            return pred == target ? 0.0 : double.NegativeInfinity;
+        }
+
+        // Compute character-level matching score
+        int minLen = Math.Min(pred.Length, target.Length);
+        int maxLen = Math.Max(pred.Length, target.Length);
+        int matches = 0;
+
+        for (int i = 0; i < minLen; i++)
+        {
+            if (pred[i] == target[i])
+            {
+                matches++;
+            }
+        }
+
+        // Match ratio penalized by length difference
+        double matchRatio = (double)matches / maxLen;
+        return Math.Log(Math.Max(matchRatio, 1e-10));
+    }
+
+    /// <summary>
+    /// Checks if a type is a numeric type.
+    /// </summary>
+    private static bool IsNumericType(Type type)
+    {
+        return type == typeof(byte) || type == typeof(sbyte) ||
+               type == typeof(short) || type == typeof(ushort) ||
+               type == typeof(int) || type == typeof(uint) ||
+               type == typeof(long) || type == typeof(ulong) ||
+               type == typeof(float) || type == typeof(double) ||
+               type == typeof(decimal);
     }
 
     /// <summary>

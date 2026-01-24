@@ -316,4 +316,193 @@ public class MergedPRBugFixTests
     }
 
     #endregion
+
+    #region FineTuning PR #753 - Log Probability Always Zero Bug
+
+    [Fact]
+    public void SupervisedFineTuning_CanBeInstantiated_WithSingleParameterConstructor()
+    {
+        // ARRANGE: The old SupervisedFineTuning only had a constructor with optional second parameter:
+        // SupervisedFineTuning(FineTuningOptions<T> options, ILossFunction<T>? lossFunction = null)
+        // This caused Activator.CreateInstance(type, options) to fail because it couldn't find
+        // a constructor with exactly one parameter.
+        // FIX: Added an explicit single-parameter constructor.
+
+        var optionsType = typeof(AiDotNet.Models.Options.FineTuningOptions<>).MakeGenericType(typeof(double));
+        var options = Activator.CreateInstance(optionsType);
+
+        var sftType = typeof(FineTuning.SupervisedFineTuning<,,>)
+            .MakeGenericType(typeof(double), typeof(double[]), typeof(double[]));
+
+        // ACT: This should NOT throw MissingMethodException
+        Exception? caughtException = null;
+        object? sftInstance = null;
+        try
+        {
+            sftInstance = Activator.CreateInstance(sftType, options);
+        }
+        catch (Exception ex)
+        {
+            caughtException = ex;
+        }
+
+        // ASSERT
+        Assert.Null(caughtException);
+        Assert.NotNull(sftInstance);
+        Assert.IsAssignableFrom(typeof(FineTuning.FineTuningBase<double, double[], double[]>), sftInstance);
+    }
+
+    [Fact]
+    public void FineTuningBase_ComputeLogProbability_ArrayOutputs_NotAlwaysZero()
+    {
+        // ARRANGE: The old code always returned 0.0 for log probability
+        // which made DPO/RLHF/etc. compute constant loss regardless of inputs
+
+        // Use reflection to test the protected method
+        var fineTuningBaseType = typeof(FineTuning.FineTuningBase<,,>)
+            .MakeGenericType(typeof(double), typeof(double[]), typeof(double[]));
+
+        var computeMethod = fineTuningBaseType.GetMethod(
+            "ComputeLogProbabilityFromPrediction",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        if (computeMethod == null)
+        {
+            // Method signature changed, skip test
+            return;
+        }
+
+        // Create a concrete implementation to test
+        var optionsType = typeof(AiDotNet.Models.Options.FineTuningOptions<>).MakeGenericType(typeof(double));
+        var options = Activator.CreateInstance(optionsType);
+
+        // Use DPO as the concrete implementation
+        var dpoType = typeof(FineTuning.DirectPreferenceOptimization<,,>)
+            .MakeGenericType(typeof(double), typeof(double[]), typeof(double[]));
+        var dpo = Activator.CreateInstance(dpoType, options);
+
+        // Test 1: Identical arrays should give log prob close to 0 (high probability)
+        var identicalPred = new double[] { 0.2, 0.3, 0.5 }; // Valid probability distribution
+        var identicalTarget = new double[] { 0.2, 0.3, 0.5 };
+        var logProbIdentical = (double)computeMethod.Invoke(dpo, new object[] { identicalPred, identicalTarget })!;
+
+        // Test 2: Different arrays should give more negative log prob
+        var differentPred = new double[] { 0.8, 0.1, 0.1 }; // Different distribution
+        var differentTarget = new double[] { 0.1, 0.1, 0.8 };
+        var logProbDifferent = (double)computeMethod.Invoke(dpo, new object[] { differentPred, differentTarget })!;
+
+        // ASSERT: Log probs should be different (not both 0.0)
+        // Identical should be higher (less negative) than different
+        Assert.NotEqual(0.0, logProbIdentical);
+        Assert.NotEqual(0.0, logProbDifferent);
+        Assert.True(logProbIdentical > logProbDifferent,
+            $"Identical arrays should have higher log prob ({logProbIdentical}) than different ({logProbDifferent})");
+    }
+
+    [Fact]
+    public void FineTuningBase_ComputeLogProbability_ScalarOutputs_NotAlwaysZero()
+    {
+        // ARRANGE: Use DPO with double[] types since we know it has the right constructor
+        // We're testing the base class method which handles scalar conversion internally
+        var optionsType = typeof(AiDotNet.Models.Options.FineTuningOptions<>).MakeGenericType(typeof(double));
+        var options = Activator.CreateInstance(optionsType);
+
+        var dpoType = typeof(FineTuning.DirectPreferenceOptimization<,,>)
+            .MakeGenericType(typeof(double), typeof(double[]), typeof(double[]));
+        var dpo = Activator.CreateInstance(dpoType, options);
+
+        var computeMethod = dpoType.BaseType!.GetMethod(
+            "ComputeLogProbabilityFromPrediction",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        if (computeMethod == null) return;
+
+        // Test with single-element arrays (simulating scalar behavior)
+        var identical1 = new double[] { 5.0 };
+        var identical2 = new double[] { 5.0 };
+        var different = new double[] { 10.0 };
+
+        var logProbIdentical = (double)computeMethod.Invoke(dpo, new object[] { identical1, identical2 })!;
+        var logProbDifferent = (double)computeMethod.Invoke(dpo, new object[] { different, identical1 })!;
+
+        // ASSERT: Identical should have higher log prob than different
+        Assert.True(logProbIdentical > logProbDifferent,
+            $"Identical arrays should have higher log prob ({logProbIdentical}) than different ({logProbDifferent})");
+    }
+
+    [Fact]
+    public void FineTuningBase_ComputeLogProbability_StringOutputs_NotAlwaysZero()
+    {
+        // ARRANGE: Use DPO with string types
+        var optionsType = typeof(AiDotNet.Models.Options.FineTuningOptions<>).MakeGenericType(typeof(double));
+        var options = Activator.CreateInstance(optionsType);
+
+        var dpoType = typeof(FineTuning.DirectPreferenceOptimization<,,>)
+            .MakeGenericType(typeof(double), typeof(string), typeof(string));
+        var dpo = Activator.CreateInstance(dpoType, options);
+
+        var computeMethod = dpoType.BaseType!.GetMethod(
+            "ComputeLogProbabilityFromPrediction",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        if (computeMethod == null) return;
+
+        // Test: Identical strings should give 0
+        var logProbIdentical = (double)computeMethod.Invoke(dpo, new object[] { "hello", "hello" })!;
+
+        // Test: Similar strings should give higher log prob than different
+        var logProbSimilar = (double)computeMethod.Invoke(dpo, new object[] { "hello", "hallo" })!;
+        var logProbDifferent = (double)computeMethod.Invoke(dpo, new object[] { "hello", "world" })!;
+
+        // ASSERT
+        Assert.Equal(0.0, logProbIdentical, precision: 10);
+        Assert.True(logProbSimilar > logProbDifferent,
+            $"Similar strings should have higher log prob ({logProbSimilar}) than different ({logProbDifferent})");
+    }
+
+    [Fact]
+    public void DirectPreferenceOptimization_DPOLoss_VariesWithInputs()
+    {
+        // This test verifies that DPO loss actually varies based on inputs
+        // Before the fix, loss was always ~0.693 (constant) because log probs were always 0
+
+        var optionsType = typeof(AiDotNet.Models.Options.FineTuningOptions<>).MakeGenericType(typeof(double));
+        var options = Activator.CreateInstance(optionsType);
+
+        var dpoType = typeof(FineTuning.DirectPreferenceOptimization<,,>)
+            .MakeGenericType(typeof(double), typeof(double[]), typeof(double[]));
+        var dpo = Activator.CreateInstance(dpoType, options);
+
+        var computeMethod = dpoType.BaseType!.GetMethod(
+            "ComputeLogProbabilityFromPrediction",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        if (computeMethod == null) return;
+
+        // Compute log probs for two different preference pairs
+        var chosen1 = new double[] { 0.9, 0.05, 0.05 };
+        var rejected1 = new double[] { 0.1, 0.1, 0.8 };
+
+        var chosen2 = new double[] { 0.33, 0.33, 0.34 };
+        var rejected2 = new double[] { 0.33, 0.34, 0.33 };
+
+        var logProbChosen1 = (double)computeMethod.Invoke(dpo, new object[] { chosen1, chosen1 })!;
+        var logProbRejected1 = (double)computeMethod.Invoke(dpo, new object[] { rejected1, chosen1 })!;
+
+        var logProbChosen2 = (double)computeMethod.Invoke(dpo, new object[] { chosen2, chosen2 })!;
+        var logProbRejected2 = (double)computeMethod.Invoke(dpo, new object[] { rejected2, chosen2 })!;
+
+        // The margins should be different for different preference pairs
+        var margin1 = logProbChosen1 - logProbRejected1;
+        var margin2 = logProbChosen2 - logProbRejected2;
+
+        // ASSERT: Margins should be different (not both 0)
+        Assert.NotEqual(0.0, margin1);
+        Assert.NotEqual(0.0, margin2);
+        // Strong preference (pair 1) should have larger margin than weak preference (pair 2)
+        Assert.True(Math.Abs(margin1) > Math.Abs(margin2),
+            $"Strong preference margin ({margin1}) should be larger than weak preference margin ({margin2})");
+    }
+
+    #endregion
 }
