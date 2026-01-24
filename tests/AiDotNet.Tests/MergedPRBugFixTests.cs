@@ -3,7 +3,10 @@ using AiDotNet.Deployment.Configuration;
 using AiDotNet.Diagnostics;
 using AiDotNet.Enums;
 using AiDotNet.Evaluation;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.ModelRegistry;
+using AiDotNet.Models;
 using AiDotNet.PromptEngineering.Optimization;
 using AiDotNet.PromptEngineering.Templates;
 using AiDotNet.TrainingMonitoring;
@@ -679,6 +682,251 @@ public class MergedPRBugFixTests
         // Restore
         MemoryTracker.MaxHistorySize = originalSize;
     }
+
+    #endregion
+
+    #region ModelRegistry PR #774 - Production Bug Fixes
+
+    [Fact]
+    public void ModelRegistry_GetModel_ReturnsClone_NotInternalState()
+    {
+        // ARRANGE: The old code returned the internal model object directly
+        // External code could modify it, causing inconsistency between memory and disk
+        var tempDir = Path.Combine(Path.GetTempPath(), $"model_registry_test_{Guid.NewGuid():N}");
+        try
+        {
+            var registry = new ModelRegistry<double, double[], double[]>(tempDir);
+
+            // Create a mock model and register it
+            var metadata = new ModelMetadata<double>
+            {
+                FeatureCount = 10,
+                ModelType = ModelType.NeuralNetwork,
+                Complexity = 100
+            };
+            var model = new MockModel();
+            var modelId = registry.RegisterModel("TestModel", model, metadata);
+
+            // ACT: Get the model and modify it
+            var retrievedModel = registry.GetModel("TestModel", 1);
+            var originalStage = retrievedModel.Stage;
+            retrievedModel.Stage = ModelStage.Production; // Modify the clone
+
+            // Get the model again
+            var retrievedAgain = registry.GetModel("TestModel", 1);
+
+            // ASSERT: The internal state should NOT have changed
+            Assert.Equal(originalStage, retrievedAgain.Stage);
+            Assert.NotEqual(ModelStage.Production, retrievedAgain.Stage);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ModelRegistry_GetModelByStage_ReturnsClone_NotInternalState()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), $"model_registry_test_{Guid.NewGuid():N}");
+        try
+        {
+            var registry = new ModelRegistry<double, double[], double[]>(tempDir);
+
+            var metadata = new ModelMetadata<double>
+            {
+                FeatureCount = 10,
+                ModelType = ModelType.NeuralNetwork
+            };
+            var model = new MockModel();
+            registry.RegisterModel("TestModel", model, metadata);
+            registry.TransitionModelStage("TestModel", 1, ModelStage.Staging);
+
+            // ACT: Get model by stage and modify it
+            var retrievedModel = registry.GetModelByStage("TestModel", ModelStage.Staging);
+            Assert.NotNull(retrievedModel);
+            retrievedModel!.Description = "Modified externally";
+
+            // Get again
+            var retrievedAgain = registry.GetModelByStage("TestModel", ModelStage.Staging);
+
+            // ASSERT: Description should still be null (not modified)
+            Assert.Null(retrievedAgain?.Description);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ModelRegistry_DeleteModelVersion_ValidatesModelName()
+    {
+        // ARRANGE: Other methods validate model name, DeleteModelVersion should too
+        var tempDir = Path.Combine(Path.GetTempPath(), $"model_registry_test_{Guid.NewGuid():N}");
+        try
+        {
+            var registry = new ModelRegistry<double, double[], double[]>(tempDir);
+
+            // ACT & ASSERT: Null/empty model names should throw ArgumentException
+            Assert.Throws<ArgumentException>(() => registry.DeleteModelVersion(null!, 1));
+            Assert.Throws<ArgumentException>(() => registry.DeleteModelVersion("", 1));
+            Assert.Throws<ArgumentException>(() => registry.DeleteModelVersion("   ", 1));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ModelRegistry_LoadErrors_ExposedForDiagnostics()
+    {
+        // ARRANGE: The old code used Console.WriteLine for errors which is bad for production
+        // Now errors are exposed via LoadErrors property
+        var tempDir = Path.Combine(Path.GetTempPath(), $"model_registry_test_{Guid.NewGuid():N}");
+        try
+        {
+            // Create a registry
+            var registry = new ModelRegistry<double, double[], double[]>(tempDir);
+
+            // ASSERT: LoadErrors should be accessible (even if empty)
+            Assert.NotNull(registry.LoadErrors);
+            Assert.IsAssignableFrom<IReadOnlyList<string>>(registry.LoadErrors);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ModelRegistry_LineageTracking_WorksForNewModels()
+    {
+        // ARRANGE: The old code never populated _lineage dictionary
+        var tempDir = Path.Combine(Path.GetTempPath(), $"model_registry_test_{Guid.NewGuid():N}");
+        try
+        {
+            var registry = new ModelRegistry<double, double[], double[]>(tempDir);
+
+            var metadata = new ModelMetadata<double>
+            {
+                FeatureCount = 10,
+                ModelType = ModelType.NeuralNetwork
+            };
+            var model = new MockModel();
+
+            // ACT: Register a model and check lineage
+            registry.RegisterModel("TestModel", model, metadata);
+            var lineage = registry.GetModelLineage("TestModel", 1);
+
+            // ASSERT: Lineage should be tracked
+            Assert.NotNull(lineage);
+            Assert.Equal("TestModel", lineage.ModelName);
+            Assert.Equal(1, lineage.Version);
+            Assert.Null(lineage.ParentVersion); // First version has no parent
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ModelRegistry_LineageTracking_TracksParentForNewVersions()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), $"model_registry_test_{Guid.NewGuid():N}");
+        try
+        {
+            var registry = new ModelRegistry<double, double[], double[]>(tempDir);
+
+            var metadata = new ModelMetadata<double>
+            {
+                FeatureCount = 10,
+                ModelType = ModelType.NeuralNetwork
+            };
+            var model = new MockModel();
+
+            // ACT: Register and create a new version
+            registry.RegisterModel("TestModel", model, metadata);
+            registry.CreateModelVersion("TestModel", model, metadata, "Second version");
+            var lineage = registry.GetModelLineage("TestModel", 2);
+
+            // ASSERT: Version 2 should have version 1 as parent
+            Assert.NotNull(lineage);
+            Assert.Equal(2, lineage.Version);
+            Assert.Equal(1, lineage.ParentVersion);
+            Assert.Equal("TestModel", lineage.ParentModel);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ModelRegistry_SearchModels_ReturnsClones()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), $"model_registry_test_{Guid.NewGuid():N}");
+        try
+        {
+            var registry = new ModelRegistry<double, double[], double[]>(tempDir);
+
+            var metadata = new ModelMetadata<double>
+            {
+                FeatureCount = 10,
+                ModelType = ModelType.NeuralNetwork
+            };
+            var model = new MockModel();
+            registry.RegisterModel("TestModel", model, metadata);
+
+            // ACT: Search and modify result
+            var criteria = new ModelSearchCriteria<double> { NamePattern = "Test" };
+            var results = registry.SearchModels(criteria);
+            Assert.Single(results);
+            results[0].Stage = ModelStage.Production;
+
+            // Search again
+            var resultsAgain = registry.SearchModels(criteria);
+
+            // ASSERT: Internal state should not have changed
+            Assert.NotEqual(ModelStage.Production, resultsAgain[0].Stage);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    /// <summary>
+    /// Mock model implementation for testing.
+    /// </summary>
+    private class MockModel : Interfaces.IModel<double[], double[], MockModelMetadata>
+    {
+        public MockModelMetadata GetModelMetadata() => new MockModelMetadata();
+
+        public void Train(double[] x, double[] y)
+        {
+            // No-op for testing
+        }
+
+        public double[] Predict(double[] input)
+        {
+            return input;
+        }
+    }
+
+    private class MockModelMetadata { }
 
     #endregion
 }
