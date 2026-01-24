@@ -37,6 +37,14 @@
     <InternalsVisibleTo Include="AiDotNetBenchmarkTests" />
   </ItemGroup>
 
+  <!-- Exclude other projects from this build -->
+  <ItemGroup>
+    <Compile Remove="AiDotNet.Playground\**" />
+    <Compile Remove="AiDotNet.Playground.Functions\**" />
+    <None Remove="AiDotNet.Playground\**" />
+    <None Remove="AiDotNet.Playground.Functions\**" />
+  </ItemGroup>
+
 	<ItemGroup>
 		<None Include="Images\Favicon.jpg">
 			<Pack>True</Pack>
