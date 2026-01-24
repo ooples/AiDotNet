@@ -45,70 +45,77 @@ Console.WriteLine(""Welcome to AiDotNet!"");
 Console.WriteLine(""The comprehensive AI/ML framework for .NET"");
 Console.WriteLine();
 Console.WriteLine(""Key Features:"");
-Console.WriteLine(""  - Simple facade pattern via AiModelBuilder"");
-Console.WriteLine(""  - Build, train, and deploy ML models easily"");
+Console.WriteLine(""  - 4,300+ AI/ML implementations"");
+Console.WriteLine(""  - Tensor operations with hardware acceleration"");
 Console.WriteLine(""  - Cross-platform: Windows, Linux, macOS"");
 "
                 },
                 new CodeExample
                 {
-                    Id = "linear-regression",
-                    Name = "Linear Regression",
-                    Description = "Train a linear regression model using AiModelBuilder",
+                    Id = "simple-regression",
+                    Name = "Simple Regression",
+                    Description = "Train a simple linear regression model",
                     Difficulty = "Beginner",
                     Tags = ["regression", "linear", "basics"],
-                    Code = @"// Linear Regression with AiModelBuilder
-using AiDotNet;
+                    Code = @"// Simple Linear Regression with AiDotNet
 using AiDotNet.Regression;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Training data: X = input features, y = target values
-var features = new double[,]
-{
-    { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 }, { 5.0 }
-};
-var labels = new double[] { 2.1, 4.0, 5.9, 8.1, 10.0 };
+// Training data: X = input features (single column), y = target values
+var features = new Matrix<double>(5, 1);
+features[0, 0] = 1.0; features[1, 0] = 2.0; features[2, 0] = 3.0;
+features[3, 0] = 4.0; features[4, 0] = 5.0;
 
-// Build and train the model using the facade
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new LinearRegression<double>())
-    .ConfigurePreprocessing()
-    .BuildAsync(features, labels);
+var labels = new Vector<double>(new double[] { 2.1, 4.0, 5.9, 8.1, 10.0 });
+
+// Create and train the model
+var model = new SimpleRegression<double>();
+model.Train(features, labels);
 
 // Make predictions
-var prediction = result.Predict(new double[] { 6.0 });
-Console.WriteLine($""Prediction for x=6: {prediction:F2}"");
-Console.WriteLine($""Model R² Score: {result.Metrics.RSquared:F4}"");
+var testData = new Matrix<double>(1, 1);
+testData[0, 0] = 6.0;
+var predictions = model.Predict(testData);
+
+Console.WriteLine($""Prediction for x=6: {predictions[0]:F2}"");
+Console.WriteLine($""Expected: ~12.0 (based on y ≈ 2x)"");
+Console.WriteLine($""Coefficients: {model.Coefficients[0]:F4}"");
+Console.WriteLine($""Intercept: {model.Intercept:F4}"");
 "
                 },
                 new CodeExample
                 {
-                    Id = "classification",
-                    Name = "Classification",
-                    Description = "Train a classifier using AiModelBuilder",
+                    Id = "ridge-regression-basic",
+                    Name = "Ridge Regression",
+                    Description = "L2 regularized linear regression",
                     Difficulty = "Beginner",
-                    Tags = ["classification", "basics"],
-                    Code = @"// Classification with AiModelBuilder
-using AiDotNet;
-using AiDotNet.Classification;
+                    Tags = ["regression", "regularization", "basics"],
+                    Code = @"// Ridge Regression (L2 Regularized) with AiDotNet
+using AiDotNet.Regression;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Training data: features and class labels
-var features = new double[,]
-{
-    { 5.1, 3.5 }, { 4.9, 3.0 }, { 7.0, 3.2 }, { 6.4, 3.2 }
-};
-var labels = new double[] { 0, 0, 1, 1 }; // Binary classes
+// Training data with 2 features
+var features = new Matrix<double>(4, 2);
+features[0, 0] = 1.0; features[0, 1] = 2.0;
+features[1, 0] = 2.0; features[1, 1] = 3.0;
+features[2, 0] = 3.0; features[2, 1] = 4.0;
+features[3, 0] = 4.0; features[3, 1] = 5.0;
 
-// Build and train using the facade pattern
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new RandomForestClassifier<double>(nEstimators: 100))
-    .ConfigurePreprocessing()
-    .ConfigureCrossValidation(new KFoldCrossValidator<double>(k: 5))
-    .BuildAsync(features, labels);
+var labels = new Vector<double>(new double[] { 3.0, 5.0, 7.0, 9.0 });
+
+// Create Ridge Regression with custom alpha (regularization strength)
+var options = new RidgeRegressionOptions<double> { Alpha = 1.0 };
+var model = new RidgeRegression<double>(options);
+model.Train(features, labels);
 
 // Make predictions
-var prediction = result.Predict(new double[] { 6.0, 3.1 });
-Console.WriteLine($""Predicted class: {prediction}"");
-Console.WriteLine($""Model Accuracy: {result.Metrics.Accuracy:P2}"");
+var testData = new Matrix<double>(1, 2);
+testData[0, 0] = 5.0; testData[0, 1] = 6.0;
+var predictions = model.Predict(testData);
+
+Console.WriteLine($""Prediction for (5, 6): {predictions[0]:F2}"");
+Console.WriteLine($""Ridge Regression trained with alpha={options.Alpha}"");
 "
                 }
             },
@@ -117,87 +124,116 @@ Console.WriteLine($""Model Accuracy: {result.Metrics.Accuracy:P2}"");
             {
                 new CodeExample
                 {
-                    Id = "ridge-regression",
-                    Name = "Ridge Regression",
-                    Description = "Linear regression with L2 regularization",
-                    Difficulty = "Intermediate",
-                    Tags = ["regression", "regularization"],
-                    Code = @"// Ridge Regression with AiModelBuilder
-using AiDotNet;
-using AiDotNet.Regression;
-
-var features = new double[,]
-{
-    { 1.0, 2.0 }, { 2.0, 3.0 }, { 3.0, 4.0 }, { 4.0, 5.0 }
-};
-var labels = new double[] { 3.0, 5.0, 7.0, 9.0 };
-
-// Ridge regression with regularization
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new RidgeRegression<double>(alpha: 1.0))
-    .ConfigurePreprocessing()
-    .BuildAsync(features, labels);
-
-var prediction = result.Predict(new double[] { 5.0, 6.0 });
-Console.WriteLine($""Prediction: {prediction:F2}"");
-Console.WriteLine($""R² Score: {result.Metrics.RSquared:F4}"");
-"
-                },
-                new CodeExample
-                {
                     Id = "polynomial-regression",
                     Name = "Polynomial Regression",
                     Description = "Fit non-linear data with polynomial features",
                     Difficulty = "Intermediate",
                     Tags = ["regression", "polynomial"],
-                    Code = @"// Polynomial Regression with AiModelBuilder
-using AiDotNet;
+                    Code = @"// Polynomial Regression with AiDotNet
 using AiDotNet.Regression;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
-// Non-linear data (quadratic relationship)
-var features = new double[,]
-{
-    { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 }, { 5.0 }
-};
-var labels = new double[] { 1.0, 4.0, 9.0, 16.0, 25.0 }; // y = x²
+// Non-linear data (quadratic relationship: y = x²)
+var features = new Matrix<double>(5, 1);
+features[0, 0] = 1.0; features[1, 0] = 2.0; features[2, 0] = 3.0;
+features[3, 0] = 4.0; features[4, 0] = 5.0;
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new PolynomialRegression<double>(degree: 2))
-    .ConfigurePreprocessing()
-    .BuildAsync(features, labels);
+var labels = new Vector<double>(new double[] { 1.0, 4.0, 9.0, 16.0, 25.0 });
 
-var prediction = result.Predict(new double[] { 6.0 });
-Console.WriteLine($""Prediction for x=6: {prediction:F2}"");
+// Create polynomial regression with degree 2
+var options = new PolynomialRegressionOptions<double> { Degree = 2 };
+var model = new PolynomialRegression<double>(options);
+model.Train(features, labels);
+
+// Make predictions
+var testData = new Matrix<double>(1, 1);
+testData[0, 0] = 6.0;
+var predictions = model.Predict(testData);
+
+Console.WriteLine($""Prediction for x=6: {predictions[0]:F2}"");
 Console.WriteLine($""Expected (6²): 36.00"");
+Console.WriteLine($""Polynomial degree: {options.Degree}"");
 "
                 },
                 new CodeExample
                 {
-                    Id = "gradient-boosting-regressor",
-                    Name = "Gradient Boosting",
-                    Description = "Ensemble method for regression",
-                    Difficulty = "Advanced",
-                    Tags = ["regression", "ensemble", "boosting"],
-                    Code = @"// Gradient Boosting Regression with AiModelBuilder
-using AiDotNet;
-using AiDotNet.Regression.Ensemble;
+                    Id = "lasso-regression",
+                    Name = "Lasso Regression",
+                    Description = "L1 regularized regression for sparse solutions",
+                    Difficulty = "Intermediate",
+                    Tags = ["regression", "regularization", "lasso"],
+                    Code = @"// Lasso Regression (L1 Regularized) with AiDotNet
+using AiDotNet.Regression;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var features = new double[,]
+// Training data with multiple features
+var features = new Matrix<double>(5, 3);
+features[0, 0] = 1.0; features[0, 1] = 2.0; features[0, 2] = 0.5;
+features[1, 0] = 2.0; features[1, 1] = 3.0; features[1, 2] = 1.0;
+features[2, 0] = 3.0; features[2, 1] = 4.0; features[2, 2] = 1.5;
+features[3, 0] = 4.0; features[3, 1] = 5.0; features[3, 2] = 2.0;
+features[4, 0] = 5.0; features[4, 1] = 6.0; features[4, 2] = 2.5;
+
+var labels = new Vector<double>(new double[] { 3.5, 5.5, 7.5, 9.5, 11.5 });
+
+// Create Lasso regression (promotes sparse coefficients)
+var options = new LassoRegressionOptions<double> { Alpha = 0.1 };
+var model = new LassoRegression<double>(options);
+model.Train(features, labels);
+
+// Show coefficients (some may be zero due to L1 regularization)
+Console.WriteLine(""Lasso Regression Results:"");
+Console.WriteLine($""Alpha (regularization): {options.Alpha}"");
+Console.WriteLine(""Coefficients:"");
+for (int i = 0; i < model.Coefficients.Length; i++)
 {
-    { 1.0, 0.5 }, { 2.0, 1.0 }, { 3.0, 1.5 }, { 4.0, 2.0 }, { 5.0, 2.5 }
+    Console.WriteLine($""  Feature {i}: {model.Coefficients[i]:F4}"");
+}
+Console.WriteLine($""Intercept: {model.Intercept:F4}"");
+"
+                },
+                new CodeExample
+                {
+                    Id = "elastic-net",
+                    Name = "Elastic Net Regression",
+                    Description = "Combined L1 and L2 regularization",
+                    Difficulty = "Intermediate",
+                    Tags = ["regression", "regularization", "elastic-net"],
+                    Code = @"// Elastic Net Regression with AiDotNet
+using AiDotNet.Regression;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.LinearAlgebra;
+
+// Training data
+var features = new Matrix<double>(5, 2);
+features[0, 0] = 1.0; features[0, 1] = 1.0;
+features[1, 0] = 2.0; features[1, 1] = 2.0;
+features[2, 0] = 3.0; features[2, 1] = 3.0;
+features[3, 0] = 4.0; features[3, 1] = 4.0;
+features[4, 0] = 5.0; features[4, 1] = 5.0;
+
+var labels = new Vector<double>(new double[] { 2.0, 4.0, 6.0, 8.0, 10.0 });
+
+// Create Elastic Net (combines L1 and L2 regularization)
+var options = new ElasticNetRegressionOptions<double>
+{
+    Alpha = 0.1,        // Overall regularization strength
+    L1Ratio = 0.5       // Balance between L1 (Lasso) and L2 (Ridge)
 };
-var labels = new double[] { 1.5, 3.0, 4.5, 6.0, 7.5 };
+var model = new ElasticNetRegression<double>(options);
+model.Train(features, labels);
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new GradientBoostingRegressor<double>(
-        nEstimators: 100,
-        learningRate: 0.1,
-        maxDepth: 3))
-    .ConfigurePreprocessing()
-    .BuildAsync(features, labels);
+// Make prediction
+var testData = new Matrix<double>(1, 2);
+testData[0, 0] = 6.0; testData[0, 1] = 6.0;
+var predictions = model.Predict(testData);
 
-var prediction = result.Predict(new double[] { 6.0, 3.0 });
-Console.WriteLine($""Prediction: {prediction:F2}"");
+Console.WriteLine(""Elastic Net Results:"");
+Console.WriteLine($""Alpha: {options.Alpha}, L1 Ratio: {options.L1Ratio}"");
+Console.WriteLine($""Prediction for (6, 6): {predictions[0]:F2}"");
+Console.WriteLine($""Expected: ~12.0"");
 "
                 }
             },
@@ -294,25 +330,36 @@ Console.WriteLine($""Predicted class: {prediction}"");
                     Description = "Partition data into K clusters",
                     Difficulty = "Beginner",
                     Tags = ["clustering", "kmeans", "unsupervised"],
-                    Code = @"// K-Means Clustering with AiModelBuilder
-using AiDotNet;
+                    Code = @"// K-Means Clustering with AiDotNet
 using AiDotNet.Clustering.Partitioning;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var data = new double[,]
-{
-    { 1.0, 1.0 }, { 1.5, 2.0 }, { 3.0, 4.0 },
-    { 5.0, 7.0 }, { 3.5, 5.0 }, { 4.5, 5.0 }
-};
+// Create sample data: 6 points in 2D
+var data = new Matrix<double>(6, 2);
+data[0, 0] = 1.0; data[0, 1] = 1.0;  // Cluster 1
+data[1, 0] = 1.5; data[1, 1] = 2.0;  // Cluster 1
+data[2, 0] = 1.2; data[2, 1] = 1.5;  // Cluster 1
+data[3, 0] = 5.0; data[3, 1] = 7.0;  // Cluster 2
+data[4, 0] = 5.5; data[4, 1] = 6.5;  // Cluster 2
+data[5, 0] = 5.2; data[5, 1] = 7.2;  // Cluster 2
 
-var result = await new AiModelBuilder<double, double[], int>()
-    .ConfigureModel(new KMeans<double>(nClusters: 2))
-    .BuildAsync(data);
+// Configure K-Means with 2 clusters
+var options = new KMeansOptions<double> { NumClusters = 2 };
+var kmeans = new KMeans<double>(options);
 
+// Train (fit) the model - y parameter is ignored for clustering
+kmeans.Train(data, new Vector<double>(data.Rows));
+
+Console.WriteLine(""K-Means Clustering Results:"");
+Console.WriteLine($""Number of clusters: {options.NumClusters}"");
+Console.WriteLine($""Iterations: {kmeans.NumIterations}"");
+Console.WriteLine();
 Console.WriteLine(""Cluster assignments:"");
-for (int i = 0; i < data.GetLength(0); i++)
+for (int i = 0; i < data.Rows; i++)
 {
-    var cluster = result.Predict(new double[] { data[i, 0], data[i, 1] });
-    Console.WriteLine($""  Point ({data[i, 0]}, {data[i, 1]}) -> Cluster {cluster}"");
+    var label = (int)kmeans.Labels[i];
+    Console.WriteLine($""  Point ({data[i, 0]:F1}, {data[i, 1]:F1}) -> Cluster {label}"");
 }
 "
                 },
@@ -323,56 +370,95 @@ for (int i = 0; i < data.GetLength(0); i++)
                     Description = "Density-based clustering that finds arbitrarily shaped clusters",
                     Difficulty = "Intermediate",
                     Tags = ["clustering", "density", "unsupervised"],
-                    Code = @"// DBSCAN Clustering with AiModelBuilder
-using AiDotNet;
+                    Code = @"// DBSCAN Clustering with AiDotNet
 using AiDotNet.Clustering.Density;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var data = new double[,]
+// Create sample data with 2 clusters and 1 outlier
+var data = new Matrix<double>(7, 2);
+// Cluster 1 (dense region around 1,1)
+data[0, 0] = 1.0; data[0, 1] = 1.0;
+data[1, 0] = 1.1; data[1, 1] = 1.1;
+data[2, 0] = 0.9; data[2, 1] = 1.0;
+// Cluster 2 (dense region around 5,5)
+data[3, 0] = 5.0; data[3, 1] = 5.0;
+data[4, 0] = 5.1; data[4, 1] = 5.1;
+data[5, 0] = 4.9; data[5, 1] = 5.0;
+// Outlier (noise point)
+data[6, 0] = 10.0; data[6, 1] = 10.0;
+
+// Configure DBSCAN
+var options = new DBSCANOptions<double>
 {
-    { 1.0, 1.0 }, { 1.1, 1.1 }, { 0.9, 1.0 },
-    { 5.0, 5.0 }, { 5.1, 5.1 }, { 4.9, 5.0 },
-    { 10.0, 10.0 } // Outlier/noise point
+    Epsilon = 0.5,  // Maximum distance between neighbors
+    MinPoints = 2   // Minimum points to form a dense region
 };
+var dbscan = new DBSCAN<double>(options);
 
-var result = await new AiModelBuilder<double, double[], int>()
-    .ConfigureModel(new DBSCAN<double>(eps: 0.5, minSamples: 2))
-    .BuildAsync(data);
+// Train the model
+dbscan.Train(data, new Vector<double>(data.Rows));
 
-Console.WriteLine(""Cluster assignments (−1 = noise):"");
-for (int i = 0; i < data.GetLength(0); i++)
+Console.WriteLine(""DBSCAN Clustering Results:"");
+Console.WriteLine($""Epsilon: {options.Epsilon}, MinPoints: {options.MinPoints}"");
+Console.WriteLine($""Clusters found: {dbscan.NumClusters}"");
+Console.WriteLine($""Noise points: {dbscan.GetNoiseCount()}"");
+Console.WriteLine();
+Console.WriteLine(""Cluster assignments (-1 = noise):"");
+for (int i = 0; i < data.Rows; i++)
 {
-    var cluster = result.Predict(new double[] { data[i, 0], data[i, 1] });
-    Console.WriteLine($""  Point ({data[i, 0]}, {data[i, 1]}) -> Cluster {cluster}"");
+    var label = (int)dbscan.Labels[i];
+    Console.WriteLine($""  Point ({data[i, 0]:F1}, {data[i, 1]:F1}) -> Cluster {label}"");
 }
 "
                 },
                 new CodeExample
                 {
-                    Id = "hierarchical",
-                    Name = "Hierarchical Clustering",
-                    Description = "Build a hierarchy of clusters",
+                    Id = "kmeans-advanced",
+                    Name = "K-Means with Options",
+                    Description = "K-Means with K-Means++ initialization",
                     Difficulty = "Intermediate",
-                    Tags = ["clustering", "hierarchical", "unsupervised"],
-                    Code = @"// Hierarchical Clustering with AiModelBuilder
-using AiDotNet;
-using AiDotNet.Clustering.Hierarchical;
+                    Tags = ["clustering", "kmeans", "advanced"],
+                    Code = @"// K-Means with Advanced Options
+using AiDotNet.Clustering.Partitioning;
+using AiDotNet.Clustering.Options;
+using AiDotNet.Tensors.LinearAlgebra;
 
-var data = new double[,]
+// Create sample data
+var data = new Matrix<double>(9, 2);
+// Three clusters of 3 points each
+data[0, 0] = 0.0; data[0, 1] = 0.0;
+data[1, 0] = 0.5; data[1, 1] = 0.5;
+data[2, 0] = 0.3; data[2, 1] = 0.2;
+data[3, 0] = 5.0; data[3, 1] = 5.0;
+data[4, 0] = 5.5; data[4, 1] = 5.3;
+data[5, 0] = 5.2; data[5, 1] = 4.8;
+data[6, 0] = 10.0; data[6, 1] = 0.0;
+data[7, 0] = 10.3; data[7, 1] = 0.2;
+data[8, 0] = 9.8; data[8, 1] = 0.3;
+
+// Configure with K-Means++ and multiple initializations
+var options = new KMeansOptions<double>
 {
-    { 1.0, 1.0 }, { 1.5, 1.5 }, { 5.0, 5.0 }, { 5.5, 5.5 }
+    NumClusters = 3,
+    InitMethod = KMeansInitMethod.KMeansPlusPlus,
+    MaxIterations = 100,
+    Tolerance = 1e-4,
+    NumInitializations = 10,
+    RandomState = 42  // For reproducibility
 };
+var kmeans = new KMeans<double>(options);
+kmeans.Train(data, new Vector<double>(data.Rows));
 
-var result = await new AiModelBuilder<double, double[], int>()
-    .ConfigureModel(new AgglomerativeClustering<double>(
-        nClusters: 2,
-        linkage: LinkageMethod.Ward))
-    .BuildAsync(data);
-
-Console.WriteLine(""Hierarchical cluster assignments:"");
-for (int i = 0; i < data.GetLength(0); i++)
+Console.WriteLine(""K-Means++ Clustering Results:"");
+Console.WriteLine($""Clusters: {options.NumClusters}"");
+Console.WriteLine($""Init method: K-Means++"");
+Console.WriteLine($""Iterations: {kmeans.NumIterations}"");
+Console.WriteLine();
+Console.WriteLine(""Cluster Centers:"");
+for (int k = 0; k < options.NumClusters; k++)
 {
-    var cluster = result.Predict(new double[] { data[i, 0], data[i, 1] });
-    Console.WriteLine($""  Point ({data[i, 0]}, {data[i, 1]}) -> Cluster {cluster}"");
+    Console.WriteLine($""  Cluster {k}: ({kmeans.ClusterCenters[k, 0]:F2}, {kmeans.ClusterCenters[k, 1]:F2})"");
 }
 "
                 }
