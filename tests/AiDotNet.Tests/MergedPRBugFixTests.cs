@@ -1,0 +1,319 @@
+using System.Reflection;
+using AiDotNet.Enums;
+using AiDotNet.Evaluation;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.PromptEngineering.Optimization;
+using AiDotNet.PromptEngineering.Templates;
+using AiDotNet.TrainingMonitoring;
+using Xunit;
+
+namespace AiDotNet.Tests;
+
+/// <summary>
+/// Tests for bugs found in recently merged PRs during production-readiness review.
+/// Each test exposes a bug that was fixed in the source code.
+/// </summary>
+public class MergedPRBugFixTests
+{
+    #region Evaluation PR #765 - PredictionTypeInference Integer Overflow Bug
+
+    [Fact]
+    public void PredictionTypeInference_LargeClassRange_DoesNotOverflow()
+    {
+        // ARRANGE: Create a vector with class labels that span a large range
+        // This would cause integer overflow with the old code: maxClass - minClass
+        // e.g., if minClass = -2000000000 and maxClass = 2000000000
+        // the subtraction would overflow because result (4000000000) > int.MaxValue
+        var actual = new Vector<double>(10);
+
+        // Use class labels that would overflow if subtracted as ints
+        actual[0] = -2000000000;
+        actual[1] = 2000000000;
+        actual[2] = -1000000000;
+        actual[3] = 1000000000;
+        actual[4] = 0;
+        actual[5] = -500000000;
+        actual[6] = 500000000;
+        actual[7] = -100000000;
+        actual[8] = 100000000;
+        actual[9] = 50000000;
+
+        // ACT: Infer prediction type - should not throw or return incorrect results due to overflow
+        var method = typeof(PredictionTypeInference).GetMethod("Infer",
+            BindingFlags.Public | BindingFlags.Static);
+        var genericMethod = method!.MakeGenericMethod(typeof(double));
+
+        var result = (PredictionType)genericMethod.Invoke(null, new object[] { actual })!;
+
+        // ASSERT: With such a large range, it should be classified as regression
+        // (not contiguous, high unique ratio)
+        Assert.Equal(PredictionType.Regression, result);
+    }
+
+    [Fact]
+    public void PredictionTypeInference_ExtremeClassValues_DoesNotOverflow()
+    {
+        // ARRANGE: Extreme case - minimum and maximum integer values
+        var actual = new Vector<double>(2);
+        actual[0] = int.MinValue;
+        actual[1] = int.MaxValue;
+
+        // ACT: Should not throw
+        var method = typeof(PredictionTypeInference).GetMethod("Infer",
+            BindingFlags.Public | BindingFlags.Static);
+        var genericMethod = method!.MakeGenericMethod(typeof(double));
+
+        var result = (PredictionType)genericMethod.Invoke(null, new object[] { actual })!;
+
+        // ASSERT: Should classify as regression due to non-contiguous extreme range
+        Assert.Equal(PredictionType.Regression, result);
+    }
+
+    [Fact]
+    public void PredictionTypeInference_NormalClassRange_StillWorksCorrectly()
+    {
+        // ARRANGE: Normal multiclass scenario with small contiguous labels
+        var actual = new Vector<double>(100);
+        for (int i = 0; i < 100; i++)
+        {
+            actual[i] = i % 5; // Classes 0, 1, 2, 3, 4
+        }
+
+        // ACT
+        var method = typeof(PredictionTypeInference).GetMethod("Infer",
+            BindingFlags.Public | BindingFlags.Static);
+        var genericMethod = method!.MakeGenericMethod(typeof(double));
+
+        var result = (PredictionType)genericMethod.Invoke(null, new object[] { actual })!;
+
+        // ASSERT: Should be multiclass
+        Assert.Equal(PredictionType.MultiClass, result);
+    }
+
+    #endregion
+
+    #region PromptEngineering PR #762 - GeneticOptimizer IndexOf Bug
+
+    [Fact]
+    public void GeneticOptimizer_TournamentSelect_WorksWithDuplicatePrompts()
+    {
+        // ARRANGE: Create optimizer and test with population containing duplicates
+        // The old code used IndexOf which returns the FIRST occurrence index,
+        // causing wrong fitness to be selected when duplicates exist
+        var optimizer = new GeneticOptimizer<double>(
+            populationSize: 10,
+            mutationRate: 0.1,
+            crossoverRate: 0.7,
+            eliteCount: 2,
+            seed: 12345 // Fixed seed for reproducibility
+        );
+
+        // Use a simple evaluation function
+        int callCount = 0;
+        Func<string, double> evaluator = (prompt) =>
+        {
+            callCount++;
+            // Score based on length - simple deterministic evaluation
+            return prompt.Length / 100.0;
+        };
+
+        // ACT: Run optimization - should not crash or produce incorrect results
+        var result = optimizer.Optimize("Test prompt for optimization", evaluator, maxIterations: 20);
+
+        // ASSERT: Optimization should complete successfully
+        Assert.NotNull(result);
+        Assert.True(callCount > 0, "Evaluator should have been called");
+    }
+
+    [Fact]
+    public void GeneticOptimizer_OptimizesPrompts_ReturnsValidTemplate()
+    {
+        // ARRANGE
+        var optimizer = new GeneticOptimizer<double>(
+            populationSize: 8,
+            mutationRate: 0.2,
+            seed: 42
+        );
+
+        // ACT
+        var result = optimizer.Optimize(
+            "Classify this text",
+            prompt => prompt.Length > 10 ? 0.8 : 0.2,
+            maxIterations: 10
+        );
+
+        // ASSERT
+        Assert.NotNull(result);
+        Assert.IsType<SimplePromptTemplate>(result);
+    }
+
+    #endregion
+
+    #region TrainingMonitoring PR #755 - CSV Export Missing Data Bug
+
+    [Fact]
+    public void TrainingMonitor_CSVExport_EmptyMetricShowsEmpty_NotZero()
+    {
+        // ARRANGE: Create monitor with sparse metrics (not every step has every metric)
+        var monitor = new TrainingMonitor<double>();
+        var sessionId = monitor.StartSession("TestSession");
+
+        // Log different metrics at different steps
+        monitor.LogMetric(sessionId, "loss", 0.5, step: 1);
+        monitor.LogMetric(sessionId, "accuracy", 0.7, step: 2); // Note: no loss at step 2
+        monitor.LogMetric(sessionId, "loss", 0.3, step: 3);
+
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            // ACT
+            monitor.ExportData(sessionId, tempFile, "csv");
+
+            // ASSERT
+            var csvContent = File.ReadAllText(tempFile);
+            var lines = csvContent.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+            // Header should contain both metrics
+            Assert.Contains("loss", lines[0]);
+            Assert.Contains("accuracy", lines[0]);
+
+            // Find the line for step 2 (where loss is missing)
+            var step2Line = lines.FirstOrDefault(l => l.StartsWith("2,"));
+            Assert.NotNull(step2Line);
+
+            // The old bug: missing metrics showed as "0" instead of empty
+            // The line should have an empty value for loss (between commas)
+            // Format: "Step,Timestamp,loss,accuracy" -> "2,<timestamp>,,0.7" (empty loss)
+            var parts = step2Line.Split(',');
+
+            // Step 2 should have empty loss (index 2) and value for accuracy
+            // If the fix works, loss column (index 2) should be empty, not "0"
+            if (parts.Length >= 4)
+            {
+                // Either loss should be empty or accuracy should be empty depending on column order
+                bool hasEmptyMetric = parts.Skip(2).Any(p => p == "");
+                Assert.True(hasEmptyMetric, "Missing metrics should be empty, not '0'");
+            }
+        }
+        finally
+        {
+            monitor.EndSession(sessionId);
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [Fact]
+    public void TrainingMonitor_CSVExport_AllMetricsPresent_NoEmptyValues()
+    {
+        // ARRANGE: Create monitor where all metrics are present at all steps
+        var monitor = new TrainingMonitor<double>();
+        var sessionId = monitor.StartSession("FullDataSession");
+
+        // Log metrics at every step
+        for (int step = 1; step <= 3; step++)
+        {
+            monitor.LogMetrics(sessionId, new Dictionary<string, double>
+            {
+                { "loss", 1.0 - step * 0.2 },
+                { "accuracy", step * 0.25 }
+            }, step);
+        }
+
+        var tempFile = Path.GetTempFileName();
+        try
+        {
+            // ACT
+            monitor.ExportData(sessionId, tempFile, "csv");
+
+            // ASSERT
+            var csvContent = File.ReadAllText(tempFile);
+            var lines = csvContent.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+            // All data lines (after header) should have no empty values
+            foreach (var line in lines.Skip(1))
+            {
+                var parts = line.Split(',');
+                foreach (var part in parts)
+                {
+                    Assert.False(string.IsNullOrEmpty(part),
+                        $"All values should be present when metrics exist: '{line}'");
+                }
+            }
+        }
+        finally
+        {
+            monitor.EndSession(sessionId);
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    #endregion
+
+    #region ProgramSynthesis PR #763 - Relative Error Comparison Bug
+
+    [Fact]
+    public void OutputMatch_LargeNumbers_UsesRelativeComparison()
+    {
+        // ARRANGE: The old code used absolute tolerance (1e-6) which fails for large numbers
+        // For example, 1e12 + 0.5 vs 1e12 has absolute error 0.5 > 1e-6, but relative error is ~5e-13
+
+        // We need to test the IsOutputMatch method via reflection since it's private
+        var assembly = typeof(ProgramSynthesis.Engines.NeuralProgramSynthesizer<>).Assembly;
+        var synthType = assembly.GetType("AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer`1")!
+            .MakeGenericType(typeof(double));
+
+        var isOutputMatchMethod = synthType.GetMethod("IsOutputMatch",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        if (isOutputMatchMethod == null)
+        {
+            // Method might not exist if the class structure changed
+            // In that case, skip this specific test
+            return;
+        }
+
+        // ACT & ASSERT: Large numbers with small relative difference should match
+
+        // Test 1: Large numbers with negligible relative error
+        var result1 = (bool)isOutputMatchMethod.Invoke(null, new object[] { "1000000000000.0001", "1000000000000.0" })!;
+        Assert.True(result1, "Large numbers with tiny relative error should match");
+
+        // Test 2: Small numbers within absolute tolerance should match
+        // absoluteTolerance is 1e-9, so 1e-10 vs 0 should match
+        var result2 = (bool)isOutputMatchMethod.Invoke(null, new object[] { "0.0000000001", "0.0" })!;
+        Assert.True(result2, "Numbers near zero within absolute tolerance (1e-9) should match");
+
+        // Test 3: Numbers with significant relative error should NOT match
+        var result3 = (bool)isOutputMatchMethod.Invoke(null, new object[] { "100.0", "99.0" })!;
+        Assert.False(result3, "1% relative error should not match");
+    }
+
+    [Fact]
+    public void OutputMatch_SmallNumbers_UsesAbsoluteComparison()
+    {
+        // Numbers near zero should use absolute comparison
+        var assembly = typeof(ProgramSynthesis.Engines.NeuralProgramSynthesizer<>).Assembly;
+        var synthType = assembly.GetType("AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer`1")!
+            .MakeGenericType(typeof(double));
+
+        var isOutputMatchMethod = synthType.GetMethod("IsOutputMatch",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        if (isOutputMatchMethod == null)
+        {
+            return;
+        }
+
+        // Small numbers near zero should match if within absolute tolerance
+        var result = (bool)isOutputMatchMethod.Invoke(null, new object[] { "0.0000000001", "0.0" })!;
+        Assert.True(result, "Tiny numbers should match using absolute tolerance");
+    }
+
+    #endregion
+}

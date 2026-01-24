@@ -75,9 +75,12 @@ internal static class PredictionTypeInference
         // - If labels are not a compact contiguous range and there are many distinct values, it's usually regression.
         int minClass = classes.Min();
         int maxClass = classes.Max();
-        int range = maxClass - minClass;
 
-        bool isContiguous = (range + 1) == classes.Count;
+        // Use long to avoid integer overflow when minClass is very negative and maxClass is very positive
+        long range = (long)maxClass - (long)minClass;
+
+        // If range overflows int or is larger than practical class count, treat as non-contiguous
+        bool isContiguous = range <= int.MaxValue && (range + 1) == classes.Count;
         double uniqueRatio = classes.Count / (double)actual.Length;
 
         if (uniqueRatio > 0.8 && classes.Count > 20)

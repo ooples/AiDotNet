@@ -302,8 +302,10 @@ public class GeneticOptimizer<T> : PromptOptimizerBase<T>
 
     private string TournamentSelect(List<string> population, T[] fitness, int tournamentSize = 3)
     {
-        string best = population[_random.Next(population.Count)];
-        T bestFitness = fitness[population.IndexOf(best)];
+        // Select by index to avoid IndexOf bug when duplicates exist in population
+        int bestIdx = _random.Next(population.Count);
+        string best = population[bestIdx];
+        T bestFitness = fitness[bestIdx];
 
         for (int i = 1; i < tournamentSize; i++)
         {

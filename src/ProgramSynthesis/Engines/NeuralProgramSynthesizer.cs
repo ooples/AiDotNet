@@ -481,7 +481,24 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
         if (double.TryParse(normalizedActual, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var actualNumber) &&
             double.TryParse(normalizedExpected, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var expectedNumber))
         {
-            return Math.Abs(actualNumber - expectedNumber) <= 1e-6;
+            // Use relative error for non-zero values to handle large numbers correctly
+            // For numbers near zero, fall back to absolute error comparison
+            const double absoluteTolerance = 1e-9;
+            const double relativeTolerance = 1e-6;
+
+            double absDiff = Math.Abs(actualNumber - expectedNumber);
+            if (absDiff <= absoluteTolerance)
+            {
+                return true;
+            }
+
+            double maxAbs = Math.Max(Math.Abs(actualNumber), Math.Abs(expectedNumber));
+            if (maxAbs > 0 && absDiff / maxAbs <= relativeTolerance)
+            {
+                return true;
+            }
+
+            return false;
         }
 
         return false;
