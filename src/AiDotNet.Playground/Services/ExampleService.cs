@@ -1055,29 +1055,29 @@ Console.WriteLine(""  4. Averaging results for robust estimate"");
                     Difficulty = "Advanced",
                     Tags = ["automl", "hyperparameter", "optimization"],
                     Code = @"// Hyperparameter Tuning with AiDotNet
-using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Models;
 using AiDotNet.Tensors.Helpers;
 
 Console.WriteLine(""Hyperparameter Tuning Demonstration"");
 Console.WriteLine();
 
-// Define hyperparameter search space
+// Define hyperparameter search space using correct API
 var searchSpace = new HyperparameterSearchSpace();
-searchSpace.AddIntParameter(""nEstimators"", 10, 200);
-searchSpace.AddIntParameter(""maxDepth"", 3, 20);
-searchSpace.AddFloatParameter(""minSamplesSplit"", 0.01, 0.5);
+searchSpace.AddInteger(""nEstimators"", 10, 200);
+searchSpace.AddInteger(""maxDepth"", 3, 20);
+searchSpace.AddContinuous(""minSamplesSplit"", 0.01, 0.5);
 
 Console.WriteLine(""Search Space Configuration:"");
 Console.WriteLine(""  nEstimators: [10, 200] (integer)"");
 Console.WriteLine(""  maxDepth: [3, 20] (integer)"");
-Console.WriteLine(""  minSamplesSplit: [0.01, 0.5] (float)"");
+Console.WriteLine(""  minSamplesSplit: [0.01, 0.5] (continuous)"");
 Console.WriteLine();
 
 // Generate sample data
 var rng = RandomHelper.CreateSeededRandom(42);
-var features = new double[200, 4];
-var labels = new double[200];
-for (int i = 0; i < 200; i++)
+var features = new double[100, 4];
+var labels = new double[100];
+for (int i = 0; i < 100; i++)
 {
     for (int j = 0; j < 4; j++)
         features[i, j] = rng.NextDouble();
@@ -1087,13 +1087,20 @@ for (int i = 0; i < 200; i++)
 Console.WriteLine($""Training data: {features.GetLength(0)} samples, {features.GetLength(1)} features"");
 Console.WriteLine();
 
-Console.WriteLine(""Usage with AiModelBuilder:"");
-Console.WriteLine(""  .ConfigureHyperparameterOptimizer(optimizer)"");
+// Sample from the search space
+Console.WriteLine(""Sample hyperparameter configuration:"");
+foreach (var param in searchSpace.Parameters)
+{
+    var sample = param.Value.Sample(rng);
+    Console.WriteLine($""  {param.Key}: {sample}"");
+}
 Console.WriteLine();
-Console.WriteLine(""Optimization finds best hyperparameters via search strategies:"");
-Console.WriteLine(""  - Grid Search: exhaustive search over parameter grid"");
-Console.WriteLine(""  - Random Search: random sampling of parameter space"");
-Console.WriteLine(""  - Bayesian Optimization: intelligent search using surrogate model"");
+
+Console.WriteLine(""Search space methods available:"");
+Console.WriteLine(""  AddInteger(name, min, max, step)  - for integers"");
+Console.WriteLine(""  AddContinuous(name, min, max, logScale) - for real values"");
+Console.WriteLine(""  AddCategorical(name, ...choices) - for discrete choices"");
+Console.WriteLine(""  AddBoolean(name) - for true/false"");
 "
                 },
                 new CodeExample
@@ -3304,7 +3311,6 @@ foreach (var (id, score) in results)
 using AiDotNet;
 using AiDotNet.RetrievalAugmentedGeneration.Configuration;
 using AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies;
-using AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine(""RAG Pipeline Components"");
@@ -3323,57 +3329,35 @@ var documents = new[]
 Console.WriteLine($""Knowledge Base: {documents.Length} documents"");
 Console.WriteLine();
 
-// Step 1: Configure chunking strategy
-var chunkConfig = new ChunkingConfig
-{
-    ChunkSize = 200,
-    ChunkOverlap = 50
-};
-
-Console.WriteLine(""Chunking Configuration:"");
-Console.WriteLine($""  Chunk size: {chunkConfig.ChunkSize}"");
-Console.WriteLine($""  Overlap: {chunkConfig.ChunkOverlap}"");
-Console.WriteLine();
-
-// Step 2: Configure retrieval
-var retrievalConfig = new RetrievalConfig
-{
-    TopK = 3,
-    SimilarityThreshold = 0.7
-};
-
-Console.WriteLine(""Retrieval Configuration:"");
-Console.WriteLine($""  Top-K: {retrievalConfig.TopK}"");
-Console.WriteLine($""  Similarity threshold: {retrievalConfig.SimilarityThreshold}"");
-Console.WriteLine();
-
-// Step 3: Configure reranking
-var rerankConfig = new RerankingConfig
-{
-    EnableReranking = true,
-    TopK = 2
-};
-
-Console.WriteLine(""Reranking Configuration:"");
-Console.WriteLine($""  Enabled: {rerankConfig.EnableReranking}"");
-Console.WriteLine($""  Final Top-K: {rerankConfig.TopK}"");
-Console.WriteLine();
-
-// Build full RAG configuration
-var ragConfig = new RAGConfigurationBuilder()
-    .WithChunking(chunkConfig)
-    .WithRetrieval(retrievalConfig)
-    .WithReranking(rerankConfig)
+// Step 1: Build RAG configuration using the builder pattern
+var ragConfig = new RAGConfigurationBuilder<double>()
+    .WithDocumentStore(""memory"")
+    .WithChunking(""recursive"", chunkSize: 200, chunkOverlap: 50)
+    .WithRetrieval(""dense"", topK: 3)
+    .WithReranking(""cross-encoder"", topK: 2)
     .Build();
 
-Console.WriteLine(""RAG Pipeline Ready!"");
+Console.WriteLine(""RAG Configuration:"");
+Console.WriteLine($""  Document Store: {ragConfig.DocumentStore.Type}"");
+Console.WriteLine($""  Chunking:"");
+Console.WriteLine($""    Strategy: {ragConfig.Chunking.Strategy}"");
+Console.WriteLine($""    Chunk Size: {ragConfig.Chunking.ChunkSize}"");
+Console.WriteLine($""    Overlap: {ragConfig.Chunking.ChunkOverlap}"");
+Console.WriteLine($""  Retrieval:"");
+Console.WriteLine($""    Strategy: {ragConfig.Retrieval.Strategy}"");
+Console.WriteLine($""    Top-K: {ragConfig.Retrieval.TopK}"");
+Console.WriteLine($""  Reranking:"");
+Console.WriteLine($""    Strategy: {ragConfig.Reranking.Strategy}"");
+Console.WriteLine($""    Final Top-K: {ragConfig.Reranking.TopK}"");
 Console.WriteLine();
-Console.WriteLine(""Pipeline Flow:"");
-Console.WriteLine(""  1. Query -> Embedding"");
-Console.WriteLine(""  2. Vector search -> Top-K candidates"");
-Console.WriteLine(""  3. Reranking -> Final documents"");
-Console.WriteLine(""  4. Context + Query -> Generator"");
-Console.WriteLine(""  5. Answer with sources"");
+
+Console.WriteLine(""RAG Pipeline Flow:"");
+Console.WriteLine(""  1. Document -> Chunking -> Store"");
+Console.WriteLine(""  2. Query -> Embedding"");
+Console.WriteLine(""  3. Vector search -> Top-K candidates"");
+Console.WriteLine(""  4. Reranking -> Final documents"");
+Console.WriteLine(""  5. Context + Query -> Generator"");
+Console.WriteLine(""  6. Answer with sources"");
 "
                 },
                 new CodeExample
@@ -3442,13 +3426,17 @@ for (int i = 0; i < chunks.Count; i++)
                 {
                     Id = "semantic-search",
                     Name = "Semantic Search",
-                    Description = "Search using semantic meaning rather than keywords",
+                    Description = "Search using semantic similarity with vector index",
                     Difficulty = "Intermediate",
                     Tags = ["rag", "semantic", "search", "embeddings"],
-                    Code = @"// Semantic Search with AiModelBuilder
+                    Code = @"// Semantic Search with HNSW Vector Index
 using AiDotNet;
-using AiDotNet.RAG;
-using AiDotNet.NLP.Embeddings;
+using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes;
+using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics;
+using AiDotNet.Tensors.LinearAlgebra;
+
+Console.WriteLine(""Semantic Search Demo"");
+Console.WriteLine();
 
 var corpus = new[]
 {
@@ -3459,19 +3447,49 @@ var corpus = new[]
     ""The weather today is sunny and warm""
 };
 
-var result = await new AiModelBuilder<double, string[], SemanticSearchEngine<double>>()
-    .ConfigureModel(new SemanticSearchBuilder<double>()
-        .UseEmbeddings(new SentenceTransformer<double>(""all-mpnet-base-v2"")))
-    .BuildAsync(corpus);
+Console.WriteLine(""Corpus:"");
+for (int i = 0; i < corpus.Length; i++)
+    Console.WriteLine($""  [{i}] {corpus[i]}"");
+Console.WriteLine();
 
-// Semantic search finds meaning, not just keywords
-var query = ""canine jumping"";
-var matches = result.Search(query, topK: 2);
+// Create vector index
+var metric = new CosineSimilarityMetric<double>();
+var index = new HNSWIndex<double>(metric);
 
-Console.WriteLine($""Query: '{query}'"");
-Console.WriteLine(""Semantic matches (finds similar meaning):"");
-foreach (var (text, score) in matches)
-    Console.WriteLine($""  [{score:F4}] {text}"");
+// Simulate embeddings (in practice, use a neural embedding model)
+var rng = RandomHelper.CreateSeededRandom(42);
+int embeddingDim = 128;
+
+// Generate pseudo-semantic embeddings
+// Documents 0 and 1 are semantically similar (animals jumping)
+// Documents 2 and 3 are semantically similar (AI/ML)
+for (int i = 0; i < corpus.Length; i++)
+{
+    var embedding = new double[embeddingDim];
+    double baseOffset = (i == 0 || i == 1) ? 0.5 : (i == 2 || i == 3) ? -0.5 : 0;
+    for (int j = 0; j < embeddingDim; j++)
+        embedding[j] = baseOffset + rng.NextDouble() * 0.3;
+    var vec = new Vector<double>(embedding).Normalize();
+    index.Add($""doc_{i}"", vec);
+}
+
+// Query: ""canine jumping"" -> should match docs 0 and 1
+var queryEmbedding = new double[embeddingDim];
+for (int j = 0; j < embeddingDim; j++)
+    queryEmbedding[j] = 0.5 + rng.NextDouble() * 0.1;  // Similar to animal docs
+var queryVec = new Vector<double>(queryEmbedding).Normalize();
+
+var results = index.Search(queryVec, topK: 3);
+
+Console.WriteLine(""Query: 'canine jumping' (semantic search)"");
+Console.WriteLine(""Top 3 semantic matches:"");
+foreach (var (id, score) in results)
+{
+    int idx = int.Parse(id.Split('_')[1]);
+    Console.WriteLine($""  [{score:F4}] {corpus[idx]}"");
+}
+Console.WriteLine();
+Console.WriteLine(""Note: Semantic search finds similar MEANING, not keywords!"");
 "
                 }
             },
@@ -3671,37 +3689,48 @@ Console.WriteLine(""  - SVD-based importance scoring"");
                     Tags = ["automl", "classification", "model-selection"],
                     Code = @"// AutoML Classification with AiModelBuilder
 using AiDotNet;
-using AiDotNet.AutoML;
+using AiDotNet.Configuration;
+using AiDotNet.DataLoaders;
+using AiDotNet.Enums;
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
-var features = new double[1000, 20];
-var labels = new double[1000];
+var features = new double[100, 20];
+var labels = new double[100];
 var rng = RandomHelper.CreateSeededRandom(42);
-for (int i = 0; i < 1000; i++)
+for (int i = 0; i < 100; i++)
 {
     for (int j = 0; j < 20; j++)
         features[i, j] = rng.NextDouble();
     labels[i] = features[i, 0] + features[i, 1] > 1 ? 1 : 0;
 }
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureAutoML(new AutoMLConfig()
-        .SetTask(MLTask.Classification)
-        .SetTimeLimit(TimeSpan.FromMinutes(5))
-        .SetMetric(OptimizationMetric.Accuracy)
-        .SearchModels(new[]
-        {
-            typeof(RandomForestClassifier<double>),
-            typeof(GradientBoostingClassifier<double>),
-            typeof(LogisticRegression<double>),
-            typeof(SupportVectorClassifier<double>)
-        }))
-    .BuildAsync(features, labels);
+var loader = DataLoaders.FromArrays(features, labels);
+
+var autoMLOptions = new AutoMLOptions<double, Matrix<double>, Vector<double>>
+{
+    Budget = new AutoMLBudgetOptions
+    {
+        Preset = AutoMLBudgetPreset.Fast,
+        TimeLimitOverride = TimeSpan.FromSeconds(30)
+    },
+    TaskFamilyOverride = AutoMLTaskFamily.BinaryClassification,
+    SearchStrategy = AutoMLSearchStrategy.RandomSearch
+};
+
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureAutoML(autoMLOptions)
+    .BuildAsync();
 
 Console.WriteLine(""AutoML Classification Results:"");
-Console.WriteLine($""  Best model: {result.BestModel.GetType().Name}"");
-Console.WriteLine($""  Best accuracy: {result.BestScore:P2}"");
-Console.WriteLine($""  Models evaluated: {result.ModelsEvaluated}"");
-Console.WriteLine($""  Total time: {result.ElapsedTime.TotalSeconds:F1}s"");
+Console.WriteLine($""  Best model: {result.Model?.GetType().Name ?? ""N/A""}"");
+Console.WriteLine($""  Training metrics: {result.TrainingMetrics?.Count ?? 0} recorded"");
+if (result.AutoMLSummary is not null)
+{
+    Console.WriteLine($""  Trials evaluated: {result.AutoMLSummary.Trials.Count}"");
+    Console.WriteLine($""  Total time: {result.AutoMLSummary.ElapsedTime.TotalSeconds:F1}s"");
+}
 "
                 },
                 new CodeExample
@@ -3713,33 +3742,50 @@ Console.WriteLine($""  Total time: {result.ElapsedTime.TotalSeconds:F1}s"");
                     Tags = ["automl", "regression", "model-selection"],
                     Code = @"// AutoML Regression with AiModelBuilder
 using AiDotNet;
-using AiDotNet.AutoML;
+using AiDotNet.Configuration;
+using AiDotNet.DataLoaders;
+using AiDotNet.Enums;
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
-var features = new double[500, 10];
-var labels = new double[500];
+var features = new double[100, 10];
+var labels = new double[100];
 var rng = RandomHelper.CreateSeededRandom(42);
-for (int i = 0; i < 500; i++)
+for (int i = 0; i < 100; i++)
 {
     for (int j = 0; j < 10; j++)
         features[i, j] = rng.NextDouble() * 10;
     labels[i] = features[i, 0] * 2 + features[i, 1] * 3 + rng.NextDouble();
 }
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureAutoML(new AutoMLConfig()
-        .SetTask(MLTask.Regression)
-        .SetTimeLimit(TimeSpan.FromMinutes(3))
-        .SetMetric(OptimizationMetric.R2Score)
-        .SetCrossValidationFolds(5)
-        .EnableEarlyTermination(patience: 10))
-    .BuildAsync(features, labels);
+var loader = DataLoaders.FromArrays(features, labels);
+
+var autoMLOptions = new AutoMLOptions<double, Matrix<double>, Vector<double>>
+{
+    Budget = new AutoMLBudgetOptions
+    {
+        Preset = AutoMLBudgetPreset.Fast,
+        TimeLimitOverride = TimeSpan.FromSeconds(30)
+    },
+    TaskFamilyOverride = AutoMLTaskFamily.Regression,
+    SearchStrategy = AutoMLSearchStrategy.RandomSearch,
+    CrossValidation = new CrossValidationOptions { Folds = 3 }
+};
+
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureAutoML(autoMLOptions)
+    .BuildAsync();
 
 Console.WriteLine(""AutoML Regression Results:"");
-Console.WriteLine($""  Best model: {result.BestModel.GetType().Name}"");
-Console.WriteLine($""  Best R² score: {result.BestScore:F4}"");
-Console.WriteLine($""  Best hyperparameters:"");
-foreach (var param in result.BestHyperparameters)
-    Console.WriteLine($""    {param.Key}: {param.Value}"");
+Console.WriteLine($""  Best model: {result.Model?.GetType().Name ?? ""N/A""}"");
+if (result.AutoMLSummary is not null)
+{
+    Console.WriteLine($""  Trials evaluated: {result.AutoMLSummary.Trials.Count}"");
+    Console.WriteLine($""  Search strategy: {result.AutoMLSummary.SearchStrategy}"");
+    foreach (var trial in result.AutoMLSummary.Trials.Take(3))
+        Console.WriteLine($""  Trial {trial.TrialNumber}: Score={trial.Score:F4}"");
+}
 "
                 },
                 new CodeExample
@@ -3751,36 +3797,65 @@ foreach (var param in result.BestHyperparameters)
                     Tags = ["automl", "nas", "neural-network", "architecture"],
                     Code = @"// Neural Architecture Search with AiModelBuilder
 using AiDotNet;
-using AiDotNet.AutoML;
-using AiDotNet.AutoML.NAS;
+using AiDotNet.Configuration;
+using AiDotNet.DataLoaders;
+using AiDotNet.Enums;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
-var features = new double[1000, 784]; // MNIST-like data
-var labels = new double[1000];
+// Generate sample image-like data (small for playground)
+var features = new double[50, 28 * 28]; // 28x28 grayscale images
+var labels = new double[50];
 var rng = RandomHelper.CreateSeededRandom(42);
-for (int i = 0; i < 1000; i++)
+for (int i = 0; i < 50; i++)
 {
     for (int j = 0; j < 784; j++)
         features[i, j] = rng.NextDouble();
-    labels[i] = i % 10;
+    labels[i] = i % 10; // 10 classes
 }
 
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureAutoML(new NeuralArchitectureSearch<double>()
-        .SetSearchSpace(new NASSearchSpace()
-            .AddLayerChoice(""conv"", new[] { 16, 32, 64 })
-            .AddLayerChoice(""dense"", new[] { 128, 256, 512 })
-            .AddActivationChoice(new[] { ActivationType.ReLU, ActivationType.GELU })
-            .AddDropoutRange(0.1, 0.5))
-        .SetSearchStrategy(SearchStrategy.ENAS)
-        .SetTimeLimit(TimeSpan.FromMinutes(30))
-        .SetMaxTrials(100))
-    .BuildAsync(features, labels);
+var loader = DataLoaders.FromArrays(features, labels);
+
+// Configure NAS-specific options
+var nasOptions = new NASOptions<double>
+{
+    Strategy = AutoMLSearchStrategy.DARTS,
+    MaxEpochs = 5,
+    MaxSearchTime = TimeSpan.FromSeconds(30),
+    InputChannels = 1,
+    SpatialSize = 28,
+    NumClasses = 10,
+    Verbose = true,
+    RandomSeed = 42
+};
+
+// Configure AutoML with NAS strategy
+var autoMLOptions = new AutoMLOptions<double, Matrix<double>, Vector<double>>
+{
+    Budget = new AutoMLBudgetOptions
+    {
+        Preset = AutoMLBudgetPreset.Fast,
+        TimeLimitOverride = TimeSpan.FromSeconds(60)
+    },
+    TaskFamilyOverride = AutoMLTaskFamily.MultiClassClassification,
+    SearchStrategy = AutoMLSearchStrategy.DARTS,
+    NAS = nasOptions
+};
+
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureAutoML(autoMLOptions)
+    .BuildAsync();
 
 Console.WriteLine(""Neural Architecture Search Results:"");
-Console.WriteLine($""  Best architecture found:"");
-Console.WriteLine($""    {result.BestArchitecture}"");
-Console.WriteLine($""  Validation accuracy: {result.BestScore:P2}"");
-Console.WriteLine($""  Parameters: {result.BestModel.ParameterCount:N0}"");
+Console.WriteLine($""  Search strategy: DARTS"");
+Console.WriteLine($""  Model found: {result.Model?.GetType().Name ?? ""N/A""}"");
+if (result.AutoMLSummary is not null)
+{
+    Console.WriteLine($""  Trials evaluated: {result.AutoMLSummary.Trials.Count}"");
+    Console.WriteLine($""  Total time: {result.AutoMLSummary.ElapsedTime.TotalSeconds:F1}s"");
+}
 "
                 },
                 new CodeExample
@@ -3791,47 +3866,48 @@ Console.WriteLine($""  Parameters: {result.BestModel.ParameterCount:N0}"");
                     Difficulty = "Advanced",
                     Tags = ["automl", "bayesian", "hyperparameter", "optimization"],
                     Code = @"// Bayesian Hyperparameter Optimization
-using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Models;
 using AiDotNet.Tensors.Helpers;
 
 Console.WriteLine(""Bayesian Hyperparameter Optimization"");
 Console.WriteLine();
 
-// Define search space
+// Define search space using correct API
 var searchSpace = new HyperparameterSearchSpace();
-searchSpace.AddIntParameter(""n_estimators"", 50, 500);
-searchSpace.AddFloatParameter(""learning_rate"", 0.01, 0.3);  // log scale
-searchSpace.AddIntParameter(""max_depth"", 3, 15);
-searchSpace.AddFloatParameter(""subsample"", 0.5, 1.0);
+searchSpace.AddInteger(""n_estimators"", 50, 500);
+searchSpace.AddContinuous(""learning_rate"", 0.01, 0.3, logScale: true);
+searchSpace.AddInteger(""max_depth"", 3, 15);
+searchSpace.AddContinuous(""subsample"", 0.5, 1.0);
 
 Console.WriteLine(""Search Space:"");
 Console.WriteLine(""  n_estimators: [50, 500] (integer)"");
-Console.WriteLine(""  learning_rate: [0.01, 0.3] (float, log scale)"");
+Console.WriteLine(""  learning_rate: [0.01, 0.3] (continuous, log scale)"");
 Console.WriteLine(""  max_depth: [3, 15] (integer)"");
-Console.WriteLine(""  subsample: [0.5, 1.0] (float)"");
+Console.WriteLine(""  subsample: [0.5, 1.0] (continuous)"");
 Console.WriteLine();
 
-Console.WriteLine(""Bayesian Optimization Configuration:"");
-Console.WriteLine(""  Acquisition Function: Expected Improvement (EI)"");
-Console.WriteLine(""  Initial Random Points: 10"");
-Console.WriteLine(""  Max Iterations: 50"");
-Console.WriteLine();
-
-// Sample data
+// Sample from search space to demonstrate functionality
 var rng = RandomHelper.CreateSeededRandom(42);
-Console.WriteLine(""Training Data:"");
-Console.WriteLine(""  800 samples, 15 features"");
-Console.WriteLine(""  3 classes (multiclass classification)"");
+Console.WriteLine(""Sample configurations from search space:"");
+for (int trial = 1; trial <= 5; trial++)
+{
+    Console.WriteLine($""  Trial {trial}:"");
+    foreach (var param in searchSpace.Parameters)
+    {
+        var sample = param.Value.Sample(rng);
+        Console.WriteLine($""    {param.Key}: {sample:F4}"");
+    }
+}
 Console.WriteLine();
 
-Console.WriteLine(""Sample Optimization Results:"");
-Console.WriteLine(""  Best parameters found:"");
-Console.WriteLine(""    n_estimators: 287"");
-Console.WriteLine(""    learning_rate: 0.0523"");
-Console.WriteLine(""    max_depth: 8"");
-Console.WriteLine(""    subsample: 0.85"");
-Console.WriteLine(""  Best accuracy: 94.5%"");
-Console.WriteLine(""  Iterations completed: 50"");
+Console.WriteLine(""Bayesian Optimization can be configured via AutoML:"");
+Console.WriteLine(""  SearchStrategy = AutoMLSearchStrategy.BayesianOptimization"");
+Console.WriteLine();
+Console.WriteLine(""Available search strategies:"");
+Console.WriteLine(""  - RandomSearch: random sampling"");
+Console.WriteLine(""  - BayesianOptimization: Gaussian process surrogate"");
+Console.WriteLine(""  - Evolutionary: genetic algorithms"");
+Console.WriteLine(""  - MultiFidelity: successive halving"");
 "
                 }
             },
