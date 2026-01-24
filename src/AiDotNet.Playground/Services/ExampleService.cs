@@ -59,9 +59,8 @@ Console.WriteLine(""  - Cross-platform: Windows, Linux, macOS"");
                     Tags = ["regression", "linear", "basics"],
                     Code = @"// Simple Linear Regression with AiModelBuilder
 using AiDotNet;
-using AiDotNet.DataLoaders;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Regression;
-using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Training data: X = input features (single column), y = target values
@@ -75,15 +74,16 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureModel(new SimpleRegression<double>())
     .BuildAsync();
 
-// Make predictions
+// Make predictions - AiModelResult exposes Predict() directly
 var testData = new Matrix<double>(1, 1);
 testData[0, 0] = 6.0;
-var predictions = result.Model.Predict(testData);
+var predictions = result.Predict(testData);
 
 Console.WriteLine($""Prediction for x=6: {predictions[0]:F2}"");
 Console.WriteLine($""Expected: ~12.0 (based on y ≈ 2x)"");
-Console.WriteLine($""Coefficients: {result.Model.Coefficients[0]:F4}"");
-Console.WriteLine($""Intercept: {result.Model.Intercept:F4}"");
+Console.WriteLine($""Training completed successfully!"");
+Console.WriteLine($""The AiModelResult facade hides implementation details"");
+Console.WriteLine($""and provides a clean interface for predictions."");
 "
                 },
                 new CodeExample
@@ -95,7 +95,7 @@ Console.WriteLine($""Intercept: {result.Model.Intercept:F4}"");
                     Tags = ["regression", "regularization", "basics"],
                     Code = @"// Ridge Regression (L2 Regularized) with AiModelBuilder
 using AiDotNet;
-using AiDotNet.DataLoaders;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Regression;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -116,7 +116,7 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 // Make predictions
 var testData = new Matrix<double>(1, 2);
 testData[0, 0] = 5.0; testData[0, 1] = 6.0;
-var predictions = result.Model.Predict(testData);
+var predictions = result.Predict(testData);
 
 Console.WriteLine($""Prediction for (5, 6): {predictions[0]:F2}"");
 Console.WriteLine($""Ridge Regression trained with alpha={options.Alpha}"");
@@ -135,7 +135,7 @@ Console.WriteLine($""Ridge Regression trained with alpha={options.Alpha}"");
                     Tags = ["regression", "polynomial"],
                     Code = @"// Polynomial Regression with AiModelBuilder
 using AiDotNet;
-using AiDotNet.DataLoaders;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Regression;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -156,7 +156,7 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 // Make predictions
 var testData = new Matrix<double>(1, 1);
 testData[0, 0] = 6.0;
-var predictions = result.Model.Predict(testData);
+var predictions = result.Predict(testData);
 
 Console.WriteLine($""Prediction for x=6: {predictions[0]:F2}"");
 Console.WriteLine($""Expected (6²): 36.00"");
@@ -172,7 +172,7 @@ Console.WriteLine($""Polynomial degree: {options.Degree}"");
                     Tags = ["regression", "regularization", "lasso"],
                     Code = @"// Lasso Regression (L1 Regularized) with AiModelBuilder
 using AiDotNet;
-using AiDotNet.DataLoaders;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Regression;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -197,15 +197,16 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureModel(new LassoRegression<double>(options))
     .BuildAsync();
 
-// Show coefficients (some may be zero due to L1 regularization)
+// Make a prediction to demonstrate the model works
+var testData = new Matrix<double>(1, 3);
+testData[0, 0] = 6.0; testData[0, 1] = 7.0; testData[0, 2] = 3.0;
+var predictions = result.Predict(testData);
+
 Console.WriteLine(""Lasso Regression Results:"");
 Console.WriteLine($""Alpha (regularization): {options.Alpha}"");
-Console.WriteLine(""Coefficients:"");
-for (int i = 0; i < result.Model.Coefficients.Length; i++)
-{
-    Console.WriteLine($""  Feature {i}: {result.Model.Coefficients[i]:F4}"");
-}
-Console.WriteLine($""Intercept: {result.Model.Intercept:F4}"");
+Console.WriteLine($""Prediction for (6, 7, 3): {predictions[0]:F2}"");
+Console.WriteLine(""Lasso regularization encourages sparse coefficients"");
+Console.WriteLine(""(some coefficients become exactly zero)."");
 "
                 },
                 new CodeExample
@@ -217,7 +218,7 @@ Console.WriteLine($""Intercept: {result.Model.Intercept:F4}"");
                     Tags = ["regression", "regularization", "elastic-net"],
                     Code = @"// Elastic Net Regression with AiModelBuilder
 using AiDotNet;
-using AiDotNet.DataLoaders;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Regression;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
@@ -242,7 +243,7 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 // Make prediction
 var testData = new Matrix<double>(1, 2);
 testData[0, 0] = 6.0; testData[0, 1] = 6.0;
-var predictions = result.Model.Predict(testData);
+var predictions = result.Predict(testData);
 
 Console.WriteLine(""Elastic Net Results:"");
 Console.WriteLine($""Alpha: {options.Alpha}, L1 Ratio: {options.L1Ratio}"");
@@ -288,13 +289,13 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 // Make prediction on new data
 var testData = new Matrix<double>(1, 2);
 testData[0, 0] = 3.5; testData[0, 1] = 2.5;
-var predictions = result.Model.Predict(testData);
+var predictions = result.Predict(testData);
 
 Console.WriteLine(""Logistic Regression Results:"");
-Console.WriteLine($""  Prediction for (3.5, 2.5): {predictions[0]:F4}"");
+Console.WriteLine($""  Prediction probability for (3.5, 2.5): {predictions[0]:F4}"");
 Console.WriteLine($""  Predicted class: {(predictions[0] > 0.5 ? 1 : 0)}"");
-Console.WriteLine($""  Coefficients: [{string.Join("", "", result.Model.Coefficients.Select(c => c.ToString(""F4"")))}]"");
-Console.WriteLine($""  Intercept: {result.Model.Intercept:F4}"");
+Console.WriteLine(""  Model uses sigmoid function to output probabilities"");
+Console.WriteLine(""  Predictions > 0.5 are classified as class 1"");
 "
                 },
                 new CodeExample
@@ -338,7 +339,7 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 // Make predictions
 var testData = new Matrix<double>(1, 2);
 testData[0, 0] = 2.5; testData[0, 1] = 2.5;
-var predictions = result.Model.Predict(testData);
+var predictions = result.Predict(testData);
 
 Console.WriteLine(""SVM Classification Results:"");
 Console.WriteLine($""  Kernel: RBF (Gamma={options.Gamma})"");
@@ -381,7 +382,7 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
 // Make prediction
 var testData = new Matrix<double>(1, 2);
 testData[0, 0] = 3.0; testData[0, 1] = 4.0;
-var predictions = result.Model.Predict(testData);
+var predictions = result.Predict(testData);
 
 Console.WriteLine(""Gaussian Naive Bayes Results:"");
 Console.WriteLine($""  Prediction for (3.0, 4.0): {predictions[0]:F4}"");
@@ -1039,7 +1040,7 @@ var rfOptions = new RandomForestClassifierOptions<double> { NEstimators = 50 };
 var model = new RandomForestClassifier<double>(rfOptions);
 
 // Create cross-validator
-var cvOptions = new CrossValidationOptions { NumFolds = 5, Shuffle = true };
+var cvOptions = new CrossValidationOptions { NumberOfFolds = 5, ShuffleData = true };
 var crossValidator = new KFoldCrossValidator<double, Matrix<double>, Vector<double>>(cvOptions);
 
 // Build with cross-validation
@@ -1158,7 +1159,7 @@ Console.WriteLine();
 // Make prediction
 var testData = new Matrix<double>(1, 2);
 testData[0, 0] = 6.0; testData[0, 1] = 7.0;
-var predictions = result.Model.Predict(testData);
+var predictions = result.Predict(testData);
 
 Console.WriteLine($""Prediction for (6, 7): {predictions[0]:F4}"");
 Console.WriteLine($""Predicted class: {(predictions[0] > 0.5 ? 1 : 0)}"");
@@ -1974,7 +1975,7 @@ Console.WriteLine($""  Model trained after outlier removal"");
 
 // Test predictions with clean data
 var testFeatures = new Matrix<double>(new double[,] { { 6.0, 11.0 }, { 5.5, 10.5 }, { 7.0, 12.0 } });
-var predictions = result.Model.Predict(testFeatures);
+var predictions = result.Predict(testFeatures);
 
 Console.WriteLine(""  Predictions on test data:"");
 for (int i = 0; i < predictions.Length; i++)
@@ -2033,7 +2034,7 @@ Console.WriteLine($""  Model trained after IQR outlier removal"");
 
 // Test predictions
 var testFeatures = new Matrix<double>(new double[,] { { 60.0, 115.0, 30.0 }, { 55.0, 110.0, 28.0 } });
-var predictions = result.Model.Predict(testFeatures);
+var predictions = result.Predict(testFeatures);
 
 Console.WriteLine(""  Test predictions:"");
 for (int i = 0; i < predictions.Length; i++)
@@ -2116,7 +2117,7 @@ var testFeatures = new Matrix<double>(1, 20);
 for (int j = 0; j < 20; j++)
     testFeatures[0, j] = rng.NextDouble() * 5;
 
-var predictions = result.Model.Predict(pca.Transform(testFeatures));
+var predictions = result.Predict(pca.Transform(testFeatures));
 Console.WriteLine($""  Test prediction: {predictions[0]:F2}"");
 "
                 },
@@ -2245,7 +2246,7 @@ var testFeatures = new Matrix<double>(new double[,] {
     { 50, 40, 30, 10, 7.5, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50 }
 });
 var transformed = pca95.Transform(testFeatures);
-var predictions = result.Model.Predict(transformed);
+var predictions = result.Predict(transformed);
 Console.WriteLine($""  Test prediction: {predictions[0]:F2}"");
 "
                 }
@@ -2306,7 +2307,7 @@ Console.WriteLine(""  Model trained on TF-IDF features"");
 // Classify new text
 var newDoc = new[] { ""This is an excellent product!"" };
 var newFeatures = tfidf.Transform(newDoc);
-var prediction = result.Model.Predict(newFeatures);
+var prediction = result.Predict(newFeatures);
 
 Console.WriteLine($""  New review: '{newDoc[0]}'"");
 Console.WriteLine($""  Prediction: {(prediction[0] > 0.5 ? ""Positive"" : ""Negative"")}"");
@@ -2515,7 +2516,7 @@ Console.WriteLine();
 // Test on new documents
 var testDocs = new string[] { ""Great product, highly recommend!"", ""Total waste of money"" };
 var testFeatures = tfidf.Transform(testDocs);
-var predictions = result.Model.Predict(testFeatures);
+var predictions = result.Predict(testFeatures);
 
 Console.WriteLine(""Test Predictions:"");
 for (int i = 0; i < testDocs.Length; i++)
@@ -2761,7 +2762,7 @@ var testFeatures = new Matrix<double>(1, numMfccCoefficients);
 for (int j = 0; j < numMfccCoefficients; j++)
     testFeatures[0, j] = 0.2 + rng.NextDouble() * 0.3;  // Music-like pattern
 
-var prediction = result.Model.Predict(testFeatures);
+var prediction = result.Predict(testFeatures);
 string[] classNames = { ""Speech"", ""Music"", ""Noise"" };
 Console.WriteLine(""Test Prediction:"");
 for (int c = 0; c < numClasses; c++)
@@ -3704,7 +3705,7 @@ Console.WriteLine(""  - SVD-based importance scoring"");
                     Code = @"// AutoML Classification with AiModelBuilder
 using AiDotNet;
 using AiDotNet.Configuration;
-using AiDotNet.DataLoaders;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
@@ -3757,8 +3758,9 @@ if (result.AutoMLSummary is not null)
                     Code = @"// AutoML Regression with AiModelBuilder
 using AiDotNet;
 using AiDotNet.Configuration;
-using AiDotNet.DataLoaders;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 
@@ -3783,7 +3785,7 @@ var autoMLOptions = new AutoMLOptions<double, Matrix<double>, Vector<double>>
     },
     TaskFamilyOverride = AutoMLTaskFamily.Regression,
     SearchStrategy = AutoMLSearchStrategy.RandomSearch,
-    CrossValidation = new CrossValidationOptions { Folds = 3 }
+    CrossValidation = new CrossValidationOptions { NumberOfFolds = 3 }
 };
 
 var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
@@ -3812,7 +3814,7 @@ if (result.AutoMLSummary is not null)
                     Code = @"// Neural Architecture Search with AiModelBuilder
 using AiDotNet;
 using AiDotNet.Configuration;
-using AiDotNet.DataLoaders;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
