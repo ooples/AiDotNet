@@ -633,6 +633,13 @@ jobs:
       - name: Build Blazor WASM Playground
         run: dotnet publish src/AiDotNet.Playground/AiDotNet.Playground.csproj -c Release -o _playground
 
+      - name: Restore Playground Functions dependencies
+        run: dotnet restore src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj
+
+      - name: Build Playground Functions (validation only)
+        run: dotnet build src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release
+        # Note: Azure Functions deployment requires a separate workflow with Azure credentials
+
       - name: Copy Playground to documentation site
         run: |
           mkdir -p _site/playground
