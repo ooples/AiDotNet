@@ -238,7 +238,7 @@ public class PlaygroundExampleCompilationTests
 
         var sb = new StringBuilder();
 
-        // Default usings
+        // Default usings - include common AiDotNet namespaces
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Collections.Generic;");
         sb.AppendLine("using System.Linq;");
@@ -246,7 +246,12 @@ public class PlaygroundExampleCompilationTests
         sb.AppendLine("using System.Threading.Tasks;");
         sb.AppendLine("using System.IO;");
         sb.AppendLine("using AiDotNet;");
+        sb.AppendLine("using AiDotNet.Data.Loaders;");
+        sb.AppendLine("using AiDotNet.Enums;");
+        sb.AppendLine("using AiDotNet.Models;");
+        sb.AppendLine("using AiDotNet.Models.Options;");
         sb.AppendLine("using AiDotNet.Tensors;");
+        sb.AppendLine("using AiDotNet.Tensors.Helpers;");
         sb.AppendLine("using AiDotNet.Tensors.LinearAlgebra;");
 
         // User usings (deduplicated)
