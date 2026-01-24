@@ -162,13 +162,16 @@ public class IRGraph
                 return false; // Using a tensor before it's produced
             }
 
-            // Mark output as produced
-            producedTensors.Add(op.OutputId);
-
-            // Ensure output shape is defined
-            if (!TensorShapes.ContainsKey(op.OutputId))
+            // Mark ALL outputs as produced (support multi-output operations like gradient ops)
+            foreach (var outputId in op.OutputIds)
             {
-                TensorShapes[op.OutputId] = op.OutputShape;
+                producedTensors.Add(outputId);
+
+                // Ensure output shape is defined for each output
+                if (!TensorShapes.ContainsKey(outputId))
+                {
+                    TensorShapes[outputId] = op.OutputShape;
+                }
             }
         }
 
@@ -237,7 +240,13 @@ public class IRGraph
         foreach (var op in Operations)
         {
             hash = hash * 31 + op.OpType.GetHashCode();
-            hash = hash * 31 + op.OutputId.GetHashCode();
+
+            // Hash ALL output IDs (support multi-output operations)
+            foreach (var outputId in op.OutputIds)
+            {
+                hash = hash * 31 + outputId.GetHashCode();
+            }
+
             hash = hash * 31 + op.OutputType.GetHashCode();
             hash = hash * 31 + op.OutputShape.GetShapeHashCode();
 
