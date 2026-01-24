@@ -236,13 +236,25 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
     {
         return modelName.ToLowerInvariant() switch
         {
+            // Claude 3.5 models (200k context) - check these first before claude-3
+            var m when m.Contains("claude-3-5-sonnet") => 200000,
+            var m when m.Contains("claude-3-5-haiku") => 200000,
+            var m when m.Contains("claude-3.5-sonnet") => 200000, // Shorthand format
+            var m when m.Contains("claude-3.5-haiku") => 200000,  // Shorthand format
+
+            // Claude 3 models (200k context)
             var m when m.Contains("claude-3-opus") => 200000,
             var m when m.Contains("claude-3-sonnet") => 200000,
             var m when m.Contains("claude-3-haiku") => 200000,
+
+            // Claude 2.x models
             var m when m.Contains("claude-2.1") => 200000,
             var m when m.Contains("claude-2.0") => 100000,
             var m when m.Contains("claude-2") => 100000,
+
+            // Claude Instant models
             var m when m.Contains("claude-instant") => 100000,
+
             _ => 100000 // Default fallback
         };
     }
