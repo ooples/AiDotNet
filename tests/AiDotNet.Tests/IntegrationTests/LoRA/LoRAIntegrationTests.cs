@@ -487,6 +487,8 @@ public class LoRAIntegrationTests
         // Loss should have decreased with fixed training data
         Assert.False(double.IsNaN(finalLoss), "Final loss should not be NaN");
         Assert.False(double.IsInfinity(finalLoss), "Final loss should not be Infinity");
+        Assert.True(finalLoss <= initialLoss + 1e-8,
+            $"Expected loss to decrease (initial {initialLoss}, final {finalLoss}).");
     }
 
     #endregion
@@ -557,7 +559,6 @@ public class LoRAIntegrationTests
     public void AllAdapters_ForwardPass_ProducesValidOutput()
     {
         var baseLayer = new DenseLayer<double>(InputSize, OutputSize);
-        var input = CreateTensor(1, InputSize);
 
         // Initialize shared matrices for VeRA and DVoRA
         VeRAAdapter<double>.InitializeSharedMatrices(InputSize, OutputSize, Rank);
