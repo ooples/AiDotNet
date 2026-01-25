@@ -11,8 +11,10 @@ using AiDotNet.ModelRegistry;
 using AiDotNet.Models;
 using AiDotNet.PromptEngineering.Optimization;
 using AiDotNet.PromptEngineering.Templates;
+using AiDotNet.Serialization;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TrainingMonitoring;
+using Newtonsoft.Json;
 using Xunit;
 
 namespace AiDotNet.Tests;
@@ -2651,6 +2653,176 @@ public class MergedPRBugFixTests
         Assert.Equal(5, config.BeamWidth);
         Assert.Equal(60, config.MaxReasoningTimeSeconds);
         Assert.False(config.EnableVerification); // Off by default for performance
+    }
+
+    #endregion
+
+    #region Serialization PR #759 - VectorJsonConverter and TensorJsonConverter Validation Bugs
+
+    [Fact]
+    public void VectorJsonConverter_NegativeLength_ThrowsJsonSerializationException()
+    {
+        // ARRANGE: JSON with negative length that should be rejected
+        var converter = new VectorJsonConverter();
+        var settings = new JsonSerializerSettings();
+        settings.Converters.Add(converter);
+
+        string malformedJson = "{\"length\": -5, \"data\": []}";
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<JsonSerializationException>(() =>
+        {
+            JsonConvert.DeserializeObject<Vector<double>>(malformedJson, settings);
+        });
+
+        Assert.Contains("non-negative", ex.Message);
+        Assert.Contains("-5", ex.Message);
+    }
+
+    [Fact]
+    public void VectorJsonConverter_ZeroLength_AcceptsValidEmptyVector()
+    {
+        // ARRANGE: JSON with zero length is valid
+        var converter = new VectorJsonConverter();
+        var settings = new JsonSerializerSettings();
+        settings.Converters.Add(converter);
+
+        string validJson = "{\"length\": 0, \"data\": []}";
+
+        // ACT: Should not throw - zero length is valid
+        var result = JsonConvert.DeserializeObject<Vector<double>>(validJson, settings);
+
+        // ASSERT
+        Assert.NotNull(result);
+        Assert.Equal(0, result.Length);
+    }
+
+    [Fact]
+    public void TensorJsonConverter_NegativeDimension_ThrowsJsonSerializationException()
+    {
+        // ARRANGE: JSON with negative dimension that should be rejected
+        var converter = new TensorJsonConverter();
+        var settings = new JsonSerializerSettings();
+        settings.Converters.Add(converter);
+
+        string malformedJson = "{\"shape\": [2, -3, 4], \"data\": []}";
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<JsonSerializationException>(() =>
+        {
+            JsonConvert.DeserializeObject<Tensor<double>>(malformedJson, settings);
+        });
+
+        Assert.Contains("non-negative", ex.Message);
+        Assert.Contains("index 1", ex.Message);
+        Assert.Contains("-3", ex.Message);
+    }
+
+    [Fact]
+    public void TensorJsonConverter_EmptyShape_ThrowsJsonSerializationException()
+    {
+        // ARRANGE: JSON with empty shape array that should be rejected
+        var converter = new TensorJsonConverter();
+        var settings = new JsonSerializerSettings();
+        settings.Converters.Add(converter);
+
+        string malformedJson = "{\"shape\": [], \"data\": []}";
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<JsonSerializationException>(() =>
+        {
+            JsonConvert.DeserializeObject<Tensor<double>>(malformedJson, settings);
+        });
+
+        Assert.Contains("at least one dimension", ex.Message);
+    }
+
+    [Fact]
+    public void TensorJsonConverter_ValidShape_DeserializesCorrectly()
+    {
+        // ARRANGE: Valid tensor JSON
+        var converter = new TensorJsonConverter();
+        var settings = new JsonSerializerSettings();
+        settings.Converters.Add(converter);
+
+        // 2x3 tensor with 6 elements
+        string validJson = "{\"shape\": [2, 3], \"data\": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]}";
+
+        // ACT
+        var result = JsonConvert.DeserializeObject<Tensor<double>>(validJson, settings);
+
+        // ASSERT
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Shape[0]);
+        Assert.Equal(3, result.Shape[1]);
+        Assert.Equal(6, result.Length);
+    }
+
+    [Fact]
+    public void TensorJsonConverter_AllZeroDimensions_ValidButEmpty()
+    {
+        // ARRANGE: Tensor with zero dimension is valid but results in empty tensor
+        var converter = new TensorJsonConverter();
+        var settings = new JsonSerializerSettings();
+        settings.Converters.Add(converter);
+
+        string validJson = "{\"shape\": [2, 0, 3], \"data\": []}";
+
+        // ACT
+        var result = JsonConvert.DeserializeObject<Tensor<double>>(validJson, settings);
+
+        // ASSERT
+        Assert.NotNull(result);
+        Assert.Equal(0, result.Length); // 2 * 0 * 3 = 0 elements
+    }
+
+    [Fact]
+    public void VectorJsonConverter_RoundTrip_PreservesData()
+    {
+        // ARRANGE: Create a vector, serialize it, then deserialize
+        var original = new Vector<double>(new double[] { 1.5, 2.5, 3.5, 4.5 });
+
+        var converter = new VectorJsonConverter();
+        var settings = new JsonSerializerSettings();
+        settings.Converters.Add(converter);
+
+        // ACT
+        string json = JsonConvert.SerializeObject(original, settings);
+        var restored = JsonConvert.DeserializeObject<Vector<double>>(json, settings);
+
+        // ASSERT
+        Assert.NotNull(restored);
+        Assert.Equal(original.Length, restored.Length);
+        for (int i = 0; i < original.Length; i++)
+        {
+            Assert.Equal(original[i], restored[i]);
+        }
+    }
+
+    [Fact]
+    public void TensorJsonConverter_RoundTrip_PreservesData()
+    {
+        // ARRANGE: Create a tensor, serialize it, then deserialize
+        var original = new Tensor<double>(new int[] { 2, 2 });
+        original[0, 0] = 1.0;
+        original[0, 1] = 2.0;
+        original[1, 0] = 3.0;
+        original[1, 1] = 4.0;
+
+        var converter = new TensorJsonConverter();
+        var settings = new JsonSerializerSettings();
+        settings.Converters.Add(converter);
+
+        // ACT
+        string json = JsonConvert.SerializeObject(original, settings);
+        var restored = JsonConvert.DeserializeObject<Tensor<double>>(json, settings);
+
+        // ASSERT
+        Assert.NotNull(restored);
+        Assert.Equal(original.Shape.Length, restored.Shape.Length);
+        Assert.Equal(original.Shape[0], restored.Shape[0]);
+        Assert.Equal(original.Shape[1], restored.Shape[1]);
+        Assert.Equal(original.Length, restored.Length);
     }
 
     #endregion

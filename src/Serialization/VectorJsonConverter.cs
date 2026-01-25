@@ -121,6 +121,13 @@ namespace AiDotNet.Serialization
             }
             int length = lengthToken.Value<int>();
 
+            // Validate that length is non-negative
+            if (length < 0)
+            {
+                throw new JsonSerializationException(
+                    $"Vector 'length' must be non-negative, but was {length}.");
+            }
+
             // Validate that 'data' token exists and is a JArray
             var dataToken = jObject["data"];
             if (dataToken == null || dataToken.Type != JTokenType.Array)

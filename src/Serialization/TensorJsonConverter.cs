@@ -123,6 +123,23 @@ namespace AiDotNet.Serialization
                 throw new JsonSerializationException("Tensor JSON must contain 'shape' property.");
             }
 
+            // Validate that shape is not empty
+            if (shape.Length == 0)
+            {
+                throw new JsonSerializationException(
+                    "Tensor 'shape' array must contain at least one dimension.");
+            }
+
+            // Validate that all dimensions are non-negative
+            for (int i = 0; i < shape.Length; i++)
+            {
+                if (shape[i] < 0)
+                {
+                    throw new JsonSerializationException(
+                        $"Tensor 'shape' dimension at index {i} must be non-negative, but was {shape[i]}.");
+                }
+            }
+
             // Get the element type (T) from Tensor<T>
             var elementType = objectType.GetGenericArguments()[0];
 
