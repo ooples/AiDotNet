@@ -1674,4 +1674,209 @@ public class MergedPRBugFixTests
     }
 
     #endregion
+
+    #region InferenceOptimization PR #768 - Production Bug Fixes
+
+    [Fact]
+    public void OptimizationNode_AddInput_ThrowsForNullInputNode()
+    {
+        // ARRANGE
+        var node = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double>();
+        AiDotNet.InferenceOptimization.Core.OptimizationNode<double>? nullInput = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => node.AddInput(nullInput!));
+        Assert.Equal("inputNode", ex.ParamName);
+    }
+
+    [Fact]
+    public void OptimizationNode_RemoveInput_ThrowsForNullInputNode()
+    {
+        // ARRANGE
+        var node = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double>();
+        AiDotNet.InferenceOptimization.Core.OptimizationNode<double>? nullInput = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => node.RemoveInput(nullInput!));
+        Assert.Equal("inputNode", ex.ParamName);
+    }
+
+    [Fact]
+    public void OptimizationNode_ReplaceInput_ThrowsForNullOldInput()
+    {
+        // ARRANGE
+        var node = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double>();
+        var newInput = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double>();
+        AiDotNet.InferenceOptimization.Core.OptimizationNode<double>? nullInput = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => node.ReplaceInput(nullInput!, newInput));
+        Assert.Equal("oldInput", ex.ParamName);
+    }
+
+    [Fact]
+    public void OptimizationNode_ReplaceInput_ThrowsForNullNewInput()
+    {
+        // ARRANGE
+        var node = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double>();
+        var oldInput = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double>();
+        AiDotNet.InferenceOptimization.Core.OptimizationNode<double>? nullInput = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => node.ReplaceInput(oldInput, nullInput!));
+        Assert.Equal("newInput", ex.ParamName);
+    }
+
+    [Fact]
+    public void OptimizationGraph_FindNodeById_ThrowsForNullId()
+    {
+        // ARRANGE
+        var graph = new AiDotNet.InferenceOptimization.Core.OptimizationGraph<double>();
+        string? nullId = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => graph.FindNodeById(nullId!));
+        Assert.Equal("id", ex.ParamName);
+    }
+
+    [Fact]
+    public void OptimizationGraph_FindNodesByName_ThrowsForNullName()
+    {
+        // ARRANGE
+        var graph = new AiDotNet.InferenceOptimization.Core.OptimizationGraph<double>();
+        string? nullName = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => graph.FindNodesByName(nullName!));
+        Assert.Equal("name", ex.ParamName);
+    }
+
+    [Fact]
+    public void IRDataTypeExtensions_FromSystemType_ThrowsForNullType()
+    {
+        // ARRANGE
+        Type? nullType = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.InferenceOptimization.IR.Common.IRDataTypeExtensions.FromSystemType(nullType!));
+        Assert.Equal("type", ex.ParamName);
+    }
+
+    [Fact]
+    public void TensorType_IsBroadcastCompatible_ThrowsForNullOther()
+    {
+        // ARRANGE
+        var tensorType = new AiDotNet.InferenceOptimization.IR.Common.TensorType
+        {
+            Shape = new int[] { 3, 4 }
+        };
+        AiDotNet.InferenceOptimization.IR.Common.TensorType? nullOther = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => tensorType.IsBroadcastCompatible(nullOther!));
+        Assert.Equal("other", ex.ParamName);
+    }
+
+    [Fact]
+    public void GraphOptimizer_Optimize_ThrowsForNullGraph()
+    {
+        // ARRANGE
+        var optimizer = new AiDotNet.InferenceOptimization.Core.GraphOptimizer<double>();
+        AiDotNet.InferenceOptimization.Core.IOptimizationGraph<double>? nullGraph = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => optimizer.Optimize(nullGraph!));
+        Assert.Equal("graph", ex.ParamName);
+    }
+
+    [Fact]
+    public void GraphOptimizer_AddPass_ThrowsForNullPass()
+    {
+        // ARRANGE
+        var optimizer = new AiDotNet.InferenceOptimization.Core.GraphOptimizer<double>();
+        AiDotNet.InferenceOptimization.Passes.IOptimizationPass<double>? nullPass = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => optimizer.AddPass(nullPass!));
+        Assert.Equal("pass", ex.ParamName);
+    }
+
+    [Fact]
+    public void OptimizationNode_AddInputRemoveInput_ValidInputs_WorksCorrectly()
+    {
+        // ARRANGE
+        var node = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double> { Name = "output" };
+        var inputNode = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double> { Name = "input" };
+
+        // ACT - Add input
+        node.AddInput(inputNode);
+
+        // ASSERT - Input was added
+        Assert.Contains(inputNode, node.Inputs);
+        Assert.Contains(node, inputNode.Outputs);
+
+        // ACT - Remove input
+        node.RemoveInput(inputNode);
+
+        // ASSERT - Input was removed
+        Assert.DoesNotContain(inputNode, node.Inputs);
+        Assert.DoesNotContain(node, inputNode.Outputs);
+    }
+
+    [Fact]
+    public void OptimizationGraph_FindNodesByIdAndName_ValidInputs_WorksCorrectly()
+    {
+        // ARRANGE
+        var graph = new AiDotNet.InferenceOptimization.Core.OptimizationGraph<double>();
+        var node1 = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double> { Name = "conv1" };
+        var node2 = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double> { Name = "conv1" };
+        var node3 = new AiDotNet.InferenceOptimization.Core.OptimizationNode<double> { Name = "relu1" };
+        graph.AddNode(node1);
+        graph.AddNode(node2);
+        graph.AddNode(node3);
+
+        // ACT & ASSERT - FindNodeById
+        var foundById = graph.FindNodeById(node1.Id);
+        Assert.Same(node1, foundById);
+
+        // ACT & ASSERT - FindNodesByName
+        var foundByName = graph.FindNodesByName("conv1");
+        Assert.Equal(2, foundByName.Count);
+
+        // ACT & ASSERT - FindNodeById with non-existent ID returns null
+        var notFound = graph.FindNodeById("non-existent-id");
+        Assert.Null(notFound);
+    }
+
+    [Fact]
+    public void TensorType_IsBroadcastCompatible_ValidInputs_WorksCorrectly()
+    {
+        // ARRANGE
+        var type1 = new AiDotNet.InferenceOptimization.IR.Common.TensorType { Shape = new int[] { 3, 4 } };
+        var type2 = new AiDotNet.InferenceOptimization.IR.Common.TensorType { Shape = new int[] { 3, 4 } };
+        var type3 = new AiDotNet.InferenceOptimization.IR.Common.TensorType { Shape = new int[] { 1, 4 } };
+        var type4 = new AiDotNet.InferenceOptimization.IR.Common.TensorType { Shape = new int[] { 3, 5 } };
+
+        // ACT & ASSERT
+        Assert.True(type1.IsBroadcastCompatible(type2)); // Same shape
+        Assert.True(type1.IsBroadcastCompatible(type3)); // Broadcastable (1 can become 3)
+        Assert.False(type1.IsBroadcastCompatible(type4)); // Not compatible (4 != 5)
+    }
+
+    [Fact]
+    public void IRDataTypeExtensions_FromSystemType_ValidTypes_ReturnsCorrectDataType()
+    {
+        // ACT & ASSERT
+        Assert.Equal(AiDotNet.InferenceOptimization.IR.Common.IRDataType.Float32,
+            AiDotNet.InferenceOptimization.IR.Common.IRDataTypeExtensions.FromSystemType(typeof(float)));
+        Assert.Equal(AiDotNet.InferenceOptimization.IR.Common.IRDataType.Float64,
+            AiDotNet.InferenceOptimization.IR.Common.IRDataTypeExtensions.FromSystemType(typeof(double)));
+        Assert.Equal(AiDotNet.InferenceOptimization.IR.Common.IRDataType.Int32,
+            AiDotNet.InferenceOptimization.IR.Common.IRDataTypeExtensions.FromSystemType(typeof(int)));
+        Assert.Equal(AiDotNet.InferenceOptimization.IR.Common.IRDataType.Bool,
+            AiDotNet.InferenceOptimization.IR.Common.IRDataTypeExtensions.FromSystemType(typeof(bool)));
+    }
+
+    #endregion
 }

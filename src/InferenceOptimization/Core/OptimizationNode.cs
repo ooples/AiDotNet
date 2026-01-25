@@ -121,6 +121,9 @@ public class OptimizationNode<T> where T : struct
     /// </summary>
     public void AddInput(OptimizationNode<T> inputNode)
     {
+        if (inputNode == null)
+            throw new ArgumentNullException(nameof(inputNode));
+
         if (!Inputs.Contains(inputNode))
         {
             Inputs.Add(inputNode);
@@ -137,6 +140,9 @@ public class OptimizationNode<T> where T : struct
     /// </summary>
     public void RemoveInput(OptimizationNode<T> inputNode)
     {
+        if (inputNode == null)
+            throw new ArgumentNullException(nameof(inputNode));
+
         Inputs.Remove(inputNode);
         inputNode.Outputs.Remove(this);
     }
@@ -146,6 +152,11 @@ public class OptimizationNode<T> where T : struct
     /// </summary>
     public void ReplaceInput(OptimizationNode<T> oldInput, OptimizationNode<T> newInput)
     {
+        if (oldInput == null)
+            throw new ArgumentNullException(nameof(oldInput));
+        if (newInput == null)
+            throw new ArgumentNullException(nameof(newInput));
+
         var index = Inputs.IndexOf(oldInput);
         if (index >= 0)
         {
