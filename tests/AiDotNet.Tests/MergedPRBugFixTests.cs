@@ -1535,4 +1535,143 @@ public class MergedPRBugFixTests
     }
 
     #endregion
+
+    #region Interpretability PR #769 - Production Bug Fixes
+
+    [Fact]
+    public void InterpretabilityMetricsHelper_GetUniqueGroups_ThrowsForNullSensitiveFeature()
+    {
+        // ARRANGE: The old code would throw NullReferenceException
+        Vector<double>? nullVector = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetUniqueGroups(nullVector!));
+        Assert.Equal("sensitiveFeature", ex.ParamName);
+    }
+
+    [Fact]
+    public void InterpretabilityMetricsHelper_GetGroupIndices_ThrowsForNullSensitiveFeature()
+    {
+        // ARRANGE
+        Vector<double>? nullVector = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetGroupIndices(nullVector!, 1.0));
+        Assert.Equal("sensitiveFeature", ex.ParamName);
+    }
+
+    [Fact]
+    public void InterpretabilityMetricsHelper_GetSubset_ThrowsForNullVector()
+    {
+        // ARRANGE
+        Vector<double>? nullVector = null;
+        var indices = new List<int> { 0, 1 };
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetSubset(nullVector!, indices));
+        Assert.Equal("vector", ex.ParamName);
+    }
+
+    [Fact]
+    public void InterpretabilityMetricsHelper_GetSubset_ThrowsForNullIndices()
+    {
+        // ARRANGE
+        var vector = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        List<int>? nullIndices = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetSubset(vector, nullIndices!));
+        Assert.Equal("indices", ex.ParamName);
+    }
+
+    [Fact]
+    public void InterpretabilityMetricsHelper_ComputePositiveRate_ThrowsForNullPredictions()
+    {
+        // ARRANGE
+        Vector<double>? nullVector = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputePositiveRate(nullVector!));
+        Assert.Equal("predictions", ex.ParamName);
+    }
+
+    [Fact]
+    public void InterpretabilityMetricsHelper_ComputeTruePositiveRate_ThrowsForNullPredictions()
+    {
+        // ARRANGE
+        Vector<double>? nullPredictions = null;
+        var actualLabels = new Vector<double>(new double[] { 1.0, 0.0, 1.0 });
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeTruePositiveRate(nullPredictions!, actualLabels));
+        Assert.Equal("predictions", ex.ParamName);
+    }
+
+    [Fact]
+    public void InterpretabilityMetricsHelper_ComputeTruePositiveRate_ThrowsForNullActualLabels()
+    {
+        // ARRANGE
+        var predictions = new Vector<double>(new double[] { 1.0, 0.0, 1.0 });
+        Vector<double>? nullLabels = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeTruePositiveRate(predictions, nullLabels!));
+        Assert.Equal("actualLabels", ex.ParamName);
+    }
+
+    [Fact]
+    public void InterpretabilityMetricsHelper_ComputeFalsePositiveRate_ThrowsForNullPredictions()
+    {
+        // ARRANGE
+        Vector<double>? nullPredictions = null;
+        var actualLabels = new Vector<double>(new double[] { 1.0, 0.0, 1.0 });
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeFalsePositiveRate(nullPredictions!, actualLabels));
+        Assert.Equal("predictions", ex.ParamName);
+    }
+
+    [Fact]
+    public void InterpretabilityMetricsHelper_ComputePrecision_ThrowsForNullPredictions()
+    {
+        // ARRANGE
+        Vector<double>? nullPredictions = null;
+        var actualLabels = new Vector<double>(new double[] { 1.0, 0.0, 1.0 });
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputePrecision(nullPredictions!, actualLabels));
+        Assert.Equal("predictions", ex.ParamName);
+    }
+
+    [Fact]
+    public void InterpretabilityMetricsHelper_ValidFunctions_ReturnCorrectResults()
+    {
+        // ARRANGE
+        var sensitiveFeature = new Vector<double>(new double[] { 0.0, 1.0, 0.0, 1.0, 0.0 });
+        var predictions = new Vector<double>(new double[] { 1.0, 0.0, 1.0, 1.0, 0.0 });
+        var actualLabels = new Vector<double>(new double[] { 1.0, 0.0, 1.0, 0.0, 0.0 });
+
+        // ACT
+        var uniqueGroups = AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetUniqueGroups(sensitiveFeature);
+        var groupIndices = AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.GetGroupIndices(sensitiveFeature, 0.0);
+        var positiveRate = AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputePositiveRate(predictions);
+        var tpr = AiDotNet.Interpretability.InterpretabilityMetricsHelper<double>.ComputeTruePositiveRate(predictions, actualLabels);
+
+        // ASSERT
+        Assert.Equal(2, uniqueGroups.Count); // Two unique groups: 0.0 and 1.0
+        Assert.Equal(3, groupIndices.Count); // Indices 0, 2, 4 have value 0.0
+        Assert.Equal(0.6, positiveRate, 2); // 3 out of 5 are positive (>= 0.5)
+        Assert.Equal(1.0, tpr, 2); // 2 true positives out of 2 actual positives
+    }
+
+    #endregion
 }

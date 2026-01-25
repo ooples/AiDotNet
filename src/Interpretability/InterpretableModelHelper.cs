@@ -22,6 +22,11 @@ namespace AiDotNet.Interpretability
             IInterpretableModel<T> model,
             HashSet<InterpretationMethod> enabledMethods)
         {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+            if (enabledMethods == null)
+                throw new ArgumentNullException(nameof(enabledMethods));
+
             if (!enabledMethods.Contains(InterpretationMethod.FeatureImportance))
             {
                 throw new InvalidOperationException("FeatureImportance method is not enabled.");
@@ -43,6 +48,13 @@ namespace AiDotNet.Interpretability
             HashSet<InterpretationMethod> enabledMethods,
             Tensor<T> input)
         {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+            if (enabledMethods == null)
+                throw new ArgumentNullException(nameof(enabledMethods));
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+
             if (!enabledMethods.Contains(InterpretationMethod.FeatureImportance))
             {
                 throw new InvalidOperationException("FeatureImportance method is not enabled.");
@@ -64,6 +76,13 @@ namespace AiDotNet.Interpretability
             HashSet<InterpretationMethod> enabledMethods,
             Tensor<T> inputs)
         {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+            if (enabledMethods == null)
+                throw new ArgumentNullException(nameof(enabledMethods));
+            if (inputs == null)
+                throw new ArgumentNullException(nameof(inputs));
+
             if (!enabledMethods.Contains(InterpretationMethod.SHAP))
             {
                 throw new InvalidOperationException("SHAP method is not enabled.");
@@ -87,6 +106,13 @@ namespace AiDotNet.Interpretability
             Tensor<T> input,
             int numFeatures = 10)
         {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+            if (enabledMethods == null)
+                throw new ArgumentNullException(nameof(enabledMethods));
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+
             if (!enabledMethods.Contains(InterpretationMethod.LIME))
             {
                 throw new InvalidOperationException("LIME method is not enabled.");
@@ -110,6 +136,13 @@ namespace AiDotNet.Interpretability
             Vector<int> featureIndices,
             int gridResolution = 20)
         {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+            if (enabledMethods == null)
+                throw new ArgumentNullException(nameof(enabledMethods));
+            if (featureIndices == null)
+                throw new ArgumentNullException(nameof(featureIndices));
+
             if (!enabledMethods.Contains(InterpretationMethod.PartialDependence))
             {
                 throw new InvalidOperationException("PartialDependence method is not enabled.");
@@ -135,6 +168,15 @@ namespace AiDotNet.Interpretability
             Tensor<T> desiredOutput,
             int maxChanges = 5)
         {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+            if (enabledMethods == null)
+                throw new ArgumentNullException(nameof(enabledMethods));
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+            if (desiredOutput == null)
+                throw new ArgumentNullException(nameof(desiredOutput));
+
             if (!enabledMethods.Contains(InterpretationMethod.Counterfactual))
             {
                 throw new InvalidOperationException("Counterfactual method is not enabled.");
@@ -152,6 +194,9 @@ namespace AiDotNet.Interpretability
         public static Task<Dictionary<string, object>> GetModelSpecificInterpretabilityAsync<T>(
             IInterpretableModel<T> model)
         {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+
             return model.GetModelSpecificInterpretabilityAsync();
         }
 
@@ -168,6 +213,13 @@ namespace AiDotNet.Interpretability
             Tensor<T> input,
             Tensor<T> prediction)
         {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+            if (prediction == null)
+                throw new ArgumentNullException(nameof(prediction));
+
             return model.GenerateTextExplanationAsync(input, prediction);
         }
 
@@ -184,6 +236,9 @@ namespace AiDotNet.Interpretability
             int feature1Index,
             int feature2Index)
         {
+            if (enabledMethods == null)
+                throw new ArgumentNullException(nameof(enabledMethods));
+
             if (!enabledMethods.Contains(InterpretationMethod.FeatureInteraction))
             {
                 throw new InvalidOperationException("FeatureInteraction method is not enabled.");
@@ -203,6 +258,9 @@ namespace AiDotNet.Interpretability
         public static Task<FairnessMetrics<T>> ValidateFairnessAsync<T>(
             List<FairnessMetric> fairnessMetrics)
         {
+            if (fairnessMetrics == null)
+                throw new ArgumentNullException(nameof(fairnessMetrics));
+
             // Return placeholder implementation with zero values for all metrics
             var numOps = MathHelper.GetNumericOperations<T>();
             return Task.FromResult(new FairnessMetrics<T>(
@@ -229,6 +287,13 @@ namespace AiDotNet.Interpretability
             Tensor<T> input,
             T threshold)
         {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
+            if (enabledMethods == null)
+                throw new ArgumentNullException(nameof(enabledMethods));
+            if (input == null)
+                throw new ArgumentNullException(nameof(input));
+
             if (!enabledMethods.Contains(InterpretationMethod.Anchor))
             {
                 throw new InvalidOperationException("Anchor method is not enabled.");
