@@ -254,13 +254,19 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
             "gpt-4o-2024-08-06" => 128000,
             "gpt-4o-2024-11-20" => 128000,
 
-            // o1 reasoning models (128k context)
-            "o1" => 128000,
-            "o1-preview" => 128000,
-            "o1-mini" => 128000,
+            // o1 reasoning models (200k context per OpenAI documentation)
+            "o1" => 200000,
+            "o1-preview" => 200000,
+            "o1-mini" => 200000,
 
             // o3 reasoning models (200k context)
             "o3-mini" => 200000,
+
+            // Handle model variants with date suffixes using prefix matching
+            _ when modelName.StartsWith("gpt-4o-", StringComparison.OrdinalIgnoreCase) => 128000,
+            _ when modelName.StartsWith("gpt-4-turbo", StringComparison.OrdinalIgnoreCase) => 128000,
+            _ when modelName.StartsWith("o1-", StringComparison.OrdinalIgnoreCase) => 200000,
+            _ when modelName.StartsWith("o3-", StringComparison.OrdinalIgnoreCase) => 200000,
 
             _ => 4096 // Default fallback
         };

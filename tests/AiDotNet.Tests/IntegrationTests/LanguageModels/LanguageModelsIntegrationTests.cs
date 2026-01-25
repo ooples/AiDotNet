@@ -16,7 +16,7 @@ namespace AiDotNet.Tests.IntegrationTests.LanguageModels;
 /// </summary>
 public class LanguageModelsIntegrationTests
 {
-    private const string ValidApiKey = "sk-test-api-key-12345";
+    private const string ValidApiKey = "test-api-key-12345";
     private const string ValidEndpoint = "https://test-resource.openai.azure.com";
     private const string ValidDeploymentName = "gpt-4-deployment";
 
@@ -236,16 +236,16 @@ public class LanguageModelsIntegrationTests
     public void OpenAIChatModel_MaxContextTokens_O1_ShouldReturnCorrectTokens()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "o1");
-        // o1 has 128k context window - if this fails with 4096, it means the model isn't registered
-        Assert.Equal(128000, model.MaxContextTokens);
+        // o1 has 200k context window per OpenAI documentation
+        Assert.Equal(200000, model.MaxContextTokens);
     }
 
     [Fact]
     public void OpenAIChatModel_MaxContextTokens_O1Mini_ShouldReturnCorrectTokens()
     {
         var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "o1-mini");
-        // o1-mini has 128k context window
-        Assert.Equal(128000, model.MaxContextTokens);
+        // o1-mini has 200k context window per OpenAI documentation
+        Assert.Equal(200000, model.MaxContextTokens);
     }
 
     [Fact]
@@ -933,15 +933,22 @@ public class LanguageModelsIntegrationTests
     [Fact]
     public async Task ChatModel_GenerateAsync_NearLimitPrompt_AcceptsPrompt()
     {
-        // Create model with gpt-3.5-turbo (4096 context)
-        var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-3.5-turbo");
+        // Create mock handler that returns an error response (simulating invalid API key)
+        var mockHandler = new MockHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        {
+            Content = new StringContent(@"{""error"":{""message"":""Invalid API key""}}")
+        });
+        using var httpClient = new HttpClient(mockHandler);
+
+        // Create model with gpt-3.5-turbo (4096 context) using mock HTTP client
+        var model = new OpenAIChatModel<double>(ValidApiKey, modelName: "gpt-3.5-turbo", httpClient: httpClient);
 
         // Create a prompt just under the limit (4096 tokens * 4 chars = 16384)
         // Subtract some for safety margin
         var almostMaxPrompt = new string('a', 16000);
 
         // This should NOT throw ArgumentException for length
-        // It will throw InvalidOperationException when trying to call API (no real key)
+        // It will throw InvalidOperationException when trying to call API (mock returns 401)
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => model.GenerateAsync(almostMaxPrompt));
 
@@ -1125,9 +1132,15 @@ public class LanguageModelsIntegrationTests
     [Fact]
     public void OpenAIChatModel_Generate_WithValidPrompt_ExecutesSynchronously()
     {
-        var model = new OpenAIChatModel<double>(ValidApiKey);
+        // Create mock handler that returns an error response
+        var mockHandler = new MockHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        {
+            Content = new StringContent(@"{""error"":{""message"":""Invalid API key""}}")
+        });
+        using var httpClient = new HttpClient(mockHandler);
+        var model = new OpenAIChatModel<double>(ValidApiKey, httpClient: httpClient);
 
-        // This should throw InvalidOperationException (no real API key)
+        // This should throw InvalidOperationException (mock returns 401)
         // not OperationCanceledException or AggregateException
         var exception = Assert.Throws<InvalidOperationException>(() => model.Generate("Test prompt"));
 
@@ -1140,7 +1153,13 @@ public class LanguageModelsIntegrationTests
     [Fact]
     public async Task OpenAIChatModel_GenerateResponseAsync_IsAliasForGenerateAsync()
     {
-        var model = new OpenAIChatModel<double>(ValidApiKey);
+        // Create mock handler that returns an error response
+        var mockHandler = new MockHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        {
+            Content = new StringContent(@"{""error"":{""message"":""Invalid API key""}}")
+        });
+        using var httpClient = new HttpClient(mockHandler);
+        var model = new OpenAIChatModel<double>(ValidApiKey, httpClient: httpClient);
 
         // Both methods should behave identically
         var exception1 = await Assert.ThrowsAsync<InvalidOperationException>(
