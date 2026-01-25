@@ -122,11 +122,14 @@ public class StandardLoRAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> mergedParams = new Vector<T>(baseParams.Length);
 
         // Merge weights
+        // baseParams is stored as [outputSize][inputSize] (row-major, output-major)
+        // loraWeights from MergeWeights() is [inputSize, outputSize]
+        // So we access loraWeights[inputIdx, outputIdx] = loraWeights[col, row]
         for (int i = 0; i < weightCount; i++)
         {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
+            int outputIdx = i / inputSize;
+            int inputIdx = i % inputSize;
+            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[inputIdx, outputIdx]);
         }
 
         // Copy biases unchanged
