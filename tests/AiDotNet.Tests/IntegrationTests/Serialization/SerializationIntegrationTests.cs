@@ -104,22 +104,29 @@ public class SerializationIntegrationTests : IDisposable
     [Fact]
     public void JsonConverterRegistry_ClearConverters_RemovesAll()
     {
+        // Step 1: Register default converters
         JsonConverterRegistry.RegisterAllConverters();
-        Assert.Equal(3, JsonConverterRegistry.GetAllConverters().Count);
+        var initialCount = JsonConverterRegistry.GetAllConverters().Count;
+        Assert.Equal(3, initialCount); // 3 default converters: Matrix, Vector, Tensor
 
-        JsonConverterRegistry.ClearConverters();
-
-        // After clearing, GetAllConverters will auto-initialize again
-        // So we need to clear and then check before auto-init happens
-        JsonConverterRegistry.ClearConverters();
-
-        // Now manually add one converter to check it was cleared
+        // Step 2: Register a custom converter
         var customConverter = new MockJsonConverter();
         JsonConverterRegistry.RegisterConverter(customConverter);
 
-        var converters = JsonConverterRegistry.GetAllConverters();
-        // Since _initialized is false after clear, GetAllConverters will re-register defaults plus our custom one
-        Assert.True(converters.Count >= 1);
+        // Step 3: Verify custom converter was added
+        var convertersBeforeClear = JsonConverterRegistry.GetAllConverters();
+        Assert.Equal(4, convertersBeforeClear.Count); // 3 defaults + 1 custom
+        Assert.Contains(customConverter, convertersBeforeClear);
+
+        // Step 4: Clear all converters
+        JsonConverterRegistry.ClearConverters();
+
+        // Step 5: Get converters again (triggers auto-reinitialization with defaults only)
+        var convertersAfterClear = JsonConverterRegistry.GetAllConverters();
+
+        // Step 6: Verify custom converter was removed and only defaults remain
+        Assert.Equal(3, convertersAfterClear.Count); // Back to 3 defaults only
+        Assert.DoesNotContain(customConverter, convertersAfterClear);
     }
 
     #endregion
