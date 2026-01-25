@@ -179,6 +179,18 @@ public class PruningMask<T> : IPruningMask<T>
         // For 2D tensors (fully connected layers)
         if (weights.Rank == 2)
         {
+            int totalElements = weights.Shape[0] * weights.Shape[1];
+
+            // Handle case where mask is 1D (1xN) but tensor is 2D (MxK) with M*K == N
+            // This happens when mask was created from a flattened tensor
+            if (_mask.Rows == 1 && _mask.Columns == totalElements)
+            {
+                var flatWeights = weights.ToVector();
+                var flatMask = _mask.GetRow(0);
+                var flatResult = flatWeights.PointwiseMultiply(flatMask);
+                return Tensor<T>.FromVector(flatResult, (int[])weights.Shape.Clone());
+            }
+
             var matrix = TensorToMatrix(weights);
             var pruned = Apply(matrix);
             return MatrixToTensor(pruned);

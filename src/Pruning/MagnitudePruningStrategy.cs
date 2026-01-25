@@ -164,27 +164,73 @@ public class MagnitudePruningStrategy<T> : IPruningStrategy<T>
         if (targetSparsity < 0 || targetSparsity > 1)
             throw new ArgumentException("targetSparsity must be between 0 and 1");
 
-        int totalElements = importanceScores.Length;
-        int numToPrune = (int)(totalElements * targetSparsity);
-
-        // Flatten scores and find threshold
-        var flatScores = new List<(int idx, T score)>();
+        // Separate zero and non-zero scores
+        // Zero scores indicate already-pruned weights (from previous pruning rounds)
+        var zeroScores = new List<int>();
+        var nonZeroScores = new List<(int idx, T score)>();
 
         for (int i = 0; i < importanceScores.Length; i++)
         {
-            flatScores.Add((i, importanceScores[i]));
+            if (_numOps.Equals(importanceScores[i], _numOps.Zero))
+            {
+                zeroScores.Add(i);
+            }
+            else
+            {
+                nonZeroScores.Add((i, importanceScores[i]));
+            }
         }
 
-        // Sort by importance (ascending, so smallest are first)
-        flatScores.Sort((a, b) => _numOps.ToDouble(a.score).CompareTo(_numOps.ToDouble(b.score)));
+        // Sort non-zero scores by importance (ascending, so smallest are first)
+        nonZeroScores.Sort((a, b) => _numOps.ToDouble(a.score).CompareTo(_numOps.ToDouble(b.score)));
 
-        // Create mask: prune the smallest numToPrune elements
         var keepIndices = new bool[importanceScores.Length];
         ArrayPolyfill.Fill(keepIndices, true);
 
-        for (int i = 0; i < numToPrune && i < flatScores.Count; i++)
+        // Mark already-zero weights as pruned (they stay pruned)
+        foreach (int idx in zeroScores)
         {
-            keepIndices[flatScores[i].idx] = false;
+            keepIndices[idx] = false;
+        }
+
+        // For iterative pruning: targetSparsity applies to REMAINING non-zero weights
+        // This allows users to prune "X% more" in each round
+        // Example: 25% sparsity in round 1, then 33% of remaining = ~50% total
+        int numToPruneFromNonZero = (int)Math.Round(nonZeroScores.Count * targetSparsity);
+
+        // Prune the smallest non-zero weights
+        for (int i = 0; i < numToPruneFromNonZero && i < nonZeroScores.Count; i++)
+        {
+            keepIndices[nonZeroScores[i].idx] = false;
+        }
+
+        // Special case: if ALL weights are zero, handle based on targetSparsity
+        if (nonZeroScores.Count == 0)
+        {
+            if (targetSparsity > 0)
+            {
+                // Honor the sparsity target by marking some as "pruned" (they're already zero anyway)
+                int numToPrune = (int)Math.Round(importanceScores.Length * targetSparsity);
+                // All weights are zero - just mark the first numToPrune as pruned
+                for (int i = 0; i < numToPrune && i < zeroScores.Count; i++)
+                {
+                    keepIndices[zeroScores[i]] = false;
+                }
+                // Reset the remaining to "kept" to achieve target sparsity
+                for (int i = numToPrune; i < zeroScores.Count; i++)
+                {
+                    keepIndices[zeroScores[i]] = true;
+                }
+            }
+            else
+            {
+                // targetSparsity == 0 means keep all weights (no pruning)
+                // Set all zero-score indices to kept so nothing remains pruned
+                foreach (int idx in zeroScores)
+                {
+                    keepIndices[idx] = true;
+                }
+            }
         }
 
         var mask = new PruningMask<T>(keepIndices);
