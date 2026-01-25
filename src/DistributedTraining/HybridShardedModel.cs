@@ -132,8 +132,8 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
             }
         }
 
-        // Clear the pending config after base constructor completes
-        PendingConfig.Value = null;
+        // PendingConfig is cleared in OnBeforeInitializeSharding after consumption
+        // (not here, because lazy init means OnBeforeInitializeSharding may not have run yet)
     }
 
     /// <summary>
@@ -158,6 +158,9 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     {
         // Read configuration from ThreadLocal (stored before base constructor call)
         var pending = PendingConfig.Value ?? (1, 1, -1);
+
+        // Clear the pending config now that we've consumed it
+        PendingConfig.Value = null;
         int requestedPipelineParallelSize = pending.pp;
         int requestedTensorParallelSize = pending.tp;
         int requestedDataParallelSize = pending.dp;

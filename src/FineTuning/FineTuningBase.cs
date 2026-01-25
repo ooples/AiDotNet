@@ -246,13 +246,19 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
             return double.NegativeInfinity;
         }
 
+        // Handle string/text outputs FIRST (before IEnumerable, since strings implement IEnumerable<char>)
+        if (prediction is string predStr && target is string targetStr)
+        {
+            return ComputeStringLogProbability(predStr, targetStr);
+        }
+
         // Handle array types (probability distributions, embeddings)
         if (prediction is Array predArray && target is Array targetArray)
         {
             return ComputeArrayLogProbability(predArray, targetArray);
         }
 
-        // Handle IEnumerable types
+        // Handle IEnumerable types (strings already handled above)
         if (prediction is System.Collections.IEnumerable predEnum && target is System.Collections.IEnumerable targetEnum)
         {
             var predList = predEnum.Cast<object>().ToArray();
@@ -269,12 +275,6 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
             double predVal = Convert.ToDouble(prediction);
             double targetVal = Convert.ToDouble(target);
             return ComputeScalarLogProbability(predVal, targetVal);
-        }
-
-        // Handle string/text outputs (sequence matching)
-        if (prediction is string predStr && target is string targetStr)
-        {
-            return ComputeStringLogProbability(predStr, targetStr);
         }
 
         // Default: exact match gives 0 (log(1)), mismatch gives large negative

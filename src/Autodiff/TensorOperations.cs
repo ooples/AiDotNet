@@ -1324,22 +1324,10 @@ public static class TensorOperations<T>
 
         // Set JIT compiler metadata
         node.OperationType = OperationType.ReduceSum;
-        // Set OperationParams with or without "Axes" key depending on whether axes is specified
-        if (axes != null)
-        {
-            node.OperationParams = new Dictionary<string, object>
-            {
-                { "Axes", axes },
-                { "KeepDims", keepDims }
-            };
-        }
-        else
-        {
-            node.OperationParams = new Dictionary<string, object>
-            {
-                { "KeepDims", keepDims }
-            };
-        }
+        // Set OperationParams - always include KeepDims, conditionally include Axes
+        node.OperationParams = axes != null
+            ? new Dictionary<string, object> { { "Axes", axes }, { "KeepDims", keepDims } }
+            : new Dictionary<string, object> { { "KeepDims", keepDims } };
 
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
