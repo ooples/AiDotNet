@@ -413,6 +413,18 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Divide(ComputationNode<T> a, ComputationNode<T> b)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Validate for division by zero
+        for (int i = 0; i < b.Value.Length; i++)
+        {
+            if (numOps.Equals(b.Value[i], numOps.Zero))
+            {
+                throw new ArgumentException(
+                    $"Division by zero detected at index {i}. The denominator tensor contains zero values.",
+                    nameof(b));
+            }
+        }
+
         var result = new Tensor<T>(a.Value.Shape);
         for (int i = 0; i < a.Value.Length; i++)
         {
@@ -597,6 +609,18 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Log(ComputationNode<T> a)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Validate for non-positive values (log is only defined for positive numbers)
+        for (int i = 0; i < a.Value.Length; i++)
+        {
+            if (numOps.LessThanOrEquals(a.Value[i], numOps.Zero))
+            {
+                throw new ArgumentException(
+                    $"Logarithm of non-positive value detected at index {i}. Log requires all positive values.",
+                    nameof(a));
+            }
+        }
+
         var result = a.Value.Transform((x, _) => numOps.Log(x));
         void BackwardFunction(Tensor<T> gradient)
         {
@@ -649,18 +673,39 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Sqrt(ComputationNode<T> a)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Validate for negative values (sqrt is only defined for non-negative numbers)
+        for (int i = 0; i < a.Value.Length; i++)
+        {
+            if (numOps.LessThan(a.Value[i], numOps.Zero))
+            {
+                throw new ArgumentException(
+                    $"Square root of negative value detected at index {i}. Sqrt requires all non-negative values.",
+                    nameof(a));
+            }
+        }
+
         var result = a.Value.Transform((x, _) => numOps.Sqrt(x));
         void BackwardFunction(Tensor<T> gradient)
         {
             if (a.RequiresGradient)
             {
                 // ∂(√a)/∂a = 1/(2√a) = 1/(2*result)
+                // Note: At x=0, derivative is technically infinite, but we use 0 to avoid numerical issues
                 var two = numOps.FromDouble(2.0);
                 var gradA = new Tensor<T>(gradient.Shape);
                 for (int i = 0; i < gradient.Length; i++)
                 {
-                    var twoTimesResult = numOps.Multiply(two, result[i]);
-                    gradA[i] = numOps.Divide(gradient[i], twoTimesResult);
+                    // Handle edge case where result is zero (derivative would be infinite)
+                    if (numOps.Equals(result[i], numOps.Zero))
+                    {
+                        gradA[i] = numOps.Zero; // Use zero instead of infinity
+                    }
+                    else
+                    {
+                        var twoTimesResult = numOps.Multiply(two, result[i]);
+                        gradA[i] = numOps.Divide(gradient[i], twoTimesResult);
+                    }
                 }
                 var existingGrad = a.Gradient;
                 a.Gradient = existingGrad == null ? gradA : existingGrad.Add(gradA);
@@ -1279,11 +1324,22 @@ public static class TensorOperations<T>
 
         // Set JIT compiler metadata
         node.OperationType = OperationType.ReduceSum;
-        node.OperationParams = new Dictionary<string, object>
+        // Only set OperationParams if axes is not null to avoid null reference issues
+        if (axes != null)
         {
-            { "Axes", axes! },
-            { "KeepDims", keepDims }
-        };
+            node.OperationParams = new Dictionary<string, object>
+            {
+                { "Axes", axes },
+                { "KeepDims", keepDims }
+            };
+        }
+        else
+        {
+            node.OperationParams = new Dictionary<string, object>
+            {
+                { "KeepDims", keepDims }
+            };
+        }
 
         var tape = GradientTape<T>.Current;
         if (tape != null && tape.IsRecording)
