@@ -718,7 +718,9 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> baseDirection = NormalizeRows(baseWeights);
 
         // Get LoRA weight contribution
-        Matrix<T> loraWeights = _loraLayer.MergeWeights();
+        // MergeWeights() returns [inputSize, outputSize], but we need [outputSize, inputSize]
+        // to match base weight dimensions, so we transpose it (same as in Forward method)
+        Matrix<T> loraWeights = _loraLayer.MergeWeights().Transpose();
 
         // Add LoRA to direction and normalize
         Matrix<T> adaptedDirection = new Matrix<T>(outputSize, inputSize);

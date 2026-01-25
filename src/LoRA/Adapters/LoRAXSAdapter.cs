@@ -853,6 +853,30 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
+    /// Overrides base class parameter packing to prevent buffer overrun during base constructor.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The base class constructor calls UpdateParametersFromLayers() which tries to pack
+    /// _loraLayer.GetParameters() (size 2*d*r). However, LoRAXSAdapter's ParameterCount
+    /// returns Rank*Rank (much smaller) before _trainableR is initialized.
+    /// This override guards against that early call and delegates to UpdateParametersFromR
+    /// once the R matrix is ready.
+    /// </para>
+    /// </remarks>
+    protected override void UpdateParametersFromLayers()
+    {
+        // Guard against being called from base constructor before _trainableR is initialized
+        if (_trainableR == null)
+        {
+            return;
+        }
+
+        // LoRA-XS only stores R matrix parameters, not the underlying _loraLayer
+        UpdateParametersFromR();
+    }
+
+    /// <summary>
     /// Updates the R matrix from the parameter vector.
     /// </summary>
     private void UpdateRFromParameters()
