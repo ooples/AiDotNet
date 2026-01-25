@@ -48,6 +48,15 @@ public class TelemetryConfig
     public bool TrackLatency { get; set; } = true;
 
     /// <summary>
+    /// Alias for TrackLatency for more intuitive access.
+    /// </summary>
+    public bool CollectLatency
+    {
+        get => TrackLatency;
+        set => TrackLatency = value;
+    }
+
+    /// <summary>
     /// Gets or sets whether to track throughput metrics (default: true).
     /// </summary>
     /// <remarks>
@@ -66,6 +75,15 @@ public class TelemetryConfig
     /// </para>
     /// </remarks>
     public bool TrackErrors { get; set; } = true;
+
+    /// <summary>
+    /// Alias for TrackErrors for more intuitive access.
+    /// </summary>
+    public bool CollectErrors
+    {
+        get => TrackErrors;
+        set => TrackErrors = value;
+    }
 
     /// <summary>
     /// Gets or sets whether to track cache hit/miss rates (default: true).

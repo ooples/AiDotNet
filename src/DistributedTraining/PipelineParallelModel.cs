@@ -73,8 +73,8 @@ namespace AiDotNet.DistributedTraining;
 public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private readonly int _microBatchSize;
-    private readonly int _stageId;
-    private readonly int _numStages;
+    private int _stageId;
+    private int _numStages;
 
     /// <summary>
     /// Creates a new Pipeline Parallel model.
@@ -89,8 +89,16 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         : base(wrappedModel, config)
     {
         _microBatchSize = microBatchSize;
-        _stageId = Rank;
-        _numStages = WorldSize;
+        // Note: _stageId and _numStages are set in InitializeSharding which is called by base constructor
+    }
+
+    /// <summary>
+    /// Called before InitializeSharding to set up derived class state.
+    /// </summary>
+    protected override void OnBeforeInitializeSharding()
+    {
+        _stageId = Config.CommunicationBackend.Rank;
+        _numStages = Config.CommunicationBackend.WorldSize;
     }
 
     /// <summary>

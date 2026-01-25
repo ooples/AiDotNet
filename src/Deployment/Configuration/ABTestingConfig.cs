@@ -50,6 +50,17 @@ public class ABTestingConfig
     public bool Enabled { get; set; } = false;
 
     /// <summary>
+    /// Gets or sets the default traffic split percentage for new test versions (default: 0.5).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When adding a new version to test, this is the default
+    /// percentage of traffic it will receive. 0.5 means 50% of traffic goes to new version.
+    /// Adjust based on your risk tolerance for new deployments.
+    /// </para>
+    /// </remarks>
+    public double DefaultTrafficSplit { get; set; } = 0.5;
+
+    /// <summary>
     /// Gets or sets the traffic split configuration.
     /// </summary>
     /// <remarks>
@@ -59,6 +70,16 @@ public class ABTestingConfig
     /// </para>
     /// </remarks>
     public Dictionary<string, double> TrafficSplit { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets the list of defined A/B tests.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Contains the list of configured A/B tests.
+    /// Each test defines which model versions to compare and their traffic allocation.
+    /// </para>
+    /// </remarks>
+    public List<ABTest> Tests { get; set; } = new();
 
     /// <summary>
     /// Gets or sets the strategy for assigning users to versions (default: Random).
