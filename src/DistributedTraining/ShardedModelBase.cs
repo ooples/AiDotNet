@@ -128,13 +128,15 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
             Config.CommunicationBackend.Initialize();
         }
 
-        // Initialize sharding
+        // Initialize sharding state (actual sharding deferred to derived class)
+        // NOTE: Derived classes MUST call InitializeSharding() at the END of their constructors
+        // after setting any fields used by their InitializeSharding() override.
+        // This is necessary because C# doesn't allow derived class fields to be set
+        // before the base class constructor runs.
         LocalShard = new Vector<T>(Array.Empty<T>());
         ShardStartIndex = 0;
         ShardSize = 0;
         CachedFullParameters = null;
-
-        InitializeSharding();
     }
 
     /// <summary>

@@ -83,6 +83,8 @@ public class ZeRO2Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     public ZeRO2Model(IFullModel<T, TInput, TOutput> wrappedModel, IShardingConfiguration<T> config)
         : base(wrappedModel, config)
     {
+        // Must call InitializeSharding() after base constructor to ensure proper initialization
+        InitializeSharding();
     }
 
     protected override void InitializeSharding()

@@ -57,6 +57,13 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     {
         CommunicationBackend = communicationBackend ??
             throw new ArgumentNullException(nameof(communicationBackend));
+
+        if (learningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate),
+                "Learning rate must be greater than zero.");
+        }
+
         var ops = MathHelper.GetNumericOperations<T>();
         LearningRate = ops.FromDouble(learningRate);
     }

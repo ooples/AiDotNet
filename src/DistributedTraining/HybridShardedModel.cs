@@ -102,6 +102,18 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         int dataParallelSize = -1)
         : base(wrappedModel, config)
     {
+        if (pipelineParallelSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pipelineParallelSize),
+                "Pipeline parallel size must be at least 1.");
+        }
+
+        if (tensorParallelSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(tensorParallelSize),
+                "Tensor parallel size must be at least 1.");
+        }
+
         _pipelineParallelSize = pipelineParallelSize;
         _tensorParallelSize = tensorParallelSize;
 
@@ -137,6 +149,9 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         int withinStage = Rank % tensorGroupSize;
         _tensorRank = withinStage / _dataParallelSize;
         _dataRank = withinStage % _dataParallelSize;
+
+        // Must call InitializeSharding() after setting all parallel dimension fields
+        InitializeSharding();
     }
 
     /// <summary>
@@ -238,7 +253,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
             SynchronizeGradients();
 
             // Apply the synchronized gradients to update parameters
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
 
             // Get updated parameters
             var updatedParams = WrappedModel.GetParameters();
@@ -249,7 +264,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         else
         {
             // Without gradient synchronization, apply gradients locally
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
             var updatedParams = WrappedModel.GetParameters();
 
             // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)

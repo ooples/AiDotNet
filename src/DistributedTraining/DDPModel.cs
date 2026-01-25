@@ -85,6 +85,8 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
     public DDPModel(IFullModel<T, TInput, TOutput> wrappedModel, IShardingConfiguration<T> config)
         : base(wrappedModel, config)
     {
+        // Must call InitializeSharding() after base constructor to ensure proper initialization
+        InitializeSharding();
     }
 
     /// <summary>
@@ -160,9 +162,8 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
             SynchronizeGradients();
 
             // Apply the averaged gradients to update parameters
-            // Note: We use a fixed learning rate here. For adaptive optimizers,
-            // use DDPOptimizer which properly handles optimizer state.
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            // Note: For adaptive optimizers, use DDPOptimizer which properly handles optimizer state.
+            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
 
             // Get updated parameters back to LocalShard
             LocalShard = WrappedModel.GetParameters();
@@ -174,7 +175,7 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
         {
             // Without gradient synchronization, apply gradients locally
             // This is equivalent to non-distributed training
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
             LocalShard = WrappedModel.GetParameters();
         }
     }

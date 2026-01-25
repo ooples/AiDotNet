@@ -88,9 +88,18 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         int microBatchSize = 1)
         : base(wrappedModel, config)
     {
+        if (microBatchSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(microBatchSize),
+                "Micro batch size must be at least 1.");
+        }
+
         _microBatchSize = microBatchSize;
         _stageId = Rank;
         _numStages = WorldSize;
+
+        // Must call InitializeSharding() after setting _numStages and _stageId
+        InitializeSharding();
     }
 
     /// <summary>
@@ -188,12 +197,11 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             Config.CommunicationBackend.Send(gradientVector, _stageId - 1, tag: 1);
         }
 
-        // Apply accumulated gradients to parameters using a fixed learning rate
+        // Apply accumulated gradients to parameters using the configured learning rate
         // In pipeline parallelism, we use a simple SGD-style update: θ = θ - lr * gradients
         // For more sophisticated optimization, wrap this model with a gradient-based optimizer
         WrappedModel.SetParameters(parametersBefore);
-        var learningRate = NumOps.FromDouble(0.01); // Default learning rate for pipeline stages
-        WrappedModel.ApplyGradients(gradientVector, learningRate);
+        WrappedModel.ApplyGradients(gradientVector, Config.LearningRate);
 
         // Extract this stage's parameter shard
         var updatedParams = WrappedModel.GetParameters();
