@@ -134,7 +134,23 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
         ShardSize = 0;
         CachedFullParameters = null;
 
+        // Allow derived classes to set up state before sharding
+        OnBeforeInitializeSharding();
         InitializeSharding();
+    }
+
+    /// <summary>
+    /// Called before InitializeSharding to allow derived classes to set up state.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Override this method in derived classes to initialize fields that are needed
+    /// by InitializeSharding but cannot be set before the base constructor call.
+    /// </para>
+    /// </remarks>
+    protected virtual void OnBeforeInitializeSharding()
+    {
+        // Default implementation does nothing
     }
 
     /// <summary>

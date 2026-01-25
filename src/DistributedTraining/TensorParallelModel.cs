@@ -83,8 +83,8 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="TOutput">The output type for the model</typeparam>
 public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
-    private readonly int _tensorParallelSize;
-    private readonly List<int> _tensorParallelGroup;
+    private int _tensorParallelSize;
+    private List<int> _tensorParallelGroup = new();
 
     /// <summary>
     /// Creates a new Tensor Parallel model.
@@ -96,11 +96,20 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         IShardingConfiguration<T> config)
         : base(wrappedModel, config)
     {
-        _tensorParallelSize = WorldSize;
+        // Note: _tensorParallelSize and _tensorParallelGroup are set in OnBeforeInitializeSharding
+        // which is called by the base constructor before this body runs.
+    }
+
+    /// <summary>
+    /// Called before InitializeSharding to set up derived class state.
+    /// </summary>
+    protected override void OnBeforeInitializeSharding()
+    {
+        _tensorParallelSize = Config.CommunicationBackend.WorldSize;
 
         // Build tensor-parallel group (all ranks in this world are in the same TP group)
         _tensorParallelGroup = new List<int>();
-        for (int i = 0; i < WorldSize; i++)
+        for (int i = 0; i < _tensorParallelSize; i++)
         {
             _tensorParallelGroup.Add(i);
         }
