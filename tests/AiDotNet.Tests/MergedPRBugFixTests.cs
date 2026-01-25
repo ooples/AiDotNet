@@ -1205,4 +1205,196 @@ public class MergedPRBugFixTests
     }
 
     #endregion
+
+    #region LanguageModels PR #771 - Production Bug Fixes
+
+    [Fact]
+    public void OpenAIChatModel_NullModelName_ThrowsArgumentNullException()
+    {
+        // ARRANGE: The old code would throw NullReferenceException in GetMaxContextTokens
+        // when modelName.ToLowerInvariant() was called on a null modelName
+        // Now it throws a clear ArgumentNullException
+
+        // ACT & ASSERT
+        Assert.Throws<ArgumentNullException>(() =>
+            new AiDotNet.LanguageModels.OpenAIChatModel<double>(
+                apiKey: "test-api-key",
+                modelName: null!));
+    }
+
+    [Fact]
+    public void OpenAIChatModel_EmptyModelName_ThrowsArgumentException()
+    {
+        // ARRANGE: The old code would silently use default context tokens for empty model names
+        // Now it validates that model name is not empty or whitespace
+
+        // ACT & ASSERT
+        Assert.Throws<ArgumentException>(() =>
+            new AiDotNet.LanguageModels.OpenAIChatModel<double>(
+                apiKey: "test-api-key",
+                modelName: ""));
+
+        Assert.Throws<ArgumentException>(() =>
+            new AiDotNet.LanguageModels.OpenAIChatModel<double>(
+                apiKey: "test-api-key",
+                modelName: "   "));
+    }
+
+    [Fact]
+    public void OpenAIChatModel_InvalidMaxTokens_ThrowsArgumentException()
+    {
+        // ARRANGE: The old code let maxTokens <= 0 through to base class
+        // which threw confusing "Maximum generation tokens must be positive" error
+        // Now throws clear "Max tokens must be positive" early
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentException>(() =>
+            new AiDotNet.LanguageModels.OpenAIChatModel<double>(
+                apiKey: "test-api-key",
+                maxTokens: 0));
+        Assert.Contains("Max tokens", ex.Message);
+
+        var ex2 = Assert.Throws<ArgumentException>(() =>
+            new AiDotNet.LanguageModels.OpenAIChatModel<double>(
+                apiKey: "test-api-key",
+                maxTokens: -100));
+        Assert.Contains("Max tokens", ex2.Message);
+    }
+
+    [Fact]
+    public void AnthropicChatModel_NullModelName_ThrowsArgumentNullException()
+    {
+        // ARRANGE: Same issue as OpenAIChatModel - null modelName caused NullReferenceException
+
+        // ACT & ASSERT
+        Assert.Throws<ArgumentNullException>(() =>
+            new AiDotNet.LanguageModels.AnthropicChatModel<double>(
+                apiKey: "test-api-key",
+                modelName: null!));
+    }
+
+    [Fact]
+    public void AnthropicChatModel_EmptyModelName_ThrowsArgumentException()
+    {
+        // ARRANGE: Empty model name should be validated
+
+        // ACT & ASSERT
+        Assert.Throws<ArgumentException>(() =>
+            new AiDotNet.LanguageModels.AnthropicChatModel<double>(
+                apiKey: "test-api-key",
+                modelName: ""));
+
+        Assert.Throws<ArgumentException>(() =>
+            new AiDotNet.LanguageModels.AnthropicChatModel<double>(
+                apiKey: "test-api-key",
+                modelName: "   "));
+    }
+
+    [Fact]
+    public void AzureOpenAIChatModel_NullApiVersion_ThrowsArgumentException()
+    {
+        // ARRANGE: The old code didn't validate apiVersion, causing invalid URL
+        // like "?api-version=null" to be constructed
+
+        // ACT & ASSERT
+        Assert.Throws<ArgumentException>(() =>
+            new AiDotNet.LanguageModels.AzureOpenAIChatModel<double>(
+                endpoint: "https://test.openai.azure.com",
+                apiKey: "test-api-key",
+                deploymentName: "gpt-4",
+                apiVersion: null!));
+    }
+
+    [Fact]
+    public void AzureOpenAIChatModel_EmptyApiVersion_ThrowsArgumentException()
+    {
+        // ARRANGE: Empty apiVersion should also be rejected
+
+        // ACT & ASSERT
+        Assert.Throws<ArgumentException>(() =>
+            new AiDotNet.LanguageModels.AzureOpenAIChatModel<double>(
+                endpoint: "https://test.openai.azure.com",
+                apiKey: "test-api-key",
+                deploymentName: "gpt-4",
+                apiVersion: ""));
+
+        Assert.Throws<ArgumentException>(() =>
+            new AiDotNet.LanguageModels.AzureOpenAIChatModel<double>(
+                endpoint: "https://test.openai.azure.com",
+                apiKey: "test-api-key",
+                deploymentName: "gpt-4",
+                apiVersion: "   "));
+    }
+
+    [Fact]
+    public void AzureOpenAIChatModel_InvalidMaxTokens_ThrowsArgumentException()
+    {
+        // ARRANGE: Same issue as OpenAIChatModel - maxTokens <= 0 should be caught early
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentException>(() =>
+            new AiDotNet.LanguageModels.AzureOpenAIChatModel<double>(
+                endpoint: "https://test.openai.azure.com",
+                apiKey: "test-api-key",
+                deploymentName: "gpt-4",
+                maxTokens: 0));
+        Assert.Contains("Max tokens", ex.Message);
+    }
+
+    [Fact]
+    public void OpenAIChatModel_ValidParameters_CreatesInstance()
+    {
+        // ARRANGE: Verify valid parameters work correctly
+
+        // ACT
+        var model = new AiDotNet.LanguageModels.OpenAIChatModel<double>(
+            apiKey: "test-api-key",
+            modelName: "gpt-4",
+            temperature: 0.7,
+            maxTokens: 1024);
+
+        // ASSERT
+        Assert.NotNull(model);
+        Assert.Equal("gpt-4", model.ModelName);
+        Assert.Equal(1024, model.MaxGenerationTokens);
+    }
+
+    [Fact]
+    public void AnthropicChatModel_ValidParameters_CreatesInstance()
+    {
+        // ARRANGE: Verify valid parameters work correctly
+
+        // ACT
+        var model = new AiDotNet.LanguageModels.AnthropicChatModel<double>(
+            apiKey: "test-api-key",
+            modelName: "claude-3-sonnet-20240229",
+            temperature: 0.5,
+            maxTokens: 2048);
+
+        // ASSERT
+        Assert.NotNull(model);
+        Assert.Equal("claude-3-sonnet-20240229", model.ModelName);
+        Assert.Equal(2048, model.MaxGenerationTokens);
+    }
+
+    [Fact]
+    public void AzureOpenAIChatModel_ValidParameters_CreatesInstance()
+    {
+        // ARRANGE: Verify valid parameters work correctly
+
+        // ACT
+        var model = new AiDotNet.LanguageModels.AzureOpenAIChatModel<double>(
+            endpoint: "https://test.openai.azure.com",
+            apiKey: "test-api-key",
+            deploymentName: "gpt-4-deployment",
+            apiVersion: "2024-02-15-preview",
+            maxTokens: 4096);
+
+        // ASSERT
+        Assert.NotNull(model);
+        Assert.Equal("azure-gpt-4-deployment", model.ModelName);
+        Assert.Equal(4096, model.MaxGenerationTokens);
+    }
+
+    #endregion
 }

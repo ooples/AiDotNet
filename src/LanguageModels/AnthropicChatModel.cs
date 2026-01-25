@@ -119,9 +119,14 @@ public class AnthropicChatModel<T> : ChatModelBase<T>
         int topK = 0,
         HttpClient? httpClient = null,
         string? endpoint = null)
-        : base(httpClient, GetMaxContextTokens(modelName), maxTokens)
+        : base(httpClient, GetMaxContextTokens(modelName ?? throw new ArgumentNullException(nameof(modelName), "Model name cannot be null.")), maxTokens)
     {
         ValidateApiKey(apiKey);
+
+        if (string.IsNullOrWhiteSpace(modelName))
+        {
+            throw new ArgumentException("Model name cannot be empty or whitespace.", nameof(modelName));
+        }
 
         if (temperature < 0 || temperature > 1)
         {

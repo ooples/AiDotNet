@@ -126,7 +126,7 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
         double presencePenalty = 0.0,
         int maxContextTokens = 8192,
         HttpClient? httpClient = null)
-        : base(httpClient, maxContextTokens, maxTokens)
+        : base(httpClient, maxContextTokens, ValidateMaxTokens(maxTokens))
     {
         if (string.IsNullOrWhiteSpace(endpoint))
         {
@@ -138,6 +138,11 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
         if (string.IsNullOrWhiteSpace(deploymentName))
         {
             throw new ArgumentException("Deployment name cannot be null or empty.", nameof(deploymentName));
+        }
+
+        if (string.IsNullOrWhiteSpace(apiVersion))
+        {
+            throw new ArgumentException("API version cannot be null or empty.", nameof(apiVersion));
         }
 
         if (temperature < 0 || temperature > 2)
@@ -243,6 +248,21 @@ public class AzureOpenAIChatModel<T> : ChatModelBase<T>
         }
 
         return choice.Message.Content;
+    }
+
+    /// <summary>
+    /// Validates and returns the maxTokens value.
+    /// </summary>
+    /// <param name="maxTokens">The maximum tokens value to validate.</param>
+    /// <returns>The validated maxTokens value.</returns>
+    /// <exception cref="ArgumentException">Thrown when maxTokens is not positive.</exception>
+    private static int ValidateMaxTokens(int maxTokens)
+    {
+        if (maxTokens <= 0)
+        {
+            throw new ArgumentException("Max tokens must be positive.", nameof(maxTokens));
+        }
+        return maxTokens;
     }
 
     #region Azure OpenAI API Models
