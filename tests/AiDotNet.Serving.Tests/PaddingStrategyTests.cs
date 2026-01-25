@@ -190,4 +190,134 @@ public class PaddingStrategyTests
         Assert.Throws<ArgumentException>(() => bucketStrategy.PadBatch(emptyVectors, out _));
         Assert.Throws<ArgumentException>(() => fixedStrategy.PadBatch(emptyVectors, out _));
     }
+
+    #region PR #758 Bug Fix Tests - Parameter Validation
+
+    [Fact]
+    public void FixedSizePaddingStrategy_Constructor_ThrowsOnNonPositiveFixedLength()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new FixedSizePaddingStrategy(fixedLength: 0));
+        Assert.Throws<ArgumentException>(() =>
+            new FixedSizePaddingStrategy(fixedLength: -1));
+    }
+
+    [Fact]
+    public void BucketPaddingStrategy_Constructor_ThrowsOnNullOrEmptyBucketSizes()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new BucketPaddingStrategy(null!));
+        Assert.Throws<ArgumentException>(() =>
+            new BucketPaddingStrategy(Array.Empty<int>()));
+    }
+
+    [Fact]
+    public void MinimalPaddingStrategy_PadBatch_ThrowsOnNullVectorInArray()
+    {
+        // Arrange
+        var strategy = new MinimalPaddingStrategy();
+        var vectors = new Vector<double>[]
+        {
+            new Vector<double>(new double[] { 1, 2, 3 }),
+            null!,
+            new Vector<double>(new double[] { 4, 5 })
+        };
+
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentException>(() => strategy.PadBatch(vectors, out _));
+        Assert.Contains("index 1", ex.Message);
+    }
+
+    [Fact]
+    public void BucketPaddingStrategy_PadBatch_ThrowsOnNullVectorInArray()
+    {
+        // Arrange
+        var strategy = new BucketPaddingStrategy(new[] { 8, 16, 32 });
+        var vectors = new Vector<double>[]
+        {
+            new Vector<double>(new double[] { 1, 2, 3 }),
+            null!,
+            new Vector<double>(new double[] { 4, 5 })
+        };
+
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentException>(() => strategy.PadBatch(vectors, out _));
+        Assert.Contains("index 1", ex.Message);
+    }
+
+    [Fact]
+    public void FixedSizePaddingStrategy_PadBatch_ThrowsOnNullVectorInArray()
+    {
+        // Arrange
+        var strategy = new FixedSizePaddingStrategy(fixedLength: 10);
+        var vectors = new Vector<double>[]
+        {
+            new Vector<double>(new double[] { 1, 2, 3 }),
+            null!,
+            new Vector<double>(new double[] { 4, 5 })
+        };
+
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentException>(() => strategy.PadBatch(vectors, out _));
+        Assert.Contains("index 1", ex.Message);
+    }
+
+    [Fact]
+    public void MinimalPaddingStrategy_UnpadBatch_ThrowsOnNegativeOriginalLength()
+    {
+        // Arrange
+        var strategy = new MinimalPaddingStrategy();
+        var vectors = new[]
+        {
+            new Vector<double>(new double[] { 1, 2, 3 }),
+            new Vector<double>(new double[] { 4, 5 })
+        };
+        var paddedMatrix = strategy.PadBatch(vectors, out _);
+        var originalLengths = new[] { 3, -1 };
+
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentException>(() => strategy.UnpadBatch(paddedMatrix, originalLengths));
+        Assert.Contains("index 1", ex.Message);
+        Assert.Contains("-1", ex.Message);
+    }
+
+    [Fact]
+    public void BucketPaddingStrategy_UnpadBatch_ThrowsOnNegativeOriginalLength()
+    {
+        // Arrange
+        var strategy = new BucketPaddingStrategy(new[] { 8, 16, 32 });
+        var vectors = new[]
+        {
+            new Vector<double>(new double[] { 1, 2, 3 }),
+            new Vector<double>(new double[] { 4, 5 })
+        };
+        var paddedMatrix = strategy.PadBatch(vectors, out _);
+        var originalLengths = new[] { 3, -5 };
+
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentException>(() => strategy.UnpadBatch(paddedMatrix, originalLengths));
+        Assert.Contains("index 1", ex.Message);
+        Assert.Contains("-5", ex.Message);
+    }
+
+    [Fact]
+    public void FixedSizePaddingStrategy_UnpadBatch_ThrowsOnNegativeOriginalLength()
+    {
+        // Arrange
+        var strategy = new FixedSizePaddingStrategy(fixedLength: 10);
+        var vectors = new[]
+        {
+            new Vector<double>(new double[] { 1, 2, 3 }),
+            new Vector<double>(new double[] { 4, 5 })
+        };
+        var paddedMatrix = strategy.PadBatch(vectors, out _);
+        var originalLengths = new[] { -2, 2 };
+
+        // Act & Assert
+        var ex = Assert.Throws<ArgumentException>(() => strategy.UnpadBatch(paddedMatrix, originalLengths));
+        Assert.Contains("index 0", ex.Message);
+        Assert.Contains("-2", ex.Message);
+    }
+
+    #endregion
 }

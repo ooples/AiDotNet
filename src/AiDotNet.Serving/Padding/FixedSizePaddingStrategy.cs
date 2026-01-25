@@ -32,6 +32,13 @@ public class FixedSizePaddingStrategy : IPaddingStrategy
         if (vectors == null || vectors.Length == 0)
             throw new ArgumentException("Vectors array cannot be null or empty", nameof(vectors));
 
+        // Validate no null vectors
+        for (int i = 0; i < vectors.Length; i++)
+        {
+            if (vectors[i] == null)
+                throw new ArgumentException($"Vector at index {i} cannot be null.", nameof(vectors));
+        }
+
         var batchSize = vectors.Length;
 
         // Validate that no vector exceeds fixed length
@@ -77,6 +84,13 @@ public class FixedSizePaddingStrategy : IPaddingStrategy
             throw new ArgumentNullException(nameof(originalLengths));
         if (paddedMatrix.Rows != originalLengths.Length)
             throw new ArgumentException("Number of rows must match number of original lengths");
+
+        // Validate original lengths are non-negative
+        for (int i = 0; i < originalLengths.Length; i++)
+        {
+            if (originalLengths[i] < 0)
+                throw new ArgumentException($"Original length at index {i} cannot be negative, but was {originalLengths[i]}.", nameof(originalLengths));
+        }
 
         var result = new Vector<T>[paddedMatrix.Rows];
 

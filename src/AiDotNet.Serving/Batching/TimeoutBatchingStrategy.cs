@@ -13,8 +13,14 @@ public class TimeoutBatchingStrategy : IBatchingStrategy
     /// </summary>
     /// <param name="timeoutMs">Maximum time to wait before processing a batch</param>
     /// <param name="maxBatchSize">Maximum batch size</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if timeoutMs is negative or maxBatchSize is less than 1.</exception>
     public TimeoutBatchingStrategy(int timeoutMs, int maxBatchSize)
     {
+        if (timeoutMs < 0)
+            throw new ArgumentOutOfRangeException(nameof(timeoutMs), "Timeout cannot be negative.");
+        if (maxBatchSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxBatchSize), "Max batch size must be at least 1.");
+
         _timeoutMs = timeoutMs;
         _maxBatchSize = maxBatchSize;
     }
@@ -28,7 +34,7 @@ public class TimeoutBatchingStrategy : IBatchingStrategy
 
     public int GetOptimalBatchSize(int queuedRequests, double averageLatencyMs)
     {
-        return _maxBatchSize > 0 ? Math.Min(queuedRequests, _maxBatchSize) : queuedRequests;
+        return Math.Min(queuedRequests, _maxBatchSize);
     }
 
     public void UpdatePerformanceFeedback(int batchSize, double latencyMs)
