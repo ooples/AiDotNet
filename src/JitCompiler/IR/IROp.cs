@@ -140,6 +140,43 @@ public abstract class IROp
     public int[] OutputShape { get; set; } = Array.Empty<int>();
 
     /// <summary>
+    /// Gets the shapes of all output tensors, indexed by position in OutputIds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For multi-output operations (e.g., split, gradient ops), each output may have
+    /// a different shape. This property returns an array where OutputShapes[i]
+    /// corresponds to OutputIds[i].
+    /// </para>
+    /// <para>
+    /// If not explicitly set, defaults to using OutputShape for all outputs
+    /// (backward compatibility for single-output operations).
+    /// </para>
+    /// <para><b>For Beginners:</b> When an operation produces multiple outputs,
+    /// each output can have its own shape. For example, a "split" operation that
+    /// splits a [6, 4] tensor into two parts might produce:
+    /// - OutputIds = [1, 2]
+    /// - OutputShapes = [[3, 4], [3, 4]] (each half)
+    /// </para>
+    /// </remarks>
+    public virtual int[][] OutputShapes
+    {
+        get
+        {
+            // Default: use OutputShape for all outputs (backward compatibility)
+            var count = OutputIds.Length;
+            if (count == 0) return Array.Empty<int[]>();
+
+            var shapes = new int[count][];
+            for (int i = 0; i < count; i++)
+            {
+                shapes[i] = OutputShape;
+            }
+            return shapes;
+        }
+    }
+
+    /// <summary>
     /// Gets the operation type name for debugging and visualization.
     /// </summary>
     /// <remarks>

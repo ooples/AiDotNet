@@ -163,14 +163,17 @@ public class IRGraph
             }
 
             // Mark ALL outputs as produced (support multi-output operations like gradient ops)
-            foreach (var outputId in op.OutputIds)
+            // Use per-output shapes from OutputShapes array for proper multi-output support
+            var outputShapes = op.OutputShapes;
+            for (int i = 0; i < op.OutputIds.Length; i++)
             {
+                var outputId = op.OutputIds[i];
                 producedTensors.Add(outputId);
 
-                // Ensure output shape is defined for each output
+                // Ensure output shape is defined for each output using per-output shape
                 if (!TensorShapes.ContainsKey(outputId))
                 {
-                    TensorShapes[outputId] = op.OutputShape;
+                    TensorShapes[outputId] = i < outputShapes.Length ? outputShapes[i] : op.OutputShape;
                 }
             }
         }
@@ -244,7 +247,7 @@ public class IRGraph
             // Hash ALL output IDs (support multi-output operations)
             foreach (var outputId in op.OutputIds)
             {
-                hash = hash * 31 + outputId.GetHashCode();
+                hash = hash * 31 + outputId;
             }
 
             hash = hash * 31 + op.OutputType.GetHashCode();
@@ -252,7 +255,7 @@ public class IRGraph
 
             foreach (var inputId in op.InputIds)
             {
-                hash = hash * 31 + inputId.GetHashCode();
+                hash = hash * 31 + inputId;
             }
         }
 

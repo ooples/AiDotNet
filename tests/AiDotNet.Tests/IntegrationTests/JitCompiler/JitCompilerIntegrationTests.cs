@@ -1083,7 +1083,7 @@ public class JitCompilerIntegrationTests
         };
         graph.Operations.Add(multiOutputOp);
 
-        graph.Validate();
+        Assert.True(graph.Validate(), "Graph should validate successfully");
 
         // Both output shapes should be populated
         Assert.True(graph.TensorShapes.ContainsKey(1), "First output shape should be tracked");
@@ -1634,30 +1634,28 @@ public class JitCompilerIntegrationTests
     #region Thread Safety Tests (Production Readiness)
 
     /// <summary>
-    /// Tests that CodeGenerator can compile graphs concurrently without race conditions.
+    /// Tests that multiple IRGraph instances can be validated concurrently without race conditions.
     /// Important for production use in multi-threaded server environments.
     /// </summary>
     [Fact]
-    public void CodeGenerator_ConcurrentCompilation_NoRaceConditions()
+    public void IRGraph_ConcurrentValidationOfMultipleGraphs_NoRaceConditions()
     {
-        var codeGenerator = new CodeGenerator();
         var errors = new ConcurrentBag<Exception>();
-        var compiledCount = 0;
+        var validatedCount = 0;
 
-        // Create multiple graphs to compile concurrently
+        // Create multiple graphs to validate concurrently
         var graphs = Enumerable.Range(0, 10).Select(_ => CreateSimpleGraph()).ToList();
 
-        // Compile graphs concurrently
+        // Validate graphs concurrently
         Parallel.ForEach(graphs, graph =>
         {
             try
             {
-                // Note: CodeGenerator.Generate<T> should be thread-safe
-                // This test verifies that by running multiple compilations concurrently
+                // Validate each graph concurrently to verify thread safety
                 var isValid = graph.Validate();
                 if (isValid)
                 {
-                    Interlocked.Increment(ref compiledCount);
+                    Interlocked.Increment(ref validatedCount);
                 }
             }
             catch (Exception ex)
@@ -1667,7 +1665,7 @@ public class JitCompilerIntegrationTests
         });
 
         Assert.Empty(errors);
-        Assert.Equal(10, compiledCount);
+        Assert.Equal(10, validatedCount);
     }
 
     /// <summary>
@@ -1970,11 +1968,9 @@ public class JitCompilerIntegrationTests
         var optimizer = new SIMDOptimizer(enableSIMD: true);
 
         // IsEnabled should reflect hardware capabilities
-        // On modern x86/ARM processors, this should be true
         var isEnabled = optimizer.IsEnabled;
-
-        // Just verify the property doesn't throw
-        Assert.True(isEnabled || !isEnabled);
+        // Property access succeeded without throwing - that's the test
+        _ = isEnabled; // Suppress unused variable warning
     }
 
     [Fact]
