@@ -30,8 +30,14 @@ public static class IRTypeExtensions
     /// <summary>
     /// Gets the IRType for a given System.Type.
     /// </summary>
+    /// <param name="type">The System.Type to convert.</param>
+    /// <returns>The corresponding IRType.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when type is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown when the type is not supported in IR.</exception>
     public static IRType FromSystemType(Type type)
     {
+        if (type == null) throw new ArgumentNullException(nameof(type));
+
         return type switch
         {
             Type t when t == typeof(float) => IRType.Float32,

@@ -165,10 +165,11 @@ public class IRGraph
             // Mark output as produced
             producedTensors.Add(op.OutputId);
 
-            // Ensure output shape is defined
-            if (!TensorShapes.ContainsKey(op.OutputId))
+            // Verify output shape is defined (but don't modify TensorShapes - Validate should be read-only)
+            if (!TensorShapes.ContainsKey(op.OutputId) && (op.OutputShape == null || op.OutputShape.Length == 0))
             {
-                TensorShapes[op.OutputId] = op.OutputShape;
+                // Missing shape information and no output shape defined on operation
+                return false;
             }
         }
 

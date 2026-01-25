@@ -4,6 +4,7 @@ using AiDotNet.Diagnostics;
 using AiDotNet.Enums;
 using AiDotNet.Evaluation;
 using AiDotNet.Interfaces;
+using AiDotNet.JitCompiler.IR;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Metrics;
 using AiDotNet.ModelRegistry;
@@ -1394,6 +1395,143 @@ public class MergedPRBugFixTests
         Assert.NotNull(model);
         Assert.Equal("azure-gpt-4-deployment", model.ModelName);
         Assert.Equal(4096, model.MaxGenerationTokens);
+    }
+
+    #endregion
+
+    #region JitCompiler PR #770 - Production Bug Fixes
+
+    [Fact]
+    public void IRGraph_Validate_DoesNotModifyTensorShapes()
+    {
+        // ARRANGE: The old code would add missing output shapes to TensorShapes during validation
+        // This was a side effect - Validate() should be read-only
+        var graph = new AiDotNet.JitCompiler.IR.IRGraph();
+        graph.InputIds.Add(0);
+        graph.TensorShapes[0] = new int[] { 3, 4 };
+
+        // Add an operation with OutputShape defined on the operation
+        var addOp = new AiDotNet.JitCompiler.IR.Operations.AddOp
+        {
+            InputIds = new int[] { 0, 0 },
+            OutputId = 1,
+            OutputShape = new int[] { 3, 4 },
+            OutputType = AiDotNet.JitCompiler.IR.IRType.Float32
+        };
+        graph.Operations.Add(addOp);
+        graph.OutputIds.Add(1);
+
+        // Capture initial state of TensorShapes
+        var initialCount = graph.TensorShapes.Count;
+
+        // ACT: Validate should NOT modify TensorShapes
+        var isValid = graph.Validate();
+
+        // ASSERT: TensorShapes should NOT have been modified
+        Assert.True(isValid);
+        Assert.Equal(initialCount, graph.TensorShapes.Count);
+    }
+
+    [Fact]
+    public void TensorShapeExtensions_GetElementCount_ThrowsForNullShape()
+    {
+        // ARRANGE: The old code would throw NullReferenceException
+        // Now it throws ArgumentNullException with proper parameter name
+        int[]? nullShape = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.JitCompiler.IR.TensorShapeExtensions.GetElementCount(nullShape!));
+        Assert.Equal("shape", ex.ParamName);
+    }
+
+    [Fact]
+    public void TensorShapeExtensions_ShapeToString_ThrowsForNullShape()
+    {
+        // ARRANGE: The old code would throw NullReferenceException
+        int[]? nullShape = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.JitCompiler.IR.TensorShapeExtensions.ShapeToString(nullShape!));
+        Assert.Equal("shape", ex.ParamName);
+    }
+
+    [Fact]
+    public void TensorShapeExtensions_GetShapeHashCode_ThrowsForNullShape()
+    {
+        // ARRANGE: The old code would throw NullReferenceException
+        int[]? nullShape = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.JitCompiler.IR.TensorShapeExtensions.GetShapeHashCode(nullShape!));
+        Assert.Equal("shape", ex.ParamName);
+    }
+
+    [Fact]
+    public void TensorShapeExtensions_GetShape_ThrowsForNullTensor()
+    {
+        // ARRANGE: The old code would throw NullReferenceException
+        AiDotNet.Tensors.LinearAlgebra.Tensor<double>? nullTensor = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.JitCompiler.IR.TensorShapeExtensions.GetShape(nullTensor!));
+        Assert.Equal("tensor", ex.ParamName);
+    }
+
+    [Fact]
+    public void IRTypeExtensions_FromSystemType_ThrowsForNullType()
+    {
+        // ARRANGE: The old code would throw NullReferenceException
+        Type? nullType = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            AiDotNet.JitCompiler.IR.IRTypeExtensions.FromSystemType(nullType!));
+        Assert.Equal("type", ex.ParamName);
+    }
+
+    [Fact]
+    public void TensorShapeExtensions_GetElementCount_ValidShapes()
+    {
+        // ARRANGE & ACT & ASSERT: Verify valid shapes work correctly
+        Assert.Equal(1, new int[] { }.GetElementCount()); // Scalar
+        Assert.Equal(5, new int[] { 5 }.GetElementCount()); // Vector
+        Assert.Equal(12, new int[] { 3, 4 }.GetElementCount()); // Matrix
+        Assert.Equal(24, new int[] { 2, 3, 4 }.GetElementCount()); // 3D tensor
+        Assert.Equal(-1, new int[] { 3, -1, 4 }.GetElementCount()); // Dynamic dimension
+    }
+
+    [Fact]
+    public void TensorShapeExtensions_ShapeToString_ValidShapes()
+    {
+        // ARRANGE & ACT & ASSERT: Verify valid shapes produce correct strings
+        Assert.Equal("scalar", new int[] { }.ShapeToString());
+        Assert.Equal("[5]", new int[] { 5 }.ShapeToString());
+        Assert.Equal("[3, 4]", new int[] { 3, 4 }.ShapeToString());
+        Assert.Equal("[2, ?, 4]", new int[] { 2, -1, 4 }.ShapeToString()); // Dynamic shown as ?
+    }
+
+    [Fact]
+    public void IRTypeExtensions_FromSystemType_ValidTypes()
+    {
+        // ARRANGE & ACT & ASSERT: Verify type conversions work correctly
+        Assert.Equal(AiDotNet.JitCompiler.IR.IRType.Float32, AiDotNet.JitCompiler.IR.IRTypeExtensions.FromSystemType(typeof(float)));
+        Assert.Equal(AiDotNet.JitCompiler.IR.IRType.Float64, AiDotNet.JitCompiler.IR.IRTypeExtensions.FromSystemType(typeof(double)));
+        Assert.Equal(AiDotNet.JitCompiler.IR.IRType.Int32, AiDotNet.JitCompiler.IR.IRTypeExtensions.FromSystemType(typeof(int)));
+        Assert.Equal(AiDotNet.JitCompiler.IR.IRType.Int64, AiDotNet.JitCompiler.IR.IRTypeExtensions.FromSystemType(typeof(long)));
+    }
+
+    [Fact]
+    public void IRTypeExtensions_ToSystemType_ValidTypes()
+    {
+        // ARRANGE & ACT & ASSERT: Verify reverse conversions work
+        Assert.Equal(typeof(float), AiDotNet.JitCompiler.IR.IRType.Float32.ToSystemType());
+        Assert.Equal(typeof(double), AiDotNet.JitCompiler.IR.IRType.Float64.ToSystemType());
+        Assert.Equal(typeof(int), AiDotNet.JitCompiler.IR.IRType.Int32.ToSystemType());
+        Assert.Equal(typeof(long), AiDotNet.JitCompiler.IR.IRType.Int64.ToSystemType());
     }
 
     #endregion
