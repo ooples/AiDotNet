@@ -204,20 +204,32 @@ public class MagnitudePruningStrategy<T> : IPruningStrategy<T>
             keepIndices[nonZeroScores[i].idx] = false;
         }
 
-        // Special case: if ALL weights are zero, honor the sparsity target
-        // by marking some as "pruned" (they're already zero anyway)
-        if (nonZeroScores.Count == 0 && targetSparsity > 0)
+        // Special case: if ALL weights are zero, handle based on targetSparsity
+        if (nonZeroScores.Count == 0)
         {
-            int numToPrune = (int)Math.Round(importanceScores.Length * targetSparsity);
-            // All weights are zero - just mark the first numToPrune as pruned
-            for (int i = 0; i < numToPrune && i < zeroScores.Count; i++)
+            if (targetSparsity > 0)
             {
-                keepIndices[zeroScores[i]] = false;
+                // Honor the sparsity target by marking some as "pruned" (they're already zero anyway)
+                int numToPrune = (int)Math.Round(importanceScores.Length * targetSparsity);
+                // All weights are zero - just mark the first numToPrune as pruned
+                for (int i = 0; i < numToPrune && i < zeroScores.Count; i++)
+                {
+                    keepIndices[zeroScores[i]] = false;
+                }
+                // Reset the remaining to "kept" to achieve target sparsity
+                for (int i = numToPrune; i < zeroScores.Count; i++)
+                {
+                    keepIndices[zeroScores[i]] = true;
+                }
             }
-            // Reset the remaining to "kept" to achieve target sparsity
-            for (int i = numToPrune; i < zeroScores.Count; i++)
+            else
             {
-                keepIndices[zeroScores[i]] = true;
+                // targetSparsity == 0 means keep all weights (no pruning)
+                // Set all zero-score indices to kept so nothing remains pruned
+                foreach (int idx in zeroScores)
+                {
+                    keepIndices[idx] = true;
+                }
             }
         }
 
