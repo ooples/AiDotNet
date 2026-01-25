@@ -1,6 +1,11 @@
 using Xunit;
 using AiDotNet.DistributedTraining;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Interfaces;
+using AiDotNet.Models;
+using AiDotNet.Enums;
+using AiDotNet.Autodiff;
+using AiDotNet.LossFunctions;
 
 namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 
@@ -1495,6 +1500,785 @@ public class DistributedTrainingIntegrationTests
         finally
         {
             backend.Shutdown();
+        }
+    }
+
+    #endregion
+
+    #region DDPModel Tests
+
+    [Fact]
+    public void DDPModel_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, ddpModel.Rank);
+        Assert.Equal(4, ddpModel.WorldSize);
+        Assert.NotNull(ddpModel.WrappedModel);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void DDPModel_GetModelMetadata_IncludesDistributedInfo()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = ddpModel.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("DDP", metadata.Properties["Strategy"] as string ?? "");
+        Assert.Equal(4, metadata.Properties["WorldSize"] as int? ?? 0);
+        Assert.Equal(0, metadata.Properties["Rank"] as int? ?? -1);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void DDPModel_LocalParameterShard_ContainsFullParameters()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        // DDP keeps full parameters on each process
+        Assert.Equal(8, ddpModel.LocalParameterShard.Length);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void DDPModel_GatherFullParameters_ReturnsSameAsLocal()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var gathered = ddpModel.GatherFullParameters();
+
+        // In DDP, gathered should equal local
+        Assert.Equal(ddpModel.LocalParameterShard.Length, gathered.Length);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void DDPModel_Clone_CreatesNewInstance()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var cloned = ddpModel.Clone();
+
+        Assert.NotSame(ddpModel, cloned);
+        Assert.IsType<DDPModel<double, Vector<double>, Vector<double>>>(cloned);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void DDPModel_WithParameters_CreatesNewModel()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var newParams = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 });
+        var newModel = ddpModel.WithParameters(newParams);
+
+        Assert.NotSame(ddpModel, newModel);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void DDPModel_Serialize_Deserialize_PreservesState()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var ddpModel = new DDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var serialized = ddpModel.Serialize();
+        Assert.NotEmpty(serialized);
+
+        var ddpModel2 = new DDPModel<double, Vector<double>, Vector<double>>(new MockDistributedModel(8), config);
+        ddpModel2.Deserialize(serialized);
+
+        Assert.Equal(ddpModel.WorldSize, ddpModel2.WorldSize);
+        Assert.Equal(ddpModel.Rank, ddpModel2.Rank);
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region FSDPModel Tests
+
+    [Fact]
+    public void FSDPModel_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var fsdpModel = new FSDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, fsdpModel.Rank);
+        Assert.Equal(4, fsdpModel.WorldSize);
+        Assert.NotNull(fsdpModel.WrappedModel);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void FSDPModel_LocalParameterShard_ContainsPartialParameters()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var fsdpModel = new FSDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        // FSDP shards parameters across processes
+        // With 8 parameters and 4 processes, each gets 2
+        Assert.Equal(2, fsdpModel.LocalParameterShard.Length);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void FSDPModel_GetModelMetadata_IncludesDistributedInfo()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var fsdpModel = new FSDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = fsdpModel.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("FSDP", metadata.Properties["Strategy"] as string ?? "");
+        Assert.Equal(4, metadata.Properties["WorldSize"] as int? ?? 0);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void FSDPModel_Clone_CreatesNewInstance()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 1, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var fsdpModel = new FSDPModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var cloned = fsdpModel.Clone();
+
+        Assert.NotSame(fsdpModel, cloned);
+        Assert.IsType<FSDPModel<double, Vector<double>, Vector<double>>>(cloned);
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region ZeRO Models Tests
+
+    [Fact]
+    public void ZeRO1Model_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero1Model = new ZeRO1Model<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, zero1Model.Rank);
+        Assert.Equal(4, zero1Model.WorldSize);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void ZeRO1Model_GetModelMetadata_IncludesStrategy()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero1Model = new ZeRO1Model<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = zero1Model.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("ZeRO-1", metadata.Properties["Strategy"] as string ?? "");
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void ZeRO2Model_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero2Model = new ZeRO2Model<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, zero2Model.Rank);
+        Assert.Equal(4, zero2Model.WorldSize);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void ZeRO2Model_GetModelMetadata_IncludesStrategy()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero2Model = new ZeRO2Model<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = zero2Model.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("ZeRO-2", metadata.Properties["Strategy"] as string ?? "");
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void ZeRO3Model_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero3Model = new ZeRO3Model<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, zero3Model.Rank);
+        Assert.Equal(4, zero3Model.WorldSize);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void ZeRO3Model_GetModelMetadata_IncludesStrategy()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero3Model = new ZeRO3Model<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = zero3Model.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("ZeRO-3", metadata.Properties["Strategy"] as string ?? "");
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void ZeRO3Model_LocalParameterShard_IsSharded()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var zero3Model = new ZeRO3Model<double, Vector<double>, Vector<double>>(model, config);
+
+        // ZeRO-3 shards parameters across processes
+        Assert.Equal(2, zero3Model.LocalParameterShard.Length);
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region PipelineParallelModel Tests
+
+    [Fact]
+    public void PipelineParallelModel_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, pipelineModel.Rank);
+        Assert.Equal(4, pipelineModel.WorldSize);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void PipelineParallelModel_GetModelMetadata_IncludesStrategy()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = pipelineModel.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("PipelineParallel", metadata.Properties["Strategy"] as string ?? "");
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region TensorParallelModel Tests
+
+    [Fact]
+    public void TensorParallelModel_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var tensorModel = new TensorParallelModel<double, Vector<double>, Vector<double>>(model, config);
+
+        Assert.Equal(0, tensorModel.Rank);
+        Assert.Equal(4, tensorModel.WorldSize);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void TensorParallelModel_GetModelMetadata_IncludesStrategy()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var tensorModel = new TensorParallelModel<double, Vector<double>, Vector<double>>(model, config);
+
+        var metadata = tensorModel.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("TensorParallel", metadata.Properties["Strategy"] as string ?? "");
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region HybridShardedModel Tests
+
+    [Fact]
+    public void HybridShardedModel_Constructor_InitializesCorrectly()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var hybridModel = new HybridShardedModel<double, Vector<double>, Vector<double>>(model, config, pipelineParallelSize: 2);
+
+        Assert.Equal(0, hybridModel.Rank);
+        Assert.Equal(4, hybridModel.WorldSize);
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void HybridShardedModel_GetModelMetadata_IncludesStrategy()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var hybridModel = new HybridShardedModel<double, Vector<double>, Vector<double>>(model, config, pipelineParallelSize: 2);
+
+        var metadata = hybridModel.GetModelMetadata();
+
+        Assert.True(metadata.Properties["IsDistributed"] as bool? ?? false);
+        Assert.Equal("3D-Parallelism (Hybrid)", metadata.Properties["Strategy"] as string ?? "");
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region Edge Cases Tests
+
+    [Fact]
+    public void InMemoryBackend_MultipleEnvironments_AreIsolated()
+    {
+        var envId1 = Guid.NewGuid().ToString();
+        var envId2 = Guid.NewGuid().ToString();
+
+        var backend1 = new InMemoryCommunicationBackend<double>(0, 1, envId1);
+        var backend2 = new InMemoryCommunicationBackend<double>(0, 1, envId2);
+
+        backend1.Initialize();
+        backend2.Initialize();
+
+        // Operations in one environment shouldn't affect the other
+        var data1 = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 });
+        var data2 = new Vector<double>(new double[] { 10.0, 20.0, 30.0, 40.0 });
+
+        backend1.AllReduce(data1, ReductionOperation.Sum);
+        backend2.AllReduce(data2, ReductionOperation.Sum);
+
+        Assert.Equal(1.0, data1[0], 0.001);
+        Assert.Equal(10.0, data2[0], 0.001);
+
+        backend1.Shutdown();
+        backend2.Shutdown();
+    }
+
+    [Fact]
+    public void ShardedModel_Constructor_ThrowsOnNullModel()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+
+        Assert.Throws<ArgumentNullException>(() =>
+            new DDPModel<double, Vector<double>, Vector<double>>(null!, config));
+
+        backend.Shutdown();
+    }
+
+    [Fact]
+    public void ShardedModel_Constructor_ThrowsOnNullConfig()
+    {
+        var model = new MockDistributedModel(8);
+
+        Assert.Throws<ArgumentNullException>(() =>
+            new DDPModel<double, Vector<double>, Vector<double>>(model, null!));
+    }
+
+    [Fact]
+    public void DDPModel_Deserialize_ThrowsOnWorldSizeMismatch()
+    {
+        var envId1 = Guid.NewGuid().ToString();
+        var envId2 = Guid.NewGuid().ToString();
+
+        // Create and serialize with worldSize=2
+        var backend1 = new InMemoryCommunicationBackend<double>(0, 2, envId1);
+        backend1.Initialize();
+        var config1 = new ShardingConfiguration<double>(backend1);
+        var model1 = new MockDistributedModel(8);
+        var ddpModel1 = new DDPModel<double, Vector<double>, Vector<double>>(model1, config1);
+        var serialized = ddpModel1.Serialize();
+        backend1.Shutdown();
+
+        // Try to deserialize with worldSize=4
+        var backend2 = new InMemoryCommunicationBackend<double>(0, 4, envId2);
+        backend2.Initialize();
+        var config2 = new ShardingConfiguration<double>(backend2);
+        var model2 = new MockDistributedModel(8);
+        var ddpModel2 = new DDPModel<double, Vector<double>, Vector<double>>(model2, config2);
+
+        Assert.Throws<InvalidOperationException>(() => ddpModel2.Deserialize(serialized));
+
+        backend2.Shutdown();
+    }
+
+    [Fact]
+    public void AllDistributedStrategies_HaveUniqueMetadataStrategies()
+    {
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+        var model = new MockDistributedModel(8);
+
+        var strategies = new List<string>();
+
+        strategies.Add(new DDPModel<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new FSDPModel<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new ZeRO1Model<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new ZeRO2Model<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new ZeRO3Model<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new PipelineParallelModel<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new TensorParallelModel<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+        strategies.Add(new HybridShardedModel<double, Vector<double>, Vector<double>>(model.Clone() as MockDistributedModel, config, 2)
+            .GetModelMetadata().Properties["Strategy"] as string ?? "");
+
+        // All strategies should have unique names
+        Assert.Equal(strategies.Count, strategies.Distinct().Count());
+
+        backend.Shutdown();
+    }
+
+    #endregion
+
+    #region Mock Model for Testing
+
+    /// <summary>
+    /// Mock model that implements IFullModel for distributed training tests.
+    /// </summary>
+    private class MockDistributedModel : IFullModel<double, Vector<double>, Vector<double>>
+    {
+        private Vector<double> _parameters;
+        private Vector<double>? _gradients;
+        private readonly int _parameterCount;
+
+        public MockDistributedModel(int parameterCount)
+        {
+            _parameterCount = parameterCount;
+            _parameters = new Vector<double>(Enumerable.Range(0, parameterCount).Select(i => (double)i * 0.1).ToArray());
+        }
+
+        public int ParameterCount => _parameterCount;
+
+        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+
+        public Vector<double> Predict(Vector<double> input)
+        {
+            // Simple mock prediction
+            var result = new double[input.Length];
+            for (int i = 0; i < input.Length; i++)
+            {
+                result[i] = input[i] * 2.0;
+            }
+            return new Vector<double>(result);
+        }
+
+        public void Train(Vector<double> input, Vector<double> expectedOutput)
+        {
+            // Simple mock training - compute gradients and update
+            _gradients = ComputeGradients(input, expectedOutput, null);
+            ApplyGradients(_gradients, 0.01);
+        }
+
+        public Vector<double> ComputeGradients(Vector<double> input, Vector<double> expectedOutput, ILossFunction<double>? lossFunction = null)
+        {
+            // Mock gradient computation
+            var gradients = new double[_parameters.Length];
+            for (int i = 0; i < gradients.Length; i++)
+            {
+                gradients[i] = 0.01 * (i + 1);
+            }
+            _gradients = new Vector<double>(gradients);
+            return _gradients;
+        }
+
+        public void ApplyGradients(Vector<double> gradients, double learningRate)
+        {
+            var newParams = new double[_parameters.Length];
+            for (int i = 0; i < _parameters.Length; i++)
+            {
+                newParams[i] = _parameters[i] - learningRate * gradients[i];
+            }
+            _parameters = new Vector<double>(newParams);
+        }
+
+        public Vector<double> GetParameters()
+        {
+            return _parameters.Clone();
+        }
+
+        public void SetParameters(Vector<double> parameters)
+        {
+            _parameters = parameters.Clone();
+        }
+
+        public Vector<double> GetParameterGradients()
+        {
+            return _gradients?.Clone() ?? new Vector<double>(new double[_parameterCount]);
+        }
+
+        public ModelMetadata<double> GetModelMetadata()
+        {
+            return new ModelMetadata<double>
+            {
+                Name = "MockDistributedModel",
+                ModelType = ModelType.NeuralNetwork,
+                TrainingDate = DateTimeOffset.UtcNow,
+                FeatureCount = _parameterCount
+            };
+        }
+
+        public byte[] Serialize()
+        {
+            using var ms = new MemoryStream();
+            using var writer = new BinaryWriter(ms);
+
+            writer.Write(_parameterCount);
+            foreach (var param in _parameters.ToArray())
+            {
+                writer.Write(param);
+            }
+
+            return ms.ToArray();
+        }
+
+        public void Deserialize(byte[] data)
+        {
+            using var ms = new MemoryStream(data);
+            using var reader = new BinaryReader(ms);
+
+            var count = reader.ReadInt32();
+            var parameters = new double[count];
+            for (int i = 0; i < count; i++)
+            {
+                parameters[i] = reader.ReadDouble();
+            }
+            _parameters = new Vector<double>(parameters);
+        }
+
+        public void SaveModel(string filePath)
+        {
+            File.WriteAllBytes(filePath, Serialize());
+        }
+
+        public void LoadModel(string filePath)
+        {
+            Deserialize(File.ReadAllBytes(filePath));
+        }
+
+        public void SaveState(Stream stream)
+        {
+            var data = Serialize();
+            stream.Write(data, 0, data.Length);
+            stream.Flush();
+        }
+
+        public void LoadState(Stream stream)
+        {
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            Deserialize(ms.ToArray());
+        }
+
+        public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters)
+        {
+            var newModel = new MockDistributedModel(_parameterCount);
+            newModel.SetParameters(parameters);
+            return newModel;
+        }
+
+        public IEnumerable<int> GetActiveFeatureIndices()
+        {
+            return Enumerable.Range(0, _parameterCount);
+        }
+
+        public void SetActiveFeatureIndices(IEnumerable<int> indices)
+        {
+            // No-op for mock
+        }
+
+        public bool IsFeatureUsed(int featureIndex)
+        {
+            return featureIndex >= 0 && featureIndex < _parameterCount;
+        }
+
+        public Dictionary<string, double> GetFeatureImportance()
+        {
+            return Enumerable.Range(0, _parameterCount)
+                .ToDictionary(i => $"feature_{i}", i => 1.0 / _parameterCount);
+        }
+
+        public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
+        {
+            var node = new ComputationNode<double>(
+                new Tensor<double>(new[] { _parameterCount }),
+                false,
+                null,
+                null,
+                "mock_graph"
+            );
+            inputNodes.Add(node);
+            return node;
+        }
+
+        public bool SupportsJitCompilation => false;
+
+        public IFullModel<double, Vector<double>, Vector<double>> Clone()
+        {
+            var cloned = new MockDistributedModel(_parameterCount);
+            cloned.SetParameters(_parameters);
+            return cloned;
+        }
+
+        public IFullModel<double, Vector<double>, Vector<double>> DeepCopy()
+        {
+            return Clone();
         }
     }
 
