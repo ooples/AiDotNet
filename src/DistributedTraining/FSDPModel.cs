@@ -83,8 +83,7 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     public FSDPModel(IFullModel<T, TInput, TOutput> wrappedModel, IShardingConfiguration<T> config)
         : base(wrappedModel, config)
     {
-        // Must call InitializeSharding() after base constructor to ensure proper initialization
-        InitializeSharding();
+        // Sharding is initialized lazily via EnsureShardingInitialized() to avoid virtual calls in constructor
     }
 
     /// <inheritdoc/>
