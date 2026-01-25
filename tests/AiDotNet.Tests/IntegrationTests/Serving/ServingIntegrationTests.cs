@@ -618,11 +618,11 @@ public class ServingIntegrationTests
         var request = CreateGenerationRequest();
         var sequence = new SequenceState<double>(request);
 
-        // Simulate waiting
-        Thread.Sleep(50);
-        sequence.GenerationStartedAt = DateTime.UtcNow;
+        // Set GenerationStartedAt to a known offset from CreatedAt (deterministic, no sleeping)
+        sequence.GenerationStartedAt = sequence.CreatedAt.AddMilliseconds(50);
 
-        Assert.True(sequence.QueueTime.TotalMilliseconds >= 50);
+        // Assert the exact expected duration
+        Assert.Equal(50, sequence.QueueTime.TotalMilliseconds);
     }
 
     [Fact]
