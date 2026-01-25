@@ -359,4 +359,26 @@ public class BpeTokenizerTests
         Assert.True(_tokenizer.VocabularySize > 0);
         Assert.Equal(_tokenizer.Vocabulary.Size, _tokenizer.VocabularySize);
     }
+
+    #region PR #757 Bug Fix Tests - Parameter Validation
+
+    [Fact]
+    public void Train_NullCorpus_ThrowsArgumentNullException()
+    {
+        Assert.Throws<System.ArgumentNullException>(() =>
+            BpeTokenizer.Train(null!, 100));
+    }
+
+    [Fact]
+    public void Train_InvalidVocabSize_ThrowsArgumentOutOfRangeException()
+    {
+        var corpus = new List<string> { "Hello world" };
+
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            BpeTokenizer.Train(corpus, 0));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            BpeTokenizer.Train(corpus, -1));
+    }
+
+    #endregion
 }

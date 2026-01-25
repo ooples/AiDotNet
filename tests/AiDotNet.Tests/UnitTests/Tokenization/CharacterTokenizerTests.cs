@@ -202,4 +202,26 @@ public class CharacterTokenizerTests
         // ASCII printable: 95 chars (32-126) + special tokens
         Assert.True(tokenizer.VocabularySize >= 95);
     }
+
+    #region PR #757 Bug Fix Tests - Parameter Validation
+
+    [Fact]
+    public void Train_NullCorpus_ThrowsArgumentNullException()
+    {
+        Assert.Throws<System.ArgumentNullException>(() =>
+            CharacterTokenizer.Train(null!));
+    }
+
+    [Fact]
+    public void Train_InvalidMinFrequency_ThrowsArgumentOutOfRangeException()
+    {
+        var corpus = new List<string> { "Hello world" };
+
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            CharacterTokenizer.Train(corpus, minFrequency: 0));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            CharacterTokenizer.Train(corpus, minFrequency: -1));
+    }
+
+    #endregion
 }

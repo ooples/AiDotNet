@@ -51,8 +51,12 @@ namespace AiDotNet.Tokenization.Vocabulary
         /// </summary>
         /// <param name="tokenToId">The token-to-ID mapping.</param>
         /// <param name="unkToken">The unknown token.</param>
+        /// <exception cref="ArgumentNullException">Thrown if tokenToId is null.</exception>
         public Vocabulary(Dictionary<string, int> tokenToId, string unkToken = "[UNK]")
         {
+            if (tokenToId == null)
+                throw new ArgumentNullException(nameof(tokenToId));
+
             _tokenToId = new Dictionary<string, int>(tokenToId);
             _idToToken = tokenToId.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
             _nextId = tokenToId.Count > 0 ? tokenToId.Values.Max() + 1 : 0;
@@ -94,8 +98,12 @@ namespace AiDotNet.Tokenization.Vocabulary
         /// Adds multiple tokens to the vocabulary.
         /// </summary>
         /// <param name="tokens">The tokens to add.</param>
+        /// <exception cref="ArgumentNullException">Thrown if tokens is null.</exception>
         public void AddTokens(IEnumerable<string> tokens)
         {
+            if (tokens == null)
+                throw new ArgumentNullException(nameof(tokens));
+
             foreach (var token in tokens)
             {
                 AddToken(token);

@@ -103,6 +103,8 @@ namespace AiDotNet.Tokenization.Algorithms
         {
             if (corpus == null)
                 throw new ArgumentNullException(nameof(corpus));
+            if (vocabSize < 1)
+                throw new ArgumentOutOfRangeException(nameof(vocabSize), "Vocabulary size must be at least 1.");
 
             var corpusList = corpus.ToList();
             specialTokens ??= SpecialTokens.Gpt();

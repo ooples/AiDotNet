@@ -134,6 +134,7 @@ namespace AiDotNet.Tokenization.Specialized
         /// (32 bins means velocity values 0-127 are grouped into 32 categories).
         /// </para>
         /// </remarks>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if ticksPerBeat or numVelocityBins is less than 1.</exception>
         public MidiTokenizer(
             IVocabulary vocabulary,
             SpecialTokens specialTokens,
@@ -142,6 +143,11 @@ namespace AiDotNet.Tokenization.Specialized
             int numVelocityBins = 32)
             : base(vocabulary, specialTokens)
         {
+            if (ticksPerBeat < 1)
+                throw new ArgumentOutOfRangeException(nameof(ticksPerBeat), "Ticks per beat must be at least 1.");
+            if (numVelocityBins < 1)
+                throw new ArgumentOutOfRangeException(nameof(numVelocityBins), "Number of velocity bins must be at least 1.");
+
             _strategy = strategy;
             _ticksPerBeat = ticksPerBeat;
             _numVelocityBins = numVelocityBins;
@@ -421,8 +427,14 @@ namespace AiDotNet.Tokenization.Specialized
         /// <param name="ticksPerBeat">MIDI ticks per beat for timing calculations (default: 480).</param>
         /// <param name="numVelocityBins">Number of velocity bins for quantization (default: 32).</param>
         /// <returns>A new MidiTokenizer configured with the REMI strategy.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if ticksPerBeat or numVelocityBins is less than 1.</exception>
         public static MidiTokenizer CreateREMI(SpecialTokens? specialTokens = null, int ticksPerBeat = 480, int numVelocityBins = 32)
         {
+            if (ticksPerBeat < 1)
+                throw new ArgumentOutOfRangeException(nameof(ticksPerBeat), "Ticks per beat must be at least 1.");
+            if (numVelocityBins < 1)
+                throw new ArgumentOutOfRangeException(nameof(numVelocityBins), "Number of velocity bins must be at least 1.");
+
             specialTokens ??= CreateDefaultSpecialTokens();
             var vocabulary = CreateREMIVocabulary(specialTokens, numVelocityBins);
             return new MidiTokenizer(vocabulary, specialTokens, TokenizationStrategy.REMI, ticksPerBeat, numVelocityBins);
@@ -437,8 +449,14 @@ namespace AiDotNet.Tokenization.Specialized
         /// <param name="ticksPerBeat">MIDI ticks per beat for timing calculations (default: 480).</param>
         /// <param name="numVelocityBins">Number of velocity bins for quantization (default: 32).</param>
         /// <returns>A new MidiTokenizer configured with the CPWord strategy.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if ticksPerBeat or numVelocityBins is less than 1.</exception>
         public static MidiTokenizer CreateCPWord(SpecialTokens? specialTokens = null, int ticksPerBeat = 480, int numVelocityBins = 32)
         {
+            if (ticksPerBeat < 1)
+                throw new ArgumentOutOfRangeException(nameof(ticksPerBeat), "Ticks per beat must be at least 1.");
+            if (numVelocityBins < 1)
+                throw new ArgumentOutOfRangeException(nameof(numVelocityBins), "Number of velocity bins must be at least 1.");
+
             specialTokens ??= CreateDefaultSpecialTokens();
             var vocabulary = CreateCPWordVocabulary(specialTokens, numVelocityBins);
             return new MidiTokenizer(vocabulary, specialTokens, TokenizationStrategy.CPWord, ticksPerBeat, numVelocityBins);
@@ -452,8 +470,12 @@ namespace AiDotNet.Tokenization.Specialized
         /// <param name="specialTokens">Special tokens configuration. If null, creates default MIDI special tokens.</param>
         /// <param name="ticksPerBeat">MIDI ticks per beat for timing calculations (default: 480).</param>
         /// <returns>A new MidiTokenizer configured with the SimpleNote strategy.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if ticksPerBeat is less than 1.</exception>
         public static MidiTokenizer CreateSimpleNote(SpecialTokens? specialTokens = null, int ticksPerBeat = 480)
         {
+            if (ticksPerBeat < 1)
+                throw new ArgumentOutOfRangeException(nameof(ticksPerBeat), "Ticks per beat must be at least 1.");
+
             specialTokens ??= CreateDefaultSpecialTokens();
             var vocabulary = CreateSimpleNoteVocabulary(specialTokens);
             return new MidiTokenizer(vocabulary, specialTokens, TokenizationStrategy.SimpleNote, ticksPerBeat, 1);
