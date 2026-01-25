@@ -824,15 +824,19 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                 }
             }
 
-            // Dequeue the message
-            var message = _messageQueues[queueKey].Dequeue();
+            // Peek to validate size BEFORE dequeuing (prevents data loss on size mismatch)
+            var message = _messageQueues[queueKey].Peek();
 
             // Validate size matches expected count
             if (message.Length != count)
             {
                 throw new InvalidOperationException(
-                    $"Received message size {message.Length} does not match expected count {count}.");
+                    $"Received message size {message.Length} does not match expected count {count}. " +
+                    "Message remains in queue for potential recovery.");
             }
+
+            // Size validated, now safe to dequeue
+            _messageQueues[queueKey].Dequeue();
 
             // Cleanup empty queues
             if (_messageQueues[queueKey].Count == 0)
@@ -855,6 +859,16 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
         }
 
         int length = vectors[0].Length;
+
+        // Validate all vectors have the same length to prevent IndexOutOfRangeException
+        for (int i = 1; i < vectors.Count; i++)
+        {
+            if (vectors[i].Length != length)
+            {
+                throw new ArgumentException(
+                    $"All vectors must have the same length. Vector 0 has length {length}, but vector {i} has length {vectors[i].Length}.");
+            }
+        }
         var result = new T[length];
 
         for (int i = 0; i < length; i++)
