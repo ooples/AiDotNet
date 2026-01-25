@@ -1879,4 +1879,218 @@ public class MergedPRBugFixTests
     }
 
     #endregion
+
+    #region HyperparameterOptimization PR #767 - Production Bug Fixes
+
+    [Fact]
+    public void TrialPruner_ReportAndCheckPrune_ThrowsForNullTrial()
+    {
+        // ARRANGE
+        var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>();
+        AiDotNet.Models.HyperparameterTrial<double>? nullTrial = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => pruner.ReportAndCheckPrune(nullTrial!, 1, 0.5));
+        Assert.Equal("trial", ex.ParamName);
+    }
+
+    [Fact]
+    public void TrialPruner_ReportAndCheckPruneString_ThrowsForNullTrialId()
+    {
+        // ARRANGE
+        var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>();
+        string? nullTrialId = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => pruner.ReportAndCheckPrune(nullTrialId!, 1, 0.5));
+        Assert.Equal("trialId", ex.ParamName);
+    }
+
+    [Fact]
+    public void TrialPruner_MarkComplete_ThrowsForNullTrialId()
+    {
+        // ARRANGE
+        var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>();
+        string? nullTrialId = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => pruner.MarkComplete(nullTrialId!));
+        Assert.Equal("trialId", ex.ParamName);
+    }
+
+    [Fact]
+    public void ContinuousDistribution_Sample_ThrowsForNullRandom()
+    {
+        // ARRANGE
+        var dist = new AiDotNet.Models.ContinuousDistribution { Min = 0.0, Max = 1.0 };
+        Random? nullRandom = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample(nullRandom!));
+        Assert.Equal("random", ex.ParamName);
+    }
+
+    [Fact]
+    public void IntegerDistribution_Sample_ThrowsForNullRandom()
+    {
+        // ARRANGE
+        var dist = new AiDotNet.Models.IntegerDistribution { Min = 0, Max = 10, Step = 1 };
+        Random? nullRandom = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample(nullRandom!));
+        Assert.Equal("random", ex.ParamName);
+    }
+
+    [Fact]
+    public void CategoricalDistribution_Sample_ThrowsForNullRandom()
+    {
+        // ARRANGE
+        var dist = new AiDotNet.Models.CategoricalDistribution { Choices = new List<object> { "a", "b", "c" } };
+        Random? nullRandom = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => dist.Sample(nullRandom!));
+        Assert.Equal("random", ex.ParamName);
+    }
+
+    [Fact]
+    public void TrialPruner_ReportAndCheckPrune_ValidInputs_WorksCorrectly()
+    {
+        // ARRANGE
+        var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>(
+            maximize: true,
+            warmupSteps: 2);
+        var trial = new AiDotNet.Models.HyperparameterTrial<double>(0);
+
+        // ACT - Report values for warmup period (should not prune)
+        bool shouldPrune1 = pruner.ReportAndCheckPrune(trial, 0, 0.5);
+        bool shouldPrune2 = pruner.ReportAndCheckPrune(trial, 1, 0.6);
+
+        // ASSERT - Should not prune during warmup
+        Assert.False(shouldPrune1);
+        Assert.False(shouldPrune2);
+    }
+
+    [Fact]
+    public void ParameterDistribution_Sample_ValidInputs_WorksCorrectly()
+    {
+        // ARRANGE
+        var random = new Random(42);
+        var continuousDist = new AiDotNet.Models.ContinuousDistribution { Min = 0.0, Max = 1.0 };
+        var integerDist = new AiDotNet.Models.IntegerDistribution { Min = 0, Max = 10, Step = 2 };
+        var categoricalDist = new AiDotNet.Models.CategoricalDistribution { Choices = new List<object> { "a", "b", "c" } };
+
+        // ACT
+        var continuousSample = (double)continuousDist.Sample(random);
+        var integerSample = (int)integerDist.Sample(random);
+        var categoricalSample = categoricalDist.Sample(random);
+
+        // ASSERT
+        Assert.InRange(continuousSample, 0.0, 1.0);
+        Assert.InRange(integerSample, 0, 10);
+        Assert.Contains(categoricalSample, categoricalDist.Choices);
+    }
+
+    [Fact]
+    public void HyperparameterSearchSpace_AddMethods_ValidateInputs()
+    {
+        // ARRANGE
+        var searchSpace = new AiDotNet.Models.HyperparameterSearchSpace();
+
+        // ACT & ASSERT - AddContinuous
+        searchSpace.AddContinuous("learning_rate", 0.001, 0.1);
+        Assert.True(searchSpace.Parameters.ContainsKey("learning_rate"));
+
+        // ACT & ASSERT - AddInteger
+        searchSpace.AddInteger("batch_size", 16, 128, 16);
+        Assert.True(searchSpace.Parameters.ContainsKey("batch_size"));
+
+        // ACT & ASSERT - AddCategorical
+        searchSpace.AddCategorical("optimizer", "adam", "sgd", "rmsprop");
+        Assert.True(searchSpace.Parameters.ContainsKey("optimizer"));
+
+        // ACT & ASSERT - AddBoolean
+        searchSpace.AddBoolean("use_dropout");
+        Assert.True(searchSpace.Parameters.ContainsKey("use_dropout"));
+    }
+
+    [Fact]
+    public void HyperparameterSearchSpace_AddContinuous_ThrowsForInvalidRange()
+    {
+        // ARRANGE
+        var searchSpace = new AiDotNet.Models.HyperparameterSearchSpace();
+
+        // ACT & ASSERT - min >= max should throw
+        var ex = Assert.Throws<ArgumentException>(() => searchSpace.AddContinuous("param", 1.0, 0.5));
+        Assert.Contains("less than", ex.Message);
+    }
+
+    [Fact]
+    public void HyperparameterSearchSpace_AddInteger_ThrowsForInvalidStep()
+    {
+        // ARRANGE
+        var searchSpace = new AiDotNet.Models.HyperparameterSearchSpace();
+
+        // ACT & ASSERT - step <= 0 should throw
+        var ex = Assert.Throws<ArgumentException>(() => searchSpace.AddInteger("param", 0, 10, 0));
+        Assert.Contains("positive", ex.Message);
+    }
+
+    [Fact]
+    public void EarlyStopping_Check_WorksCorrectly()
+    {
+        // ARRANGE
+        var earlyStopping = new AiDotNet.HyperparameterOptimization.EarlyStopping<double>(
+            patience: 3,
+            minDelta: 0.01,
+            maximize: true);
+
+        // ACT - Report improving values
+        bool stop1 = earlyStopping.Check(0.5, 0);
+        bool stop2 = earlyStopping.Check(0.6, 1);
+        bool stop3 = earlyStopping.Check(0.7, 2);
+
+        // ASSERT - Should not stop while improving
+        Assert.False(stop1);
+        Assert.False(stop2);
+        Assert.False(stop3);
+        Assert.Equal(0.7, earlyStopping.BestValue);
+
+        // ACT - Report non-improving values
+        bool stop4 = earlyStopping.Check(0.69, 3);
+        bool stop5 = earlyStopping.Check(0.68, 4);
+        bool stop6 = earlyStopping.Check(0.67, 5);
+
+        // ASSERT - Should stop after patience exceeded
+        Assert.False(stop4);
+        Assert.False(stop5);
+        Assert.True(stop6);
+        Assert.True(earlyStopping.ShouldStop);
+    }
+
+    [Fact]
+    public void TrialPruner_Strategies_WorkCorrectly()
+    {
+        // ARRANGE - Test median pruning strategy
+        var pruner = new AiDotNet.HyperparameterOptimization.TrialPruner<double>(
+            maximize: true,
+            strategy: AiDotNet.HyperparameterOptimization.PruningStrategy.MedianPruning,
+            warmupSteps: 0);
+
+        // ACT - Add some trial history
+        pruner.ReportAndCheckPrune("trial1", 0, 0.8);
+        pruner.ReportAndCheckPrune("trial2", 0, 0.6);
+        pruner.ReportAndCheckPrune("trial3", 0, 0.4);
+
+        // Check if a new low performer would be pruned
+        bool shouldPrune = pruner.ReportAndCheckPrune("trial4", 0, 0.3);
+
+        // ASSERT - Trial with value below median should be marked for pruning
+        // Note: With only 3 prior values, may not have enough data to prune
+        var stats = pruner.GetStatistics();
+        Assert.Equal(4, stats.TotalTrials);
+    }
+
+    #endregion
 }

@@ -158,6 +158,9 @@ public class ContinuousDistribution : ParameterDistribution
     /// <inheritdoc/>
     public override object Sample(Random random)
     {
+        if (random == null)
+            throw new ArgumentNullException(nameof(random));
+
         var sample = random.NextDouble();
 
         if (LogScale)
@@ -203,6 +206,9 @@ public class IntegerDistribution : ParameterDistribution
     /// </remarks>
     public override object Sample(Random random)
     {
+        if (random == null)
+            throw new ArgumentNullException(nameof(random));
+
         var numSteps = (Max - Min) / Step;
         var stepIndex = random.Next(0, numSteps + 1);
         return Min + stepIndex * Step;
@@ -225,6 +231,9 @@ public class CategoricalDistribution : ParameterDistribution
     /// <inheritdoc/>
     public override object Sample(Random random)
     {
+        if (random == null)
+            throw new ArgumentNullException(nameof(random));
+
         var index = random.Next(0, Choices.Count);
         return Choices[index];
     }
