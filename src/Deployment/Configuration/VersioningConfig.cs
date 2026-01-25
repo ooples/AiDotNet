@@ -60,7 +60,27 @@ public class VersioningConfig
     /// 5 is usually enough for rollback purposes.
     /// </para>
     /// </remarks>
-    public int MaxVersionHistory { get; set; } = 5;
+    public int MaxVersionHistory { get; set; } = 3;
+
+    /// <summary>
+    /// Alias for MaxVersionHistory for more intuitive access.
+    /// </summary>
+    public int MaxVersionsPerModel
+    {
+        get => MaxVersionHistory;
+        set => MaxVersionHistory = value;
+    }
+
+    /// <summary>
+    /// Gets or sets whether to automatically clean up old versions when MaxVersionHistory is exceeded (default: true).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When true, old model versions are automatically deleted when
+    /// you exceed MaxVersionHistory. When false, you must manually delete old versions.
+    /// Recommended to keep true for automatic disk space management.
+    /// </para>
+    /// </remarks>
+    public bool AutoCleanup { get; set; } = true;
 
     /// <summary>
     /// Gets or sets whether to track which version is used for each inference (default: true).

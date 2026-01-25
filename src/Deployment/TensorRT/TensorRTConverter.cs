@@ -37,7 +37,7 @@ public class TensorRTConverter<T, TInput, TOutput>
 
         // Step 1: Export to ONNX first
         var onnxPath = Path.ChangeExtension(outputPath, ".onnx");
-        var exportConfig = ExportConfiguration.ForTensorRT(config.MaxBatchSize, config.UseFp16);
+        var exportConfig = ExportConfiguration.ForTensorRT(config.MaxBatchSize, config.Precision == TensorRTPrecision.FP16);
         _onnxExporter.Export(model, onnxPath, exportConfig);
 
         // Step 2: Build TensorRT engine from ONNX
@@ -78,8 +78,7 @@ public class TensorRTConverter<T, TInput, TOutput>
         {
             MaxBatchSize = config.MaxBatchSize,
             MaxWorkspaceSize = config.MaxWorkspaceSize,
-            UseFp16 = config.UseFp16,
-            UseInt8 = config.UseInt8,
+            Precision = config.Precision,
             StrictTypeConstraints = config.StrictTypeConstraints,
             EnableDynamicShapes = config.EnableDynamicShapes
         };
@@ -92,7 +91,7 @@ public class TensorRTConverter<T, TInput, TOutput>
 
         // Configure device properties
         builder.DeviceId = config.DeviceId;
-        builder.DlaCore = config.DlaCore;
+        builder.DLACore = config.DLACore;
 
         // Serialize engine configuration
         var engineData = SerializeTensorRTEngine(builder, onnxPath, config);
@@ -134,12 +133,11 @@ public class TensorRTConverter<T, TInput, TOutput>
         // Write TensorRT configuration
         writer.Write(builder.MaxBatchSize);
         writer.Write(builder.MaxWorkspaceSize);
-        writer.Write(builder.UseFp16);
-        writer.Write(builder.UseInt8);
+        writer.Write((int)builder.Precision);
         writer.Write(builder.StrictTypeConstraints);
         writer.Write(builder.EnableDynamicShapes);
         writer.Write(builder.DeviceId);
-        writer.Write(builder.DlaCore ?? -1);
+        writer.Write(builder.DLACore);
 
         // Embed the ONNX model data (allows self-contained engine file)
         var onnxData = File.ReadAllBytes(onnxPath);
@@ -167,7 +165,7 @@ public class TensorRTConverter<T, TInput, TOutput>
         }
 
         // Write calibration data path if INT8 is used
-        if (builder.UseInt8)
+        if (builder.Precision == TensorRTPrecision.INT8)
         {
             writer.Write(config.CalibrationDataPath ?? string.Empty);
         }

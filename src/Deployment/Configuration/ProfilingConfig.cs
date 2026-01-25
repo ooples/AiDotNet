@@ -82,6 +82,15 @@ public class ProfilingConfig
     public bool TrackCallHierarchy { get; set; } = true;
 
     /// <summary>
+    /// Alias for TrackCallHierarchy for more intuitive access.
+    /// </summary>
+    public bool TraceExecution
+    {
+        get => TrackCallHierarchy;
+        set => TrackCallHierarchy = value;
+    }
+
+    /// <summary>
     /// Gets or sets whether to track memory allocations (default: true).
     /// </summary>
     /// <remarks>
@@ -91,6 +100,15 @@ public class ProfilingConfig
     /// </para>
     /// </remarks>
     public bool TrackAllocations { get; set; } = true;
+
+    /// <summary>
+    /// Alias for TrackAllocations for more intuitive access.
+    /// </summary>
+    public bool MeasureMemory
+    {
+        get => TrackAllocations;
+        set => TrackAllocations = value;
+    }
 
     /// <summary>
     /// Gets or sets whether to include detailed timing breakdowns (default: false).

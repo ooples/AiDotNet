@@ -79,12 +79,17 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
 {
     private Vector<T>? _computedGradients;
 
-    private readonly int _pipelineParallelSize;
-    private readonly int _tensorParallelSize;
-    private readonly int _dataParallelSize;
-    private readonly int _pipelineRank;
-    private readonly int _tensorRank;
-    private readonly int _dataRank;
+    // Static ThreadLocal to pass constructor parameters before base constructor call.
+    // This is necessary because C# doesn't allow derived class code to run before base constructor.
+    private static readonly ThreadLocal<(int pp, int tp, int dp)?> PendingConfig = new();
+
+    // Computed values (set in OnBeforeInitializeSharding)
+    private int _pipelineParallelSize;
+    private int _tensorParallelSize;
+    private int _dataParallelSize;
+    private int _pipelineRank;
+    private int _tensorRank;
+    private int _dataRank;
 
     /// <summary>
     /// Creates a new 3D Parallel (Hybrid Sharded) model.
@@ -100,41 +105,73 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         int pipelineParallelSize = 1,
         int tensorParallelSize = 1,
         int dataParallelSize = -1)
-        : base(wrappedModel, config)
+        : base(StoreConfigAndPassThrough(wrappedModel, pipelineParallelSize, tensorParallelSize, dataParallelSize), config)
     {
-        _pipelineParallelSize = pipelineParallelSize;
-        _tensorParallelSize = tensorParallelSize;
+        // Clear the pending config after base constructor completes
+        PendingConfig.Value = null;
+    }
+
+    /// <summary>
+    /// Stores constructor parameters in ThreadLocal before base constructor call.
+    /// This workaround is necessary because C# doesn't allow derived class code to execute
+    /// before the base constructor, but we need these values in OnBeforeInitializeSharding.
+    /// </summary>
+    private static IFullModel<T, TInput, TOutput> StoreConfigAndPassThrough(
+        IFullModel<T, TInput, TOutput> model,
+        int pipelineParallelSize,
+        int tensorParallelSize,
+        int dataParallelSize)
+    {
+        PendingConfig.Value = (pipelineParallelSize, tensorParallelSize, dataParallelSize);
+        return model;
+    }
+
+    /// <summary>
+    /// Called before InitializeSharding to set up derived class state.
+    /// </summary>
+    protected override void OnBeforeInitializeSharding()
+    {
+        // Read configuration from ThreadLocal (stored before base constructor call)
+        var pending = PendingConfig.Value ?? (1, 1, -1);
+        int requestedPipelineParallelSize = pending.pp;
+        int requestedTensorParallelSize = pending.tp;
+        int requestedDataParallelSize = pending.dp;
+
+        _pipelineParallelSize = requestedPipelineParallelSize;
+        _tensorParallelSize = requestedTensorParallelSize;
 
         // Calculate data parallel size if not specified
-        if (dataParallelSize == -1)
+        if (requestedDataParallelSize == -1)
         {
-            int totalGpus = WorldSize;
-            if (totalGpus % (pipelineParallelSize * tensorParallelSize) != 0)
+            int totalGpus = Config.CommunicationBackend.WorldSize;
+            if (totalGpus % (_pipelineParallelSize * _tensorParallelSize) != 0)
             {
                 throw new ArgumentException(
                     $"WorldSize ({totalGpus}) must be divisible by " +
-                    $"pipelineParallelSize ({pipelineParallelSize}) × tensorParallelSize ({tensorParallelSize})");
+                    $"pipelineParallelSize ({_pipelineParallelSize}) × tensorParallelSize ({_tensorParallelSize})");
             }
-            _dataParallelSize = totalGpus / (pipelineParallelSize * tensorParallelSize);
+            _dataParallelSize = totalGpus / (_pipelineParallelSize * _tensorParallelSize);
         }
         else
         {
-            _dataParallelSize = dataParallelSize;
+            _dataParallelSize = requestedDataParallelSize;
         }
 
         // Verify configuration
-        if (_pipelineParallelSize * _tensorParallelSize * _dataParallelSize != WorldSize)
+        int worldSize = Config.CommunicationBackend.WorldSize;
+        if (_pipelineParallelSize * _tensorParallelSize * _dataParallelSize != worldSize)
         {
             throw new ArgumentException(
                 $"Pipeline ({_pipelineParallelSize}) × Tensor ({_tensorParallelSize}) × " +
-                $"Data ({_dataParallelSize}) must equal WorldSize ({WorldSize})");
+                $"Data ({_dataParallelSize}) must equal WorldSize ({worldSize})");
         }
 
         // Calculate this process's position in the 3D grid
         // Layout: [pipeline][tensor][data]
+        int rank = Config.CommunicationBackend.Rank;
         int tensorGroupSize = _tensorParallelSize * _dataParallelSize;
-        _pipelineRank = Rank / tensorGroupSize;
-        int withinStage = Rank % tensorGroupSize;
+        _pipelineRank = rank / tensorGroupSize;
+        int withinStage = rank % tensorGroupSize;
         _tensorRank = withinStage / _dataParallelSize;
         _dataRank = withinStage % _dataParallelSize;
     }

@@ -130,13 +130,16 @@ public class TelemetryCollector
         var totalLatency = relevantMetrics.Sum(m => Interlocked.Read(ref m.TotalLatencyMs));
         var cacheHits = relevantMetrics.Sum(m => Interlocked.Read(ref m.CacheHits));
 
+        // Total requests includes both successful inferences and errors
+        var totalRequests = totalInferences + totalErrors;
+
         return new ModelStatistics
         {
             ModelName = modelName,
             Version = version,
             TotalInferences = totalInferences,
             TotalErrors = totalErrors,
-            ErrorRate = totalInferences > 0 ? (double)totalErrors / totalInferences : 0.0,
+            ErrorRate = totalRequests > 0 ? (double)totalErrors / totalRequests : 0.0,
             AverageLatencyMs = totalInferences > 0 ? (double)totalLatency / totalInferences : 0.0,
             MinLatencyMs = relevantMetrics.Any() ? relevantMetrics.Min(m => Interlocked.Read(ref m.MinLatencyMs)) : 0,
             MaxLatencyMs = relevantMetrics.Any() ? relevantMetrics.Max(m => Interlocked.Read(ref m.MaxLatencyMs)) : 0,

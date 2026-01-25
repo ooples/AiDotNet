@@ -11,6 +11,9 @@ public enum CoreMLComputeUnits
     /// <summary>CPU and GPU</summary>
     CPUAndGPU,
 
+    /// <summary>CPU and Neural Engine (A11 and later, no GPU)</summary>
+    CPUAndNeuralEngine,
+
     /// <summary>All available units (CPU, GPU, Neural Engine)</summary>
     All,
 

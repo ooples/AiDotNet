@@ -4332,8 +4332,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var tensorRTConfig = new TensorRTConfiguration
         {
             MaxBatchSize = exportConfig.BatchSize,
-            UseFp16 = exportConfig.Quantization == QuantizationMode.Float16,
-            UseInt8 = exportConfig.Quantization == QuantizationMode.Int8
+            Precision = exportConfig.Quantization switch
+            {
+                QuantizationMode.Float16 => TensorRTPrecision.FP16,
+                QuantizationMode.Int8 => TensorRTPrecision.INT8,
+                _ => TensorRTPrecision.FP32
+            }
         };
 
         var converter = new TensorRTConverter<T, TInput, TOutput>();
