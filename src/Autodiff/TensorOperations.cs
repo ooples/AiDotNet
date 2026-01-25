@@ -1324,7 +1324,7 @@ public static class TensorOperations<T>
 
         // Set JIT compiler metadata
         node.OperationType = OperationType.ReduceSum;
-        // Only set OperationParams if axes is not null to avoid null reference issues
+        // Set OperationParams with or without "Axes" key depending on whether axes is specified
         if (axes != null)
         {
             node.OperationParams = new Dictionary<string, object>

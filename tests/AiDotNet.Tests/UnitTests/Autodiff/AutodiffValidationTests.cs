@@ -152,11 +152,10 @@ public class AutodiffValidationTests
 
         // Assert
         Assert.Equal(21.0, result.Value[0], 5); // 1+2+3+4+5+6 = 21
-        // When axes is null, OperationParams should not contain "Axes" key (to avoid null storage)
-        // It should either be null entirely or contain only "KeepDims"
-        Assert.True(result.OperationParams == null ||
-                    !result.OperationParams.ContainsKey("Axes") ||
-                    result.OperationParams["Axes"] != null);
+        // When axes is null, OperationParams should be set but NOT contain "Axes" key
+        Assert.NotNull(result.OperationParams);
+        Assert.False(result.OperationParams.ContainsKey("Axes"), "OperationParams should not contain 'Axes' when axes parameter is null");
+        Assert.True(result.OperationParams.ContainsKey("KeepDims"), "OperationParams should contain 'KeepDims'");
     }
 
     [Fact]
