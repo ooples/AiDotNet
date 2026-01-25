@@ -891,7 +891,8 @@ public class ServingIntegrationTests
     [Fact]
     public void SequenceStatus_ContainsExpectedValues()
     {
-        var values = Enum.GetValues<SequenceStatus>();
+        // Use non-generic Enum.GetValues for .NET Framework 4.7.1 compatibility
+        var values = Enum.GetValues(typeof(SequenceStatus)).Cast<SequenceStatus>();
 
         Assert.Contains(SequenceStatus.Pending, values);
         Assert.Contains(SequenceStatus.Prefilling, values);
@@ -905,7 +906,8 @@ public class ServingIntegrationTests
     [Fact]
     public void StopReason_ContainsExpectedValues()
     {
-        var values = Enum.GetValues<StopReason>();
+        // Use non-generic Enum.GetValues for .NET Framework 4.7.1 compatibility
+        var values = Enum.GetValues(typeof(StopReason)).Cast<StopReason>();
 
         Assert.Contains(StopReason.MaxLength, values);
         Assert.Contains(StopReason.EndOfSequence, values);
@@ -917,7 +919,8 @@ public class ServingIntegrationTests
     [Fact]
     public void SchedulingPolicy_ContainsExpectedValues()
     {
-        var values = Enum.GetValues<SchedulingPolicy>();
+        // Use non-generic Enum.GetValues for .NET Framework 4.7.1 compatibility
+        var values = Enum.GetValues(typeof(SchedulingPolicy)).Cast<SchedulingPolicy>();
 
         Assert.Contains(SchedulingPolicy.FCFS, values);
         Assert.Contains(SchedulingPolicy.Priority, values);
