@@ -2518,4 +2518,140 @@ public class MergedPRBugFixTests
     }
 
     #endregion
+
+    #region Reasoning PR #760 - Search Algorithm and Model Bugs
+
+    [Fact]
+    public void ReasoningChain_AddStep_ThrowsForNullStep()
+    {
+        // ARRANGE
+        var chain = new AiDotNet.Reasoning.Models.ReasoningChain<double>();
+        AiDotNet.Reasoning.Models.ReasoningStep<double>? nullStep = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => chain.AddStep(nullStep!));
+        Assert.Equal("step", ex.ParamName);
+    }
+
+    [Fact]
+    public void ReasoningChain_AddStep_SetsStepNumberCorrectly()
+    {
+        // ARRANGE
+        var chain = new AiDotNet.Reasoning.Models.ReasoningChain<double>();
+        var step1 = new AiDotNet.Reasoning.Models.ReasoningStep<double> { Content = "Step 1" };
+        var step2 = new AiDotNet.Reasoning.Models.ReasoningStep<double> { Content = "Step 2" };
+
+        // ACT
+        chain.AddStep(step1);
+        chain.AddStep(step2);
+
+        // ASSERT
+        Assert.Equal(1, step1.StepNumber);
+        Assert.Equal(2, step2.StepNumber);
+        Assert.Equal(2, chain.Steps.Count);
+    }
+
+    [Fact]
+    public void MonteCarloTreeSearch_Constructor_ThrowsForNegativeExplorationConstant()
+    {
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new AiDotNet.Reasoning.Search.MonteCarloTreeSearch<double>(explorationConstant: -1.0));
+        Assert.Equal("explorationConstant", ex.ParamName);
+    }
+
+    [Fact]
+    public void MonteCarloTreeSearch_Constructor_ThrowsForZeroSimulations()
+    {
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new AiDotNet.Reasoning.Search.MonteCarloTreeSearch<double>(numSimulations: 0));
+        Assert.Equal("numSimulations", ex.ParamName);
+    }
+
+    [Fact]
+    public void MonteCarloTreeSearch_Constructor_AcceptsValidParameters()
+    {
+        // ACT - should not throw
+        var mcts = new AiDotNet.Reasoning.Search.MonteCarloTreeSearch<double>(
+            explorationConstant: 0.0,  // Edge case: 0 is valid (pure exploitation)
+            numSimulations: 1);        // Edge case: minimum valid value
+
+        // ASSERT
+        Assert.NotNull(mcts);
+        Assert.Equal("Monte Carlo Tree Search (MCTS)", mcts.AlgorithmName);
+    }
+
+    [Fact]
+    public void ThoughtNode_GetPathFromRoot_ReturnsCorrectPath()
+    {
+        // ARRANGE - Create a simple tree structure
+        var root = new AiDotNet.Reasoning.Models.ThoughtNode<double>
+        {
+            Thought = "Root problem",
+            Depth = 0
+        };
+        var child = new AiDotNet.Reasoning.Models.ThoughtNode<double>
+        {
+            Thought = "First step",
+            Parent = root,
+            Depth = 1
+        };
+        var grandchild = new AiDotNet.Reasoning.Models.ThoughtNode<double>
+        {
+            Thought = "Second step",
+            Parent = child,
+            Depth = 2
+        };
+
+        // ACT
+        var path = grandchild.GetPathFromRoot();
+
+        // ASSERT
+        Assert.Equal(3, path.Count);
+        Assert.Equal("Root problem", path[0]);
+        Assert.Equal("First step", path[1]);
+        Assert.Equal("Second step", path[2]);
+    }
+
+    [Fact]
+    public void ThoughtNode_IsLeaf_ReturnsTrueForNodeWithNoChildren()
+    {
+        // ARRANGE
+        var node = new AiDotNet.Reasoning.Models.ThoughtNode<double> { Thought = "Leaf node" };
+
+        // ACT & ASSERT
+        Assert.True(node.IsLeaf());
+    }
+
+    [Fact]
+    public void ThoughtNode_IsRoot_ReturnsTrueForNodeWithNoParent()
+    {
+        // ARRANGE
+        var root = new AiDotNet.Reasoning.Models.ThoughtNode<double> { Thought = "Root" };
+        var child = new AiDotNet.Reasoning.Models.ThoughtNode<double> { Thought = "Child", Parent = root };
+
+        // ACT & ASSERT
+        Assert.True(root.IsRoot());
+        Assert.False(child.IsRoot());
+    }
+
+    [Fact]
+    public void ReasoningConfig_DefaultValues_AreReasonable()
+    {
+        // ARRANGE & ACT
+        var config = new AiDotNet.Reasoning.Models.ReasoningConfig();
+
+        // ASSERT - Verify defaults are sensible for production use
+        Assert.Equal(10, config.MaxSteps);
+        Assert.Equal(3, config.ExplorationDepth);
+        Assert.Equal(3, config.BranchingFactor);
+        Assert.Equal(5, config.NumSamples);
+        Assert.Equal(0.7, config.Temperature);
+        Assert.Equal(5, config.BeamWidth);
+        Assert.Equal(60, config.MaxReasoningTimeSeconds);
+        Assert.False(config.EnableVerification); // Off by default for performance
+    }
+
+    #endregion
 }
