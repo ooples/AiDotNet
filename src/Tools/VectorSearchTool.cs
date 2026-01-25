@@ -76,7 +76,12 @@ public class VectorSearchTool<T> : ITool
 
         if (topK < 1)
         {
-            throw new ArgumentException("TopK must be at least 1.", nameof(topK));
+            throw new ArgumentOutOfRangeException(nameof(topK), "TopK must be at least 1.");
+        }
+
+        if (topK > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(topK), "TopK cannot exceed 100 to prevent performance issues.");
         }
 
         _defaultTopK = topK;

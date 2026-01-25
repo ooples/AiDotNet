@@ -335,8 +335,74 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
     /// </summary>
     /// <param name="layer">The layer to wrap with a LoRA adapter.</param>
     /// <returns>A new LoRA adapter wrapping the given layer.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no compatible constructor is found.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method attempts to create an adapter using a constructor with signature
+    /// (ILayer&lt;T&gt;, int, double, bool) for (layer, rank, alpha, freezeBaseLayer).
+    /// </para>
+    /// <para>
+    /// If the adapter type does not have this exact constructor signature (e.g., QLoRAAdapter
+    /// which has additional quantization parameters), this method will throw with a helpful
+    /// error message explaining how to properly instantiate that adapter type.
+    /// </para>
+    /// </remarks>
     private ILayer<T> CreateAdapter(ILayer<T> layer)
     {
-        return (ILayer<T>)Activator.CreateInstance(_adapterType, layer, Rank, Alpha, FreezeBaseLayer)!;
+        // Try to find a constructor matching (ILayer<T>, int, double, bool)
+        var constructors = _adapterType.GetConstructors();
+
+        foreach (var ctor in constructors)
+        {
+            var parameters = ctor.GetParameters();
+            if (parameters.Length >= 4)
+            {
+                // Check first 4 parameters match expected types
+                bool firstFourMatch =
+                    typeof(ILayer<T>).IsAssignableFrom(parameters[0].ParameterType) &&
+                    parameters[1].ParameterType == typeof(int) &&
+                    parameters[2].ParameterType == typeof(double) &&
+                    parameters[3].ParameterType == typeof(bool);
+
+                if (firstFourMatch)
+                {
+                    // Check remaining parameters have defaults
+                    bool allRemainingHaveDefaults = true;
+                    for (int i = 4; i < parameters.Length; i++)
+                    {
+                        if (!parameters[i].HasDefaultValue)
+                        {
+                            allRemainingHaveDefaults = false;
+                            break;
+                        }
+                    }
+
+                    if (allRemainingHaveDefaults)
+                    {
+                        // Build parameter array with defaults for remaining parameters
+                        object?[] args = new object?[parameters.Length];
+                        args[0] = layer;
+                        args[1] = Rank;
+                        args[2] = Alpha;
+                        args[3] = FreezeBaseLayer;
+
+                        for (int i = 4; i < parameters.Length; i++)
+                        {
+                            args[i] = parameters[i].DefaultValue;
+                        }
+
+                        return (ILayer<T>)ctor.Invoke(args)!;
+                    }
+                }
+            }
+        }
+
+        // If no compatible constructor found, provide helpful error message
+        throw new InvalidOperationException(
+            $"Adapter type '{_adapterType.Name}' does not have a compatible constructor signature. " +
+            $"Expected signature: (ILayer<T> layer, int rank, double alpha, bool freezeBaseLayer, ...) " +
+            $"where the 4th parameter is bool (freezeBaseLayer). " +
+            $"Some adapters like QLoRAAdapter have different parameter orders and require explicit instantiation. " +
+            $"Use DefaultLoRAConfiguration with StandardLoRAAdapter (default) or pass a pre-created adapter instance.");
     }
 }

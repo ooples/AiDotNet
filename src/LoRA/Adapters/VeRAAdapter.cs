@@ -75,8 +75,9 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// <remarks>
     /// This vector scales the output of the shared matrices on a per-dimension basis.
     /// It is initialized to ones so VeRA has no effect initially.
+    /// Reassigned with correct size in CreateLoRALayer() which is called by the base constructor.
     /// </remarks>
-    private Vector<T> _scalingVectorD;
+    private Vector<T> _scalingVectorD = Vector<T>.Empty();
 
     /// <summary>
     /// Scaling vector b (rank) - trainable per-layer parameter.
@@ -84,8 +85,9 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// <remarks>
     /// This vector scales the intermediate rank-dimensional representation.
     /// It is initialized to ones so VeRA has no effect initially.
+    /// Reassigned with correct size in CreateLoRALayer() which is called by the base constructor.
     /// </remarks>
-    private Vector<T> _scalingVectorB;
+    private Vector<T> _scalingVectorB = Vector<T>.Empty();
 
     /// <summary>
     /// Gradient for scaling vector d computed during backpropagation.
@@ -186,19 +188,8 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
                 $"do not match required dimensions ({rank}×{outputSize})", nameof(baseLayer));
         }
 
-        // Initialize scaling vectors to ones (so VeRA has no initial effect)
-        _scalingVectorD = new Vector<T>(outputSize);
-        _scalingVectorB = new Vector<T>(rank);
-
-        for (int i = 0; i < outputSize; i++)
-        {
-            _scalingVectorD[i] = NumOps.One;
-        }
-
-        for (int i = 0; i < rank; i++)
-        {
-            _scalingVectorB[i] = NumOps.One;
-        }
+        // Note: Scaling vectors are already initialized in CreateLoRALayer() which runs before this point.
+        // This is necessary because the base constructor accesses ParameterCount which uses the scaling vectors.
 
         // Update parameter vector with scaling vectors
         UpdateParametersFromVectors();
@@ -286,6 +277,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// <remarks>
     /// VeRA doesn't use the standard LoRALayer, so this creates a dummy layer.
     /// The actual VeRA computation is handled in Forward() and Backward() methods.
+    /// This method also initializes the scaling vectors (must happen before ParameterCount is accessed).
     /// </remarks>
     protected override LoRALayer<T> CreateLoRALayer(int rank, double alpha)
     {
@@ -293,6 +285,23 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         // Create a minimal LoRA layer that won't be used
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputShape()[0];
+
+        // IMPORTANT: Initialize scaling vectors here because this is called from the base constructor
+        // BEFORE ParameterCount is accessed. If we wait until the VeRAAdapter constructor body,
+        // the base constructor will try to access ParameterCount which uses these vectors, causing NullReferenceException.
+        _scalingVectorD = new Vector<T>(outputSize);
+        _scalingVectorB = new Vector<T>(rank);
+
+        for (int i = 0; i < outputSize; i++)
+        {
+            _scalingVectorD[i] = NumOps.One;
+        }
+
+        for (int i = 0; i < rank; i++)
+        {
+            _scalingVectorB[i] = NumOps.One;
+        }
+
         return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }
 
@@ -583,6 +592,20 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
 
         Parameters = parameters.Clone();
         UpdateVectorsFromParameters();
+    }
+
+    /// <summary>
+    /// Overrides base class parameter synchronization to use VeRA's scaling vectors instead of LoRA layer.
+    /// </summary>
+    /// <remarks>
+    /// VeRA doesn't use the standard LoRA layer for trainable parameters. Instead, it uses
+    /// scaling vectors d and b. This override ensures the base class calls our vector-based
+    /// parameter synchronization instead of trying to copy LoRA layer parameters.
+    /// </remarks>
+    protected override void UpdateParametersFromLayers()
+    {
+        // VeRA uses scaling vectors instead of LoRA layer parameters
+        UpdateParametersFromVectors();
     }
 
     /// <summary>

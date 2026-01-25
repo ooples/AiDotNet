@@ -343,6 +343,21 @@ public abstract class ToolBase : ITool
     /// </remarks>
     protected static bool TryGetBool(JToken token, string propertyName, bool defaultValue = false)
     {
-        return token[propertyName]?.ToObject<bool>() ?? defaultValue;
+        var value = token[propertyName];
+        if (value == null)
+            return defaultValue;
+
+        try
+        {
+            return value.ToObject<bool>();
+        }
+        catch (FormatException)
+        {
+            return defaultValue;
+        }
+        catch (ArgumentException)
+        {
+            return defaultValue;
+        }
     }
 }

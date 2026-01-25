@@ -158,9 +158,19 @@ public class LoRALayer<T> : LayerBase<T>
     public LoRALayer(int inputSize, int outputSize, int rank, double alpha = -1, IActivationFunction<T>? activationFunction = null)
         : base(new[] { inputSize }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
+        if (inputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(inputSize), "Input size must be positive");
+        }
+
+        if (outputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be positive");
+        }
+
         if (rank <= 0)
         {
-            throw new ArgumentException("Rank must be positive", nameof(rank));
+            throw new ArgumentOutOfRangeException(nameof(rank), "Rank must be positive");
         }
 
         if (rank > Math.Min(inputSize, outputSize))

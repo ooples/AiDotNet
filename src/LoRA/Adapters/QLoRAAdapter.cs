@@ -785,12 +785,15 @@ public class QLoRAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> mergedParams = new Vector<T>((inputSize * outputSize) + outputSize);
 
         // Merge weights
+        // dequantizedBaseWeights is [outputSize, inputSize]
+        // loraWeights from MergeWeights() is [inputSize, outputSize]
+        // So we access loraWeights[j, i] = loraWeights[inputIdx, outputIdx]
         for (int i = 0; i < outputSize; i++)
         {
             for (int j = 0; j < inputSize; j++)
             {
                 int idx = i * inputSize + j;
-                mergedParams[idx] = NumOps.Add(dequantizedBaseWeights[i, j], loraWeights[i, j]);
+                mergedParams[idx] = NumOps.Add(dequantizedBaseWeights[i, j], loraWeights[j, i]);
             }
         }
 

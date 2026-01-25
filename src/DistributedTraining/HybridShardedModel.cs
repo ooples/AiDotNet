@@ -107,6 +107,31 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         int dataParallelSize = -1)
         : base(StoreConfigAndPassThrough(wrappedModel, pipelineParallelSize, tensorParallelSize, dataParallelSize), config)
     {
+        // Validate parameters early
+        if (pipelineParallelSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pipelineParallelSize),
+                "Pipeline parallel size must be at least 1.");
+        }
+
+        if (tensorParallelSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(tensorParallelSize),
+                "Tensor parallel size must be at least 1.");
+        }
+
+        // Validate WorldSize constraint early (if explicit dataParallelSize is provided)
+        if (dataParallelSize > 0)
+        {
+            int worldSize = config.CommunicationBackend.WorldSize;
+            if (pipelineParallelSize * tensorParallelSize * dataParallelSize != worldSize)
+            {
+                throw new ArgumentException(
+                    $"Pipeline ({pipelineParallelSize}) × Tensor ({tensorParallelSize}) × " +
+                    $"Data ({dataParallelSize}) must equal WorldSize ({worldSize})");
+            }
+        }
+
         // Clear the pending config after base constructor completes
         PendingConfig.Value = null;
     }
@@ -275,7 +300,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
             SynchronizeGradients();
 
             // Apply the synchronized gradients to update parameters
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
 
             // Get updated parameters
             var updatedParams = WrappedModel.GetParameters();
@@ -286,7 +311,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         else
         {
             // Without gradient synchronization, apply gradients locally
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
             var updatedParams = WrappedModel.GetParameters();
 
             // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)

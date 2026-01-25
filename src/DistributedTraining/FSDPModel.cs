@@ -83,6 +83,8 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     public FSDPModel(IFullModel<T, TInput, TOutput> wrappedModel, IShardingConfiguration<T> config)
         : base(wrappedModel, config)
     {
+        // Must call InitializeSharding() after base constructor to ensure proper initialization
+        InitializeSharding();
     }
 
     /// <inheritdoc/>
@@ -114,9 +116,8 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
             Config.CommunicationBackend.AllReduce(_computedGradients, ReductionOperation.Average);
 
             // Apply the averaged gradients to update full parameters
-            // Note: We use a fixed learning rate here. For adaptive optimizers,
-            // use FSDPOptimizer which properly handles optimizer state.
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            // Note: For adaptive optimizers, use FSDPOptimizer which properly handles optimizer state.
+            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
 
             // Get updated full parameters
             var updatedParams = WrappedModel.GetParameters();
@@ -131,7 +132,7 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
         else
         {
             // No auto-sync: apply gradients locally without synchronization
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
             var updatedParams = WrappedModel.GetParameters();
 
             // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)
