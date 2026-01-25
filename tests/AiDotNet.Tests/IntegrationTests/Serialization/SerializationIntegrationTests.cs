@@ -46,7 +46,17 @@ public class SerializationIntegrationTests : IDisposable
 
         var converters = JsonConverterRegistry.GetAllConverters();
 
-        Assert.Equal(3, converters.Count); // Should still be 3, not 9
+        // Verify total count is still 3 (not 9)
+        Assert.Equal(3, converters.Count);
+
+        // Verify exactly one of each converter type (no duplicates)
+        var vectorConverterCount = converters.Count(c => c is VectorJsonConverter);
+        var matrixConverterCount = converters.Count(c => c is MatrixJsonConverter);
+        var tensorConverterCount = converters.Count(c => c is TensorJsonConverter);
+
+        Assert.Equal(1, vectorConverterCount);
+        Assert.Equal(1, matrixConverterCount);
+        Assert.Equal(1, tensorConverterCount);
     }
 
     [Fact]
