@@ -279,7 +279,22 @@ public abstract class ToolBase : ITool
     /// </remarks>
     protected static int TryGetInt(JToken token, string propertyName, int defaultValue = 0)
     {
-        return token[propertyName]?.ToObject<int>() ?? defaultValue;
+        var value = token[propertyName];
+        if (value == null)
+            return defaultValue;
+
+        try
+        {
+            return value.ToObject<int>();
+        }
+        catch (FormatException)
+        {
+            return defaultValue;
+        }
+        catch (ArgumentException)
+        {
+            return defaultValue;
+        }
     }
 
     /// <summary>
@@ -300,7 +315,22 @@ public abstract class ToolBase : ITool
     /// </remarks>
     protected static double TryGetDouble(JToken token, string propertyName, double defaultValue = 0.0)
     {
-        return token[propertyName]?.ToObject<double>() ?? defaultValue;
+        var value = token[propertyName];
+        if (value == null)
+            return defaultValue;
+
+        try
+        {
+            return value.ToObject<double>();
+        }
+        catch (FormatException)
+        {
+            return defaultValue;
+        }
+        catch (ArgumentException)
+        {
+            return defaultValue;
+        }
     }
 
     /// <summary>
@@ -321,6 +351,21 @@ public abstract class ToolBase : ITool
     /// </remarks>
     protected static bool TryGetBool(JToken token, string propertyName, bool defaultValue = false)
     {
-        return token[propertyName]?.ToObject<bool>() ?? defaultValue;
+        var value = token[propertyName];
+        if (value == null)
+            return defaultValue;
+
+        try
+        {
+            return value.ToObject<bool>();
+        }
+        catch (FormatException)
+        {
+            return defaultValue;
+        }
+        catch (ArgumentException)
+        {
+            return defaultValue;
+        }
     }
 }

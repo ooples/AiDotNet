@@ -91,12 +91,22 @@ public class RAGTool<T> : ITool
 
         if (topK < 1)
         {
-            throw new ArgumentException("TopK must be at least 1.", nameof(topK));
+            throw new ArgumentOutOfRangeException(nameof(topK), "TopK must be at least 1.");
+        }
+
+        if (topK > 100)
+        {
+            throw new ArgumentOutOfRangeException(nameof(topK), "TopK cannot exceed 100 to prevent performance issues.");
         }
 
         if (topKAfterRerank.HasValue && topKAfterRerank.Value < 1)
         {
-            throw new ArgumentException("TopKAfterRerank must be at least 1.", nameof(topKAfterRerank));
+            throw new ArgumentOutOfRangeException(nameof(topKAfterRerank), "TopKAfterRerank must be at least 1.");
+        }
+
+        if (topKAfterRerank.HasValue && topKAfterRerank.Value > topK)
+        {
+            throw new ArgumentOutOfRangeException(nameof(topKAfterRerank), "TopKAfterRerank cannot exceed TopK.");
         }
 
         _reranker = reranker;
