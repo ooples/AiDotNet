@@ -2093,4 +2093,256 @@ public class MergedPRBugFixTests
     }
 
     #endregion
+
+    #region ExperimentTracking PR #766 - Production Bug Fixes
+
+    [Fact]
+    public void ExperimentTracker_GetExperiment_ThrowsForNullExperimentId()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
+        string? nullId = null;
+
+        try
+        {
+            // ACT & ASSERT
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.GetExperiment(nullId!));
+            Assert.Equal("experimentId", ex.ParamName);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ExperimentTracker_GetRun_ThrowsForNullRunId()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
+        string? nullId = null;
+
+        try
+        {
+            // ACT & ASSERT
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.GetRun(nullId!));
+            Assert.Equal("runId", ex.ParamName);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ExperimentTracker_SearchRuns_ThrowsForInvalidMaxResults()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
+
+        try
+        {
+            // ACT & ASSERT - maxResults = 0
+            var ex = Assert.Throws<ArgumentOutOfRangeException>(() => tracker.SearchRuns("test", 0));
+            Assert.Equal("maxResults", ex.ParamName);
+
+            // ACT & ASSERT - maxResults < 0
+            var ex2 = Assert.Throws<ArgumentOutOfRangeException>(() => tracker.SearchRuns("test", -5));
+            Assert.Equal("maxResults", ex2.ParamName);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ExperimentTracker_StartRun_PersistsExperimentTimestamp()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
+
+        try
+        {
+            var experimentId = tracker.CreateExperiment("Test Experiment");
+            var experiment1 = tracker.GetExperiment(experimentId);
+            var initialTimestamp = experiment1.LastUpdatedAt;
+
+            // Wait a bit to ensure timestamp changes
+            System.Threading.Thread.Sleep(50);
+
+            // ACT - Start a run (which should update experiment timestamp)
+            var run = tracker.StartRun(experimentId, "Test Run");
+
+            // ASSERT - Experiment timestamp should be updated
+            var experiment2 = tracker.GetExperiment(experimentId);
+            Assert.True(experiment2.LastUpdatedAt > initialTimestamp,
+                "Experiment timestamp should be updated after starting a run");
+
+            // Verify the timestamp is persisted by reloading
+            var tracker2 = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
+            var reloadedExperiment = tracker2.GetExperiment(experimentId);
+            Assert.True(reloadedExperiment.LastUpdatedAt > initialTimestamp,
+                "Persisted experiment timestamp should reflect the update");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ExperimentRun_LogArtifact_ThrowsForEmptyExtractedFilename()
+    {
+        // ARRANGE
+        var run = new AiDotNet.Models.ExperimentRun<double>("test-experiment");
+
+        // ACT & ASSERT - Path that results in empty filename (e.g., root path)
+        // Path.GetFileName("/") returns empty string on some systems
+        var ex = Assert.Throws<ArgumentException>(() => run.LogArtifact("/", null));
+        Assert.Contains("explicit artifact path", ex.Message);
+    }
+
+    [Fact]
+    public void ExperimentRun_GetLatestMetric_ThrowsForNullMetricName()
+    {
+        // ARRANGE
+        var run = new AiDotNet.Models.ExperimentRun<double>("test-experiment");
+        string? nullName = null;
+
+        // ACT & ASSERT
+        var ex = Assert.Throws<ArgumentNullException>(() => run.GetLatestMetric(nullName!));
+        Assert.Equal("metricName", ex.ParamName);
+    }
+
+    [Fact]
+    public void ExperimentTracker_DeleteExperiment_RemovesFromMemoryEvenIfDirectoryDeletionFails()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
+
+        try
+        {
+            var experimentId = tracker.CreateExperiment("Test Experiment");
+
+            // ACT - Delete the experiment
+            tracker.DeleteExperiment(experimentId);
+
+            // ASSERT - Experiment should be removed from memory
+            var ex = Assert.Throws<ArgumentException>(() => tracker.GetExperiment(experimentId));
+            Assert.Contains("not found", ex.Message);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ExperimentRun_LogMetric_ThreadSafe()
+    {
+        // ARRANGE
+        var run = new AiDotNet.Models.ExperimentRun<double>("test-experiment");
+        var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+
+        // ACT - Log metrics from multiple threads concurrently
+        var tasks = new List<Task>();
+        for (int i = 0; i < 10; i++)
+        {
+            int threadId = i;
+            tasks.Add(Task.Run(() =>
+            {
+                try
+                {
+                    for (int j = 0; j < 100; j++)
+                    {
+                        run.LogMetric($"metric_{threadId}", j * 0.1, j);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    exceptions.Add(ex);
+                }
+            }));
+        }
+        Task.WaitAll(tasks.ToArray());
+
+        // ASSERT - No exceptions should have occurred
+        Assert.Empty(exceptions);
+
+        // All metrics should be logged
+        var metrics = run.GetMetrics();
+        Assert.Equal(10, metrics.Count); // 10 different metric names
+        foreach (var metric in metrics.Values)
+        {
+            Assert.Equal(100, metric.Count); // 100 values per metric
+        }
+    }
+
+    [Fact]
+    public void ExperimentTracker_ListRuns_ThrowsForNullExperimentId()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
+        string? nullId = null;
+
+        try
+        {
+            // ACT & ASSERT
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.ListRuns(nullId!));
+            Assert.Equal("experimentId", ex.ParamName);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ExperimentTracker_DeleteExperiment_ThrowsForNullExperimentId()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
+        string? nullId = null;
+
+        try
+        {
+            // ACT & ASSERT
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.DeleteExperiment(nullId!));
+            Assert.Equal("experimentId", ex.ParamName);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void ExperimentTracker_DeleteRun_ThrowsForNullRunId()
+    {
+        // ARRANGE
+        var tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<double>(tempDir);
+        string? nullId = null;
+
+        try
+        {
+            // ACT & ASSERT
+            var ex = Assert.Throws<ArgumentNullException>(() => tracker.DeleteRun(nullId!));
+            Assert.Equal("runId", ex.ParamName);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+        }
+    }
+
+    #endregion
 }

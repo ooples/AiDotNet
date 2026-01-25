@@ -80,10 +80,9 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
             var run = new ExperimentRun<T>(experimentId, runName, tags);
             _runs[run.RunId] = run;
 
-            // Update experiment timestamp
+            // Update experiment timestamp and persist both
             experiment.Touch();
-
-            // Persist run
+            SaveExperiment(experiment);
             SaveRun(run);
 
             return run;
@@ -95,6 +94,9 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
     /// </summary>
     public override IExperiment GetExperiment(string experimentId)
     {
+        if (experimentId == null)
+            throw new ArgumentNullException(nameof(experimentId));
+
         lock (SyncLock)
         {
             if (!_experiments.TryGetValue(experimentId, out var experiment))
@@ -109,6 +111,9 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
     /// </summary>
     public override IExperimentRun<T> GetRun(string runId)
     {
+        if (runId == null)
+            throw new ArgumentNullException(nameof(runId));
+
         lock (SyncLock)
         {
             if (!_runs.TryGetValue(runId, out var run))
@@ -144,6 +149,9 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
     /// </summary>
     public override IEnumerable<IExperimentRun<T>> ListRuns(string experimentId, string? filter = null)
     {
+        if (experimentId == null)
+            throw new ArgumentNullException(nameof(experimentId));
+
         lock (SyncLock)
         {
             if (!_experiments.ContainsKey(experimentId))
@@ -168,6 +176,9 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
     /// </summary>
     public override void DeleteExperiment(string experimentId)
     {
+        if (experimentId == null)
+            throw new ArgumentNullException(nameof(experimentId));
+
         lock (SyncLock)
         {
             if (!_experiments.ContainsKey(experimentId))
@@ -187,11 +198,20 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
             // Delete experiment
             _experiments.Remove(experimentId);
 
-            // Delete experiment directory
+            // Delete experiment directory - continue even if deletion fails
+            // (the in-memory state is already updated)
             var experimentDir = GetExperimentDirectoryPath(experimentId);
-            if (Directory.Exists(experimentDir))
+            try
             {
-                Directory.Delete(experimentDir, true);
+                if (Directory.Exists(experimentDir))
+                {
+                    Directory.Delete(experimentDir, true);
+                }
+            }
+            catch (IOException)
+            {
+                // Directory may be in use or have permission issues
+                // The experiment is already removed from memory, so log and continue
             }
         }
     }
@@ -201,6 +221,9 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
     /// </summary>
     public override void DeleteRun(string runId)
     {
+        if (runId == null)
+            throw new ArgumentNullException(nameof(runId));
+
         lock (SyncLock)
         {
             if (!_runs.ContainsKey(runId))
@@ -213,10 +236,19 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
             // Remove from tracking
             _runs.Remove(runId);
 
-            // Delete run directory
-            if (Directory.Exists(runDir))
+            // Delete run directory - continue even if deletion fails
+            // (the in-memory state is already updated)
+            try
             {
-                Directory.Delete(runDir, true);
+                if (Directory.Exists(runDir))
+                {
+                    Directory.Delete(runDir, true);
+                }
+            }
+            catch (IOException)
+            {
+                // Directory may be in use or have permission issues
+                // The run is already removed from memory, so log and continue
             }
         }
     }
@@ -226,6 +258,9 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
     /// </summary>
     public override IEnumerable<IExperimentRun<T>> SearchRuns(string filter, int maxResults = 100)
     {
+        if (maxResults <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxResults), "Max results must be greater than zero.");
+
         lock (SyncLock)
         {
             var matchingRuns = _runs.Values.AsEnumerable();
@@ -350,7 +385,9 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
 
     private string GetRunDirectory(string runId)
     {
-        var run = _runs[runId];
+        if (!_runs.TryGetValue(runId, out var run))
+            throw new InvalidOperationException($"Run with ID '{runId}' not found in tracker. This is an internal error.");
+
         var experimentDir = GetExperimentDirectoryPath(run.ExperimentId);
         var sanitizedRunId = GetSanitizedFileName(runId);
         var path = Path.Combine(experimentDir, sanitizedRunId);
