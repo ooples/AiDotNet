@@ -62,7 +62,9 @@ public class LoggingIntegrationTests : IDisposable
             writer = new SummaryWriter();
             logDir = writer.LogDir;
             Assert.NotNull(writer.LogDir);
-            Assert.StartsWith("runs", writer.LogDir);
+            // Check the parent directory name is "runs" (path-agnostic, works with absolute paths)
+            var parentDirName = Path.GetFileName(Path.GetDirectoryName(writer.LogDir));
+            Assert.Equal("runs", parentDirName);
             Assert.True(Directory.Exists(writer.LogDir));
         }
         finally
