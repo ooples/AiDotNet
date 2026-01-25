@@ -27,6 +27,9 @@ public class BucketBatchingStrategy : IBatchingStrategy
 
         _bucketBoundaries = bucketBoundaries ?? new[] { 32, 64, 128, 256, 512 };
 
+        if (_bucketBoundaries.Length == 0)
+            throw new ArgumentException("Bucket boundaries cannot be empty.", nameof(bucketBoundaries));
+
         // Validate bucket boundaries are positive
         for (int i = 0; i < _bucketBoundaries.Length; i++)
         {

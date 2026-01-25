@@ -2472,24 +2472,33 @@ public class MergedPRBugFixTests
     {
         // ARRANGE - This tests that the Receive method validates size BEFORE dequeuing
         // to prevent data loss when caller requests wrong size
-        var backend = new AiDotNet.DistributedTraining.InMemoryCommunicationBackend<double>(0, 2, "test-receive-size");
-        backend.Initialize();
+        var sender = new AiDotNet.DistributedTraining.InMemoryCommunicationBackend<double>(0, 2, "test-receive-size");
+        var receiver = new AiDotNet.DistributedTraining.InMemoryCommunicationBackend<double>(1, 2, "test-receive-size");
+        sender.Initialize();
+        receiver.Initialize();
 
         try
         {
-            // This is a single-process test that verifies the validation logic
-            // In a real scenario, another rank would send the data
-            // Here we just verify that when size doesn't match, the message is preserved
-            // (The actual multi-rank test is in the integration tests)
+            // ACT - Send a message with 3 elements
+            var payload = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
+            sender.Send(payload, destinationRank: 1, tag: 7);
 
-            // For this unit test, we verify the constructor and basic validation
-            Assert.Equal(0, backend.Rank);
-            Assert.Equal(2, backend.WorldSize);
-            Assert.True(backend.IsInitialized);
+            // ASSERT - Try to receive with wrong size (2 instead of 3) - should throw
+            Assert.Throws<InvalidOperationException>(() =>
+                receiver.Receive(sourceRank: 0, count: 2, tag: 7));
+
+            // ASSERT - Message should still be in queue, receive with correct size (3) should work
+            var received = receiver.Receive(sourceRank: 0, count: 3, tag: 7);
+            Assert.Equal(payload.Length, received.Length);
+            for (int i = 0; i < payload.Length; i++)
+            {
+                Assert.Equal(payload[i], received[i]);
+            }
         }
         finally
         {
-            backend.Shutdown();
+            sender.Shutdown();
+            receiver.Shutdown();
         }
     }
 

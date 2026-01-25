@@ -306,10 +306,10 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
                 target[i] = Convert.ToDouble(targetArray.GetValue(i));
             }
         }
-        catch
+        catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
         {
-            // If conversion fails, fall back to equality check
-            return predArray.Equals(targetArray) ? 0.0 : -10.0;
+            // If conversion fails, fall back to equality check using SequenceEqual
+            return predArray.Cast<object>().SequenceEqual(targetArray.Cast<object>()) ? 0.0 : -10.0;
         }
 
         // If lengths differ, use the minimum length and penalize
@@ -387,7 +387,7 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
             // Use the array method
             return ComputeArrayLogProbability(predDouble, targetDouble);
         }
-        catch
+        catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
         {
             // Fall back to sequence matching
             int matches = 0;

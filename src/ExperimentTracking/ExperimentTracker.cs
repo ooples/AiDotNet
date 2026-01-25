@@ -208,10 +208,11 @@ public class ExperimentTracker<T> : ExperimentTrackerBase<T>
                     Directory.Delete(experimentDir, true);
                 }
             }
-            catch (IOException)
+            catch (IOException ex)
             {
                 // Directory may be in use or have permission issues
                 // The experiment is already removed from memory, so log and continue
+                Console.WriteLine($"[ExperimentTracker] Failed to delete experiment directory '{experimentDir}': {ex.Message}");
             }
         }
     }

@@ -53,8 +53,8 @@ internal class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
     /// <exception cref="ArgumentOutOfRangeException">Thrown if explorationConstant is negative or numSimulations is less than 1.</exception>
     public MonteCarloTreeSearch(double explorationConstant = 1.414, int numSimulations = 100)
     {
-        if (explorationConstant < 0)
-            throw new ArgumentOutOfRangeException(nameof(explorationConstant), "Exploration constant must be non-negative.");
+        if (double.IsNaN(explorationConstant) || double.IsInfinity(explorationConstant) || explorationConstant < 0)
+            throw new ArgumentOutOfRangeException(nameof(explorationConstant), "Exploration constant must be a finite non-negative value.");
         if (numSimulations < 1)
             throw new ArgumentOutOfRangeException(nameof(numSimulations), "Number of simulations must be at least 1.");
 

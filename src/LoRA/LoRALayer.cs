@@ -139,7 +139,7 @@ public class LoRALayer<T> : LayerBase<T>
     /// <param name="rank">The rank of the low-rank decomposition (must be positive and less than min(inputSize, outputSize)).</param>
     /// <param name="alpha">The scaling factor for LoRA contributions (typically similar to rank value).</param>
     /// <param name="activationFunction">Optional activation function to apply after the LoRA transformation.</param>
-    /// <exception cref="ArgumentException">Thrown when rank is invalid.</exception>
+    /// <exception cref="ArgumentException">Thrown when rank is not positive or exceeds min(inputSize, outputSize).</exception>
     /// <remarks>
     /// <para>
     /// The LoRA matrices are initialized as follows:
