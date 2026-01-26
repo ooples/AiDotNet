@@ -2260,13 +2260,13 @@ Console.WriteLine($""  Test prediction: {predictions[0]:F2}"");
                     Description = "Convert text documents to TF-IDF weighted vectors",
                     Difficulty = "Intermediate",
                     Tags = ["nlp", "text", "tfidf", "vectorization"],
-                    Code = @"// TF-IDF Text Vectorization for Classification
+                    Code = @"// TF-IDF Text Vectorization for Classification using AiModelBuilder
 using AiDotNet;
 using AiDotNet.Preprocessing.TextVectorizers;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 
-// Sample text documents
+// Sample text documents for sentiment classification
 var documents = new string[]
 {
     ""I love this product, it's amazing!"",
@@ -2285,29 +2285,27 @@ var tfidf = new TfidfVectorizer<double>(
     lowercase: true
 );
 
-// Transform documents to feature matrix
-var features = tfidf.FitTransform(documents);
+// Use DataLoaders.FromTextDocuments for seamless AiModelBuilder integration
+// This fits the vectorizer and creates a data loader in one step
+var loader = DataLoaders.FromTextDocuments(documents, labels, tfidf);
 
-Console.WriteLine(""TF-IDF Vectorization Results:"");
-Console.WriteLine($""  Documents: {documents.Length}"");
-Console.WriteLine($""  Vocabulary size: {tfidf.Vocabulary?.Count ?? 0}"");
-Console.WriteLine($""  Feature matrix shape: {features.Rows} x {features.Columns}"");
-
-// Now use with AiModelBuilder
-var loader = DataLoaders.FromMatrixVector(features, new Vector<double>(labels));
 var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureDataLoader(loader)
     .ConfigureModel(new LogisticRegression<double>())
     .BuildAsync();
 
-Console.WriteLine();
-Console.WriteLine(""  Model trained on TF-IDF features"");
+Console.WriteLine(""TF-IDF Text Classification Results:"");
+Console.WriteLine($""  Documents: {documents.Length}"");
+Console.WriteLine($""  Vocabulary size: {tfidf.Vocabulary?.Count ?? 0}"");
+Console.WriteLine($""  TF-IDF features: {tfidf.FeatureNames?.Length ?? 0}"");
+Console.WriteLine(""  Model trained successfully!"");
 
-// Classify new text
+// Classify new text using the fitted vectorizer
 var newDoc = new[] { ""This is an excellent product!"" };
 var newFeatures = tfidf.Transform(newDoc);
 var prediction = result.Predict(newFeatures);
 
+Console.WriteLine();
 Console.WriteLine($""  New review: '{newDoc[0]}'"");
 Console.WriteLine($""  Prediction: {(prediction[0] > 0.5 ? ""Positive"" : ""Negative"")}"");
 "
@@ -2459,7 +2457,7 @@ Console.WriteLine(""Download from: huggingface.co/bert-base-uncased"");
                     Description = "Text classification using neural networks with TF-IDF features",
                     Difficulty = "Advanced",
                     Tags = ["nlp", "classification", "neural-network", "embedding"],
-                    Code = @"// Neural Network Text Classification
+                    Code = @"// Neural Network Text Classification using AiModelBuilder
 using AiDotNet;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Preprocessing.TextVectorizers;
@@ -2479,13 +2477,18 @@ var trainDocs = new string[]
 };
 var trainLabels = new double[] { 1, 1, 1, 1, 0, 0, 0, 0 };
 
-// Vectorize with TF-IDF
+// Create TF-IDF vectorizer
 var tfidf = new TfidfVectorizer<double>(maxFeatures: 30);
-var features = tfidf.FitTransform(trainDocs);
+
+// Use DataLoaders.FromTextDocuments for AiModelBuilder integration
+var loader = DataLoaders.FromTextDocuments(trainDocs, trainLabels, tfidf);
+
+// Get feature count from fitted vectorizer
+int featureCount = tfidf.FeatureNames?.Length ?? 30;
 
 Console.WriteLine(""Text Classification with Neural Network:"");
 Console.WriteLine($""  Training documents: {trainDocs.Length}"");
-Console.WriteLine($""  TF-IDF features: {features.Columns}"");
+Console.WriteLine($""  TF-IDF features: {featureCount}"");
 Console.WriteLine();
 
 // Create neural network architecture for binary classification
@@ -2493,20 +2496,20 @@ var architecture = new NeuralNetworkArchitecture<double>(
     inputType: InputType.OneDimensional,
     taskType: NeuralNetworkTaskType.BinaryClassification,
     complexity: NetworkComplexity.Simple,
-    inputSize: features.Columns,
+    inputSize: featureCount,
     outputSize: 1);
 
-// Create and configure the neural network
+// Create neural network and use with AiModelBuilder
 var network = new FeedForwardNeuralNetwork<double>(architecture);
 
 Console.WriteLine(""Neural Network Architecture:"");
-Console.WriteLine($""  Input: {features.Columns} TF-IDF features"");
+Console.WriteLine($""  Input: {featureCount} TF-IDF features"");
 Console.WriteLine($""  Hidden: Dense layers (auto-configured)"");
 Console.WriteLine($""  Output: Binary classification (sigmoid)"");
 Console.WriteLine($""  Complexity: Simple"");
 Console.WriteLine();
 
-// Demonstrate the TF-IDF + Neural Network pipeline
+// Transform test documents using the fitted vectorizer
 var testDocs = new string[] { ""Great product, highly recommend!"", ""Total waste of money"" };
 var testFeatures = tfidf.Transform(testDocs);
 
@@ -2521,7 +2524,7 @@ for (int i = 0; i < testDocs.Length; i++)
 }
 
 Console.WriteLine();
-Console.WriteLine(""Note: For full training, use network.Train() or TrainAsync()."");
+Console.WriteLine(""DataLoaders.FromTextDocuments provides seamless text vectorization integration."");
 "
                 },
                 new CodeExample
