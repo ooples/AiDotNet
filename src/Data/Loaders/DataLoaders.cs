@@ -1,5 +1,6 @@
 using AiDotNet.Data.Geometry;
 using AiDotNet.FederatedLearning.Benchmarks.Leaf;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Data.Loaders;
@@ -511,6 +512,112 @@ public static class DataLoaders
     #region Text Document Factory Methods
 
     /// <summary>
+    /// Creates a data loader from text documents using any text vectorizer.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="documents">Array of text documents to vectorize.</param>
+    /// <param name="labels">Vector of labels, one per document.</param>
+    /// <param name="vectorizer">Any text vectorizer implementing <see cref="ITextVectorizer{T}"/>.</param>
+    /// <returns>A configured InMemoryDataLoader with vectorized text features.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when documents, labels, or vectorizer is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when document count doesn't match label count.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the easiest way to use text data with AiModelBuilder.
+    /// The vectorizer converts your text documents into numeric features automatically.
+    ///
+    /// **Available Vectorizers:**
+    /// - <see cref="Preprocessing.TextVectorizers.TfidfVectorizer{T}"/>: TF-IDF weighted features (recommended for most cases)
+    /// - <see cref="Preprocessing.TextVectorizers.CountVectorizer{T}"/>: Simple word count features
+    /// - <see cref="Preprocessing.TextVectorizers.HashingVectorizer{T}"/>: Memory-efficient hashing (for very large vocabularies)
+    ///
+    /// **Example - Sentiment Classification:**
+    /// ```csharp
+    /// var documents = new[] { "Great product!", "Terrible service", "Love it!" };
+    /// var labels = new Vector&lt;double&gt;(new[] { 1.0, 0.0, 1.0 });
+    ///
+    /// // Use TF-IDF (recommended for most text classification tasks)
+    /// var loader = DataLoaders.FromTextDocuments(
+    ///     documents,
+    ///     labels,
+    ///     new TfidfVectorizer&lt;double&gt;(maxFeatures: 50));
+    ///
+    /// // Or use CountVectorizer for simple bag-of-words
+    /// var loader2 = DataLoaders.FromTextDocuments(
+    ///     documents,
+    ///     labels,
+    ///     new CountVectorizer&lt;double&gt;(maxFeatures: 50));
+    ///
+    /// // Or use HashingVectorizer for memory efficiency with large vocabularies
+    /// var loader3 = DataLoaders.FromTextDocuments(
+    ///     documents,
+    ///     labels,
+    ///     new HashingVectorizer&lt;double&gt;(nFeatures: 1024));
+    ///
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureDataLoader(loader)
+    ///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
+    ///     .BuildAsync();
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromTextDocuments<T>(
+        string[] documents,
+        Vector<T> labels,
+        ITextVectorizer<T> vectorizer)
+    {
+        if (documents is null)
+            throw new ArgumentNullException(nameof(documents), "Documents array cannot be null.");
+        if (labels is null)
+            throw new ArgumentNullException(nameof(labels), "Labels vector cannot be null.");
+        if (vectorizer is null)
+            throw new ArgumentNullException(nameof(vectorizer), "Vectorizer cannot be null.");
+        if (documents.Length != labels.Length)
+            throw new ArgumentException(
+                $"Document count ({documents.Length}) must match label count ({labels.Length}).",
+                nameof(labels));
+
+        // Fit and transform documents to features
+        var features = vectorizer.FitTransform(documents);
+        return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(features, labels);
+    }
+
+    /// <summary>
+    /// Creates a data loader from text documents using any text vectorizer with array labels.
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="documents">Array of text documents to vectorize.</param>
+    /// <param name="labels">Array of labels, one per document.</param>
+    /// <param name="vectorizer">Any text vectorizer implementing <see cref="ITextVectorizer{T}"/>.</param>
+    /// <returns>A configured InMemoryDataLoader with vectorized text features.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when documents, labels, or vectorizer is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when document count doesn't match label count.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Convenience overload that accepts a simple array for labels.
+    ///
+    /// **Example:**
+    /// ```csharp
+    /// var documents = new[] { "Great!", "Bad!", "Amazing!" };
+    /// var labels = new double[] { 1, 0, 1 };
+    ///
+    /// var loader = DataLoaders.FromTextDocuments(
+    ///     documents,
+    ///     labels,
+    ///     new TfidfVectorizer&lt;double&gt;(maxFeatures: 50));
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromTextDocuments<T>(
+        string[] documents,
+        T[] labels,
+        ITextVectorizer<T> vectorizer)
+    {
+        if (labels is null)
+            throw new ArgumentNullException(nameof(labels), "Labels array cannot be null.");
+
+        return FromTextDocuments(documents, new Vector<T>(labels), vectorizer);
+    }
+
+    /// <summary>
     /// Creates a data loader from text documents using a TF-IDF vectorizer.
     /// </summary>
     /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
@@ -546,20 +653,7 @@ public static class DataLoaders
         Vector<T> labels,
         Preprocessing.TextVectorizers.TfidfVectorizer<T> vectorizer)
     {
-        if (documents is null)
-            throw new ArgumentNullException(nameof(documents), "Documents array cannot be null.");
-        if (labels is null)
-            throw new ArgumentNullException(nameof(labels), "Labels vector cannot be null.");
-        if (vectorizer is null)
-            throw new ArgumentNullException(nameof(vectorizer), "Vectorizer cannot be null.");
-        if (documents.Length != labels.Length)
-            throw new ArgumentException(
-                $"Document count ({documents.Length}) must match label count ({labels.Length}).",
-                nameof(labels));
-
-        // Fit and transform documents to TF-IDF features
-        var features = vectorizer.FitTransform(documents);
-        return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(features, labels);
+        return FromTextDocuments(documents, labels, (ITextVectorizer<T>)vectorizer);
     }
 
     /// <summary>
@@ -592,10 +686,7 @@ public static class DataLoaders
         T[] labels,
         Preprocessing.TextVectorizers.TfidfVectorizer<T> vectorizer)
     {
-        if (labels is null)
-            throw new ArgumentNullException(nameof(labels), "Labels array cannot be null.");
-
-        return FromTextDocuments(documents, new Vector<T>(labels), vectorizer);
+        return FromTextDocuments(documents, labels, (ITextVectorizer<T>)vectorizer);
     }
 
     /// <summary>
@@ -626,20 +717,7 @@ public static class DataLoaders
         Vector<T> labels,
         Preprocessing.TextVectorizers.CountVectorizer<T> vectorizer)
     {
-        if (documents is null)
-            throw new ArgumentNullException(nameof(documents), "Documents array cannot be null.");
-        if (labels is null)
-            throw new ArgumentNullException(nameof(labels), "Labels vector cannot be null.");
-        if (vectorizer is null)
-            throw new ArgumentNullException(nameof(vectorizer), "Vectorizer cannot be null.");
-        if (documents.Length != labels.Length)
-            throw new ArgumentException(
-                $"Document count ({documents.Length}) must match label count ({labels.Length}).",
-                nameof(labels));
-
-        // Fit and transform documents to count features
-        var features = vectorizer.FitTransform(documents);
-        return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(features, labels);
+        return FromTextDocuments(documents, labels, (ITextVectorizer<T>)vectorizer);
     }
 
     /// <summary>
@@ -655,10 +733,7 @@ public static class DataLoaders
         T[] labels,
         Preprocessing.TextVectorizers.CountVectorizer<T> vectorizer)
     {
-        if (labels is null)
-            throw new ArgumentNullException(nameof(labels), "Labels array cannot be null.");
-
-        return FromTextDocuments(documents, new Vector<T>(labels), vectorizer);
+        return FromTextDocuments(documents, labels, (ITextVectorizer<T>)vectorizer);
     }
 
     /// <summary>
@@ -689,20 +764,7 @@ public static class DataLoaders
         Vector<T> labels,
         Preprocessing.TextVectorizers.HashingVectorizer<T> vectorizer)
     {
-        if (documents is null)
-            throw new ArgumentNullException(nameof(documents), "Documents array cannot be null.");
-        if (labels is null)
-            throw new ArgumentNullException(nameof(labels), "Labels vector cannot be null.");
-        if (vectorizer is null)
-            throw new ArgumentNullException(nameof(vectorizer), "Vectorizer cannot be null.");
-        if (documents.Length != labels.Length)
-            throw new ArgumentException(
-                $"Document count ({documents.Length}) must match label count ({labels.Length}).",
-                nameof(labels));
-
-        // Transform documents to hashed features (hashing vectorizer doesn't need fitting)
-        var features = vectorizer.Transform(documents);
-        return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(features, labels);
+        return FromTextDocuments(documents, labels, (ITextVectorizer<T>)vectorizer);
     }
 
     /// <summary>
@@ -718,10 +780,7 @@ public static class DataLoaders
         T[] labels,
         Preprocessing.TextVectorizers.HashingVectorizer<T> vectorizer)
     {
-        if (labels is null)
-            throw new ArgumentNullException(nameof(labels), "Labels array cannot be null.");
-
-        return FromTextDocuments(documents, new Vector<T>(labels), vectorizer);
+        return FromTextDocuments(documents, labels, (ITextVectorizer<T>)vectorizer);
     }
 
     #endregion

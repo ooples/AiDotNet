@@ -1,5 +1,5 @@
-using AiDotNet.Helpers;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -9,8 +9,8 @@ namespace AiDotNet.Preprocessing.TextVectorizers;
 /// <remarks>
 /// <para>
 /// HashingVectorizer uses the hashing trick to map tokens to a fixed number of features.
-/// Unlike CountVectorizer, it doesn't require storing a vocabulary, making it memory-efficient
-/// for very large datasets or streaming applications.
+/// Unlike CountVectorizer and TfidfVectorizer, it doesn't require storing a vocabulary,
+/// making it memory-efficient for very large datasets or streaming applications.
 /// </para>
 /// <para>
 /// The trade-off is that hash collisions can occur (different tokens map to same feature),
@@ -24,16 +24,12 @@ namespace AiDotNet.Preprocessing.TextVectorizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
-public class HashingVectorizer<T>
+public class HashingVectorizer<T> : TextVectorizerBase<T>
 {
     private readonly int _nFeatures;
-    private readonly (int Min, int Max) _nGramRange;
-    private readonly bool _lowercase;
     private readonly bool _binary;
     private readonly bool _alternateSign;
     private readonly HashingNorm _norm;
-    private readonly Func<string, IEnumerable<string>>? _tokenizer;
-    private readonly HashSet<string>? _stopWords;
 
     /// <summary>
     /// Gets the number of output features (hash buckets).
@@ -60,20 +56,37 @@ public class HashingVectorizer<T>
         HashingNorm norm = HashingNorm.L2,
         Func<string, IEnumerable<string>>? tokenizer = null,
         HashSet<string>? stopWords = null)
+        : base(minDf: 1, maxDf: 1.0, maxFeatures: null, nGramRange, lowercase, tokenizer, stopWords)
     {
         if (nFeatures < 1)
-        {
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeatures));
-        }
 
         _nFeatures = nFeatures;
-        _nGramRange = nGramRange ?? (1, 1);
-        _lowercase = lowercase;
         _binary = binary;
         _alternateSign = alternateSign;
         _norm = norm;
-        _tokenizer = tokenizer;
-        _stopWords = stopWords;
+
+        // Generate synthetic feature names
+        _featureNames = Enumerable.Range(0, _nFeatures).Select(i => $"hash_{i}").ToArray();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// HashingVectorizer is always fitted - it doesn't learn from data.
+    /// </remarks>
+    public override bool IsFitted => true;
+
+    /// <inheritdoc/>
+    public override int FeatureCount => _nFeatures;
+
+    /// <summary>
+    /// Fits the vectorizer (no-op for HashingVectorizer - fitting is not required).
+    /// </summary>
+    /// <param name="documents">The documents (ignored).</param>
+    public override void Fit(IEnumerable<string> documents)
+    {
+        // HashingVectorizer doesn't need fitting - this is a no-op for API compatibility
+        _nDocs = documents.Count();
     }
 
     /// <summary>
@@ -82,7 +95,7 @@ public class HashingVectorizer<T>
     /// </summary>
     /// <param name="documents">The documents to transform.</param>
     /// <returns>Matrix where each row is a document's hashed feature vector.</returns>
-    public Matrix<T> Transform(IEnumerable<string> documents)
+    public override Matrix<T> Transform(IEnumerable<string> documents)
     {
         var docList = documents.ToList();
         int nDocs = docList.Count;
@@ -151,20 +164,17 @@ public class HashingVectorizer<T>
         {
             for (int j = 0; j < _nFeatures; j++)
             {
-                output[i, j] = NumOps<T>.FromDouble(result[i, j]);
+                output[i, j] = NumOps.FromDouble(result[i, j]);
             }
         }
 
         return new Matrix<T>(output);
     }
 
-    /// <summary>
-    /// Fits and transforms (for API compatibility - no actual fitting needed).
-    /// </summary>
-    /// <param name="documents">The documents to transform.</param>
-    /// <returns>Matrix of hashed feature values.</returns>
-    public Matrix<T> FitTransform(IEnumerable<string> documents)
+    /// <inheritdoc/>
+    public override Matrix<T> FitTransform(IEnumerable<string> documents)
     {
+        // HashingVectorizer doesn't need fitting, just transform
         return Transform(documents);
     }
 
@@ -195,93 +205,6 @@ public class HashingVectorizer<T>
             return hash;
         }
     }
-
-    private IEnumerable<string> Tokenize(string text)
-    {
-        if (_tokenizer is not null)
-        {
-            var tokens = _tokenizer(text);
-            if (_lowercase)
-            {
-                tokens = tokens.Select(t => t.ToLowerInvariant());
-            }
-            if (_stopWords is not null)
-            {
-                tokens = tokens.Where(t => !_stopWords.Contains(t));
-            }
-            return tokens;
-        }
-
-        // Default tokenizer: split on whitespace and punctuation
-        string processedText = _lowercase ? text.ToLowerInvariant() : text;
-
-        var tokenList = new List<string>();
-        var currentToken = new System.Text.StringBuilder();
-
-        foreach (char c in processedText)
-        {
-            if (char.IsLetterOrDigit(c))
-            {
-                currentToken.Append(c);
-            }
-            else if (currentToken.Length > 0)
-            {
-                string token = currentToken.ToString();
-                if (_stopWords is null || !_stopWords.Contains(token))
-                {
-                    tokenList.Add(token);
-                }
-                currentToken.Clear();
-            }
-        }
-
-        if (currentToken.Length > 0)
-        {
-            string token = currentToken.ToString();
-            if (_stopWords is null || !_stopWords.Contains(token))
-            {
-                tokenList.Add(token);
-            }
-        }
-
-        return tokenList;
-    }
-
-    private IEnumerable<string> GenerateNGrams(IEnumerable<string> tokens)
-    {
-        var tokenList = tokens.ToList();
-        var ngrams = new List<string>();
-
-        for (int n = _nGramRange.Min; n <= _nGramRange.Max; n++)
-        {
-            for (int i = 0; i <= tokenList.Count - n; i++)
-            {
-                string ngram = string.Join(" ", tokenList.Skip(i).Take(n));
-                ngrams.Add(ngram);
-            }
-        }
-
-        return ngrams;
-    }
-
-    /// <summary>
-    /// Gets feature names (hash bucket indices).
-    /// </summary>
-    public string[] GetFeatureNamesOut()
-    {
-        return Enumerable.Range(0, _nFeatures).Select(i => $"hash_{i}").ToArray();
-    }
-
-    /// <summary>
-    /// Common English stop words.
-    /// </summary>
-    public static HashSet<string> EnglishStopWords => new HashSet<string>
-    {
-        "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
-        "has", "he", "in", "is", "it", "its", "of", "on", "that", "the",
-        "to", "was", "were", "will", "with", "the", "this", "but", "they",
-        "have", "had", "what", "when", "where", "who", "which", "why", "how"
-    };
 }
 
 /// <summary>

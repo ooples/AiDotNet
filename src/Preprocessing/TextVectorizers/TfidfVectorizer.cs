@@ -1,5 +1,5 @@
-using AiDotNet.Helpers;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -27,45 +27,30 @@ namespace AiDotNet.Preprocessing.TextVectorizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
-public class TfidfVectorizer<T>
+public class TfidfVectorizer<T> : TextVectorizerBase<T>
 {
-    private readonly int _minDf;
-    private readonly double _maxDf;
-    private readonly int? _maxFeatures;
-    private readonly (int Min, int Max) _nGramRange;
-    private readonly bool _lowercase;
     private readonly TfidfNorm _norm;
     private readonly bool _useIdf;
     private readonly bool _smoothIdf;
     private readonly bool _sublinearTf;
-    private readonly Func<string, IEnumerable<string>>? _tokenizer;
-    private readonly HashSet<string>? _stopWords;
 
-    // Fitted parameters
-    private Dictionary<string, int>? _vocabulary;
-    private string[]? _featureNames;
+    // Fitted parameters specific to TF-IDF
     private double[]? _idfWeights;
-    private int _nDocs;
-
-    /// <summary>
-    /// Gets the vocabulary (token to index mapping).
-    /// </summary>
-    public Dictionary<string, int>? Vocabulary => _vocabulary;
-
-    /// <summary>
-    /// Gets the feature names (tokens).
-    /// </summary>
-    public string[]? FeatureNames => _featureNames;
 
     /// <summary>
     /// Gets the IDF weights for each term.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// IDF (Inverse Document Frequency) weights indicate how rare/important each term is.
+    /// Higher values mean the term appears in fewer documents and is more discriminative.
+    /// </para>
+    /// <para><b>For Beginners:</b> Terms that appear in many documents get low IDF weights
+    /// (they're common and not very distinctive), while terms in few documents get high weights
+    /// (they're rare and help distinguish documents).
+    /// </para>
+    /// </remarks>
     public double[]? IdfWeights => _idfWeights;
-
-    /// <summary>
-    /// Gets whether this vectorizer has been fitted.
-    /// </summary>
-    public bool IsFitted => _vocabulary is not null;
 
     /// <summary>
     /// Creates a new instance of <see cref="TfidfVectorizer{T}"/>.
@@ -93,35 +78,22 @@ public class TfidfVectorizer<T>
         bool sublinearTf = false,
         Func<string, IEnumerable<string>>? tokenizer = null,
         HashSet<string>? stopWords = null)
+        : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords)
     {
-        if (minDf < 1)
-        {
-            throw new ArgumentException("Minimum document frequency must be at least 1.", nameof(minDf));
-        }
-
-        if (maxDf < 0 || maxDf > 1)
-        {
-            throw new ArgumentException("Maximum document frequency must be between 0 and 1.", nameof(maxDf));
-        }
-
-        _minDf = minDf;
-        _maxDf = maxDf;
-        _maxFeatures = maxFeatures;
-        _nGramRange = nGramRange ?? (1, 1);
-        _lowercase = lowercase;
         _norm = norm;
         _useIdf = useIdf;
         _smoothIdf = smoothIdf;
         _sublinearTf = sublinearTf;
-        _tokenizer = tokenizer;
-        _stopWords = stopWords;
     }
+
+    /// <inheritdoc/>
+    public override bool IsFitted => _vocabulary is not null && _idfWeights is not null;
 
     /// <summary>
     /// Fits the vectorizer to the corpus.
     /// </summary>
     /// <param name="documents">The text documents to learn vocabulary and IDF from.</param>
-    public void Fit(IEnumerable<string> documents)
+    public override void Fit(IEnumerable<string> documents)
     {
         var docList = documents.ToList();
         _nDocs = docList.Count;
@@ -149,42 +121,14 @@ public class TfidfVectorizer<T>
             }
         }
 
-        // Filter by document frequency
-        double maxDfCount = _maxDf * _nDocs;
-        var filteredTokens = dfCounts
-            .Where(kvp => kvp.Value >= _minDf && kvp.Value <= maxDfCount)
-            .Select(kvp => kvp.Key)
-            .ToList();
-
-        // Sort by total count (descending) for consistent ordering
-        filteredTokens = filteredTokens
-            .OrderByDescending(t => allTokenCounts[t])
-            .ThenBy(t => t)
-            .ToList();
-
-        // Apply max features limit
-        if (_maxFeatures.HasValue && filteredTokens.Count > _maxFeatures.Value)
-        {
-            filteredTokens = filteredTokens.Take(_maxFeatures.Value).ToList();
-        }
-
-        // Sort alphabetically for final vocabulary
-        filteredTokens = filteredTokens.OrderBy(t => t).ToList();
-
-        // Build vocabulary
-        _vocabulary = new Dictionary<string, int>();
-        for (int i = 0; i < filteredTokens.Count; i++)
-        {
-            _vocabulary[filteredTokens[i]] = i;
-        }
-
-        _featureNames = filteredTokens.ToArray();
+        // Build vocabulary using base class method
+        BuildVocabulary(dfCounts, allTokenCounts);
 
         // Compute IDF weights
-        _idfWeights = new double[filteredTokens.Count];
-        for (int i = 0; i < filteredTokens.Count; i++)
+        _idfWeights = new double[_featureNames!.Length];
+        for (int i = 0; i < _featureNames.Length; i++)
         {
-            string term = filteredTokens[i];
+            string term = _featureNames[i];
             int df = dfCounts[term];
 
             if (_smoothIdf)
@@ -205,11 +149,11 @@ public class TfidfVectorizer<T>
     /// </summary>
     /// <param name="documents">The documents to transform.</param>
     /// <returns>Matrix where each row is a document's TF-IDF vector.</returns>
-    public Matrix<T> Transform(IEnumerable<string> documents)
+    public override Matrix<T> Transform(IEnumerable<string> documents)
     {
         if (_vocabulary is null || _idfWeights is null)
         {
-            throw new InvalidOperationException("TfidfVectorizer has not been fitted.");
+            throw new InvalidOperationException("TfidfVectorizer has not been fitted. Call Fit() or FitTransform() first.");
         }
 
         var docList = documents.ToList();
@@ -286,111 +230,12 @@ public class TfidfVectorizer<T>
         {
             for (int j = 0; j < nFeatures; j++)
             {
-                output[i, j] = NumOps<T>.FromDouble(result[i, j]);
+                output[i, j] = NumOps.FromDouble(result[i, j]);
             }
         }
 
         return new Matrix<T>(output);
     }
-
-    /// <summary>
-    /// Fits the vectorizer and transforms the documents.
-    /// </summary>
-    /// <param name="documents">The documents to fit and transform.</param>
-    /// <returns>Matrix of TF-IDF values.</returns>
-    public Matrix<T> FitTransform(IEnumerable<string> documents)
-    {
-        var docList = documents.ToList();
-        Fit(docList);
-        return Transform(docList);
-    }
-
-    private IEnumerable<string> Tokenize(string text)
-    {
-        if (_tokenizer is not null)
-        {
-            var tokens = _tokenizer(text);
-            if (_lowercase)
-            {
-                tokens = tokens.Select(t => t.ToLowerInvariant());
-            }
-            if (_stopWords is not null)
-            {
-                tokens = tokens.Where(t => !_stopWords.Contains(t));
-            }
-            return tokens;
-        }
-
-        // Default tokenizer: split on whitespace and punctuation
-        string processedText = _lowercase ? text.ToLowerInvariant() : text;
-
-        var tokenList = new List<string>();
-        var currentToken = new System.Text.StringBuilder();
-
-        foreach (char c in processedText)
-        {
-            if (char.IsLetterOrDigit(c))
-            {
-                currentToken.Append(c);
-            }
-            else if (currentToken.Length > 0)
-            {
-                string token = currentToken.ToString();
-                if (_stopWords is null || !_stopWords.Contains(token))
-                {
-                    tokenList.Add(token);
-                }
-                currentToken.Clear();
-            }
-        }
-
-        if (currentToken.Length > 0)
-        {
-            string token = currentToken.ToString();
-            if (_stopWords is null || !_stopWords.Contains(token))
-            {
-                tokenList.Add(token);
-            }
-        }
-
-        return tokenList;
-    }
-
-    private IEnumerable<string> GenerateNGrams(IEnumerable<string> tokens)
-    {
-        var tokenList = tokens.ToList();
-        var ngrams = new List<string>();
-
-        for (int n = _nGramRange.Min; n <= _nGramRange.Max; n++)
-        {
-            for (int i = 0; i <= tokenList.Count - n; i++)
-            {
-                string ngram = string.Join(" ", tokenList.Skip(i).Take(n));
-                ngrams.Add(ngram);
-            }
-        }
-
-        return ngrams;
-    }
-
-    /// <summary>
-    /// Gets the feature names (vocabulary terms).
-    /// </summary>
-    public string[] GetFeatureNamesOut()
-    {
-        return _featureNames ?? Array.Empty<string>();
-    }
-
-    /// <summary>
-    /// Common English stop words.
-    /// </summary>
-    public static HashSet<string> EnglishStopWords => new HashSet<string>
-    {
-        "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
-        "has", "he", "in", "is", "it", "its", "of", "on", "that", "the",
-        "to", "was", "were", "will", "with", "the", "this", "but", "they",
-        "have", "had", "what", "when", "where", "who", "which", "why", "how"
-    };
 }
 
 /// <summary>
