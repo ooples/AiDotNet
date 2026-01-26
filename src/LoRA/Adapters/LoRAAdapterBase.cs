@@ -498,11 +498,15 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         Vector<T> mergedParams = new Vector<T>(baseParams.Length);
 
         // Merge weights
+        // MergeWeights() returns [inputSize, outputSize] matrix
+        // DenseLayer stores weights in row-major order as [outputSize, inputSize]
+        // So for flat index i: output = i / inputSize, input = i % inputSize
+        // To access loraWeights: loraWeights[input, output]
         for (int i = 0; i < weightCount; i++)
         {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
+            int outputIdx = i / inputSize;
+            int inputIdx = i % inputSize;
+            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[inputIdx, outputIdx]);
         }
 
         // Copy biases unchanged

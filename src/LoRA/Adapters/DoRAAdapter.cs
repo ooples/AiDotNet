@@ -371,9 +371,11 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         // Compute base direction (W / ||W||)
         Matrix<T> baseDirection = NormalizeRows(baseWeights);
 
-        // Get LoRA weight contribution as matrix (B × A)
-        // We don't call _loraLayer.Forward() here since we only need the weight delta, not the output
-        Matrix<T> loraWeightDelta = _loraLayer.MergeWeights(); // This gives us [outputSize, inputSize]
+        // Get LoRA weight contribution as matrix (A × B)
+        // MergeWeights() returns [inputSize, outputSize], but we need [outputSize, inputSize]
+        // to match base weight dimensions, so we transpose it
+        Matrix<T> loraWeightDeltaRaw = _loraLayer.MergeWeights(); // This gives us [inputSize, outputSize]
+        Matrix<T> loraWeightDelta = loraWeightDeltaRaw.Transpose(); // Now [outputSize, inputSize]
 
         int batchSize = input.Shape[0];
 
@@ -716,7 +718,9 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> baseDirection = NormalizeRows(baseWeights);
 
         // Get LoRA weight contribution
-        Matrix<T> loraWeights = _loraLayer.MergeWeights();
+        // MergeWeights() returns [inputSize, outputSize], but we need [outputSize, inputSize]
+        // to match base weight dimensions, so we transpose it (same as in Forward method)
+        Matrix<T> loraWeights = _loraLayer.MergeWeights().Transpose();
 
         // Add LoRA to direction and normalize
         Matrix<T> adaptedDirection = new Matrix<T>(outputSize, inputSize);
