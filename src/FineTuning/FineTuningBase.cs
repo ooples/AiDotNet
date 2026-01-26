@@ -269,8 +269,8 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
             }
         }
 
-        // Handle numeric types directly
-        if (IsNumericType(prediction.GetType()))
+        // Handle numeric types directly (both must be numeric to avoid Convert.ToDouble throwing)
+        if (IsNumericType(prediction.GetType()) && IsNumericType(target.GetType()))
         {
             double predVal = Convert.ToDouble(prediction);
             double targetVal = Convert.ToDouble(target);
