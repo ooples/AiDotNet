@@ -1324,8 +1324,9 @@ public static class TensorOperations<T>
 
         // Set JIT compiler metadata
         node.OperationType = OperationType.ReduceSum;
-        // Set OperationParams - always include KeepDims, conditionally include Axes
-        node.OperationParams = axes != null
+        // Set OperationParams - always include KeepDims, only include Axes if non-null AND non-empty
+        // (empty axes array means "sum all" just like null, so don't emit "Axes": [] which could miscompile)
+        node.OperationParams = axes != null && axes.Length > 0
             ? new Dictionary<string, object> { { "Axes", axes }, { "KeepDims", keepDims } }
             : new Dictionary<string, object> { { "KeepDims", keepDims } };
 

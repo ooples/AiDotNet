@@ -394,7 +394,8 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
             int minLen = Math.Min(pred.Length, target.Length);
             for (int i = 0; i < minLen; i++)
             {
-                if (pred[i]?.Equals(target[i]) == true)
+                // Treat null-null as a match, otherwise use Equals comparison
+                if ((pred[i] == null && target[i] == null) || pred[i]?.Equals(target[i]) == true)
                 {
                     matches++;
                 }
