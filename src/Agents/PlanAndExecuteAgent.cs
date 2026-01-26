@@ -506,16 +506,59 @@ Final answer:";
     /// </summary>
     private string ExtractJsonFromResponse(string response)
     {
-        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline, RegexTimeout);
+        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*\})\s*```", RegexOptions.Multiline, RegexTimeout);
         if (jsonMatch.Success)
         {
             return jsonMatch.Groups[1].Value;
         }
 
-        var jsonObjectMatch = Regex.Match(response, @"\{[\s\S]*?\}", RegexOptions.None, RegexTimeout);
-        if (jsonObjectMatch.Success)
+        // Try to find JSON object without code blocks using brace balancing
+        // This handles nested objects correctly
+        int startIndex = response.IndexOf('{');
+        if (startIndex >= 0)
         {
-            return jsonObjectMatch.Value;
+            int braceCount = 0;
+            bool inString = false;
+            bool escapeNext = false;
+
+            for (int i = startIndex; i < response.Length; i++)
+            {
+                char c = response[i];
+
+                if (escapeNext)
+                {
+                    escapeNext = false;
+                    continue;
+                }
+
+                if (c == '\\' && inString)
+                {
+                    escapeNext = true;
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inString = !inString;
+                    continue;
+                }
+
+                if (!inString)
+                {
+                    if (c == '{')
+                    {
+                        braceCount++;
+                    }
+                    else if (c == '}')
+                    {
+                        braceCount--;
+                        if (braceCount == 0)
+                        {
+                            return response.Substring(startIndex, i - startIndex + 1);
+                        }
+                    }
+                }
+            }
         }
 
         return response;
