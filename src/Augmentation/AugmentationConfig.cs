@@ -951,6 +951,14 @@ public static class DataModalityDetector
             return DataModality.Audio;
         }
 
+        // Check for generic Tensor BEFORE text check - Tensor fullName could contain
+        // substrings that match other checks, so we need to identify it early.
+        // Return Unknown since a Tensor could be image, audio spectrogram, or other modalities.
+        if (typeName.StartsWith("Tensor", StringComparison.Ordinal))
+        {
+            return DataModality.Unknown;
+        }
+
         // Check for text types
         if (inputType == typeof(string) ||
             inputType == typeof(string[]) ||
@@ -974,13 +982,6 @@ public static class DataModalityDetector
             fullName.Contains("Frame", StringComparison.OrdinalIgnoreCase))
         {
             return DataModality.Video;
-        }
-
-        // Check for generic Tensor - return Unknown to require explicit configuration
-        // since a Tensor could be image, audio spectrogram, or other modalities
-        if (typeName.StartsWith("Tensor", StringComparison.Ordinal))
-        {
-            return DataModality.Unknown;
         }
 
         // Check for Vector (could be tabular)
