@@ -296,7 +296,6 @@ public class LDAVectorizer<T> : TextVectorizerBase<T>
 
         // Use variational inference for new documents
         var result = new double[nDocs, _nTopics];
-        var random = _randomState.HasValue ? RandomHelper.CreateSeededRandom(_randomState.Value) : RandomHelper.CreateSecureRandom();
 
         for (int d = 0; d < nDocs; d++)
         {

@@ -437,20 +437,15 @@ public class Doc2VecVectorizer<T> : TextVectorizerBase<T>
                 .Where(t => _vocabulary?.ContainsKey(t) == true)
                 .ToList();
 
-            // Initialize document vector
+            // Empty documents get zero vectors for deterministic output
+            if (tokens.Count == 0)
+                continue;
+
+            // Initialize document vector with small random values
             var docVector = new double[_vectorSize];
             for (int i = 0; i < _vectorSize; i++)
             {
                 docVector[i] = (random.NextDouble() - 0.5) * 0.5 / _vectorSize;
-            }
-
-            if (tokens.Count == 0)
-            {
-                for (int i = 0; i < _vectorSize; i++)
-                {
-                    result[d, i] = docVector[i];
-                }
-                continue;
             }
 
             // Infer document vector through gradient descent

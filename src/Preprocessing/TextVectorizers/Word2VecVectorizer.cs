@@ -88,6 +88,12 @@ public class Word2VecVectorizer<T> : TextVectorizerBase<T>
             throw new ArgumentException("Vector size must be at least 1.", nameof(vectorSize));
         if (windowSize < 1)
             throw new ArgumentException("Window size must be at least 1.", nameof(windowSize));
+        if (epochs < 1)
+            throw new ArgumentException("Epochs must be at least 1.", nameof(epochs));
+        if (learningRate <= 0)
+            throw new ArgumentException("Learning rate must be positive.", nameof(learningRate));
+        if (negativeSamples < 0)
+            throw new ArgumentException("Negative samples must be non-negative.", nameof(negativeSamples));
 
         _vectorSize = vectorSize;
         _windowSize = windowSize;
