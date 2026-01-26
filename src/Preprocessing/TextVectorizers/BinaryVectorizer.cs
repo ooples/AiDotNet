@@ -5,64 +5,47 @@ using AiDotNet.Tokenization.Interfaces;
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
 /// <summary>
-/// Converts a collection of text documents to a matrix of token counts.
+/// Converts text documents to binary feature vectors (presence/absence encoding).
 /// </summary>
 /// <remarks>
 /// <para>
-/// CountVectorizer tokenizes text documents and builds a vocabulary, then
-/// encodes each document as a count vector (bag of words representation).
+/// BinaryVectorizer creates a simple presence/absence encoding where each feature
+/// is 1 if the term appears in the document and 0 otherwise. Unlike CountVectorizer
+/// with binary=true, this vectorizer is optimized specifically for binary encoding.
 /// </para>
-/// <para>
-/// Features include:
-/// - Customizable tokenization
-/// - N-gram support (unigrams, bigrams, etc.)
-/// - Minimum and maximum document frequency thresholds
-/// - Maximum vocabulary size
-/// </para>
-/// <para><b>For Beginners:</b> CountVectorizer turns text into numbers:
-/// - Each unique word becomes a column
-/// - Each document becomes a row
-/// - Values are word counts
-///
-/// Example: ["I like cats", "I like dogs"] becomes:
-///          | I | like | cats | dogs |
-/// Doc 1:   | 1 |  1   |  1   |  0   |
-/// Doc 2:   | 1 |  1   |  0   |  1   |
+/// <para><b>For Beginners:</b> Binary encoding is the simplest text representation:
+/// - Each word is either present (1) or absent (0) in a document
+/// - Word frequency is ignored (appearing 10 times = appearing once)
+/// - Fast and memory-efficient
+/// - Works well when word presence matters more than frequency
+/// - Common in document classification and spam detection
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
-public class CountVectorizer<T> : TextVectorizerBase<T>
+public class BinaryVectorizer<T> : TextVectorizerBase<T>
 {
-    private readonly bool _binary;
-
     /// <summary>
-    /// Creates a new instance of <see cref="CountVectorizer{T}"/>.
+    /// Creates a new instance of <see cref="BinaryVectorizer{T}"/>.
     /// </summary>
     /// <param name="minDf">Minimum document frequency (absolute count). Defaults to 1.</param>
     /// <param name="maxDf">Maximum document frequency (proportion 0-1). Defaults to 1.0.</param>
     /// <param name="maxFeatures">Maximum vocabulary size. Null for unlimited.</param>
     /// <param name="nGramRange">N-gram range (min, max). Defaults to (1, 1) for unigrams.</param>
     /// <param name="lowercase">Convert all text to lowercase. Defaults to true.</param>
-    /// <param name="binary">If true, use binary counts (1 if present, 0 if absent). Defaults to false.</param>
-    /// <param name="tokenizer">Custom tokenizer function. Null for default whitespace/punctuation tokenizer.</param>
-    /// <param name="stopWords">Words to exclude from vocabulary. Null for no filtering.</param>
-    /// <param name="advancedTokenizer">
-    /// Optional ITokenizer for subword tokenization (BPE, WordPiece, SentencePiece).
-    /// When provided, takes precedence over the simple tokenizer function.
-    /// </param>
-    public CountVectorizer(
+    /// <param name="tokenizer">Custom tokenizer function. Null for default.</param>
+    /// <param name="stopWords">Words to exclude. Null for no filtering.</param>
+    /// <param name="advancedTokenizer">Optional ITokenizer for subword tokenization.</param>
+    public BinaryVectorizer(
         int minDf = 1,
         double maxDf = 1.0,
         int? maxFeatures = null,
         (int Min, int Max)? nGramRange = null,
         bool lowercase = true,
-        bool binary = false,
         Func<string, IEnumerable<string>>? tokenizer = null,
         HashSet<string>? stopWords = null,
         ITokenizer? advancedTokenizer = null)
         : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords, advancedTokenizer)
     {
-        _binary = binary;
     }
 
     /// <summary>
@@ -74,7 +57,6 @@ public class CountVectorizer<T> : TextVectorizerBase<T>
         var docList = documents.ToList();
         _nDocs = docList.Count;
 
-        // Count document frequency for each token
         var dfCounts = new Dictionary<string, int>();
         var allTokenCounts = new Dictionary<string, int>();
 
@@ -97,20 +79,19 @@ public class CountVectorizer<T> : TextVectorizerBase<T>
             }
         }
 
-        // Build vocabulary using base class method
         BuildVocabulary(dfCounts, allTokenCounts);
     }
 
     /// <summary>
-    /// Transforms documents to count vectors.
+    /// Transforms documents to binary vectors.
     /// </summary>
     /// <param name="documents">The documents to transform.</param>
-    /// <returns>Matrix where each row is a document and each column is a token count.</returns>
+    /// <returns>Matrix where each row is a document's binary feature vector.</returns>
     public override Matrix<T> Transform(IEnumerable<string> documents)
     {
         if (_vocabulary is null)
         {
-            throw new InvalidOperationException("CountVectorizer has not been fitted. Call Fit() or FitTransform() first.");
+            throw new InvalidOperationException("BinaryVectorizer has not been fitted. Call Fit() or FitTransform() first.");
         }
 
         var docList = documents.ToList();
@@ -122,20 +103,13 @@ public class CountVectorizer<T> : TextVectorizerBase<T>
         {
             var tokens = Tokenize(docList[i]);
             var ngrams = GenerateNGrams(tokens);
+            var uniqueNGrams = new HashSet<string>(ngrams);
 
-            foreach (string ngram in ngrams)
+            foreach (string ngram in uniqueNGrams)
             {
                 if (_vocabulary.TryGetValue(ngram, out int idx))
                 {
-                    if (_binary)
-                    {
-                        result[i, idx] = NumOps.One;
-                    }
-                    else
-                    {
-                        double current = NumOps.ToDouble(result[i, idx]);
-                        result[i, idx] = NumOps.FromDouble(current + 1);
-                    }
+                    result[i, idx] = NumOps.One;
                 }
             }
         }

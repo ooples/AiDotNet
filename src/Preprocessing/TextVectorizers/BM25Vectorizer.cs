@@ -5,103 +5,97 @@ using AiDotNet.Tokenization.Interfaces;
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
 /// <summary>
-/// Converts a collection of text documents to a TF-IDF weighted matrix.
+/// Converts text documents to BM25-weighted feature vectors.
 /// </summary>
 /// <remarks>
 /// <para>
-/// TfidfVectorizer converts text to TF-IDF (Term Frequency-Inverse Document Frequency)
-/// representation, which weights terms by their importance in a document relative
-/// to the entire corpus.
+/// BM25 (Best Matching 25) is an advanced ranking function used by search engines like
+/// Elasticsearch and Lucene. It improves upon TF-IDF by adding document length normalization
+/// and term frequency saturation.
 /// </para>
 /// <para>
-/// TF-IDF = TF × IDF where:
-/// - TF (Term Frequency) = count of term in document / total terms in document
-/// - IDF (Inverse Document Frequency) = log(total documents / documents containing term)
+/// The BM25 formula is:
+/// <code>
+/// score(D,Q) = IDF(qi) * (f(qi,D) * (k1 + 1)) / (f(qi,D) + k1 * (1 - b + b * |D|/avgdl))
+/// </code>
+/// Where:
+/// - f(qi,D) = term frequency of qi in document D
+/// - |D| = document length
+/// - avgdl = average document length in the corpus
+/// - k1 = term frequency saturation parameter (typically 1.2-2.0)
+/// - b = document length normalization parameter (typically 0.75)
 /// </para>
-/// <para><b>For Beginners:</b> TF-IDF makes rare but meaningful words more important:
-/// - Common words like "the" appear everywhere, so they get low weight
-/// - Rare words that only appear in specific documents get high weight
-/// - This helps distinguish documents by their unique content
-///
-/// Example: "machine learning" in a tech article is more meaningful
-/// than "the" which appears in every document.
+/// <para><b>For Beginners:</b> BM25 is like TF-IDF but smarter:
+/// - Long documents don't unfairly dominate (length normalization)
+/// - Repeating a word 100 times doesn't score 100x better than once (saturation)
+/// - Used by Google, Elasticsearch, and most modern search engines
+/// - Generally performs better than TF-IDF for search and retrieval tasks
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
-public class TfidfVectorizer<T> : TextVectorizerBase<T>
+public class BM25Vectorizer<T> : TextVectorizerBase<T>
 {
-    private readonly TfidfNorm _norm;
-    private readonly bool _useIdf;
-    private readonly bool _smoothIdf;
-    private readonly bool _sublinearTf;
+    private readonly double _k1;
+    private readonly double _b;
+    private readonly double _delta;
+    private readonly BM25Norm _norm;
 
-    // Fitted parameters specific to TF-IDF
     private double[]? _idfWeights;
+    private double _avgDocLength;
+    private int[]? _docLengths;
 
     /// <summary>
     /// Gets the IDF weights for each term.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// IDF (Inverse Document Frequency) weights indicate how rare/important each term is.
-    /// Higher values mean the term appears in fewer documents and is more discriminative.
-    /// </para>
-    /// <para><b>For Beginners:</b> Terms that appear in many documents get low IDF weights
-    /// (they're common and not very distinctive), while terms in few documents get high weights
-    /// (they're rare and help distinguish documents).
-    /// </para>
-    /// </remarks>
     public double[]? IdfWeights => _idfWeights;
 
     /// <summary>
-    /// Creates a new instance of <see cref="TfidfVectorizer{T}"/>.
+    /// Gets the average document length in the corpus.
     /// </summary>
+    public double AverageDocumentLength => _avgDocLength;
+
+    /// <summary>
+    /// Creates a new instance of <see cref="BM25Vectorizer{T}"/>.
+    /// </summary>
+    /// <param name="k1">Term frequency saturation parameter. Higher values mean term frequency has more impact. Default: 1.5</param>
+    /// <param name="b">Document length normalization parameter (0-1). 0 = no normalization, 1 = full normalization. Default: 0.75</param>
+    /// <param name="delta">BM25+ modification parameter. Adds a small constant to prevent zero scores. Default: 0 (standard BM25)</param>
     /// <param name="minDf">Minimum document frequency (absolute count). Defaults to 1.</param>
     /// <param name="maxDf">Maximum document frequency (proportion 0-1). Defaults to 1.0.</param>
     /// <param name="maxFeatures">Maximum vocabulary size. Null for unlimited.</param>
     /// <param name="nGramRange">N-gram range (min, max). Defaults to (1, 1) for unigrams.</param>
     /// <param name="lowercase">Convert all text to lowercase. Defaults to true.</param>
-    /// <param name="norm">Normalization method for output vectors. Defaults to L2.</param>
-    /// <param name="useIdf">Whether to use IDF weighting. Defaults to true.</param>
-    /// <param name="smoothIdf">Smooth IDF by adding 1 to df. Defaults to true.</param>
-    /// <param name="sublinearTf">Apply sublinear TF (1 + log(tf)). Defaults to false.</param>
-    /// <param name="tokenizer">Custom tokenizer function. Null for default word-level tokenization.</param>
+    /// <param name="norm">Normalization method for output vectors. Defaults to None.</param>
+    /// <param name="tokenizer">Custom tokenizer function. Null for default.</param>
     /// <param name="stopWords">Words to exclude. Null for no filtering.</param>
     /// <param name="advancedTokenizer">
     /// Optional ITokenizer for subword tokenization (BPE, WordPiece, SentencePiece).
     /// When provided, takes precedence over the simple tokenizer function.
     /// </param>
-    /// <example>
-    /// <code>
-    /// // Basic usage with default tokenization
-    /// var tfidf = new TfidfVectorizer&lt;double&gt;();
-    /// var matrix = tfidf.FitTransform(documents);
-    ///
-    /// // Using BERT tokenization for consistency with neural network models
-    /// var tokenizer = AutoTokenizer.FromPretrained("bert-base-uncased");
-    /// var tfidf = new TfidfVectorizer&lt;double&gt;(advancedTokenizer: tokenizer);
-    /// var matrix = tfidf.FitTransform(documents);
-    /// </code>
-    /// </example>
-    public TfidfVectorizer(
+    public BM25Vectorizer(
+        double k1 = 1.5,
+        double b = 0.75,
+        double delta = 0,
         int minDf = 1,
         double maxDf = 1.0,
         int? maxFeatures = null,
         (int Min, int Max)? nGramRange = null,
         bool lowercase = true,
-        TfidfNorm norm = TfidfNorm.L2,
-        bool useIdf = true,
-        bool smoothIdf = true,
-        bool sublinearTf = false,
+        BM25Norm norm = BM25Norm.None,
         Func<string, IEnumerable<string>>? tokenizer = null,
         HashSet<string>? stopWords = null,
         ITokenizer? advancedTokenizer = null)
         : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords, advancedTokenizer)
     {
+        if (k1 < 0)
+            throw new ArgumentException("k1 must be non-negative.", nameof(k1));
+        if (b < 0 || b > 1)
+            throw new ArgumentException("b must be between 0 and 1.", nameof(b));
+
+        _k1 = k1;
+        _b = b;
+        _delta = delta;
         _norm = norm;
-        _useIdf = useIdf;
-        _smoothIdf = smoothIdf;
-        _sublinearTf = sublinearTf;
     }
 
     /// <inheritdoc/>
@@ -110,21 +104,26 @@ public class TfidfVectorizer<T> : TextVectorizerBase<T>
     /// <summary>
     /// Fits the vectorizer to the corpus.
     /// </summary>
-    /// <param name="documents">The text documents to learn vocabulary and IDF from.</param>
+    /// <param name="documents">The text documents to learn vocabulary and statistics from.</param>
     public override void Fit(IEnumerable<string> documents)
     {
         var docList = documents.ToList();
         _nDocs = docList.Count;
 
-        // Count document frequency for each token
+        // Count document frequency for each token and track document lengths
         var dfCounts = new Dictionary<string, int>();
         var allTokenCounts = new Dictionary<string, int>();
+        _docLengths = new int[_nDocs];
+        int totalLength = 0;
 
-        foreach (string doc in docList)
+        for (int i = 0; i < docList.Count; i++)
         {
-            var tokens = Tokenize(doc);
-            var ngrams = GenerateNGrams(tokens);
+            var tokens = Tokenize(docList[i]);
+            var ngrams = GenerateNGrams(tokens).ToList();
             var uniqueNGrams = new HashSet<string>(ngrams);
+
+            _docLengths[i] = ngrams.Count;
+            totalLength += ngrams.Count;
 
             foreach (string ngram in uniqueNGrams)
             {
@@ -139,39 +138,34 @@ public class TfidfVectorizer<T> : TextVectorizerBase<T>
             }
         }
 
+        _avgDocLength = _nDocs > 0 ? (double)totalLength / _nDocs : 0;
+
         // Build vocabulary using base class method
         BuildVocabulary(dfCounts, allTokenCounts);
 
-        // Compute IDF weights
+        // Compute IDF weights using BM25 formula
         _idfWeights = new double[_featureNames!.Length];
         for (int i = 0; i < _featureNames.Length; i++)
         {
             string term = _featureNames[i];
             int df = dfCounts[term];
 
-            if (_smoothIdf)
-            {
-                // Smooth IDF: log((n + 1) / (df + 1)) + 1
-                _idfWeights[i] = Math.Log((double)(_nDocs + 1) / (df + 1)) + 1;
-            }
-            else
-            {
-                // Standard IDF: log(n / df) + 1
-                _idfWeights[i] = Math.Log((double)_nDocs / df) + 1;
-            }
+            // BM25 IDF: log((N - df + 0.5) / (df + 0.5))
+            // Add 1 to avoid negative IDF for very common terms
+            _idfWeights[i] = Math.Log(1 + (_nDocs - df + 0.5) / (df + 0.5));
         }
     }
 
     /// <summary>
-    /// Transforms documents to TF-IDF weighted vectors.
+    /// Transforms documents to BM25-weighted vectors.
     /// </summary>
     /// <param name="documents">The documents to transform.</param>
-    /// <returns>Matrix where each row is a document's TF-IDF vector.</returns>
+    /// <returns>Matrix where each row is a document's BM25 vector.</returns>
     public override Matrix<T> Transform(IEnumerable<string> documents)
     {
         if (_vocabulary is null || _idfWeights is null)
         {
-            throw new InvalidOperationException("TfidfVectorizer has not been fitted. Call Fit() or FitTransform() first.");
+            throw new InvalidOperationException("BM25Vectorizer has not been fitted. Call Fit() or FitTransform() first.");
         }
 
         var docList = documents.ToList();
@@ -183,6 +177,7 @@ public class TfidfVectorizer<T> : TextVectorizerBase<T>
         {
             var tokens = Tokenize(docList[i]);
             var ngrams = GenerateNGrams(tokens).ToList();
+            int docLength = ngrams.Count;
 
             // Count term frequencies
             var tfCounts = new Dictionary<int, int>();
@@ -195,35 +190,34 @@ public class TfidfVectorizer<T> : TextVectorizerBase<T>
                 }
             }
 
-            // Apply TF weighting
+            // Compute BM25 scores
             foreach (var kvp in tfCounts)
             {
                 int idx = kvp.Key;
                 double tf = kvp.Value;
 
-                if (_sublinearTf && tf > 0)
-                {
-                    tf = 1 + Math.Log(tf);
-                }
+                // BM25 term weight
+                double numerator = tf * (_k1 + 1);
+                double denominator = tf + _k1 * (1 - _b + _b * docLength / _avgDocLength);
+                double termWeight = numerator / denominator + _delta;
 
-                // Apply IDF
-                double tfidf = _useIdf ? tf * _idfWeights[idx] : tf;
-                result[i, idx] = tfidf;
+                // BM25 score = IDF * term weight
+                result[i, idx] = _idfWeights[idx] * termWeight;
             }
 
-            // Normalize
-            if (_norm != TfidfNorm.None)
+            // Normalize if requested
+            if (_norm != BM25Norm.None)
             {
                 double normValue = 0;
 
-                if (_norm == TfidfNorm.L1)
+                if (_norm == BM25Norm.L1)
                 {
                     for (int j = 0; j < nFeatures; j++)
                     {
                         normValue += Math.Abs(result[i, j]);
                     }
                 }
-                else if (_norm == TfidfNorm.L2)
+                else if (_norm == BM25Norm.L2)
                 {
                     for (int j = 0; j < nFeatures; j++)
                     {
