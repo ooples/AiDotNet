@@ -233,14 +233,41 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
     {
         return modelName.ToLowerInvariant() switch
         {
+            // GPT-3.5 models
             "gpt-3.5-turbo" => 4096,
             "gpt-3.5-turbo-16k" => 16384,
+
+            // GPT-4 base models
             "gpt-4" => 8192,
             "gpt-4-32k" => 32768,
+
+            // GPT-4 Turbo models (128k context)
             "gpt-4-turbo" => 128000,
             "gpt-4-turbo-preview" => 128000,
+            "gpt-4-1106-preview" => 128000,
+            "gpt-4-0125-preview" => 128000,
+
+            // GPT-4o models (128k context)
             "gpt-4o" => 128000,
             "gpt-4o-mini" => 128000,
+            "gpt-4o-2024-05-13" => 128000,
+            "gpt-4o-2024-08-06" => 128000,
+            "gpt-4o-2024-11-20" => 128000,
+
+            // o1 reasoning models (200k context per OpenAI documentation)
+            "o1" => 200000,
+            "o1-preview" => 200000,
+            "o1-mini" => 200000,
+
+            // o3 reasoning models (200k context)
+            "o3-mini" => 200000,
+
+            // Handle model variants with date suffixes using prefix matching
+            _ when modelName.StartsWith("gpt-4o-", StringComparison.OrdinalIgnoreCase) => 128000,
+            _ when modelName.StartsWith("gpt-4-turbo", StringComparison.OrdinalIgnoreCase) => 128000,
+            _ when modelName.StartsWith("o1-", StringComparison.OrdinalIgnoreCase) => 200000,
+            _ when modelName.StartsWith("o3-", StringComparison.OrdinalIgnoreCase) => 200000,
+
             _ => 4096 // Default fallback
         };
     }
