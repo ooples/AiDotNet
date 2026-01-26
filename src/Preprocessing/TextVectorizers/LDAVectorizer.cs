@@ -299,11 +299,18 @@ public class LDAVectorizer<T> : TextVectorizerBase<T>
 
         for (int d = 0; d < nDocs; d++)
         {
-            // Initialize topic proportions uniformly
+            // Compute document length (total token count)
+            double docLength = 0;
+            for (int w = 0; w < nWords; w++)
+            {
+                docLength += NumOps.ToDouble(countMatrix[d, w]);
+            }
+
+            // Initialize topic proportions uniformly based on document length
             var gamma = new double[_nTopics];
             for (int k = 0; k < _nTopics; k++)
             {
-                gamma[k] = _alpha + (double)nWords / _nTopics;
+                gamma[k] = _alpha + docLength / _nTopics;
             }
 
             // Iterate to convergence
