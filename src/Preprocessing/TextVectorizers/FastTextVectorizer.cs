@@ -90,6 +90,8 @@ public class FastTextVectorizer<T> : TextVectorizerBase<T>
     {
         if (vectorSize < 1)
             throw new ArgumentException("Vector size must be at least 1.", nameof(vectorSize));
+        if (buckets < 1)
+            throw new ArgumentOutOfRangeException(nameof(buckets), "Buckets must be at least 1.");
 
         _vectorSize = vectorSize;
         _windowSize = windowSize;
@@ -99,6 +101,8 @@ public class FastTextVectorizer<T> : TextVectorizerBase<T>
         _negativeSamples = negativeSamples;
         _subwordNGramRange = subwordNGramRange ?? (3, 6);
         _buckets = buckets;
+        if (aggregation == Word2VecAggregation.TfidfWeighted)
+            throw new NotSupportedException("TfidfWeighted aggregation is not supported by FastTextVectorizer.");
         _aggregation = aggregation;
         _randomState = randomState;
     }
@@ -190,7 +194,7 @@ public class FastTextVectorizer<T> : TextVectorizerBase<T>
         }
 
         // Initialize vectors
-        var random = _randomState.HasValue ? new Random(_randomState.Value) : new Random();
+        var random = _randomState.HasValue ? RandomHelper.CreateSeededRandom(_randomState.Value) : RandomHelper.CreateSecureRandom();
         _subwordVectors = new double[_buckets, _vectorSize];
         var outputVectors = new double[vocabSize, _vectorSize];
 

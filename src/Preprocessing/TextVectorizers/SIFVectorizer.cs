@@ -69,6 +69,8 @@ public class SIFVectorizer<T> : TextVectorizerBase<T>
 
         _wordVectors = wordVectors;
         _vectorSize = wordVectors.Values.First().Length;
+        if (wordVectors.Values.Any(v => v.Length != _vectorSize))
+            throw new ArgumentException("All word vectors must have the same dimensionality.", nameof(wordVectors));
         _alpha = alpha;
         _removePrincipalComponent = removePrincipalComponent;
         _nPrincipalComponents = nPrincipalComponents;
@@ -102,6 +104,15 @@ public class SIFVectorizer<T> : TextVectorizerBase<T>
                 _wordFrequencies[token] = count + 1;
                 totalWords++;
             }
+        }
+
+        // Guard against empty corpus (all documents tokenize to empty)
+        if (totalWords == 0)
+        {
+            _wordFrequencies = new Dictionary<string, double>();
+            _vocabulary = new Dictionary<string, int>();
+            _featureNames = Enumerable.Range(0, _vectorSize).Select(i => $"sif_dim_{i}").ToArray();
+            return;
         }
 
         // Normalize to probabilities
@@ -217,7 +228,7 @@ public class SIFVectorizer<T> : TextVectorizerBase<T>
 
         // Power iteration to find principal components
         var pcs = new List<double[]>();
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int comp = 0; comp < nComponents; comp++)
         {

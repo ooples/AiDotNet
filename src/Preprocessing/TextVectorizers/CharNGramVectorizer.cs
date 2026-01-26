@@ -79,7 +79,8 @@ public class CharNGramVectorizer<T> : TextVectorizerBase<T>
             {
                 words = words.Where(w => !_stopWords.Contains(w)).ToArray();
             }
-            processedText = string.Join(" ", words.Select(w => $" {w} "));
+            // Add leading and trailing space for word boundaries without creating triple spaces
+            processedText = " " + string.Join(" ", words) + " ";
         }
 
         var ngrams = new List<string>();

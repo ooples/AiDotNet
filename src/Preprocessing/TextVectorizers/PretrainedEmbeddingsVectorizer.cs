@@ -74,6 +74,8 @@ public class PretrainedEmbeddingsVectorizer<T> : TextVectorizerBase<T>
             throw new ArgumentException("Embeddings path cannot be null or empty.", nameof(embeddingsPath));
         if (!File.Exists(embeddingsPath))
             throw new FileNotFoundException("Embeddings file not found.", embeddingsPath);
+        if (aggregation == Word2VecAggregation.TfidfWeighted)
+            throw new NotSupportedException("TfidfWeighted aggregation is not supported by PretrainedEmbeddingsVectorizer.");
 
         _format = format;
         _maxVocabSize = maxVocabSize;
@@ -105,6 +107,8 @@ public class PretrainedEmbeddingsVectorizer<T> : TextVectorizerBase<T>
     {
         if (wordVectors is null || wordVectors.Count == 0)
             throw new ArgumentException("Word vectors cannot be null or empty.", nameof(wordVectors));
+        if (aggregation == Word2VecAggregation.TfidfWeighted)
+            throw new NotSupportedException("TfidfWeighted aggregation is not supported by PretrainedEmbeddingsVectorizer.");
 
         _format = PretrainedFormat.Dictionary;
         _aggregation = aggregation;
@@ -193,7 +197,7 @@ public class PretrainedEmbeddingsVectorizer<T> : TextVectorizerBase<T>
         var vector = new double[parts.Length - 1];
         for (int i = 1; i < parts.Length; i++)
         {
-            vector[i - 1] = double.Parse(parts[i]);
+            vector[i - 1] = double.Parse(parts[i], CultureInfo.InvariantCulture);
         }
         return (word, vector);
     }
@@ -207,7 +211,7 @@ public class PretrainedEmbeddingsVectorizer<T> : TextVectorizerBase<T>
         var vector = new double[vectorParts.Length];
         for (int i = 0; i < vectorParts.Length; i++)
         {
-            vector[i] = double.Parse(vectorParts[i]);
+            vector[i] = double.Parse(vectorParts[i], CultureInfo.InvariantCulture);
         }
         return (word, vector);
     }

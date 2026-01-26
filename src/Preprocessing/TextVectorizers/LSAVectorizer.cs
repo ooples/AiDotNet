@@ -34,6 +34,7 @@ public class LSAVectorizer<T> : TextVectorizerBase<T>
     private readonly double _tolerance;
     private readonly int? _randomState;
 
+    private int _effectiveComponents;
     private TfidfVectorizer<T>? _tfidfVectorizer;
     private double[,]? _components; // V^T from SVD: (n_components, n_features)
     private double[]? _singularValues;
@@ -106,7 +107,11 @@ public class LSAVectorizer<T> : TextVectorizerBase<T>
     public override bool IsFitted => _components is not null && _tfidfVectorizer is not null;
 
     /// <inheritdoc/>
-    public override int FeatureCount => _nComponents;
+    /// <remarks>
+    /// Returns the effective number of components, which may be less than the requested
+    /// nComponents if the corpus is smaller than the requested dimensions.
+    /// </remarks>
+    public override int FeatureCount => _effectiveComponents > 0 ? _effectiveComponents : _nComponents;
 
     /// <summary>
     /// Fits the LSA vectorizer to the corpus.
@@ -125,16 +130,23 @@ public class LSAVectorizer<T> : TextVectorizerBase<T>
             nGramRange: _nGramRange,
             lowercase: _lowercase,
             tokenizer: _tokenizer,
-            stopWords: _stopWords);
+            stopWords: _stopWords,
+            advancedTokenizer: _advancedTokenizer);
 
         var tfidfMatrix = _tfidfVectorizer.FitTransform(docList);
         _vocabulary = _tfidfVectorizer.Vocabulary;
-        _featureNames = Enumerable.Range(0, _nComponents).Select(i => $"lsa_component_{i}").ToArray();
 
         // Convert to double array for SVD
         int nDocs = tfidfMatrix.Rows;
         int nFeatures = tfidfMatrix.Columns;
-        int actualComponents = Math.Min(_nComponents, Math.Min(nDocs, nFeatures));
+
+        // Calculate effective components - may be less than requested if corpus is small
+        _effectiveComponents = Math.Min(_nComponents, Math.Min(nDocs, nFeatures));
+        if (_effectiveComponents < 1)
+            throw new InvalidOperationException("LSA requires at least one component; check corpus size and vocabulary.");
+
+        // Set feature names based on effective components, not requested components
+        _featureNames = Enumerable.Range(0, _effectiveComponents).Select(i => $"lsa_component_{i}").ToArray();
 
         var matrix = new double[nDocs, nFeatures];
         for (int i = 0; i < nDocs; i++)
@@ -146,7 +158,7 @@ public class LSAVectorizer<T> : TextVectorizerBase<T>
         }
 
         // Perform truncated SVD using power iteration method
-        PerformTruncatedSVD(matrix, actualComponents);
+        PerformTruncatedSVD(matrix, _effectiveComponents);
     }
 
     /// <summary>
@@ -157,7 +169,7 @@ public class LSAVectorizer<T> : TextVectorizerBase<T>
         int m = matrix.GetLength(0); // documents
         int n = matrix.GetLength(1); // features
 
-        var random = _randomState.HasValue ? new Random(_randomState.Value) : new Random();
+        var random = _randomState.HasValue ? RandomHelper.CreateSeededRandom(_randomState.Value) : RandomHelper.CreateSecureRandom();
 
         // Initialize random matrix Q (n x nComponents)
         var Q = new double[n, nComponents];
@@ -227,6 +239,12 @@ public class LSAVectorizer<T> : TextVectorizerBase<T>
         }
 
         _explainedVarianceRatio = new double[nComponents];
+        // Guard against zero totalVariance (e.g., all-zero TF-IDF matrix)
+        if (totalVariance <= _tolerance)
+        {
+            // Leave ratios as zeros (already initialized)
+            return;
+        }
         for (int i = 0; i < nComponents; i++)
         {
             _explainedVarianceRatio[i] = (_singularValues[i] * _singularValues[i]) / totalVariance;

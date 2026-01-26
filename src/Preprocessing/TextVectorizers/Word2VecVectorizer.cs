@@ -40,6 +40,7 @@ public class Word2VecVectorizer<T> : TextVectorizerBase<T>
 
     private Dictionary<string, double[]>? _wordVectors;
     private Dictionary<string, int>? _wordCounts;
+    private Dictionary<string, int>? _documentFrequency;
 
     /// <summary>
     /// Gets the learned word vectors.
@@ -117,11 +118,20 @@ public class Word2VecVectorizer<T> : TextVectorizerBase<T>
         // Tokenize all documents
         var allTokens = new List<List<string>>();
         _wordCounts = new Dictionary<string, int>();
+        _documentFrequency = new Dictionary<string, int>();
 
         foreach (string doc in docList)
         {
             var tokens = Tokenize(doc).ToList();
             allTokens.Add(tokens);
+
+            // Track unique tokens in this document for document frequency
+            var uniqueTokens = new HashSet<string>(tokens);
+            foreach (string token in uniqueTokens)
+            {
+                _documentFrequency.TryGetValue(token, out int df);
+                _documentFrequency[token] = df + 1;
+            }
 
             foreach (string token in tokens)
             {
@@ -155,7 +165,7 @@ public class Word2VecVectorizer<T> : TextVectorizerBase<T>
         }
 
         // Initialize vectors
-        var random = _randomState.HasValue ? new Random(_randomState.Value) : new Random();
+        var random = _randomState.HasValue ? RandomHelper.CreateSeededRandom(_randomState.Value) : RandomHelper.CreateSecureRandom();
         var inputVectors = new double[vocabSize, _vectorSize];
         var outputVectors = new double[vocabSize, _vectorSize];
 
@@ -190,23 +200,24 @@ public class Word2VecVectorizer<T> : TextVectorizerBase<T>
                     int windowStart = Math.Max(0, pos - _windowSize);
                     int windowEnd = Math.Min(filteredTokens.Count - 1, pos + _windowSize);
 
-                    for (int ctxPos = windowStart; ctxPos <= windowEnd; ctxPos++)
+                    if (_architecture == Word2VecArchitecture.SkipGram)
                     {
-                        if (ctxPos == pos) continue;
-
-                        string contextWord = filteredTokens[ctxPos];
-                        int contextIdx = wordToIndex[contextWord];
-
-                        if (_architecture == Word2VecArchitecture.SkipGram)
+                        for (int ctxPos = windowStart; ctxPos <= windowEnd; ctxPos++)
                         {
+                            if (ctxPos == pos) continue;
+
+                            string contextWord = filteredTokens[ctxPos];
+                            int contextIdx = wordToIndex[contextWord];
+
                             TrainSkipGram(inputVectors, outputVectors, targetIdx, contextIdx,
                                          samplingTable, random, lr, vocabSize);
                         }
-                        else
-                        {
-                            TrainCBOW(inputVectors, outputVectors, filteredTokens, wordToIndex,
-                                     pos, windowStart, windowEnd, samplingTable, random, lr, vocabSize);
-                        }
+                    }
+                    else
+                    {
+                        // CBOW: train once per target word position using all context words
+                        TrainCBOW(inputVectors, outputVectors, filteredTokens, wordToIndex,
+                                 pos, windowStart, windowEnd, samplingTable, random, lr, vocabSize);
                     }
                 }
             }
@@ -443,14 +454,15 @@ public class Word2VecVectorizer<T> : TextVectorizerBase<T>
                     }
                 }
             }
-            else if (_aggregation == Word2VecAggregation.TfidfWeighted && _wordCounts is not null)
+            else if (_aggregation == Word2VecAggregation.TfidfWeighted && _documentFrequency is not null)
             {
                 double totalDocs = _nDocs;
                 double totalWeight = 0;
 
                 foreach (string token in validTokens)
                 {
-                    double idf = Math.Log(totalDocs / (_wordCounts.GetValueOrDefault(token, 1) + 1));
+                    // Use document frequency (number of docs containing the word) for proper IDF calculation
+                    double idf = Math.Log(totalDocs / (_documentFrequency.GetValueOrDefault(token, 1) + 1));
                     var vec = _wordVectors[token];
                     for (int i = 0; i < _vectorSize; i++)
                     {
@@ -504,6 +516,7 @@ public class Word2VecVectorizer<T> : TextVectorizerBase<T>
         if (_wordVectors is null)
             throw new InvalidOperationException("Word2VecVectorizer has not been fitted.");
 
+        var normalizedWord = _lowercase ? word.ToLowerInvariant() : word;
         var targetVector = GetWordVector(word);
         if (targetVector is null)
             return new List<(string, double)>();
@@ -512,7 +525,7 @@ public class Word2VecVectorizer<T> : TextVectorizerBase<T>
 
         foreach (var kvp in _wordVectors)
         {
-            if (kvp.Key == word) continue;
+            if (kvp.Key == normalizedWord) continue;
 
             double dot = 0, normA = 0, normB = 0;
             for (int i = 0; i < _vectorSize; i++)

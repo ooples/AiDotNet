@@ -88,6 +88,14 @@ public class Doc2VecVectorizer<T> : TextVectorizerBase<T>
     {
         if (vectorSize < 1)
             throw new ArgumentException("Vector size must be at least 1.", nameof(vectorSize));
+        if (windowSize < 0)
+            throw new ArgumentException("Window size must be non-negative.", nameof(windowSize));
+        if (epochs < 1)
+            throw new ArgumentException("Epochs must be at least 1.", nameof(epochs));
+        if (learningRate <= 0)
+            throw new ArgumentException("Learning rate must be positive.", nameof(learningRate));
+        if (negativeSamples < 0)
+            throw new ArgumentException("Negative samples must be non-negative.", nameof(negativeSamples));
 
         _vectorSize = vectorSize;
         _windowSize = windowSize;
@@ -151,7 +159,7 @@ public class Doc2VecVectorizer<T> : TextVectorizerBase<T>
         var wordToIndex = _vocabulary;
 
         // Initialize vectors
-        var random = _randomState.HasValue ? new Random(_randomState.Value) : new Random();
+        var random = _randomState.HasValue ? RandomHelper.CreateSeededRandom(_randomState.Value) : RandomHelper.CreateSecureRandom();
         var inputVectors = new double[vocabSize, _vectorSize];
         var outputVectors = new double[vocabSize, _vectorSize];
         var docVectorArray = new double[_nDocs, _vectorSize];
@@ -203,13 +211,15 @@ public class Doc2VecVectorizer<T> : TextVectorizerBase<T>
         }
 
         // Store final vectors
+        // For PV-DBOW, inputVectors are never updated, so use outputVectors for word vectors
+        var sourceVectors = _architecture == Doc2VecArchitecture.PV_DBOW ? outputVectors : inputVectors;
         _wordVectors = new Dictionary<string, double[]>();
         for (int i = 0; i < vocabSize; i++)
         {
             var vector = new double[_vectorSize];
             for (int j = 0; j < _vectorSize; j++)
             {
-                vector[j] = inputVectors[i, j];
+                vector[j] = sourceVectors[i, j];
             }
             _wordVectors[vocabArray[i]] = vector;
         }
@@ -419,7 +429,7 @@ public class Doc2VecVectorizer<T> : TextVectorizerBase<T>
         int nDocs = docList.Count;
         var result = new double[nDocs, _vectorSize];
 
-        var random = _randomState.HasValue ? new Random(_randomState.Value + 1) : new Random();
+        var random = _randomState.HasValue ? RandomHelper.CreateSeededRandom(_randomState.Value + 1) : RandomHelper.CreateSecureRandom();
 
         for (int d = 0; d < nDocs; d++)
         {

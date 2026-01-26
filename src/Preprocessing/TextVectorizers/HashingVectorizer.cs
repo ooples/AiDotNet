@@ -72,8 +72,21 @@ public class HashingVectorizer<T> : TextVectorizerBase<T>
         _alternateSign = alternateSign;
         _norm = norm;
 
-        // Generate synthetic feature names
-        _featureNames = Enumerable.Range(0, _nFeatures).Select(i => $"hash_{i}").ToArray();
+        // Don't pre-generate feature names - do it lazily if needed
+        // With default nFeatures = 1048576, eagerly allocating would consume tens of megabytes
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Feature names are generated lazily on first call to avoid memory allocation
+    /// when feature names are not needed. With the default 1 million features,
+    /// this saves significant memory.
+    /// </remarks>
+    public override string[] GetFeatureNamesOut()
+    {
+        // Generate synthetic feature names on demand
+        _featureNames ??= Enumerable.Range(0, _nFeatures).Select(i => $"hash_{i}").ToArray();
+        return _featureNames;
     }
 
     /// <inheritdoc/>

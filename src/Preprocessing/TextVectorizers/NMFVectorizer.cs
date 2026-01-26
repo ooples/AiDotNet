@@ -33,6 +33,7 @@ public class NMFVectorizer<T> : TextVectorizerBase<T>
     private readonly int? _randomState;
     private readonly NMFInitialization _init;
 
+    private int _effectiveComponents;
     private TfidfVectorizer<T>? _tfidfVectorizer;
     private double[,]? _components; // H: (n_components, n_features)
 
@@ -92,7 +93,11 @@ public class NMFVectorizer<T> : TextVectorizerBase<T>
     public override bool IsFitted => _components is not null && _tfidfVectorizer is not null;
 
     /// <inheritdoc/>
-    public override int FeatureCount => _nComponents;
+    /// <remarks>
+    /// Returns the effective number of components, which may be less than the requested
+    /// nComponents if the corpus is smaller than the requested dimensions.
+    /// </remarks>
+    public override int FeatureCount => _effectiveComponents > 0 ? _effectiveComponents : _nComponents;
 
     /// <summary>
     /// Fits the NMF model to the corpus using multiplicative update rules.
@@ -111,14 +116,22 @@ public class NMFVectorizer<T> : TextVectorizerBase<T>
             nGramRange: _nGramRange,
             lowercase: _lowercase,
             tokenizer: _tokenizer,
-            stopWords: _stopWords);
+            stopWords: _stopWords,
+            advancedTokenizer: _advancedTokenizer);
 
         var tfidfMatrix = _tfidfVectorizer.FitTransform(docList);
         _vocabulary = _tfidfVectorizer.Vocabulary;
-        _featureNames = Enumerable.Range(0, _nComponents).Select(i => $"nmf_topic_{i}").ToArray();
 
         int nDocs = tfidfMatrix.Rows;
         int nFeatures = tfidfMatrix.Columns;
+
+        // Calculate effective components - may be less than requested if corpus is small
+        _effectiveComponents = Math.Min(_nComponents, Math.Min(nDocs, nFeatures));
+        if (_effectiveComponents < 1)
+            throw new InvalidOperationException("NMF requires at least one component; check corpus size and vocabulary.");
+
+        // Set feature names based on effective components
+        _featureNames = Enumerable.Range(0, _effectiveComponents).Select(i => $"nmf_topic_{i}").ToArray();
 
         // Convert to double array
         var V = new double[nDocs, nFeatures];
@@ -131,8 +144,8 @@ public class NMFVectorizer<T> : TextVectorizerBase<T>
         }
 
         // Initialize W and H
-        var random = _randomState.HasValue ? new Random(_randomState.Value) : new Random();
-        int k = Math.Min(_nComponents, Math.Min(nDocs, nFeatures));
+        var random = _randomState.HasValue ? RandomHelper.CreateSeededRandom(_randomState.Value) : RandomHelper.CreateSecureRandom();
+        int k = _effectiveComponents;
 
         var W = new double[nDocs, k];
         var H = new double[k, nFeatures];
@@ -203,10 +216,18 @@ public class NMFVectorizer<T> : TextVectorizerBase<T>
         _components = H;
     }
 
+    /// <summary>
+    /// NNDSVD-inspired initialization using scaled random values.
+    /// </summary>
+    /// <remarks>
+    /// This is a simplified approximation that uses the mean of the input matrix
+    /// to scale random initialization values. It does not implement the full NNDSVD
+    /// algorithm (which requires SVD decomposition), but provides better starting
+    /// values than pure random initialization for faster convergence.
+    /// </remarks>
     private void InitializeNNDSVD(double[,] V, double[,] W, double[,] H, int m, int n, int k)
     {
-        // Simple NNDSVD-like initialization using SVD approximation
-        var random = _randomState.HasValue ? new Random(_randomState.Value) : new Random();
+        var random = _randomState.HasValue ? RandomHelper.CreateSeededRandom(_randomState.Value) : RandomHelper.CreateSecureRandom();
 
         // Initialize with small positive random values as fallback
         for (int i = 0; i < m; i++)
@@ -375,7 +396,8 @@ public class NMFVectorizer<T> : TextVectorizerBase<T>
         }
 
         // Solve for W using NNLS-like update
-        var random = _randomState.HasValue ? new Random(_randomState.Value) : new Random();
+        // Use a fixed seed derived from _randomState for reproducibility
+        var random = _randomState.HasValue ? RandomHelper.CreateSeededRandom(_randomState.Value) : RandomHelper.CreateSeededRandom(42);
         var W = new double[nDocs, k];
 
         // Initialize W

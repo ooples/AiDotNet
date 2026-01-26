@@ -87,6 +87,14 @@ public class LDAVectorizer<T> : TextVectorizerBase<T>
     {
         if (nTopics < 1)
             throw new ArgumentException("Number of topics must be at least 1.", nameof(nTopics));
+        if (maxIterations < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxIterations), "Max iterations must be at least 1.");
+        if (alpha <= 0)
+            throw new ArgumentOutOfRangeException(nameof(alpha), "Alpha must be > 0.");
+        if (beta <= 0)
+            throw new ArgumentOutOfRangeException(nameof(beta), "Beta must be > 0.");
+        if (tolerance < 0)
+            throw new ArgumentOutOfRangeException(nameof(tolerance), "Tolerance must be >= 0.");
 
         _nTopics = nTopics;
         _maxIterations = maxIterations;
@@ -119,7 +127,8 @@ public class LDAVectorizer<T> : TextVectorizerBase<T>
             nGramRange: _nGramRange,
             lowercase: _lowercase,
             tokenizer: _tokenizer,
-            stopWords: _stopWords);
+            stopWords: _stopWords,
+            advancedTokenizer: _advancedTokenizer);
 
         var countMatrix = _countVectorizer.FitTransform(docList);
         _vocabulary = _countVectorizer.Vocabulary;
@@ -129,7 +138,7 @@ public class LDAVectorizer<T> : TextVectorizerBase<T>
         int nWords = countMatrix.Columns;
 
         // Initialize random
-        var random = _randomState.HasValue ? new Random(_randomState.Value) : new Random();
+        var random = _randomState.HasValue ? RandomHelper.CreateSeededRandom(_randomState.Value) : RandomHelper.CreateSecureRandom();
 
         // Initialize topic assignments for each word occurrence
         var wordTopics = new List<List<int>>(); // wordTopics[doc][word_position] = topic
@@ -287,7 +296,7 @@ public class LDAVectorizer<T> : TextVectorizerBase<T>
 
         // Use variational inference for new documents
         var result = new double[nDocs, _nTopics];
-        var random = _randomState.HasValue ? new Random(_randomState.Value) : new Random();
+        var random = _randomState.HasValue ? RandomHelper.CreateSeededRandom(_randomState.Value) : RandomHelper.CreateSecureRandom();
 
         for (int d = 0; d < nDocs; d++)
         {

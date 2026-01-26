@@ -11,7 +11,16 @@ public enum NMFInitialization
     Random,
 
     /// <summary>
-    /// Non-negative Double SVD initialization (more stable but slower).
+    /// NNDSVD-inspired initialization using scaled random values based on input statistics.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is a simplified approximation that uses the mean of the input matrix
+    /// to scale the random initialization, providing better starting values than
+    /// pure random initialization. It does not implement the full NNDSVD algorithm
+    /// (which requires SVD decomposition), but often achieves similar benefits for
+    /// convergence stability.
+    /// </para>
+    /// </remarks>
     NNDSVD
 }

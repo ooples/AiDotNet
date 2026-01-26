@@ -155,6 +155,14 @@ public abstract class TextVectorizerBase<T> : ITextVectorizer<T>
             throw new ArgumentException("Minimum document frequency must be at least 1.", nameof(minDf));
         if (maxDf < 0 || maxDf > 1)
             throw new ArgumentException("Maximum document frequency must be between 0 and 1.", nameof(maxDf));
+        if (nGramRange.HasValue)
+        {
+            var range = nGramRange.Value;
+            if (range.Min < 1)
+                throw new ArgumentException("Minimum n-gram length must be at least 1.", nameof(nGramRange));
+            if (range.Max < range.Min)
+                throw new ArgumentException("Maximum n-gram length must be >= minimum.", nameof(nGramRange));
+        }
 
         _minDf = minDf;
         _maxDf = maxDf;
@@ -351,7 +359,7 @@ public abstract class TextVectorizerBase<T> : ITextVectorizer<T>
     {
         "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
         "has", "he", "in", "is", "it", "its", "of", "on", "that", "the",
-        "to", "was", "were", "will", "with", "the", "this", "but", "they",
+        "to", "was", "were", "will", "with", "this", "but", "they",
         "have", "had", "what", "when", "where", "who", "which", "why", "how",
         "all", "each", "every", "both", "few", "more", "most", "other", "some",
         "such", "no", "nor", "not", "only", "own", "same", "so", "than", "too",

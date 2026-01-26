@@ -42,6 +42,7 @@ public class GloVeVectorizer<T> : TextVectorizerBase<T>
 
     private Dictionary<string, double[]>? _wordVectors;
     private Dictionary<string, int>? _wordCounts;
+    private Dictionary<string, int>? _documentFrequency;
 
     /// <summary>
     /// Gets the learned word vectors.
@@ -117,11 +118,20 @@ public class GloVeVectorizer<T> : TextVectorizerBase<T>
         // Tokenize all documents
         var allTokens = new List<List<string>>();
         _wordCounts = new Dictionary<string, int>();
+        _documentFrequency = new Dictionary<string, int>();
 
         foreach (string doc in docList)
         {
             var tokens = Tokenize(doc).ToList();
             allTokens.Add(tokens);
+
+            // Track unique tokens in this document for document frequency
+            var uniqueTokens = new HashSet<string>(tokens);
+            foreach (string token in uniqueTokens)
+            {
+                _documentFrequency.TryGetValue(token, out int df);
+                _documentFrequency[token] = df + 1;
+            }
 
             foreach (string token in tokens)
             {
@@ -177,7 +187,7 @@ public class GloVeVectorizer<T> : TextVectorizerBase<T>
         }
 
         // Initialize vectors and biases
-        var random = _randomState.HasValue ? new Random(_randomState.Value) : new Random();
+        var random = _randomState.HasValue ? RandomHelper.CreateSeededRandom(_randomState.Value) : RandomHelper.CreateSecureRandom();
         var W = new double[vocabSize, _vectorSize]; // Main word vectors
         var W_tilde = new double[vocabSize, _vectorSize]; // Context word vectors
         var b = new double[vocabSize]; // Main biases
@@ -339,14 +349,15 @@ public class GloVeVectorizer<T> : TextVectorizerBase<T>
                     }
                 }
             }
-            else if (_aggregation == Word2VecAggregation.TfidfWeighted && _wordCounts is not null)
+            else if (_aggregation == Word2VecAggregation.TfidfWeighted && _documentFrequency is not null)
             {
                 double totalDocs = _nDocs;
                 double totalWeight = 0;
 
                 foreach (string token in validTokens)
                 {
-                    double idf = Math.Log(totalDocs / (_wordCounts.GetValueOrDefault(token, 1) + 1));
+                    // Use document frequency (number of docs containing the word) for proper IDF calculation
+                    double idf = Math.Log(totalDocs / (_documentFrequency.GetValueOrDefault(token, 1) + 1));
                     var vec = _wordVectors[token];
                     for (int i = 0; i < _vectorSize; i++)
                     {
@@ -400,7 +411,8 @@ public class GloVeVectorizer<T> : TextVectorizerBase<T>
         if (_wordVectors is null)
             throw new InvalidOperationException("GloVeVectorizer has not been fitted.");
 
-        var targetVector = GetWordVector(word);
+        var normalizedWord = _lowercase ? word.ToLowerInvariant() : word;
+        var targetVector = _wordVectors.GetValueOrDefault(normalizedWord);
         if (targetVector is null)
             return new List<(string, double)>();
 
@@ -408,7 +420,7 @@ public class GloVeVectorizer<T> : TextVectorizerBase<T>
 
         foreach (var kvp in _wordVectors)
         {
-            if (kvp.Key == word) continue;
+            if (kvp.Key == normalizedWord) continue;
 
             double dot = 0, normA = 0, normB = 0;
             for (int i = 0; i < _vectorSize; i++)
