@@ -331,6 +331,15 @@ public class LDAVectorizer<T> : TextVectorizerBase<T>
                     }
 
                     // Normalize and update gamma
+                    // Guard against numerical underflow causing division by zero
+                    if (sumPhi <= 0 || double.IsNaN(sumPhi) || double.IsInfinity(sumPhi))
+                    {
+                        // Fallback to uniform distribution if numerical underflow
+                        sumPhi = _nTopics;
+                        for (int k = 0; k < _nTopics; k++)
+                            phi[k] = 1.0;
+                    }
+
                     for (int k = 0; k < _nTopics; k++)
                     {
                         phi[k] /= sumPhi;
