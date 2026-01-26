@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -64,8 +65,24 @@ public class TfidfVectorizer<T> : TextVectorizerBase<T>
     /// <param name="useIdf">Whether to use IDF weighting. Defaults to true.</param>
     /// <param name="smoothIdf">Smooth IDF by adding 1 to df. Defaults to true.</param>
     /// <param name="sublinearTf">Apply sublinear TF (1 + log(tf)). Defaults to false.</param>
-    /// <param name="tokenizer">Custom tokenizer function. Null for default.</param>
+    /// <param name="tokenizer">Custom tokenizer function. Null for default word-level tokenization.</param>
     /// <param name="stopWords">Words to exclude. Null for no filtering.</param>
+    /// <param name="advancedTokenizer">
+    /// Optional ITokenizer for subword tokenization (BPE, WordPiece, SentencePiece).
+    /// When provided, takes precedence over the simple tokenizer function.
+    /// </param>
+    /// <example>
+    /// <code>
+    /// // Basic usage with default tokenization
+    /// var tfidf = new TfidfVectorizer&lt;double&gt;();
+    /// var matrix = tfidf.FitTransform(documents);
+    ///
+    /// // Using BERT tokenization for consistency with neural network models
+    /// var tokenizer = AutoTokenizer.FromPretrained("bert-base-uncased");
+    /// var tfidf = new TfidfVectorizer&lt;double&gt;(advancedTokenizer: tokenizer);
+    /// var matrix = tfidf.FitTransform(documents);
+    /// </code>
+    /// </example>
     public TfidfVectorizer(
         int minDf = 1,
         double maxDf = 1.0,
@@ -77,8 +94,9 @@ public class TfidfVectorizer<T> : TextVectorizerBase<T>
         bool smoothIdf = true,
         bool sublinearTf = false,
         Func<string, IEnumerable<string>>? tokenizer = null,
-        HashSet<string>? stopWords = null)
-        : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords)
+        HashSet<string>? stopWords = null,
+        ITokenizer? advancedTokenizer = null)
+        : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords, advancedTokenizer)
     {
         _norm = norm;
         _useIdf = useIdf;

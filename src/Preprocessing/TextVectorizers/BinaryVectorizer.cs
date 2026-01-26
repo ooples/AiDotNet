@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -33,6 +34,7 @@ public class BinaryVectorizer<T> : TextVectorizerBase<T>
     /// <param name="lowercase">Convert all text to lowercase. Defaults to true.</param>
     /// <param name="tokenizer">Custom tokenizer function. Null for default.</param>
     /// <param name="stopWords">Words to exclude. Null for no filtering.</param>
+    /// <param name="advancedTokenizer">Optional ITokenizer for subword tokenization.</param>
     public BinaryVectorizer(
         int minDf = 1,
         double maxDf = 1.0,
@@ -40,8 +42,9 @@ public class BinaryVectorizer<T> : TextVectorizerBase<T>
         (int Min, int Max)? nGramRange = null,
         bool lowercase = true,
         Func<string, IEnumerable<string>>? tokenizer = null,
-        HashSet<string>? stopWords = null)
-        : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords)
+        HashSet<string>? stopWords = null,
+        ITokenizer? advancedTokenizer = null)
+        : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords, advancedTokenizer)
     {
     }
 

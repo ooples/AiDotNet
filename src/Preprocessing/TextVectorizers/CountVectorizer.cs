@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -45,6 +46,10 @@ public class CountVectorizer<T> : TextVectorizerBase<T>
     /// <param name="binary">If true, use binary counts (1 if present, 0 if absent). Defaults to false.</param>
     /// <param name="tokenizer">Custom tokenizer function. Null for default whitespace/punctuation tokenizer.</param>
     /// <param name="stopWords">Words to exclude from vocabulary. Null for no filtering.</param>
+    /// <param name="advancedTokenizer">
+    /// Optional ITokenizer for subword tokenization (BPE, WordPiece, SentencePiece).
+    /// When provided, takes precedence over the simple tokenizer function.
+    /// </param>
     public CountVectorizer(
         int minDf = 1,
         double maxDf = 1.0,
@@ -53,8 +58,9 @@ public class CountVectorizer<T> : TextVectorizerBase<T>
         bool lowercase = true,
         bool binary = false,
         Func<string, IEnumerable<string>>? tokenizer = null,
-        HashSet<string>? stopWords = null)
-        : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords)
+        HashSet<string>? stopWords = null,
+        ITokenizer? advancedTokenizer = null)
+        : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords, advancedTokenizer)
     {
         _binary = binary;
     }

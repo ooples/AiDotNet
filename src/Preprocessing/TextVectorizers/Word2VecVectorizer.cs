@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -65,6 +66,7 @@ public class Word2VecVectorizer<T> : TextVectorizerBase<T>
     /// <param name="randomState">Random seed for reproducibility. Null for random.</param>
     /// <param name="tokenizer">Custom tokenizer function. Null for default.</param>
     /// <param name="stopWords">Words to exclude. Null for no filtering.</param>
+    /// <param name="advancedTokenizer">Optional ITokenizer for subword tokenization.</param>
     public Word2VecVectorizer(
         int vectorSize = 100,
         int windowSize = 5,
@@ -77,8 +79,9 @@ public class Word2VecVectorizer<T> : TextVectorizerBase<T>
         bool lowercase = true,
         int? randomState = null,
         Func<string, IEnumerable<string>>? tokenizer = null,
-        HashSet<string>? stopWords = null)
-        : base(minCount, 1.0, null, (1, 1), lowercase, tokenizer, stopWords)
+        HashSet<string>? stopWords = null,
+        ITokenizer? advancedTokenizer = null)
+        : base(minCount, 1.0, null, (1, 1), lowercase, tokenizer, stopWords, advancedTokenizer)
     {
         if (vectorSize < 1)
             throw new ArgumentException("Vector size must be at least 1.", nameof(vectorSize));

@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -14,6 +15,16 @@ namespace AiDotNet.Preprocessing.TextVectorizers;
 /// - N-gram generation (creating word sequences)
 /// - Stop word filtering
 /// - Vocabulary management
+/// </para>
+/// <para>
+/// Supports two tokenization approaches:
+/// <list type="bullet">
+/// <item><b>Simple Tokenizer (default):</b> Uses word-level tokenization via a custom function
+/// or the built-in whitespace/punctuation splitter. Best for traditional NLP tasks.</item>
+/// <item><b>ITokenizer Integration:</b> Uses advanced subword tokenization (BPE, WordPiece, SentencePiece)
+/// from the AiDotNet.Tokenization module. Enables consistent tokenization between classical ML
+/// and neural network approaches.</item>
+/// </list>
 /// </para>
 /// <para><b>For Beginners:</b> This is the foundation that all text vectorizers build upon.
 /// It handles the common task of breaking text into tokens and managing which words
@@ -55,9 +66,21 @@ public abstract class TextVectorizerBase<T> : ITextVectorizer<T>
     protected readonly bool _lowercase;
 
     /// <summary>
-    /// Custom tokenizer function.
+    /// Custom tokenizer function (simple word-level tokenization).
     /// </summary>
     protected readonly Func<string, IEnumerable<string>>? _tokenizer;
+
+    /// <summary>
+    /// Advanced tokenizer implementing ITokenizer (BPE, WordPiece, SentencePiece).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When set, this takes precedence over the simple tokenizer function.
+    /// Enables using the same subword tokenization used by neural networks (BERT, GPT, etc.)
+    /// with traditional text vectorizers like TF-IDF and BM25.
+    /// </para>
+    /// </remarks>
+    protected readonly ITokenizer? _advancedTokenizer;
 
     /// <summary>
     /// Set of stop words to exclude.
@@ -99,8 +122,25 @@ public abstract class TextVectorizerBase<T> : ITextVectorizer<T>
     /// <param name="maxFeatures">Maximum vocabulary size. Null for unlimited.</param>
     /// <param name="nGramRange">N-gram range (min, max). Defaults to (1, 1) for unigrams.</param>
     /// <param name="lowercase">Convert all text to lowercase. Defaults to true.</param>
-    /// <param name="tokenizer">Custom tokenizer function. Null for default.</param>
+    /// <param name="tokenizer">Custom tokenizer function. Null for default word-level tokenization.</param>
     /// <param name="stopWords">Words to exclude. Null for no filtering.</param>
+    /// <param name="advancedTokenizer">
+    /// Optional ITokenizer for subword tokenization (BPE, WordPiece, SentencePiece).
+    /// When provided, this takes precedence over the simple tokenizer function.
+    /// Enables consistent tokenization between classical ML and neural network approaches.
+    /// </param>
+    /// <remarks>
+    /// <para><b>Tokenization Priority:</b></para>
+    /// <list type="number">
+    /// <item>If <paramref name="advancedTokenizer"/> is provided, it is used (subword tokens).</item>
+    /// <item>Else if <paramref name="tokenizer"/> function is provided, it is used (custom word-level).</item>
+    /// <item>Else the default whitespace/punctuation splitter is used (simple word-level).</item>
+    /// </list>
+    /// <para><b>For Beginners:</b> For most traditional NLP tasks, the default tokenization works well.
+    /// Use <paramref name="advancedTokenizer"/> if you want to match the tokenization used by
+    /// neural network models like BERT, GPT, or if you need to handle rare words via subword splitting.
+    /// </para>
+    /// </remarks>
     protected TextVectorizerBase(
         int minDf = 1,
         double maxDf = 1.0,
@@ -108,7 +148,8 @@ public abstract class TextVectorizerBase<T> : ITextVectorizer<T>
         (int Min, int Max)? nGramRange = null,
         bool lowercase = true,
         Func<string, IEnumerable<string>>? tokenizer = null,
-        HashSet<string>? stopWords = null)
+        HashSet<string>? stopWords = null,
+        ITokenizer? advancedTokenizer = null)
     {
         if (minDf < 1)
             throw new ArgumentException("Minimum document frequency must be at least 1.", nameof(minDf));
@@ -122,6 +163,7 @@ public abstract class TextVectorizerBase<T> : ITextVectorizer<T>
         _lowercase = lowercase;
         _tokenizer = tokenizer;
         _stopWords = stopWords;
+        _advancedTokenizer = advancedTokenizer;
     }
 
     /// <inheritdoc/>
@@ -150,13 +192,38 @@ public abstract class TextVectorizerBase<T> : ITextVectorizer<T>
     /// <param name="text">The text to tokenize.</param>
     /// <returns>Enumerable of tokens.</returns>
     /// <remarks>
+    /// <para>
+    /// Tokenization priority:
+    /// <list type="number">
+    /// <item>If an ITokenizer (advancedTokenizer) is configured, uses subword tokenization.</item>
+    /// <item>If a custom tokenizer function is configured, uses that.</item>
+    /// <item>Otherwise, uses the default whitespace/punctuation splitter.</item>
+    /// </list>
+    /// </para>
     /// <para><b>For Beginners:</b> Tokenization splits text into individual words or tokens.
     /// By default, it splits on whitespace and punctuation, converts to lowercase if configured,
-    /// and removes stop words if configured.
+    /// and removes stop words if configured. When using an ITokenizer, you get subword tokens
+    /// (like "un", "##happy" for "unhappy" in WordPiece) which can handle rare words better.
     /// </para>
     /// </remarks>
     protected virtual IEnumerable<string> Tokenize(string text)
     {
+        // Priority 1: Use advanced ITokenizer if provided (subword tokenization)
+        if (_advancedTokenizer is not null)
+        {
+            // Use the ITokenizer.Tokenize method which returns subword tokens as strings
+            var tokens = _advancedTokenizer.Tokenize(text);
+            IEnumerable<string> result = tokens;
+
+            if (_lowercase)
+                result = result.Select(t => t.ToLowerInvariant());
+            if (_stopWords is not null)
+                result = result.Where(t => !_stopWords.Contains(t));
+
+            return result;
+        }
+
+        // Priority 2: Use custom tokenizer function if provided
         if (_tokenizer is not null)
         {
             var tokens = _tokenizer(text);
@@ -167,7 +234,7 @@ public abstract class TextVectorizerBase<T> : ITextVectorizer<T>
             return tokens;
         }
 
-        // Default tokenizer: split on whitespace and punctuation
+        // Priority 3: Default tokenizer - split on whitespace and punctuation
         string processedText = _lowercase ? text.ToLowerInvariant() : text;
         var tokenList = new List<string>();
         var currentToken = new System.Text.StringBuilder();

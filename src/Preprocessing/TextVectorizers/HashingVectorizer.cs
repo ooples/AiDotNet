@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -47,6 +48,10 @@ public class HashingVectorizer<T> : TextVectorizerBase<T>
     /// <param name="norm">Normalization method for output vectors. Defaults to L2.</param>
     /// <param name="tokenizer">Custom tokenizer function. Null for default.</param>
     /// <param name="stopWords">Words to exclude. Null for no filtering.</param>
+    /// <param name="advancedTokenizer">
+    /// Optional ITokenizer for subword tokenization (BPE, WordPiece, SentencePiece).
+    /// When provided, takes precedence over the simple tokenizer function.
+    /// </param>
     public HashingVectorizer(
         int nFeatures = 1048576,
         (int Min, int Max)? nGramRange = null,
@@ -55,8 +60,9 @@ public class HashingVectorizer<T> : TextVectorizerBase<T>
         bool alternateSign = true,
         HashingNorm norm = HashingNorm.L2,
         Func<string, IEnumerable<string>>? tokenizer = null,
-        HashSet<string>? stopWords = null)
-        : base(minDf: 1, maxDf: 1.0, maxFeatures: null, nGramRange, lowercase, tokenizer, stopWords)
+        HashSet<string>? stopWords = null,
+        ITokenizer? advancedTokenizer = null)
+        : base(minDf: 1, maxDf: 1.0, maxFeatures: null, nGramRange, lowercase, tokenizer, stopWords, advancedTokenizer)
     {
         if (nFeatures < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeatures));

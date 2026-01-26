@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -76,6 +77,7 @@ public class LSAVectorizer<T> : TextVectorizerBase<T>
     /// <param name="randomState">Random seed for reproducibility. Null for random.</param>
     /// <param name="tokenizer">Custom tokenizer function. Null for default.</param>
     /// <param name="stopWords">Words to exclude. Null for no filtering.</param>
+    /// <param name="advancedTokenizer">Optional ITokenizer for subword tokenization.</param>
     public LSAVectorizer(
         int nComponents = 100,
         int nIterations = 5,
@@ -87,8 +89,9 @@ public class LSAVectorizer<T> : TextVectorizerBase<T>
         bool lowercase = true,
         int? randomState = null,
         Func<string, IEnumerable<string>>? tokenizer = null,
-        HashSet<string>? stopWords = null)
-        : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords)
+        HashSet<string>? stopWords = null,
+        ITokenizer? advancedTokenizer = null)
+        : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords, advancedTokenizer)
     {
         if (nComponents < 1)
             throw new ArgumentException("Number of components must be at least 1.", nameof(nComponents));

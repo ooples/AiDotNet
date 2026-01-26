@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -40,6 +41,7 @@ public class CharNGramVectorizer<T> : TextVectorizerBase<T>
     /// <param name="lowercase">Convert all text to lowercase. Defaults to true.</param>
     /// <param name="norm">Normalization method for output vectors. Defaults to L2.</param>
     /// <param name="stopWords">Words to exclude before generating character n-grams. Null for no filtering.</param>
+    /// <param name="advancedTokenizer">Optional ITokenizer for subword tokenization.</param>
     public CharNGramVectorizer(
         (int Min, int Max)? charNGramRange = null,
         bool wordBoundaries = true,
@@ -48,8 +50,9 @@ public class CharNGramVectorizer<T> : TextVectorizerBase<T>
         int? maxFeatures = null,
         bool lowercase = true,
         CharNGramNorm norm = CharNGramNorm.L2,
-        HashSet<string>? stopWords = null)
-        : base(minDf, maxDf, maxFeatures, (1, 1), lowercase, null, stopWords)
+        HashSet<string>? stopWords = null,
+        ITokenizer? advancedTokenizer = null)
+        : base(minDf, maxDf, maxFeatures, (1, 1), lowercase, null, stopWords, advancedTokenizer)
     {
         _charNGramRange = charNGramRange ?? (2, 4);
         _wordBoundaries = wordBoundaries;

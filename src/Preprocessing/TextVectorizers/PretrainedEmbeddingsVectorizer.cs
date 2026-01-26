@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -56,6 +57,7 @@ public class PretrainedEmbeddingsVectorizer<T> : TextVectorizerBase<T>
     /// <param name="lowercase">Convert all text to lowercase. Defaults to true.</param>
     /// <param name="tokenizer">Custom tokenizer function. Null for default.</param>
     /// <param name="stopWords">Words to exclude. Null for no filtering.</param>
+    /// <param name="advancedTokenizer">Optional ITokenizer for subword tokenization.</param>
     public PretrainedEmbeddingsVectorizer(
         string embeddingsPath,
         PretrainedFormat format = PretrainedFormat.Auto,
@@ -64,8 +66,9 @@ public class PretrainedEmbeddingsVectorizer<T> : TextVectorizerBase<T>
         double oovVector = 0,
         bool lowercase = true,
         Func<string, IEnumerable<string>>? tokenizer = null,
-        HashSet<string>? stopWords = null)
-        : base(1, 1.0, null, (1, 1), lowercase, tokenizer, stopWords)
+        HashSet<string>? stopWords = null,
+        ITokenizer? advancedTokenizer = null)
+        : base(1, 1.0, null, (1, 1), lowercase, tokenizer, stopWords, advancedTokenizer)
     {
         if (string.IsNullOrWhiteSpace(embeddingsPath))
             throw new ArgumentException("Embeddings path cannot be null or empty.", nameof(embeddingsPath));
@@ -89,14 +92,16 @@ public class PretrainedEmbeddingsVectorizer<T> : TextVectorizerBase<T>
     /// <param name="lowercase">Convert all text to lowercase.</param>
     /// <param name="tokenizer">Custom tokenizer function.</param>
     /// <param name="stopWords">Words to exclude.</param>
+    /// <param name="advancedTokenizer">Optional ITokenizer for subword tokenization.</param>
     public PretrainedEmbeddingsVectorizer(
         Dictionary<string, double[]> wordVectors,
         Word2VecAggregation aggregation = Word2VecAggregation.Mean,
         double oovVector = 0,
         bool lowercase = true,
         Func<string, IEnumerable<string>>? tokenizer = null,
-        HashSet<string>? stopWords = null)
-        : base(1, 1.0, null, (1, 1), lowercase, tokenizer, stopWords)
+        HashSet<string>? stopWords = null,
+        ITokenizer? advancedTokenizer = null)
+        : base(1, 1.0, null, (1, 1), lowercase, tokenizer, stopWords, advancedTokenizer)
     {
         if (wordVectors is null || wordVectors.Count == 0)
             throw new ArgumentException("Word vectors cannot be null or empty.", nameof(wordVectors));

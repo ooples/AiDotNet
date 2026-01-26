@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Preprocessing.TextVectorizers;
 
@@ -66,6 +67,7 @@ public class LDAVectorizer<T> : TextVectorizerBase<T>
     /// <param name="randomState">Random seed for reproducibility. Null for random.</param>
     /// <param name="tokenizer">Custom tokenizer function. Null for default.</param>
     /// <param name="stopWords">Words to exclude. Defaults to English stop words.</param>
+    /// <param name="advancedTokenizer">Optional ITokenizer for subword tokenization.</param>
     public LDAVectorizer(
         int nTopics = 10,
         int maxIterations = 100,
@@ -79,8 +81,9 @@ public class LDAVectorizer<T> : TextVectorizerBase<T>
         bool lowercase = true,
         int? randomState = null,
         Func<string, IEnumerable<string>>? tokenizer = null,
-        HashSet<string>? stopWords = null)
-        : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords ?? EnglishStopWords)
+        HashSet<string>? stopWords = null,
+        ITokenizer? advancedTokenizer = null)
+        : base(minDf, maxDf, maxFeatures, nGramRange, lowercase, tokenizer, stopWords ?? EnglishStopWords, advancedTokenizer)
     {
         if (nTopics < 1)
             throw new ArgumentException("Number of topics must be at least 1.", nameof(nTopics));
