@@ -31,6 +31,11 @@ namespace AiDotNet.JitCompiler.IR;
 public class IRGraph
 {
     /// <summary>
+    /// Lock object for thread-safe access to TensorShapes during validation.
+    /// </summary>
+    private readonly object _tensorShapesLock = new();
+
+    /// <summary>
     /// Gets or sets the list of operations in this graph, in execution order.
     /// </summary>
     /// <remarks>
@@ -162,13 +167,26 @@ public class IRGraph
                 return false; // Using a tensor before it's produced
             }
 
-            // Mark output as produced
-            producedTensors.Add(op.OutputId);
-
-            // Ensure output shape is defined
-            if (!TensorShapes.ContainsKey(op.OutputId))
+            // Mark ALL outputs as produced (support multi-output operations like gradient ops)
+            // Use per-output shapes from OutputShapes array for proper multi-output support
+            var outputShapes = op.OutputShapes;
+            for (int i = 0; i < op.OutputIds.Length; i++)
             {
-                TensorShapes[op.OutputId] = op.OutputShape;
+                var outputId = op.OutputIds[i];
+                producedTensors.Add(outputId);
+
+                // Ensure output shape is defined for each output using per-output shape
+                // Use double-checked locking for thread-safety
+                if (!TensorShapes.ContainsKey(outputId))
+                {
+                    lock (_tensorShapesLock)
+                    {
+                        if (!TensorShapes.ContainsKey(outputId))
+                        {
+                            TensorShapes[outputId] = i < outputShapes.Length ? outputShapes[i] : op.OutputShape;
+                        }
+                    }
+                }
             }
         }
 
@@ -226,7 +244,7 @@ public class IRGraph
         // Hash input shapes
         foreach (var inputId in InputIds.OrderBy(id => id))
         {
-            hash = hash * 31 + inputId.GetHashCode();
+            hash = hash * 31 + inputId;
             if (TensorShapes.TryGetValue(inputId, out var shape))
             {
                 hash = hash * 31 + shape.GetShapeHashCode();
@@ -237,20 +255,33 @@ public class IRGraph
         foreach (var op in Operations)
         {
             hash = hash * 31 + op.OpType.GetHashCode();
-            hash = hash * 31 + op.OutputId.GetHashCode();
+
+            // Hash ALL output IDs and their per-output shapes (support multi-output operations)
+            var outputShapes = op.OutputShapes;
+            for (int i = 0; i < op.OutputIds.Length; i++)
+            {
+                var outputId = op.OutputIds[i];
+                hash = hash * 31 + outputId;
+                // Use per-output shape to avoid collisions for multi-output ops
+                var shape = i < outputShapes.Length ? outputShapes[i] : op.OutputShape;
+                if (shape is not null)
+                {
+                    hash = hash * 31 + shape.GetShapeHashCode();
+                }
+            }
+
             hash = hash * 31 + op.OutputType.GetHashCode();
-            hash = hash * 31 + op.OutputShape.GetShapeHashCode();
 
             foreach (var inputId in op.InputIds)
             {
-                hash = hash * 31 + inputId.GetHashCode();
+                hash = hash * 31 + inputId;
             }
         }
 
         // Hash output IDs
         foreach (var outputId in OutputIds.OrderBy(id => id))
         {
-            hash = hash * 31 + outputId.GetHashCode();
+            hash = hash * 31 + outputId;
         }
 
         return hash;
