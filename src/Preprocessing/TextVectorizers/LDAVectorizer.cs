@@ -359,6 +359,14 @@ public class LDAVectorizer<T> : TextVectorizerBase<T>
 
             // Normalize gamma to get topic proportions
             double sumGamma = gamma.Sum();
+            if (sumGamma <= 0 || double.IsNaN(sumGamma) || double.IsInfinity(sumGamma))
+            {
+                // Fallback to uniform distribution
+                sumGamma = _nTopics;
+                for (int k = 0; k < _nTopics; k++)
+                    gamma[k] = 1.0;
+            }
+
             for (int k = 0; k < _nTopics; k++)
             {
                 result[d, k] = gamma[k] / sumGamma;
