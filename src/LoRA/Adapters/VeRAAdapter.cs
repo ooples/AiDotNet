@@ -121,8 +121,18 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int veraParams = _scalingVectorD.Length + _scalingVectorB.Length;
-            return _freezeBaseLayer ? veraParams : (_baseLayer.ParameterCount + veraParams);
+            // Handle case where scaling vectors haven't been initialized yet
+            // (called from base constructor before derived constructor runs)
+            if (_scalingVectorD == null || _scalingVectorB == null)
+            {
+                // Return expected size based on layer dimensions and rank
+                int outputSize = GetOutputShape()[0];
+                int veraParams = outputSize + Rank;
+                return _freezeBaseLayer ? veraParams : (_baseLayer.ParameterCount + veraParams);
+            }
+
+            int actualVeraParams = _scalingVectorD.Length + _scalingVectorB.Length;
+            return _freezeBaseLayer ? actualVeraParams : (_baseLayer.ParameterCount + actualVeraParams);
         }
     }
 
@@ -270,6 +280,27 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// Gets whether the shared matrices have been initialized.
     /// </summary>
     public static bool AreSharedMatricesInitialized => _sharedMatrixA != null && _sharedMatrixB != null;
+
+    /// <summary>
+    /// Updates the parameter vector from the current layer states.
+    /// </summary>
+    /// <remarks>
+    /// VeRA overrides this to only copy scaling vectors (d and b), not the full LoRA layer parameters.
+    /// This is called from the base constructor before scaling vectors are initialized,
+    /// so we check for null and skip if not ready yet.
+    /// </remarks>
+    protected override void UpdateParametersFromLayers()
+    {
+        // This method is called from base constructor before scaling vectors are initialized.
+        // If vectors aren't ready yet, skip - they'll be set in VeRAAdapter constructor.
+        if (_scalingVectorD == null || _scalingVectorB == null)
+        {
+            return;
+        }
+
+        // Use VeRA's own method to properly pack only the scaling vectors
+        UpdateParametersFromVectors();
+    }
 
     /// <summary>
     /// Creates a VeRA-specific layer (not used since VeRA doesn't use LoRALayer).
@@ -592,20 +623,6 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
 
         Parameters = parameters.Clone();
         UpdateVectorsFromParameters();
-    }
-
-    /// <summary>
-    /// Overrides base class parameter synchronization to use VeRA's scaling vectors instead of LoRA layer.
-    /// </summary>
-    /// <remarks>
-    /// VeRA doesn't use the standard LoRA layer for trainable parameters. Instead, it uses
-    /// scaling vectors d and b. This override ensures the base class calls our vector-based
-    /// parameter synchronization instead of trying to copy LoRA layer parameters.
-    /// </remarks>
-    protected override void UpdateParametersFromLayers()
-    {
-        // VeRA uses scaling vectors instead of LoRA layer parameters
-        UpdateParametersFromVectors();
     }
 
     /// <summary>

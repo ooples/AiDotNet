@@ -1,0 +1,35 @@
+#!/bin/bash
+#
+# Pre-commit hook to prevent direct commits to protected branches.
+# This hook runs before each commit and blocks commits to master/main.
+#
+# To enable this hook, run from the repository root:
+#   git config core.hooksPath .githooks
+#
+
+# Get the current branch name
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+# List of protected branches
+protected_branches=("master" "main")
+
+# Check if current branch is protected
+for protected in "${protected_branches[@]}"; do
+    if [ "$branch" = "$protected" ]; then
+        echo ""
+        echo "============================================================"
+        echo "ERROR: Direct commits to '$branch' branch are not allowed!"
+        echo "============================================================"
+        echo ""
+        echo "Please create a feature branch instead:"
+        echo "  git checkout -b feature/your-feature-name"
+        echo "  git checkout -b fix/your-fix-name"
+        echo "  git checkout -b test/your-test-name"
+        echo ""
+        echo "Then commit your changes and create a pull request."
+        echo ""
+        exit 1
+    fi
+done
+
+exit 0

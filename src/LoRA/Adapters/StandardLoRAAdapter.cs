@@ -124,7 +124,7 @@ public class StandardLoRAAdapter<T> : LoRAAdapterBase<T>
         // Merge weights
         // baseParams is stored as [outputSize][inputSize] (row-major, output-major)
         // loraWeights from MergeWeights() is [inputSize, outputSize]
-        // So we access loraWeights[inputIdx, outputIdx] = loraWeights[col, row]
+        // So we access loraWeights[inputIdx, outputIdx]
         for (int i = 0; i < weightCount; i++)
         {
             int outputIdx = i / inputSize;

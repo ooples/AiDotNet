@@ -223,7 +223,8 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
         {
             var maskedScores = currentMask.Apply(importanceScores);
             int totalRemaining = CountNonZero(maskedScores);
-            int numToPrune = (int)(totalRemaining * prunePerRound);
+            // Use rounding instead of truncation to achieve target sparsity more accurately
+            int numToPrune = (int)Math.Round(totalRemaining * prunePerRound);
 
             var flatScores = new List<(int idx, double score)>();
             for (int i = 0; i < maskedScores.Length; i++)
@@ -290,7 +291,8 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
 
             // Find threshold for this round
             int totalRemaining = CountNonZero(maskedScores);
-            int numToPrune = (int)(totalRemaining * prunePerRound);
+            // Use rounding instead of truncation to achieve target sparsity more accurately
+            int numToPrune = (int)Math.Round(totalRemaining * prunePerRound);
 
             var flatScores = new List<(int row, int col, double score)>();
 
@@ -350,7 +352,8 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
             var flatMasked = maskedScores.ToVector();
 
             int totalRemaining = CountNonZero(flatMasked);
-            int numToPrune = (int)(totalRemaining * prunePerRound);
+            // Use rounding instead of truncation to achieve target sparsity more accurately
+            int numToPrune = (int)Math.Round(totalRemaining * prunePerRound);
 
             var sortedScores = GetSortedNonZeroScores(flatMasked);
             var keepIndices = BuildKeepIndicesFromMasked(flatMasked);

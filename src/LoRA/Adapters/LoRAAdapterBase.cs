@@ -500,7 +500,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         // Merge weights
         // baseParams is stored as [outputSize][inputSize] (row-major, output-major)
         // loraWeights from MergeWeights() is [inputSize, outputSize]
-        // So we need loraWeights[inputIdx, outputIdx] = loraWeights[col, row]
+        // So we access loraWeights[inputIdx, outputIdx]
         for (int i = 0; i < weightCount; i++)
         {
             int outputIdx = i / inputSize;

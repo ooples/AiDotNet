@@ -1105,4 +1105,354 @@ public class GradientTapeIntegrationTests
     }
 
     #endregion
+
+    #region Edge Case Tests - Large, Small, and Extreme Gradients
+
+    /// <summary>
+    /// Test: Very large gradients (gradient explosion scenario)
+    /// f(x) = x^10, df/dx = 10*x^9
+    /// For x = 10: gradient = 10 * 10^9 = 10^10 (very large)
+    /// </summary>
+    [Fact]
+    public void Gradient_VeryLargeGradient_HandlesCorrectly()
+    {
+        // Arrange
+        var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 1 }), "x");
+        x.Value[0] = 10.0;
+
+        using (var tape = new GradientTape<double>())
+        {
+            tape.Watch(x);
+
+            // f(x) = x^10 computed as repeated multiplication
+            var result = x;
+            for (int i = 1; i < 10; i++)
+            {
+                result = TensorOperations<double>.ElementwiseMultiply(result, x);
+            }
+
+            var gradients = tape.Gradient(result, new[] { x });
+
+            // Assert
+            // df/dx = 10 * x^9 = 10 * 10^9 = 10^10
+            double expected = 10.0 * Math.Pow(10.0, 9);
+            Assert.True(gradients.ContainsKey(x));
+            Assert.Equal(expected, gradients[x][0], expected * 1e-6); // relative tolerance for large numbers
+        }
+    }
+
+    /// <summary>
+    /// Test: Very small gradients (gradient vanishing scenario)
+    /// f(x) = x^10, df/dx = 10*x^9
+    /// For x = 0.1: gradient = 10 * 0.1^9 = 10^-8 (very small)
+    /// </summary>
+    [Fact]
+    public void Gradient_VerySmallGradient_HandlesCorrectly()
+    {
+        // Arrange
+        var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 1 }), "x");
+        x.Value[0] = 0.1;
+
+        using (var tape = new GradientTape<double>())
+        {
+            tape.Watch(x);
+
+            // f(x) = x^10
+            var result = x;
+            for (int i = 1; i < 10; i++)
+            {
+                result = TensorOperations<double>.ElementwiseMultiply(result, x);
+            }
+
+            var gradients = tape.Gradient(result, new[] { x });
+
+            // Assert
+            // df/dx = 10 * x^9 = 10 * 0.1^9 = 10 * 10^-9 = 10^-8
+            double expected = 10.0 * Math.Pow(0.1, 9);
+            Assert.True(gradients.ContainsKey(x));
+            Assert.Equal(expected, gradients[x][0], 1e-12);
+        }
+    }
+
+    /// <summary>
+    /// Test: Gradient at non-differentiable point (ReLU at x=0)
+    /// ReLU is not differentiable at x=0, but implementations typically use subgradient 0
+    /// </summary>
+    [Fact]
+    public void Gradient_ReLU_AtNonDifferentiablePoint_ReturnsSubgradient()
+    {
+        // Arrange
+        var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 1 }), "x");
+        x.Value[0] = 0.0; // Non-differentiable point
+
+        using (var tape = new GradientTape<double>())
+        {
+            tape.Watch(x);
+
+            var relu = TensorOperations<double>.ReLU(x);
+            var y = TensorOperations<double>.Sum(relu);
+
+            var gradients = tape.Gradient(y, new[] { x });
+
+            // Assert - at x=0, subgradient is typically 0 (could also be 0.5 in some implementations)
+            Assert.True(gradients.ContainsKey(x));
+            Assert.True(gradients[x][0] == 0.0 || gradients[x][0] == 0.5 || gradients[x][0] == 1.0,
+                $"Expected subgradient at x=0 to be 0, 0.5, or 1, but got {gradients[x][0]}");
+        }
+    }
+
+    /// <summary>
+    /// Test: Gradient of absolute value at non-differentiable point (x=0)
+    /// |x| is not differentiable at x=0
+    /// </summary>
+    [Fact]
+    public void Gradient_AbsoluteValue_AtZero_HandlesNonDifferentiability()
+    {
+        // Arrange
+        var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 3 }), "x");
+        x.Value[0] = 2.0;   // positive -> gradient = 1
+        x.Value[1] = -2.0;  // negative -> gradient = -1
+        x.Value[2] = 0.0;   // non-differentiable point
+
+        using (var tape = new GradientTape<double>())
+        {
+            tape.Watch(x);
+
+            var abs = TensorOperations<double>.Abs(x);
+            var y = TensorOperations<double>.Sum(abs);
+
+            var gradients = tape.Gradient(y, new[] { x });
+
+            // Assert
+            Assert.True(gradients.ContainsKey(x));
+            Assert.Equal(1.0, gradients[x][0], Tolerance);  // d|x|/dx = 1 for x > 0
+            Assert.Equal(-1.0, gradients[x][1], Tolerance); // d|x|/dx = -1 for x < 0
+            // At x=0, subgradient is typically 0
+            Assert.True(Math.Abs(gradients[x][2]) <= 1.0,
+                $"Expected subgradient at x=0 to be in [-1, 1], but got {gradients[x][2]}");
+        }
+    }
+
+    /// <summary>
+    /// Test: Gradient near discontinuity (steep sigmoid approximating step function)
+    /// Very steep sigmoid behaves almost like step function
+    /// </summary>
+    [Fact]
+    public void Gradient_SteepSigmoid_NearDiscontinuity_HandlesCorrectly()
+    {
+        // Arrange - using very large values to create steep sigmoid
+        var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 3 }), "x");
+        x.Value[0] = -100.0; // Far negative - sigmoid ≈ 0, gradient ≈ 0
+        x.Value[1] = 0.0;    // At zero - sigmoid = 0.5, gradient = 0.25
+        x.Value[2] = 100.0;  // Far positive - sigmoid ≈ 1, gradient ≈ 0
+
+        using (var tape = new GradientTape<double>())
+        {
+            tape.Watch(x);
+
+            var sig = TensorOperations<double>.Sigmoid(x);
+            var y = TensorOperations<double>.Sum(sig);
+
+            var gradients = tape.Gradient(y, new[] { x });
+
+            // Assert
+            Assert.True(gradients.ContainsKey(x));
+
+            // At x = -100: sigmoid ≈ 0, gradient = sig * (1 - sig) ≈ 0
+            Assert.True(gradients[x][0] < 1e-10, $"Expected near-zero gradient at x=-100, got {gradients[x][0]}");
+
+            // At x = 0: sigmoid = 0.5, gradient = 0.5 * 0.5 = 0.25
+            Assert.Equal(0.25, gradients[x][1], 1e-6);
+
+            // At x = 100: sigmoid ≈ 1, gradient = sig * (1 - sig) ≈ 0
+            Assert.True(gradients[x][2] < 1e-10, $"Expected near-zero gradient at x=100, got {gradients[x][2]}");
+        }
+    }
+
+    /// <summary>
+    /// Test: Gradient with values near machine epsilon
+    /// Tests numerical stability with very small values
+    /// </summary>
+    [Fact]
+    public void Gradient_NearMachineEpsilon_MaintainsStability()
+    {
+        // Arrange
+        var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 1 }), "x");
+        x.Value[0] = 1e-15; // Very close to machine epsilon
+
+        using (var tape = new GradientTape<double>())
+        {
+            tape.Watch(x);
+
+            // f(x) = x^2
+            var y = TensorOperations<double>.ElementwiseMultiply(x, x);
+
+            var gradients = tape.Gradient(y, new[] { x });
+
+            // Assert
+            // df/dx = 2x = 2 * 1e-15 = 2e-15
+            Assert.True(gradients.ContainsKey(x));
+            double expected = 2.0 * 1e-15;
+            Assert.Equal(expected, gradients[x][0], 1e-20);
+        }
+    }
+
+    /// <summary>
+    /// Test: Gradient explosion detection with exponential growth
+    /// f(x) = e^(e^x), gradient grows very fast
+    /// </summary>
+    [Fact]
+    public void Gradient_ExponentialChain_HandlesLargeValues()
+    {
+        // Arrange
+        var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 1 }), "x");
+        x.Value[0] = 2.0; // e^(e^2) = e^7.389 ≈ 1618.18
+
+        using (var tape = new GradientTape<double>())
+        {
+            tape.Watch(x);
+
+            // f(x) = e^(e^x)
+            var exp1 = TensorOperations<double>.Exp(x);
+            var y = TensorOperations<double>.Exp(exp1);
+
+            var gradients = tape.Gradient(y, new[] { x });
+
+            // Assert
+            // d/dx[e^(e^x)] = e^(e^x) * e^x
+            double expX = Math.Exp(2.0);
+            double expected = Math.Exp(expX) * expX;
+
+            Assert.True(gradients.ContainsKey(x));
+            Assert.Equal(expected, gradients[x][0], expected * 1e-6);
+        }
+    }
+
+    /// <summary>
+    /// Test: Gradient with mixed very large and very small values in same tensor
+    /// Tests handling of wide dynamic range
+    /// </summary>
+    [Fact]
+    public void Gradient_MixedMagnitudes_HandlesWideDynamicRange()
+    {
+        // Arrange
+        var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 3 }), "x");
+        x.Value[0] = 1e-10;  // Very small
+        x.Value[1] = 1.0;    // Normal
+        x.Value[2] = 1e10;   // Very large
+
+        using (var tape = new GradientTape<double>())
+        {
+            tape.Watch(x);
+
+            // f(x) = x^2, df/dx = 2x
+            var y = TensorOperations<double>.ElementwiseMultiply(x, x);
+            var z = TensorOperations<double>.Sum(y);
+
+            var gradients = tape.Gradient(z, new[] { x });
+
+            // Assert - gradients should scale with input
+            Assert.True(gradients.ContainsKey(x));
+            Assert.Equal(2e-10, gradients[x][0], 1e-15);
+            Assert.Equal(2.0, gradients[x][1], Tolerance);
+            Assert.Equal(2e10, gradients[x][2], 1e5); // relative tolerance for large numbers
+        }
+    }
+
+    /// <summary>
+    /// Test: LeakyReLU at non-differentiable point (x=0)
+    /// LeakyReLU(x) = max(alpha*x, x) where alpha is typically 0.01
+    /// </summary>
+    [Fact]
+    public void Gradient_LeakyReLU_AtNonDifferentiablePoint()
+    {
+        // Arrange
+        var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 3 }), "x");
+        x.Value[0] = 2.0;   // positive -> gradient = 1
+        x.Value[1] = -2.0;  // negative -> gradient = alpha (0.01)
+        x.Value[2] = 0.0;   // non-differentiable point
+
+        const double alpha = 0.01;
+
+        using (var tape = new GradientTape<double>())
+        {
+            tape.Watch(x);
+
+            var leakyRelu = TensorOperations<double>.LeakyReLU(x, alpha);
+            var y = TensorOperations<double>.Sum(leakyRelu);
+
+            var gradients = tape.Gradient(y, new[] { x });
+
+            // Assert
+            Assert.True(gradients.ContainsKey(x));
+            Assert.Equal(1.0, gradients[x][0], Tolerance);     // positive region
+            Assert.Equal(alpha, gradients[x][1], Tolerance);   // negative region
+            // At x=0, typically uses right derivative (1) or left (alpha)
+            Assert.True(gradients[x][2] == 1.0 || gradients[x][2] == alpha,
+                $"Expected gradient at x=0 to be {alpha} or 1, but got {gradients[x][2]}");
+        }
+    }
+
+    /// <summary>
+    /// Test: Division gradient near zero (potential for very large gradients)
+    /// f(x) = 1/x, df/dx = -1/x^2
+    /// As x approaches 0, gradient approaches infinity
+    /// </summary>
+    [Fact]
+    public void Gradient_Division_NearZero_HandlesLargeGradient()
+    {
+        // Arrange
+        var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 1 }), "x");
+        x.Value[0] = 0.001; // Small but not zero
+
+        using (var tape = new GradientTape<double>())
+        {
+            tape.Watch(x);
+
+            // f(x) = 1/x
+            var one = TensorOperations<double>.Constant(new Tensor<double>(new[] { 1 }));
+            one.Value[0] = 1.0;
+            var y = TensorOperations<double>.Divide(one, x);
+
+            var gradients = tape.Gradient(y, new[] { x });
+
+            // Assert
+            // df/dx = -1/x^2 = -1/0.000001 = -1000000
+            double expected = -1.0 / (0.001 * 0.001);
+            Assert.True(gradients.ContainsKey(x));
+            Assert.Equal(expected, gradients[x][0], Math.Abs(expected) * 1e-6);
+        }
+    }
+
+    /// <summary>
+    /// Test: Gradient stability with repeated operations (accumulation test)
+    /// Verifies gradients don't drift with many operations
+    /// </summary>
+    [Fact]
+    public void Gradient_ManyOperations_MaintainsAccuracy()
+    {
+        // Arrange
+        var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 1 }), "x");
+        x.Value[0] = 1.0;
+
+        using (var tape = new GradientTape<double>())
+        {
+            tape.Watch(x);
+
+            // f(x) = x + x + x + ... (100 times) = 100x, df/dx = 100
+            var result = x;
+            for (int i = 1; i < 100; i++)
+            {
+                result = TensorOperations<double>.Add(result, x);
+            }
+
+            var gradients = tape.Gradient(result, new[] { x });
+
+            // Assert
+            Assert.True(gradients.ContainsKey(x));
+            Assert.Equal(100.0, gradients[x][0], Tolerance);
+        }
+    }
+
+    #endregion
 }
