@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LoRA;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.LoRA;
@@ -41,9 +42,9 @@ public class LoRAIntegrationTests
     [Fact]
     public void LoRALayer_Initialize_InvalidRank_Throws()
     {
-        Assert.Throws<ArgumentException>(() => new LoRALayer<double>(InputSize, OutputSize, 0, Alpha));
-        Assert.Throws<ArgumentException>(() => new LoRALayer<double>(InputSize, OutputSize, -1, Alpha));
-        Assert.Throws<ArgumentException>(() => new LoRALayer<double>(10, 10, 20, Alpha)); // rank > min(in, out)
+        Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(InputSize, OutputSize, 0, Alpha));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(InputSize, OutputSize, -1, Alpha));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(10, 10, 20, Alpha)); // rank > min(in, out)
     }
 
     [Fact]
@@ -595,7 +596,7 @@ public class LoRAIntegrationTests
     private static Tensor<double> CreateTensor(int batchSize, int featureSize)
     {
         var data = new Vector<double>(batchSize * featureSize);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < data.Length; i++)
         {
