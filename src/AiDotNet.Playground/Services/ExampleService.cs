@@ -427,17 +427,15 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureModel(kmeans)
     .BuildAsync();
 
-// Access the trained clustering model
-var trainedModel = (KMeans<double>)result.Model;
-
+// The model passed to ConfigureModel is trained in-place
 Console.WriteLine(""K-Means Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""Number of clusters: {options.NumClusters}"");
-Console.WriteLine($""Iterations: {trainedModel.NumIterations}"");
+Console.WriteLine($""Iterations: {kmeans.NumIterations}"");
 Console.WriteLine();
 Console.WriteLine(""Cluster assignments:"");
 for (int i = 0; i < data.Rows; i++)
 {
-    var label = (int)trainedModel.Labels[i];
+    var label = (int)kmeans.Labels[i];
     Console.WriteLine($""  Point ({data[i, 0]:F1}, {data[i, 1]:F1}) -> Cluster {label}"");
 }
 "
@@ -483,17 +481,16 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureModel(dbscan)
     .BuildAsync();
 
-var trainedModel = (DBSCAN<double>)result.Model;
-
+// The model passed to ConfigureModel is trained in-place
 Console.WriteLine(""DBSCAN Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""Epsilon: {options.Epsilon}, MinPoints: {options.MinPoints}"");
-Console.WriteLine($""Clusters found: {trainedModel.NumClusters}"");
-Console.WriteLine($""Noise points: {trainedModel.GetNoiseCount()}"");
+Console.WriteLine($""Clusters found: {dbscan.NumClusters}"");
+Console.WriteLine($""Noise points: {dbscan.GetNoiseCount()}"");
 Console.WriteLine();
 Console.WriteLine(""Cluster assignments (-1 = noise):"");
 for (int i = 0; i < data.Rows; i++)
 {
-    var label = (int)trainedModel.Labels[i];
+    var label = (int)dbscan.Labels[i];
     Console.WriteLine($""  Point ({data[i, 0]:F1}, {data[i, 1]:F1}) -> Cluster {label}"");
 }
 "
@@ -545,16 +542,15 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureModel(hdbscan)
     .BuildAsync();
 
-var trainedModel = (HDBSCAN<double>)result.Model;
-
+// The model passed to ConfigureModel is trained in-place
 Console.WriteLine(""HDBSCAN Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""MinClusterSize: {options.MinClusterSize}"");
-Console.WriteLine($""Clusters found: {trainedModel.NumClusters}"");
+Console.WriteLine($""Clusters found: {hdbscan.NumClusters}"");
 Console.WriteLine();
 Console.WriteLine(""Cluster assignments (-1 = noise):"");
 for (int i = 0; i < data.Rows; i++)
 {
-    var label = (int)trainedModel.Labels[i];
+    var label = (int)hdbscan.Labels[i];
     Console.WriteLine($""  Point ({data[i, 0]:F1}, {data[i, 1]:F1}) -> Cluster {label}"");
 }
 Console.WriteLine();
@@ -603,8 +599,7 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureModel(fcm)
     .BuildAsync();
 
-var trainedModel = (FuzzyCMeans<double>)result.Model;
-
+// The model passed to ConfigureModel is trained in-place
 Console.WriteLine(""Fuzzy C-Means Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""Clusters: {options.NumClusters}"");
 Console.WriteLine($""Fuzziness: {options.Fuzziness}"");
@@ -615,7 +610,7 @@ for (int i = 0; i < data.Rows; i++)
     Console.WriteLine($""  Point ({data[i, 0]:F1}, {data[i, 1]:F1}):"");
     for (int k = 0; k < options.NumClusters; k++)
     {
-        var membership = trainedModel.MembershipMatrix[i, k];
+        var membership = fcm.MembershipMatrix[i, k];
         Console.WriteLine($""    Cluster {k}: {membership:P1}"");
     }
 }
@@ -668,16 +663,15 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureModel(meanshift)
     .BuildAsync();
 
-var trainedModel = (MeanShift<double>)result.Model;
-
+// The model passed to ConfigureModel is trained in-place
 Console.WriteLine(""Mean Shift Clustering Results (via AiModelBuilder):"");
-Console.WriteLine($""Bandwidth (auto-estimated): {trainedModel.Bandwidth:F2}"");
-Console.WriteLine($""Clusters found automatically: {trainedModel.NumClusters}"");
+Console.WriteLine($""Bandwidth (auto-estimated): {meanshift.Bandwidth:F2}"");
+Console.WriteLine($""Clusters found automatically: {meanshift.NumClusters}"");
 Console.WriteLine();
 Console.WriteLine(""Cluster assignments:"");
 for (int i = 0; i < data.Rows; i++)
 {
-    var label = (int)trainedModel.Labels[i];
+    var label = (int)meanshift.Labels[i];
     Console.WriteLine($""  Point ({data[i, 0]:F1}, {data[i, 1]:F1}) -> Cluster {label}"");
 }
 Console.WriteLine();
@@ -731,8 +725,7 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureModel(spectral)
     .BuildAsync();
 
-var trainedModel = (SpectralClustering<double>)result.Model;
-
+// The model passed to ConfigureModel is trained in-place
 Console.WriteLine(""Spectral Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""Clusters: {options.NumClusters}"");
 Console.WriteLine($""Affinity: {options.Affinity}"");
@@ -741,7 +734,7 @@ Console.WriteLine();
 Console.WriteLine(""Cluster assignments:"");
 for (int i = 0; i < data.Rows; i++)
 {
-    var label = (int)trainedModel.Labels[i];
+    var label = (int)spectral.Labels[i];
     Console.WriteLine($""  Point ({data[i, 0]:F1}, {data[i, 1]:F1}) -> Cluster {label}"");
 }
 Console.WriteLine();
@@ -796,17 +789,16 @@ var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureModel(kmeans)
     .BuildAsync();
 
-var trainedModel = (KMeans<double>)result.Model;
-
+// The model passed to ConfigureModel is trained in-place
 Console.WriteLine(""K-Means++ Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""Clusters: {options.NumClusters}"");
 Console.WriteLine($""Init method: K-Means++"");
-Console.WriteLine($""Iterations: {trainedModel.NumIterations}"");
+Console.WriteLine($""Iterations: {kmeans.NumIterations}"");
 Console.WriteLine();
 Console.WriteLine(""Cluster Centers:"");
 for (int k = 0; k < options.NumClusters; k++)
 {
-    Console.WriteLine($""  Cluster {k}: ({trainedModel.ClusterCenters[k, 0]:F2}, {trainedModel.ClusterCenters[k, 1]:F2})"");
+    Console.WriteLine($""  Cluster {k}: ({kmeans.ClusterCenters[k, 0]:F2}, {kmeans.ClusterCenters[k, 1]:F2})"");
 }
 "
                 },
@@ -852,11 +844,10 @@ for (int k = 2; k <= 4; k++)
         .ConfigureModel(kmeans)
         .BuildAsync();
 
-    var trainedModel = (KMeans<double>)result.Model;
-
+    // The model passed to ConfigureModel is trained in-place
     // Calculate Silhouette Score
     var silhouette = new SilhouetteScore<double>();
-    var score = silhouette.Compute(data, trainedModel.Labels);
+    var score = silhouette.Compute(data, kmeans.Labels);
 
     Console.WriteLine($""  K={k}: Silhouette Score = {score:F4}"");
 }
