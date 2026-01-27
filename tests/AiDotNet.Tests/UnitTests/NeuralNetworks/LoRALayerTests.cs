@@ -24,24 +24,24 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         }
 
         [Fact]
-        public void Constructor_WithZeroRank_ThrowsArgumentException()
+        public void Constructor_WithZeroRank_ThrowsArgumentOutOfRangeException()
         {
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() => new LoRALayer<double>(10, 5, rank: 0));
+            // Act & Assert - ArgumentOutOfRangeException is correct for invalid range values
+            Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(10, 5, rank: 0));
         }
 
         [Fact]
-        public void Constructor_WithNegativeRank_ThrowsArgumentException()
+        public void Constructor_WithNegativeRank_ThrowsArgumentOutOfRangeException()
         {
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() => new LoRALayer<double>(10, 5, rank: -1));
+            // Act & Assert - ArgumentOutOfRangeException is correct for invalid range values
+            Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(10, 5, rank: -1));
         }
 
         [Fact]
-        public void Constructor_WithRankExceedingDimensions_ThrowsArgumentException()
+        public void Constructor_WithRankExceedingDimensions_ThrowsArgumentOutOfRangeException()
         {
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() => new LoRALayer<double>(10, 5, rank: 11));
+            // Act & Assert - ArgumentOutOfRangeException is correct for invalid range values
+            Assert.Throws<ArgumentOutOfRangeException>(() => new LoRALayer<double>(10, 5, rank: 11));
         }
 
         [Fact]
