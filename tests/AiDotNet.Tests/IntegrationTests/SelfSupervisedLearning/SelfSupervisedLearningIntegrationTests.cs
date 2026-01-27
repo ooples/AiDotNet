@@ -937,7 +937,11 @@ public class SelfSupervisedLearningIntegrationTests
             var emptyTensor = new Tensor<double>(Array.Empty<double>(), [0, 8]);
             // Calling with empty tensors - implementation dependent behavior
         }
-        catch (Exception ex) when (ex is ArgumentException || ex is IndexOutOfRangeException)
+        catch (ArgumentException)
+        {
+            // Expected - empty batches may not be supported
+        }
+        catch (IndexOutOfRangeException)
         {
             // Expected - empty batches may not be supported
         }
