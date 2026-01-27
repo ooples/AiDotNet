@@ -872,13 +872,15 @@ Console.WriteLine(""Best K is the one with highest Silhouette Score!"");
                     Description = "Simple feedforward neural network for classification",
                     Difficulty = "Intermediate",
                     Tags = ["neural-network", "classification"],
-                    Code = @"// Neural Network for XOR problem using AiDotNet
+                    Code = @"// Neural Network for XOR problem using AiModelBuilder
+using AiDotNet;
+using AiDotNet.Data.Loaders;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // XOR problem data
-Console.WriteLine(""Neural Network XOR Problem Demonstration"");
-Console.WriteLine();
+var featureData = new double[,] { { 0, 0 }, { 0, 1 }, { 1, 0 }, { 1, 1 } };
+var labelData = new double[] { 0, 1, 1, 0 };
 
 // Create architecture for XOR (2 inputs -> hidden layer -> 1 output)
 var architecture = new NeuralNetworkArchitecture<double>(
@@ -891,28 +893,30 @@ var architecture = new NeuralNetworkArchitecture<double>(
 // Create neural network
 var nn = new FeedForwardNeuralNetwork<double>(architecture);
 
-Console.WriteLine(""XOR Neural Network Architecture:"");
+// Convert data to Tensor format for neural networks
+var featureMatrix = new Matrix<double>(featureData);
+var featureTensor = Tensor<double>.FromMatrix(featureMatrix);
+var labelTensor = Tensor<double>.FromVector(new Vector<double>(labelData));
+
+// Train the network (single training step)
+nn.Train(featureTensor, labelTensor);
+
+Console.WriteLine(""XOR Neural Network trained:"");
 Console.WriteLine($""  Input size: {architecture.InputSize}"");
 Console.WriteLine($""  Output size: {architecture.OutputSize}"");
 Console.WriteLine($""  Task type: {architecture.TaskType}"");
-Console.WriteLine($""  Layers: {nn.Layers.Count}"");
 Console.WriteLine();
 
-// Create input data as tensor
-var inputs = new double[4, 2]
+// Make predictions
+var testTensor = Tensor<double>.FromMatrix(featureMatrix);
+var predictions = nn.Forward(testTensor);
+
+Console.WriteLine(""XOR Predictions:"");
+Console.WriteLine(""  Input     Expected  Predicted"");
+for (int i = 0; i < 4; i++)
 {
-    { 0, 0 }, { 0, 1 }, { 1, 0 }, { 1, 1 }
-};
-
-Console.WriteLine(""XOR Truth Table:"");
-Console.WriteLine(""  Input1  Input2  Expected"");
-Console.WriteLine(""    0       0        0"");
-Console.WriteLine(""    0       1        1"");
-Console.WriteLine(""    1       0        1"");
-Console.WriteLine(""    1       1        0"");
-Console.WriteLine();
-Console.WriteLine(""Note: Full training requires epochs of backpropagation."");
-Console.WriteLine(""Use TrainBatch() method with training data for actual training."");
+    Console.WriteLine($""  ({featureData[i, 0]},{featureData[i, 1]})      {labelData[i]}        {predictions[i]:F2}"");
+}
 "
                 },
                 new CodeExample
@@ -922,12 +926,19 @@ Console.WriteLine(""Use TrainBatch() method with training data for actual traini
                     Description = "Neural network for continuous value prediction",
                     Difficulty = "Intermediate",
                     Tags = ["neural-network", "regression"],
-                    Code = @"// Neural Network Regression using AiDotNet
+                    Code = @"// Neural Network Regression
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 
-Console.WriteLine(""Neural Network Regression: Function Approximation"");
-Console.WriteLine();
+// Generate training data: y = sin(x)
+var featureData = new double[10, 1];
+var labelData = new double[10];
+for (int i = 0; i < 10; i++)
+{
+    double x = i * Math.PI / 5;
+    featureData[i, 0] = x;
+    labelData[i] = Math.Sin(x);
+}
 
 // Create architecture for regression (1 input -> hidden -> 1 output)
 var architecture = new NeuralNetworkArchitecture<double>(
@@ -937,28 +948,33 @@ var architecture = new NeuralNetworkArchitecture<double>(
     inputSize: 1,
     outputSize: 1);
 
-// Create neural network for regression
+// Create neural network
 var nn = new FeedForwardNeuralNetwork<double>(architecture);
 
-Console.WriteLine(""Sin(x) Function Approximation:"");
+// Convert data to Tensor format for neural networks
+var featureMatrix = new Matrix<double>(featureData);
+var featureTensor = Tensor<double>.FromMatrix(featureMatrix);
+var labelTensor = Tensor<double>.FromVector(new Vector<double>(labelData));
+
+// Train the network (single training step)
+nn.Train(featureTensor, labelTensor);
+
+Console.WriteLine(""Neural Network Regression (Sin approximation) trained:"");
 Console.WriteLine($""  Architecture: 1 -> hidden layers -> 1"");
 Console.WriteLine($""  Task: Regression (continuous output)"");
 Console.WriteLine();
 
-// Generate training data points
-Console.WriteLine(""Sample training data (y = sin(x)):"");
-for (int i = 0; i <= 4; i++)
-{
-    double x = i * Math.PI / 4;
-    double y = Math.Sin(x);
-    Console.WriteLine($""  x = {x:F4}, sin(x) = {y:F4}"");
-}
+// Make test predictions
+var testFeatures = new double[,] { { 0.0 }, { Math.PI / 2 }, { Math.PI } };
+var testMatrix = new Matrix<double>(testFeatures);
+var testTensor = Tensor<double>.FromMatrix(testMatrix);
+var predictions = nn.Forward(testTensor);
 
-Console.WriteLine();
-Console.WriteLine(""Target: Predict sin(1.57) = ~1.0"");
-Console.WriteLine($""Actual sin(1.57) = {Math.Sin(1.57):F4}"");
-Console.WriteLine();
-Console.WriteLine(""Note: Use TrainBatch() for training with gradient descent."");
+Console.WriteLine(""Sin(x) Predictions:"");
+Console.WriteLine(""  x        Expected   Predicted"");
+Console.WriteLine($""  0.00     {Math.Sin(0.0):F4}     {predictions[0]:F4}"");
+Console.WriteLine($""  π/2      {Math.Sin(Math.PI / 2):F4}     {predictions[1]:F4}"");
+Console.WriteLine($""  π        {Math.Sin(Math.PI):F4}     {predictions[2]:F4}"");
 "
                 }
             },
@@ -972,13 +988,21 @@ Console.WriteLine(""Note: Use TrainBatch() for training with gradient descent.""
                     Description = "Time series forecasting with ARIMA",
                     Difficulty = "Intermediate",
                     Tags = ["time-series", "forecasting", "arima"],
-                    Code = @"// ARIMA Time Series Forecasting with AiDotNet
+                    Code = @"// ARIMA Time Series Forecasting using AiModelBuilder
+using AiDotNet;
+using AiDotNet.Data.Loaders;
 using AiDotNet.TimeSeries;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Monthly sales data
 var data = new double[] { 100, 120, 130, 125, 140, 150, 160, 155, 170, 180, 190, 200 };
+
+// Convert to features (time index) and labels (values)
+var features = new double[data.Length, 1];
+for (int i = 0; i < data.Length; i++)
+    features[i, 0] = i;
+var labels = data;
 
 // Create ARIMA model with options
 var options = new ARIMAOptions<double>
@@ -987,29 +1011,32 @@ var options = new ARIMAOptions<double>
     D = 1,  // Differencing order
     Q = 1   // Moving Average order
 };
-var arima = new ARIMAModel<double>(options);
 
-// Convert data to Matrix and dummy Vector for Train
-var features = new Matrix<double>(data.Length, 1);
-for (int i = 0; i < data.Length; i++)
-    features[i, 0] = i;  // Time index
-var labels = new Vector<double>(data);
+// Build using AiModelBuilder facade pattern
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new ARIMAModel<double>(options))
+    .BuildAsync();
 
-// Train the model
-arima.Train(features, labels);
-
-Console.WriteLine(""ARIMA Time Series Model:"");
+Console.WriteLine(""ARIMA Time Series Model (trained via AiModelBuilder):"");
 Console.WriteLine($""  Parameters: P={options.P}, D={options.D}, Q={options.Q}"");
 Console.WriteLine($""  Training data: {data.Length} observations"");
 Console.WriteLine();
-Console.WriteLine(""Training data:"");
-for (int i = 0; i < data.Length; i++)
+
+// Make predictions using the facade
+var testData = new Matrix<double>(3, 1);
+testData[0, 0] = 12;  // Predict month 13
+testData[1, 0] = 13;  // Predict month 14
+testData[2, 0] = 14;  // Predict month 15
+
+var predictions = result.Predict(testData);
+
+Console.WriteLine(""Forecasts:"");
+for (int i = 0; i < 3; i++)
 {
-    Console.WriteLine($""  Month {i + 1}: {data[i]:F0}"");
+    Console.WriteLine($""  Month {13 + i}: {predictions[i]:F1}"");
 }
-Console.WriteLine();
-Console.WriteLine(""ARIMA is used for forecasting future values based on"");
-Console.WriteLine(""autoregressive patterns, trends, and moving averages."");
 "
                 },
                 new CodeExample
@@ -1019,7 +1046,9 @@ Console.WriteLine(""autoregressive patterns, trends, and moving averages."");
                     Description = "Simple exponential smoothing for forecasting",
                     Difficulty = "Beginner",
                     Tags = ["time-series", "forecasting", "smoothing"],
-                    Code = @"// Exponential Smoothing with AiDotNet
+                    Code = @"// Exponential Smoothing using AiModelBuilder
+using AiDotNet;
+using AiDotNet.Data.Loaders;
 using AiDotNet.TimeSeries;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -1027,30 +1056,42 @@ using AiDotNet.Tensors.LinearAlgebra;
 // Time series data
 var data = new double[] { 10, 12, 13, 15, 14, 16, 18, 17, 19, 20 };
 
+// Convert to features (time index) and labels (values)
+var features = new double[data.Length, 1];
+for (int i = 0; i < data.Length; i++)
+    features[i, 0] = i;
+var labels = data;
+
 // Create Exponential Smoothing model with options
 var options = new ExponentialSmoothingOptions<double>
 {
     InitialAlpha = 0.3  // Smoothing factor (0-1)
 };
-var model = new ExponentialSmoothingModel<double>(options);
 
-// Convert data to Matrix and Vector for Train
-var features = new Matrix<double>(data.Length, 1);
-for (int i = 0; i < data.Length; i++)
-    features[i, 0] = i;  // Time index
-var labels = new Vector<double>(data);
+// Build using AiModelBuilder facade pattern
+var loader = DataLoaders.FromArrays(features, labels);
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(new ExponentialSmoothingModel<double>(options))
+    .BuildAsync();
 
-// Train the model
-model.Train(features, labels);
-
-Console.WriteLine(""Exponential Smoothing Model:"");
+Console.WriteLine(""Exponential Smoothing (trained via AiModelBuilder):"");
 Console.WriteLine($""  Alpha (smoothing factor): {options.InitialAlpha}"");
 Console.WriteLine($""  Training data: {data.Length} observations"");
 Console.WriteLine();
-Console.WriteLine(""Original data:"");
-for (int i = 0; i < data.Length; i++)
+
+// Make predictions using the facade
+var testData = new Matrix<double>(3, 1);
+testData[0, 0] = 10;  // Predict next periods
+testData[1, 0] = 11;
+testData[2, 0] = 12;
+
+var predictions = result.Predict(testData);
+
+Console.WriteLine(""Forecasts:"");
+for (int i = 0; i < 3; i++)
 {
-    Console.WriteLine($""  t={i}: {data[i]:F1}"");
+    Console.WriteLine($""  t={10 + i}: {predictions[i]:F2}"");
 }
 Console.WriteLine();
 Console.WriteLine(""Higher alpha = more weight on recent observations"");
@@ -1911,6 +1952,7 @@ Console.WriteLine(""Result: Clean, normalized data ready for ML!"");
                     Tags = ["anomaly", "outlier", "isolation-forest", "time-series"],
                     Code = @"// Time Series Isolation Forest with AiModelBuilder
 using AiDotNet;
+using AiDotNet.Data.Loaders;
 using AiDotNet.TimeSeries.AnomalyDetection;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -1950,18 +1992,21 @@ var options = new TimeSeriesIsolationForestOptions<double>
     RandomSeed = 42
 };
 
-// Create and train the Isolation Forest model
+// Create model and train using AiModelBuilder facade pattern
 var model = new TimeSeriesIsolationForest<double>(options);
-var featureMatrix = new Matrix<double>(features);
-var labelVector = new Vector<double>(labels);
-model.Train(featureMatrix, labelVector);
+var loader = DataLoaders.FromArrays(features, labels);
 
-// Use the trained model for anomaly detection
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(model)
+    .BuildAsync();
+
+// Use the trained model for anomaly detection (model is trained in-place)
 var timeSeries = new Vector<double>(timeSeriesData);
 var anomalyScores = model.DetectAnomalies(timeSeries);
 var anomalyIndices = model.GetAnomalyIndices(timeSeries);
 
-Console.WriteLine(""Time Series Isolation Forest Results:"");
+Console.WriteLine(""Time Series Isolation Forest Results (via AiModelBuilder):"");
 Console.WriteLine($""  Total data points: {timeSeriesData.Length}"");
 Console.WriteLine($""  Anomalies detected: {anomalyIndices.Count}"");
 Console.WriteLine($""  Anomaly indices: [{string.Join("", "", anomalyIndices.Take(10))}]"");
@@ -4787,7 +4832,7 @@ var yTrain = new Vector<double>(new double[] { 1.1, 1.9, 3.1, 4.0, 5.2 });
 var kernel = new GaussianKernel<double>(sigma: 1.0);
 var gp = new StandardGaussianProcess<double>(kernel);
 
-// Train
+// Train GP (GPs have their own training interface)
 gp.Fit(xTrain, yTrain);
 
 // Predict with uncertainty
@@ -4811,6 +4856,9 @@ foreach (var x in new[] { 0.5, 2.5, 3.5, 6.0 })
 Console.WriteLine();
 Console.WriteLine(""GP provides uncertainty estimates"");
 Console.WriteLine(""Higher uncertainty far from training data"");
+Console.WriteLine();
+Console.WriteLine(""Note: GPs have their own Fit/Predict interface"");
+Console.WriteLine(""with built-in uncertainty quantification."");
 "
                 }
             },
