@@ -1083,7 +1083,9 @@ public class ActiveLearningIntegrationTests
 
                 // First class gets confidence, rest share (1-confidence)
                 output[i * _numClasses] = Math.Log(confidence);
-                double remaining = (1 - confidence) / (_numClasses - 1);
+                // Guard against single-class divide-by-zero
+                double divisor = _numClasses > 1 ? _numClasses - 1 : 1.0;
+                double remaining = (1 - confidence) / divisor;
                 for (int c = 1; c < _numClasses; c++)
                 {
                     output[i * _numClasses + c] = Math.Log(remaining + 0.01);
