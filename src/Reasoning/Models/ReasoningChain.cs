@@ -213,8 +213,12 @@ public class ReasoningChain<T>
     /// The step number is automatically set to be one more than the current last step.
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown if step is null.</exception>
     public void AddStep(ReasoningStep<T> step)
     {
+        if (step == null)
+            throw new ArgumentNullException(nameof(step));
+
         step.StepNumber = Steps.Count + 1;
         Steps.Add(step);
     }

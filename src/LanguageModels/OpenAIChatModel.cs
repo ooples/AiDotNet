@@ -120,9 +120,14 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
         double presencePenalty = 0.0,
         HttpClient? httpClient = null,
         string? endpoint = null)
-        : base(httpClient, GetMaxContextTokens(modelName), maxTokens)
+        : base(httpClient, GetMaxContextTokens(modelName ?? throw new ArgumentNullException(nameof(modelName), "Model name cannot be null.")), ValidateMaxTokens(maxTokens))
     {
         ValidateApiKey(apiKey);
+
+        if (string.IsNullOrWhiteSpace(modelName))
+        {
+            throw new ArgumentException("Model name cannot be empty or whitespace.", nameof(modelName));
+        }
 
         if (temperature < 0 || temperature > 2)
         {
@@ -222,6 +227,21 @@ public class OpenAIChatModel<T> : ChatModelBase<T>
         }
 
         return choice.Message.Content;
+    }
+
+    /// <summary>
+    /// Validates and returns the maxTokens value.
+    /// </summary>
+    /// <param name="maxTokens">The maximum tokens value to validate.</param>
+    /// <returns>The validated maxTokens value.</returns>
+    /// <exception cref="ArgumentException">Thrown when maxTokens is not positive.</exception>
+    private static int ValidateMaxTokens(int maxTokens)
+    {
+        if (maxTokens <= 0)
+        {
+            throw new ArgumentException("Max tokens must be positive.", nameof(maxTokens));
+        }
+        return maxTokens;
     }
 
     /// <summary>

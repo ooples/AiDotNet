@@ -70,6 +70,11 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// </summary>
     protected int ShardSize;
 
+    /// <summary>
+    /// Flag indicating whether sharding has been initialized.
+    /// </summary>
+    private bool _isShardingInitialized;
+
     /// <inheritdoc/>
     public IFullModel<T, TInput, TOutput> WrappedModel => _wrappedModel;
 
@@ -85,7 +90,14 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     public int WorldSize => Config.CommunicationBackend.WorldSize;
 
     /// <inheritdoc/>
-    public Vector<T> LocalParameterShard => LocalShard;
+    public Vector<T> LocalParameterShard
+    {
+        get
+        {
+            EnsureShardingInitialized();
+            return LocalShard;
+        }
+    }
 
     /// <inheritdoc/>
     public IShardingConfiguration<T> ShardingConfiguration => Config;
@@ -128,15 +140,31 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
             Config.CommunicationBackend.Initialize();
         }
 
-        // Initialize sharding
+        // Initialize sharding state (actual sharding is done lazily to avoid virtual calls in constructor)
         LocalShard = new Vector<T>(Array.Empty<T>());
         ShardStartIndex = 0;
         ShardSize = 0;
         CachedFullParameters = null;
+        _isShardingInitialized = false;
+    }
 
-        // Allow derived classes to set up state before sharding
-        OnBeforeInitializeSharding();
-        InitializeSharding();
+    /// <summary>
+    /// Ensures that sharding has been initialized. Call this at the start of any method that requires sharding.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method uses lazy initialization to avoid calling virtual methods in the constructor,
+    /// which can cause issues when derived classes override these methods.
+    /// </para>
+    /// </remarks>
+    protected void EnsureShardingInitialized()
+    {
+        if (!_isShardingInitialized)
+        {
+            OnBeforeInitializeSharding();
+            InitializeSharding();
+            _isShardingInitialized = true;
+        }
     }
 
     /// <summary>
@@ -199,6 +227,8 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// <inheritdoc/>
     public virtual Vector<T> GatherFullParameters()
     {
+        EnsureShardingInitialized();
+
         // Use cached version if available
         if (CachedFullParameters != null)
         {
@@ -214,6 +244,8 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// <inheritdoc/>
     public virtual void SynchronizeGradients()
     {
+        EnsureShardingInitialized();
+
         // Perform AllReduce with average operation
         Config.CommunicationBackend.AllReduce(LocalShard, ReductionOperation.Average);
 
@@ -259,6 +291,8 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// <param name="fullParameters">The full parameter vector</param>
     protected void UpdateLocalShardFromFull(Vector<T> fullParameters)
     {
+        EnsureShardingInitialized();
+
         var shardData = new T[ShardSize];
         Array.Copy(fullParameters.ToArray(), ShardStartIndex, shardData, 0, ShardSize);
         LocalShard = new Vector<T>(shardData);

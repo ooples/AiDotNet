@@ -69,6 +69,8 @@ namespace AiDotNet.Tokenization.Algorithms
         /// <summary>
         /// Trains a character tokenizer from a corpus.
         /// </summary>
+        /// <exception cref="ArgumentNullException">Thrown if corpus is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if minFrequency is less than 1.</exception>
         public static CharacterTokenizer Train(
             IEnumerable<string> corpus,
             SpecialTokens? specialTokens = null,
@@ -77,6 +79,8 @@ namespace AiDotNet.Tokenization.Algorithms
         {
             if (corpus == null)
                 throw new ArgumentNullException(nameof(corpus));
+            if (minFrequency < 1)
+                throw new ArgumentOutOfRangeException(nameof(minFrequency), "Min frequency must be at least 1.");
 
             specialTokens ??= SpecialTokens.Default();
             var charFrequencies = new Dictionary<char, int>();

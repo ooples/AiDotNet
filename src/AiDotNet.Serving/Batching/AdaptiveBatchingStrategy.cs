@@ -28,6 +28,7 @@ public class AdaptiveBatchingStrategy : IBatchingStrategy
     /// <param name="maxWaitMs">Maximum wait time before processing</param>
     /// <param name="targetLatencyMs">Target latency in milliseconds</param>
     /// <param name="latencyToleranceFactor">Tolerance factor for latency (e.g., 2.0 means p99 should be less than 2x p50)</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if parameters are invalid.</exception>
     public AdaptiveBatchingStrategy(
         int minBatchSize,
         int maxBatchSize,
@@ -35,6 +36,17 @@ public class AdaptiveBatchingStrategy : IBatchingStrategy
         double targetLatencyMs,
         double latencyToleranceFactor = 2.0)
     {
+        if (minBatchSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(minBatchSize), "Min batch size must be at least 1.");
+        if (maxBatchSize < minBatchSize)
+            throw new ArgumentOutOfRangeException(nameof(maxBatchSize), $"Max batch size must be at least {minBatchSize} (min batch size).");
+        if (maxWaitMs < 0)
+            throw new ArgumentOutOfRangeException(nameof(maxWaitMs), "Max wait time cannot be negative.");
+        if (targetLatencyMs <= 0)
+            throw new ArgumentOutOfRangeException(nameof(targetLatencyMs), "Target latency must be positive.");
+        if (latencyToleranceFactor <= 0)
+            throw new ArgumentOutOfRangeException(nameof(latencyToleranceFactor), "Latency tolerance factor must be positive.");
+
         _minBatchSize = minBatchSize;
         _maxBatchSize = maxBatchSize;
         _maxWaitMs = maxWaitMs;

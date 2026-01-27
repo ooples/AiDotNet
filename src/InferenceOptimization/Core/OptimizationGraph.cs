@@ -77,11 +77,17 @@ public class OptimizationGraph<T> : IOptimizationGraph<T> where T : struct
 
     public OptimizationNode<T>? FindNodeById(string id)
     {
+        if (id == null)
+            throw new ArgumentNullException(nameof(id));
+
         return _nodeIndex.TryGetValue(id, out var node) ? node : null;
     }
 
     public List<OptimizationNode<T>> FindNodesByName(string name)
     {
+        if (name == null)
+            throw new ArgumentNullException(nameof(name));
+
         return Nodes.Where(n => n.Name == name).ToList();
     }
 

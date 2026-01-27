@@ -469,6 +469,55 @@ public class MidiTokenizerTests
         // Assert
         Assert.NotEmpty(result.TokenIds);
     }
+
+    #region PR #757 Bug Fix Tests - Parameter Validation
+
+    [Fact]
+    public void CreateREMI_InvalidTicksPerBeat_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            MidiTokenizer.CreateREMI(ticksPerBeat: 0));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            MidiTokenizer.CreateREMI(ticksPerBeat: -1));
+    }
+
+    [Fact]
+    public void CreateREMI_InvalidNumVelocityBins_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            MidiTokenizer.CreateREMI(numVelocityBins: 0));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            MidiTokenizer.CreateREMI(numVelocityBins: -1));
+    }
+
+    [Fact]
+    public void CreateCPWord_InvalidTicksPerBeat_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            MidiTokenizer.CreateCPWord(ticksPerBeat: 0));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            MidiTokenizer.CreateCPWord(ticksPerBeat: -1));
+    }
+
+    [Fact]
+    public void CreateCPWord_InvalidNumVelocityBins_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            MidiTokenizer.CreateCPWord(numVelocityBins: 0));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            MidiTokenizer.CreateCPWord(numVelocityBins: -1));
+    }
+
+    [Fact]
+    public void CreateSimpleNote_InvalidTicksPerBeat_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            MidiTokenizer.CreateSimpleNote(ticksPerBeat: 0));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            MidiTokenizer.CreateSimpleNote(ticksPerBeat: -1));
+    }
+
+    #endregion
 }
 
 /// <summary>

@@ -58,6 +58,11 @@ public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, T
             throw new ArgumentNullException(nameof(input));
         }
 
+        if (trueLabel == null)
+        {
+            throw new ArgumentNullException(nameof(trueLabel));
+        }
+
         if (targetModel == null)
         {
             throw new ArgumentNullException(nameof(targetModel));

@@ -88,6 +88,17 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
             _models[name].Add(registeredModel);
             SaveModelVersion(registeredModel);
 
+            // Track lineage for this version
+            var lineageKey = $"{name}:v{version}";
+            _lineage[lineageKey] = new ModelLineage
+            {
+                ModelName = name,
+                Version = version,
+                CreatedAt = registeredModel.CreatedAt,
+                ParentVersion = null, // First version has no parent
+                TrainingDataSource = metadata?.ModelType.ToString() // Basic tracking
+            };
+
             return registeredModel.ModelId;
         }
     }
@@ -129,6 +140,18 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
             _models[modelName].Add(registeredModel);
             SaveModelVersion(registeredModel);
 
+            // Track lineage for this version with previous version as parent
+            var lineageKey = $"{modelName}:v{version}";
+            _lineage[lineageKey] = new ModelLineage
+            {
+                ModelName = modelName,
+                Version = version,
+                CreatedAt = registeredModel.CreatedAt,
+                ParentVersion = version - 1, // Previous version is the parent
+                ParentModel = modelName, // Same model, previous version
+                TrainingDataSource = metadata?.ModelType.ToString() // Basic tracking
+            };
+
             return version;
         }
     }
@@ -136,6 +159,11 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
     /// <summary>
     /// Retrieves a specific model version from the registry.
     /// </summary>
+    /// <remarks>
+    /// Returns a clone of the registered model to prevent external modification
+    /// of internal state. Modifications to the returned object will not affect
+    /// the registry; use UpdateModelMetadata or UpdateModelTags to persist changes.
+    /// </remarks>
     public override RegisteredModel<T, TInput, TOutput> GetModel(string modelName, int? version = null)
     {
         ValidateModelName(modelName);
@@ -145,16 +173,59 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
             if (!_models.TryGetValue(modelName, out var versions))
                 throw new ArgumentException($"Model '{modelName}' not found in registry.", nameof(modelName));
 
+            RegisteredModel<T, TInput, TOutput>? model;
             if (version.HasValue)
             {
-                var model = versions.FirstOrDefault(m => m.Version == version.Value);
+                model = versions.FirstOrDefault(m => m.Version == version.Value);
                 if (model == null)
                     throw new ArgumentException($"Version {version.Value} of model '{modelName}' not found.", nameof(version));
-                return model;
+            }
+            else
+            {
+                model = versions.OrderByDescending(m => m.Version).FirstOrDefault();
+                if (model == null)
+                    throw new ArgumentException($"Model '{modelName}' has no versions.", nameof(modelName));
             }
 
-            return versions.OrderByDescending(m => m.Version).First();
+            // Return a clone to prevent external modification of internal state
+            return CloneRegisteredModel(model);
         }
+    }
+
+    /// <summary>
+    /// Creates a shallow clone of a registered model to prevent external modification.
+    /// </summary>
+    private static RegisteredModel<T, TInput, TOutput> CloneRegisteredModel(RegisteredModel<T, TInput, TOutput> original)
+    {
+        return new RegisteredModel<T, TInput, TOutput>
+        {
+            ModelId = original.ModelId,
+            Name = original.Name,
+            Version = original.Version,
+            Stage = original.Stage,
+            Metadata = original.Metadata, // Note: Metadata is not deep-cloned for performance
+            Tags = new Dictionary<string, string>(original.Tags),
+            Description = original.Description,
+            CreatedAt = original.CreatedAt,
+            LastModifiedAt = original.LastModifiedAt,
+            StoragePath = original.StoragePath,
+            ModelCard = original.ModelCard // Note: ModelCard is not deep-cloned
+        };
+    }
+
+    /// <summary>
+    /// Gets the internal model for mutation operations. Must be called within SyncLock.
+    /// </summary>
+    private RegisteredModel<T, TInput, TOutput> GetInternalModel(string modelName, int version)
+    {
+        if (!_models.TryGetValue(modelName, out var versions))
+            throw new ArgumentException($"Model '{modelName}' not found in registry.", nameof(modelName));
+
+        var model = versions.FirstOrDefault(m => m.Version == version);
+        if (model == null)
+            throw new ArgumentException($"Version {version} of model '{modelName}' not found.", nameof(modelName));
+
+        return model;
     }
 
     /// <summary>
@@ -168,6 +239,10 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
     /// <summary>
     /// Gets the model currently in a specific stage.
     /// </summary>
+    /// <remarks>
+    /// Returns a clone of the registered model to prevent external modification
+    /// of internal state.
+    /// </remarks>
     public override RegisteredModel<T, TInput, TOutput>? GetModelByStage(string modelName, ModelStage stage)
     {
         ValidateModelName(modelName);
@@ -177,10 +252,13 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
             if (!_models.TryGetValue(modelName, out var versions))
                 return null;
 
-            return versions
+            var model = versions
                 .Where(m => m.Stage == stage)
                 .OrderByDescending(m => m.Version)
                 .FirstOrDefault();
+
+            // Return a clone to prevent external modification of internal state
+            return model != null ? CloneRegisteredModel(model) : null;
         }
     }
 
@@ -193,7 +271,7 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
 
         lock (SyncLock)
         {
-            var model = GetModel(modelName, version);
+            var model = GetInternalModel(modelName, version);
 
             if (archivePrevious && targetStage != ModelStage.Archived)
             {
@@ -317,7 +395,10 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
                     searchCriteria.Tags.All(t => m.Tags.TryGetValue(t.Key, out var value) && value == t.Value));
             }
 
-            return results.OrderByDescending(m => m.CreatedAt).ToList();
+            // Return clones to prevent external modification of internal state
+            return results.OrderByDescending(m => m.CreatedAt)
+                .Select(m => CloneRegisteredModel(m))
+                .ToList();
         }
     }
 
@@ -326,12 +407,14 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
     /// </summary>
     public override void UpdateModelMetadata(string modelName, int version, ModelMetadata<T> metadata)
     {
+        ValidateModelName(modelName);
+
         if (metadata == null)
             throw new ArgumentNullException(nameof(metadata));
 
         lock (SyncLock)
         {
-            var model = GetModel(modelName, version);
+            var model = GetInternalModel(modelName, version);
             model.Metadata = metadata;
             model.LastModifiedAt = DateTime.UtcNow;
             SaveModelVersion(model);
@@ -343,12 +426,14 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
     /// </summary>
     public override void UpdateModelTags(string modelName, int version, Dictionary<string, string> tags)
     {
+        ValidateModelName(modelName);
+
         if (tags == null)
             throw new ArgumentNullException(nameof(tags));
 
         lock (SyncLock)
         {
-            var model = GetModel(modelName, version);
+            var model = GetInternalModel(modelName, version);
             foreach (var tag in tags)
             {
                 model.Tags[tag.Key] = tag.Value;
@@ -363,6 +448,8 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
     /// </summary>
     public override void DeleteModelVersion(string modelName, int version)
     {
+        ValidateModelName(modelName);
+
         lock (SyncLock)
         {
             if (!_models.TryGetValue(modelName, out var versions))
@@ -375,7 +462,8 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
             versions.Remove(model);
 
             // Delete file - validate path is within registry directory before deletion
-            if (model.StoragePath != null && File.Exists(model.StoragePath))
+            // Use try-delete pattern to avoid TOCTOU race condition
+            if (model.StoragePath != null)
             {
                 try
                 {
@@ -387,16 +475,47 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
                     // StoragePath points outside the registry directory, skip deletion for security
                     // This could happen if the serialized data was tampered with
                 }
+                catch (FileNotFoundException)
+                {
+                    // File was already deleted (TOCTOU race) - this is fine
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    // Directory was already deleted - this is fine
+                }
             }
+
+            // Also delete model card file if it exists
+            try
+            {
+                var modelCardPath = GetModelCardPath(modelName, version);
+                File.Delete(modelCardPath);
+            }
+            catch (FileNotFoundException)
+            {
+                // Model card didn't exist - this is fine
+            }
+            catch (DirectoryNotFoundException)
+            {
+                // Directory was already deleted - this is fine
+            }
+
+            // Also remove lineage tracking for this version
+            var lineageKey = $"{modelName}:v{version}";
+            _lineage.Remove(lineageKey);
 
             // If no versions left, remove the model entirely
             if (versions.Count == 0)
             {
                 _models.Remove(modelName);
                 var modelDir = GetModelDirectoryPath(modelName);
-                if (Directory.Exists(modelDir))
+                try
                 {
                     Directory.Delete(modelDir, true);
+                }
+                catch (DirectoryNotFoundException)
+                {
+                    // Directory was already deleted - this is fine
                 }
             }
         }
@@ -530,12 +649,14 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
     /// </remarks>
     public override void AttachModelCard(string modelName, int version, ModelCard modelCard)
     {
+        ValidateModelName(modelName);
+
         if (modelCard == null)
             throw new ArgumentNullException(nameof(modelCard));
 
         lock (SyncLock)
         {
-            var model = GetModel(modelName, version);
+            var model = GetInternalModel(modelName, version);
             model.ModelCard = modelCard;
             model.LastModifiedAt = DateTime.UtcNow;
             SaveModelVersion(model);
@@ -555,34 +676,48 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
     {
         lock (SyncLock)
         {
-            var model = GetModel(modelName, version);
-            if (model.ModelCard != null)
+            // Get the internal model (not clone) to check/set ModelCard
+            if (!_models.TryGetValue(modelName, out var versions))
+                throw new ArgumentException($"Model '{modelName}' not found in registry.", nameof(modelName));
+
+            var internalModel = versions.FirstOrDefault(m => m.Version == version);
+            if (internalModel == null)
+                throw new ArgumentException($"Version {version} of model '{modelName}' not found.", nameof(version));
+
+            if (internalModel.ModelCard != null)
             {
-                return model.ModelCard;
+                return internalModel.ModelCard;
             }
 
             // Try to load from file if not in memory
+            // Use try-read pattern to avoid TOCTOU race condition
             var modelCardPath = GetModelCardPath(modelName, version);
-            if (File.Exists(modelCardPath))
+            try
             {
-                try
+                ValidatePathWithinDirectory(modelCardPath, RegistryDirectory);
+                var json = File.ReadAllText(modelCardPath);
+                var modelCard = DeserializeFromJson<ModelCard>(json);
+                if (modelCard != null)
                 {
-                    ValidatePathWithinDirectory(modelCardPath, RegistryDirectory);
-                    var json = File.ReadAllText(modelCardPath);
-                    var modelCard = DeserializeFromJson<ModelCard>(json);
-                    if (modelCard != null)
-                    {
-                        model.ModelCard = modelCard;
-                    }
-                    return modelCard;
+                    internalModel.ModelCard = modelCard;
                 }
-                catch (IOException)
-                {
-                    return null;
-                }
+                return modelCard;
             }
-
-            return null;
+            catch (FileNotFoundException)
+            {
+                // Model card file doesn't exist
+                return null;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                // Model directory doesn't exist
+                return null;
+            }
+            catch (IOException)
+            {
+                // File is locked or inaccessible
+                return null;
+            }
         }
     }
 
@@ -696,6 +831,13 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
 
     #region Private Helper Methods
 
+    /// <summary>
+    /// List of errors that occurred during model loading at startup.
+    /// Check this after construction to see if any persisted models failed to load.
+    /// </summary>
+    public IReadOnlyList<string> LoadErrors => _loadErrors;
+    private readonly List<string> _loadErrors = new();
+
     private void LoadExistingModels()
     {
         if (!Directory.Exists(RegistryDirectory))
@@ -704,10 +846,24 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
         foreach (var modelDir in Directory.GetDirectories(RegistryDirectory))
         {
             var modelName = Path.GetFileName(modelDir);
-            var versionFiles = Directory.GetFiles(modelDir, "v*.json");
+            string[] versionFiles;
+
+            try
+            {
+                versionFiles = Directory.GetFiles(modelDir, "v*.json");
+            }
+            catch (IOException)
+            {
+                // Directory became inaccessible - skip it
+                continue;
+            }
 
             foreach (var versionFile in versionFiles)
             {
+                // Skip model card files
+                if (versionFile.EndsWith("_modelcard.json", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 try
                 {
                     ValidatePathWithinDirectory(versionFile, RegistryDirectory);
@@ -725,11 +881,18 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
                 }
                 catch (IOException ex)
                 {
-                    Console.WriteLine($"[ModelRegistry] Failed to read model file '{versionFile}': {ex.Message}");
+                    // Record error for later inspection instead of polluting stdout
+                    _loadErrors.Add($"Failed to read model file '{versionFile}': {ex.Message}");
                 }
                 catch (JsonException ex)
                 {
-                    Console.WriteLine($"[ModelRegistry] Failed to deserialize model file '{versionFile}': {ex.Message}");
+                    // Record error for later inspection instead of polluting stdout
+                    _loadErrors.Add($"Failed to deserialize model file '{versionFile}': {ex.Message}");
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    // Path validation failed - file outside registry directory
+                    _loadErrors.Add($"Security: Model file '{versionFile}' failed path validation: {ex.Message}");
                 }
             }
         }

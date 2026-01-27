@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Tokenization.Models;
 
 namespace AiDotNet.Tokenization.Configuration
@@ -75,11 +76,23 @@ namespace AiDotNet.Tokenization.Configuration
         /// </summary>
         public bool EnableParallelBatchProcessing { get; set; } = true;
 
+        private int _parallelBatchThreshold = 32;
+
         /// <summary>
         /// Gets or sets the minimum batch size to trigger parallel processing.
         /// Default is 32.
         /// </summary>
-        public int ParallelBatchThreshold { get; set; } = 32;
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if value is less than 1.</exception>
+        public int ParallelBatchThreshold
+        {
+            get => _parallelBatchThreshold;
+            set
+            {
+                if (value < 1)
+                    throw new ArgumentOutOfRangeException(nameof(value), "Parallel batch threshold must be at least 1.");
+                _parallelBatchThreshold = value;
+            }
+        }
 
         /// <summary>
         /// Creates encoding options based on this configuration.

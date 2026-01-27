@@ -150,6 +150,9 @@ public abstract class HyperparameterOptimizerBase<T, TInput, TOutput> : IHyperpa
     /// <returns>The trial with the best objective value.</returns>
     protected virtual HyperparameterTrial<T> FindBestTrial(List<HyperparameterTrial<T>> completedTrials)
     {
+        if (completedTrials == null)
+            throw new ArgumentNullException(nameof(completedTrials));
+
         return Maximize
             ? completedTrials.OrderByDescending(t => t.ObjectiveValue).First()
             : completedTrials.OrderBy(t => t.ObjectiveValue).First();
@@ -203,6 +206,13 @@ public abstract class HyperparameterOptimizerBase<T, TInput, TOutput> : IHyperpa
         Func<Dictionary<string, object>, T> objectiveFunction,
         Dictionary<string, object> parameters)
     {
+        if (trial == null)
+            throw new ArgumentNullException(nameof(trial));
+        if (objectiveFunction == null)
+            throw new ArgumentNullException(nameof(objectiveFunction));
+        if (parameters == null)
+            throw new ArgumentNullException(nameof(parameters));
+
         trial.Parameters = parameters;
 
         try

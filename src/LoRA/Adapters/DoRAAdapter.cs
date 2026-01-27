@@ -372,10 +372,11 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> baseDirection = NormalizeRows(baseWeights);
 
         // Get LoRA weight contribution as matrix (A × B)
-        // MergeWeights() returns [inputSize, outputSize], but we need [outputSize, inputSize]
-        // to match base weight dimensions, so we transpose it
-        Matrix<T> loraWeightDeltaRaw = _loraLayer.MergeWeights(); // This gives us [inputSize, outputSize]
-        Matrix<T> loraWeightDelta = loraWeightDeltaRaw.Transpose(); // Now [outputSize, inputSize]
+        // We don't call _loraLayer.Forward() here since we only need the weight delta, not the output
+        // loraWeightDelta is [inputSize, outputSize] from MergeWeights()
+        // baseDirection is [outputSize, inputSize]
+        // So we access loraWeightDelta[j, i] = loraWeightDelta[inputIdx, outputIdx]
+        Matrix<T> loraWeightDelta = _loraLayer.MergeWeights();
 
         int batchSize = input.Shape[0];
 
@@ -385,7 +386,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         {
             for (int j = 0; j < inputSize; j++)
             {
-                adaptedDirection[i, j] = NumOps.Add(baseDirection[i, j], loraWeightDelta[i, j]);
+                adaptedDirection[i, j] = NumOps.Add(baseDirection[i, j], loraWeightDelta[j, i]);
             }
         }
 
@@ -718,9 +719,10 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> baseDirection = NormalizeRows(baseWeights);
 
         // Get LoRA weight contribution
-        // MergeWeights() returns [inputSize, outputSize], but we need [outputSize, inputSize]
-        // to match base weight dimensions, so we transpose it (same as in Forward method)
-        Matrix<T> loraWeights = _loraLayer.MergeWeights().Transpose();
+        // loraWeights from MergeWeights() is [inputSize, outputSize]
+        // baseDirection is [outputSize, inputSize]
+        // So we access loraWeights[j, i] = loraWeights[inputIdx, outputIdx]
+        Matrix<T> loraWeights = _loraLayer.MergeWeights();
 
         // Add LoRA to direction and normalize
         Matrix<T> adaptedDirection = new Matrix<T>(outputSize, inputSize);
@@ -728,7 +730,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         {
             for (int j = 0; j < inputSize; j++)
             {
-                adaptedDirection[i, j] = NumOps.Add(baseDirection[i, j], loraWeights[i, j]);
+                adaptedDirection[i, j] = NumOps.Add(baseDirection[i, j], loraWeights[j, i]);
             }
         }
 

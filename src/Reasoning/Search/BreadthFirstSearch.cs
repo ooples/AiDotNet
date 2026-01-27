@@ -149,14 +149,23 @@ internal class BreadthFirstSearch<T> : ISearchAlgorithm<T>
     }
 
     /// <summary>
-    /// Collects all nodes in the tree via recursion.
+    /// Collects all nodes in the tree using an iterative approach to avoid StackOverflow on deep trees.
     /// </summary>
     private void CollectAllNodes(AiDotNet.Reasoning.Models.ThoughtNode<T> node, List<AiDotNet.Reasoning.Models.ThoughtNode<T>> collection)
     {
-        collection.Add(node);
-        foreach (var child in node.Children)
+        // Use iterative BFS with explicit queue instead of recursion to prevent StackOverflow
+        var nodeQueue = new Queue<AiDotNet.Reasoning.Models.ThoughtNode<T>>();
+        nodeQueue.Enqueue(node);
+
+        while (nodeQueue.Count > 0)
         {
-            CollectAllNodes(child, collection);
+            var current = nodeQueue.Dequeue();
+            collection.Add(current);
+
+            foreach (var child in current.Children)
+            {
+                nodeQueue.Enqueue(child);
+            }
         }
     }
 

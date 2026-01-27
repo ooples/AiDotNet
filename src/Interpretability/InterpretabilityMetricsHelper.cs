@@ -44,6 +44,9 @@ namespace AiDotNet.Interpretability
         /// </remarks>
         public static List<T> GetUniqueGroups(Vector<T> sensitiveFeature)
         {
+            if (sensitiveFeature == null)
+                throw new ArgumentNullException(nameof(sensitiveFeature));
+
             var uniqueGroups = new HashSet<T>();
             for (int i = 0; i < sensitiveFeature.Length; i++)
             {
@@ -71,6 +74,9 @@ namespace AiDotNet.Interpretability
         /// </remarks>
         public static List<int> GetGroupIndices(Vector<T> sensitiveFeature, T groupValue)
         {
+            if (sensitiveFeature == null)
+                throw new ArgumentNullException(nameof(sensitiveFeature));
+
             var indices = new List<int>();
             for (int i = 0; i < sensitiveFeature.Length; i++)
             {
@@ -101,6 +107,11 @@ namespace AiDotNet.Interpretability
         /// </remarks>
         public static Vector<T> GetSubset(Vector<T> vector, List<int> indices)
         {
+            if (vector == null)
+                throw new ArgumentNullException(nameof(vector));
+            if (indices == null)
+                throw new ArgumentNullException(nameof(indices));
+
             var subset = new T[indices.Count];
             for (int i = 0; i < indices.Count; i++)
             {
@@ -127,6 +138,9 @@ namespace AiDotNet.Interpretability
         /// </remarks>
         public static T ComputePositiveRate(Vector<T> predictions)
         {
+            if (predictions == null)
+                throw new ArgumentNullException(nameof(predictions));
+
             if (predictions.Length == 0)
                 return _numOps.Zero;
 
@@ -164,6 +178,11 @@ namespace AiDotNet.Interpretability
         /// </remarks>
         public static T ComputeTruePositiveRate(Vector<T> predictions, Vector<T> actualLabels)
         {
+            if (predictions == null)
+                throw new ArgumentNullException(nameof(predictions));
+            if (actualLabels == null)
+                throw new ArgumentNullException(nameof(actualLabels));
+
             if (predictions.Length == 0 || actualLabels.Length == 0)
                 return _numOps.Zero;
 
@@ -213,6 +232,11 @@ namespace AiDotNet.Interpretability
         /// </remarks>
         public static T ComputeFalsePositiveRate(Vector<T> predictions, Vector<T> actualLabels)
         {
+            if (predictions == null)
+                throw new ArgumentNullException(nameof(predictions));
+            if (actualLabels == null)
+                throw new ArgumentNullException(nameof(actualLabels));
+
             if (predictions.Length == 0 || actualLabels.Length == 0)
                 return _numOps.Zero;
 
@@ -262,6 +286,11 @@ namespace AiDotNet.Interpretability
         /// </remarks>
         public static T ComputePrecision(Vector<T> predictions, Vector<T> actualLabels)
         {
+            if (predictions == null)
+                throw new ArgumentNullException(nameof(predictions));
+            if (actualLabels == null)
+                throw new ArgumentNullException(nameof(actualLabels));
+
             if (predictions.Length == 0 || actualLabels.Length == 0)
                 return _numOps.Zero;
 

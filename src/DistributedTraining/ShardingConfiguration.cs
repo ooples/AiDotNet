@@ -57,6 +57,13 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     {
         CommunicationBackend = communicationBackend ??
             throw new ArgumentNullException(nameof(communicationBackend));
+
+        if (learningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate),
+                "Learning rate must be greater than zero.");
+        }
+
         var ops = MathHelper.GetNumericOperations<T>();
         LearningRate = ops.FromDouble(learningRate);
     }
@@ -75,8 +82,14 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     /// </remarks>
     /// <param name="communicationBackend">The communication backend to use</param>
     /// <returns>A new configuration with default settings</returns>
+    /// <exception cref="ArgumentNullException">Thrown if communicationBackend is null</exception>
     public static ShardingConfiguration<T> CreateDefault(ICommunicationBackend<T> communicationBackend)
     {
+        if (communicationBackend == null)
+        {
+            throw new ArgumentNullException(nameof(communicationBackend));
+        }
+
         return new ShardingConfiguration<T>(communicationBackend);
     }
 
@@ -92,8 +105,14 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     /// </remarks>
     /// <param name="communicationBackend">The communication backend to use</param>
     /// <returns>A configuration optimized for high-bandwidth scenarios</returns>
+    /// <exception cref="ArgumentNullException">Thrown if communicationBackend is null</exception>
     public static ShardingConfiguration<T> CreateForHighBandwidth(ICommunicationBackend<T> communicationBackend)
     {
+        if (communicationBackend == null)
+        {
+            throw new ArgumentNullException(nameof(communicationBackend));
+        }
+
         return new ShardingConfiguration<T>(communicationBackend)
         {
             AutoSyncGradients = true,
@@ -114,8 +133,14 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     /// </remarks>
     /// <param name="communicationBackend">The communication backend to use</param>
     /// <returns>A configuration optimized for low-bandwidth scenarios</returns>
+    /// <exception cref="ArgumentNullException">Thrown if communicationBackend is null</exception>
     public static ShardingConfiguration<T> CreateForLowBandwidth(ICommunicationBackend<T> communicationBackend)
     {
+        if (communicationBackend == null)
+        {
+            throw new ArgumentNullException(nameof(communicationBackend));
+        }
+
         return new ShardingConfiguration<T>(communicationBackend)
         {
             AutoSyncGradients = true,

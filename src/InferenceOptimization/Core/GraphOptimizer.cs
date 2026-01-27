@@ -26,6 +26,9 @@ public class GraphOptimizer<T> where T : struct
     /// </summary>
     public IOptimizationGraph<T> Optimize(IOptimizationGraph<T> graph)
     {
+        if (graph == null)
+            throw new ArgumentNullException(nameof(graph));
+
         if (_options.Level == OptimizationLevel.None)
         {
             return graph;
@@ -98,6 +101,9 @@ public class GraphOptimizer<T> where T : struct
     /// </summary>
     public void AddPass(IOptimizationPass<T> pass)
     {
+        if (pass == null)
+            throw new ArgumentNullException(nameof(pass));
+
         _passes.Add(pass);
     }
 

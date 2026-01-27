@@ -107,8 +107,33 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         int dataParallelSize = -1)
         : base(StoreConfigAndPassThrough(wrappedModel, pipelineParallelSize, tensorParallelSize, dataParallelSize), config)
     {
-        // Clear the pending config after base constructor completes
-        PendingConfig.Value = null;
+        // Validate parameters early
+        if (pipelineParallelSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pipelineParallelSize),
+                "Pipeline parallel size must be at least 1.");
+        }
+
+        if (tensorParallelSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(tensorParallelSize),
+                "Tensor parallel size must be at least 1.");
+        }
+
+        // Validate WorldSize constraint early (if explicit dataParallelSize is provided)
+        if (dataParallelSize > 0)
+        {
+            int worldSize = config.CommunicationBackend.WorldSize;
+            if (pipelineParallelSize * tensorParallelSize * dataParallelSize != worldSize)
+            {
+                throw new ArgumentException(
+                    $"Pipeline ({pipelineParallelSize}) × Tensor ({tensorParallelSize}) × " +
+                    $"Data ({dataParallelSize}) must equal WorldSize ({worldSize})");
+            }
+        }
+
+        // PendingConfig is cleared in OnBeforeInitializeSharding after consumption
+        // (not here, because lazy init means OnBeforeInitializeSharding may not have run yet)
     }
 
     /// <summary>
@@ -133,6 +158,9 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
     {
         // Read configuration from ThreadLocal (stored before base constructor call)
         var pending = PendingConfig.Value ?? (1, 1, -1);
+
+        // Clear the pending config now that we've consumed it
+        PendingConfig.Value = null;
         int requestedPipelineParallelSize = pending.pp;
         int requestedTensorParallelSize = pending.tp;
         int requestedDataParallelSize = pending.dp;
@@ -275,7 +303,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
             SynchronizeGradients();
 
             // Apply the synchronized gradients to update parameters
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
 
             // Get updated parameters
             var updatedParams = WrappedModel.GetParameters();
@@ -286,7 +314,7 @@ public class HybridShardedModel<T, TInput, TOutput> : ShardedModelBase<T, TInput
         else
         {
             // Without gradient synchronization, apply gradients locally
-            WrappedModel.ApplyGradients(_computedGradients, NumOps.FromDouble(0.01));
+            WrappedModel.ApplyGradients(_computedGradients, Config.LearningRate);
             var updatedParams = WrappedModel.GetParameters();
 
             // Update local shard (this already invalidates cache via UpdateLocalShardFromFull)

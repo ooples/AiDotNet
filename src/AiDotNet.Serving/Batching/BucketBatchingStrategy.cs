@@ -16,9 +16,27 @@ public class BucketBatchingStrategy : IBatchingStrategy
     /// <param name="bucketBoundaries">Array of bucket boundaries (e.g., [32, 64, 128, 256, 512])</param>
     /// <param name="maxBatchSize">Maximum batch size per bucket</param>
     /// <param name="maxWaitMs">Maximum wait time before processing</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if maxBatchSize is less than 1 or maxWaitMs is negative.</exception>
+    /// <exception cref="ArgumentException">Thrown if bucketBoundaries contains non-positive values.</exception>
     public BucketBatchingStrategy(int[] bucketBoundaries, int maxBatchSize, int maxWaitMs)
     {
+        if (maxBatchSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxBatchSize), "Max batch size must be at least 1.");
+        if (maxWaitMs < 0)
+            throw new ArgumentOutOfRangeException(nameof(maxWaitMs), "Max wait time cannot be negative.");
+
         _bucketBoundaries = bucketBoundaries ?? new[] { 32, 64, 128, 256, 512 };
+
+        if (_bucketBoundaries.Length == 0)
+            throw new ArgumentException("Bucket boundaries cannot be empty.", nameof(bucketBoundaries));
+
+        // Validate bucket boundaries are positive
+        for (int i = 0; i < _bucketBoundaries.Length; i++)
+        {
+            if (_bucketBoundaries[i] <= 0)
+                throw new ArgumentException($"Bucket boundary at index {i} must be positive, but was {_bucketBoundaries[i]}.", nameof(bucketBoundaries));
+        }
+
         Array.Sort(_bucketBoundaries);
         _maxBatchSize = maxBatchSize;
         _maxWaitMs = maxWaitMs;

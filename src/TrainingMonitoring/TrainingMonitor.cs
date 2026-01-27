@@ -473,18 +473,20 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
                 {
                     var values = new List<string> { step.ToString() };
 
-                    // Find timestamp for this step
-                    var timestamp = session.MetricHistory.Values
+                    // Find timestamp for this step - check if entry actually exists
+                    var timestampMatches = session.MetricHistory.Values
                         .SelectMany(h => h)
-                        .FirstOrDefault(v => v.Step == step)
-                        .Timestamp;
-                    values.Add(timestamp.ToString("O"));
+                        .Where(v => v.Step == step)
+                        .ToList();
+                    values.Add(timestampMatches.Count > 0 ? timestampMatches[0].Timestamp.ToString("O") : "");
 
                     foreach (var metricName in metricNames)
                     {
-                        var metricValue = session.MetricHistory[metricName]
-                            .FirstOrDefault(v => v.Step == step);
-                        values.Add(metricValue.Value?.ToString() ?? "");
+                        // Check if this metric has a value for this step
+                        var metricMatches = session.MetricHistory[metricName]
+                            .Where(v => v.Step == step)
+                            .ToList();
+                        values.Add(metricMatches.Count > 0 ? metricMatches[0].Value?.ToString() ?? "" : "");
                     }
 
                     writer.WriteLine(string.Join(",", values));

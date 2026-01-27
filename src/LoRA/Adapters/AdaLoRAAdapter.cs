@@ -192,6 +192,11 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
             throw new ArgumentException("Importance score EMA factor must be between 0 and 1", nameof(importanceScoreEMA));
         }
 
+        if (pruningInterval <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pruningInterval), "Pruning interval must be positive");
+        }
+
         _maxRank = maxRank;
         _currentRank = maxRank;
         _rankPruningThreshold = rankPruningThreshold;

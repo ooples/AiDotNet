@@ -241,13 +241,13 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
         }
 
         [Fact]
-        public void Constructor_WithRankExceedingBankSizeA_ThrowsArgumentException()
+        public void Constructor_WithRankExceedingBankSizeA_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
             var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
 
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() => new VBLoRAAdapter<double>(
+            // Act & Assert - ArgumentOutOfRangeException is correct for invalid range values
+            Assert.Throws<ArgumentOutOfRangeException>(() => new VBLoRAAdapter<double>(
                 baseLayer,
                 rank: 15,
                 bankSizeA: 10,

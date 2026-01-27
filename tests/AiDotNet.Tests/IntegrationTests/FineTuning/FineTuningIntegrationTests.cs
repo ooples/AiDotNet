@@ -5,6 +5,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -33,7 +34,7 @@ public class FineTuningIntegrationTests
         public MockFullModel(int inputSize, int outputSize)
         {
             _weights = new Vector<double>(inputSize * outputSize);
-            var random = new Random(42);
+            var random = RandomHelper.CreateSeededRandom(42);
             for (int i = 0; i < _weights.Length; i++)
             {
                 _weights[i] = random.NextDouble() * 0.1;
@@ -171,7 +172,7 @@ public class FineTuningIntegrationTests
     private static Vector<double> CreateVector(int size)
     {
         var vector = new Vector<double>(size);
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
         for (int i = 0; i < size; i++)
         {
             vector[i] = random.NextDouble();
@@ -183,7 +184,7 @@ public class FineTuningIntegrationTests
     {
         var inputs = new Vector<double>[count];
         var outputs = new Vector<double>[count];
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < count; i++)
         {
@@ -211,7 +212,7 @@ public class FineTuningIntegrationTests
         var inputs = new Vector<double>[count];
         var chosen = new Vector<double>[count];
         var rejected = new Vector<double>[count];
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < count; i++)
         {
@@ -243,7 +244,7 @@ public class FineTuningIntegrationTests
     {
         var data = CreateSFTData(count);
         var rewards = new double[count];
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < count; i++)
         {
@@ -258,7 +259,7 @@ public class FineTuningIntegrationTests
     {
         var inputs = new Vector<double>[count];
         var rankedOutputs = new Vector<double>[count][];
-        var random = new Random(42);
+        var random = RandomHelper.CreateSeededRandom(42);
 
         for (int i = 0; i < count; i++)
         {

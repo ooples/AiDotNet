@@ -190,12 +190,18 @@ public class ExperimentRun<T> : IExperimentRun<T>
             throw new ArgumentException("Local path cannot be null or empty.", nameof(localPath));
 
         var path = artifactPath ?? Path.GetFileName(localPath);
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("Could not extract file name from path. Please provide an explicit artifact path.", nameof(localPath));
+
         _artifacts.Add(path);
     }
 
     /// <summary>
     /// Logs a directory of artifacts.
     /// </summary>
+    /// <exception cref="ArgumentException">Thrown when localDir is null or empty.</exception>
+    /// <exception cref="DirectoryNotFoundException">Thrown when localDir does not exist.</exception>
+    /// <exception cref="UnauthorizedAccessException">Thrown when access to the directory or subdirectories is denied.</exception>
     public void LogArtifacts(string localDir, string? artifactPath = null)
     {
         if (string.IsNullOrWhiteSpace(localDir))
@@ -207,7 +213,19 @@ public class ExperimentRun<T> : IExperimentRun<T>
         // Sanitize artifact path to prevent path traversal attacks
         var sanitizedArtifactPath = artifactPath != null ? GetSanitizedArtifactPath(artifactPath) : null;
 
-        var files = Directory.GetFiles(localDir, "*", SearchOption.AllDirectories);
+        // Get files - may throw UnauthorizedAccessException for inaccessible subdirectories
+        string[] files;
+        try
+        {
+            files = Directory.GetFiles(localDir, "*", SearchOption.AllDirectories);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            throw new UnauthorizedAccessException(
+                $"Access denied to directory '{localDir}' or one of its subdirectories. " +
+                "Ensure you have read permissions for all subdirectories.", ex);
+        }
+
         var baseDirUri = new Uri(localDir.EndsWith(Path.DirectorySeparatorChar.ToString())
             ? localDir
             : localDir + Path.DirectorySeparatorChar);
@@ -275,6 +293,9 @@ public class ExperimentRun<T> : IExperimentRun<T>
     /// </summary>
     public T? GetLatestMetric(string metricName)
     {
+        if (metricName == null)
+            throw new ArgumentNullException(nameof(metricName));
+
         if (!_metrics.TryGetValue(metricName, out var metricList))
             return default;
 

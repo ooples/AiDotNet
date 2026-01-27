@@ -201,4 +201,37 @@ public class WordPieceTokenizerTests
         Assert.Equal(3, results.Count);
         Assert.All(results, r => Assert.NotEmpty(r.TokenIds));
     }
+
+    #region PR #757 Bug Fix Tests - Parameter Validation
+
+    [Fact]
+    public void Train_NullCorpus_ThrowsArgumentNullException()
+    {
+        Assert.Throws<System.ArgumentNullException>(() =>
+            WordPieceTokenizer.Train(null!, 100));
+    }
+
+    [Fact]
+    public void Train_InvalidVocabSize_ThrowsArgumentOutOfRangeException()
+    {
+        var corpus = new List<string> { "Hello world" };
+
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            WordPieceTokenizer.Train(corpus, 0));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            WordPieceTokenizer.Train(corpus, -1));
+    }
+
+    [Fact]
+    public void Constructor_InvalidMaxInputCharsPerWord_ThrowsArgumentOutOfRangeException()
+    {
+        var vocabulary = new AiDotNet.Tokenization.Vocabulary.Vocabulary();
+
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            new WordPieceTokenizer(vocabulary, maxInputCharsPerWord: 0));
+        Assert.Throws<System.ArgumentOutOfRangeException>(() =>
+            new WordPieceTokenizer(vocabulary, maxInputCharsPerWord: -1));
+    }
+
+    #endregion
 }

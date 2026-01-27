@@ -312,9 +312,17 @@ public static class CommunicationManager
     /// <param name="root">Which process is broadcasting (default: 0)</param>
     /// <returns>The broadcast data</returns>
     /// <exception cref="InvalidOperationException">Thrown if not initialized</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if root is out of valid range</exception>
     public static Vector<T> Broadcast<T>(Vector<T> data, int root = 0)
     {
         var backend = GetBackend<T>();
+
+        if (root < 0 || root >= backend.WorldSize)
+        {
+            throw new ArgumentOutOfRangeException(nameof(root),
+                $"Root must be between 0 and {backend.WorldSize - 1}, but was {root}.");
+        }
+
         return backend.Broadcast(data, root);
     }
 
@@ -332,9 +340,17 @@ public static class CommunicationManager
     /// <param name="root">Which process is scattering (default: 0)</param>
     /// <returns>The chunk received by this process</returns>
     /// <exception cref="InvalidOperationException">Thrown if not initialized</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if root is out of valid range</exception>
     public static Vector<T> Scatter<T>(Vector<T> sendData, int root = 0)
     {
         var backend = GetBackend<T>();
+
+        if (root < 0 || root >= backend.WorldSize)
+        {
+            throw new ArgumentOutOfRangeException(nameof(root),
+                $"Root must be between 0 and {backend.WorldSize - 1}, but was {root}.");
+        }
+
         return backend.Scatter(sendData, root);
     }
 
@@ -353,8 +369,14 @@ public static class CommunicationManager
     /// <param name="operation">How to combine the data</param>
     /// <returns>The reduced chunk for this process</returns>
     /// <exception cref="InvalidOperationException">Thrown if not initialized</exception>
+    /// <exception cref="ArgumentNullException">Thrown if data is null</exception>
     public static Vector<T> ReduceScatter<T>(Vector<T> data, ReductionOperation operation)
     {
+        if (data == null)
+        {
+            throw new ArgumentNullException(nameof(data));
+        }
+
         var backend = GetBackend<T>();
         return backend.ReduceScatter(data, operation);
     }

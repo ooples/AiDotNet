@@ -24,6 +24,7 @@ namespace AiDotNet.Tokenization.Algorithms
         /// <param name="specialTokens">The special tokens.</param>
         /// <param name="continuingSubwordPrefix">The prefix for continuing subwords (default: "##").</param>
         /// <param name="maxInputCharsPerWord">Maximum characters per word (default: 100).</param>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if maxInputCharsPerWord is less than 1.</exception>
         public WordPieceTokenizer(
             IVocabulary vocabulary,
             SpecialTokens? specialTokens = null,
@@ -31,6 +32,9 @@ namespace AiDotNet.Tokenization.Algorithms
             int maxInputCharsPerWord = 100)
             : base(vocabulary, specialTokens ?? SpecialTokens.Bert())
         {
+            if (maxInputCharsPerWord < 1)
+                throw new ArgumentOutOfRangeException(nameof(maxInputCharsPerWord), "Max input chars per word must be at least 1.");
+
             _continuingSubwordPrefix = continuingSubwordPrefix;
             _maxInputCharsPerWord = maxInputCharsPerWord;
         }
@@ -43,12 +47,19 @@ namespace AiDotNet.Tokenization.Algorithms
         /// <param name="specialTokens">The special tokens.</param>
         /// <param name="continuingSubwordPrefix">The prefix for continuing subwords.</param>
         /// <returns>A trained WordPiece tokenizer.</returns>
+        /// <exception cref="ArgumentNullException">Thrown if corpus is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if vocabSize is less than 1.</exception>
         public static WordPieceTokenizer Train(
             IEnumerable<string> corpus,
             int vocabSize,
             SpecialTokens? specialTokens = null,
             string continuingSubwordPrefix = "##")
         {
+            if (corpus == null)
+                throw new ArgumentNullException(nameof(corpus));
+            if (vocabSize < 1)
+                throw new ArgumentOutOfRangeException(nameof(vocabSize), "Vocabulary size must be at least 1.");
+
             specialTokens ??= SpecialTokens.Bert();
 
             // Step 1: Build character vocabulary

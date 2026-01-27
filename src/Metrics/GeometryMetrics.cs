@@ -78,15 +78,23 @@ public class ChamferDistance<T> where T : struct
     /// <param name="source">Source point cloud [N, D].</param>
     /// <param name="target">Target point cloud [M, D].</param>
     /// <returns>Mean distance from source points to nearest target points.</returns>
+    /// <exception cref="ArgumentException">Thrown when target is empty but source is not.</exception>
     public T ComputeOneWay(Tensor<T> source, Tensor<T> target)
     {
         int numSource = source.Shape[0];
         int numTarget = target.Shape[0];
         int dim = source.Shape[1];
 
-        if (numSource == 0 || numTarget == 0)
+        // Empty source: no points to match, so distance is 0 (vacuously true)
+        if (numSource == 0)
         {
             return _numOps.Zero;
+        }
+
+        // Empty target with non-empty source: undefined/infinite distance (no points to match to)
+        if (numTarget == 0)
+        {
+            throw new ArgumentException("Cannot compute Chamfer Distance: target point cloud is empty but source has points", nameof(target));
         }
 
         T totalDist = _numOps.Zero;
@@ -564,18 +572,37 @@ public class IoU3D<T> where T : struct
     /// <returns>IoU value between 0 and 1. Higher is better.</returns>
     public T ComputeBoxIoU(T[] boxA, T[] boxB)
     {
+        if (boxA == null) throw new ArgumentNullException(nameof(boxA));
+        if (boxB == null) throw new ArgumentNullException(nameof(boxB));
+
         if (boxA.Length != 6 || boxB.Length != 6)
         {
             throw new ArgumentException("Boxes must have 6 values [x_min, y_min, z_min, x_max, y_max, z_max]");
         }
 
+        // Validate box coordinates (min should be <= max for each dimension)
+        double aXMin = _numOps.ToDouble(boxA[0]), aYMin = _numOps.ToDouble(boxA[1]), aZMin = _numOps.ToDouble(boxA[2]);
+        double aXMax = _numOps.ToDouble(boxA[3]), aYMax = _numOps.ToDouble(boxA[4]), aZMax = _numOps.ToDouble(boxA[5]);
+        double bXMin = _numOps.ToDouble(boxB[0]), bYMin = _numOps.ToDouble(boxB[1]), bZMin = _numOps.ToDouble(boxB[2]);
+        double bXMax = _numOps.ToDouble(boxB[3]), bYMax = _numOps.ToDouble(boxB[4]), bZMax = _numOps.ToDouble(boxB[5]);
+
+        if (aXMin > aXMax || aYMin > aYMax || aZMin > aZMax)
+        {
+            throw new ArgumentException("Box A has invalid coordinates: min values must be <= max values", nameof(boxA));
+        }
+
+        if (bXMin > bXMax || bYMin > bYMax || bZMin > bZMax)
+        {
+            throw new ArgumentException("Box B has invalid coordinates: min values must be <= max values", nameof(boxB));
+        }
+
         // Compute intersection
-        double xMin = Math.Max(_numOps.ToDouble(boxA[0]), _numOps.ToDouble(boxB[0]));
-        double yMin = Math.Max(_numOps.ToDouble(boxA[1]), _numOps.ToDouble(boxB[1]));
-        double zMin = Math.Max(_numOps.ToDouble(boxA[2]), _numOps.ToDouble(boxB[2]));
-        double xMax = Math.Min(_numOps.ToDouble(boxA[3]), _numOps.ToDouble(boxB[3]));
-        double yMax = Math.Min(_numOps.ToDouble(boxA[4]), _numOps.ToDouble(boxB[4]));
-        double zMax = Math.Min(_numOps.ToDouble(boxA[5]), _numOps.ToDouble(boxB[5]));
+        double xMin = Math.Max(aXMin, bXMin);
+        double yMin = Math.Max(aYMin, bYMin);
+        double zMin = Math.Max(aZMin, bZMin);
+        double xMax = Math.Min(aXMax, bXMax);
+        double yMax = Math.Min(aYMax, bYMax);
+        double zMax = Math.Min(aZMax, bZMax);
 
         double interX = Math.Max(0, xMax - xMin);
         double interY = Math.Max(0, yMax - yMin);
@@ -583,12 +610,8 @@ public class IoU3D<T> where T : struct
         double intersection = interX * interY * interZ;
 
         // Compute union
-        double volA = (_numOps.ToDouble(boxA[3]) - _numOps.ToDouble(boxA[0])) *
-                      (_numOps.ToDouble(boxA[4]) - _numOps.ToDouble(boxA[1])) *
-                      (_numOps.ToDouble(boxA[5]) - _numOps.ToDouble(boxA[2]));
-        double volB = (_numOps.ToDouble(boxB[3]) - _numOps.ToDouble(boxB[0])) *
-                      (_numOps.ToDouble(boxB[4]) - _numOps.ToDouble(boxB[1])) *
-                      (_numOps.ToDouble(boxB[5]) - _numOps.ToDouble(boxB[2]));
+        double volA = (aXMax - aXMin) * (aYMax - aYMin) * (aZMax - aZMin);
+        double volB = (bXMax - bXMin) * (bYMax - bYMin) * (bZMax - bZMin);
 
         double union = volA + volB - intersection;
 

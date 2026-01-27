@@ -91,6 +91,9 @@ public class PeakSignalToNoiseRatio<T> where T : struct
     /// <returns>Array of PSNR values, one per batch item.</returns>
     public T[] ComputeBatch(Tensor<T> predicted, Tensor<T> groundTruth)
     {
+        if (predicted == null) throw new ArgumentNullException(nameof(predicted));
+        if (groundTruth == null) throw new ArgumentNullException(nameof(groundTruth));
+
         if (predicted.Rank != 4 || groundTruth.Rank != 4)
         {
             throw new ArgumentException("Batch computation requires 4D tensors [B, H, W, C]");

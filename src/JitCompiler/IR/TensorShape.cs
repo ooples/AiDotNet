@@ -49,6 +49,8 @@ public static class TensorShapeExtensions
     /// </remarks>
     public static int GetElementCount(this int[] shape)
     {
+        if (shape == null) throw new ArgumentNullException(nameof(shape));
+
         // Scalar (empty shape) has 1 element
         if (shape.Length == 0) return 1;
 
@@ -228,6 +230,8 @@ public static class TensorShapeExtensions
     /// </remarks>
     public static string ShapeToString(this int[] shape)
     {
+        if (shape == null) throw new ArgumentNullException(nameof(shape));
+
         if (shape.Length == 0) return "scalar";
         return $"[{string.Join(", ", shape.Select(d => d >= 0 ? d.ToString() : "?"))}]";
     }
@@ -251,6 +255,8 @@ public static class TensorShapeExtensions
     /// </remarks>
     public static int GetShapeHashCode(this int[] shape)
     {
+        if (shape == null) throw new ArgumentNullException(nameof(shape));
+
         int hash = 17;
         foreach (var dim in shape)
         {
@@ -274,6 +280,8 @@ public static class TensorShapeExtensions
     /// </remarks>
     public static int[] GetShape<T>(this Tensor<T> tensor)
     {
+        if (tensor == null) throw new ArgumentNullException(nameof(tensor));
+
         // Return a defensive copy to prevent mutation of internal state
         return tensor.Shape.ToArray();
     }

@@ -32,8 +32,14 @@ public class PerformanceMetrics
     /// </summary>
     /// <param name="maxSamples">Maximum number of latency samples to keep for percentile calculation</param>
     /// <param name="maxQueueDepthSamples">Maximum number of queue depth samples to keep</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if maxSamples or maxQueueDepthSamples is less than 1.</exception>
     public PerformanceMetrics(int maxSamples = 10000, int maxQueueDepthSamples = 1000)
     {
+        if (maxSamples < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxSamples), "Max samples must be at least 1.");
+        if (maxQueueDepthSamples < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxQueueDepthSamples), "Max queue depth samples must be at least 1.");
+
         _maxSamples = maxSamples;
         _maxQueueDepthSamples = maxQueueDepthSamples;
         _latencySamples = new ConcurrentQueue<double>();

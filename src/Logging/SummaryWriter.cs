@@ -115,6 +115,9 @@ public class SummaryWriter : IDisposable
     /// </remarks>
     public void AddScalars(string mainTag, Dictionary<string, float> tagScalarDict, long? step = null)
     {
+        if (tagScalarDict == null) throw new ArgumentNullException(nameof(tagScalarDict));
+        if (tagScalarDict.Count == 0) return; // Nothing to write
+
         _writer.WriteScalars(mainTag, tagScalarDict, step ?? _defaultStep++);
     }
 
@@ -127,6 +130,9 @@ public class SummaryWriter : IDisposable
     /// <param name="bins">Number of bins (not implemented, uses auto).</param>
     public void AddHistogram(string tag, float[] values, long? step = null, int bins = 64)
     {
+        if (values == null) throw new ArgumentNullException(nameof(values));
+        if (values.Length == 0) return; // Nothing to histogram
+
         _writer.WriteHistogram(tag, values, step ?? _defaultStep++);
     }
 
@@ -135,8 +141,12 @@ public class SummaryWriter : IDisposable
     /// </summary>
     public void AddHistogram(string tag, float[,] values, long? step = null, int bins = 64)
     {
+        if (values == null) throw new ArgumentNullException(nameof(values));
+
         int rows = values.GetLength(0);
         int cols = values.GetLength(1);
+        if (rows == 0 || cols == 0) return; // Nothing to histogram
+
         var flat = new float[rows * cols];
         int idx = 0;
         for (int i = 0; i < rows; i++)
@@ -166,6 +176,10 @@ public class SummaryWriter : IDisposable
     /// <param name="dataformats">Format of the image data: 'CHW' or 'HWC'. Default is 'CHW'.</param>
     public void AddImage(string tag, float[,,] imageData, long? step = null, string dataformats = "CHW")
     {
+        if (imageData == null) throw new ArgumentNullException(nameof(imageData));
+        if (dataformats != "CHW" && dataformats != "HWC")
+            throw new ArgumentException($"Invalid dataformats '{dataformats}'. Must be 'CHW' or 'HWC'.", nameof(dataformats));
+
         int c, h, w;
         if (dataformats == "CHW")
         {
@@ -230,10 +244,16 @@ public class SummaryWriter : IDisposable
     /// <param name="normalize">Whether to normalize images to [0, 1].</param>
     public void AddImages(string tag, float[,,,] images, long? step = null, int nrow = 8, int padding = 2, bool normalize = false)
     {
+        if (images == null) throw new ArgumentNullException(nameof(images));
+        if (nrow <= 0) throw new ArgumentOutOfRangeException(nameof(nrow), "nrow must be positive");
+        if (padding < 0) throw new ArgumentOutOfRangeException(nameof(padding), "padding cannot be negative");
+
         int n = images.GetLength(0);
         int c = images.GetLength(1);
         int h = images.GetLength(2);
         int w = images.GetLength(3);
+
+        if (n == 0) return; // No images to display
 
         // Calculate grid dimensions
         int ncol = (n + nrow - 1) / nrow;
@@ -347,6 +367,14 @@ public class SummaryWriter : IDisposable
     /// <param name="numThresholds">Number of thresholds for the curve.</param>
     public void AddPrCurve(string tag, int[] labels, float[] predictions, long? step = null, int numThresholds = 127)
     {
+        if (labels == null) throw new ArgumentNullException(nameof(labels));
+        if (predictions == null) throw new ArgumentNullException(nameof(predictions));
+        if (labels.Length != predictions.Length)
+            throw new ArgumentException($"Labels length ({labels.Length}) must match predictions length ({predictions.Length})");
+        if (labels.Length == 0) return; // Nothing to compute
+        if (numThresholds < 2)
+            throw new ArgumentOutOfRangeException(nameof(numThresholds), "numThresholds must be at least 2");
+
         // Calculate precision-recall at various thresholds
         var thresholds = Enumerable.Range(0, numThresholds)
             .Select(i => (float)i / (numThresholds - 1))
@@ -433,10 +461,13 @@ public class SummaryWriter : IDisposable
     /// <param name="step">Global step.</param>
     public void LogWeights(string layerName, float[] weights, float[]? gradients = null, long? step = null)
     {
+        if (weights == null) throw new ArgumentNullException(nameof(weights));
+        if (weights.Length == 0) return; // No weights to log
+
         var s = step ?? _defaultStep++;
         AddHistogram($"weights/{layerName}", weights, s);
 
-        if (gradients != null)
+        if (gradients != null && gradients.Length > 0)
         {
             AddHistogram($"gradients/{layerName}", gradients, s);
 

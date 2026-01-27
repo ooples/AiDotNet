@@ -193,6 +193,9 @@ public class TensorType
     /// </summary>
     public bool IsBroadcastCompatible(TensorType other)
     {
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
+
         if (HasDynamicShape || other.HasDynamicShape) return true;
 
         int maxRank = Math.Max(Shape.Length, other.Shape.Length);
@@ -230,6 +233,9 @@ public static class IRDataTypeExtensions
 {
     public static IRDataType FromSystemType(Type type)
     {
+        if (type == null)
+            throw new ArgumentNullException(nameof(type));
+
         return type switch
         {
             Type t when t == typeof(float) => IRDataType.Float32,

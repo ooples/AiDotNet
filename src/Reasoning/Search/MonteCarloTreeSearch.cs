@@ -48,10 +48,16 @@ internal class MonteCarloTreeSearch<T> : ISearchAlgorithm<T>
     /// <summary>
     /// Initializes a new instance of the <see cref="MonteCarloTreeSearch{T}"/> class.
     /// </summary>
-    /// <param name="explorationConstant">UCB1 exploration constant (default: 1.414, sqrt(2)).</param>
-    /// <param name="numSimulations">Number of MCTS iterations (default: 100).</param>
+    /// <param name="explorationConstant">UCB1 exploration constant (default: 1.414, sqrt(2)). Must be non-negative.</param>
+    /// <param name="numSimulations">Number of MCTS iterations (default: 100). Must be at least 1.</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if explorationConstant is negative or numSimulations is less than 1.</exception>
     public MonteCarloTreeSearch(double explorationConstant = 1.414, int numSimulations = 100)
     {
+        if (double.IsNaN(explorationConstant) || double.IsInfinity(explorationConstant) || explorationConstant < 0)
+            throw new ArgumentOutOfRangeException(nameof(explorationConstant), "Exploration constant must be a finite non-negative value.");
+        if (numSimulations < 1)
+            throw new ArgumentOutOfRangeException(nameof(numSimulations), "Number of simulations must be at least 1.");
+
         _explorationConstant = explorationConstant;
         _numSimulations = numSimulations;
         _random = RandomHelper.CreateSeededRandom(42); // Deterministic for reproducibility

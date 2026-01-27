@@ -28,9 +28,12 @@ public class VisionAndTabularBenchmarkingIntegrationTests
     [Fact]
     public async Task BuildAsync_WithTabularNonIidBenchmarking_AttachesBenchmarkReport()
     {
+        // Training data must match the benchmark's FeatureCount (3 features in this test)
         var model = new KNearestNeighborsRegression<double>(new KNearestNeighborsOptions { K = 1 });
         var optimizer = new FederatedNoOpOptimizer(model);
-        var loader = DataLoaders.FromArrays(new double[,] { { 0.0 }, { 1.0 } }, new double[] { 0.0, 1.0 });
+        var loader = DataLoaders.FromArrays(
+            new double[,] { { 0.0, 0.0, 0.0 }, { 1.0, 1.0, 1.0 }, { 2.0, 2.0, 2.0 } },
+            new double[] { 0.0, 1.0, 2.0 });
 
         var benchOptions = new BenchmarkingOptions
         {
@@ -136,9 +139,18 @@ public class VisionAndTabularBenchmarkingIntegrationTests
         {
             WriteCifar10Files(tempDir);
 
+            // CIFAR images are 32x32x3 = 3072 features (flattened RGB pixels)
+            const int cifarFeatureCount = 32 * 32 * 3; // 3072
+            var trainingFeatures = new double[2, cifarFeatureCount];
+            for (int i = 0; i < cifarFeatureCount; i++)
+            {
+                trainingFeatures[0, i] = 10.0 / 255.0; // normalized pixel value for sample 0
+                trainingFeatures[1, i] = 20.0 / 255.0; // normalized pixel value for sample 1
+            }
+
             var model = new KNearestNeighborsRegression<double>(new KNearestNeighborsOptions { K = 1 });
             var optimizer = new FederatedNoOpOptimizer(model);
-            var loader = DataLoaders.FromArrays(new double[,] { { 0.0 }, { 1.0 } }, new double[] { 0.0, 1.0 });
+            var loader = DataLoaders.FromArrays(trainingFeatures, new double[] { 0.0, 1.0 });
 
             var benchOptions = new BenchmarkingOptions
             {
@@ -190,9 +202,18 @@ public class VisionAndTabularBenchmarkingIntegrationTests
         {
             WriteCifar100Files(tempDir);
 
+            // CIFAR images are 32x32x3 = 3072 features (flattened RGB pixels)
+            const int cifarFeatureCount = 32 * 32 * 3; // 3072
+            var trainingFeatures = new double[2, cifarFeatureCount];
+            for (int i = 0; i < cifarFeatureCount; i++)
+            {
+                trainingFeatures[0, i] = 10.0 / 255.0; // normalized pixel value for sample 0
+                trainingFeatures[1, i] = 20.0 / 255.0; // normalized pixel value for sample 1
+            }
+
             var model = new KNearestNeighborsRegression<double>(new KNearestNeighborsOptions { K = 1 });
             var optimizer = new FederatedNoOpOptimizer(model);
-            var loader = DataLoaders.FromArrays(new double[,] { { 0.0 }, { 1.0 } }, new double[] { 0.0, 1.0 });
+            var loader = DataLoaders.FromArrays(trainingFeatures, new double[] { 0.0, 1.0 });
 
             var benchOptions = new BenchmarkingOptions
             {

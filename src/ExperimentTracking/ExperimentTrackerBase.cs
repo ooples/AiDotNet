@@ -150,6 +150,9 @@ public abstract class ExperimentTrackerBase<T> : IExperimentTracker<T>
     /// <returns>The JSON string representation.</returns>
     protected virtual string SerializeToJson(object obj)
     {
+        if (obj == null)
+            throw new ArgumentNullException(nameof(obj));
+
         return JsonConvert.SerializeObject(obj, JsonSettings);
     }
 
@@ -161,6 +164,9 @@ public abstract class ExperimentTrackerBase<T> : IExperimentTracker<T>
     /// <returns>The deserialized object.</returns>
     protected virtual TResult? DeserializeFromJson<TResult>(string json) where TResult : class
     {
+        if (json == null)
+            throw new ArgumentNullException(nameof(json));
+
         return JsonConvert.DeserializeObject<TResult>(json, JsonSettings);
     }
 

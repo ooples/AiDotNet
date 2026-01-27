@@ -242,6 +242,12 @@ public abstract class CurriculumSchedulerBase<T> : ICurriculumScheduler<T>
     {
         if (sortedIndices is null) throw new ArgumentNullException(nameof(sortedIndices));
 
+        // Handle empty case gracefully
+        if (totalSamples == 0 || sortedIndices.Length == 0)
+        {
+            return Array.Empty<int>();
+        }
+
         if (sortedIndices.Length != totalSamples)
         {
             throw new ArgumentException(

@@ -332,6 +332,12 @@ public static class FeatureSelectorHelper<T, TInput>
     {
         if (originalData is Matrix<T> matrix)
         {
+            // Handle empty matrix (0 rows) - return an empty matrix with the correct column count
+            if (matrix.Rows == 0)
+            {
+                return (TInput)(object)new Matrix<T>(0, selectedFeatureIndices.Count);
+            }
+
             var selectedColumns = selectedFeatureIndices
                 .Select(i => matrix.GetColumn(i))
                 .ToArray();

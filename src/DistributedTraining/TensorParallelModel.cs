@@ -113,6 +113,8 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         {
             _tensorParallelGroup.Add(i);
         }
+
+        // InitializeSharding() will be called by EnsureShardingInitialized() after this method completes
     }
 
     /// <summary>

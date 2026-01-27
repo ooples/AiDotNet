@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Tokenization.Vocabulary;
 using Xunit;
@@ -136,5 +138,25 @@ namespace AiDotNet.Tests.Tokenization
             Assert.Equal(1, vocab.Size);
             Assert.True(vocab.ContainsToken("[UNK]"));
         }
+
+        #region PR #757 Bug Fix Tests - Parameter Validation
+
+        [Fact]
+        public void Constructor_FromDictionary_ThrowsOnNullTokenToId()
+        {
+            Assert.Throws<ArgumentNullException>(() =>
+                new Vocabulary((Dictionary<string, int>)null!));
+        }
+
+        [Fact]
+        public void AddTokens_ThrowsOnNullTokens()
+        {
+            var vocab = new Vocabulary("[UNK]");
+
+            Assert.Throws<ArgumentNullException>(() =>
+                vocab.AddTokens(null!));
+        }
+
+        #endregion
     }
 }

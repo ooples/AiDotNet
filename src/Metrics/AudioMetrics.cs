@@ -380,6 +380,9 @@ public class ShortTimeObjectiveIntelligibility<T> where T : struct
     /// <returns>STOI score between 0 and 1. Higher is better.</returns>
     public T Compute(Tensor<T> degraded, Tensor<T> clean)
     {
+        if (degraded == null) throw new ArgumentNullException(nameof(degraded));
+        if (clean == null) throw new ArgumentNullException(nameof(clean));
+
         if (degraded.Length != clean.Length)
         {
             throw new ArgumentException("Degraded and clean signals must have the same length");
@@ -534,7 +537,8 @@ public class ShortTimeObjectiveIntelligibility<T> where T : struct
         for (int f = 0; f < segmentLength; f++)
         {
             int frame = startFrame + f;
-            if (frame >= degraded.GetLength(0))
+            // Check bounds for both degraded and clean arrays
+            if (frame >= degraded.GetLength(0) || frame >= clean.GetLength(0))
             {
                 break;
             }
@@ -613,9 +617,18 @@ public class ScaleInvariantSignalToDistortionRatio<T> where T : struct
     /// <returns>SI-SDR in decibels. Higher is better.</returns>
     public T Compute(Tensor<T> estimated, Tensor<T> target)
     {
+        if (estimated == null) throw new ArgumentNullException(nameof(estimated));
+        if (target == null) throw new ArgumentNullException(nameof(target));
+
         if (estimated.Length != target.Length)
         {
             throw new ArgumentException("Estimated and target signals must have the same length");
+        }
+
+        // Handle empty tensors - cannot compute SI-SDR with no samples
+        if (estimated.Length == 0)
+        {
+            return _numOps.FromDouble(-100.0); // Return very low SI-SDR for empty signals
         }
 
         // Zero-mean the signals
@@ -734,6 +747,9 @@ public class SignalToNoiseRatio<T> where T : struct
     /// <returns>SNR in decibels. Higher is better.</returns>
     public T Compute(Tensor<T> clean, Tensor<T> noisy)
     {
+        if (clean == null) throw new ArgumentNullException(nameof(clean));
+        if (noisy == null) throw new ArgumentNullException(nameof(noisy));
+
         if (clean.Length != noisy.Length)
         {
             throw new ArgumentException("Clean and noisy signals must have the same length");

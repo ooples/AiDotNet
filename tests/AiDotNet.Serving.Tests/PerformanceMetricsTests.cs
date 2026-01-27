@@ -176,4 +176,26 @@ public class PerformanceMetricsTests
         var p50 = metrics.GetLatencyPercentile(50);
         Assert.True(p50 >= 100); // Should be from the most recent samples
     }
+
+    #region PR #758 Bug Fix Tests - Parameter Validation
+
+    [Fact]
+    public void PerformanceMetrics_Constructor_ThrowsOnInvalidMaxSamples()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new PerformanceMetrics(maxSamples: 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new PerformanceMetrics(maxSamples: -1));
+    }
+
+    [Fact]
+    public void PerformanceMetrics_Constructor_ThrowsOnInvalidMaxQueueDepthSamples()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new PerformanceMetrics(maxSamples: 100, maxQueueDepthSamples: 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new PerformanceMetrics(maxSamples: 100, maxQueueDepthSamples: -1));
+    }
+
+    #endregion
 }

@@ -75,6 +75,9 @@ public class TrialPruner<T>
     /// <returns>True if the trial should be pruned, false to continue.</returns>
     public bool ReportAndCheckPrune(HyperparameterTrial<T> trial, int step, T value)
     {
+        if (trial == null)
+            throw new ArgumentNullException(nameof(trial));
+
         double doubleValue = _numOps.ToDouble(value);
         return ReportAndCheckPrune(trial.TrialId, step, doubleValue);
     }
@@ -88,6 +91,9 @@ public class TrialPruner<T>
     /// <returns>True if the trial should be pruned, false to continue.</returns>
     public bool ReportAndCheckPrune(string trialId, int step, double value)
     {
+        if (trialId == null)
+            throw new ArgumentNullException(nameof(trialId));
+
         lock (_lock)
         {
             // Record the intermediate value
@@ -239,6 +245,9 @@ public class TrialPruner<T>
     /// </summary>
     public void MarkComplete(string trialId)
     {
+        if (trialId == null)
+            throw new ArgumentNullException(nameof(trialId));
+
         // Currently just stores the history; could be extended
         // to track completion status for more advanced pruning
     }

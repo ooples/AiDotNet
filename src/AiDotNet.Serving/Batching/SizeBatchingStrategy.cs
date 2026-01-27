@@ -13,8 +13,14 @@ public class SizeBatchingStrategy : IBatchingStrategy
     /// </summary>
     /// <param name="batchSize">Target batch size to trigger processing</param>
     /// <param name="maxWaitMs">Maximum wait time before processing smaller batches</param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if batchSize is less than 1 or maxWaitMs is negative.</exception>
     public SizeBatchingStrategy(int batchSize, int maxWaitMs)
     {
+        if (batchSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be at least 1.");
+        if (maxWaitMs < 0)
+            throw new ArgumentOutOfRangeException(nameof(maxWaitMs), "Max wait time cannot be negative.");
+
         _batchSize = batchSize;
         _maxWaitMs = maxWaitMs;
     }

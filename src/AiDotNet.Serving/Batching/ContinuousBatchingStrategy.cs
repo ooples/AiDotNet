@@ -48,6 +48,13 @@ public class ContinuousBatchingStrategy : BatchingStrategyBase
         double targetLatencyMs = 50,
         bool adaptiveConcurrency = true)
     {
+        if (maxConcurrency < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Max concurrency must be at least 1.");
+        if (minWaitMs < 0)
+            throw new ArgumentOutOfRangeException(nameof(minWaitMs), "Min wait time cannot be negative.");
+        if (targetLatencyMs <= 0)
+            throw new ArgumentOutOfRangeException(nameof(targetLatencyMs), "Target latency must be positive.");
+
         _maxConcurrency = maxConcurrency;
         _minWaitMs = minWaitMs;
         _targetLatencyMs = targetLatencyMs;

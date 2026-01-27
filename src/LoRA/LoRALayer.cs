@@ -139,7 +139,7 @@ public class LoRALayer<T> : LayerBase<T>
     /// <param name="rank">The rank of the low-rank decomposition (must be positive and less than min(inputSize, outputSize)).</param>
     /// <param name="alpha">The scaling factor for LoRA contributions (typically similar to rank value).</param>
     /// <param name="activationFunction">Optional activation function to apply after the LoRA transformation.</param>
-    /// <exception cref="ArgumentException">Thrown when rank is invalid.</exception>
+    /// <exception cref="ArgumentException">Thrown when rank is not positive or exceeds min(inputSize, outputSize).</exception>
     /// <remarks>
     /// <para>
     /// The LoRA matrices are initialized as follows:
@@ -158,14 +158,24 @@ public class LoRALayer<T> : LayerBase<T>
     public LoRALayer(int inputSize, int outputSize, int rank, double alpha = -1, IActivationFunction<T>? activationFunction = null)
         : base(new[] { inputSize }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
+        if (inputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(inputSize), "Input size must be positive");
+        }
+
+        if (outputSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be positive");
+        }
+
         if (rank <= 0)
         {
-            throw new ArgumentException("Rank must be positive", nameof(rank));
+            throw new ArgumentOutOfRangeException(nameof(rank), "Rank must be positive");
         }
 
         if (rank > Math.Min(inputSize, outputSize))
         {
-            throw new ArgumentException($"Rank ({rank}) cannot exceed min(inputSize, outputSize) = {Math.Min(inputSize, outputSize)}", nameof(rank));
+            throw new ArgumentOutOfRangeException(nameof(rank), $"Rank ({rank}) cannot exceed min(inputSize, outputSize) = {Math.Min(inputSize, outputSize)}");
         }
 
         _rank = rank;
