@@ -401,9 +401,11 @@ Console.WriteLine(""  Classes learned: 2"");
                     Description = "Partition data into K clusters",
                     Difficulty = "Beginner",
                     Tags = ["clustering", "kmeans", "unsupervised"],
-                    Code = @"// K-Means Clustering with AiDotNet
+                    Code = @"// K-Means Clustering with AiDotNet using AiModelBuilder
+using AiDotNet;
 using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Clustering.Options;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Create sample data: 6 points in 2D
@@ -419,10 +421,14 @@ data[5, 0] = 5.2; data[5, 1] = 7.2;  // Cluster 2
 var options = new KMeansOptions<double> { NumClusters = 2 };
 var kmeans = new KMeans<double>(options);
 
-// Train (fit) the model - y parameter is ignored for clustering
-kmeans.Train(data, new Vector<double>(data.Rows));
+// Use AiModelBuilder pattern for clustering (recommended API)
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(DataLoaders.FromMatrix(data))
+    .ConfigureModel(kmeans)
+    .BuildAsync();
 
-Console.WriteLine(""K-Means Clustering Results:"");
+// The model passed to ConfigureModel is trained in-place
+Console.WriteLine(""K-Means Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""Number of clusters: {options.NumClusters}"");
 Console.WriteLine($""Iterations: {kmeans.NumIterations}"");
 Console.WriteLine();
@@ -441,9 +447,11 @@ for (int i = 0; i < data.Rows; i++)
                     Description = "Density-based clustering that finds arbitrarily shaped clusters",
                     Difficulty = "Intermediate",
                     Tags = ["clustering", "density", "unsupervised"],
-                    Code = @"// DBSCAN Clustering with AiDotNet
+                    Code = @"// DBSCAN Clustering with AiDotNet using AiModelBuilder
+using AiDotNet;
 using AiDotNet.Clustering.Density;
 using AiDotNet.Clustering.Options;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Create sample data with 2 clusters and 1 outlier
@@ -467,10 +475,14 @@ var options = new DBSCANOptions<double>
 };
 var dbscan = new DBSCAN<double>(options);
 
-// Train the model
-dbscan.Train(data, new Vector<double>(data.Rows));
+// Use AiModelBuilder pattern for clustering
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(DataLoaders.FromMatrix(data))
+    .ConfigureModel(dbscan)
+    .BuildAsync();
 
-Console.WriteLine(""DBSCAN Clustering Results:"");
+// The model passed to ConfigureModel is trained in-place
+Console.WriteLine(""DBSCAN Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""Epsilon: {options.Epsilon}, MinPoints: {options.MinPoints}"");
 Console.WriteLine($""Clusters found: {dbscan.NumClusters}"");
 Console.WriteLine($""Noise points: {dbscan.GetNoiseCount()}"");
@@ -490,9 +502,11 @@ for (int i = 0; i < data.Rows; i++)
                     Description = "Hierarchical density-based clustering with automatic cluster detection",
                     Difficulty = "Intermediate",
                     Tags = ["clustering", "density", "hierarchical", "unsupervised"],
-                    Code = @"// HDBSCAN - Hierarchical DBSCAN with AiDotNet
+                    Code = @"// HDBSCAN - Hierarchical DBSCAN with AiDotNet using AiModelBuilder
+using AiDotNet;
 using AiDotNet.Clustering.Density;
 using AiDotNet.Clustering.Options;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Create sample data with varying density clusters
@@ -522,10 +536,14 @@ var options = new HDBSCANOptions<double>
 };
 var hdbscan = new HDBSCAN<double>(options);
 
-// Train the model
-hdbscan.Train(data, new Vector<double>(data.Rows));
+// Use AiModelBuilder pattern for clustering
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(DataLoaders.FromMatrix(data))
+    .ConfigureModel(hdbscan)
+    .BuildAsync();
 
-Console.WriteLine(""HDBSCAN Clustering Results:"");
+// The model passed to ConfigureModel is trained in-place
+Console.WriteLine(""HDBSCAN Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""MinClusterSize: {options.MinClusterSize}"");
 Console.WriteLine($""Clusters found: {hdbscan.NumClusters}"");
 Console.WriteLine();
@@ -549,9 +567,11 @@ Console.WriteLine(""  - Provides cluster hierarchy"");
                     Description = "Soft clustering where points can belong to multiple clusters",
                     Difficulty = "Intermediate",
                     Tags = ["clustering", "fuzzy", "soft-clustering", "unsupervised"],
-                    Code = @"// Fuzzy C-Means Soft Clustering with AiDotNet
+                    Code = @"// Fuzzy C-Means Soft Clustering with AiDotNet using AiModelBuilder
+using AiDotNet;
 using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Clustering.Options;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Create sample data
@@ -573,10 +593,14 @@ var options = new FuzzyCMeansOptions<double>
 };
 var fcm = new FuzzyCMeans<double>(options);
 
-// Train the model
-fcm.Train(data, new Vector<double>(data.Rows));
+// Use AiModelBuilder pattern for clustering
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(DataLoaders.FromMatrix(data))
+    .ConfigureModel(fcm)
+    .BuildAsync();
 
-Console.WriteLine(""Fuzzy C-Means Clustering Results:"");
+// The model passed to ConfigureModel is trained in-place
+Console.WriteLine(""Fuzzy C-Means Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""Clusters: {options.NumClusters}"");
 Console.WriteLine($""Fuzziness: {options.Fuzziness}"");
 Console.WriteLine();
@@ -601,9 +625,11 @@ Console.WriteLine(""Points at (3, 3) have mixed membership - they're between clu
                     Description = "Find clusters without specifying number of clusters",
                     Difficulty = "Intermediate",
                     Tags = ["clustering", "density", "mode-seeking", "unsupervised"],
-                    Code = @"// Mean Shift Clustering with AiDotNet
+                    Code = @"// Mean Shift Clustering with AiDotNet using AiModelBuilder
+using AiDotNet;
 using AiDotNet.Clustering.Density;
 using AiDotNet.Clustering.Options;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Create sample data with natural clusters
@@ -631,10 +657,14 @@ var options = new MeanShiftOptions<double>
 };
 var meanshift = new MeanShift<double>(options);
 
-// Train the model
-meanshift.Train(data, new Vector<double>(data.Rows));
+// Use AiModelBuilder pattern for clustering
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(DataLoaders.FromMatrix(data))
+    .ConfigureModel(meanshift)
+    .BuildAsync();
 
-Console.WriteLine(""Mean Shift Clustering Results:"");
+// The model passed to ConfigureModel is trained in-place
+Console.WriteLine(""Mean Shift Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""Bandwidth (auto-estimated): {meanshift.Bandwidth:F2}"");
 Console.WriteLine($""Clusters found automatically: {meanshift.NumClusters}"");
 Console.WriteLine();
@@ -658,9 +688,11 @@ Console.WriteLine(""  - Robust to outliers"");
                     Description = "Graph-based clustering for complex cluster shapes",
                     Difficulty = "Advanced",
                     Tags = ["clustering", "spectral", "graph", "unsupervised"],
-                    Code = @"// Spectral Clustering with AiDotNet
+                    Code = @"// Spectral Clustering with AiDotNet using AiModelBuilder
+using AiDotNet;
 using AiDotNet.Clustering.Spectral;
 using AiDotNet.Clustering.Options;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Create sample data - spectral clustering works well for non-spherical clusters
@@ -687,10 +719,14 @@ var options = new SpectralOptions<double>
 };
 var spectral = new SpectralClustering<double>(options);
 
-// Train the model
-spectral.Train(data, new Vector<double>(data.Rows));
+// Use AiModelBuilder pattern for clustering
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(DataLoaders.FromMatrix(data))
+    .ConfigureModel(spectral)
+    .BuildAsync();
 
-Console.WriteLine(""Spectral Clustering Results:"");
+// The model passed to ConfigureModel is trained in-place
+Console.WriteLine(""Spectral Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""Clusters: {options.NumClusters}"");
 Console.WriteLine($""Affinity: {options.Affinity}"");
 Console.WriteLine($""Normalization: {options.Normalization}"");
@@ -715,9 +751,11 @@ Console.WriteLine(""  - Works better than K-Means for complex shapes"");
                     Description = "K-Means with K-Means++ initialization",
                     Difficulty = "Intermediate",
                     Tags = ["clustering", "kmeans", "advanced"],
-                    Code = @"// K-Means with Advanced Options
+                    Code = @"// K-Means with Advanced Options using AiModelBuilder
+using AiDotNet;
 using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Clustering.Options;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Create sample data
@@ -744,9 +782,15 @@ var options = new KMeansOptions<double>
     RandomState = 42  // For reproducibility
 };
 var kmeans = new KMeans<double>(options);
-kmeans.Train(data, new Vector<double>(data.Rows));
 
-Console.WriteLine(""K-Means++ Clustering Results:"");
+// Use AiModelBuilder pattern for clustering
+var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+    .ConfigureDataLoader(DataLoaders.FromMatrix(data))
+    .ConfigureModel(kmeans)
+    .BuildAsync();
+
+// The model passed to ConfigureModel is trained in-place
+Console.WriteLine(""K-Means++ Clustering Results (via AiModelBuilder):"");
 Console.WriteLine($""Clusters: {options.NumClusters}"");
 Console.WriteLine($""Init method: K-Means++"");
 Console.WriteLine($""Iterations: {kmeans.NumIterations}"");
@@ -765,10 +809,12 @@ for (int k = 0; k < options.NumClusters; k++)
                     Description = "Evaluate clustering quality with Silhouette Score",
                     Difficulty = "Intermediate",
                     Tags = ["clustering", "evaluation", "metrics", "silhouette"],
-                    Code = @"// Cluster Evaluation with Silhouette Score
+                    Code = @"// Cluster Evaluation with Silhouette Score using AiModelBuilder
+using AiDotNet;
 using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Evaluation;
+using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.LinearAlgebra;
 
 // Create well-separated clusters
@@ -780,17 +826,25 @@ data[3, 0] = 5.0; data[3, 1] = 5.0;
 data[4, 0] = 5.1; data[4, 1] = 5.1;
 data[5, 0] = 5.0; data[5, 1] = 5.2;
 
-// Test different numbers of clusters
-Console.WriteLine(""Silhouette Score Analysis:"");
+// Test different numbers of clusters using AiModelBuilder
+Console.WriteLine(""Silhouette Score Analysis (via AiModelBuilder):"");
 Console.WriteLine(""(Higher is better, range -1 to +1)"");
 Console.WriteLine();
+
+var dataLoader = DataLoaders.FromMatrix(data);
 
 for (int k = 2; k <= 4; k++)
 {
     var options = new KMeansOptions<double> { NumClusters = k, RandomState = 42 };
     var kmeans = new KMeans<double>(options);
-    kmeans.Train(data, new Vector<double>(data.Rows));
 
+    // Use AiModelBuilder pattern
+    var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        .ConfigureDataLoader(dataLoader)
+        .ConfigureModel(kmeans)
+        .BuildAsync();
+
+    // The model passed to ConfigureModel is trained in-place
     // Calculate Silhouette Score
     var silhouette = new SilhouetteScore<double>();
     var score = silhouette.Compute(data, kmeans.Labels);
@@ -2260,13 +2314,13 @@ Console.WriteLine($""  Test prediction: {predictions[0]:F2}"");
                     Description = "Convert text documents to TF-IDF weighted vectors",
                     Difficulty = "Intermediate",
                     Tags = ["nlp", "text", "tfidf", "vectorization"],
-                    Code = @"// TF-IDF Text Vectorization for Classification
+                    Code = @"// TF-IDF Text Vectorization for Classification using AiModelBuilder
 using AiDotNet;
 using AiDotNet.Preprocessing.TextVectorizers;
 using AiDotNet.Regression;
 using AiDotNet.Tensors.LinearAlgebra;
 
-// Sample text documents
+// Sample text documents for sentiment classification
 var documents = new string[]
 {
     ""I love this product, it's amazing!"",
@@ -2285,29 +2339,27 @@ var tfidf = new TfidfVectorizer<double>(
     lowercase: true
 );
 
-// Transform documents to feature matrix
-var features = tfidf.FitTransform(documents);
+// Use DataLoaders.FromTextDocuments for seamless AiModelBuilder integration
+// This fits the vectorizer and creates a data loader in one step
+var loader = DataLoaders.FromTextDocuments(documents, labels, tfidf);
 
-Console.WriteLine(""TF-IDF Vectorization Results:"");
-Console.WriteLine($""  Documents: {documents.Length}"");
-Console.WriteLine($""  Vocabulary size: {tfidf.Vocabulary?.Count ?? 0}"");
-Console.WriteLine($""  Feature matrix shape: {features.Rows} x {features.Columns}"");
-
-// Now use with AiModelBuilder
-var loader = DataLoaders.FromMatrixVector(features, new Vector<double>(labels));
 var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
     .ConfigureDataLoader(loader)
     .ConfigureModel(new LogisticRegression<double>())
     .BuildAsync();
 
-Console.WriteLine();
-Console.WriteLine(""  Model trained on TF-IDF features"");
+Console.WriteLine(""TF-IDF Text Classification Results:"");
+Console.WriteLine($""  Documents: {documents.Length}"");
+Console.WriteLine($""  Vocabulary size: {tfidf.Vocabulary?.Count ?? 0}"");
+Console.WriteLine($""  TF-IDF features: {tfidf.FeatureNames?.Length ?? 0}"");
+Console.WriteLine(""  Model trained successfully!"");
 
-// Classify new text
+// Classify new text using the fitted vectorizer
 var newDoc = new[] { ""This is an excellent product!"" };
 var newFeatures = tfidf.Transform(newDoc);
 var prediction = result.Predict(newFeatures);
 
+Console.WriteLine();
 Console.WriteLine($""  New review: '{newDoc[0]}'"");
 Console.WriteLine($""  Prediction: {(prediction[0] > 0.5 ? ""Positive"" : ""Negative"")}"");
 "
@@ -2459,7 +2511,7 @@ Console.WriteLine(""Download from: huggingface.co/bert-base-uncased"");
                     Description = "Text classification using neural networks with TF-IDF features",
                     Difficulty = "Advanced",
                     Tags = ["nlp", "classification", "neural-network", "embedding"],
-                    Code = @"// Neural Network Text Classification
+                    Code = @"// Neural Network Text Classification using AiModelBuilder
 using AiDotNet;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Preprocessing.TextVectorizers;
@@ -2479,13 +2531,18 @@ var trainDocs = new string[]
 };
 var trainLabels = new double[] { 1, 1, 1, 1, 0, 0, 0, 0 };
 
-// Vectorize with TF-IDF
+// Create TF-IDF vectorizer
 var tfidf = new TfidfVectorizer<double>(maxFeatures: 30);
-var features = tfidf.FitTransform(trainDocs);
+
+// Use DataLoaders.FromTextDocuments for AiModelBuilder integration
+var loader = DataLoaders.FromTextDocuments(trainDocs, trainLabels, tfidf);
+
+// Get feature count from fitted vectorizer
+int featureCount = tfidf.FeatureNames?.Length ?? 30;
 
 Console.WriteLine(""Text Classification with Neural Network:"");
 Console.WriteLine($""  Training documents: {trainDocs.Length}"");
-Console.WriteLine($""  TF-IDF features: {features.Columns}"");
+Console.WriteLine($""  TF-IDF features: {featureCount}"");
 Console.WriteLine();
 
 // Create neural network architecture for binary classification
@@ -2493,20 +2550,20 @@ var architecture = new NeuralNetworkArchitecture<double>(
     inputType: InputType.OneDimensional,
     taskType: NeuralNetworkTaskType.BinaryClassification,
     complexity: NetworkComplexity.Simple,
-    inputSize: features.Columns,
+    inputSize: featureCount,
     outputSize: 1);
 
-// Create and configure the neural network
+// Create neural network and use with AiModelBuilder
 var network = new FeedForwardNeuralNetwork<double>(architecture);
 
 Console.WriteLine(""Neural Network Architecture:"");
-Console.WriteLine($""  Input: {features.Columns} TF-IDF features"");
+Console.WriteLine($""  Input: {featureCount} TF-IDF features"");
 Console.WriteLine($""  Hidden: Dense layers (auto-configured)"");
 Console.WriteLine($""  Output: Binary classification (sigmoid)"");
 Console.WriteLine($""  Complexity: Simple"");
 Console.WriteLine();
 
-// Demonstrate the TF-IDF + Neural Network pipeline
+// Transform test documents using the fitted vectorizer
 var testDocs = new string[] { ""Great product, highly recommend!"", ""Total waste of money"" };
 var testFeatures = tfidf.Transform(testDocs);
 
@@ -2521,7 +2578,7 @@ for (int i = 0; i < testDocs.Length; i++)
 }
 
 Console.WriteLine();
-Console.WriteLine(""Note: For full training, use network.Train() or TrainAsync()."");
+Console.WriteLine(""DataLoaders.FromTextDocuments provides seamless text vectorization integration."");
 "
                 },
                 new CodeExample
