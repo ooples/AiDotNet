@@ -60,10 +60,9 @@ public class DataVersionControlIntegrationTests : IDisposable
     #region Constructor Tests
 
     [Fact]
-    public void Constructor_WithNullStorageDirectory_UsesDefaultDirectory()
+    public void Constructor_WithExplicitStorageDirectory_CreatesInstance()
     {
-        // This test needs careful handling as it creates in current directory
-        // Using explicit storage directory instead for isolation
+        // Test basic constructor with explicit storage directory
         var dvc = new DataVersionControl<double>(_storageDirectory);
         Assert.NotNull(dvc);
     }
@@ -772,7 +771,7 @@ public class DataVersionControlIntegrationTests : IDisposable
     }
 
     [Fact]
-    public void GetDatasetSnapshot_ReturnsFirstDataset()
+    public void GetDatasetSnapshot_ReturnsSnapshotMetadata()
     {
         var dvc = new DataVersionControl<double>(_storageDirectory);
         var dataPath1 = CreateTestFile("train.csv", "training");

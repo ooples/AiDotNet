@@ -20,13 +20,15 @@ public class AgentsIntegrationTests
     {
         private readonly Queue<string> _responses;
         private readonly Func<string, string>? _dynamicResponse;
+        private readonly object _lock = new();
+        private int _callCount;
 
         public string ModelName => "mock-model";
         public int MaxContextTokens => 4096;
         public int MaxGenerationTokens => 1024;
 
-        public int CallCount { get; private set; }
-        public List<string> ReceivedPrompts { get; } = new();
+        public int CallCount => _callCount;
+        public System.Collections.Concurrent.ConcurrentBag<string> ReceivedPrompts { get; } = new();
 
         public MockChatModel(params string[] responses)
         {
@@ -41,7 +43,7 @@ public class AgentsIntegrationTests
 
         public Task<string> GenerateResponseAsync(string prompt, CancellationToken cancellationToken = default)
         {
-            CallCount++;
+            System.Threading.Interlocked.Increment(ref _callCount);
             ReceivedPrompts.Add(prompt);
 
             if (_dynamicResponse != null)
@@ -49,7 +51,10 @@ public class AgentsIntegrationTests
                 return Task.FromResult(_dynamicResponse(prompt));
             }
 
-            return Task.FromResult(_responses.Count > 0 ? _responses.Dequeue() : "No more responses configured");
+            lock (_lock)
+            {
+                return Task.FromResult(_responses.Count > 0 ? _responses.Dequeue() : "No more responses configured");
+            }
         }
 
         public Task<string> GenerateAsync(string prompt, CancellationToken cancellationToken = default)

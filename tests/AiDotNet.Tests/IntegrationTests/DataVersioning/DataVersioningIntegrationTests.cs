@@ -62,17 +62,31 @@ public class DataVersioningIntegrationTests : IDisposable
     [Fact]
     public void Constructor_WithNullStorageDirectory_UsesDefaultDirectory()
     {
+        var expectedDefault = Path.Combine(Directory.GetCurrentDirectory(), "data-versions");
+        bool existedBefore = Directory.Exists(expectedDefault);
+
         // Act
         using var dvc = new DVC(null);
 
         // Assert
-        var expectedDefault = Path.Combine(Directory.GetCurrentDirectory(), "data-versions");
         Assert.Equal(expectedDefault, dvc.StorageDirectory);
 
-        // Cleanup
-        if (Directory.Exists(expectedDefault))
+        // Cleanup - only delete if we created it during this test, and only if empty or nearly empty
+        if (!existedBefore && Directory.Exists(expectedDefault))
         {
-            Directory.Delete(expectedDefault, true);
+            try
+            {
+                // Only delete if it's empty or contains only the test-created subdirectories
+                var files = Directory.GetFiles(expectedDefault, "*", SearchOption.AllDirectories);
+                if (files.Length == 0)
+                {
+                    Directory.Delete(expectedDefault, true);
+                }
+            }
+            catch
+            {
+                // Ignore cleanup errors - test data may need manual cleanup
+            }
         }
     }
 
@@ -498,7 +512,10 @@ public class DataVersioningIntegrationTests : IDisposable
         // Arrange
         using var dvc = new DVC(_storageDir);
         var id1 = dvc.CreateDataset("dataset-1");
+        // Small delay to ensure distinct timestamps (avoids timestamp-tie flakes)
+        System.Threading.Thread.Sleep(10);
         var id2 = dvc.CreateDataset("dataset-2");
+        System.Threading.Thread.Sleep(10);
 
         // Add a version to dataset-1 to update its LastUpdatedAt
         CreateTestFile("data.csv", "content");
