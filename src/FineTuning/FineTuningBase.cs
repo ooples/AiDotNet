@@ -277,8 +277,11 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
             return ComputeScalarLogProbability(predVal, targetVal);
         }
 
-        // Default: exact match gives 0 (log(1)), mismatch gives large negative
-        return prediction.Equals(target) ? 0.0 : -10.0;
+        // Default: use structural equality for value types, reference equality for others
+        // Note: Collections should have been handled by IEnumerable branch above
+        // This fallback is for custom types that may implement value-based Equals
+        bool areEqual = EqualityComparer<TOutput>.Default.Equals(prediction, target);
+        return areEqual ? 0.0 : -10.0;
     }
 
     /// <summary>
@@ -306,7 +309,17 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
                 target[i] = Convert.ToDouble(targetArray.GetValue(i));
             }
         }
-        catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
+        catch (InvalidCastException)
+        {
+            // If conversion fails, fall back to equality check using SequenceEqual
+            return predArray.Cast<object>().SequenceEqual(targetArray.Cast<object>()) ? 0.0 : -10.0;
+        }
+        catch (FormatException)
+        {
+            // If conversion fails, fall back to equality check using SequenceEqual
+            return predArray.Cast<object>().SequenceEqual(targetArray.Cast<object>()) ? 0.0 : -10.0;
+        }
+        catch (OverflowException)
         {
             // If conversion fails, fall back to equality check using SequenceEqual
             return predArray.Cast<object>().SequenceEqual(targetArray.Cast<object>()) ? 0.0 : -10.0;
@@ -387,23 +400,20 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
             // Use the array method
             return ComputeArrayLogProbability(predDouble, targetDouble);
         }
-        catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
+        catch (InvalidCastException)
         {
             // Fall back to sequence matching
-            int matches = 0;
-            int minLen = Math.Min(pred.Length, target.Length);
-            for (int i = 0; i < minLen; i++)
-            {
-                // Treat null-null as a match, otherwise use Equals comparison
-                if ((pred[i] == null && target[i] == null) || pred[i]?.Equals(target[i]) == true)
-                {
-                    matches++;
-                }
-            }
-
-            double matchRatio = minLen > 0 ? (double)matches / minLen : 0.0;
-            double lengthPenalty = Math.Abs(pred.Length - target.Length) * -0.1;
-            return Math.Log(Math.Max(matchRatio, 1e-10)) + lengthPenalty;
+            return ComputeSequenceMatchLogProbability(pred, target);
+        }
+        catch (FormatException)
+        {
+            // Fall back to sequence matching
+            return ComputeSequenceMatchLogProbability(pred, target);
+        }
+        catch (OverflowException)
+        {
+            // Fall back to sequence matching
+            return ComputeSequenceMatchLogProbability(pred, target);
         }
     }
 
@@ -422,6 +432,30 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
         // Using sigma = 1.0 as default scale
         const double sigma = 1.0;
         return -squaredError / (2.0 * sigma * sigma);
+    }
+
+    /// <summary>
+    /// Computes log probability using sequence element matching for non-numeric objects.
+    /// </summary>
+    /// <param name="pred">Predicted sequence.</param>
+    /// <param name="target">Target sequence.</param>
+    /// <returns>Log probability based on match ratio.</returns>
+    private static double ComputeSequenceMatchLogProbability(object[] pred, object[] target)
+    {
+        int matches = 0;
+        int minLen = Math.Min(pred.Length, target.Length);
+        for (int i = 0; i < minLen; i++)
+        {
+            // Treat null-null as a match, otherwise use Equals comparison
+            if ((pred[i] == null && target[i] == null) || pred[i]?.Equals(target[i]) == true)
+            {
+                matches++;
+            }
+        }
+
+        double matchRatio = minLen > 0 ? (double)matches / minLen : 0.0;
+        double lengthPenalty = Math.Abs(pred.Length - target.Length) * -0.1;
+        return Math.Log(Math.Max(matchRatio, 1e-10)) + lengthPenalty;
     }
 
     /// <summary>
