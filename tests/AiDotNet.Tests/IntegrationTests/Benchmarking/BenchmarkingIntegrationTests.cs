@@ -615,19 +615,19 @@ public class BenchmarkingIntegrationTests
     public void BenchmarkMetric_AllValues_AreValid()
     {
         // Act
-        var metrics = Enum.GetValues<BenchmarkMetric>();
+        var metrics = (BenchmarkMetric[])Enum.GetValues(typeof(BenchmarkMetric));
 
         // Assert
         Assert.Equal(8, metrics.Length);
 
-        Assert.Contains(BenchmarkMetric.Accuracy, metrics);
-        Assert.Contains(BenchmarkMetric.AverageConfidence, metrics);
-        Assert.Contains(BenchmarkMetric.TotalEvaluated, metrics);
-        Assert.Contains(BenchmarkMetric.CorrectCount, metrics);
-        Assert.Contains(BenchmarkMetric.TotalDurationMilliseconds, metrics);
-        Assert.Contains(BenchmarkMetric.AverageTimePerItemMilliseconds, metrics);
-        Assert.Contains(BenchmarkMetric.MeanSquaredError, metrics);
-        Assert.Contains(BenchmarkMetric.RootMeanSquaredError, metrics);
+        Assert.Contains(BenchmarkMetric.Accuracy, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.AverageConfidence, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.TotalEvaluated, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.CorrectCount, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.TotalDurationMilliseconds, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.AverageTimePerItemMilliseconds, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.MeanSquaredError, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.RootMeanSquaredError, (IEnumerable<BenchmarkMetric>)metrics);
     }
 
     #endregion
@@ -638,14 +638,14 @@ public class BenchmarkingIntegrationTests
     public void BenchmarkExecutionStatus_AllValues_AreValid()
     {
         // Act
-        var statuses = Enum.GetValues<BenchmarkExecutionStatus>();
+        var statuses = (BenchmarkExecutionStatus[])Enum.GetValues(typeof(BenchmarkExecutionStatus));
 
         // Assert
         Assert.Equal(3, statuses.Length);
 
-        Assert.Contains(BenchmarkExecutionStatus.Succeeded, statuses);
-        Assert.Contains(BenchmarkExecutionStatus.Failed, statuses);
-        Assert.Contains(BenchmarkExecutionStatus.Skipped, statuses);
+        Assert.Contains(BenchmarkExecutionStatus.Succeeded, (IEnumerable<BenchmarkExecutionStatus>)statuses);
+        Assert.Contains(BenchmarkExecutionStatus.Failed, (IEnumerable<BenchmarkExecutionStatus>)statuses);
+        Assert.Contains(BenchmarkExecutionStatus.Skipped, (IEnumerable<BenchmarkExecutionStatus>)statuses);
     }
 
     #endregion
@@ -656,14 +656,14 @@ public class BenchmarkingIntegrationTests
     public void BenchmarkSuiteKind_AllValues_AreValid()
     {
         // Act
-        var kinds = Enum.GetValues<BenchmarkSuiteKind>();
+        var kinds = (BenchmarkSuiteKind[])Enum.GetValues(typeof(BenchmarkSuiteKind));
 
         // Assert
         Assert.Equal(3, kinds.Length);
 
-        Assert.Contains(BenchmarkSuiteKind.Reasoning, kinds);
-        Assert.Contains(BenchmarkSuiteKind.DatasetSuite, kinds);
-        Assert.Contains(BenchmarkSuiteKind.System, kinds);
+        Assert.Contains(BenchmarkSuiteKind.Reasoning, (IEnumerable<BenchmarkSuiteKind>)kinds);
+        Assert.Contains(BenchmarkSuiteKind.DatasetSuite, (IEnumerable<BenchmarkSuiteKind>)kinds);
+        Assert.Contains(BenchmarkSuiteKind.System, (IEnumerable<BenchmarkSuiteKind>)kinds);
     }
 
     #endregion

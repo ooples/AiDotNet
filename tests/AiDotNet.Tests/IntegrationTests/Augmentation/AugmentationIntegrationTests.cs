@@ -919,7 +919,7 @@ public class AugmentationIntegrationTests
 
         // Assert - should have fewer words
         var originalWordCount = text[0].Split(' ').Length;
-        var resultWordCount = result[0].Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+        var resultWordCount = result[0].Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length;
         Assert.True(resultWordCount < originalWordCount || resultWordCount == originalWordCount);
     }
 
@@ -936,7 +936,7 @@ public class AugmentationIntegrationTests
 
         // Assert - words should still exist but potentially in different order
         var originalWords = text[0].Split(' ').ToHashSet();
-        var resultWords = result[0].Split(' ', StringSplitOptions.RemoveEmptyEntries).ToHashSet();
+        var resultWords = result[0].Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).ToHashSet();
         Assert.Equal(originalWords.Count, resultWords.Count);
         Assert.Subset(originalWords, resultWords);
     }
