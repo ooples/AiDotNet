@@ -1,8 +1,8 @@
-using Xunit;
-using AiDotNet.Evaluation;
 using AiDotNet.Enums;
+using AiDotNet.Evaluation;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Evaluation;
 
