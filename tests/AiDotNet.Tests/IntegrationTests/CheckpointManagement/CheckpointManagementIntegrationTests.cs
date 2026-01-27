@@ -64,9 +64,20 @@ public class CheckpointManagementIntegrationTests : IDisposable
         // When no directory specified, should use ./checkpoints
         var manager = new CheckpointManager<double, Matrix<double>, Vector<double>>();
 
-        var checkpointDir = manager.GetCheckpointDirectory();
-
-        Assert.Contains("checkpoints", checkpointDir);
+        try
+        {
+            var checkpointDir = manager.GetCheckpointDirectory();
+            Assert.Contains("checkpoints", checkpointDir);
+        }
+        finally
+        {
+            // Clean up the default directory if it was created
+            var defaultDir = Path.Combine(Directory.GetCurrentDirectory(), "checkpoints");
+            if (Directory.Exists(defaultDir) && Directory.GetFiles(defaultDir).Length == 0)
+            {
+                try { Directory.Delete(defaultDir); } catch { /* ignore cleanup errors */ }
+            }
+        }
     }
 
     #endregion
@@ -365,7 +376,8 @@ public class CheckpointManagementIntegrationTests : IDisposable
         Assert.Contains("improvement=True", str);
         Assert.Contains("keep=5", str);
         Assert.Contains("last=50", str);
-        Assert.Contains("0.1234", str);
+        // Use invariant culture formatting for decimal assertion to handle different locales
+        Assert.Contains(0.1234.ToString(System.Globalization.CultureInfo.InvariantCulture), str);
     }
 
     [Fact]

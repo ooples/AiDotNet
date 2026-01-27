@@ -600,26 +600,31 @@ public class FederatedLearningIntegrationTests
         var shamirType = typeof(ThresholdSecureAggregation<double>).Assembly
             .GetType("AiDotNet.FederatedLearning.Cryptography.ShamirSecretSharing");
 
-        if (shamirType != null)
+        // Skip if internal type is not available (may be refactored or renamed)
+        if (shamirType == null)
         {
-            var splitMethod = shamirType.GetMethod("SplitSecret",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-            var combineMethod = shamirType.GetMethod("CombineShares",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-
-            if (splitMethod != null && combineMethod != null)
-            {
-                var shares = (Dictionary<int, byte[]>)splitMethod.Invoke(null,
-                    new object[] { secret, xByRecipient, threshold, 42, "test" })!;
-
-                Assert.Equal(numShares, shares.Count);
-
-                var reconstructed = (byte[])combineMethod.Invoke(null,
-                    new object[] { shares, xByRecipient, threshold, secret.Length })!;
-
-                Assert.Equal(secret, reconstructed);
-            }
+            // Internal class not found - this is acceptable as implementation detail may change
+            return;
         }
+
+        var splitMethod = shamirType.GetMethod("SplitSecret",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        var combineMethod = shamirType.GetMethod("CombineShares",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+        // If type exists, methods should also exist
+        Assert.NotNull(splitMethod);
+        Assert.NotNull(combineMethod);
+
+        var shares = (Dictionary<int, byte[]>)splitMethod!.Invoke(null,
+            new object[] { secret, xByRecipient, threshold, 42, "test" })!;
+
+        Assert.Equal(numShares, shares.Count);
+
+        var reconstructed = (byte[])combineMethod!.Invoke(null,
+            new object[] { shares, xByRecipient, threshold, secret.Length })!;
+
+        Assert.Equal(secret, reconstructed);
     }
 
     [Fact]

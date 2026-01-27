@@ -780,7 +780,8 @@ public class BenchmarkingIntegrationTests
 
     private static void SetInternalProperty<TObject, TValue>(TObject obj, string propertyName, TValue value)
     {
-        var property = typeof(TObject).GetProperty(propertyName);
+        var property = typeof(TObject).GetProperty(propertyName,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
         if (property is null)
         {
             throw new InvalidOperationException($"Property {propertyName} not found on type {typeof(TObject).Name}");

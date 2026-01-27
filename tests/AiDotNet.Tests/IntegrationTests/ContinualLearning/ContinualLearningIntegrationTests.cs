@@ -726,8 +726,9 @@ public class ContinualLearningIntegrationTests
     }
 
     [Fact]
-    public void AllRegularizationStrategies_LossIsNonNegative()
+    public void CoreRegularizationStrategies_LossIsNonNegative()
     {
+        // Tests the three core regularization-based strategies: EWC, SI, and MAS
         var strategies = new IContinualLearningStrategy<double>[]
         {
             new ElasticWeightConsolidation<double>(),

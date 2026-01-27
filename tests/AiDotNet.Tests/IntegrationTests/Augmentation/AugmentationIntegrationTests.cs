@@ -1667,7 +1667,13 @@ public class AugmentationIntegrationTests
 
         // Assert - box should be rotated (and expanded to axis-aligned bounding box)
         Assert.Single(result.BoundingBoxes!);
-        // Rotated box will have different coordinates
+        var rotatedBox = result.BoundingBoxes![0];
+        // After 45-degree rotation, the axis-aligned bounding box enclosing the rotated square will be larger
+        // Original box: (40,40) to (60,60), 20x20 square centered at (50,50)
+        // Rotated 45 degrees: corners move to new positions, AABB will be roughly sqrt(2) times larger
+        // The exact values depend on rotation implementation, but box should have valid coordinates
+        Assert.True(rotatedBox.X2 > rotatedBox.X1, "Rotated box should have X2 > X1");
+        Assert.True(rotatedBox.Y2 > rotatedBox.Y1, "Rotated box should have Y2 > Y1");
     }
 
     #endregion

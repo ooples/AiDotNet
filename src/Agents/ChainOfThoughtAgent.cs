@@ -404,8 +404,8 @@ Final answer:";
     /// </summary>
     private string ExtractJsonFromResponse(string response)
     {
-        // Remove markdown code block markers if present
-        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*\})\s*```", RegexOptions.Multiline, RegexTimeout);
+        // Remove markdown code block markers if present (non-greedy to avoid spanning multiple code blocks)
+        var jsonMatch = Regex.Match(response, @"```(?:json)?\s*(\{[\s\S]*?\})\s*```", RegexOptions.Multiline, RegexTimeout);
         if (jsonMatch.Success)
         {
             return jsonMatch.Groups[1].Value;

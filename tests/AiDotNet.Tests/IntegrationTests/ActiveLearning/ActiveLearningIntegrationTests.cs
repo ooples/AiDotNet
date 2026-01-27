@@ -52,13 +52,15 @@ public class ActiveLearningIntegrationTests
     private static Tensor<double> CreatePoolWithKnownUncertainty(int numSamples, int numFeatures)
     {
         var data = new double[numSamples * numFeatures];
+        // Guard against divide-by-zero when numSamples is 1
+        double divisor = numSamples > 1 ? numSamples - 1 : 1.0;
         for (int i = 0; i < numSamples; i++)
         {
             // Feature values encode the sample index to create predictable uncertainty
             for (int j = 0; j < numFeatures; j++)
             {
                 // Sample 0 gets values near 1 (confident), Sample N-1 gets values near 0.5 (uncertain)
-                data[i * numFeatures + j] = 1.0 - (0.5 * i / (numSamples - 1));
+                data[i * numFeatures + j] = 1.0 - (0.5 * i / divisor);
             }
         }
         return new Tensor<double>(new[] { numSamples, numFeatures }, new Vector<double>(data));
@@ -396,6 +398,10 @@ public class ActiveLearningIntegrationTests
         // Assert - All scores should be the same (or very close due to implementation)
         var firstScore = scores[0];
         // Random sampling typically assigns equal informativeness
+        foreach (var score in scores)
+        {
+            Assert.Equal(firstScore, score, 1e-10);
+        }
     }
 
     #endregion
