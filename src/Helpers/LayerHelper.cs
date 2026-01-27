@@ -10124,4 +10124,612 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Finance Model Layers
+
+    /// <summary>
+    /// Creates the default layers for a PatchTST (Patch Time Series Transformer) network.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">Input sequence length.</param>
+    /// <param name="predictionHorizon">Number of future time steps to predict.</param>
+    /// <param name="numFeatures">Number of input features (channels).</param>
+    /// <param name="patchSize">Size of each patch (segment of time series).</param>
+    /// <param name="stride">Stride between consecutive patches.</param>
+    /// <param name="numLayers">Number of transformer encoder layers.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="modelDimension">Model dimension (embedding size).</param>
+    /// <param name="feedForwardDimension">Feedforward network dimension.</param>
+    /// <returns>A collection of layers forming a PatchTST network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PatchTST (Patch Time Series Transformer) is a modern architecture
+    /// for time series forecasting that works by dividing the input into patches (segments)
+    /// and processing them with a transformer encoder.
+    /// </para>
+    /// <para>
+    /// Think of it like reading a book by looking at groups of words (patches) instead of
+    /// individual letters. This makes it faster and often more accurate for time series forecasting.
+    /// </para>
+    /// <para>
+    /// The architecture includes:
+    /// <list type="bullet">
+    /// <item>Patch embedding: Converts each patch into a dense vector representation</item>
+    /// <item>Transformer encoder layers: Process the patches using self-attention</item>
+    /// <item>Layer normalization: Stabilizes training</item>
+    /// <item>Output projection: Maps the encoder output to the prediction horizon</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultPatchTSTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 24,
+        int numFeatures = 7,
+        int patchSize = 16,
+        int stride = 8,
+        int numLayers = 3,
+        int numHeads = 4,
+        int modelDimension = 128,
+        int feedForwardDimension = 256)
+    {
+        // Validate parameters
+        if (sequenceLength < patchSize)
+            throw new ArgumentException("Sequence length must be at least patch size.", nameof(sequenceLength));
+        if (patchSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "Patch size must be at least 1.");
+        if (stride < 1 || stride > patchSize)
+            throw new ArgumentOutOfRangeException(nameof(stride), "Stride must be between 1 and patch size.");
+        if (modelDimension % numHeads != 0)
+            throw new ArgumentException("Model dimension must be divisible by number of heads.", nameof(modelDimension));
+
+        // Calculate number of patches
+        int numPatches = (sequenceLength - patchSize) / stride + 1;
+
+        // Patch embedding: maps each patch from patchSize to modelDimension
+        yield return new DenseLayer<T>(
+            inputSize: patchSize,
+            outputSize: modelDimension,
+            activationFunction: new ReLUActivation<T>());
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                embeddingSize: modelDimension,
+                numHeads: numHeads,
+                feedForwardDim: feedForwardDimension);
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+
+        // Output projection: maps from (numPatches * modelDimension) to predictionHorizon
+        yield return new DenseLayer<T>(
+            inputSize: numPatches * modelDimension,
+            outputSize: predictionHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for an iTransformer (Inverted Transformer) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">The input sequence length (default: 96).</param>
+    /// <param name="predictionHorizon">The number of future time steps to predict (default: 96).</param>
+    /// <param name="numFeatures">The number of input features/variables (default: 7).</param>
+    /// <param name="numLayers">The number of transformer encoder layers (default: 2).</param>
+    /// <param name="numHeads">The number of attention heads (default: 8).</param>
+    /// <param name="modelDimension">The model embedding dimension (default: 512).</param>
+    /// <param name="feedForwardDimension">The feedforward network dimension (default: 512).</param>
+    /// <returns>A collection of layers forming an iTransformer network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> iTransformer "inverts" the traditional transformer approach for time series.
+    /// Instead of treating each time step as a token (like PatchTST), iTransformer treats each
+    /// variable/feature as a token. This allows the model to learn relationships between variables
+    /// (like how price relates to volume) using the attention mechanism.
+    /// </para>
+    /// <para>
+    /// The architecture consists of:
+    /// <list type="bullet">
+    /// <item>Variate embedding: Embeds the entire time series of each variable into a token</item>
+    /// <item>Transformer encoders: Learn cross-variable dependencies via attention</item>
+    /// <item>Output projection: Maps learned representations to predictions</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Liu et al., "iTransformer: Inverted Transformers Are Effective for Time Series Forecasting",
+    /// ICLR 2024.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultITransformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 96,
+        int numFeatures = 7,
+        int numLayers = 2,
+        int numHeads = 8,
+        int modelDimension = 512,
+        int feedForwardDimension = 512)
+    {
+        // Validate parameters
+        if (sequenceLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "Sequence length must be at least 1.");
+        if (predictionHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(predictionHorizon), "Prediction horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (numLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be at least 1.");
+        if (modelDimension % numHeads != 0)
+            throw new ArgumentException("Model dimension must be divisible by number of heads.", nameof(modelDimension));
+
+        // Variate embedding: maps each variable's time series to a token embedding
+        // Input: [batch, seq_len] per variable -> Output: [batch, model_dim] per variable
+        yield return new DenseLayer<T>(
+            inputSize: sequenceLength,
+            outputSize: modelDimension,
+            activationFunction: new ReLUActivation<T>());
+
+        // Transformer encoder layers with attention across variables
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                embeddingSize: modelDimension,
+                numHeads: numHeads,
+                feedForwardDim: feedForwardDimension);
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+
+        // Output projection: maps from model dimension to prediction horizon
+        // Each variable token produces its own forecast
+        yield return new DenseLayer<T>(
+            inputSize: modelDimension,
+            outputSize: predictionHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for a FEDformer (Frequency Enhanced Decomposed Transformer) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">The input sequence length (default: 96).</param>
+    /// <param name="predictionHorizon">The number of future time steps to predict (default: 96).</param>
+    /// <param name="numFeatures">The number of input features/variables (default: 7).</param>
+    /// <param name="numEncoderLayers">The number of encoder layers (default: 2).</param>
+    /// <param name="numDecoderLayers">The number of decoder layers (default: 1).</param>
+    /// <param name="numHeads">The number of attention heads (default: 8).</param>
+    /// <param name="modelDimension">The model embedding dimension (default: 512).</param>
+    /// <param name="feedForwardDimension">The feedforward network dimension (default: 2048).</param>
+    /// <returns>A collection of layers forming a FEDformer network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FEDformer uses frequency-domain attention instead of standard attention,
+    /// which makes it much faster (linear complexity vs quadratic). It also decomposes the time series
+    /// into trend and seasonal components for better interpretability.
+    /// </para>
+    /// <para>
+    /// The architecture consists of:
+    /// <list type="bullet">
+    /// <item>Input embedding: Projects input features to model dimension</item>
+    /// <item>Encoder: Processes input with frequency-enhanced attention</item>
+    /// <item>Decoder: Generates predictions using cross-attention with encoder</item>
+    /// <item>Output projection: Maps to final predictions</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Zhou et al., "FEDformer: Frequency Enhanced Decomposed Transformer",
+    /// ICML 2022.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFEDformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 96,
+        int numFeatures = 7,
+        int numEncoderLayers = 2,
+        int numDecoderLayers = 1,
+        int numHeads = 8,
+        int modelDimension = 512,
+        int feedForwardDimension = 2048)
+    {
+        // Validate parameters
+        if (sequenceLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "Sequence length must be at least 1.");
+        if (predictionHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(predictionHorizon), "Prediction horizon must be at least 1.");
+        if (numEncoderLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numEncoderLayers), "Number of encoder layers must be at least 1.");
+        if (modelDimension % numHeads != 0)
+            throw new ArgumentException("Model dimension must be divisible by number of heads.", nameof(modelDimension));
+
+        // Input embedding
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: modelDimension,
+            activationFunction: new ReLUActivation<T>());
+
+        // Encoder layers (using standard transformer encoder as approximation)
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                embeddingSize: modelDimension,
+                numHeads: numHeads,
+                feedForwardDim: feedForwardDimension);
+        }
+
+        // Decoder layers
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                embeddingSize: modelDimension,
+                numHeads: numHeads,
+                feedForwardDim: feedForwardDimension);
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+
+        // Output projection
+        yield return new DenseLayer<T>(
+            inputSize: modelDimension,
+            outputSize: numFeatures,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for an Autoformer model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">The input sequence length (default: 96).</param>
+    /// <param name="predictionHorizon">The number of future time steps to predict (default: 96).</param>
+    /// <param name="numFeatures">The number of input features/variables (default: 7).</param>
+    /// <param name="numEncoderLayers">The number of encoder layers (default: 2).</param>
+    /// <param name="numDecoderLayers">The number of decoder layers (default: 1).</param>
+    /// <param name="numHeads">The number of attention heads (default: 8).</param>
+    /// <param name="modelDimension">The model embedding dimension (default: 512).</param>
+    /// <param name="feedForwardDimension">The feedforward network dimension (default: 2048).</param>
+    /// <returns>A collection of layers forming an Autoformer network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Autoformer replaces standard attention with "Auto-Correlation" which
+    /// discovers period-based dependencies by measuring similarity between different time lags.
+    /// It's like finding repeating patterns in music by checking if the beat matches at different delays.
+    /// </para>
+    /// <para>
+    /// Key innovations:
+    /// <list type="bullet">
+    /// <item>Auto-Correlation: Finds periodic patterns efficiently using FFT</item>
+    /// <item>Series Decomposition: Separates trend from seasonal patterns progressively</item>
+    /// <item>O(L log L) complexity: Much faster than standard attention</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Wu et al., "Autoformer: Decomposition Transformers with Auto-Correlation",
+    /// NeurIPS 2021.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultAutoformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 96,
+        int numFeatures = 7,
+        int numEncoderLayers = 2,
+        int numDecoderLayers = 1,
+        int numHeads = 8,
+        int modelDimension = 512,
+        int feedForwardDimension = 2048)
+    {
+        // Validate parameters
+        if (sequenceLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "Sequence length must be at least 1.");
+        if (predictionHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(predictionHorizon), "Prediction horizon must be at least 1.");
+        if (modelDimension % numHeads != 0)
+            throw new ArgumentException("Model dimension must be divisible by number of heads.", nameof(modelDimension));
+
+        // Input embedding
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: modelDimension,
+            activationFunction: new ReLUActivation<T>());
+
+        // Encoder layers with auto-correlation (using transformer encoder as base)
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                embeddingSize: modelDimension,
+                numHeads: numHeads,
+                feedForwardDim: feedForwardDimension);
+        }
+
+        // Decoder layers
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                embeddingSize: modelDimension,
+                numHeads: numHeads,
+                feedForwardDim: feedForwardDimension);
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+
+        // Output projection
+        yield return new DenseLayer<T>(
+            inputSize: modelDimension,
+            outputSize: numFeatures,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for an Informer model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">The input sequence length (default: 96).</param>
+    /// <param name="predictionHorizon">The number of future time steps to predict (default: 96).</param>
+    /// <param name="numFeatures">The number of input features/variables (default: 7).</param>
+    /// <param name="numEncoderLayers">The number of encoder layers (default: 2).</param>
+    /// <param name="numDecoderLayers">The number of decoder layers (default: 1).</param>
+    /// <param name="numHeads">The number of attention heads (default: 8).</param>
+    /// <param name="modelDimension">The model embedding dimension (default: 512).</param>
+    /// <param name="feedForwardDimension">The feedforward network dimension (default: 2048).</param>
+    /// <returns>A collection of layers forming an Informer network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Informer was one of the first transformers designed specifically for
+    /// long sequence time series forecasting. It introduces "ProbSparse" attention which only
+    /// computes attention for the most important query-key pairs, making it much faster.
+    /// </para>
+    /// <para>
+    /// Key innovations:
+    /// <list type="bullet">
+    /// <item>ProbSparse Attention: Only attends to top-k important positions</item>
+    /// <item>Self-attention Distilling: Progressively reduces sequence length</item>
+    /// <item>Generative Decoder: Predicts all future values at once</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Zhou et al., "Informer: Beyond Efficient Transformer for Long Sequence
+    /// Time-Series Forecasting", AAAI 2021.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultInformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 96,
+        int numFeatures = 7,
+        int numEncoderLayers = 2,
+        int numDecoderLayers = 1,
+        int numHeads = 8,
+        int modelDimension = 512,
+        int feedForwardDimension = 2048)
+    {
+        // Validate parameters
+        if (sequenceLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "Sequence length must be at least 1.");
+        if (predictionHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(predictionHorizon), "Prediction horizon must be at least 1.");
+        if (modelDimension % numHeads != 0)
+            throw new ArgumentException("Model dimension must be divisible by number of heads.", nameof(modelDimension));
+
+        // Input embedding
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: modelDimension,
+            activationFunction: new ReLUActivation<T>());
+
+        // Encoder layers with ProbSparse attention (using transformer encoder as approximation)
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                embeddingSize: modelDimension,
+                numHeads: numHeads,
+                feedForwardDim: feedForwardDimension);
+        }
+
+        // Decoder layers
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                embeddingSize: modelDimension,
+                numHeads: numHeads,
+                feedForwardDim: feedForwardDimension);
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+
+        // Output projection
+        yield return new DenseLayer<T>(
+            inputSize: modelDimension,
+            outputSize: numFeatures,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layers for a Temporal Fusion Transformer (TFT) architecture.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">Input sequence length (lookback window).</param>
+    /// <param name="predictionHorizon">Number of future steps to predict.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="hiddenSize">Hidden state size for LSTM and attention.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="numLayers">Number of GRN layers.</param>
+    /// <param name="dropout">Dropout rate for regularization.</param>
+    /// <returns>An enumerable of layers configured for TFT.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TFT uses a combination of LSTM, attention, and gating mechanisms:
+    /// </para>
+    /// <para>
+    /// <list type="bullet">
+    /// <item><b>Variable Selection:</b> Learns which features are most important</item>
+    /// <item><b>LSTM:</b> Captures local temporal patterns</item>
+    /// <item><b>GRN:</b> Gated Residual Networks for flexible processing</item>
+    /// <item><b>Attention:</b> Focuses on important time periods</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTFTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 24,
+        int predictionHorizon = 6,
+        int numFeatures = 7,
+        int hiddenSize = 128,
+        int numHeads = 4,
+        int numLayers = 2,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (sequenceLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "Sequence length must be at least 1.");
+        if (predictionHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(predictionHorizon), "Prediction horizon must be at least 1.");
+        if (hiddenSize % numHeads != 0)
+            throw new ArgumentException("Hidden size must be divisible by number of heads.", nameof(hiddenSize));
+
+        // Variable selection network (encoder)
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: hiddenSize,
+            activationFunction: new ReLUActivation<T>());
+
+        // LSTM Encoder
+        // Input shape: [batch, sequence, features] where features = hiddenSize after embedding
+        yield return new LSTMLayer<T>(
+            inputSize: hiddenSize,
+            hiddenSize: hiddenSize,
+            inputShape: new[] { 1, sequenceLength, hiddenSize },
+            activation: (IActivationFunction<T>?)null,
+            recurrentActivation: null,
+            engine: null);
+
+        // LSTM Decoder
+        // Input shape: [batch, sequence, features] where features = hiddenSize from encoder
+        yield return new LSTMLayer<T>(
+            inputSize: hiddenSize,
+            hiddenSize: hiddenSize,
+            inputShape: new[] { 1, predictionHorizon, hiddenSize },
+            activation: (IActivationFunction<T>?)null,
+            recurrentActivation: null,
+            engine: null);
+
+        // Gated Residual Network layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new DenseLayer<T>(
+                inputSize: hiddenSize,
+                outputSize: hiddenSize,
+                activationFunction: new ELUActivation<T>());
+        }
+
+        // Interpretable multi-head attention
+        yield return new TransformerEncoderLayer<T>(
+            embeddingSize: hiddenSize,
+            numHeads: numHeads,
+            feedForwardDim: hiddenSize * 4);
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+        // Output projection: maps to prediction horizon
+        yield return new DenseLayer<T>(
+            inputSize: hiddenSize,
+            outputSize: predictionHorizon * numFeatures,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the Crossformer (Cross-Dimension Transformer) architecture.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">The input sequence length. Default: 96.</param>
+    /// <param name="predictionHorizon">The number of future time steps to predict. Default: 24.</param>
+    /// <param name="numFeatures">The number of input features/variables. Default: 7.</param>
+    /// <param name="segmentLength">The length of each time segment. Default: 12.</param>
+    /// <param name="modelDimension">The model dimension (embedding size). Default: 128.</param>
+    /// <param name="numHeads">The number of attention heads. Default: 4.</param>
+    /// <param name="numLayers">The number of transformer layers. Default: 3.</param>
+    /// <param name="dropout">The dropout rate. Default: 0.1.</param>
+    /// <returns>An enumerable of layers comprising the Crossformer architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// Crossformer uses a two-stage attention mechanism (TSA) that captures both temporal
+    /// dependencies and cross-variable relationships through:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><b>Cross-Time Attention:</b> Captures temporal patterns within each variable</item>
+    /// <item><b>Cross-Dimension Attention:</b> Captures relationships across variables</item>
+    /// <item><b>Hierarchical Structure:</b> Processes at multiple time scales</item>
+    /// </list>
+    /// <para>
+    /// <b>For Beginners:</b> Crossformer is designed for multivariate time series where both
+    /// the relationship between time steps AND the relationship between different variables
+    /// matter. For example, in stock prediction, Crossformer can learn that price going up
+    /// AND volume going down together have a specific meaning.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultCrossformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 24,
+        int numFeatures = 7,
+        int segmentLength = 12,
+        int modelDimension = 128,
+        int numHeads = 4,
+        int numLayers = 3,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (sequenceLength < segmentLength)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "Sequence length must be at least segment length.");
+        if (predictionHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(predictionHorizon), "Prediction horizon must be at least 1.");
+        if (modelDimension % numHeads != 0)
+            throw new ArgumentException("Model dimension must be divisible by number of heads.", nameof(modelDimension));
+
+        int numSegments = (sequenceLength + segmentLength - 1) / segmentLength;
+
+        // Dimension-Segment Embedding (DSE)
+        // Embeds each segment for each dimension/variable
+        yield return new DenseLayer<T>(
+            inputSize: segmentLength * numFeatures,
+            outputSize: modelDimension,
+            activationFunction: new GELUActivation<T>());
+
+        // Two-Stage Attention (TSA) Layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Cross-Time Attention
+            yield return new TransformerEncoderLayer<T>(
+                embeddingSize: modelDimension,
+                numHeads: numHeads,
+                feedForwardDim: modelDimension * 4);
+
+            // Cross-Dimension Attention
+            yield return new TransformerEncoderLayer<T>(
+                embeddingSize: modelDimension,
+                numHeads: numHeads,
+                feedForwardDim: modelDimension * 4);
+
+            // Dropout between stages
+            yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+
+        // Output projection to prediction horizon
+        yield return new DenseLayer<T>(
+            inputSize: modelDimension,
+            outputSize: predictionHorizon * numFeatures,
+            activationFunction: null);
+    }
+
+    #endregion
 }

@@ -100,23 +100,44 @@ public interface IFinancialModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
     /// </returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Uncertainty quantification tells you not just the predicted value,
-    /// but also how confident the model is. For example, quantiles [0.1, 0.5, 0.9] give you:
-    /// - 10th percentile (lower bound with 80% confidence)
-    /// - 50th percentile (median prediction)
-    /// - 90th percentile (upper bound with 80% confidence)
+    /// <b>For Beginners:</b> This method makes predictions about future values based on historical data.
+    /// Uncertainty quantification tells you not just the predicted value, but also how confident
+    /// the model is. For example, quantiles [0.1, 0.5, 0.9] give you:
+    /// </para>
+    /// <para>
+    /// <list type="bullet">
+    /// <item>10th percentile (lower bound with 80% confidence)</item>
+    /// <item>50th percentile (median prediction)</item>
+    /// <item>90th percentile (upper bound with 80% confidence)</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// var forecast = model.Forecast(historicalData, quantiles: new[] { 0.1, 0.5, 0.9 });
+    /// // forecast[0] = lower bound, forecast[1] = median, forecast[2] = upper bound
+    /// </code>
     /// </para>
     /// </remarks>
     Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null);
 
     /// <summary>
-    /// Gets the name of the model architecture.
-    /// </summary>
-    string ModelName { get; }
-
-    /// <summary>
     /// Gets financial-specific metrics from the model.
     /// </summary>
     /// <returns>Dictionary containing financial metrics like MAE, RMSE, MAPE, etc.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method returns a dictionary of metrics that describe
+    /// the model's performance and configuration. Common metrics include:
+    /// </para>
+    /// <para>
+    /// <list type="bullet">
+    /// <item><b>MAE</b>: Mean Absolute Error - average prediction error</item>
+    /// <item><b>RMSE</b>: Root Mean Squared Error - emphasizes larger errors</item>
+    /// <item><b>MAPE</b>: Mean Absolute Percentage Error - error as a percentage</item>
+    /// <item><b>ParameterCount</b>: Number of trainable parameters in the model</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     Dictionary<string, T> GetFinancialMetrics();
 }
