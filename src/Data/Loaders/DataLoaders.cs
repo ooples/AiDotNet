@@ -289,6 +289,45 @@ public static class DataLoaders
     }
 
     /// <summary>
+    /// Creates a data loader from a feature Matrix only (for unsupervised learning like clustering).
+    /// </summary>
+    /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
+    /// <param name="features">Matrix where rows are samples and columns are features.</param>
+    /// <returns>A configured InMemoryDataLoader ready for unsupervised training.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when features is null.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for unsupervised learning algorithms like clustering
+    /// where you don't have labels - the algorithm discovers patterns on its own.
+    ///
+    /// **Example - Clustering Customer Data:**
+    /// ```csharp
+    /// // Features: [age, income, spending_score]
+    /// var features = new Matrix&lt;double&gt;(100, 3);
+    /// // Fill with customer data...
+    ///
+    /// var loader = DataLoaders.FromMatrix(features);
+    ///
+    /// // Use with AiModelBuilder for clustering
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureDataLoader(loader)
+    ///     .ConfigureModel(new KMeans&lt;double&gt;(new KMeansOptions&lt;double&gt; { NumClusters = 3 }))
+    ///     .BuildAsync();
+    /// ```
+    /// </para>
+    /// </remarks>
+    public static InMemoryDataLoader<T, Matrix<T>, Vector<T>> FromMatrix<T>(Matrix<T> features)
+    {
+        if (features is null)
+        {
+            throw new ArgumentNullException(nameof(features), "Features matrix cannot be null.");
+        }
+
+        // For unsupervised learning, create a dummy label vector (not used by clustering algorithms)
+        var dummyLabels = new Vector<T>(features.Rows);
+        return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(features, dummyLabels);
+    }
+
+    /// <summary>
     /// Creates a data loader from a feature Matrix and label Matrix (for multi-output regression).
     /// </summary>
     /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>
