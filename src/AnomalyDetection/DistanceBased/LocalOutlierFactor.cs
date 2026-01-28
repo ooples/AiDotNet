@@ -145,18 +145,10 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            double lofScore;
-
-            if (isTrainingData)
-            {
-                // Use precomputed values for training data
-                lofScore = ComputeLOFScore(i);
-            }
-            else
-            {
-                // Compute LOF for new data point
-                lofScore = ComputeLOFScoreForNewPoint(X.GetRow(i));
-            }
+            // Use precomputed values for training data, otherwise compute for new point
+            double lofScore = isTrainingData
+                ? ComputeLOFScore(i)
+                : ComputeLOFScoreForNewPoint(X.GetRow(i));
 
             // LOF > 1 indicates anomaly, higher = more anomalous
             scores[i] = NumOps.FromDouble(lofScore);
@@ -250,15 +242,10 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
             }
 
             // LRD = k / sum of reachability distances
-            if (NumOps.GreaterThan(reachabilitySum, NumOps.Zero))
-            {
-                lrd[i] = NumOps.Divide(NumOps.FromDouble(_numNeighbors), reachabilitySum);
-            }
-            else
-            {
-                // If all neighbors are at distance 0, assign high LRD
-                lrd[i] = NumOps.FromDouble(double.MaxValue);
-            }
+            // If all neighbors are at distance 0, assign high LRD
+            lrd[i] = NumOps.GreaterThan(reachabilitySum, NumOps.Zero)
+                ? NumOps.Divide(NumOps.FromDouble(_numNeighbors), reachabilitySum)
+                : NumOps.FromDouble(double.MaxValue);
         }
 
         return lrd;
@@ -304,15 +291,9 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
             reachabilitySum = NumOps.Add(reachabilitySum, reachDist);
         }
 
-        T pointLrd;
-        if (NumOps.GreaterThan(reachabilitySum, NumOps.Zero))
-        {
-            pointLrd = NumOps.Divide(NumOps.FromDouble(_numNeighbors), reachabilitySum);
-        }
-        else
-        {
-            pointLrd = NumOps.FromDouble(double.MaxValue);
-        }
+        T pointLrd = NumOps.GreaterThan(reachabilitySum, NumOps.Zero)
+            ? NumOps.Divide(NumOps.FromDouble(_numNeighbors), reachabilitySum)
+            : NumOps.FromDouble(double.MaxValue);
 
         // Compute LOF
         T lofSum = NumOps.Zero;

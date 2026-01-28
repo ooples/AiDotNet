@@ -179,6 +179,13 @@ public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        if (_inputDim != 0 && X.Columns != _inputDim)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_inputDim} features.",
+                nameof(X));
+        }
+
         var scores = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)

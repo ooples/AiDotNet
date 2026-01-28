@@ -44,6 +44,7 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
     private readonly int _maxSamples;
     private List<IsolationTree>? _trees;
     private double _averagePathLength;
+    private int _inputDim;
 
     /// <summary>
     /// Gets the number of trees in the forest.
@@ -116,8 +117,17 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        _inputDim = X.Columns;
         int n = X.Rows;
         int effectiveMaxSamples = Math.Min(_maxSamples, n);
+
+        if (effectiveMaxSamples < 2)
+        {
+            throw new ArgumentException(
+                $"Isolation Forest requires at least 2 samples. Got {n} samples with maxSamples={_maxSamples}.",
+                nameof(X));
+        }
+
         int maxDepth = (int)Math.Ceiling(Math.Log(effectiveMaxSamples) / Math.Log(2));
 
         // Calculate the average path length for normalization
@@ -151,6 +161,19 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
     private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
     {
         ValidateInput(X);
+
+        if (X.Columns != _inputDim)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_inputDim} features.",
+                nameof(X));
+        }
+
+        if (_averagePathLength <= 0)
+        {
+            throw new InvalidOperationException(
+                "Average path length is invalid. Ensure the model was fitted with at least 2 samples.");
+        }
 
         var scores = new Vector<T>(X.Rows);
 
@@ -271,14 +294,9 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
             return currentDepth + AveragePathLength(node.Size);
         }
 
-        if (NumOps.LessThan(point[node.SplitFeature], node.SplitValue))
-        {
-            return PathLength(point, node.Left!, currentDepth + 1);
-        }
-        else
-        {
-            return PathLength(point, node.Right!, currentDepth + 1);
-        }
+        return NumOps.LessThan(point[node.SplitFeature], node.SplitValue)
+            ? PathLength(point, node.Left!, currentDepth + 1)
+            : PathLength(point, node.Right!, currentDepth + 1);
     }
 
     /// <summary>

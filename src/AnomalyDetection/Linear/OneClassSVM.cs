@@ -117,10 +117,22 @@ public class OneClassSVM<T> : AnomalyDetectorBase<T>
                 "It roughly represents the expected proportion of outliers.");
         }
 
+        if (double.IsNaN(gamma) || double.IsInfinity(gamma))
+        {
+            throw new ArgumentOutOfRangeException(nameof(gamma),
+                "Gamma must be a finite number.");
+        }
+
         if (maxIterations < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(maxIterations),
                 "Max iterations must be at least 1.");
+        }
+
+        if (tolerance <= 0 || double.IsNaN(tolerance) || double.IsInfinity(tolerance))
+        {
+            throw new ArgumentOutOfRangeException(nameof(tolerance),
+                "Tolerance must be a positive, finite value.");
         }
 
         _nu = nu;

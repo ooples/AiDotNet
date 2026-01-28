@@ -176,7 +176,15 @@ public abstract class AnomalyDetectorBase<T> : IAnomalyDetector<T>
 
         // Find the index corresponding to the (1 - contamination) percentile
         // Higher scores = more anomalous, so we want the top contamination% to be anomalies
-        int thresholdIndex = (int)Math.Floor((1 - _contamination) * sortedScores.Length);
+        // Use Ceiling to ensure at least one outlier can be detected on small datasets
+        int numOutliers = (int)Math.Ceiling(_contamination * sortedScores.Length);
+        // Ensure at least 1 outlier when dataset has more than 1 sample
+        if (numOutliers == 0 && sortedScores.Length > 1)
+        {
+            numOutliers = 1;
+        }
+
+        int thresholdIndex = sortedScores.Length - numOutliers;
         thresholdIndex = Math.Max(0, Math.Min(thresholdIndex, sortedScores.Length - 1));
 
         _threshold = sortedScores[thresholdIndex];
