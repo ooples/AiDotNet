@@ -1,6 +1,6 @@
 using System.IO;
 using AiDotNet.Finance.Interfaces;
-using AiDotNet.Finance.Options;
+using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -534,6 +534,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, UpdateParameters updates internal parameters or state. This keeps the FEDformer architecture aligned with the latest values.
+    /// </para>
+    /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (parameters is null)
@@ -550,6 +555,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, GetModelMetadata performs a supporting step in the workflow. It keeps the FEDformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -572,6 +582,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, CreateNewInstance builds and wires up model components. This sets up the FEDformer architecture before use.
+    /// </para>
+    /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (_useNativeMode)
@@ -592,6 +607,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the FEDformer architecture be reused later.
+    /// </para>
+    /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_sequenceLength);
@@ -609,6 +629,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the FEDformer architecture be reused later.
+    /// </para>
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _ = reader.ReadInt32(); // sequenceLength
@@ -630,6 +655,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, Forecast produces predictions from input data. This is the main inference step of the FEDformer architecture.
+    /// </para>
+    /// </remarks>
     public Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         if (input is null)
@@ -639,6 +669,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the FEDformer architecture.
+    /// </para>
+    /// </remarks>
     public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         if (input is null)
@@ -667,6 +702,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, Evaluate performs a supporting step in the workflow. It keeps the FEDformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
     {
         if (inputs is null)
@@ -699,6 +739,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the FEDformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         if (!_useInstanceNormalization)
@@ -708,6 +753,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the FEDformer architecture is performing.
+    /// </para>
+    /// </remarks>
     public Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
@@ -789,6 +839,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Forecasts using native layers.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, ForecastNative produces predictions from input data. This is the main inference step of the FEDformer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         SetTrainingMode(false);
@@ -798,6 +853,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Forecasts using ONNX model.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, ForecastOnnx produces predictions from input data. This is the main inference step of the FEDformer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)
@@ -838,6 +898,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Applies RevIN (Reversible Instance Normalization).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, ApplyRevIN performs a supporting step in the workflow. It keeps the FEDformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
         var result = new Tensor<T>(input.Shape);
@@ -875,6 +940,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Calculates the mean for each feature.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, CalculateInstanceMean performs a supporting step in the workflow. It keeps the FEDformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private Tensor<T> CalculateInstanceMean(Tensor<T> input)
     {
         var mean = new T[_numFeatures];
@@ -896,6 +966,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Calculates the standard deviation for each feature.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, CalculateInstanceStd performs a supporting step in the workflow. It keeps the FEDformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private Tensor<T> CalculateInstanceStd(Tensor<T> input, Tensor<T> mean)
     {
         var std = new T[_numFeatures];
@@ -919,6 +994,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Shifts input with predictions for autoregressive forecasting.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, ShiftInputWithPredictions produces predictions from input data. This is the main inference step of the FEDformer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsToShift)
     {
         var newData = new T[input.Length];
@@ -933,6 +1013,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Concatenates multiple predictions.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, ConcatenatePredictions produces predictions from input data. This is the main inference step of the FEDformer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         var outputData = new T[totalSteps * _numFeatures];
@@ -958,6 +1043,11 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IDisposable
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the FEDformer model, Dispose performs a supporting step in the workflow. It keeps the FEDformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     protected override void Dispose(bool disposing)
     {
         if (disposing)

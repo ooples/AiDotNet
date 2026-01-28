@@ -1,6 +1,6 @@
 using System.IO;
 using AiDotNet.Finance.Interfaces;
-using AiDotNet.Finance.Options;
+using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;

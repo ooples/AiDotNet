@@ -49,7 +49,7 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// <summary>
     /// Indicates whether this model uses native layers (true) or ONNX model (false).
     /// </summary>
-    private readonly bool _useNativeMode;
+    protected readonly bool _useNativeMode;
 
     #endregion
 
@@ -113,9 +113,6 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// <inheritdoc/>
     public int NumFeatures => _numFeatures;
 
-    /// <inheritdoc/>
-    public abstract string ModelName { get; }
-
     /// <summary>
     /// Gets the last recorded training loss.
     /// </summary>
@@ -169,7 +166,6 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         _numFeatures = numFeatures;
         _lastTrainingLoss = NumOps.Zero;
 
-        InitializeLayers();
     }
 
     /// <summary>
@@ -229,12 +225,18 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
             throw new InvalidOperationException($"Failed to load ONNX model: {ex.Message}", ex);
         }
 
-        InitializeLayers();
     }
 
     /// <summary>
     /// Validates constructor arguments.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is a safety check to make sure you do not accidentally
+    /// build a model with impossible settings (like a sequence length of zero).
+    /// Catching these early prevents confusing errors later.
+    /// </para>
+    /// </remarks>
     private static void ValidateConstructorArguments(int sequenceLength, int predictionHorizon, int numFeatures)
     {
         if (sequenceLength < 1)
@@ -253,6 +255,13 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     #region IFinancialModel Implementation
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the main prediction method.
+    /// It decides whether to use the native C# model (trainable) or the ONNX model
+    /// (fast inference) based on how the class was constructed.
+    /// </para>
+    /// </remarks>
     public virtual Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         if (input is null)
@@ -272,6 +281,12 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns a simple report card for the model,
+    /// including configuration (sequence length, features) and training loss history.
+    /// </para>
+    /// </remarks>
     public virtual Dictionary<string, T> GetFinancialMetrics()
     {
         var metrics = new Dictionary<string, T>();
@@ -308,12 +323,24 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// <param name="input">Input tensor.</param>
     /// <param name="quantiles">Optional quantiles for uncertainty estimation.</param>
     /// <returns>Forecast tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the "native mode" prediction path.
+    /// Derived models implement their own forward pass here using C# layers.
+    /// </para>
+    /// </remarks>
     protected abstract Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles);
 
     /// <summary>
     /// Validates the input tensor shape.
     /// </summary>
     /// <param name="input">Input tensor to validate.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Ensures the input data has the right dimensions
+    /// before the model tries to process it. This avoids shape mismatch errors.
+    /// </para>
+    /// </remarks>
     protected abstract void ValidateInputShape(Tensor<T> input);
 
     #endregion
@@ -325,6 +352,13 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// </summary>
     /// <param name="input">Input tensor.</param>
     /// <returns>Output tensor from ONNX inference.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ONNX mode is like running a pre-trained black box.
+    /// This method converts your input to ONNX format, runs the model, and converts
+    /// the output back to AiDotNet tensors.
+    /// </para>
+    /// </remarks>
     protected virtual Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession is null)
@@ -369,6 +403,13 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     #region Training
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Training only works in native mode.
+    /// This method runs a forward pass, calculates the error (loss),
+    /// and then lets derived classes update the model weights.
+    /// </para>
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -401,6 +442,12 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// <param name="input">Input tensor.</param>
     /// <param name="target">Target tensor.</param>
     /// <param name="output">Model output from forward pass.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Derived models implement their specific training logic here,
+    /// including backward passes and optimizer updates.
+    /// </para>
+    /// </remarks>
     protected abstract void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output);
 
     #endregion
@@ -408,6 +455,12 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     #region Prediction
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Predict is an alias for Forecast so the model works with
+    /// the broader AiDotNet interfaces. It forwards to the same logic.
+    /// </para>
+    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         return Forecast(input);
@@ -418,11 +471,16 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     #region Serialization
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Metadata is how the library keeps track of what a model is,
+    /// including its configuration and (for native mode) the serialized weights.
+    /// </para>
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var additionalInfo = new Dictionary<string, object>
         {
-            { "ModelName", ModelName },
             { "SequenceLength", _sequenceLength },
             { "PredictionHorizon", _predictionHorizon },
             { "NumFeatures", _numFeatures },
@@ -443,6 +501,12 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Saves the core configuration (sequence length, horizon, features)
+    /// before allowing derived classes to store their own settings.
+    /// </para>
+    /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         if (!_useNativeMode)
@@ -457,6 +521,12 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Loads the core configuration saved by SerializeNetworkSpecificData,
+    /// then lets derived classes restore their extra settings.
+    /// </para>
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         if (!_useNativeMode)
@@ -475,6 +545,12 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// Serializes model-specific data. Override in derived classes.
     /// </summary>
     /// <param name="writer">Binary writer.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Derived models can save extra settings here
+    /// (like the number of layers or hidden size).
+    /// </para>
+    /// </remarks>
     protected virtual void SerializeModelSpecificData(BinaryWriter writer)
     {
         // Default implementation does nothing
@@ -485,6 +561,12 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// Deserializes model-specific data. Override in derived classes.
     /// </summary>
     /// <param name="reader">Binary reader.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Derived models load their extra settings here
+    /// to restore a saved model correctly.
+    /// </para>
+    /// </remarks>
     protected virtual void DeserializeModelSpecificData(BinaryReader reader)
     {
         // Default implementation does nothing
@@ -499,6 +581,12 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// Disposes resources.
     /// </summary>
     /// <param name="disposing">Whether to dispose managed resources.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Frees memory and file handles (like ONNX sessions)
+    /// when you're done with the model.
+    /// </para>
+    /// </remarks>
     protected override void Dispose(bool disposing)
     {
         if (disposing)

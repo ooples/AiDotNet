@@ -19,6 +19,383 @@ public static class LayerHelper<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Creates the default layer configuration for a Deep Portfolio Management model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numAssets">The number of assets in the portfolio.</param>
+    /// <returns>A collection of layers forming the portfolio optimization network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Deep Portfolio models use neural networks to directly
+    /// output optimal asset weights. This method uses a Softmax activation at the
+    /// end to ensure weights sum to 100%, mimicking a fully invested portfolio.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepPortfolioLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numAssets)
+    {
+        // 2-layer MLP with Softmax output for weight allocation
+        yield return new DenseLayer<T>(architecture.CalculatedInputSize, 64, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(64, numAssets, new SoftmaxActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for a Neural Value-at-Risk (VaR) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">The number of input features (market factors).</param>
+    /// <returns>A collection of layers forming the Neural VaR network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Neural VaR models use deep learning to map market
+    /// conditions to the potential loss of a portfolio. It learns complex,
+    /// non-linear relationships that traditional statistical VaR might miss.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralVaRLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures)
+    {
+        // Deep MLP for risk mapping
+        return CreateDefaultLayers(architecture, 3, 128, 1);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for a Market Making agent.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="stateSize">The size of the market state vector.</param>
+    /// <param name="actionSize">The size of the action vector (typically bid/ask spreads).</param>
+    /// <param name="hiddenSize">The size of hidden layers.</param>
+    /// <returns>A collection of layers forming the market making policy network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Market making agents need to process market depth,
+    /// order flow, and their own inventory to set optimal bid and ask prices.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMarketMakingLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int stateSize,
+        int actionSize,
+        int hiddenSize = 64)
+    {
+        // Simple MLP for market making policy
+        return CreateDefaultLayers(architecture, 2, hiddenSize, actionSize);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for InvestLM.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="maxSequenceLength">Maximum sequence length.</param>
+    /// <param name="vocabularySize">Size of the vocabulary.</param>
+    /// <param name="hiddenSize">Hidden layer size.</param>
+    /// <param name="numAttentionHeads">Number of attention heads.</param>
+    /// <param name="numHiddenLayers">Number of transformer layers.</param>
+    /// <param name="dropoutProbability">Dropout probability.</param>
+    /// <returns>A collection of layers forming InvestLM.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> InvestLM uses a decoder-only transformer architecture
+    /// fine-tuned on high-quality investment research and financial analysis.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultInvestLMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int maxSequenceLength = 1024,
+        int vocabularySize = 32000,
+        int hiddenSize = 768,
+        int numAttentionHeads = 12,
+        int numHiddenLayers = 12,
+        double dropoutProbability = 0.1)
+    {
+        // Follows the GPT/LLaMA-style decoder-only pattern
+        return CreateDefaultFinGPTLayers(architecture, maxSequenceLength, vocabularySize, 
+            hiddenSize, numAttentionHeads, numHiddenLayers, dropoutProbability);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for FinMA.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="maxSequenceLength">Maximum sequence length.</param>
+    /// <param name="vocabularySize">Size of the vocabulary.</param>
+    /// <param name="numAgents">Number of specialized agents.</param>
+    /// <param name="hiddenSize">Hidden layer size.</param>
+    /// <param name="numAttentionHeads">Number of attention heads.</param>
+    /// <param name="numHiddenLayers">Number of transformer layers.</param>
+    /// <param name="dropoutProbability">Dropout probability.</param>
+    /// <returns>A collection of layers forming FinMA.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FinMA (Financial Multi-Agent) uses a set of specialized
+    /// transformer models that collaborate. This method initializes the base
+    /// transformer architecture used by the agents.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int maxSequenceLength = 512,
+        int vocabularySize = 32000,
+        int numAgents = 4,
+        int hiddenSize = 768,
+        int numAttentionHeads = 12,
+        int numHiddenLayers = 12,
+        double dropoutProbability = 0.1)
+    {
+        // Follows a LLaMA-style decoder-only pattern for each agent
+        // In this implementation, we return the layers for a single representative agent
+        return CreateDefaultFinGPTLayers(architecture, maxSequenceLength, vocabularySize, 
+            hiddenSize, numAttentionHeads, numHiddenLayers, dropoutProbability);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for BloombergGPT.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="maxSequenceLength">Maximum sequence length.</param>
+    /// <param name="vocabularySize">Size of the vocabulary.</param>
+    /// <param name="hiddenSize">Hidden layer size.</param>
+    /// <param name="numAttentionHeads">Number of attention heads.</param>
+    /// <param name="numHiddenLayers">Number of transformer layers.</param>
+    /// <param name="dropoutProbability">Dropout probability.</param>
+    /// <returns>A collection of layers forming BloombergGPT.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> BloombergGPT uses a massive decoder-only transformer
+    /// architecture (like GPT-3) trained on Bloomberg's extensive financial data
+    /// archives plus general web data.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBloombergGPTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int maxSequenceLength = 2048,
+        int vocabularySize = 131072,
+        int hiddenSize = 768,
+        int numAttentionHeads = 12,
+        int numHiddenLayers = 12,
+        double dropoutProbability = 0.1)
+    {
+        // Follows standard GPT pattern but with ALiBi or Rotary positional embeddings usually
+        // For simplicity in the library, we'll use learned positional embeddings
+        return CreateDefaultFinGPTLayers(architecture, maxSequenceLength, vocabularySize, 
+            hiddenSize, numAttentionHeads, numHiddenLayers, dropoutProbability);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for FinGPT.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="maxSequenceLength">Maximum sequence length.</param>
+    /// <param name="vocabularySize">Size of the vocabulary.</param>
+    /// <param name="hiddenSize">Hidden layer size.</param>
+    /// <param name="numAttentionHeads">Number of attention heads.</param>
+    /// <param name="numHiddenLayers">Number of transformer layers.</param>
+    /// <param name="dropoutProbability">Dropout probability.</param>
+    /// <returns>A collection of layers forming FinGPT.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FinGPT uses a GPT (Generative Pre-trained Transformer)
+    /// architecture optimized for financial text generation and market analysis.
+    /// Unlike BERT (which is an encoder), GPT is a decoder-only model designed to
+    /// predict the next word in a sequence.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFinGPTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int maxSequenceLength = 1024,
+        int vocabularySize = 50257,
+        int hiddenSize = 768,
+        int numAttentionHeads = 12,
+        int numHiddenLayers = 12,
+        double dropoutProbability = 0.1)
+    {
+        // 1. Embedding Layers
+        yield return new EmbeddingLayer<T>(vocabularySize, hiddenSize);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenSize);
+        
+        yield return new DropoutLayer<T>(dropoutProbability);
+
+        // 2. Transformer Decoder Blocks
+        for (int i = 0; i < numHiddenLayers; i++)
+        {
+            // Masked self-attention (standard MultiHeadAttention handles masking via causal mask)
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenSize, numAttentionHeads, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+            // Feed-forward
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 4, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(hiddenSize * 4, hiddenSize);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+            yield return new DropoutLayer<T>(dropoutProbability);
+        }
+
+        // 3. Final Norm
+        yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+        // 4. Output Head (predict next token from vocabulary)
+        yield return new DenseLayer<T>(hiddenSize, vocabularySize);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for FinBERT-tone.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="maxSequenceLength">Maximum sequence length.</param>
+    /// <param name="vocabularySize">Size of the vocabulary.</param>
+    /// <param name="numClasses">Number of sentiment classes.</param>
+    /// <param name="hiddenSize">Hidden layer size.</param>
+    /// <param name="numAttentionHeads">Number of attention heads.</param>
+    /// <param name="numHiddenLayers">Number of transformer layers.</param>
+    /// <param name="dropoutProbability">Dropout probability.</param>
+    /// <returns>A collection of layers forming FinBERT-tone.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FinBERT-tone uses the BERT architecture with a specific
+    /// classification head designed to detect the tone or sentiment of financial text.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFinBERTToneLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int maxSequenceLength = 512,
+        int vocabularySize = 30522,
+        int numClasses = 3,
+        int hiddenSize = 768,
+        int numAttentionHeads = 12,
+        int numHiddenLayers = 12,
+        double dropoutProbability = 0.1)
+    {
+        // Word embeddings
+        yield return new EmbeddingLayer<T>(vocabularySize, hiddenSize);
+        // Positional embeddings
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenSize);
+        // Type embeddings
+        yield return new EmbeddingLayer<T>(2, hiddenSize);
+        
+        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new DropoutLayer<T>(dropoutProbability);
+
+        for (int i = 0; i < numHiddenLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenSize, numAttentionHeads, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 4, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(hiddenSize * 4, hiddenSize);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+            yield return new DropoutLayer<T>(dropoutProbability);
+        }
+
+        // Pooler
+        yield return new DenseLayer<T>(hiddenSize, hiddenSize, new TanhActivation<T>() as IActivationFunction<T>);
+
+        // Classification Head for Tone/Sentiment
+        yield return new DenseLayer<T>(hiddenSize, numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for FinancialBERT.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="maxSequenceLength">Maximum sequence length.</param>
+    /// <param name="vocabularySize">Size of the vocabulary.</param>
+    /// <param name="hiddenSize">Hidden layer size.</param>
+    /// <param name="numAttentionHeads">Number of attention heads.</param>
+    /// <param name="numHiddenLayers">Number of transformer layers.</param>
+    /// <param name="dropoutProbability">Dropout probability.</param>
+    /// <returns>A collection of layers forming FinancialBERT.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FinancialBERT uses the standard BERT architecture but is
+    /// domain-adapted through training on a large corpus of financial text.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFinancialBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int maxSequenceLength = 512,
+        int vocabularySize = 30522,
+        int hiddenSize = 768,
+        int numAttentionHeads = 12,
+        int numHiddenLayers = 12,
+        double dropoutProbability = 0.1)
+    {
+        // Re-use standard BERT pattern
+        return CreateDefaultSECBERTLayers(architecture, maxSequenceLength, vocabularySize, 
+            hiddenSize, numAttentionHeads, numHiddenLayers, dropoutProbability);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for SEC-BERT.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="maxSequenceLength">Maximum sequence length.</param>
+    /// <param name="vocabularySize">Size of the vocabulary.</param>
+    /// <param name="hiddenSize">Hidden layer size.</param>
+    /// <param name="numAttentionHeads">Number of attention heads.</param>
+    /// <param name="numHiddenLayers">Number of transformer layers.</param>
+    /// <param name="dropoutProbability">Dropout probability.</param>
+    /// <returns>A collection of layers forming SEC-BERT.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SEC-BERT is based on the BERT (Bidirectional Encoder
+    /// Representations from Transformers) architecture. It works by:
+    /// </para>
+    /// <para>
+    /// <list type="number">
+    /// <item><b>Embeddings:</b> Converting words into numerical vectors that
+    /// capture their financial meaning from SEC filings.</item>
+    /// <item><b>Transformer Layers:</b> Using attention mechanisms to understand
+    /// the relationships between words in a sentence, regardless of their position.</item>
+    /// <item><b>Task Head:</b> Converting the final representations into predictions
+    /// for specific financial tasks like sentiment analysis or risk classification.</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSECBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int maxSequenceLength = 512,
+        int vocabularySize = 30522,
+        int hiddenSize = 768,
+        int numAttentionHeads = 12,
+        int numHiddenLayers = 12,
+        double dropoutProbability = 0.1)
+    {
+        // 1. Embedding Layers
+        // Word embeddings
+        yield return new EmbeddingLayer<T>(vocabularySize, hiddenSize);
+        // Positional embeddings
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenSize);
+        // Type embeddings
+        yield return new EmbeddingLayer<T>(2, hiddenSize);
+        
+        // Add & Norm for embeddings
+        yield return new LayerNormalizationLayer<T>(hiddenSize);
+        yield return new DropoutLayer<T>(dropoutProbability);
+
+        // 2. Transformer Blocks
+        for (int i = 0; i < numHiddenLayers; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenSize, numAttentionHeads, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+            // Feed-forward
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 4, new GELUActivation<T>() as IActivationFunction<T>);
+            yield return new DenseLayer<T>(hiddenSize * 4, hiddenSize);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+            yield return new DropoutLayer<T>(dropoutProbability);
+        }
+
+        // 3. Pooler
+        yield return new DenseLayer<T>(hiddenSize, hiddenSize, new TanhActivation<T>() as IActivationFunction<T>);
+
+        // 4. Task Head (default to 1 for regression or 2 for binary classification)
+        yield return new DenseLayer<T>(hiddenSize, 1);
+    }
+
+    /// <summary>
     /// Creates a standard feed-forward neural network with configurable hidden layers.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -10729,6 +11106,5617 @@ public static class LayerHelper<T>
             inputSize: modelDimension,
             outputSize: predictionHorizon * numFeatures,
             activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TimesNet (Temporal 2D-Variation Modeling) architecture.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">The input sequence length. Default: 96.</param>
+    /// <param name="predictionHorizon">The number of future time steps to predict. Default: 24.</param>
+    /// <param name="numFeatures">The number of input features/variables. Default: 7.</param>
+    /// <param name="modelDimension">The model dimension (embedding size). Default: 64.</param>
+    /// <param name="feedForwardDim">The feedforward network dimension. Default: 128.</param>
+    /// <param name="numLayers">The number of TimesBlock layers. Default: 2.</param>
+    /// <param name="topK">Number of dominant periods to discover. Default: 5.</param>
+    /// <param name="convKernelSize">The 2D convolution kernel size. Default: 3.</param>
+    /// <param name="dropout">The dropout rate. Default: 0.1.</param>
+    /// <returns>An enumerable of layers comprising the TimesNet architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// TimesNet transforms 1D time series into 2D tensors based on discovered periods,
+    /// then applies 2D convolutions to capture both intra-period and inter-period variations.
+    /// </para>
+    /// <list type="bullet">
+    /// <item><b>Period Discovery:</b> Uses FFT to find dominant periods</item>
+    /// <item><b>2D Transformation:</b> Reshapes 1D series into 2D based on periods</item>
+    /// <item><b>Inception Block:</b> Multi-scale 2D convolutions</item>
+    /// <item><b>Aggregation:</b> Combines features from different periods</item>
+    /// </list>
+    /// <para>
+    /// <b>For Beginners:</b> TimesNet is like looking at time series data from a bird's eye view.
+    /// Instead of just seeing one long sequence, it rearranges the data to show patterns
+    /// that repeat at different time scales (daily, weekly, etc.), making it easier to spot trends.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimesNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 24,
+        int numFeatures = 7,
+        int modelDimension = 64,
+        int feedForwardDim = 128,
+        int numLayers = 2,
+        int topK = 5,
+        int convKernelSize = 3,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (sequenceLength < topK)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "Sequence length must be at least TopK.");
+        if (predictionHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(predictionHorizon), "Prediction horizon must be at least 1.");
+
+        // Embedding layer: project input features to model dimension
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: modelDimension,
+            activationFunction: new GELUActivation<T>());
+
+        // TimesBlock layers (simplified as conv + feedforward)
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Inception-style convolution (using 1D conv to approximate 2D behavior)
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: modelDimension,
+                inputHeight: 1,
+                inputWidth: sequenceLength,
+                outputDepth: modelDimension,
+                kernelSize: convKernelSize,
+                stride: 1,
+                padding: convKernelSize / 2);
+
+            // Feedforward network
+            yield return new DenseLayer<T>(
+                inputSize: modelDimension,
+                outputSize: feedForwardDim,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: feedForwardDim,
+                outputSize: modelDimension,
+                activationFunction: null);
+
+            // Dropout
+            yield return new DropoutLayer<T>(dropout);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(modelDimension);
+
+        // Output projection: maps to prediction horizon
+        yield return new DenseLayer<T>(
+            inputSize: modelDimension,
+            outputSize: predictionHorizon * numFeatures,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the ETSformer (Exponential Smoothing Transformer) architecture.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">The input sequence length.</param>
+    /// <param name="predictionHorizon">The number of time steps to predict.</param>
+    /// <param name="numFeatures">The number of input features.</param>
+    /// <param name="modelDimension">The model embedding dimension.</param>
+    /// <param name="feedForwardDim">The feedforward network dimension.</param>
+    /// <param name="numEncoderLayers">Number of encoder layers.</param>
+    /// <param name="numDecoderLayers">Number of decoder layers.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="dropout">The dropout rate.</param>
+    /// <returns>A collection of layers forming the ETSformer architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ETSformer combines exponential smoothing with transformers.
+    /// It's like having a forecasting expert that can both see patterns in data
+    /// (like a transformer) and understand how recent vs. old data matters (exponential smoothing).
+    /// This makes it very interpretable - you can see the trend, seasonality, and level components.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultETSformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 24,
+        int numFeatures = 7,
+        int modelDimension = 64,
+        int feedForwardDim = 128,
+        int numEncoderLayers = 2,
+        int numDecoderLayers = 1,
+        int numHeads = 4,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (sequenceLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "Sequence length must be at least 1.");
+        if (predictionHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(predictionHorizon), "Prediction horizon must be at least 1.");
+        if (modelDimension % numHeads != 0)
+            throw new ArgumentException("Model dimension must be divisible by number of heads.");
+
+        // Input embedding: project features to model dimension
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: modelDimension,
+            activationFunction: new GELUActivation<T>());
+
+        // Encoder layers with exponential smoothing attention
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            // Self-attention layer for temporal patterns
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: sequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Feedforward network
+            yield return new DenseLayer<T>(
+                inputSize: modelDimension,
+                outputSize: feedForwardDim,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: feedForwardDim,
+                outputSize: modelDimension,
+                activationFunction: null);
+
+            // Dropout
+            yield return new DropoutLayer<T>(dropout);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+        }
+
+        // Decoder layers
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            // Cross-attention for encoder-decoder connection
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: sequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Feedforward network
+            yield return new DenseLayer<T>(
+                inputSize: modelDimension,
+                outputSize: feedForwardDim,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: feedForwardDim,
+                outputSize: modelDimension,
+                activationFunction: null);
+
+            // Dropout
+            yield return new DropoutLayer<T>(dropout);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+        }
+
+        // Output projection: maps to prediction horizon
+        yield return new DenseLayer<T>(
+            inputSize: modelDimension,
+            outputSize: predictionHorizon * numFeatures,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a Non-stationary Transformer model.
+    /// </summary>
+    /// <param name="architecture">Neural network architecture containing configuration.</param>
+    /// <param name="sequenceLength">Input sequence length. Default: 96.</param>
+    /// <param name="predictionHorizon">Number of future time steps to predict. Default: 24.</param>
+    /// <param name="numFeatures">Number of input features. Default: 7.</param>
+    /// <param name="modelDimension">Model embedding dimension. Default: 64.</param>
+    /// <param name="feedForwardDim">Feedforward network dimension. Default: 128.</param>
+    /// <param name="numEncoderLayers">Number of encoder layers. Default: 2.</param>
+    /// <param name="numDecoderLayers">Number of decoder layers. Default: 1.</param>
+    /// <param name="numHeads">Number of attention heads. Default: 4.</param>
+    /// <param name="projectionDim">Dimension of de-stationarization projections. Default: 64.</param>
+    /// <param name="dropout">Dropout rate. Default: 0.1.</param>
+    /// <returns>Collection of layers for Non-stationary Transformer architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Non-stationary Transformer tackles the problem of changing
+    /// statistical properties (non-stationarity) in time series data by:
+    ///
+    /// 1. <b>Series Stationarization:</b> Normalizes input data to make it stationary
+    /// 2. <b>De-stationary Attention:</b> Applies learned rescaling to attention outputs
+    ///
+    /// This approach preserves the benefits of attention (capturing long-range dependencies)
+    /// while maintaining the original data's statistical characteristics.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultNonStationaryTransformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 24,
+        int numFeatures = 7,
+        int modelDimension = 64,
+        int feedForwardDim = 128,
+        int numEncoderLayers = 2,
+        int numDecoderLayers = 1,
+        int numHeads = 4,
+        int projectionDim = 64,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (sequenceLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "Sequence length must be at least 1.");
+        if (predictionHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(predictionHorizon), "Prediction horizon must be at least 1.");
+        if (modelDimension % numHeads != 0)
+            throw new ArgumentException("Model dimension must be divisible by number of heads.");
+
+        // Input embedding: project features to model dimension
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: modelDimension,
+            activationFunction: new GELUActivation<T>());
+
+        // De-stationarization projection layer (learns to capture statistics)
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: projectionDim,
+            activationFunction: new TanhActivation<T>());
+
+        // Encoder layers with de-stationary attention
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            // Self-attention with de-stationary mechanism
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: sequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Feedforward network
+            yield return new DenseLayer<T>(
+                inputSize: modelDimension,
+                outputSize: feedForwardDim,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: feedForwardDim,
+                outputSize: modelDimension,
+                activationFunction: null);
+
+            // Dropout
+            yield return new DropoutLayer<T>(dropout);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+        }
+
+        // Decoder layers
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            // Self-attention in decoder
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: sequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Cross-attention for encoder-decoder connection
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: sequenceLength,
+                embeddingDimension: modelDimension,
+                headCount: numHeads);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+
+            // Feedforward network
+            yield return new DenseLayer<T>(
+                inputSize: modelDimension,
+                outputSize: feedForwardDim,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: feedForwardDim,
+                outputSize: modelDimension,
+                activationFunction: null);
+
+            // Dropout
+            yield return new DropoutLayer<T>(dropout);
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDimension);
+        }
+
+        // Output projection: maps to prediction horizon
+        yield return new DenseLayer<T>(
+            inputSize: modelDimension,
+            outputSize: predictionHorizon * numFeatures,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a TSMixer model.
+    /// </summary>
+    /// <param name="architecture">Neural network architecture containing configuration.</param>
+    /// <param name="sequenceLength">Input sequence length. Default: 96.</param>
+    /// <param name="predictionHorizon">Number of future time steps to predict. Default: 24.</param>
+    /// <param name="numFeatures">Number of input features. Default: 7.</param>
+    /// <param name="hiddenDim">Hidden dimension for MLP layers. Default: 64.</param>
+    /// <param name="numBlocks">Number of mixer blocks. Default: 4.</param>
+    /// <param name="feedForwardExpansion">Feedforward expansion factor. Default: 2.0.</param>
+    /// <param name="dropout">Dropout rate. Default: 0.1.</param>
+    /// <returns>Collection of layers for TSMixer architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TSMixer is an all-MLP (Multi-Layer Perceptron) architecture
+    /// that achieves excellent results without attention mechanisms. The key insight is:
+    ///
+    /// 1. <b>Time-Mixing:</b> MLPs that operate across the time dimension
+    /// 2. <b>Feature-Mixing:</b> MLPs that operate across the feature dimension
+    /// 3. <b>Alternating:</b> Each block alternates between time and feature mixing
+    ///
+    /// This simple approach is computationally efficient while achieving competitive accuracy.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTSMixerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 96,
+        int predictionHorizon = 24,
+        int numFeatures = 7,
+        int hiddenDim = 64,
+        int numBlocks = 4,
+        double feedForwardExpansion = 2.0,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (sequenceLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(sequenceLength), "Sequence length must be at least 1.");
+        if (predictionHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(predictionHorizon), "Prediction horizon must be at least 1.");
+        if (numBlocks < 1)
+            throw new ArgumentOutOfRangeException(nameof(numBlocks), "Number of blocks must be at least 1.");
+
+        int expandedDim = (int)(hiddenDim * feedForwardExpansion);
+
+        // Input projection: project features to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: hiddenDim,
+            activationFunction: new ReLUActivation<T>());
+
+        // TSMixer blocks
+        for (int block = 0; block < numBlocks; block++)
+        {
+            // Time-mixing MLP (operates across time dimension)
+            // Layer normalization before time mixing
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Time-mixing feedforward: expand
+            yield return new DenseLayer<T>(
+                inputSize: sequenceLength,
+                outputSize: expandedDim,
+                activationFunction: new ReLUActivation<T>());
+
+            // Time-mixing feedforward: project back
+            yield return new DenseLayer<T>(
+                inputSize: expandedDim,
+                outputSize: sequenceLength,
+                activationFunction: null);
+
+            // Dropout
+            yield return new DropoutLayer<T>(dropout);
+
+            // Feature-mixing MLP (operates across feature dimension)
+            // Layer normalization before feature mixing
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Feature-mixing feedforward: expand
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim,
+                outputSize: expandedDim,
+                activationFunction: new ReLUActivation<T>());
+
+            // Feature-mixing feedforward: project back
+            yield return new DenseLayer<T>(
+                inputSize: expandedDim,
+                outputSize: hiddenDim,
+                activationFunction: null);
+
+            // Dropout
+            yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Final layer normalization
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Temporal projection: maps sequence length to prediction horizon
+        yield return new DenseLayer<T>(
+            inputSize: sequenceLength,
+            outputSize: predictionHorizon,
+            activationFunction: null);
+
+        // Output projection: maps hidden dimension to features
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: numFeatures,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates layers for DeepAR probabilistic autoregressive model.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for calculations.</typeparam>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="contextLength">Length of historical context window. Default: 96.</param>
+    /// <param name="predictionLength">Length of forecast horizon. Default: 24.</param>
+    /// <param name="numFeatures">Number of input features. Default: 1.</param>
+    /// <param name="hiddenSize">Size of LSTM hidden state. Default: 40.</param>
+    /// <param name="numLstmLayers">Number of stacked LSTM layers. Default: 2.</param>
+    /// <param name="embeddingDim">Dimension for categorical embeddings. Default: 10.</param>
+    /// <param name="dropout">Dropout rate for regularization. Default: 0.1.</param>
+    /// <returns>Sequence of layers implementing the DeepAR architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepAR is a probabilistic forecasting model that uses LSTM
+    /// (Long Short-Term Memory) networks to learn temporal patterns. Unlike point forecasts,
+    /// DeepAR outputs a probability distribution, telling you not just "what" the prediction
+    /// is but also "how confident" the model is.
+    /// </para>
+    /// <para>
+    /// The architecture consists of:
+    /// - Input projection layer to expand features
+    /// - Stacked LSTM layers for capturing temporal dependencies
+    /// - Distribution output head for probabilistic predictions
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Salinas et al., "DeepAR: Probabilistic Forecasting with Autoregressive
+    /// Recurrent Networks", International Journal of Forecasting 2020.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepARLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 96,
+        int predictionLength = 24,
+        int numFeatures = 1,
+        int hiddenSize = 40,
+        int numLstmLayers = 2,
+        int embeddingDim = 10,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
+        if (predictionLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(predictionLength), "Prediction length must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (hiddenSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), "Hidden size must be at least 1.");
+        if (numLstmLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numLstmLayers), "Number of LSTM layers must be at least 1.");
+
+        // Input size includes features + optional embedding for categorical covariates
+        int inputProjectionSize = numFeatures + embeddingDim;
+
+        // Input projection: project combined input to LSTM input size
+        yield return new DenseLayer<T>(
+            inputSize: inputProjectionSize,
+            outputSize: hiddenSize,
+            activationFunction: new ReLUActivation<T>());
+
+        // Stacked LSTM layers for autoregressive modeling
+        for (int i = 0; i < numLstmLayers; i++)
+        {
+            int lstmInputSize = i == 0 ? hiddenSize : hiddenSize;
+
+            // LSTM layer with explicit type disambiguation
+            yield return new LSTMLayer<T>(
+                inputSize: lstmInputSize,
+                hiddenSize: hiddenSize,
+                inputShape: new[] { 1, contextLength, lstmInputSize },
+                activation: (IActivationFunction<T>?)null,
+                recurrentActivation: null,
+                engine: null);
+
+            // Dropout between LSTM layers (except after last layer)
+            if (i < numLstmLayers - 1 && dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // Layer normalization for stable training
+        yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+        // Distribution parameter layers - outputs mu and sigma for Gaussian distribution
+        // Mu (mean) projection
+        yield return new DenseLayer<T>(
+            inputSize: hiddenSize,
+            outputSize: predictionLength,
+            activationFunction: null);  // Linear for mean
+
+        // Sigma (std) projection - uses softplus implicitly in forward pass for positivity
+        yield return new DenseLayer<T>(
+            inputSize: hiddenSize,
+            outputSize: predictionLength,
+            activationFunction: new SoftPlusActivation<T>());  // Ensures positive std
+    }
+
+    /// <summary>
+    /// Creates layers for N-BEATS (Neural Basis Expansion Analysis for Time Series) model.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for calculations.</typeparam>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="lookbackWindow">Historical context window length. Default: 10.</param>
+    /// <param name="forecastHorizon">Number of future steps to predict. Default: 5.</param>
+    /// <param name="numStacks">Number of stacks in the architecture. Default: 2.</param>
+    /// <param name="numBlocksPerStack">Number of blocks per stack. Default: 3.</param>
+    /// <param name="hiddenSize">Size of hidden layers in blocks. Default: 256.</param>
+    /// <param name="numHiddenLayers">Number of hidden layers per block. Default: 4.</param>
+    /// <returns>Sequence of layers implementing the N-BEATS architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> N-BEATS uses a stack-of-blocks architecture where each block
+    /// produces both a "backcast" (explanation of the past) and a "forecast" (prediction of the future).
+    /// The residuals from each block are passed to the next, allowing the model to hierarchically
+    /// decompose the time series.
+    /// </para>
+    /// <para>
+    /// Key concepts:
+    /// - Blocks learn to explain patterns and produce forecasts
+    /// - Residual connections pass unexplained parts to subsequent blocks
+    /// - Stacks group related blocks (e.g., trend stack, seasonality stack)
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Oreshkin et al., "N-BEATS: Neural basis expansion analysis for
+    /// interpretable time series forecasting", ICLR 2020.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultNBEATSLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 10,
+        int forecastHorizon = 5,
+        int numStacks = 2,
+        int numBlocksPerStack = 3,
+        int hiddenSize = 256,
+        int numHiddenLayers = 4)
+    {
+        // Validate parameters
+        if (lookbackWindow < 1)
+            throw new ArgumentOutOfRangeException(nameof(lookbackWindow), "Lookback window must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numStacks < 1)
+            throw new ArgumentOutOfRangeException(nameof(numStacks), "Number of stacks must be at least 1.");
+        if (numBlocksPerStack < 1)
+            throw new ArgumentOutOfRangeException(nameof(numBlocksPerStack), "Number of blocks per stack must be at least 1.");
+        if (hiddenSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(hiddenSize), "Hidden size must be at least 1.");
+
+        // N-BEATS architecture: multiple stacks, each containing multiple blocks
+        // Each block: fully connected layers -> theta output -> basis expansion -> backcast/forecast
+
+        for (int stack = 0; stack < numStacks; stack++)
+        {
+            for (int block = 0; block < numBlocksPerStack; block++)
+            {
+                int blockInputSize = lookbackWindow;
+
+                // Input projection for block
+                yield return new DenseLayer<T>(
+                    inputSize: blockInputSize,
+                    outputSize: hiddenSize,
+                    activationFunction: new ReLUActivation<T>());
+
+                // Hidden layers within block
+                for (int layer = 0; layer < numHiddenLayers - 1; layer++)
+                {
+                    yield return new DenseLayer<T>(
+                        inputSize: hiddenSize,
+                        outputSize: hiddenSize,
+                        activationFunction: new ReLUActivation<T>());
+                }
+
+                // Theta layer for backcast (explains historical data)
+                yield return new DenseLayer<T>(
+                    inputSize: hiddenSize,
+                    outputSize: lookbackWindow,
+                    activationFunction: null);
+
+                // Theta layer for forecast (predicts future)
+                yield return new DenseLayer<T>(
+                    inputSize: hiddenSize,
+                    outputSize: forecastHorizon,
+                    activationFunction: null);
+            }
+        }
+
+        // Final output projection to aggregate forecasts
+        yield return new DenseLayer<T>(
+            inputSize: forecastHorizon,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates layers for N-HiTS (Neural Hierarchical Interpolation for Time Series) model.
+    /// </summary>
+    /// <typeparam name="T">The numeric type for calculations.</typeparam>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="lookbackWindow">Historical context window length. Default: 48.</param>
+    /// <param name="forecastHorizon">Number of future steps to predict. Default: 24.</param>
+    /// <param name="numStacks">Number of stacks in the architecture. Default: 3.</param>
+    /// <param name="numBlocksPerStack">Number of blocks per stack. Default: 1.</param>
+    /// <param name="hiddenSize">Size of hidden layers in blocks. Default: 512.</param>
+    /// <param name="numHiddenLayers">Number of hidden layers per block. Default: 2.</param>
+    /// <param name="dropout">Dropout rate for regularization. Default: 0.1.</param>
+    /// <returns>Sequence of layers implementing the N-HiTS architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> N-HiTS improves upon N-BEATS by using multi-rate signal sampling
+    /// and hierarchical interpolation. Each stack operates at a different time resolution:
+    /// - Stack 1: High-frequency patterns (fast changes)
+    /// - Stack 2: Medium-frequency patterns (weekly/monthly cycles)
+    /// - Stack 3: Low-frequency patterns (long-term trends)
+    /// </para>
+    /// <para>
+    /// The hierarchical approach makes N-HiTS more efficient for long-horizon forecasting.
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Challu et al., "N-HiTS: Neural Hierarchical Interpolation for Time Series
+    /// Forecasting", AAAI 2023.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultNHiTSLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 48,
+        int forecastHorizon = 24,
+        int numStacks = 3,
+        int numBlocksPerStack = 1,
+        int hiddenSize = 512,
+        int numHiddenLayers = 2,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (lookbackWindow < 1)
+            throw new ArgumentOutOfRangeException(nameof(lookbackWindow), "Lookback window must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numStacks < 1)
+            throw new ArgumentOutOfRangeException(nameof(numStacks), "Number of stacks must be at least 1.");
+
+        // N-HiTS uses different pooling kernel sizes for each stack
+        int[] defaultKernelSizes = new[] { 8, 4, 1 };
+
+        for (int stack = 0; stack < numStacks; stack++)
+        {
+            int kernelSize = stack < defaultKernelSizes.Length ? defaultKernelSizes[stack] : 1;
+            int pooledLookback = lookbackWindow / kernelSize;
+            pooledLookback = Math.Max(1, pooledLookback);
+
+            for (int block = 0; block < numBlocksPerStack; block++)
+            {
+                // Input projection for block
+                yield return new DenseLayer<T>(
+                    inputSize: pooledLookback,
+                    outputSize: hiddenSize,
+                    activationFunction: new ReLUActivation<T>());
+
+                // Hidden layers within block
+                for (int layer = 0; layer < numHiddenLayers - 1; layer++)
+                {
+                    yield return new DenseLayer<T>(
+                        inputSize: hiddenSize,
+                        outputSize: hiddenSize,
+                        activationFunction: new ReLUActivation<T>());
+
+                    // Dropout between layers
+                    if (dropout > 0)
+                    {
+                        yield return new DropoutLayer<T>(dropout);
+                    }
+                }
+
+                // Expression coefficients for interpolation
+                int numCoeffs = Math.Max(1, forecastHorizon / kernelSize);
+
+                // Backcast coefficients
+                yield return new DenseLayer<T>(
+                    inputSize: hiddenSize,
+                    outputSize: numCoeffs,
+                    activationFunction: null);
+
+                // Forecast coefficients
+                yield return new DenseLayer<T>(
+                    inputSize: hiddenSize,
+                    outputSize: numCoeffs,
+                    activationFunction: null);
+            }
+        }
+
+        // Final output projection
+        yield return new DenseLayer<T>(
+            inputSize: forecastHorizon,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    #endregion
+
+    #region LSTNet Layers
+
+    /// <summary>
+    /// Creates the default layers for an LSTNet (Long Short-Term Time-series Network) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="lookbackWindow">How many past time steps to consider (default: 168 for weekly hourly data).</param>
+    /// <param name="forecastHorizon">How many future time steps to predict (default: 24).</param>
+    /// <param name="numFeatures">Number of input features/variables (default: 7).</param>
+    /// <param name="convolutionFilters">Number of convolutional filters (default: 100).</param>
+    /// <param name="convolutionKernelSize">Size of convolution kernel (default: 6).</param>
+    /// <param name="hiddenRecurrentSize">Hidden size for main recurrent layers (default: 100).</param>
+    /// <param name="hiddenSkipSize">Hidden size for skip recurrent layers (default: 5).</param>
+    /// <param name="skipPeriod">Skip period for Skip-RNN (default: 24).</param>
+    /// <param name="dropout">Dropout rate for regularization (default: 0.2).</param>
+    /// <returns>A collection of layers forming an LSTNet architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> LSTNet is a specialized architecture for multivariate time series forecasting
+    /// that captures patterns at different temporal scales:
+    /// </para>
+    /// <para>
+    /// <b>Architecture Components:</b>
+    /// <list type="number">
+    ///     <item>
+    ///         <term>Convolutional Layer</term>
+    ///         <description>Extracts local features and short-term patterns from the input.
+    ///         Think of it as finding small patterns like "weekend spikes" or "morning dips".</description>
+    ///     </item>
+    ///     <item>
+    ///         <term>Recurrent Layer (GRU)</term>
+    ///         <description>Captures long-term dependencies and trends. Like remembering
+    ///         "sales have been growing for months".</description>
+    ///     </item>
+    ///     <item>
+    ///         <term>Skip-RNN</term>
+    ///         <description>Captures periodic patterns by looking at values from the same time
+    ///         in previous periods. Like comparing today's 3 PM with yesterday's 3 PM.</description>
+    ///     </item>
+    ///     <item>
+    ///         <term>Output Layer</term>
+    ///         <description>Combines all information to produce the final forecast.</description>
+    ///     </item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>When to Use LSTNet:</b>
+    /// <list type="bullet">
+    ///     <item>Multivariate time series with multiple correlated variables</item>
+    ///     <item>Data with clear periodic patterns (daily, weekly, etc.)</item>
+    ///     <item>Traffic prediction, electricity load forecasting, financial data</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultLSTNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 168,
+        int forecastHorizon = 24,
+        int numFeatures = 7,
+        int convolutionFilters = 100,
+        int convolutionKernelSize = 6,
+        int hiddenRecurrentSize = 100,
+        int hiddenSkipSize = 5,
+        int skipPeriod = 24,
+        double dropout = 0.2)
+    {
+        // Validate parameters
+        if (lookbackWindow < 1)
+            throw new ArgumentOutOfRangeException(nameof(lookbackWindow), "Lookback window must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (convolutionFilters < 1)
+            throw new ArgumentOutOfRangeException(nameof(convolutionFilters), "Convolution filters must be at least 1.");
+        if (convolutionKernelSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(convolutionKernelSize), "Convolution kernel size must be at least 1.");
+        if (skipPeriod < 1)
+            throw new ArgumentOutOfRangeException(nameof(skipPeriod), "Skip period must be at least 1.");
+        if (dropout < 0 || dropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
+
+        // === Component 1: Convolutional-style Feature Extraction ===
+        // Uses DenseLayer to simulate 1D convolution for local feature extraction
+        // In LSTNet, we process each time step's features together
+        // Input: [batch, lookbackWindow * numFeatures] (flattened)
+        // Output: [batch, convFilters]
+
+        // First layer: Project input to convolution filter space
+        // This acts as a learned local feature extractor
+        yield return new DenseLayer<T>(
+            inputSize: lookbackWindow * numFeatures,
+            outputSize: convolutionFilters,
+            activationFunction: new ReLUActivation<T>());
+
+        // Dropout for regularization
+        if (dropout > 0)
+        {
+            yield return new DropoutLayer<T>(dropout);
+        }
+
+        // Calculate effective sequence length after convolution-style processing
+        int convOutputLength = lookbackWindow - convolutionKernelSize + 1;
+
+        // === Component 2: Main Recurrent Layer (GRU) ===
+        // Captures long-term temporal dependencies
+        // Input: [batch, convFilters]
+        // Output: [batch, hiddenRecurrentSize]
+
+        yield return new GRULayer<T>(
+            inputSize: convolutionFilters,
+            hiddenSize: hiddenRecurrentSize,
+            returnSequences: false,
+            activation: (IActivationFunction<T>?)null,
+            recurrentActivation: null);
+
+        if (dropout > 0)
+        {
+            yield return new DropoutLayer<T>(dropout);
+        }
+
+        // === Component 3: Skip-RNN Layer ===
+        // Captures periodic patterns by skipping through time
+        // This allows the model to directly compare values at the same time in previous periods
+        // For example, with skip=24, it compares 3 PM today with 3 PM yesterday
+
+        // Calculate how many skip connections we can make
+        int numSkipConnections = Math.Max(1, convOutputLength / skipPeriod);
+
+        yield return new GRULayer<T>(
+            inputSize: convolutionFilters,
+            hiddenSize: hiddenSkipSize,
+            returnSequences: false,
+            activation: (IActivationFunction<T>?)null,
+            recurrentActivation: null);
+
+        if (dropout > 0)
+        {
+            yield return new DropoutLayer<T>(dropout);
+        }
+
+        // === Component 4: Highway Layer (Skip Connection) ===
+        // Allows linear information to flow directly from input to output
+        // This helps capture simple linear trends
+
+        // Dense layer for highway component
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+
+        // === Component 5: Combination Layer ===
+        // Combines outputs from GRU, Skip-RNN, and Highway
+        // Total combined size: hiddenRecurrentSize + (hiddenSkipSize * numSkipConnections)
+        int combinedSize = hiddenRecurrentSize + (hiddenSkipSize * numSkipConnections);
+
+        yield return new DenseLayer<T>(
+            inputSize: combinedSize,
+            outputSize: forecastHorizon * numFeatures,
+            activationFunction: null);
+
+        // === Component 6: Output Projection ===
+        // Final projection to get forecast for each feature
+        yield return new DenseLayer<T>(
+            inputSize: forecastHorizon * numFeatures,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    #endregion
+
+    #region TCN Layers
+
+    /// <summary>
+    /// Creates the default layers for a TCN (Temporal Convolutional Network) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="lookbackWindow">How many past time steps to consider (default: 96).</param>
+    /// <param name="forecastHorizon">How many future time steps to predict (default: 24).</param>
+    /// <param name="numFeatures">Number of input features (default: 1).</param>
+    /// <param name="numChannels">Number of convolutional channels/filters (default: 64).</param>
+    /// <param name="kernelSize">Size of convolution kernel (default: 3).</param>
+    /// <param name="numLayers">Number of TCN layers (default: 8).</param>
+    /// <param name="dropout">Dropout rate for regularization (default: 0.2).</param>
+    /// <param name="useResidualConnections">Whether to use residual connections (default: true).</param>
+    /// <returns>A collection of layers forming a TCN architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TCN (Temporal Convolutional Network) uses dilated causal convolutions
+    /// to model temporal sequences efficiently:
+    /// </para>
+    /// <para>
+    /// <b>Architecture Components:</b>
+    /// <list type="number">
+    ///     <item>
+    ///         <term>Input Projection</term>
+    ///         <description>Projects input features to the channel dimension.</description>
+    ///     </item>
+    ///     <item>
+    ///         <term>Dilated Causal Convolution Blocks</term>
+    ///         <description>Each block uses convolutions with exponentially increasing dilation
+    ///         (1, 2, 4, 8, ...) to capture patterns at different time scales.</description>
+    ///     </item>
+    ///     <item>
+    ///         <term>Residual Connections</term>
+    ///         <description>Connect input to output of each block to improve gradient flow.</description>
+    ///     </item>
+    ///     <item>
+    ///         <term>Output Projection</term>
+    ///         <description>Projects the final representation to the forecast horizon.</description>
+    ///     </item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Receptive Field Calculation:</b>
+    /// With kernel_size k and n layers, receptive field = 1 + 2*(k-1)*(2^n - 1)
+    /// For k=3, n=8: RF = 1 + 2*2*(256-1) = 1021 time steps
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTCNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 96,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int numChannels = 64,
+        int kernelSize = 3,
+        int numLayers = 8,
+        double dropout = 0.2,
+        bool useResidualConnections = true)
+    {
+        // Validate parameters
+        if (lookbackWindow < 1)
+            throw new ArgumentOutOfRangeException(nameof(lookbackWindow), "Lookback window must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (numChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(numChannels), "Number of channels must be at least 1.");
+        if (kernelSize < 2)
+            throw new ArgumentOutOfRangeException(nameof(kernelSize), "Kernel size must be at least 2.");
+        if (numLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be at least 1.");
+        if (dropout < 0 || dropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
+
+        // === Input Projection ===
+        // Project input features to channel dimension
+        yield return new DenseLayer<T>(
+            inputSize: lookbackWindow * numFeatures,
+            outputSize: numChannels,
+            activationFunction: new ReLUActivation<T>());
+
+        // === Dilated Causal Convolution Blocks ===
+        // Each block has dilation 2^i where i is the layer index
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            // For TCN, we simulate dilated convolutions using dense layers
+            // In a real implementation, these would be causal dilated conv1d layers
+            // The dilation factor doubles with each layer: 1, 2, 4, 8, 16, ...
+            int dilation = 1 << layer; // 2^layer
+
+            // First convolution in the block
+            yield return new DenseLayer<T>(
+                inputSize: numChannels,
+                outputSize: numChannels,
+                activationFunction: new ReLUActivation<T>());
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+
+            // Second convolution in the block
+            yield return new DenseLayer<T>(
+                inputSize: numChannels,
+                outputSize: numChannels,
+                activationFunction: new ReLUActivation<T>());
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+
+            // Note: Residual connections are handled in the model's Forward method,
+            // not in the layer creation. The model adds the input to the output.
+        }
+
+        // === Output Projection ===
+        // Project from channels to forecast horizon
+        yield return new DenseLayer<T>(
+            inputSize: numChannels,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    #endregion
+
+    #region WaveNet Layers
+
+    /// <summary>
+    /// Creates the default layers for a WaveNet model adapted for time series forecasting.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="lookbackWindow">How many past time steps to consider (default: 128).</param>
+    /// <param name="forecastHorizon">How many future time steps to predict (default: 24).</param>
+    /// <param name="numFeatures">Number of input features (default: 1).</param>
+    /// <param name="residualChannels">Number of residual channels (default: 32).</param>
+    /// <param name="skipChannels">Number of skip channels (default: 256).</param>
+    /// <param name="dilationDepth">Number of dilation doublings per stack (default: 8).</param>
+    /// <param name="numStacks">Number of stacks (default: 2).</param>
+    /// <param name="dropout">Dropout rate for regularization (default: 0.1).</param>
+    /// <returns>A collection of layers forming a WaveNet architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> WaveNet uses dilated causal convolutions with gated activations
+    /// and dual residual/skip connections for powerful sequence modeling:
+    /// </para>
+    /// <para>
+    /// <b>Architecture Components:</b>
+    /// <list type="number">
+    ///     <item>
+    ///         <term>Input Projection</term>
+    ///         <description>Projects input to residual channel dimension.</description>
+    ///     </item>
+    ///     <item>
+    ///         <term>Dilated Convolution Blocks</term>
+    ///         <description>Each block has gated activations and produces both
+    ///         residual and skip outputs.</description>
+    ///     </item>
+    ///     <item>
+    ///         <term>Skip Aggregation</term>
+    ///         <description>Sums skip connections from all blocks.</description>
+    ///     </item>
+    ///     <item>
+    ///         <term>Output Layers</term>
+    ///         <description>Two 1x1 convolutions to produce final forecast.</description>
+    ///     </item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultWaveNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 128,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int residualChannels = 32,
+        int skipChannels = 256,
+        int dilationDepth = 8,
+        int numStacks = 2,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (lookbackWindow < 1)
+            throw new ArgumentOutOfRangeException(nameof(lookbackWindow), "Lookback window must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (residualChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(residualChannels), "Residual channels must be at least 1.");
+        if (skipChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(skipChannels), "Skip channels must be at least 1.");
+        if (dilationDepth < 1)
+            throw new ArgumentOutOfRangeException(nameof(dilationDepth), "Dilation depth must be at least 1.");
+        if (numStacks < 1)
+            throw new ArgumentOutOfRangeException(nameof(numStacks), "Number of stacks must be at least 1.");
+        if (dropout < 0 || dropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
+
+        // === Input Projection (1x1 convolution equivalent) ===
+        // Project input features to residual channels
+        yield return new DenseLayer<T>(
+            inputSize: lookbackWindow * numFeatures,
+            outputSize: residualChannels,
+            activationFunction: new TanhActivation<T>());
+
+        // === Dilated Convolution Blocks ===
+        // Each stack repeats the dilation pattern
+        for (int stack = 0; stack < numStacks; stack++)
+        {
+            for (int layer = 0; layer < dilationDepth; layer++)
+            {
+                // Dilation factor: 2^layer
+                int dilation = 1 << layer;
+
+                // Filter convolution (for tanh)
+                yield return new DenseLayer<T>(
+                    inputSize: residualChannels,
+                    outputSize: residualChannels,
+                    activationFunction: new TanhActivation<T>());
+
+                // Gate convolution (for sigmoid)
+                yield return new DenseLayer<T>(
+                    inputSize: residualChannels,
+                    outputSize: residualChannels,
+                    activationFunction: new SigmoidActivation<T>());
+
+                // Residual connection projection (1x1 conv)
+                yield return new DenseLayer<T>(
+                    inputSize: residualChannels,
+                    outputSize: residualChannels,
+                    activationFunction: null);
+
+                // Skip connection projection (1x1 conv)
+                yield return new DenseLayer<T>(
+                    inputSize: residualChannels,
+                    outputSize: skipChannels,
+                    activationFunction: null);
+
+                if (dropout > 0)
+                {
+                    yield return new DropoutLayer<T>(dropout);
+                }
+            }
+        }
+
+        // === Output Layers ===
+        // First output layer with ReLU
+        yield return new DenseLayer<T>(
+            inputSize: skipChannels,
+            outputSize: skipChannels,
+            activationFunction: new ReLUActivation<T>());
+
+        // Second output layer with ReLU
+        yield return new DenseLayer<T>(
+            inputSize: skipChannels,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for an MQCNN (Multi-Quantile CNN) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture containing layer configurations.</param>
+    /// <param name="lookbackWindow">The number of past time steps to use as input. Default is 168.</param>
+    /// <param name="forecastHorizon">The number of future time steps to predict. Default is 24.</param>
+    /// <param name="numFeatures">The number of input features per time step. Default is 1.</param>
+    /// <param name="numQuantiles">The number of quantiles to predict. Default is 3 (e.g., P10, P50, P90).</param>
+    /// <param name="encoderChannels">The number of channels in the encoder network. Default is 64.</param>
+    /// <param name="decoderChannels">The number of channels in the decoder network. Default is 32.</param>
+    /// <param name="numEncoderLayers">The number of encoder layers. Default is 4.</param>
+    /// <param name="numDecoderLayers">The number of decoder layers. Default is 2.</param>
+    /// <param name="dropout">The dropout rate for regularization. Default is 0.2.</param>
+    /// <returns>An enumerable of layers configured for MQCNN.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MQCNN predicts multiple quantiles (percentiles) simultaneously,
+    /// providing uncertainty estimates with forecasts. Instead of just predicting "tomorrow's
+    /// value will be 100", it predicts "there's a 10% chance it will be below 95, 50% chance
+    /// below 100, and 90% chance below 105".
+    /// </para>
+    /// <para>
+    /// The architecture has two parts:
+    /// - <b>Encoder:</b> Processes the historical sequence using dilated convolutions
+    /// - <b>Decoder:</b> Produces quantile predictions from the encoded context
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is out of valid range.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultMQCNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 168,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int numQuantiles = 3,
+        int encoderChannels = 64,
+        int decoderChannels = 32,
+        int numEncoderLayers = 4,
+        int numDecoderLayers = 2,
+        double dropout = 0.2)
+    {
+        // Validate parameters
+        if (lookbackWindow < 1)
+            throw new ArgumentOutOfRangeException(nameof(lookbackWindow), "Lookback window must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (numQuantiles < 1)
+            throw new ArgumentOutOfRangeException(nameof(numQuantiles), "Number of quantiles must be at least 1.");
+        if (encoderChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(encoderChannels), "Encoder channels must be at least 1.");
+        if (decoderChannels < 1)
+            throw new ArgumentOutOfRangeException(nameof(decoderChannels), "Decoder channels must be at least 1.");
+        if (numEncoderLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numEncoderLayers), "Number of encoder layers must be at least 1.");
+        if (numDecoderLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numDecoderLayers), "Number of decoder layers must be at least 1.");
+        if (dropout < 0 || dropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
+
+        // === Encoder: Input Projection ===
+        // Project input sequence to encoder channels
+        yield return new DenseLayer<T>(
+            inputSize: lookbackWindow * numFeatures,
+            outputSize: encoderChannels,
+            activationFunction: new ReLUActivation<T>());
+
+        // === Encoder: Dilated Causal Convolution Layers ===
+        // Each layer has increasing dilation for larger receptive field
+        for (int layer = 0; layer < numEncoderLayers; layer++)
+        {
+            // Main convolution layer
+            yield return new DenseLayer<T>(
+                inputSize: encoderChannels,
+                outputSize: encoderChannels,
+                activationFunction: new ReLUActivation<T>());
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === Context Layer ===
+        // Compress encoder output to context representation
+        yield return new DenseLayer<T>(
+            inputSize: encoderChannels,
+            outputSize: decoderChannels,
+            activationFunction: new ReLUActivation<T>());
+
+        // === Decoder: Quantile Prediction Layers ===
+        // Process context for quantile predictions
+        for (int layer = 0; layer < numDecoderLayers; layer++)
+        {
+            yield return new DenseLayer<T>(
+                inputSize: decoderChannels,
+                outputSize: decoderChannels,
+                activationFunction: new ReLUActivation<T>());
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === Output Layer ===
+        // Output: forecastHorizon * numQuantiles
+        // Each time step has predictions for all quantiles
+        yield return new DenseLayer<T>(
+            inputSize: decoderChannels,
+            outputSize: forecastHorizon * numQuantiles,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for a DeepState (Deep State Space) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture containing layer configurations.</param>
+    /// <param name="lookbackWindow">The number of past time steps to use as input. Default is 168.</param>
+    /// <param name="forecastHorizon">The number of future time steps to predict. Default is 24.</param>
+    /// <param name="numFeatures">The number of input features per time step. Default is 1.</param>
+    /// <param name="stateDimension">The dimension of the SSM state. Default is 40.</param>
+    /// <param name="hiddenDimension">The hidden dimension of the RNN encoder. Default is 50.</param>
+    /// <param name="numRnnLayers">The number of RNN layers. Default is 2.</param>
+    /// <param name="dropout">The dropout rate for regularization. Default is 0.1.</param>
+    /// <returns>An enumerable of layers configured for DeepState.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepState combines deep learning with state space models:
+    /// - RNN encoder processes historical data
+    /// - Encoder output parameterizes state space model matrices
+    /// - State space model produces forecasts with natural uncertainty
+    /// </para>
+    /// <para>
+    /// The architecture includes:
+    /// - Input projection layer
+    /// - RNN encoder (multiple layers)
+    /// - SSM parameter generation layers (for F, H matrices)
+    /// - State evolution and observation layers
+    /// - Output projection for forecasts
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is out of valid range.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepStateLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 168,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int stateDimension = 40,
+        int hiddenDimension = 50,
+        int numRnnLayers = 2,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (lookbackWindow < 1)
+            throw new ArgumentOutOfRangeException(nameof(lookbackWindow), "Lookback window must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (stateDimension < 1)
+            throw new ArgumentOutOfRangeException(nameof(stateDimension), "State dimension must be at least 1.");
+        if (hiddenDimension < 1)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDimension), "Hidden dimension must be at least 1.");
+        if (numRnnLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numRnnLayers), "Number of RNN layers must be at least 1.");
+        if (dropout < 0 || dropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
+
+        // === Input Projection ===
+        // Project input features to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: lookbackWindow * numFeatures,
+            outputSize: hiddenDimension,
+            activationFunction: new ReLUActivation<T>());
+
+        // === RNN Encoder Layers ===
+        // Process sequence to extract temporal patterns
+        for (int layer = 0; layer < numRnnLayers; layer++)
+        {
+            // GRU layer (returnSequences=false for last layer)
+            bool returnSeqs = layer < numRnnLayers - 1;
+            yield return new GRULayer<T>(
+                inputSize: hiddenDimension,
+                hiddenSize: hiddenDimension,
+                returnSequences: returnSeqs,
+                activation: (IActivationFunction<T>?)null,
+                recurrentActivation: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === SSM Parameter Generation ===
+        // Generate state transition matrix parameters (F)
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDimension,
+            outputSize: stateDimension * stateDimension,
+            activationFunction: new TanhActivation<T>());
+
+        // Generate observation matrix parameters (H)
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDimension,
+            outputSize: stateDimension,
+            activationFunction: null);
+
+        // Generate initial state
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDimension,
+            outputSize: stateDimension,
+            activationFunction: new TanhActivation<T>());
+
+        // === State Evolution Layer ===
+        // Evolve state for forecast horizon
+        yield return new DenseLayer<T>(
+            inputSize: stateDimension,
+            outputSize: stateDimension * forecastHorizon,
+            activationFunction: new TanhActivation<T>());
+
+        // === Output Projection ===
+        // Project states to forecast values
+        yield return new DenseLayer<T>(
+            inputSize: stateDimension * forecastHorizon,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for a DeepFactor (Deep Factor Model).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture containing layer configurations.</param>
+    /// <param name="lookbackWindow">The number of past time steps to use as input. Default is 168.</param>
+    /// <param name="forecastHorizon">The number of future time steps to predict. Default is 24.</param>
+    /// <param name="numFeatures">The number of input features per time step. Default is 1.</param>
+    /// <param name="numFactors">The number of latent factors. Default is 10.</param>
+    /// <param name="factorHiddenDim">The hidden dimension for factor model. Default is 64.</param>
+    /// <param name="localHiddenDim">The hidden dimension for local model. Default is 32.</param>
+    /// <param name="numFactorLayers">The number of factor model layers. Default is 2.</param>
+    /// <param name="numLocalLayers">The number of local model layers. Default is 1.</param>
+    /// <param name="dropout">The dropout rate for regularization. Default is 0.1.</param>
+    /// <returns>An enumerable of layers configured for DeepFactor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepFactor decomposes time series into:
+    /// - Global factors: Patterns shared across all series
+    /// - Factor loadings: How much each series responds to each factor
+    /// - Local model: Series-specific residual patterns
+    /// </para>
+    /// <para>
+    /// The architecture includes:
+    /// - Factor RNN: Learns global factor dynamics
+    /// - Loading layer: Maps factors to series-specific contributions
+    /// - Local RNN: Captures residual series-specific patterns
+    /// - Combination layer: Merges factor and local predictions
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is out of valid range.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepFactorLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow = 168,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int numFactors = 10,
+        int factorHiddenDim = 64,
+        int localHiddenDim = 32,
+        int numFactorLayers = 2,
+        int numLocalLayers = 1,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (lookbackWindow < 1)
+            throw new ArgumentOutOfRangeException(nameof(lookbackWindow), "Lookback window must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (numFactors < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFactors), "Number of factors must be at least 1.");
+        if (factorHiddenDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(factorHiddenDim), "Factor hidden dimension must be at least 1.");
+        if (localHiddenDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(localHiddenDim), "Local hidden dimension must be at least 1.");
+        if (numFactorLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFactorLayers), "Number of factor layers must be at least 1.");
+        if (numLocalLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numLocalLayers), "Number of local layers must be at least 1.");
+        if (dropout < 0 || dropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
+
+        // === Input Projection ===
+        yield return new DenseLayer<T>(
+            inputSize: lookbackWindow * numFeatures,
+            outputSize: factorHiddenDim,
+            activationFunction: new ReLUActivation<T>());
+
+        // === Factor Model Layers ===
+        // RNN layers to learn global factor dynamics
+        for (int layer = 0; layer < numFactorLayers; layer++)
+        {
+            bool returnSeqs = layer < numFactorLayers - 1;
+            yield return new GRULayer<T>(
+                inputSize: factorHiddenDim,
+                hiddenSize: factorHiddenDim,
+                returnSequences: returnSeqs,
+                activation: (IActivationFunction<T>?)null,
+                recurrentActivation: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // Factor generation layer
+        yield return new DenseLayer<T>(
+            inputSize: factorHiddenDim,
+            outputSize: numFactors * forecastHorizon,
+            activationFunction: new TanhActivation<T>());
+
+        // === Factor Loading Layer ===
+        // Learn how factors contribute to predictions
+        yield return new DenseLayer<T>(
+            inputSize: numFactors * forecastHorizon,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+
+        // === Local Model Layers ===
+        // Simpler model for series-specific patterns
+        yield return new DenseLayer<T>(
+            inputSize: lookbackWindow * numFeatures,
+            outputSize: localHiddenDim,
+            activationFunction: new ReLUActivation<T>());
+
+        for (int layer = 0; layer < numLocalLayers; layer++)
+        {
+            yield return new DenseLayer<T>(
+                inputSize: localHiddenDim,
+                outputSize: localHiddenDim,
+                activationFunction: new ReLUActivation<T>());
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // Local prediction layer
+        yield return new DenseLayer<T>(
+            inputSize: localHiddenDim,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+
+        // === Combination Layer ===
+        // Merge factor and local predictions
+        yield return new DenseLayer<T>(
+            inputSize: forecastHorizon * 2,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for a TimesFM (Time Series Foundation Model).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture containing layer configurations.</param>
+    /// <param name="contextLength">The context length (input sequence). Default is 512.</param>
+    /// <param name="forecastHorizon">The number of future time steps to predict. Default is 96.</param>
+    /// <param name="numFeatures">The number of input features per time step. Default is 1.</param>
+    /// <param name="patchLength">The patch length for input tokenization. Default is 32.</param>
+    /// <param name="hiddenDim">The hidden dimension of the transformer. Default is 256.</param>
+    /// <param name="numLayers">The number of transformer layers. Default is 8.</param>
+    /// <param name="numHeads">The number of attention heads. Default is 4.</param>
+    /// <param name="dropout">The dropout rate for regularization. Default is 0.1.</param>
+    /// <returns>An enumerable of layers configured for TimesFM.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TimesFM uses a decoder-only transformer architecture:
+    /// - Input is patched (grouped into chunks)
+    /// - Patches are projected to hidden dimension
+    /// - Transformer processes with causal (autoregressive) attention
+    /// - Output head generates forecast values
+    /// </para>
+    /// <para>
+    /// The architecture mimics the pre-trained TimesFM but can be trained from scratch
+    /// in native mode or loaded from ONNX for the actual pre-trained weights.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is out of valid range.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimesFMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int patchLength = 32,
+        int hiddenDim = 256,
+        int numLayers = 8,
+        int numHeads = 4,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (patchLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(patchLength), "Patch length must be at least 1.");
+        if (hiddenDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDim), "Hidden dimension must be at least 1.");
+        if (numLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be at least 1.");
+        if (numHeads < 1)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be at least 1.");
+        if (dropout < 0 || dropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
+
+        int numPatches = contextLength / patchLength;
+        int patchInputSize = patchLength * numFeatures;
+
+        // === Patch Embedding ===
+        // Project each patch to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: contextLength * numFeatures,
+            outputSize: numPatches * hiddenDim,
+            activationFunction: null);
+
+        // === Transformer Layers ===
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            // Self-attention (approximated with dense layers)
+            // Query projection
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim,
+                outputSize: numPatches * hiddenDim,
+                activationFunction: null);
+
+            // Key projection
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim,
+                outputSize: numPatches * hiddenDim,
+                activationFunction: null);
+
+            // Value projection
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim,
+                outputSize: numPatches * hiddenDim,
+                activationFunction: null);
+
+            // Output projection
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim,
+                outputSize: numPatches * hiddenDim,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim,
+                outputSize: numPatches * hiddenDim * 4,
+                activationFunction: new ReLUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * hiddenDim * 4,
+                outputSize: numPatches * hiddenDim,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === Output Head ===
+        // Project to forecast horizon
+        yield return new DenseLayer<T>(
+            inputSize: numPatches * hiddenDim,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layer configuration for Lag-Llama time series foundation model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">The input context length (default: 96).</param>
+    /// <param name="forecastHorizon">The number of steps to forecast (default: 24).</param>
+    /// <param name="numFeatures">Number of input features (default: 1).</param>
+    /// <param name="numLags">Number of lag indices to use (default: 7).</param>
+    /// <param name="hiddenDim">Hidden dimension of the transformer (default: 256).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 8).</param>
+    /// <param name="numHeads">Number of attention heads (default: 4).</param>
+    /// <param name="intermediateSize">Intermediate size for FFN (default: 1024).</param>
+    /// <param name="dropout">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming the Lag-Llama architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This creates the Lag-Llama foundation model architecture.
+    ///
+    /// <b>Lag-Llama Architecture:</b>
+    /// Lag-Llama adapts the Llama LLM architecture for time series:
+    /// 1. <b>Lag Feature Extraction</b>: Creates features from past values at specific lags
+    /// 2. <b>Input Embedding</b>: Projects lag features to hidden dimension
+    /// 3. <b>Transformer Blocks</b>: Llama-style blocks with RMSNorm and SwiGLU
+    /// 4. <b>Distribution Head</b>: Outputs parameters for probabilistic predictions
+    ///
+    /// <b>Key Innovations from Llama:</b>
+    /// - RMSNorm instead of LayerNorm (faster, simpler)
+    /// - SwiGLU activation in FFN (better performance)
+    /// - RoPE for position encoding (better generalization)
+    ///
+    /// <b>Probabilistic Output:</b>
+    /// Unlike point forecasts, Lag-Llama outputs distribution parameters
+    /// (e.g., mean and variance for Normal, or df/loc/scale for Student-t).
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is out of valid range.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultLagLlamaLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 96,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int numLags = 7,
+        int hiddenDim = 256,
+        int numLayers = 8,
+        int numHeads = 4,
+        int intermediateSize = 1024,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (numLags < 1)
+            throw new ArgumentOutOfRangeException(nameof(numLags), "Number of lags must be at least 1.");
+        if (hiddenDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDim), "Hidden dimension must be at least 1.");
+        if (numLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be at least 1.");
+        if (numHeads < 1)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be at least 1.");
+        if (intermediateSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(intermediateSize), "Intermediate size must be at least 1.");
+        if (dropout < 0 || dropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
+
+        // Input size includes: value + lag features + time features
+        int inputSize = numFeatures * (1 + numLags);
+
+        // === Input Embedding ===
+        // Project lag features to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: contextLength * inputSize,
+            outputSize: contextLength * hiddenDim,
+            activationFunction: null);
+
+        // === Transformer Layers (Llama-style) ===
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            // RMSNorm (approximated with batch normalization behavior)
+            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDim);
+
+            // Multi-head Self-Attention (causal)
+            // Query projection
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * hiddenDim,
+                outputSize: contextLength * hiddenDim,
+                activationFunction: null);
+
+            // Key projection
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * hiddenDim,
+                outputSize: contextLength * hiddenDim,
+                activationFunction: null);
+
+            // Value projection
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * hiddenDim,
+                outputSize: contextLength * hiddenDim,
+                activationFunction: null);
+
+            // Output projection
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * hiddenDim,
+                outputSize: contextLength * hiddenDim,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+
+            // RMSNorm before FFN
+            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDim);
+
+            // SwiGLU-style FFN (gate * swish(x))
+            // Gate projection
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * hiddenDim,
+                outputSize: contextLength * intermediateSize,
+                activationFunction: new SiLUActivation<T>());
+
+            // Up projection
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * hiddenDim,
+                outputSize: contextLength * intermediateSize,
+                activationFunction: null);
+
+            // Down projection
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * intermediateSize,
+                outputSize: contextLength * hiddenDim,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === Final RMSNorm ===
+        yield return new BatchNormalizationLayer<T>(contextLength * hiddenDim);
+
+        // === Distribution Output Head ===
+        // For Student-t distribution: output mu, sigma, nu (3 parameters)
+        // We output forecast_horizon * 3 values
+        yield return new DenseLayer<T>(
+            inputSize: contextLength * hiddenDim,
+            outputSize: forecastHorizon * 3,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layer configuration for Chronos time series foundation model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">The input context length (default: 512).</param>
+    /// <param name="forecastHorizon">The number of steps to forecast (default: 64).</param>
+    /// <param name="numTokens">Number of discrete tokens for quantization (default: 4096).</param>
+    /// <param name="hiddenDim">Hidden dimension of the transformer (default: 768).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numHeads">Number of attention heads (default: 12).</param>
+    /// <param name="intermediateSize">Intermediate size for FFN (default: 3072).</param>
+    /// <param name="dropout">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers forming the Chronos architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This creates the Chronos foundation model architecture.
+    ///
+    /// <b>Chronos Architecture:</b>
+    /// Chronos tokenizes time series and uses a language model:
+    /// 1. <b>Token Embedding</b>: Maps token IDs to vectors
+    /// 2. <b>Positional Encoding</b>: Adds position information
+    /// 3. <b>Transformer Blocks</b>: Standard encoder-decoder or decoder-only
+    /// 4. <b>Language Model Head</b>: Predicts next token probabilities
+    ///
+    /// <b>Tokenization Process:</b>
+    /// 1. Scale time series to [-1, 1] range
+    /// 2. Quantize into N bins (e.g., 4096)
+    /// 3. Each bin is a "token" like words in text
+    /// 4. Model predicts next token probabilities
+    ///
+    /// <b>Probabilistic Forecasting:</b>
+    /// - Sample from predicted token distribution
+    /// - Convert tokens back to values
+    /// - Multiple samples give uncertainty estimates
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any parameter is out of valid range.</exception>
+    public static IEnumerable<ILayer<T>> CreateDefaultChronosLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 64,
+        int numTokens = 4096,
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int intermediateSize = 3072,
+        double dropout = 0.1)
+    {
+        // Validate parameters
+        if (contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numTokens < 1)
+            throw new ArgumentOutOfRangeException(nameof(numTokens), "Number of tokens must be at least 1.");
+        if (hiddenDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDim), "Hidden dimension must be at least 1.");
+        if (numLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be at least 1.");
+        if (numHeads < 1)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be at least 1.");
+        if (intermediateSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(intermediateSize), "Intermediate size must be at least 1.");
+        if (dropout < 0 || dropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropout), "Dropout must be between 0 and 1.");
+
+        // === Token Embedding ===
+        // Maps token IDs (represented as one-hot) to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: contextLength * numTokens,
+            outputSize: contextLength * hiddenDim,
+            activationFunction: null);
+
+        // === Transformer Layers (T5/GPT style) ===
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            // Layer normalization
+            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDim);
+
+            // Self-attention
+            // Query projection
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * hiddenDim,
+                outputSize: contextLength * hiddenDim,
+                activationFunction: null);
+
+            // Key projection
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * hiddenDim,
+                outputSize: contextLength * hiddenDim,
+                activationFunction: null);
+
+            // Value projection
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * hiddenDim,
+                outputSize: contextLength * hiddenDim,
+                activationFunction: null);
+
+            // Output projection
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * hiddenDim,
+                outputSize: contextLength * hiddenDim,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+
+            // Layer normalization before FFN
+            yield return new BatchNormalizationLayer<T>(contextLength * hiddenDim);
+
+            // Feed-forward network (GeLU activation for GPT-style)
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * hiddenDim,
+                outputSize: contextLength * intermediateSize,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: contextLength * intermediateSize,
+                outputSize: contextLength * hiddenDim,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === Final Layer Norm ===
+        yield return new BatchNormalizationLayer<T>(contextLength * hiddenDim);
+
+        // === Language Model Head ===
+        // Project to forecast token logits
+        yield return new DenseLayer<T>(
+            inputSize: contextLength * hiddenDim,
+            outputSize: forecastHorizon * numTokens,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layers for MOIRAI (Salesforce's Universal Time Series Foundation Model).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">The input context length.</param>
+    /// <param name="forecastHorizon">The prediction horizon length.</param>
+    /// <param name="numFeatures">The number of input features.</param>
+    /// <param name="patchSizes">Array of patch sizes for multi-scale patching.</param>
+    /// <param name="hiddenDim">Hidden dimension size.</param>
+    /// <param name="numLayers">Number of transformer layers.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="intermediateSize">FFN intermediate size.</param>
+    /// <param name="numMixtures">Number of mixture components for distribution output.</param>
+    /// <param name="dropout">Dropout rate.</param>
+    /// <returns>An enumerable of layers for MOIRAI.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> MOIRAI uses a unique multi-scale patching approach.
+    /// Instead of a single patch size, it creates embeddings at multiple scales
+    /// simultaneously, then processes them through a unified transformer encoder.
+    /// This allows the model to capture both fine-grained patterns and long-term trends.
+    /// The output is a mixture of distributions for probabilistic forecasting.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMOIRAILayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int[]? patchSizes = null,
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        int intermediateSize = 3072,
+        int numMixtures = 10,
+        double dropout = 0.1)
+    {
+        patchSizes ??= new[] { 8, 16, 32, 64 };
+
+        // Calculate total number of patches across all scales
+        int totalPatches = 0;
+        foreach (var patchSize in patchSizes)
+        {
+            totalPatches += contextLength / patchSize;
+        }
+
+        // === Multi-Scale Patch Embedding ===
+        // For MOIRAI, we embed patches at different scales into the same hidden dimension
+        // In practice, this is done with separate embedding layers per scale
+        // Here we approximate with a unified embedding
+        yield return new DenseLayer<T>(
+            inputSize: contextLength * numFeatures,
+            outputSize: totalPatches * hiddenDim,
+            activationFunction: null);
+
+        // === Positional Encoding ===
+        // Add learnable positional encoding for the multi-scale patches
+        yield return new BatchNormalizationLayer<T>(totalPatches * hiddenDim);
+
+        // === Masked Encoder Transformer Blocks ===
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Layer normalization (pre-norm architecture)
+            yield return new BatchNormalizationLayer<T>(totalPatches * hiddenDim);
+
+            // Multi-head self-attention across all scales
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: totalPatches,
+                embeddingDimension: hiddenDim,
+                headCount: numHeads);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+
+            // Layer normalization before FFN
+            yield return new BatchNormalizationLayer<T>(totalPatches * hiddenDim);
+
+            // Feed-forward network (GELU activation)
+            yield return new DenseLayer<T>(
+                inputSize: totalPatches * hiddenDim,
+                outputSize: totalPatches * intermediateSize,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: totalPatches * intermediateSize,
+                outputSize: totalPatches * hiddenDim,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === Final Layer Norm ===
+        yield return new BatchNormalizationLayer<T>(totalPatches * hiddenDim);
+
+        // === Prediction Head ===
+        // Project to forecast dimension
+        yield return new DenseLayer<T>(
+            inputSize: totalPatches * hiddenDim,
+            outputSize: forecastHorizon * hiddenDim,
+            activationFunction: new GELUActivation<T>());
+
+        // === Mixture Distribution Output Head ===
+        // Each mixture has: weight, mean, variance (3 params per mixture per forecast step)
+        int distributionParams = numMixtures * 3; // weight, mean, variance
+        yield return new DenseLayer<T>(
+            inputSize: forecastHorizon * hiddenDim,
+            outputSize: forecastHorizon * distributionParams,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layers for Time-LLM (LLM Reprogramming for Time Series).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">The input context length.</param>
+    /// <param name="forecastHorizon">The prediction horizon length.</param>
+    /// <param name="numFeatures">The number of input features.</param>
+    /// <param name="patchLength">Length of each patch.</param>
+    /// <param name="patchStride">Stride between patches.</param>
+    /// <param name="llmDim">LLM hidden dimension.</param>
+    /// <param name="numPrototypes">Number of text prototypes.</param>
+    /// <param name="numLayers">Number of reprogramming layers.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="dropout">Dropout rate.</param>
+    /// <returns>An enumerable of layers for Time-LLM.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Time-LLM reprograms frozen LLMs for time series.
+    /// The architecture includes:
+    /// 1. Patch embedding: Convert time series patches to embeddings
+    /// 2. Text prototype layer: Bridge between time series and text domains
+    /// 3. Reprogramming transformer: Learn the translation mapping
+    /// 4. Simulated LLM layers: Represent the frozen LLM processing
+    /// 5. Output projection: Map back to forecast values
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeLLMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int patchLength = 16,
+        int patchStride = 8,
+        int llmDim = 768,
+        int numPrototypes = 10,
+        int numLayers = 2,
+        int numHeads = 8,
+        double dropout = 0.1)
+    {
+        // Calculate number of patches
+        int numPatches = (contextLength - patchLength) / patchStride + 1;
+
+        // === Patch Embedding ===
+        // Project each patch to LLM dimension
+        yield return new DenseLayer<T>(
+            inputSize: contextLength * numFeatures,
+            outputSize: numPatches * llmDim,
+            activationFunction: null);
+
+        // === Text Prototype Layer ===
+        // These learned embeddings help bridge time series to text domain
+        // Implemented as a dense layer that expands prototype information
+        yield return new BatchNormalizationLayer<T>(numPatches * llmDim);
+
+        // === Reprogramming Transformer Blocks ===
+        // These learn to translate time series patterns to LLM-compatible representations
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Layer normalization (pre-norm)
+            yield return new BatchNormalizationLayer<T>(numPatches * llmDim);
+
+            // Self-attention for cross-patch interaction
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numPatches,
+                embeddingDimension: llmDim,
+                headCount: numHeads);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+
+            // FFN with GELU (matches GPT-style)
+            yield return new BatchNormalizationLayer<T>(numPatches * llmDim);
+
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * llmDim,
+                outputSize: numPatches * llmDim * 4,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * llmDim * 4,
+                outputSize: numPatches * llmDim,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === Simulated Frozen LLM Processing ===
+        // In native mode, we simulate the LLM with additional transformer layers
+        // In ONNX mode, the actual frozen LLM would be used
+        for (int i = 0; i < 2; i++) // Simplified LLM simulation
+        {
+            yield return new BatchNormalizationLayer<T>(numPatches * llmDim);
+
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numPatches,
+                embeddingDimension: llmDim,
+                headCount: numHeads);
+
+            yield return new BatchNormalizationLayer<T>(numPatches * llmDim);
+
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * llmDim,
+                outputSize: numPatches * llmDim * 4,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: numPatches * llmDim * 4,
+                outputSize: numPatches * llmDim,
+                activationFunction: null);
+        }
+
+        // === Final Layer Norm ===
+        yield return new BatchNormalizationLayer<T>(numPatches * llmDim);
+
+        // === Output Projection ===
+        // Project from LLM space back to forecast values
+        yield return new DenseLayer<T>(
+            inputSize: numPatches * llmDim,
+            outputSize: forecastHorizon * llmDim / 4,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: forecastHorizon * llmDim / 4,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the UniTS (Unified Time Series) model.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <param name="architecture">The neural network architecture containing input/output specifications.</param>
+    /// <param name="contextLength">The context length (input sequence length). Default: 512.</param>
+    /// <param name="forecastHorizon">The forecast horizon (prediction length). Default: 96.</param>
+    /// <param name="hiddenDim">The hidden dimension size. Default: 512.</param>
+    /// <param name="numLayers">The number of transformer layers. Default: 6.</param>
+    /// <param name="numHeads">The number of attention heads. Default: 8.</param>
+    /// <param name="convKernelSizes">The convolution kernel sizes for multi-scale temporal convolution. Default: [3, 5, 7].</param>
+    /// <param name="dropout">The dropout rate for regularization. Default: 0.1.</param>
+    /// <param name="taskType">The task type (forecasting, classification, anomaly, imputation). Default: forecasting.</param>
+    /// <param name="numClasses">The number of classes for classification task. Default: 2.</param>
+    /// <returns>An enumerable of layers configured for UniTS.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> UniTS (Unified Time Series) is a universal architecture designed to
+    /// handle multiple time series tasks with a single pretrained model. Instead of training
+    /// separate models for forecasting, classification, anomaly detection, and imputation,
+    /// UniTS learns a shared representation that transfers across all these tasks.
+    /// </para>
+    /// <para>
+    /// The architecture combines:
+    /// - Multi-scale temporal convolution (captures patterns at different time scales)
+    /// - Transformer layers (captures global dependencies)
+    /// - Task-specific output heads (adapts to each task type)
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Gao et al., "UniTS: A Unified Multi-Task Time Series Model", 2024.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultUniTSLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int hiddenDim = 512,
+        int numLayers = 6,
+        int numHeads = 8,
+        int[]? convKernelSizes = null,
+        double dropout = 0.1,
+        string taskType = "forecasting",
+        int numClasses = 2)
+    {
+        convKernelSizes ??= new[] { 3, 5, 7 };
+
+        int numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
+        int numScales = convKernelSizes.Length;
+
+        // === Input Embedding ===
+        // Project input features to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures * contextLength,
+            outputSize: hiddenDim * contextLength,
+            activationFunction: new GELUActivation<T>());
+
+        // === Multi-Scale Temporal Processing ===
+        // Simulates multi-scale temporal convolution using dense layers with different receptive fields
+        // Each scale captures patterns at different time granularities
+        for (int scale = 0; scale < numScales; scale++)
+        {
+            // Dense layer simulating temporal convolution at this scale
+            // Different scales use different hidden dimensions to capture various patterns
+            int scaleHidden = hiddenDim / numScales;
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * contextLength,
+                outputSize: scaleHidden * contextLength,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new BatchNormalizationLayer<T>(scaleHidden * contextLength);
+        }
+
+        // === Scale Aggregation ===
+        // Combine multi-scale features
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim * contextLength,
+            outputSize: hiddenDim * contextLength,
+            activationFunction: new GELUActivation<T>());
+
+        // === Transformer Encoder Stack ===
+        // Standard transformer layers for capturing global dependencies
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Pre-normalization for stability
+            yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: contextLength,
+                embeddingDimension: hiddenDim,
+                headCount: numHeads);
+
+            // Dropout for regularization
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+
+            // Feed-forward network with GELU activation
+            yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * contextLength,
+                outputSize: hiddenDim * 4 * contextLength,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * 4 * contextLength,
+                outputSize: hiddenDim * contextLength,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === Final Layer Norm ===
+        yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+
+        // === Task-Specific Output Heads ===
+        // Different projection heads for different tasks
+        switch (taskType.ToLowerInvariant())
+        {
+            case "classification":
+                // Global pooling followed by classification head
+                yield return new DenseLayer<T>(
+                    inputSize: hiddenDim * contextLength,
+                    outputSize: hiddenDim,
+                    activationFunction: new GELUActivation<T>());
+
+                yield return new DenseLayer<T>(
+                    inputSize: hiddenDim,
+                    outputSize: numClasses,
+                    activationFunction: null);
+                break;
+
+            case "anomaly":
+                // Reconstruction head for anomaly detection
+                yield return new DenseLayer<T>(
+                    inputSize: hiddenDim * contextLength,
+                    outputSize: hiddenDim * contextLength / 2,
+                    activationFunction: new GELUActivation<T>());
+
+                yield return new DenseLayer<T>(
+                    inputSize: hiddenDim * contextLength / 2,
+                    outputSize: numFeatures * contextLength,
+                    activationFunction: null);
+                break;
+
+            case "imputation":
+                // Same as anomaly - reconstruct the full sequence
+                yield return new DenseLayer<T>(
+                    inputSize: hiddenDim * contextLength,
+                    outputSize: hiddenDim * contextLength / 2,
+                    activationFunction: new GELUActivation<T>());
+
+                yield return new DenseLayer<T>(
+                    inputSize: hiddenDim * contextLength / 2,
+                    outputSize: numFeatures * contextLength,
+                    activationFunction: null);
+                break;
+
+            case "forecasting":
+            default:
+                // Forecasting projection head
+                yield return new DenseLayer<T>(
+                    inputSize: hiddenDim * contextLength,
+                    outputSize: hiddenDim * forecastHorizon / 4,
+                    activationFunction: new GELUActivation<T>());
+
+                yield return new DenseLayer<T>(
+                    inputSize: hiddenDim * forecastHorizon / 4,
+                    outputSize: forecastHorizon,
+                    activationFunction: null);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for the Timer (Generative Pre-Training) model.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <param name="architecture">The neural network architecture containing input/output specifications.</param>
+    /// <param name="contextLength">The context length (input sequence length). Default: 512.</param>
+    /// <param name="forecastHorizon">The forecast horizon (prediction length). Default: 96.</param>
+    /// <param name="numFeatures">The number of input features. Default: 1.</param>
+    /// <param name="patchLength">The patch length for tokenization. Default: 16.</param>
+    /// <param name="patchStride">The patch stride. Default: 8.</param>
+    /// <param name="hiddenDim">The hidden dimension size. Default: 768.</param>
+    /// <param name="numLayers">The number of transformer layers. Default: 12.</param>
+    /// <param name="numHeads">The number of attention heads. Default: 12.</param>
+    /// <param name="dropout">The dropout rate for regularization. Default: 0.1.</param>
+    /// <returns>An enumerable of layers configured for Timer.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Timer is a generative pre-training approach for time series.
+    /// Like GPT for language, Timer learns to predict future values from past values,
+    /// building rich temporal representations that transfer to various downstream tasks.
+    /// </para>
+    /// <para>
+    /// The architecture follows a GPT-style decoder-only transformer:
+    /// - Patch embedding converts time series to tokens
+    /// - Positional encoding adds temporal position information
+    /// - Causal transformer layers with masked self-attention
+    /// - Autoregressive generation head for forecasting
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Liu et al., "Timer: Generative Pre-Training of Time Series", 2024.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int patchLength = 16,
+        int patchStride = 8,
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        double dropout = 0.1)
+    {
+        // Calculate number of patches
+        int numPatches = (contextLength - patchLength) / patchStride + 1;
+
+        // === Patch Embedding ===
+        // Convert raw time series patches to hidden dimension tokens
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures * patchLength,
+            outputSize: hiddenDim,
+            activationFunction: new GELUActivation<T>());
+
+        // === Positional Encoding ===
+        // Add learned position information (simulated with batch norm + projection)
+        yield return new BatchNormalizationLayer<T>(hiddenDim * numPatches);
+
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim * numPatches,
+            outputSize: hiddenDim * numPatches,
+            activationFunction: null);
+
+        // === GPT-Style Decoder Transformer Stack ===
+        // Causal self-attention with masked attention
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Pre-norm for stability
+            yield return new BatchNormalizationLayer<T>(hiddenDim * numPatches);
+
+            // Multi-head self-attention (causal masking applied during forward)
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numPatches,
+                embeddingDimension: hiddenDim,
+                headCount: numHeads);
+
+            // Dropout for regularization
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+
+            // Pre-norm for FFN
+            yield return new BatchNormalizationLayer<T>(hiddenDim * numPatches);
+
+            // Feed-forward network with GELU activation
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * numPatches,
+                outputSize: hiddenDim * 4 * numPatches,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * 4 * numPatches,
+                outputSize: hiddenDim * numPatches,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === Final Layer Norm ===
+        yield return new BatchNormalizationLayer<T>(hiddenDim * numPatches);
+
+        // === Autoregressive Generation Head ===
+        // Project to forecast space for next-token prediction
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim * numPatches,
+            outputSize: hiddenDim * forecastHorizon / 4,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim * forecastHorizon / 4,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TimeGPT-style model.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <param name="architecture">The neural network architecture containing input/output specifications.</param>
+    /// <param name="contextLength">The context length (input sequence length). Default: 512.</param>
+    /// <param name="forecastHorizon">The forecast horizon (prediction length). Default: 96.</param>
+    /// <param name="numFeatures">The number of input features. Default: 1.</param>
+    /// <param name="hiddenDim">The hidden dimension size. Default: 1024.</param>
+    /// <param name="numLayers">The number of transformer layers. Default: 24.</param>
+    /// <param name="numHeads">The number of attention heads. Default: 16.</param>
+    /// <param name="dropout">The dropout rate for regularization. Default: 0.0.</param>
+    /// <returns>An enumerable of layers configured for TimeGPT.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TimeGPT is a large-scale foundation model for time series forecasting.
+    /// Like GPT for language, it was trained on millions of diverse time series to become a
+    /// general-purpose forecaster that works zero-shot on new data.
+    /// </para>
+    /// <para>
+    /// The architecture follows a standard transformer design:
+    /// - Positional encoding for temporal information
+    /// - Large transformer backbone with many layers
+    /// - Projection head for generating forecasts
+    /// - Optional conformal prediction for uncertainty
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Garza et al., "TimeGPT-1", 2023.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeGPTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int hiddenDim = 1024,
+        int numLayers = 24,
+        int numHeads = 16,
+        double dropout = 0.0)
+    {
+        // === Input Embedding ===
+        // Project input time series to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures * contextLength,
+            outputSize: hiddenDim * contextLength,
+            activationFunction: new GELUActivation<T>());
+
+        // === Positional Encoding ===
+        // Simulated with batch normalization and projection
+        yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim * contextLength,
+            outputSize: hiddenDim * contextLength,
+            activationFunction: null);
+
+        // === Large Transformer Backbone ===
+        // GPT-style transformer with many layers for foundation model capabilities
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Pre-norm for stability
+            yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: contextLength,
+                embeddingDimension: hiddenDim,
+                headCount: numHeads);
+
+            // Dropout (disabled for zero-shot inference)
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+
+            // Pre-norm for FFN
+            yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+
+            // Large feed-forward network (4x hidden dim is standard)
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * contextLength,
+                outputSize: hiddenDim * 4 * contextLength,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * 4 * contextLength,
+                outputSize: hiddenDim * contextLength,
+                activationFunction: null);
+
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+        }
+
+        // === Final Layer Norm ===
+        yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+
+        // === Forecast Projection Head ===
+        // Project to forecast horizon (with intermediate layer for capacity)
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim * contextLength,
+            outputSize: hiddenDim * forecastHorizon / 4,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim * forecastHorizon / 4,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the Mamba (Selective State Space Model).
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <param name="architecture">The neural network architecture containing input/output specifications.</param>
+    /// <param name="contextLength">The context length (input sequence length). Default: 512.</param>
+    /// <param name="forecastHorizon">The forecast horizon (prediction length). Default: 96.</param>
+    /// <param name="numFeatures">The number of input features. Default: 1.</param>
+    /// <param name="modelDim">The model dimension. Default: 256.</param>
+    /// <param name="stateDim">The state dimension for SSM. Default: 16.</param>
+    /// <param name="expandFactor">The expansion factor. Default: 2.</param>
+    /// <param name="numLayers">The number of Mamba layers. Default: 4.</param>
+    /// <param name="dropout">The dropout rate for regularization. Default: 0.1.</param>
+    /// <returns>An enumerable of layers configured for Mamba.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mamba is a selective state space model that achieves
+    /// linear-time complexity for sequence modeling. Unlike transformers with O(n^2)
+    /// attention, Mamba processes sequences in O(n) time while maintaining expressiveness
+    /// through input-dependent state space parameters.
+    /// </para>
+    /// <para>
+    /// The architecture simulates the Mamba block using available layers:
+    /// - Input projection to expanded dimension
+    /// - Dense layers simulating the SSM selective mechanism
+    /// - Output projection back to model dimension
+    /// </para>
+    /// <para>
+    /// <b>Reference:</b> Gu and Dao, "Mamba: Linear-Time Sequence Modeling with Selective State Spaces", 2024.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMambaLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int numFeatures = 1,
+        int modelDim = 256,
+        int stateDim = 16,
+        int expandFactor = 2,
+        int numLayers = 4,
+        double dropout = 0.1)
+    {
+        int innerDim = modelDim * expandFactor;
+
+        // === Input Embedding ===
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures * contextLength,
+            outputSize: modelDim * contextLength,
+            activationFunction: new GELUActivation<T>());
+
+        // === Mamba Blocks ===
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            // Pre-norm
+            yield return new BatchNormalizationLayer<T>(modelDim * contextLength);
+
+            // === Mamba Block Start ===
+            // Input projection (simulates x_proj and z_proj)
+            yield return new DenseLayer<T>(
+                inputSize: modelDim * contextLength,
+                outputSize: innerDim * contextLength,
+                activationFunction: new SiLUActivation<T>());
+
+            // Selective SSM simulation using dense layers
+            // In real Mamba, this is a state space model with input-dependent parameters
+            // We simulate it with a series of dense layers that capture the selective behavior
+
+            // B projection (input to state)
+            yield return new DenseLayer<T>(
+                inputSize: innerDim * contextLength,
+                outputSize: innerDim * stateDim,
+                activationFunction: null);
+
+            // State processing (simulates the SSM state dynamics)
+            yield return new DenseLayer<T>(
+                inputSize: innerDim * stateDim,
+                outputSize: innerDim * stateDim,
+                activationFunction: new SiLUActivation<T>());
+
+            // C projection (state to output)
+            yield return new DenseLayer<T>(
+                inputSize: innerDim * stateDim,
+                outputSize: innerDim * contextLength,
+                activationFunction: null);
+
+            // Gating mechanism (z branch)
+            yield return new DenseLayer<T>(
+                inputSize: innerDim * contextLength,
+                outputSize: innerDim * contextLength,
+                activationFunction: new SiLUActivation<T>());
+
+            // Output projection
+            yield return new DenseLayer<T>(
+                inputSize: innerDim * contextLength,
+                outputSize: modelDim * contextLength,
+                activationFunction: null);
+
+            // Dropout
+            if (dropout > 0)
+            {
+                yield return new DropoutLayer<T>(dropout);
+            }
+            // === Mamba Block End ===
+        }
+
+        // === Final Layer Norm ===
+        yield return new BatchNormalizationLayer<T>(modelDim * contextLength);
+
+        // === Output Projection ===
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength,
+            outputSize: modelDim * forecastHorizon / 4,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * forecastHorizon / 4,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the S4 (Structured State Space Sequence) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">The input sequence length (default: 1024).</param>
+    /// <param name="forecastHorizon">The prediction length (default: 96).</param>
+    /// <param name="modelDim">The model dimension (default: 256).</param>
+    /// <param name="stateDim">The state dimension N (default: 64).</param>
+    /// <param name="numLayers">Number of S4 layers (default: 6).</param>
+    /// <param name="useLowRankCorrection">Whether to use DPLR (default: true).</param>
+    /// <param name="lowRankRank">Rank of low-rank correction (default: 1).</param>
+    /// <returns>An enumerable collection of layers for the S4 model.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> S4 (Structured State Space) is a foundational model
+    /// that achieves near-linear complexity through clever mathematical structure:
+    ///
+    /// <b>The S4 Computation Flow:</b>
+    /// 1. Input embedding to model dimension
+    /// 2. For each S4 layer:
+    ///    - State Space Model (SSM) using HiPPO-structured A matrix
+    ///    - Compute as convolution using FFT (O(n log n))
+    ///    - Residual connection and normalization
+    /// 3. Output projection to forecast
+    ///
+    /// <b>Key Innovation - DPLR Decomposition:</b>
+    /// The HiPPO matrix A is decomposed as A = diagonal + low-rank.
+    /// This allows efficient computation while preserving the structure that
+    /// makes HiPPO effective at compressing long sequences.
+    ///
+    /// <b>What Each Layer Does:</b>
+    /// - Diagonal projection: The diagonal part of A (eigenvalues)
+    /// - Low-rank projections: P and Q for the off-diagonal correction
+    /// - State update: Simulates the state dynamics x' = Ax + Bu
+    /// - Output: Computes y = Cx + Du from the state
+    ///
+    /// Since we don't have explicit FFT layers, we simulate the SSM
+    /// computation using dense layers that learn the effective convolution kernel.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultS4Layers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 1024,
+        int forecastHorizon = 96,
+        int modelDim = 256,
+        int stateDim = 64,
+        int numLayers = 6,
+        bool useLowRankCorrection = true,
+        int lowRankRank = 1,
+        int numFeatures = 1)
+    {
+
+        // === Input Embedding ===
+        yield return new DenseLayer<T>(
+            inputSize: contextLength * numFeatures,
+            outputSize: modelDim * contextLength,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+
+        // === S4 Layers ===
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            // === SSM Block (simulated with dense layers) ===
+
+            // B projection (input to state)
+            // In S4, B projects input u into the state space
+            yield return new DenseLayer<T>(
+                inputSize: modelDim * contextLength,
+                outputSize: stateDim * contextLength,
+                activationFunction: null);
+
+            // Diagonal component of A (discretized)
+            // This simulates A_bar_diagonal * x where A_bar = discrete(A)
+            yield return new DenseLayer<T>(
+                inputSize: stateDim * contextLength,
+                outputSize: stateDim * contextLength,
+                activationFunction: new TanhActivation<T>()); // Tanh for stability (SSM eigenvalues)
+
+            if (useLowRankCorrection)
+            {
+                // Low-rank correction: P projection
+                yield return new DenseLayer<T>(
+                    inputSize: stateDim * contextLength,
+                    outputSize: lowRankRank * contextLength,
+                    activationFunction: null);
+
+                // Low-rank correction: Q^T projection (reconstructs contribution to state)
+                yield return new DenseLayer<T>(
+                    inputSize: lowRankRank * contextLength,
+                    outputSize: stateDim * contextLength,
+                    activationFunction: null);
+            }
+
+            // C projection (state to output)
+            // In S4, C projects the state x back to the output
+            yield return new DenseLayer<T>(
+                inputSize: stateDim * contextLength,
+                outputSize: modelDim * contextLength,
+                activationFunction: null);
+
+            // D (direct feedthrough)
+            // Skip connection from input to output (simulated via residual)
+            yield return new DenseLayer<T>(
+                inputSize: modelDim * contextLength,
+                outputSize: modelDim * contextLength,
+                activationFunction: new GELUActivation<T>());
+
+            // Layer normalization
+            yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+
+            // Dropout for regularization
+            yield return new DropoutLayer<T>(0.1);
+        }
+
+        // === FFN Block (post-SSM processing) ===
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength,
+            outputSize: modelDim * contextLength * 2,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength * 2,
+            outputSize: modelDim * contextLength,
+            activationFunction: null);
+
+        yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+
+        // === Output Projection ===
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength,
+            outputSize: modelDim * forecastHorizon / 4,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * forecastHorizon / 4,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TimeMachine (Time Series State Space Model) architecture.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">The input sequence length (default: 512).</param>
+    /// <param name="forecastHorizon">The prediction horizon (default: 96).</param>
+    /// <param name="modelDim">The model dimension d_model (default: 256).</param>
+    /// <param name="stateDim">The SSM state dimension (default: 16).</param>
+    /// <param name="numScales">Number of temporal scales/Mamba blocks (default: 4).</param>
+    /// <param name="numLayers">Number of SSM layers per scale (default: 2).</param>
+    /// <param name="expandFactor">Expansion factor for inner dimension (default: 2).</param>
+    /// <param name="convKernelSize">Convolution kernel size (default: 4).</param>
+    /// <param name="useMultiScaleAttention">Whether to use attention for scale combination (default: true).</param>
+    /// <param name="numFeatures">Number of input features (default: 1).</param>
+    /// <returns>A collection of layers forming the TimeMachine architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TimeMachine is a state space model designed specifically for
+    /// time series forecasting. The key insight from "A Time Series is Worth 4 Mambas"
+    /// is that using multiple SSM blocks at different temporal scales captures both
+    /// short-term and long-term patterns effectively.
+    /// </para>
+    /// <para>
+    /// The architecture follows this flow:
+    /// 1. Input embedding with reversible normalization
+    /// 2. Temporal decomposition into multiple scales
+    /// 3. Each scale has its own SSM (Mamba-style) blocks
+    /// 4. Multi-scale attention combines the scale outputs
+    /// 5. Output projection produces forecasts
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeMachineLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int modelDim = 256,
+        int stateDim = 16,
+        int numScales = 4,
+        int numLayers = 2,
+        int expandFactor = 2,
+        int convKernelSize = 4,
+        bool useMultiScaleAttention = true,
+        int numFeatures = 1)
+    {
+        int innerDim = modelDim * expandFactor;
+
+        // === Input Embedding with Reversible Instance Normalization ===
+        // Project input features to model dimension
+        yield return new DenseLayer<T>(
+            inputSize: contextLength * numFeatures,
+            outputSize: modelDim * contextLength,
+            activationFunction: new GELUActivation<T>());
+
+        // Layer normalization (simulates RevIN mean/variance tracking)
+        yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+
+        // === Multi-Scale SSM Blocks (4 Mambas) ===
+        // Each scale processes at different temporal granularity
+        for (int scale = 0; scale < numScales; scale++)
+        {
+            // Downsampling factor for this scale (scale 0 = finest, scale n-1 = coarsest)
+            // Scale-specific effective sequence length: contextLength / (2^scale)
+            int scaleSeqLen = Math.Max(contextLength / (1 << scale), 1);
+            int scaleDim = modelDim * scaleSeqLen;
+
+            // === Temporal Decomposition for this scale ===
+            // Simulates downsampling via dense projection
+            // (Conv1DLayer doesn't exist, so we use dense layers to approximate)
+            yield return new DenseLayer<T>(
+                inputSize: modelDim * contextLength,
+                outputSize: scaleDim,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new LayerNormalizationLayer<T>(scaleDim);
+
+            // === SSM Layers for this scale ===
+            for (int layer = 0; layer < numLayers; layer++)
+            {
+                // === Mamba-style SSM Block ===
+
+                // Input projection to expanded dimension
+                yield return new DenseLayer<T>(
+                    inputSize: scaleDim,
+                    outputSize: innerDim * scaleSeqLen,
+                    activationFunction: new SiLUActivation<T>());
+
+                // Local context processing (simulates 1D convolution with dense layer)
+                yield return new DenseLayer<T>(
+                    inputSize: innerDim * scaleSeqLen,
+                    outputSize: innerDim * scaleSeqLen,
+                    activationFunction: new SiLUActivation<T>());
+
+                // B projection (input to state)
+                yield return new DenseLayer<T>(
+                    inputSize: innerDim * scaleSeqLen,
+                    outputSize: stateDim * scaleSeqLen,
+                    activationFunction: null);
+
+                // Selective state update (A diagonal)
+                yield return new DenseLayer<T>(
+                    inputSize: stateDim * scaleSeqLen,
+                    outputSize: stateDim * scaleSeqLen,
+                    activationFunction: new TanhActivation<T>());
+
+                // C projection (state to output)
+                yield return new DenseLayer<T>(
+                    inputSize: stateDim * scaleSeqLen,
+                    outputSize: innerDim * scaleSeqLen,
+                    activationFunction: null);
+
+                // Output projection back to model dimension
+                yield return new DenseLayer<T>(
+                    inputSize: innerDim * scaleSeqLen,
+                    outputSize: scaleDim,
+                    activationFunction: null);
+
+                // Layer normalization and dropout
+                yield return new LayerNormalizationLayer<T>(scaleDim);
+                yield return new DropoutLayer<T>(0.1);
+            }
+
+            // === Upsampling back to original sequence length ===
+            if (scale > 0)
+            {
+                yield return new DenseLayer<T>(
+                    inputSize: scaleDim,
+                    outputSize: modelDim * contextLength,
+                    activationFunction: new GELUActivation<T>());
+            }
+        }
+
+        // === Multi-Scale Fusion ===
+        if (useMultiScaleAttention)
+        {
+            // Attention-based fusion of multi-scale outputs
+            // Projects all scales to same dimension for attention
+            yield return new DenseLayer<T>(
+                inputSize: modelDim * contextLength * numScales,
+                outputSize: modelDim * contextLength,
+                activationFunction: new GELUActivation<T>());
+
+            // Simple self-attention mechanism for scale weighting
+            yield return new DenseLayer<T>(
+                inputSize: modelDim * contextLength,
+                outputSize: numScales,
+                activationFunction: new SoftmaxActivation<T>());
+
+            // Apply attention weights (simplified as dense)
+            yield return new DenseLayer<T>(
+                inputSize: numScales,
+                outputSize: modelDim * contextLength,
+                activationFunction: null);
+        }
+
+        yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+
+        // === Reversible De-normalization ===
+        // (Learned affine transformation to restore original scale)
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength,
+            outputSize: modelDim * contextLength,
+            activationFunction: null);
+
+        // === Output Projection ===
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength,
+            outputSize: modelDim * forecastHorizon / 4,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * forecastHorizon / 4,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the HiPPO (High-order Polynomial Projection Operators) architecture.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">The input sequence length (default: 512).</param>
+    /// <param name="forecastHorizon">The prediction horizon (default: 96).</param>
+    /// <param name="modelDim">The model dimension d_model (default: 256).</param>
+    /// <param name="stateDim">The HiPPO state dimension/polynomial order (default: 64).</param>
+    /// <param name="numLayers">Number of HiPPO layers (default: 4).</param>
+    /// <param name="useNormalization">Whether to use layer normalization (default: true).</param>
+    /// <param name="numFeatures">Number of input features (default: 1).</param>
+    /// <returns>A collection of layers forming the HiPPO architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> HiPPO (High-order Polynomial Projection Operators) provides
+    /// the theoretical foundation for state space models like S4 and Mamba.
+    /// </para>
+    /// <para>
+    /// The architecture follows this flow:
+    /// 1. Input embedding to model dimension
+    /// 2. For each HiPPO layer:
+    ///    - B projection (input to polynomial state)
+    ///    - A matrix application (HiPPO state evolution)
+    ///    - C projection (polynomial state to output)
+    ///    - D feedthrough (skip connection)
+    ///    - Normalization and dropout
+    /// 3. Output projection to forecast horizon
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultHippoLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 512,
+        int forecastHorizon = 96,
+        int modelDim = 256,
+        int stateDim = 64,
+        int numLayers = 4,
+        bool useNormalization = true,
+        int numFeatures = 1)
+    {
+        // === Input Embedding ===
+        yield return new DenseLayer<T>(
+            inputSize: contextLength * numFeatures,
+            outputSize: modelDim * contextLength,
+            activationFunction: new GELUActivation<T>());
+
+        if (useNormalization)
+        {
+            yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+        }
+
+        // === HiPPO Layers ===
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            // === HiPPO Block ===
+            // Each block implements: x' = Ax + Bu, y = Cx + Du
+
+            // B projection (input to polynomial state space)
+            // B maps input u to state contribution
+            yield return new DenseLayer<T>(
+                inputSize: modelDim * contextLength,
+                outputSize: stateDim * contextLength,
+                activationFunction: null);
+
+            // A matrix application (HiPPO state evolution)
+            // This simulates the HiPPO matrix A that defines optimal memory
+            // In HiPPO-LegS: A[i,j] = -sqrt(2i+1)*sqrt(2j+1) if i>j, -(2i+1) if i==j
+            yield return new DenseLayer<T>(
+                inputSize: stateDim * contextLength,
+                outputSize: stateDim * contextLength,
+                activationFunction: new TanhActivation<T>()); // Tanh for stability
+
+            // Second A application for deeper state evolution
+            yield return new DenseLayer<T>(
+                inputSize: stateDim * contextLength,
+                outputSize: stateDim * contextLength,
+                activationFunction: new TanhActivation<T>());
+
+            // C projection (polynomial state to output)
+            // C reads out the polynomial coefficients to produce output
+            yield return new DenseLayer<T>(
+                inputSize: stateDim * contextLength,
+                outputSize: modelDim * contextLength,
+                activationFunction: null);
+
+            // D feedthrough (skip connection from input to output)
+            // Allows direct information flow bypassing the state
+            yield return new DenseLayer<T>(
+                inputSize: modelDim * contextLength,
+                outputSize: modelDim * contextLength,
+                activationFunction: new GELUActivation<T>());
+
+            // Normalization and dropout
+            if (useNormalization)
+            {
+                yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+            }
+            yield return new DropoutLayer<T>(0.1);
+        }
+
+        // === FFN Block (post-HiPPO processing) ===
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength,
+            outputSize: modelDim * contextLength * 2,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength * 2,
+            outputSize: modelDim * contextLength,
+            activationFunction: null);
+
+        if (useNormalization)
+        {
+            yield return new LayerNormalizationLayer<T>(modelDim * contextLength);
+        }
+
+        // === Output Projection ===
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * contextLength,
+            outputSize: modelDim * forecastHorizon / 4,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: modelDim * forecastHorizon / 4,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the TimeGrad (Diffusion for Time Series) architecture.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="contextLength">The input sequence length (default: 168).</param>
+    /// <param name="forecastHorizon">The prediction horizon (default: 24).</param>
+    /// <param name="hiddenDim">The RNN hidden dimension (default: 64).</param>
+    /// <param name="numRnnLayers">Number of RNN layers (default: 2).</param>
+    /// <param name="denoisingDim">The denoising network dimension (default: 128).</param>
+    /// <param name="numDiffusionSteps">Number of diffusion steps (default: 100).</param>
+    /// <param name="numFeatures">Number of input features (default: 1).</param>
+    /// <returns>A collection of layers forming the TimeGrad architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TimeGrad uses a diffusion process for probabilistic forecasting.
+    /// The architecture combines:
+    /// 1. RNN encoder to process historical data
+    /// 2. Denoising network conditioned on RNN hidden state
+    /// 3. Multiple diffusion steps for noise removal
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeGradLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int contextLength = 168,
+        int forecastHorizon = 24,
+        int hiddenDim = 64,
+        int numRnnLayers = 2,
+        int denoisingDim = 128,
+        int numDiffusionSteps = 100,
+        int numFeatures = 1)
+    {
+        // === Input Embedding ===
+        yield return new DenseLayer<T>(
+            inputSize: contextLength * numFeatures,
+            outputSize: hiddenDim * contextLength,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(hiddenDim * contextLength);
+
+        // === RNN Encoder ===
+        // Simulated with dense layers (actual LSTM would need special handling)
+        for (int i = 0; i < numRnnLayers; i++)
+        {
+            // Forget gate simulation
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * contextLength,
+                outputSize: hiddenDim * contextLength,
+                activationFunction: new SigmoidActivation<T>());
+
+            // Input gate simulation
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * contextLength,
+                outputSize: hiddenDim * contextLength,
+                activationFunction: new SigmoidActivation<T>());
+
+            // Cell state update
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * contextLength,
+                outputSize: hiddenDim * contextLength,
+                activationFunction: new TanhActivation<T>());
+
+            // Output projection
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * contextLength,
+                outputSize: hiddenDim * contextLength,
+                activationFunction: null);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim * contextLength);
+            yield return new DropoutLayer<T>(0.1);
+        }
+
+        // === Denoising Network ===
+        // Takes noisy forecast + RNN hidden state + timestep embedding
+
+        // Timestep embedding projection
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim * contextLength,
+            outputSize: denoisingDim,
+            activationFunction: new SiLUActivation<T>());
+
+        // Denoising blocks (simplified UNet-like structure)
+        // Down path
+        yield return new DenseLayer<T>(
+            inputSize: denoisingDim,
+            outputSize: denoisingDim * 2,
+            activationFunction: new SiLUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: denoisingDim * 2,
+            outputSize: denoisingDim * 4,
+            activationFunction: new SiLUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(denoisingDim * 4);
+
+        // Up path
+        yield return new DenseLayer<T>(
+            inputSize: denoisingDim * 4,
+            outputSize: denoisingDim * 2,
+            activationFunction: new SiLUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: denoisingDim * 2,
+            outputSize: denoisingDim,
+            activationFunction: new SiLUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(denoisingDim);
+
+        // === Noise Prediction Head ===
+        yield return new DenseLayer<T>(
+            inputSize: denoisingDim,
+            outputSize: denoisingDim / 2,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: denoisingDim / 2,
+            outputSize: forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for CSDI (Conditional Score-based Diffusion for Imputation).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> CSDI uses a transformer-based score network to learn the gradient
+    /// of the log probability (the "score") for imputing missing values. The architecture consists of:
+    ///
+    /// 1. <b>Input Processing:</b> Concatenates observed values with mask indicating missing positions
+    /// 2. <b>Time/Feature Embeddings:</b> Positional encodings for both time and feature dimensions
+    /// 3. <b>Transformer Blocks:</b> Self-attention to capture dependencies across all positions
+    /// 4. <b>Residual Blocks:</b> Process diffusion timestep and predict noise/score
+    /// 5. <b>Output Head:</b> Predicts noise for the reverse diffusion process
+    ///
+    /// The key innovation of CSDI is conditioning on observed values: the model only predicts
+    /// noise for missing positions while keeping observed values fixed during sampling.
+    /// </para>
+    /// </remarks>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">Length of the input time series (default: 100).</param>
+    /// <param name="numFeatures">Number of features/variables (default: 1).</param>
+    /// <param name="hiddenDim">Hidden dimension for the score network (default: 64).</param>
+    /// <param name="numResidualLayers">Number of residual blocks (default: 4).</param>
+    /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="timeEmbeddingDim">Dimension of diffusion timestep embeddings (default: 128).</param>
+    /// <param name="featureEmbeddingDim">Dimension of feature embeddings (default: 16).</param>
+    /// <returns>An enumerable collection of layers for the CSDI model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCSDILayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 100,
+        int numFeatures = 1,
+        int hiddenDim = 64,
+        int numResidualLayers = 4,
+        int numHeads = 8,
+        int timeEmbeddingDim = 128,
+        int featureEmbeddingDim = 16)
+    {
+        // Input size: values + mask (both of shape [seqLen * numFeatures])
+        int inputSize = sequenceLength * numFeatures * 2;
+        int flatSize = sequenceLength * numFeatures;
+
+        // === Input Projection ===
+        // Project concatenated (values, mask) to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: inputSize,
+            outputSize: hiddenDim * flatSize / numFeatures,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(hiddenDim * flatSize / numFeatures);
+
+        // === Time Embedding Network ===
+        // Process diffusion timestep through sinusoidal embedding + MLP
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim * flatSize / numFeatures,
+            outputSize: timeEmbeddingDim,
+            activationFunction: new SiLUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: timeEmbeddingDim,
+            outputSize: timeEmbeddingDim,
+            activationFunction: new SiLUActivation<T>());
+
+        // === Feature Embedding ===
+        // Learned embeddings for each feature dimension
+        yield return new DenseLayer<T>(
+            inputSize: timeEmbeddingDim,
+            outputSize: featureEmbeddingDim * numFeatures,
+            activationFunction: null);
+
+        // === Transformer Encoder Blocks ===
+        // Self-attention to capture temporal and cross-feature dependencies
+        for (int i = 0; i < 2; i++)
+        {
+            // Self-attention (simulated with dense layers)
+            yield return new DenseLayer<T>(
+                inputSize: featureEmbeddingDim * numFeatures,
+                outputSize: hiddenDim * numHeads,
+                activationFunction: null); // Q projection
+
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * numHeads,
+                outputSize: hiddenDim * numHeads,
+                activationFunction: null); // K projection
+
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * numHeads,
+                outputSize: hiddenDim * numHeads,
+                activationFunction: null); // V projection
+
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * numHeads,
+                outputSize: hiddenDim,
+                activationFunction: null); // Output projection
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DropoutLayer<T>(0.1);
+
+            // Feedforward network
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim,
+                outputSize: hiddenDim * 4,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * 4,
+                outputSize: hiddenDim,
+                activationFunction: null);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DropoutLayer<T>(0.1);
+        }
+
+        // === Residual Diffusion Blocks ===
+        // Process timestep-conditioned features through residual blocks
+        for (int i = 0; i < numResidualLayers; i++)
+        {
+            // First dense in residual block
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim,
+                outputSize: hiddenDim * 2,
+                activationFunction: new SiLUActivation<T>());
+
+            // Timestep conditioning (would be added in actual implementation)
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * 2,
+                outputSize: hiddenDim * 2,
+                activationFunction: new SiLUActivation<T>());
+
+            // Second dense with residual connection
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * 2,
+                outputSize: hiddenDim,
+                activationFunction: null);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        // === Score/Noise Prediction Head ===
+        // Predicts noise for reverse diffusion
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: hiddenDim,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: flatSize,
+            activationFunction: null); // Output noise prediction for all positions
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for TSDiff (Time Series Diffusion).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TSDiff uses a U-Net style architecture with residual blocks
+    /// and self-attention for denoising. The architecture includes:
+    ///
+    /// 1. <b>Input Embedding:</b> Projects input to hidden dimension
+    /// 2. <b>Time Embedding:</b> Sinusoidal embeddings for diffusion timestep
+    /// 3. <b>Downsampling Path:</b> Progressively reduce temporal resolution
+    /// 4. <b>Middle Block:</b> Self-attention at lowest resolution
+    /// 5. <b>Upsampling Path:</b> Progressively restore temporal resolution
+    /// 6. <b>Output Head:</b> Predict noise for denoising
+    ///
+    /// The self-guidance mechanism uses intermediate predictions to refine generation.
+    /// </para>
+    /// </remarks>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">Total sequence length (default: 192).</param>
+    /// <param name="numFeatures">Number of features/variables (default: 1).</param>
+    /// <param name="hiddenDim">Hidden dimension (default: 128).</param>
+    /// <param name="numResidualBlocks">Number of residual blocks (default: 8).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default: 4).</param>
+    /// <returns>An enumerable collection of layers for the TSDiff model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTSDiffLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 192,
+        int numFeatures = 1,
+        int hiddenDim = 128,
+        int numResidualBlocks = 8,
+        int numAttentionHeads = 4)
+    {
+        int flatSize = sequenceLength * numFeatures;
+
+        // === Input Embedding ===
+        // Project input (noisy sequence) to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: flatSize,
+            outputSize: hiddenDim,
+            activationFunction: new SiLUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // === Time Embedding Network ===
+        // Process diffusion timestep
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: hiddenDim * 2,
+            activationFunction: new SiLUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim * 2,
+            outputSize: hiddenDim,
+            activationFunction: new SiLUActivation<T>());
+
+        // === Downsampling Path ===
+        int currentDim = hiddenDim;
+        for (int i = 0; i < numResidualBlocks / 2; i++)
+        {
+            // Residual block
+            yield return new DenseLayer<T>(
+                inputSize: currentDim,
+                outputSize: currentDim,
+                activationFunction: new SiLUActivation<T>());
+
+            // Group normalization simulation
+            yield return new LayerNormalizationLayer<T>(currentDim);
+
+            yield return new DenseLayer<T>(
+                inputSize: currentDim,
+                outputSize: currentDim,
+                activationFunction: new SiLUActivation<T>());
+
+            yield return new DropoutLayer<T>(0.1);
+
+            // Downsample (double channels)
+            if (i < numResidualBlocks / 2 - 1)
+            {
+                yield return new DenseLayer<T>(
+                    inputSize: currentDim,
+                    outputSize: currentDim * 2,
+                    activationFunction: null);
+                currentDim *= 2;
+            }
+        }
+
+        // === Middle Block with Self-Attention ===
+        // Self-attention (simulated)
+        yield return new DenseLayer<T>(
+            inputSize: currentDim,
+            outputSize: currentDim * numAttentionHeads,
+            activationFunction: null); // Q
+
+        yield return new DenseLayer<T>(
+            inputSize: currentDim * numAttentionHeads,
+            outputSize: currentDim * numAttentionHeads,
+            activationFunction: null); // K
+
+        yield return new DenseLayer<T>(
+            inputSize: currentDim * numAttentionHeads,
+            outputSize: currentDim * numAttentionHeads,
+            activationFunction: null); // V
+
+        yield return new DenseLayer<T>(
+            inputSize: currentDim * numAttentionHeads,
+            outputSize: currentDim,
+            activationFunction: null); // Output projection
+
+        yield return new LayerNormalizationLayer<T>(currentDim);
+
+        // Middle residual block
+        yield return new DenseLayer<T>(
+            inputSize: currentDim,
+            outputSize: currentDim,
+            activationFunction: new SiLUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(currentDim);
+
+        yield return new DenseLayer<T>(
+            inputSize: currentDim,
+            outputSize: currentDim,
+            activationFunction: new SiLUActivation<T>());
+
+        // === Upsampling Path ===
+        for (int i = 0; i < numResidualBlocks / 2; i++)
+        {
+            // Upsample (halve channels)
+            if (i > 0)
+            {
+                yield return new DenseLayer<T>(
+                    inputSize: currentDim,
+                    outputSize: currentDim / 2,
+                    activationFunction: null);
+                currentDim /= 2;
+            }
+
+            // Residual block
+            yield return new DenseLayer<T>(
+                inputSize: currentDim,
+                outputSize: currentDim,
+                activationFunction: new SiLUActivation<T>());
+
+            yield return new LayerNormalizationLayer<T>(currentDim);
+
+            yield return new DenseLayer<T>(
+                inputSize: currentDim,
+                outputSize: currentDim,
+                activationFunction: new SiLUActivation<T>());
+
+            yield return new DropoutLayer<T>(0.1);
+        }
+
+        // === Output Head ===
+        yield return new DenseLayer<T>(
+            inputSize: currentDim,
+            outputSize: hiddenDim,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: flatSize,
+            activationFunction: null); // Output noise prediction
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for DiffusionTS (Interpretable Diffusion for Time Series).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DiffusionTS uses a decomposition-based architecture that generates
+    /// trend, seasonal, and residual components separately:
+    ///
+    /// 1. <b>Trend Network:</b> Smooth, low-frequency component (moving average style)
+    /// 2. <b>Seasonal Network:</b> Periodic patterns with fourier-like features
+    /// 3. <b>Residual Network:</b> Irregular/noise component
+    /// 4. <b>Fusion Module:</b> Combines all components coherently
+    ///
+    /// Each component network has different capacity appropriate for its complexity.
+    /// </para>
+    /// </remarks>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">Input sequence length (default: 168).</param>
+    /// <param name="forecastHorizon">Forecast horizon (default: 24).</param>
+    /// <param name="numFeatures">Number of features (default: 1).</param>
+    /// <param name="hiddenDim">Main hidden dimension (default: 64).</param>
+    /// <param name="trendHiddenDim">Trend network hidden dim (default: 32).</param>
+    /// <param name="seasonalHiddenDim">Seasonal network hidden dim (default: 48).</param>
+    /// <returns>An enumerable collection of layers for the DiffusionTS model.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultDiffusionTSLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 168,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int hiddenDim = 64,
+        int trendHiddenDim = 32,
+        int seasonalHiddenDim = 48)
+    {
+        int contextLength = sequenceLength;
+        int flatContextSize = contextLength * numFeatures;
+        int flatForecastSize = forecastHorizon * numFeatures;
+
+        // === Input Embedding ===
+        yield return new DenseLayer<T>(
+            inputSize: flatContextSize,
+            outputSize: hiddenDim,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // === Trend Network (smooth, low capacity) ===
+        // Trend should be smooth, so use fewer parameters
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: trendHiddenDim,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(trendHiddenDim);
+
+        yield return new DenseLayer<T>(
+            inputSize: trendHiddenDim,
+            outputSize: trendHiddenDim,
+            activationFunction: new GELUActivation<T>());
+
+        // Trend output
+        yield return new DenseLayer<T>(
+            inputSize: trendHiddenDim,
+            outputSize: flatForecastSize,
+            activationFunction: null);
+
+        // === Seasonal Network (periodic patterns) ===
+        // Project back to hidden for seasonal processing
+        yield return new DenseLayer<T>(
+            inputSize: flatForecastSize,
+            outputSize: seasonalHiddenDim,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(seasonalHiddenDim);
+
+        // Fourier-like feature extraction (Tanh for bounded periodic-like output)
+        yield return new DenseLayer<T>(
+            inputSize: seasonalHiddenDim,
+            outputSize: seasonalHiddenDim * 2,
+            activationFunction: new TanhActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: seasonalHiddenDim * 2,
+            outputSize: seasonalHiddenDim,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(seasonalHiddenDim);
+
+        // Seasonal output
+        yield return new DenseLayer<T>(
+            inputSize: seasonalHiddenDim,
+            outputSize: flatForecastSize,
+            activationFunction: null);
+
+        // === Residual Network (irregular patterns) ===
+        // Project for residual processing
+        yield return new DenseLayer<T>(
+            inputSize: flatForecastSize,
+            outputSize: hiddenDim,
+            activationFunction: new SiLUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+        yield return new DropoutLayer<T>(0.1);
+
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: hiddenDim,
+            activationFunction: new SiLUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Residual output
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: flatForecastSize,
+            activationFunction: null);
+
+        // === Fusion Module ===
+        // Combine trend + seasonal + residual
+        // Takes concatenated components and produces final output
+        yield return new DenseLayer<T>(
+            inputSize: flatForecastSize,
+            outputSize: hiddenDim,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: flatForecastSize,
+            activationFunction: null); // Final noise/output prediction
+    }
+
+    /// <summary>
+    /// Creates default layers for the ScoreGrad (Score-based Gradient) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">Length of input sequence (default: 168).</param>
+    /// <param name="forecastHorizon">Number of steps to forecast (default: 24).</param>
+    /// <param name="numFeatures">Number of input features (default: 1).</param>
+    /// <param name="hiddenDim">Hidden layer dimension (default: 128).</param>
+    /// <param name="numLayers">Number of score network layers (default: 4).</param>
+    /// <returns>Collection of layers for the ScoreGrad architecture.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ScoreGrad architecture has these key components:
+    ///
+    /// <b>1. Input Embedding:</b>
+    /// - Projects input time series and noise level to hidden dimension
+    /// - Combines context, noisy forecast, and sigma embedding
+    ///
+    /// <b>2. Score Network Core:</b>
+    /// - Multiple residual dense blocks
+    /// - Each block: Dense → GELU → LayerNorm → Dense → Skip connection
+    /// - Learns the score function ∇_x log p(x|σ)
+    ///
+    /// <b>3. Noise Level Conditioning:</b>
+    /// - Sinusoidal embedding of sigma value
+    /// - Allows network to output different scores at different noise levels
+    /// - Critical for annealed Langevin sampling
+    ///
+    /// <b>4. Output Head:</b>
+    /// - Projects hidden state back to forecast dimension
+    /// - Outputs the score (gradient direction toward higher probability)
+    ///
+    /// <b>Key Design Choices:</b>
+    /// - Residual connections for gradient flow
+    /// - Layer normalization for stability
+    /// - GELU activation for smooth gradients
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultScoreGradLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 168,
+        int forecastHorizon = 24,
+        int numFeatures = 1,
+        int hiddenDim = 128,
+        int numLayers = 4)
+    {
+        int contextSize = (sequenceLength - forecastHorizon) * numFeatures;
+        int forecastSize = forecastHorizon * numFeatures;
+        int noiseEmbedDim = hiddenDim / 4; // Smaller embedding for noise level
+
+        // Total input: context + noisy forecast + noise embedding
+        int totalInputSize = contextSize + forecastSize + noiseEmbedDim;
+
+        // === Input Projection ===
+        // Combine all inputs into hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: totalInputSize,
+            outputSize: hiddenDim,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // === Score Network Core (Residual Blocks) ===
+        // Multiple dense blocks that learn the score function
+        for (int i = 0; i < numLayers; i++)
+        {
+            // First dense layer of residual block
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim,
+                outputSize: hiddenDim * 2,
+                activationFunction: new GELUActivation<T>());
+
+            // Second dense layer (reduce back to hidden dim for residual connection)
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDim * 2,
+                outputSize: hiddenDim,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        // === Score Output Head ===
+        // Project to forecast dimension - this is the score (gradient)
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim,
+            outputSize: hiddenDim / 2,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDim / 2,
+            outputSize: forecastSize,
+            activationFunction: null); // Score output (can be any value, not bounded)
+    }
+
+    /// <summary>
+    /// Creates default layers for the STGNN (Spatio-Temporal Graph Neural Network) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">Length of input sequence (default: 12).</param>
+    /// <param name="forecastHorizon">Number of steps to forecast (default: 12).</param>
+    /// <param name="numNodes">Number of nodes in the graph (default: 207).</param>
+    /// <param name="numFeatures">Number of features per node (default: 1).</param>
+    /// <param name="hiddenDim">Hidden layer dimension (default: 64).</param>
+    /// <param name="numSpatialLayers">Number of graph convolution layers (default: 2).</param>
+    /// <param name="numTemporalLayers">Number of temporal convolution layers (default: 2).</param>
+    /// <returns>Collection of layers for the STGNN architecture.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> STGNN architecture alternates between spatial and temporal processing:
+    ///
+    /// <b>1. Input Embedding:</b>
+    /// - Projects node features to hidden dimension
+    /// - Prepares data for graph operations
+    ///
+    /// <b>2. ST-Conv Blocks (repeated):</b>
+    /// Each block contains:
+    /// - Temporal Conv: Captures time patterns (1D conv along time axis)
+    /// - Spatial Conv: Aggregates neighbor info (graph convolution)
+    /// - Temporal Conv: Another temporal pass for ST fusion
+    /// - Layer Norm + Residual connection
+    ///
+    /// <b>3. Output Layer:</b>
+    /// - Projects to forecast dimension
+    /// - Outputs predictions for all nodes
+    ///
+    /// <b>Key Design Choices:</b>
+    /// - Sandwich structure: Temporal-Spatial-Temporal captures complex ST dependencies
+    /// - Residual connections prevent gradient vanishing
+    /// - Layer normalization stabilizes training
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSTGNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 12,
+        int forecastHorizon = 12,
+        int numNodes = 207,
+        int numFeatures = 1,
+        int hiddenDim = 64,
+        int numSpatialLayers = 2,
+        int numTemporalLayers = 2)
+    {
+        // Input size: nodes * sequence * features (flattened)
+        int inputSize = numNodes * sequenceLength * numFeatures;
+        int outputSize = numNodes * forecastHorizon * numFeatures;
+
+        // === Input Embedding ===
+        // Project input features to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: inputSize,
+            outputSize: numNodes * hiddenDim,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+
+        // === ST-Conv Blocks ===
+        // Each block: Temporal -> Spatial -> Temporal
+        int numBlocks = Math.Max(numSpatialLayers, numTemporalLayers);
+        for (int block = 0; block < numBlocks; block++)
+        {
+            // Temporal convolution (simulated with dense layers for time processing)
+            yield return new DenseLayer<T>(
+                inputSize: numNodes * hiddenDim,
+                outputSize: numNodes * hiddenDim,
+                activationFunction: new GELUActivation<T>());
+
+            // Spatial convolution (graph aggregation simulated with dense)
+            // In practice, this would use actual graph convolution with adjacency matrix
+            yield return new DenseLayer<T>(
+                inputSize: numNodes * hiddenDim,
+                outputSize: numNodes * hiddenDim,
+                activationFunction: new GELUActivation<T>());
+
+            // Second temporal convolution
+            yield return new DenseLayer<T>(
+                inputSize: numNodes * hiddenDim,
+                outputSize: numNodes * hiddenDim,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+        }
+
+        // === Output Projection ===
+        // Project to forecast dimension
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * hiddenDim,
+            outputSize: numNodes * hiddenDim / 2,
+            activationFunction: new GELUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * hiddenDim / 2,
+            outputSize: outputSize,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for TemporalGCN (Temporal Graph Convolutional Network).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">Number of input time steps.</param>
+    /// <param name="forecastHorizon">Number of future time steps to predict.</param>
+    /// <param name="numNodes">Number of nodes in the graph.</param>
+    /// <param name="numFeatures">Number of features per node.</param>
+    /// <param name="hiddenDim">Hidden dimension for GCN and temporal layers.</param>
+    /// <param name="numGCNLayers">Number of graph convolution layers.</param>
+    /// <param name="numTemporalLayers">Number of temporal (recurrent) layers.</param>
+    /// <returns>An enumerable of layers configured for TemporalGCN.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Creates layers for TemporalGCN which combines
+    /// graph convolution with recurrent neural networks to capture both spatial
+    /// dependencies (through GCN) and temporal patterns (through GRU/LSTM).
+    /// </para>
+    /// <para>
+    /// The architecture alternates between:
+    /// 1. Graph convolution layers that aggregate neighbor information
+    /// 2. Temporal recurrent layers that model sequence patterns
+    /// This allows the network to learn how spatial patterns evolve over time.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTemporalGCNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 12,
+        int forecastHorizon = 12,
+        int numNodes = 207,
+        int numFeatures = 1,
+        int hiddenDim = 64,
+        int numGCNLayers = 2,
+        int numTemporalLayers = 1)
+    {
+        // Input size: nodes * sequence * features (flattened)
+        int inputSize = numNodes * sequenceLength * numFeatures;
+        int outputSize = numNodes * forecastHorizon * numFeatures;
+
+        // === Input Projection ===
+        // Project input features to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: inputSize,
+            outputSize: numNodes * hiddenDim,
+            activationFunction: new ReLUActivation<T>());
+
+        // === GCN Layers ===
+        // Stack graph convolution layers for spatial aggregation
+        for (int gcn = 0; gcn < numGCNLayers; gcn++)
+        {
+            // Graph convolution (simulated with dense + aggregation pattern)
+            // Each GCN layer aggregates information from k-hop neighbors
+            yield return new DenseLayer<T>(
+                inputSize: numNodes * hiddenDim,
+                outputSize: numNodes * hiddenDim,
+                activationFunction: new ReLUActivation<T>());
+
+            yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+
+            // Dropout for regularization
+            yield return new DropoutLayer<T>(0.3);
+        }
+
+        // === Temporal GRU Layers ===
+        // Process temporal sequence with recurrent layers
+        for (int t = 0; t < numTemporalLayers; t++)
+        {
+            // GRU layer for temporal modeling (using dense layers as approximation)
+            // Real implementation would use proper GRU cells with gating
+            yield return new DenseLayer<T>(
+                inputSize: numNodes * hiddenDim,
+                outputSize: numNodes * hiddenDim,
+                activationFunction: new TanhActivation<T>());
+
+            // Update gate approximation
+            yield return new DenseLayer<T>(
+                inputSize: numNodes * hiddenDim,
+                outputSize: numNodes * hiddenDim,
+                activationFunction: new SigmoidActivation<T>());
+
+            yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+        }
+
+        // === Spatio-Temporal Fusion ===
+        // Combine spatial and temporal features
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * hiddenDim,
+            outputSize: numNodes * hiddenDim,
+            activationFunction: new ReLUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+
+        // === Output Projection ===
+        // Project to forecast horizon
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * hiddenDim,
+            outputSize: numNodes * hiddenDim / 2,
+            activationFunction: new ReLUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * hiddenDim / 2,
+            outputSize: outputSize,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for MTGNN (Multivariate Time-series Graph Neural Network).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">Number of input time steps.</param>
+    /// <param name="forecastHorizon">Number of future time steps to predict.</param>
+    /// <param name="numNodes">Number of nodes (variables/time series).</param>
+    /// <param name="numFeatures">Number of features per node.</param>
+    /// <param name="hiddenDim">Hidden dimension for processing layers.</param>
+    /// <param name="nodeEmbeddingDim">Dimension of node embeddings for graph learning.</param>
+    /// <param name="numLayers">Number of graph-temporal processing layers.</param>
+    /// <param name="mixHopDepth">Depth of mix-hop propagation.</param>
+    /// <returns>An enumerable of layers configured for MTGNN.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Creates layers for MTGNN which automatically learns
+    /// the graph structure while performing spatio-temporal forecasting. The key components are:
+    /// </para>
+    /// <para>
+    /// 1. Node embedding layers that learn representations for graph structure discovery
+    /// 2. Mix-hop propagation layers for multi-scale spatial aggregation
+    /// 3. Dilated temporal convolution layers for multi-scale temporal patterns
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMTGNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 12,
+        int forecastHorizon = 12,
+        int numNodes = 207,
+        int numFeatures = 1,
+        int hiddenDim = 32,
+        int nodeEmbeddingDim = 40,
+        int numLayers = 3,
+        int mixHopDepth = 2)
+    {
+        // Input size: nodes * sequence * features (flattened)
+        int inputSize = numNodes * sequenceLength * numFeatures;
+        int outputSize = numNodes * forecastHorizon * numFeatures;
+
+        // === Input Projection ===
+        // Project input to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: inputSize,
+            outputSize: numNodes * hiddenDim,
+            activationFunction: new ReLUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+
+        // === Node Embedding Layer ===
+        // Create learnable node embeddings for adaptive graph learning
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * hiddenDim,
+            outputSize: numNodes * nodeEmbeddingDim,
+            activationFunction: new TanhActivation<T>());
+
+        // === Graph-Temporal Processing Layers ===
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            // Mix-hop graph convolution (simulated with dense layers)
+            // Aggregates 1-hop, 2-hop, ... k-hop neighbors
+            for (int hop = 0; hop < mixHopDepth; hop++)
+            {
+                yield return new DenseLayer<T>(
+                    inputSize: numNodes * (hop == 0 ? nodeEmbeddingDim : hiddenDim),
+                    outputSize: numNodes * hiddenDim,
+                    activationFunction: new ReLUActivation<T>());
+            }
+
+            // Dilated temporal convolution (simulated with dense)
+            // Different dilation rates capture different temporal scales
+            yield return new DenseLayer<T>(
+                inputSize: numNodes * hiddenDim,
+                outputSize: numNodes * hiddenDim,
+                activationFunction: new TanhActivation<T>());
+
+            // Gated skip connection
+            yield return new DenseLayer<T>(
+                inputSize: numNodes * hiddenDim,
+                outputSize: numNodes * hiddenDim,
+                activationFunction: new SigmoidActivation<T>());
+
+            yield return new LayerNormalizationLayer<T>(numNodes * hiddenDim);
+            yield return new DropoutLayer<T>(0.3);
+        }
+
+        // === Output Projection ===
+        // Project to forecast dimension
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * hiddenDim,
+            outputSize: numNodes * hiddenDim,
+            activationFunction: new ReLUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * hiddenDim,
+            outputSize: outputSize,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for GraphWaveNet (Graph WaveNet for spatial-temporal modeling).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="sequenceLength">Number of input time steps.</param>
+    /// <param name="forecastHorizon">Number of future time steps to predict.</param>
+    /// <param name="numNodes">Number of nodes in the graph.</param>
+    /// <param name="numFeatures">Number of input features per node.</param>
+    /// <param name="residualChannels">Number of residual channels.</param>
+    /// <param name="skipChannels">Number of skip connection channels.</param>
+    /// <param name="endChannels">Number of end (output) channels.</param>
+    /// <param name="numBlocks">Number of temporal convolution blocks.</param>
+    /// <param name="layersPerBlock">Number of layers per block.</param>
+    /// <returns>An enumerable of layers configured for GraphWaveNet.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Creates layers for GraphWaveNet which combines:
+    /// </para>
+    /// <para>
+    /// 1. Adaptive graph learning via node embeddings
+    /// 2. Diffusion convolution for bidirectional spatial propagation
+    /// 3. Gated dilated convolutions (WaveNet-style) for temporal patterns
+    /// 4. Skip connections from each layer to the output
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraphWaveNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength = 12,
+        int forecastHorizon = 12,
+        int numNodes = 207,
+        int numFeatures = 2,
+        int residualChannels = 32,
+        int skipChannels = 256,
+        int endChannels = 512,
+        int numBlocks = 4,
+        int layersPerBlock = 2)
+    {
+        // Input size: nodes * sequence * features (flattened)
+        int inputSize = numNodes * sequenceLength * numFeatures;
+        int outputSize = numNodes * forecastHorizon;
+
+        // === Input Projection ===
+        // Project input to residual channels
+        yield return new DenseLayer<T>(
+            inputSize: inputSize,
+            outputSize: numNodes * residualChannels,
+            activationFunction: new ReLUActivation<T>());
+
+        yield return new LayerNormalizationLayer<T>(numNodes * residualChannels);
+
+        // === WaveNet-style Blocks ===
+        for (int block = 0; block < numBlocks; block++)
+        {
+            for (int layer = 0; layer < layersPerBlock; layer++)
+            {
+                // Dilated convolution (filter branch) - captures temporal patterns
+                yield return new DenseLayer<T>(
+                    inputSize: numNodes * residualChannels,
+                    outputSize: numNodes * residualChannels,
+                    activationFunction: new TanhActivation<T>());
+
+                // Gate convolution - controls information flow
+                yield return new DenseLayer<T>(
+                    inputSize: numNodes * residualChannels,
+                    outputSize: numNodes * residualChannels,
+                    activationFunction: new SigmoidActivation<T>());
+
+                // Diffusion convolution placeholder (spatial aggregation)
+                yield return new DenseLayer<T>(
+                    inputSize: numNodes * residualChannels,
+                    outputSize: numNodes * residualChannels,
+                    activationFunction: new ReLUActivation<T>());
+
+                yield return new LayerNormalizationLayer<T>(numNodes * residualChannels);
+
+                // Skip connection projection
+                yield return new DenseLayer<T>(
+                    inputSize: numNodes * residualChannels,
+                    outputSize: numNodes * skipChannels / numBlocks,
+                    activationFunction: null);
+
+                yield return new DropoutLayer<T>(0.3);
+            }
+        }
+
+        // === Output Processing ===
+        // Combine skip connections and project to output
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * skipChannels / numBlocks,
+            outputSize: numNodes * endChannels,
+            activationFunction: new ReLUActivation<T>());
+
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * endChannels,
+            outputSize: outputSize,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layers for a DCRNN (Diffusion Convolutional Recurrent Neural Network).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numNodes">Number of nodes in the graph (sensors/locations).</param>
+    /// <param name="numFeatures">Number of input features per node.</param>
+    /// <param name="hiddenDimension">Hidden dimension for DCGRU cells.</param>
+    /// <param name="numEncoderLayers">Number of encoder DCGRU layers.</param>
+    /// <param name="numDecoderLayers">Number of decoder DCGRU layers.</param>
+    /// <param name="forecastHorizon">Number of future time steps to predict.</param>
+    /// <param name="diffusionSteps">Number of diffusion steps (K).</param>
+    /// <returns>A collection of layers for the DCRNN architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DCRNN (Diffusion Convolutional Recurrent Neural Network) was designed
+    /// specifically for traffic forecasting. It has two main innovations:
+    /// </para>
+    /// <para>
+    /// <b>1. Diffusion Convolution:</b> Instead of standard graph convolution, DCRNN models traffic
+    /// flow as a diffusion process - like how a drop of dye spreads through water. This is done
+    /// using random walk matrices that capture how influence propagates through the network.
+    /// </para>
+    /// <para>
+    /// <b>2. Encoder-Decoder Architecture:</b> The encoder reads the historical data and compresses
+    /// it into a context vector. The decoder then generates predictions one step at a time, using
+    /// both the context and its own previous outputs.
+    /// </para>
+    /// <para>
+    /// <b>3. Scheduled Sampling:</b> During training, the model gradually transitions from using
+    /// ground truth inputs (teacher forcing) to using its own predictions. This helps the model
+    /// learn to handle its own errors during inference.
+    /// </para>
+    /// <para>
+    /// The architecture mirrors the original paper: encoder DCGRU layers followed by decoder
+    /// DCGRU layers, with a final projection layer for output.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultDCRNNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numNodes = 207,
+        int numFeatures = 2,
+        int hiddenDimension = 64,
+        int numEncoderLayers = 2,
+        int numDecoderLayers = 2,
+        int forecastHorizon = 12,
+        int diffusionSteps = 2)
+    {
+        // === Input Embedding ===
+        // Project input features to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * numFeatures,
+            outputSize: numNodes * hiddenDimension,
+            activationFunction: null);
+
+        // === Encoder DCGRU Layers ===
+        // Each layer is a GRU where matrix multiplications are replaced with diffusion convolution
+        // Note: Diffusion convolution is applied in the model itself, not in layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            // GRU layer for temporal processing
+            yield return new GRULayer<T>(
+                inputSize: hiddenDimension,
+                hiddenSize: hiddenDimension,
+                returnSequences: true,
+                activation: (IActivationFunction<T>?)null,
+                recurrentActivation: null);
+
+            // Dense layer for spatial mixing (simplified diffusion approximation)
+            yield return new DenseLayer<T>(
+                inputSize: numNodes * hiddenDimension,
+                outputSize: numNodes * hiddenDimension,
+                activationFunction: new ReLUActivation<T>());
+        }
+
+        // === Decoder DCGRU Layers ===
+        // Decoder generates predictions autoregressively
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            // GRU layer for temporal processing
+            yield return new GRULayer<T>(
+                inputSize: hiddenDimension,
+                hiddenSize: hiddenDimension,
+                returnSequences: true,
+                activation: (IActivationFunction<T>?)null,
+                recurrentActivation: null);
+
+            // Dense layer for spatial mixing
+            yield return new DenseLayer<T>(
+                inputSize: numNodes * hiddenDimension,
+                outputSize: numNodes * hiddenDimension,
+                activationFunction: new ReLUActivation<T>());
+        }
+
+        // === Output Projection ===
+        // Project hidden states to output predictions
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * hiddenDimension,
+            outputSize: numNodes * forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for RelationalGCN (Relational Graph Convolutional Network).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numNodes">Number of nodes (entities) in the knowledge graph.</param>
+    /// <param name="numFeatures">Number of input features per node.</param>
+    /// <param name="numRelations">Number of relation types in the graph.</param>
+    /// <param name="hiddenDimension">Hidden dimension for R-GCN layers.</param>
+    /// <param name="numLayers">Number of R-GCN layers.</param>
+    /// <param name="numBases">Number of bases for basis decomposition.</param>
+    /// <param name="forecastHorizon">Number of time steps to forecast.</param>
+    /// <returns>An enumerable of layers configured for RelationalGCN.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> RelationalGCN extends Graph Convolutional Networks to handle
+    /// multi-relational data where different types of edges (relations) exist between nodes.
+    /// This is essential for knowledge graphs and heterogeneous networks.
+    /// </para>
+    /// <para>
+    /// The key insight is that different relationship types should have different transformation
+    /// weights. For example, in a financial network, a "supplies-to" relationship is fundamentally
+    /// different from a "competes-with" relationship.
+    /// </para>
+    /// <para>
+    /// R-GCN uses basis decomposition for parameter efficiency: instead of having a full weight
+    /// matrix for each relation, relation weights are linear combinations of shared basis matrices.
+    /// This dramatically reduces parameters when you have many relation types.
+    /// </para>
+    /// <para>
+    /// The formula: W_r = sum_b (a_rb * B_b) where B_b are shared bases and a_rb are
+    /// relation-specific combination coefficients.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultRelationalGCNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numNodes = 100,
+        int numFeatures = 16,
+        int numRelations = 10,
+        int hiddenDimension = 64,
+        int numLayers = 2,
+        int numBases = 5,
+        int forecastHorizon = 12)
+    {
+        // === Input Embedding ===
+        // Project input node features to hidden dimension
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: hiddenDimension,
+            activationFunction: new ReLUActivation<T>());
+
+        // === Basis Matrices ===
+        // Shared basis matrices for parameter-efficient relation-specific transformations
+        // In practice, these are learned as part of the model's forward pass
+        for (int b = 0; b < numBases; b++)
+        {
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDimension,
+                outputSize: hiddenDimension,
+                activationFunction: null);
+        }
+
+        // === Relation Coefficient Layers ===
+        // Each relation has coefficients for combining basis matrices
+        // This creates R-GCN's W_r = sum_b (a_rb * B_b) structure
+        yield return new DenseLayer<T>(
+            inputSize: numRelations * numBases,
+            outputSize: numRelations * numBases,
+            activationFunction: null);
+
+        // === R-GCN Layers ===
+        // Stacked relational graph convolution layers
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            // Graph aggregation layer - aggregates messages from neighbors per relation
+            // Then combines across relations
+            yield return new DenseLayer<T>(
+                inputSize: numNodes * hiddenDimension,
+                outputSize: numNodes * hiddenDimension,
+                activationFunction: new ReLUActivation<T>());
+
+            // Self-loop transformation - nodes also consider their own features
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDimension,
+                outputSize: hiddenDimension,
+                activationFunction: null);
+
+            // Dropout layer for regularization
+            yield return new DropoutLayer<T>(dropoutRate: 0.2);
+        }
+
+        // === Temporal Processing ===
+        // For time series forecasting, add temporal layers
+        yield return new GRULayer<T>(
+            inputSize: hiddenDimension,
+            hiddenSize: hiddenDimension,
+            returnSequences: true,
+            activation: (IActivationFunction<T>?)null,
+            recurrentActivation: null);
+
+        // === Output Projection ===
+        // Project to forecast horizon
+        yield return new DenseLayer<T>(
+            inputSize: numNodes * hiddenDimension,
+            outputSize: numNodes * forecastHorizon,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates default layers for FinBERT (Financial BERT) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="vocabularySize">Size of the token vocabulary.</param>
+    /// <param name="maxSequenceLength">Maximum sequence length in tokens.</param>
+    /// <param name="hiddenDimension">Hidden dimension for transformer layers.</param>
+    /// <param name="numAttentionHeads">Number of attention heads.</param>
+    /// <param name="intermediateDimension">Feed-forward intermediate dimension.</param>
+    /// <param name="numLayers">Number of transformer layers.</param>
+    /// <param name="numSentimentClasses">Number of output sentiment classes.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>An enumerable of layers configured for FinBERT.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FinBERT is a BERT-based model fine-tuned for financial sentiment
+    /// analysis. BERT (Bidirectional Encoder Representations from Transformers) uses
+    /// self-attention to understand context from both directions of the text.
+    /// </para>
+    /// <para>
+    /// The architecture follows the original BERT design:
+    /// 1. Token embeddings convert tokens to vectors
+    /// 2. Position embeddings encode sequence position
+    /// 3. Multiple transformer layers with self-attention
+    /// 4. Classification head for sentiment prediction
+    /// </para>
+    /// <para>
+    /// FinBERT adds financial domain knowledge through pre-training and fine-tuning on
+    /// financial text, enabling it to understand financial terminology and sentiment nuances.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFinBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 30522,
+        int maxSequenceLength = 512,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numSentimentClasses = 3,
+        double dropoutRate = 0.1)
+    {
+        // === Token Embedding Layer ===
+        // Maps token IDs to dense vectors
+        yield return new EmbeddingLayer<T>(
+            vocabularySize: vocabularySize,
+            embeddingDimension: hiddenDimension);
+
+        // === Position Embedding Layer ===
+        // Adds position information to token embeddings
+        yield return new EmbeddingLayer<T>(
+            vocabularySize: maxSequenceLength,
+            embeddingDimension: hiddenDimension);
+
+        // === Layer Normalization ===
+        // Normalizes embeddings before transformer layers
+        yield return new LayerNormalizationLayer<T>(
+            featureSize: hiddenDimension);
+
+        // === Dropout ===
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // === Transformer Layers ===
+        // Stack of transformer encoder blocks
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: hiddenDimension,
+                headCount: numAttentionHeads);
+
+            // Add & Norm after attention
+            yield return new LayerNormalizationLayer<T>(
+                featureSize: hiddenDimension);
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDimension,
+                outputSize: intermediateDimension,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: intermediateDimension,
+                outputSize: hiddenDimension,
+                activationFunction: null);
+
+            // Dropout in feed-forward
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+            // Add & Norm after feed-forward
+            yield return new LayerNormalizationLayer<T>(
+                featureSize: hiddenDimension);
+        }
+
+        // === Pooler ===
+        // Takes [CLS] token representation for classification
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDimension,
+            outputSize: hiddenDimension,
+            activationFunction: new TanhActivation<T>());
+
+        // === Classification Head ===
+        // Final dropout before classification
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // Classification layer
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDimension,
+            outputSize: numSentimentClasses,
+            activationFunction: null);
+
+        // Softmax for class probabilities (applied in model's forward pass)
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for SEC-BERT (Securities and Exchange Commission BERT).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture containing base configuration.</param>
+    /// <param name="vocabularySize">Size of the token vocabulary (default: 30522 for BERT-base).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length in tokens (default: 512).</param>
+    /// <param name="hiddenDimension">Hidden dimension size (default: 768 for BERT-base).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default: 12).</param>
+    /// <param name="intermediateDimension">Feed-forward intermediate dimension (default: 3072).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numClasses">Number of output classes (default: 2 for binary classification).</param>
+    /// <param name="dropoutRate">Dropout rate for regularization (default: 0.1).</param>
+    /// <param name="taskType">Task type: classification, ner, or qa (default: classification).</param>
+    /// <returns>An enumerable of layers comprising the SEC-BERT architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SEC-BERT is a BERT model specialized for understanding SEC filings,
+    /// including 10-K annual reports, 10-Q quarterly reports, 8-K current reports, and other
+    /// regulatory documents. The model understands formal legal and accounting language used
+    /// in securities filings.
+    /// </para>
+    /// <para>
+    /// SEC-BERT differs from general FinBERT in several ways:
+    /// - Pre-trained on millions of SEC filing documents
+    /// - Understands regulatory terminology like "material adverse effect", "going concern"
+    /// - Can detect subtle changes in disclosure language over time
+    /// - Supports multiple tasks: classification, named entity recognition (NER), and question answering (QA)
+    /// </para>
+    /// <para>
+    /// The architecture follows BERT-base with:
+    /// 1. Token and position embeddings
+    /// 2. 12 transformer encoder layers with self-attention
+    /// 3. Task-specific output head (classification, NER, or QA)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSECBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 30522,
+        int maxSequenceLength = 512,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numClasses = 2,
+        double dropoutRate = 0.1,
+        string taskType = "classification")
+    {
+        // === Token Embedding Layer ===
+        // Maps token IDs to dense vectors - trained on SEC filing vocabulary
+        yield return new EmbeddingLayer<T>(
+            vocabularySize: vocabularySize,
+            embeddingDimension: hiddenDimension);
+
+        // === Position Embedding Layer ===
+        // Adds position information to understand document structure
+        yield return new EmbeddingLayer<T>(
+            vocabularySize: maxSequenceLength,
+            embeddingDimension: hiddenDimension);
+
+        // === Layer Normalization ===
+        // Normalizes embeddings before transformer layers
+        yield return new LayerNormalizationLayer<T>(
+            featureSize: hiddenDimension);
+
+        // === Dropout ===
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // === Transformer Layers ===
+        // Stack of transformer encoder blocks for understanding SEC filing language
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Multi-head self-attention - captures relationships across filing sections
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: hiddenDimension,
+                headCount: numAttentionHeads);
+
+            // Add & Norm after attention
+            yield return new LayerNormalizationLayer<T>(
+                featureSize: hiddenDimension);
+
+            // Feed-forward network for regulatory language understanding
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDimension,
+                outputSize: intermediateDimension,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: intermediateDimension,
+                outputSize: hiddenDimension,
+                activationFunction: null);
+
+            // Dropout in feed-forward
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+            // Add & Norm after feed-forward
+            yield return new LayerNormalizationLayer<T>(
+                featureSize: hiddenDimension);
+        }
+
+        // === Task-Specific Output Head ===
+        // Different heads based on task type
+        if (taskType == "classification")
+        {
+            // Classification: [CLS] token pooling then classification
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDimension,
+                outputSize: hiddenDimension,
+                activationFunction: new TanhActivation<T>());
+
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDimension,
+                outputSize: numClasses,
+                activationFunction: null);
+        }
+        else if (taskType == "ner")
+        {
+            // NER: Token-level classification for each position
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+            // Output for each token position
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDimension,
+                outputSize: numClasses,  // Entity types (B-ORG, I-ORG, B-MONEY, etc.)
+                activationFunction: null);
+        }
+        else if (taskType == "qa")
+        {
+            // QA: Start and end position prediction
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+            // Combined start/end position prediction
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDimension,
+                outputSize: 2,  // Start and end logits
+                activationFunction: null);
+        }
+        else
+        {
+            // Default to classification
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDimension,
+                outputSize: hiddenDimension,
+                activationFunction: new TanhActivation<T>());
+
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDimension,
+                outputSize: numClasses,
+                activationFunction: null);
+        }
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for FinancialBERT (domain-adapted financial BERT).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture containing base configuration.</param>
+    /// <param name="vocabularySize">Size of the token vocabulary (default: 30522 for BERT-base).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length in tokens (default: 512).</param>
+    /// <param name="hiddenDimension">Hidden dimension size (default: 768 for BERT-base).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default: 12).</param>
+    /// <param name="intermediateDimension">Feed-forward intermediate dimension (default: 3072).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numClasses">Number of output classes (default: 3 for sentiment).</param>
+    /// <param name="dropoutRate">Dropout rate for regularization (default: 0.1).</param>
+    /// <param name="taskType">Task type: sentiment, topic, entity, multi (default: sentiment).</param>
+    /// <returns>An enumerable of layers comprising the FinancialBERT architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FinancialBERT is a domain-adapted BERT for comprehensive financial
+    /// text analysis. It covers broader financial applications than specialized models like
+    /// FinBERT (sentiment-focused) or SEC-BERT (regulatory-focused).
+    /// </para>
+    /// <para>
+    /// FinancialBERT supports multiple task types:
+    /// - sentiment: Positive/negative/neutral classification
+    /// - topic: Categorize by financial topic (M&amp;A, earnings, guidance, etc.)
+    /// - entity: Named entity recognition
+    /// - multi: Multi-task learning with multiple output heads
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFinancialBERTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 30522,
+        int maxSequenceLength = 512,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numClasses = 3,
+        double dropoutRate = 0.1,
+        string taskType = "sentiment")
+    {
+        // === Token Embedding Layer ===
+        yield return new EmbeddingLayer<T>(
+            vocabularySize: vocabularySize,
+            embeddingDimension: hiddenDimension);
+
+        // === Position Embedding Layer ===
+        yield return new EmbeddingLayer<T>(
+            vocabularySize: maxSequenceLength,
+            embeddingDimension: hiddenDimension);
+
+        // === Layer Normalization ===
+        yield return new LayerNormalizationLayer<T>(
+            featureSize: hiddenDimension);
+
+        // === Dropout ===
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // === Transformer Layers ===
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: hiddenDimension,
+                headCount: numAttentionHeads);
+
+            yield return new LayerNormalizationLayer<T>(
+                featureSize: hiddenDimension);
+
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDimension,
+                outputSize: intermediateDimension,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: intermediateDimension,
+                outputSize: hiddenDimension,
+                activationFunction: null);
+
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+            yield return new LayerNormalizationLayer<T>(
+                featureSize: hiddenDimension);
+        }
+
+        // === Task-Specific Output Head ===
+        // Pooler
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDimension,
+            outputSize: hiddenDimension,
+            activationFunction: new TanhActivation<T>());
+
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // Classification head
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDimension,
+            outputSize: numClasses,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for FinBERT-Tone (sentiment-focused FinBERT).
+    /// </summary>
+    /// <param name="architecture">The neural network architecture containing base configuration.</param>
+    /// <param name="vocabularySize">Size of the token vocabulary (default: 30522 for BERT-base).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length in tokens (default: 512).</param>
+    /// <param name="hiddenDimension">Hidden dimension size (default: 768 for BERT-base).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default: 12).</param>
+    /// <param name="intermediateDimension">Feed-forward intermediate dimension (default: 3072).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
+    /// <param name="numToneClasses">Number of tone classes (default: 5 for fine-grained sentiment).</param>
+    /// <param name="dropoutRate">Dropout rate for regularization (default: 0.1).</param>
+    /// <returns>An enumerable of layers comprising the FinBERT-Tone architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FinBERT-Tone is a variant of FinBERT specifically focused on
+    /// capturing fine-grained sentiment and tone in financial text. It uses 5 classes
+    /// to capture more nuanced sentiment (very negative, negative, neutral, positive, very positive).
+    /// </para>
+    /// <para>
+    /// FinBERT-Tone is particularly useful for:
+    /// - Earnings call tone analysis
+    /// - Management communication sentiment
+    /// - Forward-looking statement sentiment
+    /// - Analyst report tone classification
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFinBERTToneLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 30522,
+        int maxSequenceLength = 512,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numToneClasses = 5,
+        double dropoutRate = 0.1)
+    {
+        // === Token Embedding Layer ===
+        yield return new EmbeddingLayer<T>(
+            vocabularySize: vocabularySize,
+            embeddingDimension: hiddenDimension);
+
+        // === Position Embedding Layer ===
+        yield return new EmbeddingLayer<T>(
+            vocabularySize: maxSequenceLength,
+            embeddingDimension: hiddenDimension);
+
+        // === Layer Normalization ===
+        yield return new LayerNormalizationLayer<T>(
+            featureSize: hiddenDimension);
+
+        // === Dropout ===
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // === Transformer Layers ===
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: hiddenDimension,
+                headCount: numAttentionHeads);
+
+            yield return new LayerNormalizationLayer<T>(
+                featureSize: hiddenDimension);
+
+            yield return new DenseLayer<T>(
+                inputSize: hiddenDimension,
+                outputSize: intermediateDimension,
+                activationFunction: new GELUActivation<T>());
+
+            yield return new DenseLayer<T>(
+                inputSize: intermediateDimension,
+                outputSize: hiddenDimension,
+                activationFunction: null);
+
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+            yield return new LayerNormalizationLayer<T>(
+                featureSize: hiddenDimension);
+        }
+
+        // === Tone Classification Head ===
+        // Pooler with tanh
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDimension,
+            outputSize: hiddenDimension,
+            activationFunction: new TanhActivation<T>());
+
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // 5-class tone classifier
+        yield return new DenseLayer<T>(
+            inputSize: hiddenDimension,
+            outputSize: numToneClasses,
+            activationFunction: null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for FinGPT (Financial GPT).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FinGPT uses a GPT-style decoder architecture for financial NLP.
+    /// Unlike BERT (encoder-only), GPT uses causal attention where each token can only
+    /// attend to previous tokens, making it suitable for generation tasks.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFinGPTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 50257,
+        int maxSequenceLength = 2048,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numClasses = 3,
+        double dropoutRate = 0.1)
+    {
+        // Token embeddings
+        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
+        yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
+
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // GPT transformer blocks
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDimension, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new DenseLayer<T>(hiddenDimension, intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
+            yield return new DenseLayer<T>(intermediateDimension, hiddenDimension, (IActivationFunction<T>?)null);
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        }
+
+        yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenDimension, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for BloombergGPT-style model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> BloombergGPT is a large financial LLM. This creates a smaller
+    /// version suitable for fine-tuning on specific tasks. The architecture follows
+    /// standard decoder-only transformer design with financial domain adaptation.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBloombergGPTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 50257,
+        int maxSequenceLength = 2048,
+        int hiddenDimension = 1024,
+        int numAttentionHeads = 16,
+        int intermediateDimension = 4096,
+        int numLayers = 24,
+        int numClasses = 3,
+        double dropoutRate = 0.1)
+    {
+        // Token and position embeddings
+        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
+        yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
+
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // Transformer blocks
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDimension, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new DenseLayer<T>(hiddenDimension, intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
+            yield return new DenseLayer<T>(intermediateDimension, hiddenDimension, (IActivationFunction<T>?)null);
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        }
+
+        yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenDimension, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for FinMA (Financial Multi-Agent).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FinMA uses a transformer backbone with multiple output heads
+    /// for different agent tasks. The base architecture processes input, and specialized
+    /// heads handle different aspects of financial analysis.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 32000,
+        int maxSequenceLength = 2048,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numClasses = 3,
+        double dropoutRate = 0.1)
+    {
+        // Token and position embeddings
+        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
+        yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
+
+        yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // Shared transformer backbone
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDimension, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new DenseLayer<T>(hiddenDimension, intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
+            yield return new DenseLayer<T>(intermediateDimension, hiddenDimension, (IActivationFunction<T>?)null);
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+        }
+
+        // Multi-agent classification head (primary output)
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new TanhActivation<T>());
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(hiddenDimension, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates the default layer configuration for InvestLM (Investment Language Model).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> InvestLM is designed for investment-related NLP tasks.
+    /// The architecture is similar to other financial LLMs but with focus on
+    /// investment terminology and reasoning.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultInvestLMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int vocabularySize = 32000,
+        int maxSequenceLength = 2048,
+        int hiddenDimension = 768,
+        int numAttentionHeads = 12,
+        int intermediateDimension = 3072,
+        int numLayers = 12,
+        int numClasses = 3,
+        double dropoutRate = 0.1)
+    {
+        // Token and position embeddings
+        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
+        yield return new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension);
+
+        yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // Transformer blocks
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDimension, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+            yield return new DenseLayer<T>(hiddenDimension, intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
+            yield return new DenseLayer<T>(intermediateDimension, hiddenDimension, (IActivationFunction<T>?)null);
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            yield return new LayerNormalizationLayer<T>(featureSize: hiddenDimension);
+        }
+
+        // Investment recommendation head
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new TanhActivation<T>());
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(hiddenDimension, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region Factor Models
+
+    /// <summary>
+    /// Creates default layers for an AlphaFactorModel.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="numFeatures">Number of input features per asset.</param>
+    /// <param name="hiddenDimension">Dimension of hidden layers.</param>
+    /// <param name="numFactors">Number of latent factors to learn.</param>
+    /// <param name="numAssets">Number of assets for output.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>Enumerable of layers forming the AlphaFactorModel architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This creates the neural network layers for learning alpha factors:
+    /// 1. Feature encoder: Transforms raw features into learned representations
+    /// 2. Factor extractor: Learns a set of uncorrelated factors
+    /// 3. Alpha predictor: Combines factors to predict excess returns
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultAlphaFactorLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numFactors = 10,
+        int numAssets = 500,
+        double dropoutRate = 0.1)
+    {
+        // Feature encoder
+        yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // Hidden layer
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // Factor extractor
+        yield return new DenseLayer<T>(hiddenDimension, numFactors, (IActivationFunction<T>)new TanhActivation<T>());
+        yield return new BatchNormalizationLayer<T>(numFactors);
+
+        // Alpha predictor
+        yield return new DenseLayer<T>(numFactors, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(hiddenDimension, numAssets, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a FactorVAE model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="hiddenDimension">Dimension of hidden layers.</param>
+    /// <param name="latentDimension">Dimension of latent space.</param>
+    /// <param name="numFactors">Number of factors to disentangle.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>Enumerable of layers forming the FactorVAE architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FactorVAE uses a variational autoencoder to learn disentangled factors.
+    /// The encoder compresses data to a latent space, and the decoder reconstructs it.
+    /// The "disentanglement" means each latent dimension captures a different factor.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFactorVAELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int latentDimension = 32,
+        int numFactors = 10,
+        double dropoutRate = 0.1)
+    {
+        // Encoder
+        yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+
+        // Latent space (mean and log-variance)
+        yield return new DenseLayer<T>(hiddenDimension, latentDimension * 2, (IActivationFunction<T>?)null);
+
+        // Factor discriminator for disentanglement
+        yield return new DenseLayer<T>(latentDimension, hiddenDimension, (IActivationFunction<T>)new LeakyReLUActivation<T>());
+        yield return new DenseLayer<T>(hiddenDimension, numFactors, (IActivationFunction<T>?)null);
+
+        // Decoder
+        yield return new DenseLayer<T>(latentDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(hiddenDimension, numFeatures, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a FactorTransformer model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="hiddenDimension">Dimension of hidden layers.</param>
+    /// <param name="numFactors">Number of factors.</param>
+    /// <param name="headCount">Number of attention heads.</param>
+    /// <param name="numLayers">Number of transformer layers.</param>
+    /// <param name="sequenceLength">Length of input sequences.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>Enumerable of layers forming the FactorTransformer architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FactorTransformer uses transformer attention to model
+    /// relationships between assets and time, extracting factors that capture
+    /// cross-sectional and temporal patterns.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFactorTransformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numFactors = 10,
+        int headCount = 4,
+        int numLayers = 2,
+        int sequenceLength = 60,
+        double dropoutRate = 0.1)
+    {
+        // Input embedding
+        yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+
+        // Positional encoding is handled inside transformer, add layer norm
+        yield return new LayerNormalizationLayer<T>(hiddenDimension);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: sequenceLength,
+                embeddingDimension: hiddenDimension,
+                headCount: headCount);
+            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+
+            // Feed-forward network
+            yield return new DenseLayer<T>(hiddenDimension, hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            yield return new DenseLayer<T>(hiddenDimension * 4, hiddenDimension, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+        }
+
+        // Factor extraction head
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(hiddenDimension, numFactors, (IActivationFunction<T>)new TanhActivation<T>());
+
+        // Alpha prediction head
+        yield return new DenseLayer<T>(numFactors, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(hiddenDimension, 1, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region Risk Models
+
+    /// <summary>
+    /// Creates default layers for a NeuralVaR model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralVaRLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int sequenceLength = 60,
+        double dropoutRate = 0.1)
+    {
+        // LSTM for temporal patterns
+        yield return new LSTMLayer<T>(
+            inputSize: numFeatures,
+            hiddenSize: hiddenDimension,
+            inputShape: new[] { 1, sequenceLength, numFeatures },
+            activation: (IActivationFunction<T>?)null,
+            recurrentActivation: null,
+            engine: null);
+
+        // Dense layers for risk estimation
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension / 2);
+
+        // Output layer for VaR estimate
+        yield return new DenseLayer<T>(hiddenDimension / 2, 1, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a NeuralCVaR model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralCVaRLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int sequenceLength = 60,
+        double dropoutRate = 0.1)
+    {
+        // LSTM for temporal patterns
+        yield return new LSTMLayer<T>(
+            inputSize: numFeatures,
+            hiddenSize: hiddenDimension,
+            inputShape: new[] { 1, sequenceLength, numFeatures },
+            activation: (IActivationFunction<T>?)null,
+            recurrentActivation: null,
+            engine: null);
+
+        // Dense layers
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
+
+        // Output both VaR and CVaR
+        yield return new DenseLayer<T>(hiddenDimension / 2, 2, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for a TabNet model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabNetLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numSteps = 3,
+        int numClasses = 2,
+        double dropoutRate = 0.1)
+    {
+        // Feature transformer (shared)
+        yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+
+        // Decision steps
+        for (int i = 0; i < numSteps; i++)
+        {
+            yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+            yield return new BatchNormalizationLayer<T>(hiddenDimension);
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        }
+
+        // Output layer
+        yield return new DenseLayer<T>(hiddenDimension, numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a SAINT model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSAINTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numHeads = 4,
+        int numLayers = 2,
+        int sequenceLength = 1,
+        int numClasses = 2,
+        double dropoutRate = 0.1)
+    {
+        // Input embedding
+        yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new LayerNormalizationLayer<T>(hiddenDimension);
+
+        // Transformer layers with inter-sample attention
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: sequenceLength,
+                embeddingDimension: hiddenDimension,
+                headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+
+            yield return new DenseLayer<T>(hiddenDimension, hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            yield return new DenseLayer<T>(hiddenDimension * 4, hiddenDimension, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(hiddenDimension / 2, numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a TabTransformer model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabTransformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numHeads = 4,
+        int numLayers = 2,
+        int sequenceLength = 1,
+        int numClasses = 2,
+        double dropoutRate = 0.1)
+    {
+        // Column embedding
+        yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new LayerNormalizationLayer<T>(hiddenDimension);
+
+        // Transformer encoder for categorical columns
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: sequenceLength,
+                embeddingDimension: hiddenDimension,
+                headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+
+            yield return new DenseLayer<T>(hiddenDimension, hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            yield return new DenseLayer<T>(hiddenDimension * 4, hiddenDimension, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+        }
+
+        // MLP head
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(hiddenDimension, numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a NeuralStressTest model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralStressTestLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numScenarios = 10,
+        double dropoutRate = 0.1)
+    {
+        // Scenario encoder
+        yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // Impact predictor
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(hiddenDimension / 2, numScenarios, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region Portfolio Models
+
+    /// <summary>
+    /// Creates default layers for a DeepPortfolioManager model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDeepPortfolioLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numAssets = 100,
+        double dropoutRate = 0.1)
+    {
+        // Feature encoder
+        yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // Portfolio weights output with softmax for valid allocation
+        yield return new DenseLayer<T>(hiddenDimension, numAssets, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a HierarchicalRiskParity model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultHierarchicalRiskParityLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numAssets = 100,
+        double dropoutRate = 0.1)
+    {
+        // Covariance estimation network
+        yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+
+        // Weight prediction
+        yield return new DenseLayer<T>(hiddenDimension, numAssets, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for an AttentionAllocation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAttentionAllocationLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numHeads = 4,
+        int numAssets = 100,
+        int sequenceLength = 60,
+        double dropoutRate = 0.1)
+    {
+        // Input embedding
+        yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new LayerNormalizationLayer<T>(hiddenDimension);
+
+        // Attention for cross-asset relationships
+        yield return new MultiHeadAttentionLayer<T>(
+            sequenceLength: sequenceLength,
+            embeddingDimension: hiddenDimension,
+            headCount: numHeads);
+        yield return new LayerNormalizationLayer<T>(hiddenDimension);
+
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension * 2, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(hiddenDimension * 2, hiddenDimension, (IActivationFunction<T>?)null);
+        yield return new LayerNormalizationLayer<T>(hiddenDimension);
+
+        // Allocation output
+        yield return new DenseLayer<T>(hiddenDimension, numAssets, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a BlackLittermanNeural model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBlackLittermanNeuralLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int hiddenDimension = 128,
+        int numAssets = 100,
+        double dropoutRate = 0.1)
+    {
+        // View generator network
+        yield return new DenseLayer<T>(numFeatures, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        yield return new DenseLayer<T>(hiddenDimension, hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new BatchNormalizationLayer<T>(hiddenDimension);
+
+        // Output: expected returns and confidence
+        yield return new DenseLayer<T>(hiddenDimension, numAssets * 2, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region Volatility Models
+
+    /// <summary>
+    /// Creates default layers for a NeuralGARCH model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralGARCHLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int lookbackWindow,
+        int numAssets,
+        int hiddenSize = 64,
+        int numLayers = 2,
+        double dropoutRate = 0.1)
+    {
+        int inputSize = architecture.CalculatedInputSize;
+        int layers = Math.Max(1, numLayers);
+
+        yield return new DenseLayer<T>(inputSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>());
+
+        for (int i = 1; i < layers; i++)
+        {
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>());
+        }
+
+        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+
+        // SoftPlus keeps outputs positive for volatility
+        yield return new DenseLayer<T>(hiddenSize, numAssets, (IActivationFunction<T>)new SoftPlusActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a RealizedVolatilityTransformer model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultRealizedVolatilityTransformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int sequenceLength,
+        int numAssets,
+        int hiddenSize = 128,
+        int numHeads = 4,
+        int numLayers = 2,
+        double dropoutRate = 0.1)
+    {
+        int inputSize = architecture.CalculatedInputSize;
+        int layers = Math.Max(1, numLayers);
+
+        // Input projection
+        yield return new DenseLayer<T>(inputSize, hiddenSize, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+        // Transformer encoder for temporal patterns
+        for (int i = 0; i < layers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: sequenceLength,
+                embeddingDimension: hiddenSize,
+                headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenSize);
+
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 4, (IActivationFunction<T>)new GELUActivation<T>());
+            yield return new DenseLayer<T>(hiddenSize * 4, hiddenSize, (IActivationFunction<T>?)null);
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        }
+
+        // Volatility prediction head
+        yield return new DenseLayer<T>(hiddenSize, numAssets, (IActivationFunction<T>)new SoftPlusActivation<T>());
     }
 
     #endregion

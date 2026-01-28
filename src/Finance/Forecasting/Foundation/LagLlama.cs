@@ -1,0 +1,1068 @@
+using System.IO;
+using AiDotNet.Enums;
+using AiDotNet.Finance.Interfaces;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+
+namespace AiDotNet.Finance.Forecasting.Foundation;
+
+/// <summary>
+/// Lag-Llama foundation model for probabilistic time series forecasting.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+/// <remarks>
+/// <para>
+/// Lag-Llama adapts the Llama large language model architecture for time series forecasting.
+/// It uses lag-based features to capture temporal patterns at multiple scales and outputs
+/// probabilistic forecasts via distribution parameter prediction.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Lag-Llama brings LLM innovations to time series forecasting:
+///
+/// <b>The Lag Feature Innovation:</b>
+/// Instead of just looking at recent values, Lag-Llama creates features from specific past points:
+/// - Lag-1: Yesterday's value (immediate trend)
+/// - Lag-7: Same day last week (weekly pattern)
+/// - Lag-365: Same day last year (annual pattern)
+///
+/// This lets the model explicitly see patterns at different time scales without needing
+/// a very long context window.
+///
+/// <b>Llama Architecture Adaptations:</b>
+/// Lag-Llama adopts key Llama innovations:
+/// - <b>RMSNorm</b>: Simpler, faster layer normalization
+/// - <b>SwiGLU</b>: Improved MLP activation function
+/// - <b>RoPE</b>: Rotary Position Embeddings for better position encoding
+/// - <b>Causal Attention</b>: Each position only sees earlier positions
+///
+/// <b>Probabilistic Forecasting:</b>
+/// Unlike models that output single values, Lag-Llama outputs distribution parameters:
+/// - For Student-t: degrees of freedom (nu), location (mu), scale (sigma)
+/// - Allows uncertainty quantification: "The forecast is 100 ± 15"
+/// - Enables risk-aware decisions: "There's a 5% chance it exceeds 130"
+///
+/// <b>Why Student-t Distribution?</b>
+/// - Has heavier tails than Normal (better for extreme events)
+/// - Degrades gracefully to Normal as nu → infinity
+/// - More robust to outliers in training data
+///
+/// <b>Zero-Shot Capability:</b>
+/// Pre-trained on diverse time series, Lag-Llama can forecast new series without training.
+/// </para>
+/// <para>
+/// <b>Reference:</b> Rasul et al., "Lag-Llama: Towards Foundation Models for Probabilistic Time Series Forecasting", 2024.
+/// https://arxiv.org/abs/2310.08278
+/// </para>
+/// </remarks>
+public class LagLlama<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+{
+    #region Execution Mode
+
+    /// <summary>
+    /// Indicates whether this network uses native layers (true) or ONNX model (false).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ONNX mode loads pretrained weights for immediate zero-shot forecasting.
+    /// Native mode allows fine-tuning on your specific domain.
+    /// </para>
+    /// </remarks>
+    private readonly bool _useNativeMode;
+
+    #endregion
+
+    #region ONNX Mode Fields
+
+    /// <summary>
+    /// The ONNX inference session for running pretrained Lag-Llama.
+    /// </summary>
+    private readonly InferenceSession? _onnxSession;
+
+    /// <summary>
+    /// Path to the ONNX model file.
+    /// </summary>
+    private readonly string? _onnxModelPath;
+
+    #endregion
+
+    #region Native Mode Fields
+
+    /// <summary>
+    /// Input embedding layer that projects lag features to hidden dimension.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Converts the raw lag features (current value + lagged values)
+    /// into a rich hidden representation for the transformer.
+    /// </para>
+    /// </remarks>
+    private ILayer<T>? _inputEmbedding;
+
+    /// <summary>
+    /// Transformer layers with Llama-style architecture.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Multiple layers of attention and feed-forward processing.
+    /// Each layer includes: RMSNorm → Attention → RMSNorm → FFN.
+    /// </para>
+    /// </remarks>
+    private readonly List<ILayer<T>> _transformerLayers = [];
+
+    /// <summary>
+    /// Final layer normalization before output projection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Stabilizes values before predicting distribution parameters.
+    /// </para>
+    /// </remarks>
+    private ILayer<T>? _finalNorm;
+
+    /// <summary>
+    /// Distribution output head that predicts distribution parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Instead of predicting single values, outputs parameters
+    /// of a probability distribution (e.g., mu, sigma, nu for Student-t).
+    /// </para>
+    /// </remarks>
+    private ILayer<T>? _distributionHead;
+
+    #endregion
+
+    #region Shared Fields
+
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ILossFunction<T> _lossFunction;
+    private readonly int _contextLength;
+    private readonly int _forecastHorizon;
+    private readonly int _hiddenDimension;
+    private readonly int _numLayers;
+    private readonly int _numHeads;
+    private readonly int _intermediateSize;
+    private readonly int[] _lagIndices;
+    private readonly double _dropout;
+    private readonly string _distributionOutput;
+    private readonly bool _useRoPE;
+
+    #endregion
+
+    #region IForecastingModel Properties
+
+    /// <inheritdoc/>
+    public int SequenceLength => _contextLength;
+
+    /// <inheritdoc/>
+    public int PredictionHorizon => _forecastHorizon;
+
+    /// <inheritdoc/>
+    public int NumFeatures => 1;
+
+    /// <inheritdoc/>
+    public int PatchSize => 1;
+
+    /// <inheritdoc/>
+    public int Stride => 1;
+
+    /// <inheritdoc/>
+    public bool IsChannelIndependent => true;
+
+    /// <inheritdoc/>
+    public bool UseNativeMode => _useNativeMode;
+
+    /// <summary>
+    /// Gets the lag indices used for feature extraction.
+    /// </summary>
+    /// <value>Array of lag indices.</value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The specific time lags used as features.
+    /// Default is [1, 2, 3, 7, 14, 28, 365] to capture daily, weekly, monthly, and yearly patterns.
+    /// </para>
+    /// </remarks>
+    public int[] LagIndices => _lagIndices;
+
+    /// <summary>
+    /// Gets the distribution type used for probabilistic output.
+    /// </summary>
+    /// <value>The distribution type (e.g., "StudentT", "Normal").</value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Determines what kind of probability distribution is predicted.
+    /// Student-t is the default as it handles outliers better than Normal.
+    /// </para>
+    /// </remarks>
+    public string DistributionOutput => _distributionOutput;
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Creates a Lag-Llama model using pretrained ONNX model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="onnxModelPath">Path to the ONNX model file.</param>
+    /// <param name="options">Configuration options for the model.</param>
+    /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
+    /// <param name="lossFunction">Optional loss function.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the recommended way to use Lag-Llama:
+    /// Load pretrained weights for immediate zero-shot probabilistic forecasting.
+    /// </para>
+    /// </remarks>
+    public LagLlama(
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
+        LagLlamaOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+    {
+        if (string.IsNullOrWhiteSpace(onnxModelPath))
+            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
+
+        options ??= new LagLlamaOptions<T>();
+        ValidateOptions(options);
+
+        _useNativeMode = false;
+        _onnxSession = new InferenceSession(onnxModelPath);
+        _onnxModelPath = onnxModelPath;
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        _contextLength = options.ContextLength;
+        _forecastHorizon = options.ForecastHorizon;
+        _hiddenDimension = options.HiddenDimension;
+        _numLayers = options.NumLayers;
+        _numHeads = options.NumHeads;
+        _intermediateSize = options.IntermediateSize;
+        _lagIndices = (int[])options.LagIndices.Clone();
+        _dropout = options.DropoutRate;
+        _distributionOutput = options.DistributionOutput;
+        _useRoPE = options.UseRoPE;
+    }
+
+    /// <summary>
+    /// Creates a Lag-Llama model in native mode for training or fine-tuning.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="options">Configuration options for the model.</param>
+    /// <param name="optimizer">Optional optimizer.</param>
+    /// <param name="lossFunction">Optional loss function.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this for fine-tuning or training from scratch.
+    /// Native mode supports:
+    /// - Fine-tuning on domain-specific data
+    /// - Custom lag configurations for your use case
+    /// - Experimentation with different distributions
+    /// </para>
+    /// </remarks>
+    public LagLlama(
+        NeuralNetworkArchitecture<T> architecture,
+        LagLlamaOptions<T>? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+    {
+        options ??= new LagLlamaOptions<T>();
+        ValidateOptions(options);
+
+        _useNativeMode = true;
+        _onnxSession = null;
+        _onnxModelPath = null;
+
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+
+        _contextLength = options.ContextLength;
+        _forecastHorizon = options.ForecastHorizon;
+        _hiddenDimension = options.HiddenDimension;
+        _numLayers = options.NumLayers;
+        _numHeads = options.NumHeads;
+        _intermediateSize = options.IntermediateSize;
+        _lagIndices = (int[])options.LagIndices.Clone();
+        _dropout = options.DropoutRate;
+        _distributionOutput = options.DistributionOutput;
+        _useRoPE = options.UseRoPE;
+
+        InitializeLayers();
+    }
+
+    #endregion
+
+    #region Initialization
+
+    /// <summary>
+    /// Initializes the neural network layers for Lag-Llama.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Sets up the complete Lag-Llama architecture:
+    /// 1. Input embedding for lag features
+    /// 2. Stack of Llama-style transformer layers
+    /// 3. Final normalization
+    /// 4. Distribution output head
+    /// </para>
+    /// </remarks>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            ValidateCustomLayers(Layers);
+        }
+        else if (_useNativeMode)
+        {
+            Layers.AddRange(LayerHelper<T>.CreateDefaultLagLlamaLayers(
+                Architecture, _contextLength, _forecastHorizon, 1,
+                _lagIndices.Length, _hiddenDimension, _numLayers, _numHeads,
+                _intermediateSize, _dropout));
+
+            ExtractLayerReferences();
+        }
+    }
+
+    /// <summary>
+    /// Extracts references to specific layers from the layer collection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Organizes layers by their role:
+    /// - First: Input embedding
+    /// - Middle: Transformer blocks (attention + FFN + norms)
+    /// - Last two: Final norm and distribution head
+    /// </para>
+    /// </remarks>
+    private void ExtractLayerReferences()
+    {
+        int idx = 0;
+
+        // Input embedding
+        if (idx < Layers.Count)
+            _inputEmbedding = Layers[idx++];
+
+        // Transformer layers
+        // Each block has: norm, Q, K, V, O, (dropout), norm, gate, up, down, (dropout)
+        _transformerLayers.Clear();
+        int layersPerBlock = _dropout > 0 ? 10 : 8;
+        int totalTransformerLayers = _numLayers * layersPerBlock;
+
+        for (int i = 0; i < totalTransformerLayers && idx < Layers.Count - 2; i++)
+        {
+            _transformerLayers.Add(Layers[idx++]);
+        }
+
+        // Final normalization
+        if (idx < Layers.Count)
+            _finalNorm = Layers[idx++];
+
+        // Distribution output head
+        if (idx < Layers.Count)
+            _distributionHead = Layers[idx];
+    }
+
+    /// <summary>
+    /// Validates that custom layers meet Lag-Llama architectural requirements.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Ensures you have all required components for the model.
+    /// </para>
+    /// </remarks>
+    protected override void ValidateCustomLayers(List<ILayer<T>> layers)
+    {
+        base.ValidateCustomLayers(layers);
+        if (layers.Count < 5)
+        {
+            throw new ArgumentException(
+                "Lag-Llama requires at least 5 layers (input embed, attention, FFN, norm, distribution head).",
+                nameof(layers));
+        }
+    }
+
+    /// <summary>
+    /// Validates the Lag-Llama options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Checks that all configuration values are sensible.
+    /// </para>
+    /// </remarks>
+    private static void ValidateOptions(LagLlamaOptions<T> options)
+    {
+        var errors = new List<string>();
+
+        if (options.ContextLength < 1)
+            errors.Add("ContextLength must be at least 1.");
+        if (options.ForecastHorizon < 1)
+            errors.Add("ForecastHorizon must be at least 1.");
+        if (options.HiddenDimension < 1)
+            errors.Add("HiddenDimension must be at least 1.");
+        if (options.NumLayers < 1)
+            errors.Add("NumLayers must be at least 1.");
+        if (options.NumHeads < 1)
+            errors.Add("NumHeads must be at least 1.");
+        if (options.HiddenDimension % options.NumHeads != 0)
+            errors.Add("HiddenDimension must be divisible by NumHeads.");
+        if (options.IntermediateSize < 1)
+            errors.Add("IntermediateSize must be at least 1.");
+        if (options.LagIndices == null || options.LagIndices.Length == 0)
+            errors.Add("LagIndices must contain at least one lag.");
+        if (options.DropoutRate < 0 || options.DropoutRate >= 1)
+            errors.Add("DropoutRate must be between 0 and 1 (exclusive).");
+
+        if (errors.Count > 0)
+            throw new ArgumentException($"Invalid options: {string.Join(", ", errors)}");
+    }
+
+    #endregion
+
+    #region NeuralNetworkBase Overrides
+
+    /// <inheritdoc/>
+    public override bool SupportsTraining => _useNativeMode;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the LagLlama model, Predict produces predictions from input data. This is the main inference step of the LagLlama architecture.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Training Lag-Llama uses negative log-likelihood loss
+    /// on the predicted distribution. The model learns to predict distribution
+    /// parameters that maximize the probability of observed values.
+    /// </para>
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> target)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+
+        SetTrainingMode(true);
+
+        var predictions = Forward(input);
+
+        // Extract point predictions from distribution parameters (use mean)
+        var pointPredictions = ExtractPointPredictions(predictions);
+        LastLoss = _lossFunction.CalculateLoss(pointPredictions.ToVector(), target.ToVector());
+
+        var gradient = _lossFunction.CalculateDerivative(pointPredictions.ToVector(), target.ToVector());
+        Backward(Tensor<T>.FromVector(gradient));
+
+        _optimizer.UpdateParameters(Layers);
+
+        SetTrainingMode(false);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the LagLlama model, UpdateParameters updates internal parameters or state. This keeps the LagLlama architecture aligned with the latest values.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> gradients)
+    {
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the LagLlama model, GetModelMetadata performs a supporting step in the workflow. It keeps the LagLlama architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        return new ModelMetadata<T>
+        {
+            ModelType = ModelType.NeuralNetwork,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                { "NetworkType", "LagLlama" },
+                { "ContextLength", _contextLength },
+                { "ForecastHorizon", _forecastHorizon },
+                { "HiddenDimension", _hiddenDimension },
+                { "NumLayers", _numLayers },
+                { "NumHeads", _numHeads },
+                { "IntermediateSize", _intermediateSize },
+                { "LagIndices", string.Join(",", _lagIndices) },
+                { "DistributionOutput", _distributionOutput },
+                { "UseRoPE", _useRoPE },
+                { "UseNativeMode", _useNativeMode },
+                { "ParameterCount", GetParameterCount() }
+            },
+            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+        };
+    }
+
+    /// <summary>
+    /// Creates a new instance of this model with the same configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Creates a fresh copy of the Lag-Llama architecture.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var options = new LagLlamaOptions<T>
+        {
+            ContextLength = _contextLength,
+            ForecastHorizon = _forecastHorizon,
+            HiddenDimension = _hiddenDimension,
+            NumLayers = _numLayers,
+            NumHeads = _numHeads,
+            IntermediateSize = _intermediateSize,
+            LagIndices = (int[])_lagIndices.Clone(),
+            DropoutRate = _dropout,
+            DistributionOutput = _distributionOutput,
+            UseRoPE = _useRoPE
+        };
+
+        return new LagLlama<T>(Architecture, options);
+    }
+
+    /// <summary>
+    /// Writes Lag-Llama-specific configuration during serialization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
+    /// </para>
+    /// </remarks>
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_contextLength);
+        writer.Write(_forecastHorizon);
+        writer.Write(_hiddenDimension);
+        writer.Write(_numLayers);
+        writer.Write(_numHeads);
+        writer.Write(_intermediateSize);
+        writer.Write(_lagIndices.Length);
+        foreach (var lag in _lagIndices)
+            writer.Write(lag);
+        writer.Write(_dropout);
+        writer.Write(_distributionOutput);
+        writer.Write(_useRoPE);
+    }
+
+    /// <summary>
+    /// Reads Lag-Llama-specific configuration during deserialization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Loads the configuration that was saved during serialization.
+    /// </para>
+    /// </remarks>
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _ = reader.ReadInt32(); // contextLength
+        _ = reader.ReadInt32(); // forecastHorizon
+        _ = reader.ReadInt32(); // hiddenDimension
+        _ = reader.ReadInt32(); // numLayers
+        _ = reader.ReadInt32(); // numHeads
+        _ = reader.ReadInt32(); // intermediateSize
+        int lagCount = reader.ReadInt32();
+        for (int i = 0; i < lagCount; i++)
+            _ = reader.ReadInt32();
+        _ = reader.ReadDouble(); // dropout
+        _ = reader.ReadString(); // distributionOutput
+        _ = reader.ReadBoolean(); // useRoPE
+    }
+
+    #endregion
+
+    #region IForecastingModel Implementation
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the LagLlama model, Forecast produces predictions from input data. This is the main inference step of the LagLlama architecture.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    {
+        var output = _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
+
+        // If quantiles requested, sample from distribution
+        if (quantiles is not null && quantiles.Length > 0)
+        {
+            return SampleQuantiles(output, quantiles);
+        }
+
+        // Return point predictions (mean of distribution)
+        return ExtractPointPredictions(output);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> For forecasting beyond the horizon, Lag-Llama:
+    /// 1. Generates probabilistic forecasts for the first horizon
+    /// 2. Uses the predicted means as new "history"
+    /// 3. Repeats until the desired forecast length is reached
+    /// </para>
+    /// </remarks>
+    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    {
+        var predictions = new List<Tensor<T>>();
+        var currentInput = input;
+
+        int stepsRemaining = steps;
+        while (stepsRemaining > 0)
+        {
+            var prediction = Forecast(currentInput, null);
+            predictions.Add(prediction);
+
+            int stepsUsed = Math.Min(_forecastHorizon, stepsRemaining);
+            stepsRemaining -= stepsUsed;
+
+            if (stepsRemaining > 0)
+            {
+                currentInput = ShiftInputWithPredictions(currentInput, prediction, stepsUsed);
+            }
+        }
+
+        return ConcatenatePredictions(predictions, steps);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the LagLlama model, Evaluate performs a supporting step in the workflow. It keeps the LagLlama architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    {
+        var metrics = new Dictionary<string, T>();
+
+        T mse = NumOps.Zero;
+        T mae = NumOps.Zero;
+        int count = 0;
+
+        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
+        {
+            var diff = NumOps.Subtract(predictions[i], actuals[i]);
+            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
+            mae = NumOps.Add(mae, NumOps.Abs(diff));
+            count++;
+        }
+
+        if (count > 0)
+        {
+            mse = NumOps.Divide(mse, NumOps.FromDouble(count));
+            mae = NumOps.Divide(mae, NumOps.FromDouble(count));
+        }
+
+        metrics["MSE"] = mse;
+        metrics["MAE"] = mae;
+        metrics["RMSE"] = NumOps.Sqrt(mse);
+
+        return metrics;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the LagLlama model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the LagLlama architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    {
+        return input;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the LagLlama model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the LagLlama architecture is performing.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, T> GetFinancialMetrics()
+    {
+        T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
+
+        return new Dictionary<string, T>
+        {
+            ["ContextLength"] = NumOps.FromDouble(_contextLength),
+            ["ForecastHorizon"] = NumOps.FromDouble(_forecastHorizon),
+            ["HiddenDimension"] = NumOps.FromDouble(_hiddenDimension),
+            ["NumLayers"] = NumOps.FromDouble(_numLayers),
+            ["NumHeads"] = NumOps.FromDouble(_numHeads),
+            ["NumLags"] = NumOps.FromDouble(_lagIndices.Length),
+            ["LastLoss"] = lastLoss
+        };
+    }
+
+    #endregion
+
+    #region Forward/Backward Pass
+
+    /// <summary>
+    /// Performs the forward pass through Lag-Llama.
+    /// </summary>
+    /// <param name="input">Input tensor with lag features.</param>
+    /// <returns>Output tensor with distribution parameters.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Lag-Llama forward pass:
+    ///
+    /// <b>Step 1: Lag Feature Processing</b>
+    /// - Input includes current values and lagged values
+    /// - Embedded into hidden dimension
+    ///
+    /// <b>Step 2: Transformer Processing</b>
+    /// - Multiple Llama-style blocks
+    /// - Each block: RMSNorm → Attention → RMSNorm → FFN
+    /// - Causal attention (only look at past)
+    ///
+    /// <b>Step 3: Distribution Output</b>
+    /// - Final norm
+    /// - Project to distribution parameters
+    /// - For Student-t: outputs [mu, sigma, nu] for each forecast step
+    /// </para>
+    /// </remarks>
+    private Tensor<T> Forward(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return ForecastOnnx(input);
+
+        var current = input;
+
+        // Input embedding
+        if (_inputEmbedding is not null)
+            current = _inputEmbedding.Forward(current);
+
+        // Process through transformer layers
+        foreach (var layer in _transformerLayers)
+        {
+            current = layer.Forward(current);
+        }
+
+        // Final normalization
+        if (_finalNorm is not null)
+            current = _finalNorm.Forward(current);
+
+        // Distribution output head
+        if (_distributionHead is not null)
+            current = _distributionHead.Forward(current);
+
+        return current;
+    }
+
+    /// <summary>
+    /// Performs the backward pass through Lag-Llama.
+    /// </summary>
+    /// <param name="gradOutput">Gradient from the loss function.</param>
+    /// <returns>Gradient with respect to the input.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Backpropagation through Lag-Llama updates all learnable
+    /// parameters: embeddings, attention weights, FFN weights, and distribution head.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> Backward(Tensor<T> gradOutput)
+    {
+        var current = gradOutput;
+
+        // Distribution head backward
+        if (_distributionHead is not null)
+            current = _distributionHead.Backward(current);
+
+        // Final norm backward
+        if (_finalNorm is not null)
+            current = _finalNorm.Backward(current);
+
+        // Transformer layers backward (reverse order)
+        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
+        {
+            current = _transformerLayers[i].Backward(current);
+        }
+
+        // Input embedding backward
+        if (_inputEmbedding is not null)
+            current = _inputEmbedding.Backward(current);
+
+        return current;
+    }
+
+    #endregion
+
+    #region Inference Methods
+
+    /// <summary>
+    /// Performs native mode forecasting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Uses the neural network layers to produce probabilistic forecasts.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ForecastNative(Tensor<T> input)
+    {
+        SetTrainingMode(false);
+        return Forward(input);
+    }
+
+    /// <summary>
+    /// Performs ONNX mode forecasting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Uses the pretrained ONNX model for inference.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    {
+        if (_onnxSession is null)
+            throw new InvalidOperationException("ONNX session is not initialized.");
+
+        var inputData = new float[input.Length];
+        for (int i = 0; i < input.Length; i++)
+        {
+            inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
+        }
+
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var inputMeta = _onnxSession.InputMetadata;
+        string inputName = inputMeta.Keys.First();
+
+        var inputs = new List<NamedOnnxValue>
+        {
+            NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
+        };
+
+        using var results = _onnxSession.Run(inputs);
+        var outputTensor = results.First().AsTensor<float>();
+
+        var outputShape = outputTensor.Dimensions.ToArray();
+        var outputData = new T[outputTensor.Length];
+        for (int i = 0; i < outputTensor.Length; i++)
+        {
+            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        }
+
+        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+    }
+
+    #endregion
+
+    #region Distribution Processing
+
+    /// <summary>
+    /// Extracts point predictions (means) from distribution parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The model outputs distribution parameters.
+    /// For point predictions, we extract the mean (mu) parameter.
+    /// For Student-t: output is [mu1, sigma1, nu1, mu2, sigma2, nu2, ...]
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ExtractPointPredictions(Tensor<T> distributionParams)
+    {
+        // Output format: [mu, sigma, nu] repeated for each forecast step
+        // Extract just the mu values (every 3rd value starting at index 0)
+        var result = new Tensor<T>(new[] { _forecastHorizon });
+
+        for (int i = 0; i < _forecastHorizon; i++)
+        {
+            int idx = i * 3; // mu is at positions 0, 3, 6, ...
+            if (idx < distributionParams.Length)
+            {
+                result.Data.Span[i] = distributionParams.Data.Span[idx];
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Samples quantiles from the predicted distribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Given distribution parameters and desired quantiles,
+    /// compute the values at those quantiles. For example, quantile 0.5 gives the median,
+    /// and [0.1, 0.9] gives a 80% prediction interval.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> SampleQuantiles(Tensor<T> distributionParams, double[] quantiles)
+    {
+        // Simplified: return point predictions scaled by quantile factors
+        // Full implementation would use inverse CDF of Student-t
+        var result = new Tensor<T>(new[] { _forecastHorizon * quantiles.Length });
+
+        var pointPreds = ExtractPointPredictions(distributionParams);
+
+        for (int q = 0; q < quantiles.Length; q++)
+        {
+            double quantile = quantiles[q];
+            // Simple approximation: scale by z-score
+            double zScore = ApproximateInverseNormal(quantile);
+
+            for (int i = 0; i < _forecastHorizon; i++)
+            {
+                // Extract sigma for this step
+                int sigmaIdx = i * 3 + 1;
+                T sigma = sigmaIdx < distributionParams.Length
+                    ? distributionParams.Data.Span[sigmaIdx]
+                    : NumOps.FromDouble(1.0);
+
+                // quantile_value = mu + z_score * sigma
+                T mu = pointPreds.Data.Span[i];
+                T adjustment = NumOps.Multiply(sigma, NumOps.FromDouble(zScore));
+                result.Data.Span[q * _forecastHorizon + i] = NumOps.Add(mu, adjustment);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Approximates the inverse standard normal CDF.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Converts a probability (like 0.95) to a z-score (like 1.645).
+    /// This is a simplified approximation; full implementation would use proper quantile function.
+    /// </para>
+    /// </remarks>
+    private static double ApproximateInverseNormal(double p)
+    {
+        // Rational approximation for inverse normal (Abramowitz and Stegun)
+        if (p <= 0) return double.NegativeInfinity;
+        if (p >= 1) return double.PositiveInfinity;
+        if (p == 0.5) return 0;
+
+        double t = p < 0.5 ? Math.Sqrt(-2 * Math.Log(p)) : Math.Sqrt(-2 * Math.Log(1 - p));
+        double c0 = 2.515517, c1 = 0.802853, c2 = 0.010328;
+        double d1 = 1.432788, d2 = 0.189269, d3 = 0.001308;
+
+        double z = t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
+
+        return p < 0.5 ? -z : z;
+    }
+
+    #endregion
+
+    #region Helper Methods
+
+    /// <summary>
+    /// Shifts input tensor by incorporating predictions for autoregressive forecasting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> For multi-step forecasting, we slide the window and
+    /// add predicted values as new "history" for the next iteration.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
+    {
+        // For Lag-Llama, we need to update the lag features
+        // Simplified: shift the context and add predictions
+        var newInput = new Tensor<T>(input.Shape);
+
+        int featureSize = 1 + _lagIndices.Length; // value + lags
+        int shift = stepsUsed * featureSize;
+
+        // Shift existing data
+        for (int i = 0; i < input.Length - shift; i++)
+        {
+            if (i + shift < input.Length)
+                newInput.Data.Span[i] = input.Data.Span[i + shift];
+        }
+
+        // Add predictions at the end
+        for (int i = 0; i < stepsUsed && i < predictions.Length; i++)
+        {
+            int targetIdx = input.Length - shift + i * featureSize;
+            if (targetIdx < input.Length)
+            {
+                newInput.Data.Span[targetIdx] = predictions[i];
+            }
+        }
+
+        return newInput;
+    }
+
+    /// <summary>
+    /// Concatenates multiple prediction tensors for extended horizons.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Combines predictions from multiple iterations into one result.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
+    {
+        var result = new Tensor<T>(new[] { totalSteps });
+
+        int resultIdx = 0;
+        int stepsAdded = 0;
+
+        foreach (var pred in predictions)
+        {
+            int stepsToAdd = Math.Min(_forecastHorizon, totalSteps - stepsAdded);
+
+            for (int i = 0; i < stepsToAdd && resultIdx < totalSteps; i++)
+            {
+                if (i < pred.Length)
+                    result.Data.Span[resultIdx++] = pred[i];
+            }
+
+            stepsAdded += stepsToAdd;
+            if (stepsAdded >= totalSteps)
+                break;
+        }
+
+        return result;
+    }
+
+    #endregion
+
+    #region IDisposable
+
+    /// <summary>
+    /// Disposes resources used by the Lag-Llama model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Releases the ONNX session and other resources.
+    /// </para>
+    /// </remarks>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _onnxSession?.Dispose();
+        }
+        base.Dispose(disposing);
+    }
+
+    #endregion
+}

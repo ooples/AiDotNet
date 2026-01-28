@@ -1,6 +1,6 @@
 using System.IO;
 using AiDotNet.Finance.Interfaces;
-using AiDotNet.Finance.Options;
+using AiDotNet.Models.Options;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -386,12 +386,22 @@ public class Crossformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Crossformer model, Predict produces predictions from input data. This is the main inference step of the Crossformer architecture.
+    /// </para>
+    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Crossformer model, Train performs a training step. This updates the Crossformer architecture so it learns from data.
+    /// </para>
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)
@@ -416,12 +426,22 @@ public class Crossformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Crossformer model, UpdateParameters updates internal parameters or state. This keeps the Crossformer architecture aligned with the latest values.
+    /// </para>
+    /// </remarks>
     public override void UpdateParameters(Vector<T> gradients)
     {
         // Parameters are updated through the optimizer in Train method
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Crossformer model, GetModelMetadata performs a supporting step in the workflow. It keeps the Crossformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -522,6 +542,11 @@ public class Crossformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Crossformer model, Forecast produces predictions from input data. This is the main inference step of the Crossformer architecture.
+    /// </para>
+    /// </remarks>
     public Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
         if (_useInstanceNormalization)
@@ -536,6 +561,11 @@ public class Crossformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Crossformer model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the Crossformer architecture.
+    /// </para>
+    /// </remarks>
     public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         var predictions = new List<Tensor<T>>();
@@ -560,6 +590,11 @@ public class Crossformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Crossformer model, Evaluate performs a supporting step in the workflow. It keeps the Crossformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
@@ -591,12 +626,22 @@ public class Crossformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Crossformer model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the Crossformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         return ApplyRevIN(input, normalize: true);
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Crossformer model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the Crossformer architecture is performing.
+    /// </para>
+    /// </remarks>
     public Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>

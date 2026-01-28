@@ -1,6 +1,6 @@
 using System.IO;
+using AiDotNet.Finance.Base;
 using AiDotNet.Finance.Interfaces;
-using AiDotNet.Finance.Options;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -28,31 +28,8 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// with Transformers", ICLR 2023. https://arxiv.org/abs/2211.14730
 /// </para>
 /// </remarks>
-public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
 {
-    #region Execution Mode
-
-    /// <summary>
-    /// Indicates whether this network uses native layers (true) or ONNX model (false).
-    /// </summary>
-    private readonly bool _useNativeMode;
-
-    #endregion
-
-    #region ONNX Mode Fields
-
-    /// <summary>
-    /// The ONNX inference session for the model.
-    /// </summary>
-    private readonly InferenceSession? _onnxSession;
-
-    /// <summary>
-    /// Path to the ONNX model file.
-    /// </summary>
-    private readonly string? _onnxModelPath;
-
-    #endregion
-
     #region Native Mode Fields
 
     /// <summary>
@@ -98,26 +75,6 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// The optimizer for training.
     /// </summary>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-
-    /// <summary>
-    /// The loss function for training.
-    /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
-
-    /// <summary>
-    /// The input sequence length.
-    /// </summary>
-    private readonly int _sequenceLength;
-
-    /// <summary>
-    /// The prediction horizon.
-    /// </summary>
-    private readonly int _predictionHorizon;
-
-    /// <summary>
-    /// The number of input features.
-    /// </summary>
-    private readonly int _numFeatures;
 
     /// <summary>
     /// The patch size.
@@ -169,25 +126,13 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Properties
 
     /// <inheritdoc/>
-    public int SequenceLength => _sequenceLength;
+    public override int PatchSize => _patchSize;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _predictionHorizon;
+    public override int Stride => _stride;
 
     /// <inheritdoc/>
-    public int NumFeatures => _numFeatures;
-
-    /// <inheritdoc/>
-    public int PatchSize => _patchSize;
-
-    /// <inheritdoc/>
-    public int Stride => _stride;
-
-    /// <inheritdoc/>
-    public bool IsChannelIndependent => _channelIndependent;
-
-    /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool IsChannelIndependent => _channelIndependent;
 
     #endregion
 
@@ -234,21 +179,8 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         int stride = 8,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture,
-               lossFunction ?? new MeanSquaredErrorLoss<T>(),
-               1.0)
+        : base(architecture, onnxModelPath, sequenceLength, predictionHorizon, numFeatures)
     {
-        // Validate ONNX model path
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
-
-        _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _sequenceLength = sequenceLength;
-        _predictionHorizon = predictionHorizon;
-        _numFeatures = numFeatures;
         _patchSize = patchSize;
         _stride = stride;
         _numLayers = 3;
@@ -259,20 +191,9 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         _useInstanceNormalization = true;
         _dropout = 0.05;
 
-        InferenceSession? session = null;
-        try
-        {
-            session = new InferenceSession(onnxModelPath);
-            _onnxSession = session;
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-            _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-            InitializeLayers();
-        }
-        catch
-        {
-            session?.Dispose();
-            throw;
-        }
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        InitializeLayers();
     }
 
     /// <summary>
@@ -337,16 +258,10 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         double dropout = 0.05,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture,
-               lossFunction ?? new MeanSquaredErrorLoss<T>(),
-               1.0)
+        : base(architecture, sequenceLength, predictionHorizon, numFeatures, lossFunction)
     {
         ValidateParameters(sequenceLength, predictionHorizon, numFeatures, patchSize, stride, numLayers, numHeads, modelDimension);
 
-        _useNativeMode = true;
-        _sequenceLength = sequenceLength;
-        _predictionHorizon = predictionHorizon;
-        _numFeatures = numFeatures;
         _patchSize = patchSize;
         _stride = stride;
         _numLayers = numLayers;
@@ -358,11 +273,18 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         _dropout = dropout;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         InitializeLayers();
     }
 
+    /// <summary>
+    /// Executes ValidateParameters for the PatchTST.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the PatchTST model, ValidateParameters checks inputs and configuration. This protects the PatchTST architecture from mismatches and errors.
+    /// </para>
+    /// </remarks>
     private static void ValidateParameters(int sequenceLength, int predictionHorizon, int numFeatures,
         int patchSize, int stride, int numLayers, int numHeads, int modelDimension)
     {
@@ -421,11 +343,11 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
         }
-        else if (_useNativeMode)
+        else if (UseNativeMode)
         {
             // Use default layer configuration
             Layers.AddRange(LayerHelper<T>.CreateDefaultPatchTSTLayers(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
+                Architecture, SequenceLength, PredictionHorizon, NumFeatures,
                 _patchSize, _stride, _numLayers, _numHeads, _modelDimension, _feedForwardDimension));
 
             // Store references to specific layers for direct access
@@ -514,48 +436,37 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
     #region NeuralNetworkBase Overrides
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This property indicates whether this model can be trained.
-    /// Training is only supported when using native mode (C# layers), not when using
-    /// a pretrained ONNX model.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsTraining => _useNativeMode;
-
     /// <summary>
-    /// Makes a prediction using the input tensor.
+    /// Validates the input tensor shape for PatchTST.
     /// </summary>
-    /// <param name="input">Input tensor of shape [batch_size, sequence_length, num_features].</param>
-    /// <returns>Output tensor of shape [batch_size, prediction_horizon, num_features].</returns>
+    /// <param name="input">The input tensor to validate.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method takes historical time series data and returns
-    /// predictions for future time steps. The input should contain your historical data
-    /// (e.g., the last 96 hours of stock prices), and the output will contain predictions
-    /// for the future (e.g., the next 24 hours).
-    /// </para>
-    /// <para>
-    /// Example:
-    /// <code>
-    /// // Input: 96 time steps, 7 features
-    /// var historicalData = new Tensor&lt;double&gt;(new[] { 1, 96, 7 }, data);
-    /// var forecast = model.Predict(historicalData);
-    /// // Output: 24 predicted time steps, 7 features
-    /// </code>
+    /// <b>For Beginners:</b> Before the model can make a prediction, it needs to ensure
+    /// the input data is in the correct format. For PatchTST, the input must have the
+    /// correct sequence length and number of features.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    protected override void ValidateInputShape(Tensor<T> input)
     {
-        return Forecast(input);
+        if (input.Rank != 2 && input.Rank != 3)
+            throw new ArgumentException("Input tensor must be 2D [sequence_length, num_features] or 3D [batch_size, sequence_length, num_features].", nameof(input));
+
+        int actualSeqLen = input.Rank == 3 ? input.Shape[1] : input.Shape[0];
+        int actualNumFeatures = input.Rank == 3 ? input.Shape[2] : input.Shape[1];
+
+        if (actualSeqLen != SequenceLength)
+            throw new ArgumentException($"Input sequence length {actualSeqLen} does not match expected {SequenceLength}.", nameof(input));
+        if (actualNumFeatures != NumFeatures)
+            throw new ArgumentException($"Input number of features {actualNumFeatures} does not match expected {NumFeatures}.", nameof(input));
     }
 
     /// <summary>
     /// Trains the model on a single batch of input-output pairs.
     /// </summary>
-    /// <param name="input">Input tensor of shape [batch_size, sequence_length, num_features].</param>
-    /// <param name="expectedOutput">Target tensor of shape [batch_size, prediction_horizon, num_features].</param>
+    /// <param name="input">Input tensor.</param>
+    /// <param name="target">Target tensor.</param>
+    /// <param name="output">Model output from forward pass.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Training teaches the model to make better predictions by
@@ -570,26 +481,13 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <item>Parameter update: The optimizer applies the adjustments</item>
     /// </list>
     /// </para>
-    /// <para>
-    /// Note: Training is only available in native mode, not when using ONNX models.
-    /// </para>
     /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown if called in ONNX mode.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
         SetTrainingMode(true);
 
-        // Forward pass
-        var prediction = Forward(input);
-
-        // Calculate loss
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
         // Backward pass
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+        var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
         Backward(Tensor<T>.FromVector(outputGradient));
 
         // Update parameters
@@ -651,26 +549,17 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
-        {
-            ModelType = ModelType.NeuralNetwork,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                { "NetworkType", "PatchTST" },
-                { "SequenceLength", _sequenceLength },
-                { "PredictionHorizon", _predictionHorizon },
-                { "NumFeatures", _numFeatures },
-                { "PatchSize", _patchSize },
-                { "Stride", _stride },
-                { "NumLayers", _numLayers },
-                { "NumHeads", _numHeads },
-                { "ModelDimension", _modelDimension },
-                { "ChannelIndependent", _channelIndependent },
-                { "UseNativeMode", _useNativeMode },
-                { "ParameterCount", GetParameterCount() }
-            },
-            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
-        };
+        var metadata = base.GetModelMetadata();
+        metadata.AdditionalInfo["NetworkType"] = "PatchTST";
+        metadata.AdditionalInfo["PatchSize"] = _patchSize;
+        metadata.AdditionalInfo["Stride"] = _stride;
+        metadata.AdditionalInfo["NumLayers"] = _numLayers;
+        metadata.AdditionalInfo["NumHeads"] = _numHeads;
+        metadata.AdditionalInfo["ModelDimension"] = _modelDimension;
+        metadata.AdditionalInfo["ChannelIndependent"] = _channelIndependent;
+        metadata.AdditionalInfo["ParameterCount"] = GetParameterCount();
+        
+        return metadata;
     }
 
     /// <summary>
@@ -693,20 +582,20 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        if (_useNativeMode)
+        if (UseNativeMode)
         {
             return new PatchTST<T>(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
+                Architecture, SequenceLength, PredictionHorizon, NumFeatures,
                 _patchSize, _stride, _numLayers, _numHeads, _modelDimension, _feedForwardDimension,
                 _channelIndependent, _useInstanceNormalization, _dropout,
-                _optimizer, _lossFunction);
+                _optimizer, LossFunction);
         }
         else
         {
             return new PatchTST<T>(
-                Architecture, _onnxModelPath ?? string.Empty,
-                _sequenceLength, _predictionHorizon, _numFeatures, _patchSize, _stride,
-                _optimizer, _lossFunction);
+                Architecture, OnnxModelPath ?? string.Empty,
+                SequenceLength, PredictionHorizon, NumFeatures, _patchSize, _stride,
+                _optimizer, LossFunction);
         }
     }
 
@@ -725,11 +614,8 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// later, the corresponding DeserializeNetworkSpecificData method reads it back.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    protected override void SerializeModelSpecificData(BinaryWriter writer)
     {
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
         writer.Write(_patchSize);
         writer.Write(_stride);
         writer.Write(_numLayers);
@@ -756,11 +642,8 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// the constructor already sets these values based on the model configuration.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    protected override void DeserializeModelSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // predictionHorizon
-        _ = reader.ReadInt32(); // numFeatures
         _ = reader.ReadInt32(); // patchSize
         _ = reader.ReadInt32(); // stride
         _ = reader.ReadInt32(); // numLayers
@@ -773,6 +656,10 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     #endregion
+
+
+
+
 
     #region IForecastingModel Implementation
 
@@ -799,12 +686,12 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// Together, these form a prediction interval that shows how confident the model is.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
 
-        if (_useNativeMode)
+        if (UseNativeMode)
         {
             return ForecastNative(input, quantiles);
         }
@@ -838,7 +725,7 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// is building on its own (potentially incorrect) earlier predictions.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -852,7 +739,7 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         while (stepsRemaining > 0)
         {
             var forecast = Forecast(currentInput);
-            int stepsToUse = Math.Min(stepsRemaining, _predictionHorizon);
+            int stepsToUse = Math.Min(stepsRemaining, PredictionHorizon);
             allPredictions.Add(forecast);
             stepsRemaining -= stepsToUse;
 
@@ -890,7 +777,7 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// Lower values are better for all these metrics.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
+    public override Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
     {
         if (inputs is null)
             throw new ArgumentNullException(nameof(inputs));
@@ -947,7 +834,7 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// This method performs step 2 (the normalization step).
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         if (!_useInstanceNormalization)
             return input;
@@ -975,16 +862,11 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
-        var metrics = new Dictionary<string, T>
-        {
-            ["SequenceLength"] = NumOps.FromDouble(_sequenceLength),
-            ["PredictionHorizon"] = NumOps.FromDouble(_predictionHorizon),
-            ["NumFeatures"] = NumOps.FromDouble(_numFeatures),
-            ["NumPatches"] = NumOps.FromDouble(CalculateNumPatches()),
-            ["ParameterCount"] = NumOps.FromDouble(GetParameterCount())
-        };
+        var metrics = base.GetFinancialMetrics();
+        metrics["NumPatches"] = NumOps.FromDouble(CalculateNumPatches());
+        metrics["ParameterCount"] = NumOps.FromDouble(GetParameterCount());
 
         return metrics;
     }
@@ -1096,7 +978,7 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// </list>
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
+    protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         SetTrainingMode(false);
         return Forward(input);
@@ -1130,9 +1012,9 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// </list>
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         // Convert to ONNX format
@@ -1143,7 +1025,7 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
-        var inputMeta = _onnxSession.InputMetadata;
+        var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
         var inputs = new List<NamedOnnxValue>
@@ -1151,7 +1033,7 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
         var outputShape = outputTensor.Dimensions.ToArray();
@@ -1613,7 +1495,7 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// This is called "autoregressive" because the model's outputs become its future inputs.
     /// </para>
     /// </remarks>
-    private Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsToShift)
+    protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsToShift)
     {
         var newData = new T[input.Length];
         int shiftAmount = stepsToShift * _numFeatures;
@@ -1650,7 +1532,7 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// containing exactly 100 steps.
     /// </para>
     /// </remarks>
-    private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
+    protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         var outputData = new T[totalSteps * _numFeatures];
         int currentIdx = 0;
@@ -1701,7 +1583,7 @@ public class PatchTST<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
         base.Dispose(disposing);
     }

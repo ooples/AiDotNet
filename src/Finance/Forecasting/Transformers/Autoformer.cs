@@ -267,6 +267,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Initializes the layers for native mode operation.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, InitializeLayers builds and wires up model components. This sets up the Autoformer architecture before use.
+    /// </para>
+    /// </remarks>
     protected override void InitializeLayers()
     {
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
@@ -294,6 +299,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Extracts references to specific layers.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, ExtractLayerReferences performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private void ExtractLayerReferences()
     {
         if (Layers.Count == 0)
@@ -327,6 +337,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Validates custom layers provided by the user.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, ValidateCustomLayers checks inputs and configuration. This protects the Autoformer architecture from mismatches and errors.
+    /// </para>
+    /// </remarks>
     protected override void ValidateCustomLayers(List<ILayer<T>> layers)
     {
         base.ValidateCustomLayers(layers);
@@ -343,12 +358,22 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, Predict produces predictions from input data. This is the main inference step of the Autoformer architecture.
+    /// </para>
+    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         return Forecast(input);
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, Train performs a training step. This updates the Autoformer architecture so it learns from data.
+    /// </para>
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -368,6 +393,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, UpdateParameters updates internal parameters or state. This keeps the Autoformer architecture aligned with the latest values.
+    /// </para>
+    /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (parameters is null)
@@ -384,6 +414,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, GetModelMetadata performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -408,6 +443,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, CreateNewInstance builds and wires up model components. This sets up the Autoformer architecture before use.
+    /// </para>
+    /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         var options = new AutoformerOptions<T>
@@ -429,6 +469,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the Autoformer architecture be reused later.
+    /// </para>
+    /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_sequenceLength);
@@ -446,6 +491,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the Autoformer architecture be reused later.
+    /// </para>
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _ = reader.ReadInt32();
@@ -467,6 +517,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, Forecast produces predictions from input data. This is the main inference step of the Autoformer architecture.
+    /// </para>
+    /// </remarks>
     public Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         if (input is null)
@@ -476,6 +531,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the Autoformer architecture.
+    /// </para>
+    /// </remarks>
     public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         if (input is null)
@@ -504,6 +564,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, Evaluate performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
     {
         if (inputs is null)
@@ -536,6 +601,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         if (!_useInstanceNormalization)
@@ -545,6 +615,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the Autoformer architecture is performing.
+    /// </para>
+    /// </remarks>
     public Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
@@ -563,6 +638,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Performs the forward pass through all layers.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, Forward runs the forward pass through the layers. This moves data through the Autoformer architecture to compute outputs.
+    /// </para>
+    /// </remarks>
     private Tensor<T> Forward(Tensor<T> input)
     {
         var current = _useInstanceNormalization ? ApplyRevIN(input, normalize: true) : input;
@@ -616,6 +696,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Performs the backward pass.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, Backward propagates gradients backward. This teaches the Autoformer architecture how to adjust its weights.
+    /// </para>
+    /// </remarks>
     private Tensor<T> Backward(Tensor<T> outputGradient)
     {
         var gradient = outputGradient;
@@ -631,6 +716,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Performs native mode forecasting.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, ForecastNative produces predictions from input data. This is the main inference step of the Autoformer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         SetTrainingMode(false);
@@ -640,6 +730,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Performs ONNX mode forecasting.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, ForecastOnnx produces predictions from input data. This is the main inference step of the Autoformer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)
@@ -669,6 +764,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Initializes decomposition components.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, private performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private (Tensor<T> trend, Tensor<T> seasonal) InitializeDecomposition(Tensor<T> input)
     {
         var trend = new Tensor<T>(input.Shape);
@@ -679,6 +779,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Performs series decomposition using moving average.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, private performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private (Tensor<T> trend, Tensor<T> seasonal) SeriesDecomposition(Tensor<T> input)
     {
         var trend = MovingAverage(input, _movingAverageKernel);
@@ -689,6 +794,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Computes moving average.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, MovingAverage performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private Tensor<T> MovingAverage(Tensor<T> input, int kernelSize)
     {
         var result = new Tensor<T>(input.Shape);
@@ -721,6 +831,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Applies RevIN normalization/denormalization.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, ApplyRevIN performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
         if (normalize)
@@ -794,6 +909,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Adjusts output to prediction horizon.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, AdjustToPredictionHorizon produces predictions from input data. This is the main inference step of the Autoformer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> AdjustToPredictionHorizon(Tensor<T> output)
     {
         int currentLen = output.Shape[1];
@@ -824,6 +944,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Adds two tensors element-wise.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, AddTensors performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private Tensor<T> AddTensors(Tensor<T>? a, Tensor<T>? b)
     {
         if (a is null)
@@ -842,6 +967,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Subtracts tensor b from tensor a.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, SubtractTensors performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private Tensor<T> SubtractTensors(Tensor<T> a, Tensor<T> b)
     {
         var result = new Tensor<T>(a.Shape);
@@ -855,6 +985,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Shifts input and appends predictions.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, ShiftInputWithPredictions produces predictions from input data. This is the main inference step of the Autoformer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int steps)
     {
         int batchSize = input.Shape[0];
@@ -887,6 +1022,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Concatenates prediction tensors.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, ConcatenatePredictions produces predictions from input data. This is the main inference step of the Autoformer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         if (predictions.Count == 0)
@@ -922,6 +1062,11 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Releases resources.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Autoformer model, Dispose performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     protected override void Dispose(bool disposing)
     {
         if (disposing)

@@ -1,6 +1,6 @@
 using AiDotNet.LossFunctions;
 
-namespace AiDotNet.Finance.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
 /// Configuration options for the iTransformer (Inverted Transformer) model.

@@ -165,6 +165,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <param name="options">Configuration options for the model.</param>
     /// <param name="optimizer">Optional optimizer.</param>
     /// <param name="lossFunction">Optional loss function.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, Informer sets up the architecture and options. This prepares the model for training or inference.
+    /// </para>
+    /// </remarks>
     public Informer(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
@@ -208,6 +213,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <param name="options">Configuration options for the model.</param>
     /// <param name="optimizer">Optional optimizer.</param>
     /// <param name="lossFunction">Optional loss function.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, Informer sets up the architecture and options. This prepares the model for training or inference.
+    /// </para>
+    /// </remarks>
     public Informer(
         NeuralNetworkArchitecture<T> architecture,
         InformerOptions<T>? options = null,
@@ -247,6 +257,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Initializes the layers for native mode operation.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, InitializeLayers builds and wires up model components. This sets up the Informer architecture before use.
+    /// </para>
+    /// </remarks>
     protected override void InitializeLayers()
     {
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
@@ -274,6 +289,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Extracts references to specific layers.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, ExtractLayerReferences performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private void ExtractLayerReferences()
     {
         if (Layers.Count == 0)
@@ -307,6 +327,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Validates custom layers.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, ValidateCustomLayers checks inputs and configuration. This protects the Informer architecture from mismatches and errors.
+    /// </para>
+    /// </remarks>
     protected override void ValidateCustomLayers(List<ILayer<T>> layers)
     {
         base.ValidateCustomLayers(layers);
@@ -323,12 +348,22 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, Predict produces predictions from input data. This is the main inference step of the Informer architecture.
+    /// </para>
+    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         return Forecast(input);
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, Train performs a training step. This updates the Informer architecture so it learns from data.
+    /// </para>
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -348,6 +383,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, UpdateParameters updates internal parameters or state. This keeps the Informer architecture aligned with the latest values.
+    /// </para>
+    /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (parameters is null)
@@ -364,6 +404,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, GetModelMetadata performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -389,6 +434,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, CreateNewInstance builds and wires up model components. This sets up the Informer architecture before use.
+    /// </para>
+    /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         var options = new InformerOptions<T>
@@ -409,6 +459,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the Informer architecture be reused later.
+    /// </para>
+    /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_sequenceLength);
@@ -426,6 +481,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the Informer architecture be reused later.
+    /// </para>
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _ = reader.ReadInt32();
@@ -447,6 +507,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, Forecast produces predictions from input data. This is the main inference step of the Informer architecture.
+    /// </para>
+    /// </remarks>
     public Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         if (input is null)
@@ -456,6 +521,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the Informer architecture.
+    /// </para>
+    /// </remarks>
     public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         if (input is null)
@@ -484,6 +554,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, Evaluate performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
     {
         if (inputs is null)
@@ -516,6 +591,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         if (!_useInstanceNormalization)
@@ -525,6 +605,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the Informer architecture is performing.
+    /// </para>
+    /// </remarks>
     public Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
@@ -543,6 +628,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Performs the forward pass.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, Forward runs the forward pass through the layers. This moves data through the Informer architecture to compute outputs.
+    /// </para>
+    /// </remarks>
     private Tensor<T> Forward(Tensor<T> input)
     {
         var current = _useInstanceNormalization ? ApplyRevIN(input, normalize: true) : input;
@@ -590,6 +680,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Performs the backward pass.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, Backward propagates gradients backward. This teaches the Informer architecture how to adjust its weights.
+    /// </para>
+    /// </remarks>
     private Tensor<T> Backward(Tensor<T> outputGradient)
     {
         var gradient = outputGradient;
@@ -605,6 +700,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Performs native mode forecasting.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, ForecastNative produces predictions from input data. This is the main inference step of the Informer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         SetTrainingMode(false);
@@ -614,6 +714,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Performs ONNX mode forecasting.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, ForecastOnnx produces predictions from input data. This is the main inference step of the Informer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)
@@ -643,6 +748,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Applies RevIN normalization/denormalization.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, ApplyRevIN performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
         if (normalize)
@@ -716,6 +826,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Applies self-attention distilling.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, ApplyDistilling performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ApplyDistilling(Tensor<T> input)
     {
         int batchSize = input.Shape[0];
@@ -747,6 +862,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Prepares decoder input.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, PrepareDecoderInput performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     private Tensor<T> PrepareDecoderInput(Tensor<T> input, Tensor<T> encoderOutput)
     {
         int batchSize = input.Shape[0];
@@ -776,6 +896,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Extracts prediction portion from decoder output.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, ExtractPrediction produces predictions from input data. This is the main inference step of the Informer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ExtractPrediction(Tensor<T> decoderOutput)
     {
         int batchSize = decoderOutput.Shape[0];
@@ -808,6 +933,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Shifts input and appends predictions.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, ShiftInputWithPredictions produces predictions from input data. This is the main inference step of the Informer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int steps)
     {
         int batchSize = input.Shape[0];
@@ -840,6 +970,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Concatenates prediction tensors.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, ConcatenatePredictions produces predictions from input data. This is the main inference step of the Informer architecture.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         if (predictions.Count == 0)
@@ -875,6 +1010,11 @@ public class Informer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Releases resources.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the Informer model, Dispose performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     protected override void Dispose(bool disposing)
     {
         if (disposing)

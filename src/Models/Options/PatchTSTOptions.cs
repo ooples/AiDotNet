@@ -1,53 +1,72 @@
 using AiDotNet.LossFunctions;
 
-namespace AiDotNet.Finance.Options;
+namespace AiDotNet.Models.Options;
 
 /// <summary>
-/// Configuration options for the Crossformer model.
+/// Configuration options for the PatchTST (Patch Time Series Transformer) model.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
 /// <remarks>
 /// <para>
-/// Crossformer uses a cross-dimension attention mechanism that captures both temporal
-/// and cross-variable dependencies simultaneously through a two-stage attention structure.
+/// PatchTST divides time series into patches and processes them with a Transformer encoder.
+/// This approach has shown state-of-the-art results on long-term forecasting benchmarks.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> These options control how the Crossformer model behaves:
+/// <b>For Beginners:</b> These options control how the PatchTST model behaves:
 ///
 /// Key settings:
-/// - <b>SegmentLength:</b> How long each time segment is for cross-time attention.
+/// - <b>PatchSize:</b> How long each "patch" (segment) of time series is.
+///   Smaller patches capture fine details; larger patches capture broader patterns.
+/// - <b>Stride:</b> How much overlap between patches. Equal to PatchSize for no overlap.
 /// - <b>NumLayers:</b> How deep the transformer is. More layers = more capacity but slower.
-/// - <b>NumHeads:</b> Attention heads. More heads can capture different patterns.
-/// - <b>RouterTopK:</b> For mixture of experts, how many experts to use per token.
+/// - <b>NumHeads:</b> Attention heads. More heads can capture different types of patterns.
+/// - <b>ChannelIndependent:</b> Whether to process each variable independently.
+///   Usually True works better for multivariate forecasting.
 ///
-/// Crossformer excels at capturing both temporal patterns and cross-variable relationships
-/// that are common in multivariate financial time series.
+/// Default values are from the original PatchTST paper and work well for most datasets.
 /// </para>
 /// <para>
-/// <b>Reference:</b> Zhang et al., "Crossformer: Transformer Utilizing Cross-Dimension
-/// Dependency for Multivariate Time Series Forecasting", ICLR 2023.
-/// https://openreview.net/forum?id=vSVLM2j9eie
+/// <b>Reference:</b> Nie et al., "A Time Series is Worth 64 Words: Long-term Forecasting
+/// with Transformers", ICLR 2023. https://arxiv.org/abs/2211.14730
 /// </para>
 /// </remarks>
-public class CrossformerOptions<T>
+public class PatchTSTOptions<T>
 {
     #region Model Architecture
 
     /// <summary>
-    /// Gets or sets the segment length for cross-time attention.
-    /// Default: 12.
+    /// Gets or sets the patch size (segment length).
+    /// Default: 16.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The segment length determines how the time dimension is divided for
-    /// hierarchical cross-time attention.
+    /// The patch size determines how the input sequence is divided into segments.
+    /// Each patch becomes a "token" that the transformer processes.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> Crossformer divides time into segments to make attention
-    /// more efficient. A segment length of 12 means every 12 time steps are grouped.
+    /// <b>For Beginners:</b> If you have 96 time steps and patch size is 16,
+    /// the model creates 6 patches (96 / 16 = 6). Each patch represents 16 consecutive
+    /// time steps, compressed into a single "word" the transformer can understand.
     /// </para>
     /// </remarks>
-    public int SegmentLength { get; set; } = 12;
+    public int PatchSize { get; set; } = 16;
+
+    /// <summary>
+    /// Gets or sets the stride between consecutive patches.
+    /// Default: 8 (overlapping patches).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A stride smaller than patch size creates overlapping patches, which can improve
+    /// the model's ability to capture patterns that span patch boundaries.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> With patch size 16 and stride 8, consecutive patches
+    /// share 8 time steps. This overlap helps the model not "miss" patterns that happen
+    /// at the boundary between patches.
+    /// </para>
+    /// </remarks>
+    public int Stride { get; set; } = 8;
 
     /// <summary>
     /// Gets or sets the number of transformer encoder layers.
@@ -68,7 +87,7 @@ public class CrossformerOptions<T>
     /// <remarks>
     /// <para>
     /// Multiple attention heads allow the model to attend to different parts of
-    /// the sequence simultaneously, capturing various types of patterns.
+    /// the sequence simultaneously, capturing various types of temporal patterns.
     /// </para>
     /// </remarks>
     public int NumHeads { get; set; } = 4;
@@ -97,17 +116,27 @@ public class CrossformerOptions<T>
     /// </remarks>
     public int FeedForwardDimension { get; set; } = 256;
 
+    #endregion
+
+    #region Channel Configuration
+
     /// <summary>
-    /// Gets or sets the top-K value for router in cross-dimension attention.
-    /// Default: 2.
+    /// Gets or sets whether to use channel-independent (CI) mode.
+    /// Default: true.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Crossformer uses a routing mechanism similar to mixture
-    /// of experts. TopK determines how many "experts" are used for each input.
+    /// In CI mode, each channel (variable) is processed independently through the same
+    /// model, sharing parameters across channels. This often improves generalization
+    /// for multivariate time series forecasting.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> If you have 7 variables (like different stock features),
+    /// CI mode processes each one separately using the same weights. This helps the model
+    /// learn patterns that apply to all variables rather than memorizing variable-specific quirks.
     /// </para>
     /// </remarks>
-    public int RouterTopK { get; set; } = 2;
+    public bool ChannelIndependent { get; set; } = true;
 
     #endregion
 
@@ -115,7 +144,7 @@ public class CrossformerOptions<T>
 
     /// <summary>
     /// Gets or sets the dropout rate.
-    /// Default: 0.1.
+    /// Default: 0.05.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -123,18 +152,18 @@ public class CrossformerOptions<T>
     /// helping prevent overfitting.
     /// </para>
     /// </remarks>
-    public double Dropout { get; set; } = 0.1;
+    public double Dropout { get; set; } = 0.05;
 
     /// <summary>
     /// Gets or sets the attention dropout rate.
-    /// Default: 0.1.
+    /// Default: 0.0 (no attention dropout).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Dropout applied to attention weights.
+    /// Dropout applied to attention weights. The PatchTST paper uses 0.0.
     /// </para>
     /// </remarks>
-    public double AttentionDropout { get; set; } = 0.1;
+    public double AttentionDropout { get; set; } = 0.0;
 
     #endregion
 
@@ -147,15 +176,27 @@ public class CrossformerOptions<T>
     /// <remarks>
     /// <para>
     /// Instance normalization (RevIN) helps handle distribution shift in time series data
-    /// by normalizing each instance to zero mean and unit variance.
+    /// by normalizing each instance to zero mean and unit variance, then denormalizing
+    /// the predictions.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Time series data often has changing statistics over time
+    /// (e.g., stock prices going from $100 to $500). RevIN normalizes each input sequence
+    /// so the model sees standardized data, then "un-normalizes" the output predictions.
     /// </para>
     /// </remarks>
     public bool UseInstanceNormalization { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets whether to use pre-norm (LayerNorm before attention/FFN).
-    /// Default: true.
+    /// Gets or sets whether to use pre-norm (LayerNorm before attention/FFN) or post-norm.
+    /// Default: true (pre-norm, recommended).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Pre-norm applies layer normalization before the attention and feedforward layers,
+    /// which typically leads to more stable training.
+    /// </para>
+    /// </remarks>
     public bool UsePreNorm { get; set; } = true;
 
     #endregion
@@ -214,8 +255,12 @@ public class CrossformerOptions<T>
     {
         var errors = new List<string>();
 
-        if (SegmentLength < 1)
-            errors.Add("SegmentLength must be at least 1.");
+        if (PatchSize < 1)
+            errors.Add("PatchSize must be at least 1.");
+        if (Stride < 1)
+            errors.Add("Stride must be at least 1.");
+        if (Stride > PatchSize)
+            errors.Add("Stride cannot be greater than PatchSize.");
         if (NumLayers < 1)
             errors.Add("NumLayers must be at least 1.");
         if (NumHeads < 1)
@@ -226,16 +271,14 @@ public class CrossformerOptions<T>
             errors.Add("ModelDimension must be divisible by NumHeads.");
         if (FeedForwardDimension < 1)
             errors.Add("FeedForwardDimension must be at least 1.");
-        if (RouterTopK < 1)
-            errors.Add("RouterTopK must be at least 1.");
         if (Dropout < 0.0 || Dropout >= 1.0)
             errors.Add("Dropout must be in [0, 1).");
         if (AttentionDropout < 0.0 || AttentionDropout >= 1.0)
             errors.Add("AttentionDropout must be in [0, 1).");
         if (LearningRate <= 0)
             errors.Add("LearningRate must be positive.");
-        if (SequenceLength < SegmentLength)
-            errors.Add("SequenceLength must be at least SegmentLength.");
+        if (SequenceLength < PatchSize)
+            errors.Add("SequenceLength must be at least PatchSize.");
         if (PredictionHorizon < 1)
             errors.Add("PredictionHorizon must be at least 1.");
         if (NumFeatures < 1)
@@ -245,12 +288,12 @@ public class CrossformerOptions<T>
     }
 
     /// <summary>
-    /// Calculates the number of segments based on sequence length and segment length.
+    /// Calculates the number of patches based on sequence length, patch size, and stride.
     /// </summary>
-    /// <returns>The number of segments.</returns>
-    public int CalculateNumSegments()
+    /// <returns>The number of patches.</returns>
+    public int CalculateNumPatches()
     {
-        return (SequenceLength + SegmentLength - 1) / SegmentLength;
+        return (SequenceLength - PatchSize) / Stride + 1;
     }
 
     #endregion

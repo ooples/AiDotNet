@@ -427,12 +427,22 @@ public class TFT<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TFT model, Predict produces predictions from input data. This is the main inference step of the TFT architecture.
+    /// </para>
+    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TFT model, Train performs a training step. This updates the TFT architecture so it learns from data.
+    /// </para>
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)
@@ -457,12 +467,22 @@ public class TFT<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TFT model, UpdateParameters updates internal parameters or state. This keeps the TFT architecture aligned with the latest values.
+    /// </para>
+    /// </remarks>
     public override void UpdateParameters(Vector<T> gradients)
     {
         // Parameters are updated through the optimizer in Train method
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TFT model, GetModelMetadata performs a supporting step in the workflow. It keeps the TFT architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -568,6 +588,11 @@ public class TFT<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Implementation
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TFT model, Forecast produces predictions from input data. This is the main inference step of the TFT architecture.
+    /// </para>
+    /// </remarks>
     public Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
         if (_useInstanceNormalization)
@@ -582,6 +607,11 @@ public class TFT<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TFT model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the TFT architecture.
+    /// </para>
+    /// </remarks>
     public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         var predictions = new List<Tensor<T>>();
@@ -606,6 +636,11 @@ public class TFT<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TFT model, Evaluate performs a supporting step in the workflow. It keeps the TFT architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
@@ -637,12 +672,22 @@ public class TFT<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TFT model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the TFT architecture pipeline consistent.
+    /// </para>
+    /// </remarks>
     public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         return ApplyRevIN(input, normalize: true);
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> In the TFT model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the TFT architecture is performing.
+    /// </para>
+    /// </remarks>
     public Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
