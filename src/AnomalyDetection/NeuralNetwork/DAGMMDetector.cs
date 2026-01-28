@@ -466,11 +466,16 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                     }
 
                     // Backprop through estimation network
+                    // For softmax, we compute gradient w.r.t. energy loss
+                    // Using a simplified gradient signal based on deviation from uniform
                     var dGamma = new double[_numMixtures];
+                    double uniformProb = 1.0 / _numMixtures;
                     for (int k = 0; k < _numMixtures; k++)
                     {
                         double g = gammaDouble[k];
-                        dGamma[k] = g * (1 - g) * 0.1;
+                        // Softmax derivative: g * (1 - g) for diagonal, -g_i * g_j for off-diagonal
+                        // Simplified: encourage diverse mixture usage
+                        dGamma[k] = (g - uniformProb) * 0.01;
                     }
 
                     var dEstH = new double[_hiddenDim];
@@ -997,6 +1002,13 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
     private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
     {
         ValidateInput(X);
+
+        if (X.Columns != _inputDim)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features but model was trained with {_inputDim} features.",
+                nameof(X));
+        }
 
         var dataMeans = _dataMeans;
         var dataStds = _dataStds;
