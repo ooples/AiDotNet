@@ -104,11 +104,26 @@ public class ImputerTests
     }
 
     [Fact]
-    public void SimpleImputer_ConstantStrategy_RequiresFillValue()
+    public void SimpleImputer_ConstantStrategy_WithDefaultFillValue_UsesNumOpsZero()
     {
-        // Arrange & Act & Assert
-        Assert.Throws<ArgumentException>(() =>
-            new SimpleImputer<double>(ImputationStrategy.Constant, fillValue: null));
+        // Arrange - When no fill value is explicitly provided, the imputer uses NumOps.Zero
+        var data = new Matrix<double>(new double[,]
+        {
+            { 1.0, 10.0 },
+            { double.NaN, 20.0 },
+            { 3.0, 30.0 }
+        });
+
+        // When fillValue is not specified, it falls back to NumOps.Zero (0.0 for double)
+        var imputer = new SimpleImputer<double>(ImputationStrategy.Constant);
+
+        // Act
+        imputer.Fit(data);
+        var result = imputer.Transform(data);
+
+        // Assert - NaN should be replaced with NumOps.Zero (0.0 for double)
+        Assert.Equal(0.0, result[1, 0], Tolerance);
+        Assert.Equal(20.0, result[1, 1], Tolerance);
     }
 
     [Fact]
