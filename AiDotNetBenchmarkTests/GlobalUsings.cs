@@ -32,7 +32,7 @@ global using AiDotNet.NeuralNetworks;
 global using AiDotNet.NeuralNetworks.Layers;
 global using AiDotNet.Normalizers;
 global using AiDotNet.Optimizers;
-global using AiDotNet.OutlierRemoval;
+global using AiDotNet.AnomalyDetection;
 global using AiDotNet.Regularization;
 global using AiDotNet.Statistics;
 // AiDotNet Core

@@ -23,7 +23,7 @@ global using AiDotNet.Models.Inputs;
 global using AiDotNet.Models.Options;
 global using AiDotNet.Normalizers;
 global using AiDotNet.Optimizers;
-global using AiDotNet.OutlierRemoval;
+global using AiDotNet.AnomalyDetection;
 global using AiDotNet.ProgramSynthesis.Interfaces;
 global using AiDotNet.ProgramSynthesis.Serving;
 global using AiDotNet.PromptEngineering.Chains;

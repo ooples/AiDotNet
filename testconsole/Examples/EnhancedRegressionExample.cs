@@ -9,7 +9,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Normalizers;
 using AiDotNet.Optimizers;
-using AiDotNet.OutlierRemoval;
+using AiDotNet.AnomalyDetection;
 using AiDotNet.Regression;
 using AiDotNet.Regularization;
 using AiDotNet.Tensors.Helpers;

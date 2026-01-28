@@ -7,7 +7,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Normalizers;
 using AiDotNet.Optimizers;
-using AiDotNet.OutlierRemoval;
+using AiDotNet.AnomalyDetection;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TimeSeries;
