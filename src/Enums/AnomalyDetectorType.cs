@@ -76,6 +76,27 @@ public enum AnomalyDetectorType
     /// </summary>
     ChiSquare,
 
+    /// <summary>
+    /// Median Absolute Deviation (MAD) based detection.
+    /// Robust measure of statistical dispersion using median instead of mean.
+    /// Industry standard threshold: 3.0.
+    /// </summary>
+    MAD,
+
+    /// <summary>
+    /// Percentile-based outlier detection.
+    /// Flags points outside specified percentile range.
+    /// Common defaults: 1st and 99th percentiles.
+    /// </summary>
+    Percentile,
+
+    /// <summary>
+    /// Hampel identifier for outlier detection.
+    /// Uses median and MAD with a sliding window.
+    /// Effective for time series with local outliers.
+    /// </summary>
+    Hampel,
+
     // ==========================================
     // Distance/Density-based Methods
     // ==========================================
@@ -219,6 +240,13 @@ public enum AnomalyDetectorType
     /// </summary>
     KernelPCA,
 
+    /// <summary>
+    /// Minimum Covariance Determinant (MCD) based detection.
+    /// Robust estimation of covariance matrix for outlier detection.
+    /// Effective when data contains outliers that affect standard covariance.
+    /// </summary>
+    MCD,
+
     // ==========================================
     // Neural Network-based Methods
     // ==========================================
@@ -320,6 +348,13 @@ public enum AnomalyDetectorType
     /// </summary>
     NBEATS,
 
+    /// <summary>
+    /// Moving Average based anomaly detection.
+    /// Detects points that deviate significantly from rolling average.
+    /// Simple and effective for stationary time series.
+    /// </summary>
+    MovingAverage,
+
     // ==========================================
     // Ensemble Methods
     // ==========================================
@@ -353,6 +388,20 @@ public enum AnomalyDetectorType
     /// Projects to random subspaces and combines scores.
     /// </summary>
     RandomSubspace,
+
+    /// <summary>
+    /// Averaging ensemble method.
+    /// Combines multiple detector scores using averaging.
+    /// Simple and effective for combining diverse detectors.
+    /// </summary>
+    AverageEnsemble,
+
+    /// <summary>
+    /// Maximum ensemble method.
+    /// Combines multiple detector scores using maximum.
+    /// Conservative approach - flags point as anomaly if any detector does.
+    /// </summary>
+    MaximumEnsemble,
 
     // ==========================================
     // Probabilistic Methods
