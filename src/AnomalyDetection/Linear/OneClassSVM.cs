@@ -117,10 +117,10 @@ public class OneClassSVM<T> : AnomalyDetectorBase<T>
                 "It roughly represents the expected proportion of outliers.");
         }
 
-        if (double.IsNaN(gamma) || double.IsInfinity(gamma))
+        if (gamma < 0 || double.IsNaN(gamma) || double.IsInfinity(gamma))
         {
             throw new ArgumentOutOfRangeException(nameof(gamma),
-                "Gamma must be a finite number.");
+                "Gamma must be a non-negative, finite number. Use 0 for auto-detection.");
         }
 
         if (maxIterations < 1)

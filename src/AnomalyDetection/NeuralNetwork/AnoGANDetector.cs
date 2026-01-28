@@ -498,13 +498,16 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Discriminator weights not initialized.");
         }
 
-        // Gradient through output layer
+        // Gradient through output layer - compute gradient using ORIGINAL weights before updating
         var dH2 = new Vector<T>(_hiddenDim);
         for (int i = 0; i < _hiddenDim; i++)
         {
+            // Capture original weight for gradient computation
+            T origW3 = discW3[i, 0];
+            dH2[i] = NumOps.Multiply(origW3, NumOps.FromDouble(dOut));
+            // Now update the weight
             T grad = NumOps.Multiply(h2[i], NumOps.FromDouble(dOut));
             discW3[i, 0] = NumOps.Subtract(discW3[i, 0], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
-            dH2[i] = NumOps.Multiply(discW3[i, 0], NumOps.FromDouble(dOut));
         }
         discB3[0] = NumOps.Subtract(discB3[0], NumOps.FromDouble(lr * dOut));
 
@@ -515,16 +518,19 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
                 dH2[i] = NumOps.Multiply(dH2[i], NumOps.FromDouble(0.2));
         }
 
-        // Gradient through layer 2
+        // Gradient through layer 2 - compute gradient using ORIGINAL weights before updating
         var dH1 = new Vector<T>(_hiddenDim);
         for (int i = 0; i < _hiddenDim; i++)
         {
             dH1[i] = NumOps.Zero;
             for (int j = 0; j < _hiddenDim; j++)
             {
+                // Capture original weight for gradient computation
+                T origW2 = discW2[i, j];
+                dH1[i] = NumOps.Add(dH1[i], NumOps.Multiply(origW2, dH2[j]));
+                // Now update the weight
                 T grad = NumOps.Multiply(h1[i], dH2[j]);
                 discW2[i, j] = NumOps.Subtract(discW2[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
-                dH1[i] = NumOps.Add(dH1[i], NumOps.Multiply(discW2[i, j], dH2[j]));
             }
         }
         for (int j = 0; j < _hiddenDim; j++)
@@ -739,16 +745,19 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
             dOutputPre[j] = NumOps.Multiply(dOutput[j], NumOps.FromDouble(tanhDeriv));
         }
 
-        // Gradient through output layer
+        // Gradient through output layer - compute gradient using ORIGINAL weights before updating
         var dH2 = new Vector<T>(_hiddenDim);
         for (int i = 0; i < _hiddenDim; i++)
         {
             dH2[i] = NumOps.Zero;
             for (int j = 0; j < _inputDim; j++)
             {
+                // Capture original weight for gradient computation
+                T origW3 = genW3[i, j];
+                dH2[i] = NumOps.Add(dH2[i], NumOps.Multiply(origW3, dOutputPre[j]));
+                // Now update the weight
                 T grad = NumOps.Multiply(h2[i], dOutputPre[j]);
                 genW3[i, j] = NumOps.Subtract(genW3[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
-                dH2[i] = NumOps.Add(dH2[i], NumOps.Multiply(genW3[i, j], dOutputPre[j]));
             }
         }
         for (int j = 0; j < _inputDim; j++)
@@ -763,16 +772,19 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
                 dH2[i] = NumOps.Multiply(dH2[i], NumOps.FromDouble(0.2));
         }
 
-        // Gradient through layer 2
+        // Gradient through layer 2 - compute gradient using ORIGINAL weights before updating
         var dH1 = new Vector<T>(_hiddenDim);
         for (int i = 0; i < _hiddenDim; i++)
         {
             dH1[i] = NumOps.Zero;
             for (int j = 0; j < _hiddenDim; j++)
             {
+                // Capture original weight for gradient computation
+                T origW2 = genW2[i, j];
+                dH1[i] = NumOps.Add(dH1[i], NumOps.Multiply(origW2, dH2[j]));
+                // Now update the weight
                 T grad = NumOps.Multiply(h1[i], dH2[j]);
                 genW2[i, j] = NumOps.Subtract(genW2[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
-                dH1[i] = NumOps.Add(dH1[i], NumOps.Multiply(genW2[i, j], dH2[j]));
             }
         }
         for (int j = 0; j < _hiddenDim; j++)

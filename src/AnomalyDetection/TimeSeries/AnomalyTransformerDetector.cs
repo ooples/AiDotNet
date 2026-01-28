@@ -285,6 +285,9 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
     {
         int n = data.Rows;
         int numSeqs = n - _seqLength + 1;
+        double lr = _learningRate;
+        double clipValue = 5.0;
+        int ffDim = _modelDim * 4;
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
@@ -302,10 +305,32 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                     }
                 }
 
-                // Forward pass and compute loss
-                var (_, _, assocDisc) = Forward(seq);
+                // Forward pass with intermediate caching
+                var (output, attention, assocDisc) = ForwardWithCache(seq, out var projected, out var attnOutput, out var ffHidden);
 
-                // Compute average discrepancy
+                // Compute reconstruction loss gradient (MSE)
+                // dL/dOutput = 2 * (output - target) / N, where target is reconstructed input
+                var dOutput = new Matrix<T>(_seqLength, _modelDim);
+                for (int t = 0; t < _seqLength; t++)
+                {
+                    for (int j = 0; j < _modelDim; j++)
+                    {
+                        // Reconstruction target: try to predict the projected input
+                        T diff = NumOps.Subtract(output[t, j], projected[t, j]);
+                        dOutput[t, j] = NumOps.Multiply(NumOps.FromDouble(2.0 / (_seqLength * _modelDim)), diff);
+                    }
+                }
+
+                // Backprop through feed-forward (output -> attnOutput)
+                var dAttnOutput = BackpropFeedForward(attnOutput, ffHidden, dOutput, lr, clipValue);
+
+                // Backprop through attention (attnOutput -> projected)
+                var dProjected = BackpropAttention(projected, attention, dAttnOutput, lr, clipValue);
+
+                // Backprop through input projection (projected -> seq)
+                BackpropInputProjection(seq, dProjected, lr, clipValue);
+
+                // Update prior sigma based on association discrepancy
                 T avgDisc = NumOps.Zero;
                 for (int i = 0; i < assocDisc.Length; i++)
                 {
@@ -313,18 +338,404 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 }
                 avgDisc = NumOps.Divide(avgDisc, NumOps.FromDouble(assocDisc.Length));
 
-                // Update prior sigma based on association discrepancy
-                // Simplified: adjust sigma to minimize reconstruction + maximize discrepancy for anomalies
                 T discDiff = NumOps.Subtract(avgDisc, NumOps.One);
-                T update = NumOps.Multiply(NumOps.FromDouble(_learningRate), discDiff);
+                T update = NumOps.Multiply(NumOps.FromDouble(lr), discDiff);
                 _priorSigma = NumOps.Subtract(_priorSigma, update);
 
-                // Ensure sigma stays positive
                 double sigmaVal = NumOps.ToDouble(_priorSigma);
                 if (sigmaVal < 0.1)
                 {
                     _priorSigma = NumOps.FromDouble(0.1);
                 }
+            }
+        }
+    }
+
+    private (Matrix<T> output, Matrix<T> attention, Vector<T> assocDisc) ForwardWithCache(
+        Matrix<T> sequence, out Matrix<T> projected, out Matrix<T> attnOutput, out Matrix<T> ffHidden)
+    {
+        var inputProj = _inputProj;
+        var W1 = _W1;
+        var b1 = _b1;
+        var W2 = _W2;
+        var b2 = _b2;
+
+        if (inputProj == null || W1 == null || b1 == null || W2 == null || b2 == null)
+        {
+            throw new InvalidOperationException("Weights not initialized.");
+        }
+
+        int seqLen = sequence.Rows;
+        int ffDim = W1.Columns;
+
+        // Input projection
+        projected = new Matrix<T>(seqLen, _modelDim);
+        for (int t = 0; t < seqLen; t++)
+        {
+            for (int j = 0; j < _modelDim; j++)
+            {
+                T sum = NumOps.Zero;
+                for (int i = 0; i < _inputDim; i++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(sequence[t, i], inputProj[i, j]));
+                }
+                projected[t, j] = sum;
+            }
+        }
+
+        // Add positional encoding
+        AddPositionalEncoding(projected);
+
+        // Self-attention
+        Matrix<T> attention;
+        (attnOutput, attention) = SelfAttention(projected);
+
+        // Feed-forward with caching of hidden activations
+        ffHidden = new Matrix<T>(seqLen, ffDim);
+        var output = new Matrix<T>(seqLen, _modelDim);
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            // First layer with ReLU
+            for (int j = 0; j < ffDim; j++)
+            {
+                T sum = b1[j];
+                for (int i = 0; i < _modelDim; i++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(attnOutput[t, i], W1[i, j]));
+                }
+                double val = NumOps.ToDouble(sum);
+                ffHidden[t, j] = NumOps.FromDouble(Math.Max(0, val));
+            }
+
+            // Second layer with residual
+            for (int j = 0; j < _modelDim; j++)
+            {
+                T sum = b2[j];
+                for (int i = 0; i < ffDim; i++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(ffHidden[t, i], W2[i, j]));
+                }
+                output[t, j] = NumOps.Add(sum, attnOutput[t, j]);
+            }
+        }
+
+        // Compute prior association and discrepancy
+        var priorAssoc = ComputePriorAssociation(seqLen);
+        var assocDisc = new Vector<T>(seqLen);
+        T epsilon = NumOps.FromDouble(1e-10);
+
+        for (int i = 0; i < seqLen; i++)
+        {
+            T kl = NumOps.Zero;
+            for (int j = 0; j < seqLen; j++)
+            {
+                T p = NumOps.Add(attention[i, j], epsilon);
+                T q = NumOps.Add(priorAssoc[i, j], epsilon);
+                double pVal = NumOps.ToDouble(p);
+                double qVal = NumOps.ToDouble(q);
+                double klTerm = pVal * Math.Log(pVal / qVal);
+                kl = NumOps.Add(kl, NumOps.FromDouble(klTerm));
+            }
+            assocDisc[i] = kl;
+        }
+
+        return (output, attention, assocDisc);
+    }
+
+    private Matrix<T> BackpropFeedForward(Matrix<T> attnOutput, Matrix<T> ffHidden, Matrix<T> dOutput, double lr, double clipValue)
+    {
+        var W1 = _W1;
+        var b1 = _b1;
+        var W2 = _W2;
+        var b2 = _b2;
+
+        if (W1 == null || b1 == null || W2 == null || b2 == null)
+        {
+            throw new InvalidOperationException("Feed-forward weights not initialized.");
+        }
+
+        int seqLen = attnOutput.Rows;
+        int ffDim = W1.Columns;
+
+        // Gradient accumulators
+        var dW2 = new double[ffDim, _modelDim];
+        var dB2 = new double[_modelDim];
+        var dW1 = new double[_modelDim, ffDim];
+        var dB1 = new double[ffDim];
+
+        var dAttnOutput = new Matrix<T>(seqLen, _modelDim);
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            // Gradient through second layer (residual connection: output = W2*h + attnOutput)
+            // dL/dAttnOutput += dOutput (from residual)
+            for (int j = 0; j < _modelDim; j++)
+            {
+                dAttnOutput[t, j] = dOutput[t, j];
+            }
+
+            // dL/dW2 += h * dOutput^T
+            // dL/dh = W2 * dOutput
+            var dH = new double[ffDim];
+            for (int i = 0; i < ffDim; i++)
+            {
+                for (int j = 0; j < _modelDim; j++)
+                {
+                    double dOutVal = NumOps.ToDouble(dOutput[t, j]);
+                    double hVal = NumOps.ToDouble(ffHidden[t, i]);
+                    dW2[i, j] += hVal * dOutVal;
+                    dH[i] += NumOps.ToDouble(W2[i, j]) * dOutVal;
+                }
+            }
+
+            for (int j = 0; j < _modelDim; j++)
+            {
+                dB2[j] += NumOps.ToDouble(dOutput[t, j]);
+            }
+
+            // ReLU derivative
+            for (int i = 0; i < ffDim; i++)
+            {
+                if (NumOps.ToDouble(ffHidden[t, i]) <= 0) dH[i] = 0;
+            }
+
+            // Gradient through first layer
+            for (int i = 0; i < _modelDim; i++)
+            {
+                double attnVal = NumOps.ToDouble(attnOutput[t, i]);
+                for (int j = 0; j < ffDim; j++)
+                {
+                    dW1[i, j] += attnVal * dH[j];
+                    double w1Grad = NumOps.ToDouble(W1[i, j]) * dH[j];
+                    dAttnOutput[t, i] = NumOps.Add(dAttnOutput[t, i], NumOps.FromDouble(w1Grad));
+                }
+            }
+
+            for (int j = 0; j < ffDim; j++)
+            {
+                dB1[j] += dH[j];
+            }
+        }
+
+        // Apply weight updates with gradient clipping
+        for (int i = 0; i < ffDim; i++)
+        {
+            for (int j = 0; j < _modelDim; j++)
+            {
+                double clipped = Math.Max(-clipValue, Math.Min(clipValue, dW2[i, j]));
+                W2[i, j] = NumOps.Subtract(W2[i, j], NumOps.FromDouble(lr * clipped));
+            }
+        }
+        for (int j = 0; j < _modelDim; j++)
+        {
+            double clipped = Math.Max(-clipValue, Math.Min(clipValue, dB2[j]));
+            b2[j] = NumOps.Subtract(b2[j], NumOps.FromDouble(lr * clipped));
+        }
+        for (int i = 0; i < _modelDim; i++)
+        {
+            for (int j = 0; j < ffDim; j++)
+            {
+                double clipped = Math.Max(-clipValue, Math.Min(clipValue, dW1[i, j]));
+                W1[i, j] = NumOps.Subtract(W1[i, j], NumOps.FromDouble(lr * clipped));
+            }
+        }
+        for (int j = 0; j < ffDim; j++)
+        {
+            double clipped = Math.Max(-clipValue, Math.Min(clipValue, dB1[j]));
+            b1[j] = NumOps.Subtract(b1[j], NumOps.FromDouble(lr * clipped));
+        }
+
+        return dAttnOutput;
+    }
+
+    private Matrix<T> BackpropAttention(Matrix<T> projected, Matrix<T> attention, Matrix<T> dAttnOutput, double lr, double clipValue)
+    {
+        var Wq = _Wq;
+        var Wk = _Wk;
+        var Wv = _Wv;
+        var Wo = _Wo;
+
+        if (Wq == null || Wk == null || Wv == null || Wo == null)
+        {
+            throw new InvalidOperationException("Attention weights not initialized.");
+        }
+
+        int seqLen = projected.Rows;
+        int headDim = _modelDim / _numHeads;
+
+        // Gradient accumulators
+        var dWo = new double[_modelDim, _modelDim];
+        var dWq = new double[_modelDim, _modelDim];
+        var dWk = new double[_modelDim, _modelDim];
+        var dWv = new double[_modelDim, _modelDim];
+
+        var dProjected = new Matrix<T>(seqLen, _modelDim);
+
+        // Recompute Q, K, V for backprop
+        var Q = new double[seqLen, _modelDim];
+        var K = new double[seqLen, _modelDim];
+        var V = new double[seqLen, _modelDim];
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            for (int j = 0; j < _modelDim; j++)
+            {
+                for (int i = 0; i < _modelDim; i++)
+                {
+                    double pVal = NumOps.ToDouble(projected[t, i]);
+                    Q[t, j] += pVal * NumOps.ToDouble(Wq[i, j]);
+                    K[t, j] += pVal * NumOps.ToDouble(Wk[i, j]);
+                    V[t, j] += pVal * NumOps.ToDouble(Wv[i, j]);
+                }
+            }
+        }
+
+        // For simplified backprop, compute gradients through output projection
+        // dAttnOutput includes residual, so we need to separate
+        // attnOutput = Wo * (attention * V) + projected (residual)
+
+        // Gradient through Wo
+        for (int i = 0; i < seqLen; i++)
+        {
+            // attnOut[i] = sum_j attention[i,j] * V[j]
+            // then projected through Wo
+            var weightedV = new double[_modelDim];
+            for (int j = 0; j < seqLen; j++)
+            {
+                double attnVal = NumOps.ToDouble(attention[i, j]);
+                for (int k = 0; k < _modelDim; k++)
+                {
+                    weightedV[k] += attnVal * V[j, k];
+                }
+            }
+
+            // dWo += weightedV * dAttnOutput^T
+            for (int m = 0; m < _modelDim; m++)
+            {
+                double dOutVal = NumOps.ToDouble(dAttnOutput[i, m]);
+                for (int k = 0; k < _modelDim; k++)
+                {
+                    dWo[k, m] += weightedV[k] * dOutVal;
+                }
+            }
+
+            // Gradient to projected (from residual connection)
+            for (int j = 0; j < _modelDim; j++)
+            {
+                dProjected[i, j] = NumOps.Add(dProjected[i, j], dAttnOutput[i, j]);
+            }
+
+            // Gradient through Wo to weightedV
+            var dWeightedV = new double[_modelDim];
+            for (int k = 0; k < _modelDim; k++)
+            {
+                for (int m = 0; m < _modelDim; m++)
+                {
+                    dWeightedV[k] += NumOps.ToDouble(Wo[k, m]) * NumOps.ToDouble(dAttnOutput[i, m]);
+                }
+            }
+
+            // Gradient through V projection
+            for (int j = 0; j < seqLen; j++)
+            {
+                double attnVal = NumOps.ToDouble(attention[i, j]);
+                for (int k = 0; k < _modelDim; k++)
+                {
+                    double dV = attnVal * dWeightedV[k];
+                    // dWv += projected[j] * dV
+                    for (int p = 0; p < _modelDim; p++)
+                    {
+                        dWv[p, k] += NumOps.ToDouble(projected[j, p]) * dV;
+                    }
+                    // dProjected[j] += Wv * dV
+                    for (int p = 0; p < _modelDim; p++)
+                    {
+                        dProjected[j, p] = NumOps.Add(dProjected[j, p],
+                            NumOps.FromDouble(NumOps.ToDouble(Wv[p, k]) * dV));
+                    }
+                }
+            }
+        }
+
+        // Simplified: Also add gradients for Wq and Wk (through attention scores)
+        // Full attention backprop is complex, here we use a simplified version
+        double scale = Math.Sqrt(headDim);
+        for (int i = 0; i < seqLen; i++)
+        {
+            for (int k = 0; k < _modelDim; k++)
+            {
+                // Approximate gradient contribution
+                double qGrad = 0;
+                double kGrad = 0;
+                for (int j = 0; j < seqLen; j++)
+                {
+                    double attnVal = NumOps.ToDouble(attention[i, j]);
+                    qGrad += attnVal * K[j, k] / scale;
+                    kGrad += attnVal * Q[i, k] / scale;
+                }
+                for (int p = 0; p < _modelDim; p++)
+                {
+                    dWq[p, k] += NumOps.ToDouble(projected[i, p]) * qGrad * 0.01;
+                    dWk[p, k] += NumOps.ToDouble(projected[i, p]) * kGrad * 0.01;
+                }
+            }
+        }
+
+        // Apply weight updates
+        for (int i = 0; i < _modelDim; i++)
+        {
+            for (int j = 0; j < _modelDim; j++)
+            {
+                double clipped = Math.Max(-clipValue, Math.Min(clipValue, dWo[i, j]));
+                Wo[i, j] = NumOps.Subtract(Wo[i, j], NumOps.FromDouble(lr * clipped));
+
+                clipped = Math.Max(-clipValue, Math.Min(clipValue, dWq[i, j]));
+                Wq[i, j] = NumOps.Subtract(Wq[i, j], NumOps.FromDouble(lr * clipped));
+
+                clipped = Math.Max(-clipValue, Math.Min(clipValue, dWk[i, j]));
+                Wk[i, j] = NumOps.Subtract(Wk[i, j], NumOps.FromDouble(lr * clipped));
+
+                clipped = Math.Max(-clipValue, Math.Min(clipValue, dWv[i, j]));
+                Wv[i, j] = NumOps.Subtract(Wv[i, j], NumOps.FromDouble(lr * clipped));
+            }
+        }
+
+        return dProjected;
+    }
+
+    private void BackpropInputProjection(Matrix<T> sequence, Matrix<T> dProjected, double lr, double clipValue)
+    {
+        var inputProj = _inputProj;
+        if (inputProj == null)
+        {
+            throw new InvalidOperationException("Input projection not initialized.");
+        }
+
+        int seqLen = sequence.Rows;
+
+        // Gradient accumulator for inputProj
+        var dInputProj = new double[_inputDim, _modelDim];
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            for (int i = 0; i < _inputDim; i++)
+            {
+                double seqVal = NumOps.ToDouble(sequence[t, i]);
+                for (int j = 0; j < _modelDim; j++)
+                {
+                    dInputProj[i, j] += seqVal * NumOps.ToDouble(dProjected[t, j]);
+                }
+            }
+        }
+
+        // Apply weight updates
+        for (int i = 0; i < _inputDim; i++)
+        {
+            for (int j = 0; j < _modelDim; j++)
+            {
+                double clipped = Math.Max(-clipValue, Math.Min(clipValue, dInputProj[i, j]));
+                inputProj[i, j] = NumOps.Subtract(inputProj[i, j], NumOps.FromDouble(lr * clipped));
             }
         }
     }
@@ -421,8 +832,9 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
 
         int seqLen = x.Rows;
         int headDim = _modelDim / _numHeads;
+        T scale = NumOps.FromDouble(Math.Sqrt(headDim));
 
-        // Compute Q, K, V
+        // Compute Q, K, V projections (full model dimension)
         var Q = new Matrix<T>(seqLen, _modelDim);
         var K = new Matrix<T>(seqLen, _modelDim);
         var V = new Matrix<T>(seqLen, _modelDim);
@@ -446,55 +858,86 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             }
         }
 
-        // Compute attention scores
-        T scale = NumOps.FromDouble(Math.Sqrt(headDim));
-        var attention = new Matrix<T>(seqLen, seqLen);
-
-        for (int i = 0; i < seqLen; i++)
+        // Multi-head attention: compute attention for each head separately
+        // headOutputs[head][seq][headDim] stores the output of each head
+        var headOutputs = new T[_numHeads][,];
+        for (int h = 0; h < _numHeads; h++)
         {
-            T maxScore = NumOps.FromDouble(double.MinValue);
+            headOutputs[h] = new T[seqLen, headDim];
+        }
 
-            for (int j = 0; j < seqLen; j++)
+        // Average attention across heads for returning (for visualization/analysis)
+        var avgAttention = new Matrix<T>(seqLen, seqLen);
+
+        for (int head = 0; head < _numHeads; head++)
+        {
+            int headStart = head * headDim;
+
+            // Compute attention scores for this head
+            var headAttention = new double[seqLen, seqLen];
+
+            for (int i = 0; i < seqLen; i++)
             {
-                T score = NumOps.Zero;
-                for (int k = 0; k < _modelDim; k++)
+                double maxScore = double.MinValue;
+
+                for (int j = 0; j < seqLen; j++)
                 {
-                    score = NumOps.Add(score, NumOps.Multiply(Q[i, k], K[j, k]));
+                    double score = 0;
+                    // Dot product over headDim dimensions for this head
+                    for (int k = 0; k < headDim; k++)
+                    {
+                        double q = NumOps.ToDouble(Q[i, headStart + k]);
+                        double kVal = NumOps.ToDouble(K[j, headStart + k]);
+                        score += q * kVal;
+                    }
+                    score /= NumOps.ToDouble(scale);
+                    headAttention[i, j] = score;
+                    if (score > maxScore) maxScore = score;
                 }
-                score = NumOps.Divide(score, scale);
-                attention[i, j] = score;
-                if (NumOps.ToDouble(score) > NumOps.ToDouble(maxScore))
+
+                // Softmax for this row
+                double sum = 0;
+                for (int j = 0; j < seqLen; j++)
                 {
-                    maxScore = score;
+                    headAttention[i, j] = Math.Exp(headAttention[i, j] - maxScore);
+                    sum += headAttention[i, j];
+                }
+                for (int j = 0; j < seqLen; j++)
+                {
+                    headAttention[i, j] /= sum;
+                    // Accumulate for average attention
+                    avgAttention[i, j] = NumOps.Add(avgAttention[i, j],
+                        NumOps.FromDouble(headAttention[i, j] / _numHeads));
                 }
             }
 
-            // Softmax
-            T sum = NumOps.Zero;
-            for (int j = 0; j < seqLen; j++)
+            // Apply attention to V for this head
+            for (int i = 0; i < seqLen; i++)
             {
-                double expVal = Math.Exp(NumOps.ToDouble(attention[i, j]) - NumOps.ToDouble(maxScore));
-                attention[i, j] = NumOps.FromDouble(expVal);
-                sum = NumOps.Add(sum, attention[i, j]);
-            }
-            for (int j = 0; j < seqLen; j++)
-            {
-                attention[i, j] = NumOps.Divide(attention[i, j], sum);
+                for (int k = 0; k < headDim; k++)
+                {
+                    double sum = 0;
+                    for (int j = 0; j < seqLen; j++)
+                    {
+                        double v = NumOps.ToDouble(V[j, headStart + k]);
+                        sum += headAttention[i, j] * v;
+                    }
+                    headOutputs[head][i, k] = NumOps.FromDouble(sum);
+                }
             }
         }
 
-        // Apply attention to values
+        // Concatenate head outputs into attnOutput [seqLen, modelDim]
         var attnOutput = new Matrix<T>(seqLen, _modelDim);
         for (int i = 0; i < seqLen; i++)
         {
-            for (int k = 0; k < _modelDim; k++)
+            for (int head = 0; head < _numHeads; head++)
             {
-                T sum = NumOps.Zero;
-                for (int j = 0; j < seqLen; j++)
+                int headStart = head * headDim;
+                for (int k = 0; k < headDim; k++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(attention[i, j], V[j, k]));
+                    attnOutput[i, headStart + k] = headOutputs[head][i, k];
                 }
-                attnOutput[i, k] = sum;
             }
         }
 
@@ -514,7 +957,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             }
         }
 
-        return (output, attention);
+        return (output, avgAttention);
     }
 
     private Matrix<T> ComputePriorAssociation(int seqLen)

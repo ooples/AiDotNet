@@ -364,6 +364,7 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
 
                         // Capture weights with null checks
                         var wThetaF = block.WTheta_f;
+                        var wThetaB = block.WTheta_b;
                         var w1 = block.W1;
                         var b1 = block.B1;
                         var w2 = block.W2;
@@ -373,8 +374,8 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                         var w4 = block.W4;
                         var b4 = block.B4;
 
-                        if (wThetaF == null || w1 == null || b1 == null || w2 == null || b2 == null ||
-                            w3 == null || b3 == null || w4 == null || b4 == null)
+                        if (wThetaF == null || wThetaB == null || w1 == null || b1 == null ||
+                            w2 == null || b2 == null || w3 == null || b3 == null || w4 == null || b4 == null)
                         {
                             throw new InvalidOperationException("Block weights not initialized.");
                         }
@@ -400,8 +401,70 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                             dH[i] = sum;
                         }
 
-                        // Note: In full N-BEATS, backcast gradients would also contribute
-                        // For simplicity, we focus on forecast gradients
+                        // Gradient through WTheta_b (backcast theta)
+                        // The backcast affects residual learning: residual_next = residual - backcast
+                        // Gradient flows from subsequent blocks back through the residual chain
+                        // For the last block, backcast gradient is zero (no subsequent blocks)
+                        // For earlier blocks, gradient comes from how backcast affects next block's forecast
+                        if (blockIdx < blocks.Count - 1)
+                        {
+                            // Compute gradient through backcast from subsequent block's residual dependency
+                            // The backcast subtracts from the residual, so gradient is negated
+                            // dL/d(backcast) = -dL/d(residual_next) = -dH_next * W1_next^T (simplified)
+                            var nextBlock = blocks[blockIdx + 1];
+                            var nextW1 = nextBlock.W1;
+                            var nextHVal = hValues[blockIdx + 1];
+
+                            if (nextW1 != null && nextHVal != null)
+                            {
+                                // Compute dH for next block from its forecast contribution
+                                var nextWThetaF = nextBlock.WTheta_f;
+                                if (nextWThetaF != null)
+                                {
+                                    var dHNext = new double[_hiddenDim];
+                                    for (int i = 0; i < _hiddenDim; i++)
+                                    {
+                                        for (int j = 0; j < _inputDim; j++)
+                                        {
+                                            dHNext[i] += NumOps.ToDouble(nextWThetaF[i, j]) * NumOps.ToDouble(gradForecast[j]);
+                                        }
+                                        // Apply ReLU derivative
+                                        if (NumOps.ToDouble(nextHVal[i]) <= 0) dHNext[i] = 0;
+                                    }
+
+                                    // Backprop through next block's first FC layer to get dResidual
+                                    var dResidual = new double[inputSize];
+                                    for (int i = 0; i < inputSize; i++)
+                                    {
+                                        for (int j = 0; j < _hiddenDim; j++)
+                                        {
+                                            dResidual[i] += NumOps.ToDouble(nextW1[i, j]) * dHNext[j];
+                                        }
+                                    }
+
+                                    // Gradient for WTheta_b: dL/dWTheta_b = h * (-dResidual)^T
+                                    // (negative because residual = prev_residual - backcast)
+                                    for (int i = 0; i < _hiddenDim; i++)
+                                    {
+                                        for (int j = 0; j < inputSize; j++)
+                                        {
+                                            grad.dWTheta_b[i, j] += NumOps.ToDouble(h[i]) * (-dResidual[j]);
+                                        }
+                                    }
+
+                                    // Also add gradient through h from backcast path
+                                    for (int i = 0; i < _hiddenDim; i++)
+                                    {
+                                        double backcastGrad = 0;
+                                        for (int j = 0; j < inputSize; j++)
+                                        {
+                                            backcastGrad += NumOps.ToDouble(wThetaB[i, j]) * (-dResidual[j]);
+                                        }
+                                        dH[i] = NumOps.Add(dH[i], NumOps.FromDouble(backcastGrad));
+                                    }
+                                }
+                            }
+                        }
 
                         // Backprop through FC4 (ReLU)
                         var h3 = ForwardFC(residual, w1, b1);
@@ -603,6 +666,20 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                         {
                             double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dWTheta_f[i, j]));
                             wThetaF[i, j] = NumOps.Subtract(wThetaF[i, j], NumOps.FromDouble(lr * clippedGrad));
+                        }
+                    }
+
+                    // Update WTheta_b (backcast weights)
+                    var wThetaB = block.WTheta_b;
+                    if (wThetaB != null)
+                    {
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            for (int j = 0; j < inputSize; j++)
+                            {
+                                double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dWTheta_b[i, j]));
+                                wThetaB[i, j] = NumOps.Subtract(wThetaB[i, j], NumOps.FromDouble(lr * clippedGrad));
+                            }
                         }
                     }
                 }
@@ -870,13 +947,10 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
 
             if (i < _lookback)
             {
-                // Not enough history
+                // Not enough history for forecast-based scoring.
+                // Use sentinel value of 0 to indicate no anomaly score available.
+                // This ensures consistent scoring semantics (forecast error) across all samples.
                 score = NumOps.Zero;
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    T val = normalizedData[i, j];
-                    score = NumOps.Add(score, NumOps.Multiply(val, val));
-                }
             }
             else
             {
