@@ -49,28 +49,28 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
     private readonly double _learningRate;
 
     // Attention weights
-    private double[,]? _Wq; // Query projection
-    private double[,]? _Wk; // Key projection
-    private double[,]? _Wv; // Value projection
-    private double[,]? _Wo; // Output projection
+    private Matrix<T>? _Wq; // Query projection
+    private Matrix<T>? _Wk; // Key projection
+    private Matrix<T>? _Wv; // Value projection
+    private Matrix<T>? _Wo; // Output projection
 
     // Feed-forward weights
-    private double[,]? _W1;
-    private double[]? _b1;
-    private double[,]? _W2;
-    private double[]? _b2;
+    private Matrix<T>? _W1;
+    private Vector<T>? _b1;
+    private Matrix<T>? _W2;
+    private Vector<T>? _b2;
 
     // Input projection
-    private double[,]? _inputProj;
+    private Matrix<T>? _inputProj;
 
     // Prior association (learnable Gaussian kernel)
-    private double _priorSigma;
+    private T _priorSigma;
 
     private int _inputDim;
 
     // Normalization parameters
-    private double[]? _dataMeans;
-    private double[]? _dataStds;
+    private Vector<T>? _dataMeans;
+    private Vector<T>? _dataStds;
 
     /// <summary>
     /// Gets the model dimensions.
@@ -150,6 +150,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         _seqLength = seqLength;
         _epochs = epochs;
         _learningRate = learningRate;
+        _priorSigma = NumOps.One;
     }
 
     /// <inheritdoc/>
@@ -167,19 +168,8 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        // Convert to double array
-        var data = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            data[i] = new double[_inputDim];
-            for (int j = 0; j < _inputDim; j++)
-            {
-                data[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
-
         // Normalize data
-        var (normalizedData, means, stds) = NormalizeData(data);
+        var (normalizedData, means, stds) = NormalizeData(X);
         _dataMeans = means;
         _dataStds = stds;
 
@@ -196,37 +186,41 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private (double[][] normalized, double[] means, double[] stds) NormalizeData(double[][] data)
+    private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Length;
-        int d = data[0].Length;
+        int n = data.Rows;
+        int d = data.Columns;
 
-        var means = new double[d];
-        var stds = new double[d];
+        var means = new Vector<T>(d);
+        var stds = new Vector<T>(d);
 
         for (int j = 0; j < d; j++)
         {
+            T sum = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                means[j] += data[i][j];
+                sum = NumOps.Add(sum, data[i, j]);
             }
-            means[j] /= n;
+            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
 
+            T variance = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                stds[j] += Math.Pow(data[i][j] - means[j], 2);
+                T diff = NumOps.Subtract(data[i, j], means[j]);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
+            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
+            if (stdVal < 1e-10) stdVal = 1;
+            stds[j] = NumOps.FromDouble(stdVal);
         }
 
-        var normalized = new double[n][];
+        var normalized = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
         {
-            normalized[i] = new double[d];
             for (int j = 0; j < d; j++)
             {
-                normalized[i][j] = (data[i][j] - means[j]) / stds[j];
+                T diff = NumOps.Subtract(data[i, j], means[j]);
+                normalized[i, j] = NumOps.Divide(diff, stds[j]);
             }
         }
 
@@ -253,32 +247,43 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         double scaleFF2 = Math.Sqrt(2.0 / (ffDim + _modelDim));
 
         _W1 = InitializeMatrix(_modelDim, ffDim, scaleFF1);
-        _b1 = new double[ffDim];
+        _b1 = InitializeVector(ffDim);
         _W2 = InitializeMatrix(ffDim, _modelDim, scaleFF2);
-        _b2 = new double[_modelDim];
+        _b2 = InitializeVector(_modelDim);
 
         // Prior sigma (learnable)
-        _priorSigma = 1.0;
+        _priorSigma = NumOps.One;
     }
 
-    private double[,] InitializeMatrix(int rows, int cols, double scale)
+    private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
     {
-        var matrix = new double[rows, cols];
+        var matrix = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
                 double u1 = 1.0 - _random.NextDouble();
                 double u2 = 1.0 - _random.NextDouble();
-                matrix[i, j] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
+                double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
+                matrix[i, j] = NumOps.FromDouble(val);
             }
         }
         return matrix;
     }
 
-    private void Train(double[][] data)
+    private Vector<T> InitializeVector(int size)
     {
-        int n = data.Length;
+        var vector = new Vector<T>(size);
+        for (int i = 0; i < size; i++)
+        {
+            vector[i] = NumOps.Zero;
+        }
+        return vector;
+    }
+
+    private void Train(Matrix<T> data)
+    {
+        int n = data.Rows;
         int numSeqs = n - _seqLength + 1;
 
         for (int epoch = 0; epoch < _epochs; epoch++)
@@ -287,39 +292,66 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
 
             foreach (var idx in indices)
             {
-                // Extract sequence
-                var seq = new double[_seqLength][];
+                // Extract sequence as a Matrix<T> (seqLength x inputDim)
+                var seq = new Matrix<T>(_seqLength, _inputDim);
                 for (int t = 0; t < _seqLength; t++)
                 {
-                    seq[t] = data[idx + t];
+                    for (int j = 0; j < _inputDim; j++)
+                    {
+                        seq[t, j] = data[idx + t, j];
+                    }
                 }
 
                 // Forward pass and compute loss
                 var (_, _, assocDisc) = Forward(seq);
 
+                // Compute average discrepancy
+                T avgDisc = NumOps.Zero;
+                for (int i = 0; i < assocDisc.Length; i++)
+                {
+                    avgDisc = NumOps.Add(avgDisc, assocDisc[i]);
+                }
+                avgDisc = NumOps.Divide(avgDisc, NumOps.FromDouble(assocDisc.Length));
+
                 // Update prior sigma based on association discrepancy
                 // Simplified: adjust sigma to minimize reconstruction + maximize discrepancy for anomalies
-                double avgDisc = assocDisc.Average();
-                _priorSigma = Math.Max(0.1, _priorSigma - _learningRate * (avgDisc - 1.0));
+                T discDiff = NumOps.Subtract(avgDisc, NumOps.One);
+                T update = NumOps.Multiply(NumOps.FromDouble(_learningRate), discDiff);
+                _priorSigma = NumOps.Subtract(_priorSigma, update);
+
+                // Ensure sigma stays positive
+                double sigmaVal = NumOps.ToDouble(_priorSigma);
+                if (sigmaVal < 0.1)
+                {
+                    _priorSigma = NumOps.FromDouble(0.1);
+                }
             }
         }
     }
 
-    private (double[][] output, double[][] attention, double[] assocDisc) Forward(double[][] sequence)
+    private (Matrix<T> output, Matrix<T> attention, Vector<T> assocDisc) Forward(Matrix<T> sequence)
     {
-        int seqLen = sequence.Length;
+        // Capture nullable fields for proper null checking
+        var inputProj = _inputProj;
+        if (inputProj == null)
+        {
+            throw new InvalidOperationException("Weights not initialized.");
+        }
 
-        // Project input to model dimension
-        var projected = new double[seqLen][];
+        int seqLen = sequence.Rows;
+
+        // Project input to model dimension: projected[t, j] = sum(sequence[t, i] * inputProj[i, j])
+        var projected = new Matrix<T>(seqLen, _modelDim);
         for (int t = 0; t < seqLen; t++)
         {
-            projected[t] = new double[_modelDim];
             for (int j = 0; j < _modelDim; j++)
             {
+                T sum = NumOps.Zero;
                 for (int i = 0; i < _inputDim; i++)
                 {
-                    projected[t][j] += sequence[t][i] * _inputProj![i, j];
+                    sum = NumOps.Add(sum, NumOps.Multiply(sequence[t, i], inputProj[i, j]));
                 }
+                projected[t, j] = sum;
             }
         }
 
@@ -333,17 +365,24 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         var priorAssoc = ComputePriorAssociation(seqLen);
 
         // Association discrepancy: KL divergence between series and prior associations
-        var assocDisc = new double[seqLen];
+        var assocDisc = new Vector<T>(seqLen);
+        T epsilon = NumOps.FromDouble(1e-10);
         for (int i = 0; i < seqLen; i++)
         {
-            double kl = 0;
+            T kl = NumOps.Zero;
             for (int j = 0; j < seqLen; j++)
             {
-                double p = attention[i][j] + 1e-10;
-                double q = priorAssoc[i][j] + 1e-10;
-                kl += p * Math.Log(p / q);
+                T p = NumOps.Add(attention[i, j], epsilon);
+                T q = NumOps.Add(priorAssoc[i, j], epsilon);
+                // KL = p * log(p/q)
+                double pVal = NumOps.ToDouble(p);
+                double qVal = NumOps.ToDouble(q);
+                double klTerm = pVal * Math.Log(pVal / qVal);
+                kl = NumOps.Add(kl, NumOps.FromDouble(klTerm));
             }
-            assocDisc[i] = Math.Abs(kl);
+            // Take absolute value
+            double klVal = Math.Abs(NumOps.ToDouble(kl));
+            assocDisc[i] = NumOps.FromDouble(klVal);
         }
 
         // Feed-forward
@@ -352,185 +391,205 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         return (output, attention, assocDisc);
     }
 
-    private void AddPositionalEncoding(double[][] x)
+    private void AddPositionalEncoding(Matrix<T> x)
     {
-        int seqLen = x.Length;
+        int seqLen = x.Rows;
 
         for (int pos = 0; pos < seqLen; pos++)
         {
             for (int i = 0; i < _modelDim; i++)
             {
                 double angle = pos / Math.Pow(10000, (2.0 * (i / 2)) / _modelDim);
-                if (i % 2 == 0)
-                {
-                    x[pos][i] += Math.Sin(angle);
-                }
-                else
-                {
-                    x[pos][i] += Math.Cos(angle);
-                }
+                double pe = (i % 2 == 0) ? Math.Sin(angle) : Math.Cos(angle);
+                x[pos, i] = NumOps.Add(x[pos, i], NumOps.FromDouble(pe));
             }
         }
     }
 
-    private (double[][] output, double[][] attention) SelfAttention(double[][] x)
+    private (Matrix<T> output, Matrix<T> attention) SelfAttention(Matrix<T> x)
     {
-        int seqLen = x.Length;
+        // Capture nullable fields for proper null checking
+        var Wq = _Wq;
+        var Wk = _Wk;
+        var Wv = _Wv;
+        var Wo = _Wo;
+
+        if (Wq == null || Wk == null || Wv == null || Wo == null)
+        {
+            throw new InvalidOperationException("Attention weights not initialized.");
+        }
+
+        int seqLen = x.Rows;
         int headDim = _modelDim / _numHeads;
 
         // Compute Q, K, V
-        var Q = new double[seqLen][];
-        var K = new double[seqLen][];
-        var V = new double[seqLen][];
+        var Q = new Matrix<T>(seqLen, _modelDim);
+        var K = new Matrix<T>(seqLen, _modelDim);
+        var V = new Matrix<T>(seqLen, _modelDim);
 
         for (int t = 0; t < seqLen; t++)
         {
-            Q[t] = new double[_modelDim];
-            K[t] = new double[_modelDim];
-            V[t] = new double[_modelDim];
-
             for (int j = 0; j < _modelDim; j++)
             {
+                T qSum = NumOps.Zero;
+                T kSum = NumOps.Zero;
+                T vSum = NumOps.Zero;
                 for (int i = 0; i < _modelDim; i++)
                 {
-                    Q[t][j] += x[t][i] * _Wq![i, j];
-                    K[t][j] += x[t][i] * _Wk![i, j];
-                    V[t][j] += x[t][i] * _Wv![i, j];
+                    qSum = NumOps.Add(qSum, NumOps.Multiply(x[t, i], Wq[i, j]));
+                    kSum = NumOps.Add(kSum, NumOps.Multiply(x[t, i], Wk[i, j]));
+                    vSum = NumOps.Add(vSum, NumOps.Multiply(x[t, i], Wv[i, j]));
                 }
+                Q[t, j] = qSum;
+                K[t, j] = kSum;
+                V[t, j] = vSum;
             }
         }
 
         // Compute attention scores
-        double scale = Math.Sqrt(headDim);
-        var attention = new double[seqLen][];
+        T scale = NumOps.FromDouble(Math.Sqrt(headDim));
+        var attention = new Matrix<T>(seqLen, seqLen);
 
         for (int i = 0; i < seqLen; i++)
         {
-            attention[i] = new double[seqLen];
-            double maxScore = double.MinValue;
+            T maxScore = NumOps.FromDouble(double.MinValue);
 
             for (int j = 0; j < seqLen; j++)
             {
-                double score = 0;
+                T score = NumOps.Zero;
                 for (int k = 0; k < _modelDim; k++)
                 {
-                    score += Q[i][k] * K[j][k];
+                    score = NumOps.Add(score, NumOps.Multiply(Q[i, k], K[j, k]));
                 }
-                score /= scale;
-                attention[i][j] = score;
-                if (score > maxScore) maxScore = score;
+                score = NumOps.Divide(score, scale);
+                attention[i, j] = score;
+                if (NumOps.ToDouble(score) > NumOps.ToDouble(maxScore))
+                {
+                    maxScore = score;
+                }
             }
 
             // Softmax
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int j = 0; j < seqLen; j++)
             {
-                attention[i][j] = Math.Exp(attention[i][j] - maxScore);
-                sum += attention[i][j];
+                double expVal = Math.Exp(NumOps.ToDouble(attention[i, j]) - NumOps.ToDouble(maxScore));
+                attention[i, j] = NumOps.FromDouble(expVal);
+                sum = NumOps.Add(sum, attention[i, j]);
             }
             for (int j = 0; j < seqLen; j++)
             {
-                attention[i][j] /= sum;
+                attention[i, j] = NumOps.Divide(attention[i, j], sum);
             }
         }
 
         // Apply attention to values
-        var attnOutput = new double[seqLen][];
+        var attnOutput = new Matrix<T>(seqLen, _modelDim);
         for (int i = 0; i < seqLen; i++)
         {
-            attnOutput[i] = new double[_modelDim];
-            for (int j = 0; j < seqLen; j++)
-            {
-                for (int k = 0; k < _modelDim; k++)
-                {
-                    attnOutput[i][k] += attention[i][j] * V[j][k];
-                }
-            }
-
-            // Output projection
-            var projected = new double[_modelDim];
             for (int k = 0; k < _modelDim; k++)
             {
-                for (int m = 0; m < _modelDim; m++)
+                T sum = NumOps.Zero;
+                for (int j = 0; j < seqLen; j++)
                 {
-                    projected[k] += attnOutput[i][m] * _Wo![m, k];
+                    sum = NumOps.Add(sum, NumOps.Multiply(attention[i, j], V[j, k]));
                 }
-            }
-            attnOutput[i] = projected;
-
-            // Residual connection
-            for (int k = 0; k < _modelDim; k++)
-            {
-                attnOutput[i][k] += x[i][k];
+                attnOutput[i, k] = sum;
             }
         }
 
-        return (attnOutput, attention);
+        // Output projection with residual connection
+        var output = new Matrix<T>(seqLen, _modelDim);
+        for (int i = 0; i < seqLen; i++)
+        {
+            for (int k = 0; k < _modelDim; k++)
+            {
+                T proj = NumOps.Zero;
+                for (int m = 0; m < _modelDim; m++)
+                {
+                    proj = NumOps.Add(proj, NumOps.Multiply(attnOutput[i, m], Wo[m, k]));
+                }
+                // Residual connection
+                output[i, k] = NumOps.Add(proj, x[i, k]);
+            }
+        }
+
+        return (output, attention);
     }
 
-    private double[][] ComputePriorAssociation(int seqLen)
+    private Matrix<T> ComputePriorAssociation(int seqLen)
     {
-        var prior = new double[seqLen][];
+        var prior = new Matrix<T>(seqLen, seqLen);
+        T twoSigmaSq = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(_priorSigma, _priorSigma));
 
         for (int i = 0; i < seqLen; i++)
         {
-            prior[i] = new double[seqLen];
-            double sum = 0;
+            T sum = NumOps.Zero;
 
             for (int j = 0; j < seqLen; j++)
             {
                 // Gaussian kernel based on position distance
                 double dist = Math.Abs(i - j);
-                prior[i][j] = Math.Exp(-dist * dist / (2 * _priorSigma * _priorSigma));
-                sum += prior[i][j];
+                double distSq = dist * dist;
+                double gaussVal = Math.Exp(-distSq / NumOps.ToDouble(twoSigmaSq));
+                prior[i, j] = NumOps.FromDouble(gaussVal);
+                sum = NumOps.Add(sum, prior[i, j]);
             }
 
             // Normalize
             for (int j = 0; j < seqLen; j++)
             {
-                prior[i][j] /= sum;
+                prior[i, j] = NumOps.Divide(prior[i, j], sum);
             }
         }
 
         return prior;
     }
 
-    private double[][] FeedForward(double[][] x)
+    private Matrix<T> FeedForward(Matrix<T> x)
     {
-        int seqLen = x.Length;
-        int ffDim = _W1!.GetLength(1);
+        // Capture nullable fields for proper null checking
+        var W1 = _W1;
+        var b1 = _b1;
+        var W2 = _W2;
+        var b2 = _b2;
 
-        var output = new double[seqLen][];
+        if (W1 == null || b1 == null || W2 == null || b2 == null)
+        {
+            throw new InvalidOperationException("Feed-forward weights not initialized.");
+        }
+
+        int seqLen = x.Rows;
+        int ffDim = W1.Columns;
+
+        var output = new Matrix<T>(seqLen, _modelDim);
 
         for (int t = 0; t < seqLen; t++)
         {
             // First layer with ReLU
-            var h = new double[ffDim];
+            var h = new Vector<T>(ffDim);
             for (int j = 0; j < ffDim; j++)
             {
-                h[j] = _b1![j];
+                T sum = b1[j];
                 for (int i = 0; i < _modelDim; i++)
                 {
-                    h[j] += x[t][i] * _W1[i, j];
+                    sum = NumOps.Add(sum, NumOps.Multiply(x[t, i], W1[i, j]));
                 }
-                h[j] = Math.Max(0, h[j]); // ReLU
+                // ReLU
+                double val = NumOps.ToDouble(sum);
+                h[j] = NumOps.FromDouble(Math.Max(0, val));
             }
 
-            // Second layer
-            output[t] = new double[_modelDim];
+            // Second layer with residual connection
             for (int j = 0; j < _modelDim; j++)
             {
-                output[t][j] = _b2![j];
+                T sum = b2[j];
                 for (int i = 0; i < ffDim; i++)
                 {
-                    output[t][j] += h[i] * _W2![i, j];
+                    sum = NumOps.Add(sum, NumOps.Multiply(h[i], W2[i, j]));
                 }
-            }
-
-            // Residual connection
-            for (int j = 0; j < _modelDim; j++)
-            {
-                output[t][j] += x[t][j];
+                // Residual connection
+                output[t, j] = NumOps.Add(sum, x[t, j]);
             }
         }
 
@@ -558,14 +617,14 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         var scores = new Vector<T>(n);
 
-        // Convert to normalized double array
-        var data = new double[n][];
+        // Convert to normalized Matrix<T>
+        var data = new Matrix<T>(n, _inputDim);
         for (int i = 0; i < n; i++)
         {
-            data[i] = new double[_inputDim];
             for (int j = 0; j < _inputDim; j++)
             {
-                data[i][j] = (NumOps.ToDouble(X[i, j]) - dataMeans[j]) / dataStds[j];
+                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
+                data[i, j] = NumOps.Divide(diff, dataStds[j]);
             }
         }
 
@@ -578,10 +637,13 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
 
         while (windowStart + _seqLength <= n)
         {
-            var seq = new double[_seqLength][];
+            var seq = new Matrix<T>(_seqLength, _inputDim);
             for (int t = 0; t < _seqLength; t++)
             {
-                seq[t] = data[windowStart + t];
+                for (int j = 0; j < _inputDim; j++)
+                {
+                    seq[t, j] = data[windowStart + t, j];
+                }
             }
 
             var (_, _, assocDisc) = Forward(seq);
@@ -593,12 +655,14 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 if (hasScore[idx])
                 {
                     // Take max of overlapping scores
-                    double currentScore = NumOps.ToDouble(scores[idx]);
-                    scores[idx] = NumOps.FromDouble(Math.Max(currentScore, assocDisc[t]));
+                    if (NumOps.ToDouble(assocDisc[t]) > NumOps.ToDouble(scores[idx]))
+                    {
+                        scores[idx] = assocDisc[t];
+                    }
                 }
                 else
                 {
-                    scores[idx] = NumOps.FromDouble(assocDisc[t]);
+                    scores[idx] = assocDisc[t];
                     hasScore[idx] = true;
                 }
             }
@@ -612,12 +676,12 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             if (!hasScore[i])
             {
                 // Use simple distance for points without window coverage
-                double dist = 0;
+                T dist = NumOps.Zero;
                 for (int j = 0; j < _inputDim; j++)
                 {
-                    dist += data[i][j] * data[i][j];
+                    dist = NumOps.Add(dist, NumOps.Multiply(data[i, j], data[i, j]));
                 }
-                scores[i] = NumOps.FromDouble(dist);
+                scores[i] = dist;
             }
         }
 

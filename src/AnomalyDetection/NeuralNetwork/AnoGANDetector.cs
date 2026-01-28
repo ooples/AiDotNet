@@ -48,26 +48,26 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
     private readonly int _inferenceSteps;
 
     // Generator weights
-    private double[,]? _genW1;
-    private double[]? _genB1;
-    private double[,]? _genW2;
-    private double[]? _genB2;
-    private double[,]? _genW3;
-    private double[]? _genB3;
+    private Matrix<T>? _genW1;
+    private Vector<T>? _genB1;
+    private Matrix<T>? _genW2;
+    private Vector<T>? _genB2;
+    private Matrix<T>? _genW3;
+    private Vector<T>? _genB3;
 
     // Discriminator weights
-    private double[,]? _discW1;
-    private double[]? _discB1;
-    private double[,]? _discW2;
-    private double[]? _discB2;
-    private double[,]? _discW3;
-    private double[]? _discB3;
+    private Matrix<T>? _discW1;
+    private Vector<T>? _discB1;
+    private Matrix<T>? _discW2;
+    private Vector<T>? _discB2;
+    private Matrix<T>? _discW3;
+    private Vector<T>? _discB3;
 
     private int _inputDim;
 
     // Normalization parameters
-    private double[]? _dataMeans;
-    private double[]? _dataStds;
+    private Vector<T>? _dataMeans;
+    private Vector<T>? _dataStds;
 
     /// <summary>
     /// Gets the latent dimensions.
@@ -139,19 +139,8 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         _inputDim = X.Columns;
 
-        // Convert to double array
-        var data = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            data[i] = new double[_inputDim];
-            for (int j = 0; j < _inputDim; j++)
-            {
-                data[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
-
         // Normalize data
-        var (normalizedData, means, stds) = NormalizeData(data);
+        var (normalizedData, means, stds) = NormalizeData(X);
         _dataMeans = means;
         _dataStds = stds;
 
@@ -168,37 +157,41 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private (double[][] normalized, double[] means, double[] stds) NormalizeData(double[][] data)
+    private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Length;
-        int d = data[0].Length;
+        int n = data.Rows;
+        int d = data.Columns;
 
-        var means = new double[d];
-        var stds = new double[d];
+        var means = new Vector<T>(d);
+        var stds = new Vector<T>(d);
 
         for (int j = 0; j < d; j++)
         {
+            T sum = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                means[j] += data[i][j];
+                sum = NumOps.Add(sum, data[i, j]);
             }
-            means[j] /= n;
+            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
 
+            T variance = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                stds[j] += Math.Pow(data[i][j] - means[j], 2);
+                T diff = NumOps.Subtract(data[i, j], means[j]);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
+            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
+            if (stdVal < 1e-10) stdVal = 1;
+            stds[j] = NumOps.FromDouble(stdVal);
         }
 
-        var normalized = new double[n][];
+        var normalized = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
         {
-            normalized[i] = new double[d];
             for (int j = 0; j < d; j++)
             {
-                normalized[i][j] = (data[i][j] - means[j]) / stds[j];
+                T diff = NumOps.Subtract(data[i, j], means[j]);
+                normalized[i, j] = NumOps.Divide(diff, stds[j]);
             }
         }
 
@@ -213,11 +206,11 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         double genScale3 = Math.Sqrt(2.0 / (_hiddenDim + _inputDim));
 
         _genW1 = InitializeMatrix(_latentDim, _hiddenDim, genScale1);
-        _genB1 = new double[_hiddenDim];
+        _genB1 = InitializeVector(_hiddenDim);
         _genW2 = InitializeMatrix(_hiddenDim, _hiddenDim, genScale2);
-        _genB2 = new double[_hiddenDim];
+        _genB2 = InitializeVector(_hiddenDim);
         _genW3 = InitializeMatrix(_hiddenDim, _inputDim, genScale3);
-        _genB3 = new double[_inputDim];
+        _genB3 = InitializeVector(_inputDim);
 
         // Discriminator: input -> hidden1 -> hidden2 -> 1
         double discScale1 = Math.Sqrt(2.0 / (_inputDim + _hiddenDim));
@@ -225,31 +218,42 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         double discScale3 = Math.Sqrt(2.0 / (_hiddenDim + 1));
 
         _discW1 = InitializeMatrix(_inputDim, _hiddenDim, discScale1);
-        _discB1 = new double[_hiddenDim];
+        _discB1 = InitializeVector(_hiddenDim);
         _discW2 = InitializeMatrix(_hiddenDim, _hiddenDim, discScale2);
-        _discB2 = new double[_hiddenDim];
+        _discB2 = InitializeVector(_hiddenDim);
         _discW3 = InitializeMatrix(_hiddenDim, 1, discScale3);
-        _discB3 = new double[1];
+        _discB3 = InitializeVector(1);
     }
 
-    private double[,] InitializeMatrix(int rows, int cols, double scale)
+    private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
     {
-        var matrix = new double[rows, cols];
+        var matrix = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
                 double u1 = 1.0 - _random.NextDouble();
                 double u2 = 1.0 - _random.NextDouble();
-                matrix[i, j] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
+                double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
+                matrix[i, j] = NumOps.FromDouble(val);
             }
         }
         return matrix;
     }
 
-    private void TrainGAN(double[][] data)
+    private Vector<T> InitializeVector(int size)
     {
-        int n = data.Length;
+        var vector = new Vector<T>(size);
+        for (int i = 0; i < size; i++)
+        {
+            vector[i] = NumOps.Zero;
+        }
+        return vector;
+    }
+
+    private void TrainGAN(Matrix<T> data)
+    {
+        int n = data.Rows;
         int batchSize = Math.Min(32, n);
 
         for (int epoch = 0; epoch < _epochs; epoch++)
@@ -264,7 +268,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
                 for (int b = 0; b < actualBatchSize; b++)
                 {
                     int idx = indices[batch + b];
-                    var realData = data[idx];
+                    var realData = data.GetRow(idx);
 
                     // Generate fake data
                     var z = SampleLatent();
@@ -284,97 +288,130 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private double[] SampleLatent()
+    private Vector<T> SampleLatent()
     {
-        var z = new double[_latentDim];
+        var z = new Vector<T>(_latentDim);
         for (int i = 0; i < _latentDim; i++)
         {
             double u1 = 1.0 - _random.NextDouble();
             double u2 = 1.0 - _random.NextDouble();
-            z[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            z[i] = NumOps.FromDouble(val);
         }
         return z;
     }
 
-    private double[] Generate(double[] z)
+    private Vector<T> Generate(Vector<T> z)
     {
+        var genW1 = _genW1;
+        var genB1 = _genB1;
+        var genW2 = _genW2;
+        var genB2 = _genB2;
+        var genW3 = _genW3;
+        var genB3 = _genB3;
+
+        if (genW1 == null || genB1 == null || genW2 == null || genB2 == null ||
+            genW3 == null || genB3 == null)
+        {
+            throw new InvalidOperationException("Generator weights not initialized.");
+        }
+
         // Layer 1
-        var h1 = new double[_hiddenDim];
+        var h1 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h1[j] = _genB1![j];
+            T sum = genB1[j];
             for (int i = 0; i < _latentDim; i++)
             {
-                h1[j] += z[i] * _genW1![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(z[i], genW1[i, j]));
             }
-            h1[j] = LeakyReLU(h1[j]);
+            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
+            h1[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Layer 2
-        var h2 = new double[_hiddenDim];
+        var h2 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h2[j] = _genB2![j];
+            T sum = genB2[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                h2[j] += h1[i] * _genW2![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h1[i], genW2[i, j]));
             }
-            h2[j] = LeakyReLU(h2[j]);
+            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
+            h2[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Output layer (tanh for bounded output)
-        var output = new double[_inputDim];
+        var output = new Vector<T>(_inputDim);
         for (int j = 0; j < _inputDim; j++)
         {
-            output[j] = _genB3![j];
+            T sum = genB3[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                output[j] += h2[i] * _genW3![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h2[i], genW3[i, j]));
             }
-            output[j] = Math.Tanh(output[j]);
+            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
+            output[j] = NumOps.FromDouble(tanhVal);
         }
 
         return output;
     }
 
-    private (double output, double[] features) Discriminate(double[] x)
+    private (T output, Vector<T> features) Discriminate(Vector<T> x)
     {
+        var discW1 = _discW1;
+        var discB1 = _discB1;
+        var discW2 = _discW2;
+        var discB2 = _discB2;
+        var discW3 = _discW3;
+        var discB3 = _discB3;
+
+        if (discW1 == null || discB1 == null || discW2 == null || discB2 == null ||
+            discW3 == null || discB3 == null)
+        {
+            throw new InvalidOperationException("Discriminator weights not initialized.");
+        }
+
         // Layer 1
-        var h1 = new double[_hiddenDim];
+        var h1 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h1[j] = _discB1![j];
+            T sum = discB1[j];
             for (int i = 0; i < _inputDim; i++)
             {
-                h1[j] += x[i] * _discW1![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(x[i], discW1[i, j]));
             }
-            h1[j] = LeakyReLU(h1[j]);
+            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
+            h1[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Layer 2 (feature layer)
-        var h2 = new double[_hiddenDim];
+        var h2 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h2[j] = _discB2![j];
+            T sum = discB2[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                h2[j] += h1[i] * _discW2![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h1[i], discW2[i, j]));
             }
-            h2[j] = LeakyReLU(h2[j]);
+            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
+            h2[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Output layer (sigmoid for probability)
-        double output = _discB3![0];
+        T outputSum = discB3[0];
         for (int i = 0; i < _hiddenDim; i++)
         {
-            output += h2[i] * _discW3![i, 0];
+            outputSum = NumOps.Add(outputSum, NumOps.Multiply(h2[i], discW3[i, 0]));
         }
-        output = Sigmoid(output);
+        double sigVal = Sigmoid(NumOps.ToDouble(outputSum));
+        T output = NumOps.FromDouble(sigVal);
 
         return (output, h2);
     }
 
-    private void UpdateDiscriminator(double[] realData, double[] fakeData)
+    private void UpdateDiscriminator(Vector<T> realData, Vector<T> fakeData)
     {
         double lr = _learningRate;
 
@@ -383,11 +420,9 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         // Forward pass for fake data with cache
         var (fakeH1, fakeH2, fakeOut) = DiscriminateWithCache(fakeData);
 
-        // Binary cross-entropy gradients: d/dz sigmoid_cross_entropy = sigmoid(z) - target
-        // For real data, target = 1: gradient = realOut - 1
-        // For fake data, target = 0: gradient = fakeOut - 0 = fakeOut
-        double dRealOut = realOut - 1.0;
-        double dFakeOut = fakeOut;
+        // Binary cross-entropy gradients
+        double dRealOut = NumOps.ToDouble(realOut) - 1.0;
+        double dFakeOut = NumOps.ToDouble(fakeOut);
 
         // Backprop through discriminator for real data
         BackpropDiscriminator(realData, realH1, realH2, dRealOut, lr);
@@ -395,81 +430,113 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         BackpropDiscriminator(fakeData, fakeH1, fakeH2, dFakeOut, lr);
     }
 
-    private (double[] h1, double[] h2, double output) DiscriminateWithCache(double[] x)
+    private (Vector<T> h1, Vector<T> h2, T output) DiscriminateWithCache(Vector<T> x)
     {
+        var discW1 = _discW1;
+        var discB1 = _discB1;
+        var discW2 = _discW2;
+        var discB2 = _discB2;
+        var discW3 = _discW3;
+        var discB3 = _discB3;
+
+        if (discW1 == null || discB1 == null || discW2 == null || discB2 == null ||
+            discW3 == null || discB3 == null)
+        {
+            throw new InvalidOperationException("Discriminator weights not initialized.");
+        }
+
         // Layer 1
-        var h1Pre = new double[_hiddenDim];
-        var h1 = new double[_hiddenDim];
+        var h1 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h1Pre[j] = _discB1![j];
+            T sum = discB1[j];
             for (int i = 0; i < _inputDim; i++)
             {
-                h1Pre[j] += x[i] * _discW1![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(x[i], discW1[i, j]));
             }
-            h1[j] = LeakyReLU(h1Pre[j]);
+            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
+            h1[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Layer 2
-        var h2Pre = new double[_hiddenDim];
-        var h2 = new double[_hiddenDim];
+        var h2 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h2Pre[j] = _discB2![j];
+            T sum = discB2[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                h2Pre[j] += h1[i] * _discW2![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h1[i], discW2[i, j]));
             }
-            h2[j] = LeakyReLU(h2Pre[j]);
+            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
+            h2[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Output layer
-        double outPre = _discB3![0];
+        T outSum = discB3[0];
         for (int i = 0; i < _hiddenDim; i++)
         {
-            outPre += h2[i] * _discW3![i, 0];
+            outSum = NumOps.Add(outSum, NumOps.Multiply(h2[i], discW3[i, 0]));
         }
-        double output = Sigmoid(outPre);
+        double sigVal = Sigmoid(NumOps.ToDouble(outSum));
+        T output = NumOps.FromDouble(sigVal);
 
         return (h1, h2, output);
     }
 
-    private void BackpropDiscriminator(double[] x, double[] h1, double[] h2, double dOut, double lr)
+    private void BackpropDiscriminator(Vector<T> x, Vector<T> h1, Vector<T> h2, double dOut, double lr)
     {
+        var discW1 = _discW1;
+        var discB1 = _discB1;
+        var discW2 = _discW2;
+        var discB2 = _discB2;
+        var discW3 = _discW3;
+        var discB3 = _discB3;
+
+        if (discW1 == null || discB1 == null || discW2 == null || discB2 == null ||
+            discW3 == null || discB3 == null)
+        {
+            throw new InvalidOperationException("Discriminator weights not initialized.");
+        }
+
         // Gradient through output layer
-        var dH2 = new double[_hiddenDim];
+        var dH2 = new Vector<T>(_hiddenDim);
         for (int i = 0; i < _hiddenDim; i++)
         {
-            _discW3![i, 0] -= lr * h2[i] * dOut;
-            dH2[i] = _discW3[i, 0] * dOut;
+            T grad = NumOps.Multiply(h2[i], NumOps.FromDouble(dOut));
+            discW3[i, 0] = NumOps.Subtract(discW3[i, 0], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
+            dH2[i] = NumOps.Multiply(discW3[i, 0], NumOps.FromDouble(dOut));
         }
-        _discB3![0] -= lr * dOut;
+        discB3[0] = NumOps.Subtract(discB3[0], NumOps.FromDouble(lr * dOut));
 
         // LeakyReLU derivative for h2
         for (int i = 0; i < _hiddenDim; i++)
         {
-            if (h2[i] < 0) dH2[i] *= 0.2;
+            if (NumOps.ToDouble(h2[i]) < 0)
+                dH2[i] = NumOps.Multiply(dH2[i], NumOps.FromDouble(0.2));
         }
 
         // Gradient through layer 2
-        var dH1 = new double[_hiddenDim];
+        var dH1 = new Vector<T>(_hiddenDim);
         for (int i = 0; i < _hiddenDim; i++)
         {
+            dH1[i] = NumOps.Zero;
             for (int j = 0; j < _hiddenDim; j++)
             {
-                _discW2![i, j] -= lr * h1[i] * dH2[j];
-                dH1[i] += _discW2[i, j] * dH2[j];
+                T grad = NumOps.Multiply(h1[i], dH2[j]);
+                discW2[i, j] = NumOps.Subtract(discW2[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
+                dH1[i] = NumOps.Add(dH1[i], NumOps.Multiply(discW2[i, j], dH2[j]));
             }
         }
         for (int j = 0; j < _hiddenDim; j++)
         {
-            _discB2![j] -= lr * dH2[j];
+            discB2[j] = NumOps.Subtract(discB2[j], NumOps.FromDouble(lr * NumOps.ToDouble(dH2[j])));
         }
 
         // LeakyReLU derivative for h1
         for (int i = 0; i < _hiddenDim; i++)
         {
-            if (h1[i] < 0) dH1[i] *= 0.2;
+            if (NumOps.ToDouble(h1[i]) < 0)
+                dH1[i] = NumOps.Multiply(dH1[i], NumOps.FromDouble(0.2));
         }
 
         // Gradient through layer 1
@@ -477,16 +544,17 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = 0; j < _hiddenDim; j++)
             {
-                _discW1![i, j] -= lr * x[i] * dH1[j];
+                T grad = NumOps.Multiply(x[i], dH1[j]);
+                discW1[i, j] = NumOps.Subtract(discW1[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
             }
         }
         for (int j = 0; j < _hiddenDim; j++)
         {
-            _discB1![j] -= lr * dH1[j];
+            discB1[j] = NumOps.Subtract(discB1[j], NumOps.FromDouble(lr * NumOps.ToDouble(dH1[j])));
         }
     }
 
-    private void UpdateGenerator(double[] z)
+    private void UpdateGenerator(Vector<T> z)
     {
         double lr = _learningRate;
 
@@ -497,8 +565,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         var (_, discH2, fakeOut) = DiscriminateWithCache(fakeData);
 
         // Generator wants discriminator to output 1 for fake
-        // Gradient: d/dz BCE(sigmoid(z), 1) = sigmoid(z) - 1
-        double dOut = fakeOut - 1.0;
+        double dOut = NumOps.ToDouble(fakeOut) - 1.0;
 
         // Backprop through discriminator to get gradient w.r.t. fakeData
         var dFakeData = BackpropDiscriminatorToInput(fakeData, discH2, dOut);
@@ -507,173 +574,217 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         BackpropGenerator(z, h1, h2, dFakeData, lr);
     }
 
-    private (double[] h1, double[] h2, double[] output) GenerateWithCache(double[] z)
+    private (Vector<T> h1, Vector<T> h2, Vector<T> output) GenerateWithCache(Vector<T> z)
     {
+        var genW1 = _genW1;
+        var genB1 = _genB1;
+        var genW2 = _genW2;
+        var genB2 = _genB2;
+        var genW3 = _genW3;
+        var genB3 = _genB3;
+
+        if (genW1 == null || genB1 == null || genW2 == null || genB2 == null ||
+            genW3 == null || genB3 == null)
+        {
+            throw new InvalidOperationException("Generator weights not initialized.");
+        }
+
         // Layer 1
-        var h1 = new double[_hiddenDim];
+        var h1 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h1[j] = _genB1![j];
+            T sum = genB1[j];
             for (int i = 0; i < _latentDim; i++)
             {
-                h1[j] += z[i] * _genW1![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(z[i], genW1[i, j]));
             }
-            h1[j] = LeakyReLU(h1[j]);
+            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
+            h1[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Layer 2
-        var h2 = new double[_hiddenDim];
+        var h2 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h2[j] = _genB2![j];
+            T sum = genB2[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                h2[j] += h1[i] * _genW2![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h1[i], genW2[i, j]));
             }
-            h2[j] = LeakyReLU(h2[j]);
+            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
+            h2[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Output layer (tanh for bounded output)
-        var output = new double[_inputDim];
+        var output = new Vector<T>(_inputDim);
         for (int j = 0; j < _inputDim; j++)
         {
-            output[j] = _genB3![j];
+            T sum = genB3[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                output[j] += h2[i] * _genW3![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h2[i], genW3[i, j]));
             }
-            output[j] = Math.Tanh(output[j]);
+            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
+            output[j] = NumOps.FromDouble(tanhVal);
         }
 
         return (h1, h2, output);
     }
 
-    private double[] BackpropDiscriminatorToInput(double[] x, double[] h2, double dOut)
+    private Vector<T> BackpropDiscriminatorToInput(Vector<T> x, Vector<T> h2, double dOut)
     {
-        // Backprop through discriminator without updating weights
-        // to get gradient w.r.t. input
+        var discW1 = _discW1;
+        var discB1 = _discB1;
+        var discW2 = _discW2;
+        var discW3 = _discW3;
+
+        if (discW1 == null || discB1 == null || discW2 == null || discW3 == null)
+        {
+            throw new InvalidOperationException("Discriminator weights not initialized.");
+        }
 
         // Gradient through output layer
-        var dH2 = new double[_hiddenDim];
+        var dH2 = new Vector<T>(_hiddenDim);
         for (int i = 0; i < _hiddenDim; i++)
         {
-            dH2[i] = _discW3![i, 0] * dOut;
+            dH2[i] = NumOps.Multiply(discW3[i, 0], NumOps.FromDouble(dOut));
         }
 
         // LeakyReLU derivative for h2
         for (int i = 0; i < _hiddenDim; i++)
         {
-            if (h2[i] < 0) dH2[i] *= 0.2;
+            if (NumOps.ToDouble(h2[i]) < 0)
+                dH2[i] = NumOps.Multiply(dH2[i], NumOps.FromDouble(0.2));
         }
 
-        // We need h1 to continue backprop - recompute it
-        var h1 = new double[_hiddenDim];
+        // Recompute h1
+        var h1 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h1[j] = _discB1![j];
+            T sum = discB1[j];
             for (int i = 0; i < _inputDim; i++)
             {
-                h1[j] += x[i] * _discW1![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(x[i], discW1[i, j]));
             }
-            h1[j] = LeakyReLU(h1[j]);
+            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
+            h1[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Gradient through layer 2
-        var dH1 = new double[_hiddenDim];
+        var dH1 = new Vector<T>(_hiddenDim);
         for (int i = 0; i < _hiddenDim; i++)
         {
+            dH1[i] = NumOps.Zero;
             for (int j = 0; j < _hiddenDim; j++)
             {
-                dH1[i] += _discW2![i, j] * dH2[j];
+                dH1[i] = NumOps.Add(dH1[i], NumOps.Multiply(discW2[i, j], dH2[j]));
             }
         }
 
         // LeakyReLU derivative for h1
         for (int i = 0; i < _hiddenDim; i++)
         {
-            if (h1[i] < 0) dH1[i] *= 0.2;
+            if (NumOps.ToDouble(h1[i]) < 0)
+                dH1[i] = NumOps.Multiply(dH1[i], NumOps.FromDouble(0.2));
         }
 
         // Gradient through layer 1 to input
-        var dX = new double[_inputDim];
+        var dX = new Vector<T>(_inputDim);
         for (int i = 0; i < _inputDim; i++)
         {
+            dX[i] = NumOps.Zero;
             for (int j = 0; j < _hiddenDim; j++)
             {
-                dX[i] += _discW1![i, j] * dH1[j];
+                dX[i] = NumOps.Add(dX[i], NumOps.Multiply(discW1[i, j], dH1[j]));
             }
         }
 
         return dX;
     }
 
-    private void BackpropGenerator(double[] z, double[] h1, double[] h2, double[] dOutput, double lr)
+    private void BackpropGenerator(Vector<T> z, Vector<T> h1, Vector<T> h2, Vector<T> dOutput, double lr)
     {
-        // Tanh derivative: d/dx tanh(x) = 1 - tanh(x)^2
-        // We need the pre-tanh values, but we stored the post-tanh values
-        // We can recover: if output = tanh(pre), then pre = atanh(output)
-        // Alternatively, dOutput * (1 - output^2) gives us the gradient through tanh
+        var genW1 = _genW1;
+        var genB1 = _genB1;
+        var genW2 = _genW2;
+        var genB2 = _genB2;
+        var genW3 = _genW3;
+        var genB3 = _genB3;
 
-        // Recompute output layer pre-activation and tanh values
-        var outputPre = new double[_inputDim];
-        var output = new double[_inputDim];
+        if (genW1 == null || genB1 == null || genW2 == null || genB2 == null ||
+            genW3 == null || genB3 == null)
+        {
+            throw new InvalidOperationException("Generator weights not initialized.");
+        }
+
+        // Recompute output layer values for tanh derivative
+        var output = new Vector<T>(_inputDim);
         for (int j = 0; j < _inputDim; j++)
         {
-            outputPre[j] = _genB3![j];
+            T sum = genB3[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                outputPre[j] += h2[i] * _genW3![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h2[i], genW3[i, j]));
             }
-            output[j] = Math.Tanh(outputPre[j]);
+            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
+            output[j] = NumOps.FromDouble(tanhVal);
         }
 
         // Apply tanh derivative
-        var dOutputPre = new double[_inputDim];
+        var dOutputPre = new Vector<T>(_inputDim);
         for (int j = 0; j < _inputDim; j++)
         {
-            dOutputPre[j] = dOutput[j] * (1 - output[j] * output[j]);
+            double outVal = NumOps.ToDouble(output[j]);
+            double tanhDeriv = 1 - outVal * outVal;
+            dOutputPre[j] = NumOps.Multiply(dOutput[j], NumOps.FromDouble(tanhDeriv));
         }
 
         // Gradient through output layer
-        var dH2 = new double[_hiddenDim];
+        var dH2 = new Vector<T>(_hiddenDim);
         for (int i = 0; i < _hiddenDim; i++)
         {
+            dH2[i] = NumOps.Zero;
             for (int j = 0; j < _inputDim; j++)
             {
-                _genW3![i, j] -= lr * h2[i] * dOutputPre[j];
-                dH2[i] += _genW3[i, j] * dOutputPre[j];
+                T grad = NumOps.Multiply(h2[i], dOutputPre[j]);
+                genW3[i, j] = NumOps.Subtract(genW3[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
+                dH2[i] = NumOps.Add(dH2[i], NumOps.Multiply(genW3[i, j], dOutputPre[j]));
             }
         }
         for (int j = 0; j < _inputDim; j++)
         {
-            _genB3![j] -= lr * dOutputPre[j];
+            genB3[j] = NumOps.Subtract(genB3[j], NumOps.FromDouble(lr * NumOps.ToDouble(dOutputPre[j])));
         }
 
         // LeakyReLU derivative for h2
         for (int i = 0; i < _hiddenDim; i++)
         {
-            if (h2[i] < 0) dH2[i] *= 0.2;
+            if (NumOps.ToDouble(h2[i]) < 0)
+                dH2[i] = NumOps.Multiply(dH2[i], NumOps.FromDouble(0.2));
         }
 
         // Gradient through layer 2
-        var dH1 = new double[_hiddenDim];
+        var dH1 = new Vector<T>(_hiddenDim);
         for (int i = 0; i < _hiddenDim; i++)
         {
+            dH1[i] = NumOps.Zero;
             for (int j = 0; j < _hiddenDim; j++)
             {
-                _genW2![i, j] -= lr * h1[i] * dH2[j];
-                dH1[i] += _genW2[i, j] * dH2[j];
+                T grad = NumOps.Multiply(h1[i], dH2[j]);
+                genW2[i, j] = NumOps.Subtract(genW2[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
+                dH1[i] = NumOps.Add(dH1[i], NumOps.Multiply(genW2[i, j], dH2[j]));
             }
         }
         for (int j = 0; j < _hiddenDim; j++)
         {
-            _genB2![j] -= lr * dH2[j];
+            genB2[j] = NumOps.Subtract(genB2[j], NumOps.FromDouble(lr * NumOps.ToDouble(dH2[j])));
         }
 
         // LeakyReLU derivative for h1
         for (int i = 0; i < _hiddenDim; i++)
         {
-            if (h1[i] < 0) dH1[i] *= 0.2;
+            if (NumOps.ToDouble(h1[i]) < 0)
+                dH1[i] = NumOps.Multiply(dH1[i], NumOps.FromDouble(0.2));
         }
 
         // Gradient through layer 1
@@ -681,12 +792,13 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = 0; j < _hiddenDim; j++)
             {
-                _genW1![i, j] -= lr * z[i] * dH1[j];
+                T grad = NumOps.Multiply(z[i], dH1[j]);
+                genW1[i, j] = NumOps.Subtract(genW1[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
             }
         }
         for (int j = 0; j < _hiddenDim; j++)
         {
-            _genB1![j] -= lr * dH1[j];
+            genB1[j] = NumOps.Subtract(genB1[j], NumOps.FromDouble(lr * NumOps.ToDouble(dH1[j])));
         }
     }
 
@@ -723,17 +835,20 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         for (int i = 0; i < X.Rows; i++)
         {
             // Normalize
-            var x = new double[_inputDim];
+            var x = new Vector<T>(_inputDim);
             for (int j = 0; j < _inputDim; j++)
             {
-                x[j] = (NumOps.ToDouble(X[i, j]) - dataMeans[j]) / dataStds[j];
+                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
+                x[j] = NumOps.Divide(diff, dataStds[j]);
             }
 
             // Find optimal z via gradient descent
             var z = SampleLatent();
-            var bestZ = (double[])z.Clone();
-            double bestLoss = double.MaxValue;
-            double zLr = 0.1; // Learning rate for z optimization
+            var bestZ = new Vector<T>(_latentDim);
+            for (int j = 0; j < _latentDim; j++) bestZ[j] = z[j];
+
+            T bestLoss = NumOps.FromDouble(double.MaxValue);
+            double zLr = 0.1;
 
             for (int step = 0; step < _inferenceSteps; step++)
             {
@@ -742,74 +857,85 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
                 var (_, featReal) = Discriminate(x);
 
                 // Reconstruction loss
-                double reconLoss = 0;
+                T reconLoss = NumOps.Zero;
                 for (int j = 0; j < _inputDim; j++)
                 {
-                    reconLoss += Math.Pow(x[j] - xGen[j], 2);
+                    T diff = NumOps.Subtract(x[j], xGen[j]);
+                    reconLoss = NumOps.Add(reconLoss, NumOps.Multiply(diff, diff));
                 }
 
                 // Feature matching loss
-                double featLoss = 0;
+                T featLoss = NumOps.Zero;
                 for (int j = 0; j < _hiddenDim; j++)
                 {
-                    featLoss += Math.Pow(featReal[j] - featGen[j], 2);
+                    T diff = NumOps.Subtract(featReal[j], featGen[j]);
+                    featLoss = NumOps.Add(featLoss, NumOps.Multiply(diff, diff));
                 }
 
-                double loss = reconLoss + 0.1 * featLoss;
-                if (loss < bestLoss)
+                T loss = NumOps.Add(reconLoss, NumOps.Multiply(NumOps.FromDouble(0.1), featLoss));
+
+                if (NumOps.ToDouble(loss) < NumOps.ToDouble(bestLoss))
                 {
                     bestLoss = loss;
-                    Array.Copy(z, bestZ, _latentDim);
+                    for (int j = 0; j < _latentDim; j++) bestZ[j] = z[j];
                 }
 
                 // Compute gradient of loss w.r.t. z using finite differences
-                // dL/dz_j = (L(z + eps*e_j) - L(z - eps*e_j)) / (2*eps)
                 double eps = 1e-4;
-                var dz = new double[_latentDim];
+                var dz = new Vector<T>(_latentDim);
 
                 for (int j = 0; j < _latentDim; j++)
                 {
                     // Perturb z[j] positively
-                    z[j] += eps;
+                    T origVal = z[j];
+                    z[j] = NumOps.Add(z[j], NumOps.FromDouble(eps));
                     var xGenPlus = Generate(z);
                     var (_, featGenPlus) = Discriminate(xGenPlus);
-                    double lossPlus = 0;
+
+                    T lossPlus = NumOps.Zero;
                     for (int k = 0; k < _inputDim; k++)
                     {
-                        lossPlus += Math.Pow(x[k] - xGenPlus[k], 2);
+                        T diff = NumOps.Subtract(x[k], xGenPlus[k]);
+                        lossPlus = NumOps.Add(lossPlus, NumOps.Multiply(diff, diff));
                     }
                     for (int k = 0; k < _hiddenDim; k++)
                     {
-                        lossPlus += 0.1 * Math.Pow(featReal[k] - featGenPlus[k], 2);
+                        T diff = NumOps.Subtract(featReal[k], featGenPlus[k]);
+                        lossPlus = NumOps.Add(lossPlus, NumOps.Multiply(NumOps.FromDouble(0.1), NumOps.Multiply(diff, diff)));
                     }
 
                     // Perturb z[j] negatively
-                    z[j] -= 2 * eps;
+                    z[j] = NumOps.Subtract(origVal, NumOps.FromDouble(eps));
                     var xGenMinus = Generate(z);
                     var (_, featGenMinus) = Discriminate(xGenMinus);
-                    double lossMinus = 0;
+
+                    T lossMinus = NumOps.Zero;
                     for (int k = 0; k < _inputDim; k++)
                     {
-                        lossMinus += Math.Pow(x[k] - xGenMinus[k], 2);
+                        T diff = NumOps.Subtract(x[k], xGenMinus[k]);
+                        lossMinus = NumOps.Add(lossMinus, NumOps.Multiply(diff, diff));
                     }
                     for (int k = 0; k < _hiddenDim; k++)
                     {
-                        lossMinus += 0.1 * Math.Pow(featReal[k] - featGenMinus[k], 2);
+                        T diff = NumOps.Subtract(featReal[k], featGenMinus[k]);
+                        lossMinus = NumOps.Add(lossMinus, NumOps.Multiply(NumOps.FromDouble(0.1), NumOps.Multiply(diff, diff)));
                     }
 
                     // Restore z[j] and compute gradient
-                    z[j] += eps;
-                    dz[j] = (lossPlus - lossMinus) / (2 * eps);
+                    z[j] = origVal;
+                    double gradVal = (NumOps.ToDouble(lossPlus) - NumOps.ToDouble(lossMinus)) / (2 * eps);
+                    dz[j] = NumOps.FromDouble(gradVal);
                 }
 
                 // Update z using gradient descent with regularization
                 for (int j = 0; j < _latentDim; j++)
                 {
-                    z[j] -= zLr * (dz[j] + 0.001 * z[j]); // Gradient + L2 regularization
+                    double gradWithReg = NumOps.ToDouble(dz[j]) + 0.001 * NumOps.ToDouble(z[j]);
+                    z[j] = NumOps.Subtract(z[j], NumOps.FromDouble(zLr * gradWithReg));
                 }
             }
 
-            scores[i] = NumOps.FromDouble(bestLoss);
+            scores[i] = bestLoss;
         }
 
         return scores;

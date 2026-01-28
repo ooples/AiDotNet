@@ -48,24 +48,24 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
 
     // LSTM weights (simplified single layer)
     // Gates: forget (f), input (i), cell (c), output (o)
-    private double[,]? _Wf; // Forget gate
-    private double[,]? _Wi; // Input gate
-    private double[,]? _Wc; // Cell gate
-    private double[,]? _Wo; // Output gate
-    private double[]? _bf;
-    private double[]? _bi;
-    private double[]? _bc;
-    private double[]? _bo;
+    private Matrix<T>? _Wf; // Forget gate
+    private Matrix<T>? _Wi; // Input gate
+    private Matrix<T>? _Wc; // Cell gate
+    private Matrix<T>? _Wo; // Output gate
+    private Vector<T>? _bf;
+    private Vector<T>? _bi;
+    private Vector<T>? _bc;
+    private Vector<T>? _bo;
 
     // Output layer
-    private double[,]? _Wy;
-    private double[]? _by;
+    private Matrix<T>? _Wy;
+    private Vector<T>? _by;
 
     private int _inputDim;
 
     // Normalization parameters
-    private double[]? _dataMeans;
-    private double[]? _dataStds;
+    private Vector<T>? _dataMeans;
+    private Vector<T>? _dataStds;
 
     /// <summary>
     /// Gets the hidden dimensions.
@@ -142,19 +142,8 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        // Convert to double array
-        var data = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            data[i] = new double[_inputDim];
-            for (int j = 0; j < _inputDim; j++)
-            {
-                data[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
-
         // Normalize data
-        var (normalizedData, means, stds) = NormalizeData(data);
+        var (normalizedData, means, stds) = NormalizeData(X);
         _dataMeans = means;
         _dataStds = stds;
 
@@ -174,37 +163,41 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private (double[][] normalized, double[] means, double[] stds) NormalizeData(double[][] data)
+    private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Length;
-        int d = data[0].Length;
+        int n = data.Rows;
+        int d = data.Columns;
 
-        var means = new double[d];
-        var stds = new double[d];
+        var means = new Vector<T>(d);
+        var stds = new Vector<T>(d);
 
         for (int j = 0; j < d; j++)
         {
+            T sum = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                means[j] += data[i][j];
+                sum = NumOps.Add(sum, data[i, j]);
             }
-            means[j] /= n;
+            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
 
+            T variance = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                stds[j] += Math.Pow(data[i][j] - means[j], 2);
+                T diff = NumOps.Subtract(data[i, j], means[j]);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
+            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
+            if (stdVal < 1e-10) stdVal = 1;
+            stds[j] = NumOps.FromDouble(stdVal);
         }
 
-        var normalized = new double[n][];
+        var normalized = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
         {
-            normalized[i] = new double[d];
             for (int j = 0; j < d; j++)
             {
-                normalized[i][j] = (data[i][j] - means[j]) / stds[j];
+                T diff = NumOps.Subtract(data[i, j], means[j]);
+                normalized[i, j] = NumOps.Divide(diff, stds[j]);
             }
         }
 
@@ -222,57 +215,84 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         _Wc = InitializeMatrix(inputSize, _hiddenDim, scale);
         _Wo = InitializeMatrix(inputSize, _hiddenDim, scale);
 
-        _bf = new double[_hiddenDim];
-        _bi = new double[_hiddenDim];
-        _bc = new double[_hiddenDim];
-        _bo = new double[_hiddenDim];
+        _bf = new Vector<T>(_hiddenDim);
+        _bi = new Vector<T>(_hiddenDim);
+        _bc = new Vector<T>(_hiddenDim);
+        _bo = new Vector<T>(_hiddenDim);
 
         // Initialize forget gate bias to 1 (helps with gradient flow)
         for (int i = 0; i < _hiddenDim; i++)
         {
-            _bf[i] = 1.0;
+            _bf[i] = NumOps.One;
+            _bi[i] = NumOps.Zero;
+            _bc[i] = NumOps.Zero;
+            _bo[i] = NumOps.Zero;
         }
 
         _Wy = InitializeMatrix(_hiddenDim, _inputDim, scaleOut);
-        _by = new double[_inputDim];
+        _by = new Vector<T>(_inputDim);
+        for (int i = 0; i < _inputDim; i++)
+        {
+            _by[i] = NumOps.Zero;
+        }
     }
 
-    private double[,] InitializeMatrix(int rows, int cols, double scale)
+    private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
     {
-        var matrix = new double[rows, cols];
+        var matrix = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
                 double u1 = 1.0 - _random.NextDouble();
                 double u2 = 1.0 - _random.NextDouble();
-                matrix[i, j] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
+                double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
+                matrix[i, j] = NumOps.FromDouble(val);
             }
         }
         return matrix;
     }
 
-    private (double[][][] sequences, double[][] targets) CreateSequences(double[][] data)
+    private (Vector<T>[][] sequences, Vector<T>[] targets) CreateSequences(Matrix<T> data)
     {
-        int n = data.Length - _seqLength;
-        var sequences = new double[n][][];
-        var targets = new double[n][];
+        int n = data.Rows - _seqLength;
+        var sequences = new Vector<T>[n][];
+        var targets = new Vector<T>[n];
 
         for (int i = 0; i < n; i++)
         {
-            sequences[i] = new double[_seqLength][];
+            sequences[i] = new Vector<T>[_seqLength];
             for (int t = 0; t < _seqLength; t++)
             {
-                sequences[i][t] = data[i + t];
+                sequences[i][t] = data.GetRow(i + t);
             }
-            targets[i] = data[i + _seqLength];
+            targets[i] = data.GetRow(i + _seqLength);
         }
 
         return (sequences, targets);
     }
 
-    private void Train(double[][][] sequences, double[][] targets)
+    private void Train(Vector<T>[][] sequences, Vector<T>[] targets)
     {
+        // Capture nullable fields for proper null checking
+        var Wf = _Wf;
+        var Wi = _Wi;
+        var Wc = _Wc;
+        var Wo = _Wo;
+        var bf = _bf;
+        var bi = _bi;
+        var bc = _bc;
+        var bo = _bo;
+        var Wy = _Wy;
+        var by = _by;
+
+        if (Wf == null || Wi == null || Wc == null || Wo == null ||
+            bf == null || bi == null || bc == null || bo == null ||
+            Wy == null || by == null)
+        {
+            throw new InvalidOperationException("Weights not initialized.");
+        }
+
         int n = sequences.Length;
         int batchSize = Math.Min(32, n);
         int inputSize = _inputDim + _hiddenDim;
@@ -285,7 +305,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
             {
                 int actualBatchSize = Math.Min(batchSize, n - batch);
 
-                // Initialize gradient accumulators
+                // Initialize gradient accumulators (using double for intermediate computation during backprop)
                 var dWf = new double[inputSize, _hiddenDim];
                 var dWi = new double[inputSize, _hiddenDim];
                 var dWc = new double[inputSize, _hiddenDim];
@@ -308,137 +328,152 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
                         ForwardWithCache(seq);
 
                     // Compute output layer gradient
-                    var dOutput = new double[_inputDim];
+                    var dOutput = new Vector<T>(_inputDim);
                     for (int j = 0; j < _inputDim; j++)
                     {
-                        dOutput[j] = 2 * (prediction[j] - target[j]);
+                        T diff = NumOps.Subtract(prediction[j], target[j]);
+                        dOutput[j] = NumOps.Multiply(NumOps.FromDouble(2.0), diff);
                     }
 
                     // Backprop through output layer
                     var hFinal = hStates[seq.Length];
                     for (int j = 0; j < _inputDim; j++)
                     {
-                        dby[j] += dOutput[j];
+                        double dOutJ = NumOps.ToDouble(dOutput[j]);
+                        dby[j] += dOutJ;
                         for (int i = 0; i < _hiddenDim; i++)
                         {
-                            dWy[i, j] += hFinal[i] * dOutput[j];
+                            dWy[i, j] += NumOps.ToDouble(hFinal[i]) * dOutJ;
                         }
                     }
 
                     // Gradient w.r.t. final hidden state
-                    var dh = new double[_hiddenDim];
+                    var dh = new Vector<T>(_hiddenDim);
                     for (int i = 0; i < _hiddenDim; i++)
                     {
+                        T sum = NumOps.Zero;
                         for (int j = 0; j < _inputDim; j++)
                         {
-                            dh[i] += _Wy![i, j] * dOutput[j];
+                            sum = NumOps.Add(sum, NumOps.Multiply(Wy[i, j], dOutput[j]));
                         }
+                        dh[i] = sum;
                     }
 
                     // BPTT through time steps
-                    var dc = new double[_hiddenDim];
+                    var dc = new Vector<T>(_hiddenDim);
+                    for (int i = 0; i < _hiddenDim; i++)
+                    {
+                        dc[i] = NumOps.Zero;
+                    }
+
                     for (int t = seq.Length - 1; t >= 0; t--)
                     {
                         var f = fGates[t];
                         var ig = iGates[t];
                         var cCand = cCandidates[t];
                         var o = oGates[t];
-                        var cPrev = t > 0 ? cStates[t] : new double[_hiddenDim];
+                        var cPrev = t > 0 ? cStates[t] : CreateZeroVector(_hiddenDim);
                         var cCurr = cStates[t + 1];
                         var concat = concats[t];
 
                         // Gradient of h = o * tanh(c)
-                        // dL/do = dL/dh * tanh(c)
-                        // dL/dc += dL/dh * o * (1 - tanh(c)^2)
-                        var tanhC = new double[_hiddenDim];
+                        var tanhC = new Vector<T>(_hiddenDim);
                         for (int i = 0; i < _hiddenDim; i++)
                         {
-                            tanhC[i] = Math.Tanh(cCurr[i]);
+                            double cVal = NumOps.ToDouble(cCurr[i]);
+                            tanhC[i] = NumOps.FromDouble(Math.Tanh(cVal));
                         }
 
-                        var do_gate = new double[_hiddenDim];
+                        var do_gate = new Vector<T>(_hiddenDim);
                         for (int i = 0; i < _hiddenDim; i++)
                         {
-                            do_gate[i] = dh[i] * tanhC[i];
-                            dc[i] += dh[i] * o[i] * (1 - tanhC[i] * tanhC[i]);
+                            do_gate[i] = NumOps.Multiply(dh[i], tanhC[i]);
+                            double tanhCVal = NumOps.ToDouble(tanhC[i]);
+                            double tanhDerivative = 1.0 - tanhCVal * tanhCVal;
+                            T dcFromH = NumOps.Multiply(dh[i], NumOps.Multiply(o[i], NumOps.FromDouble(tanhDerivative)));
+                            dc[i] = NumOps.Add(dc[i], dcFromH);
                         }
 
-                        // Gradient of c = f * c_prev + i * c_candidate
-                        // dL/df = dL/dc * c_prev
-                        // dL/di = dL/dc * c_candidate
-                        // dL/dc_candidate = dL/dc * i
-                        // dL/dc_prev = dL/dc * f (carried to next iteration)
-                        var df = new double[_hiddenDim];
-                        var di = new double[_hiddenDim];
-                        var dcCand = new double[_hiddenDim];
+                        var df = new Vector<T>(_hiddenDim);
+                        var di = new Vector<T>(_hiddenDim);
+                        var dcCand = new Vector<T>(_hiddenDim);
 
                         for (int i = 0; i < _hiddenDim; i++)
                         {
-                            df[i] = dc[i] * cPrev[i];
-                            di[i] = dc[i] * cCand[i];
-                            dcCand[i] = dc[i] * ig[i];
+                            df[i] = NumOps.Multiply(dc[i], cPrev[i]);
+                            di[i] = NumOps.Multiply(dc[i], cCand[i]);
+                            dcCand[i] = NumOps.Multiply(dc[i], ig[i]);
                         }
 
-                        // Apply gate derivatives (sigmoid: s' = s*(1-s), tanh: t' = 1-t^2)
-                        var dfPre = new double[_hiddenDim];
-                        var diPre = new double[_hiddenDim];
-                        var doPre = new double[_hiddenDim];
-                        var dcCandPre = new double[_hiddenDim];
+                        // Apply gate derivatives
+                        var dfPre = new Vector<T>(_hiddenDim);
+                        var diPre = new Vector<T>(_hiddenDim);
+                        var doPre = new Vector<T>(_hiddenDim);
+                        var dcCandPre = new Vector<T>(_hiddenDim);
 
                         for (int i = 0; i < _hiddenDim; i++)
                         {
-                            dfPre[i] = df[i] * f[i] * (1 - f[i]);
-                            diPre[i] = di[i] * ig[i] * (1 - ig[i]);
-                            doPre[i] = do_gate[i] * o[i] * (1 - o[i]);
-                            dcCandPre[i] = dcCand[i] * (1 - cCand[i] * cCand[i]);
+                            // Sigmoid derivative: s * (1 - s)
+                            double fVal = NumOps.ToDouble(f[i]);
+                            double igVal = NumOps.ToDouble(ig[i]);
+                            double oVal = NumOps.ToDouble(o[i]);
+                            double cCandVal = NumOps.ToDouble(cCand[i]);
+
+                            dfPre[i] = NumOps.Multiply(df[i], NumOps.FromDouble(fVal * (1.0 - fVal)));
+                            diPre[i] = NumOps.Multiply(di[i], NumOps.FromDouble(igVal * (1.0 - igVal)));
+                            doPre[i] = NumOps.Multiply(do_gate[i], NumOps.FromDouble(oVal * (1.0 - oVal)));
+                            // Tanh derivative: 1 - tanh^2
+                            dcCandPre[i] = NumOps.Multiply(dcCand[i], NumOps.FromDouble(1.0 - cCandVal * cCandVal));
                         }
 
                         // Accumulate gradients for gate weights
                         for (int i = 0; i < inputSize; i++)
                         {
+                            double concatI = NumOps.ToDouble(concat[i]);
                             for (int j = 0; j < _hiddenDim; j++)
                             {
-                                dWf[i, j] += concat[i] * dfPre[j];
-                                dWi[i, j] += concat[i] * diPre[j];
-                                dWc[i, j] += concat[i] * dcCandPre[j];
-                                dWo[i, j] += concat[i] * doPre[j];
+                                dWf[i, j] += concatI * NumOps.ToDouble(dfPre[j]);
+                                dWi[i, j] += concatI * NumOps.ToDouble(diPre[j]);
+                                dWc[i, j] += concatI * NumOps.ToDouble(dcCandPre[j]);
+                                dWo[i, j] += concatI * NumOps.ToDouble(doPre[j]);
                             }
                         }
 
                         for (int j = 0; j < _hiddenDim; j++)
                         {
-                            dbf[j] += dfPre[j];
-                            dbi[j] += diPre[j];
-                            dbc[j] += dcCandPre[j];
-                            dbo[j] += doPre[j];
+                            dbf[j] += NumOps.ToDouble(dfPre[j]);
+                            dbi[j] += NumOps.ToDouble(diPre[j]);
+                            dbc[j] += NumOps.ToDouble(dcCandPre[j]);
+                            dbo[j] += NumOps.ToDouble(doPre[j]);
                         }
 
-                        // Gradient w.r.t. concat = [x, h_prev]
-                        // We need dL/dh_prev for the next iteration
-                        var dConcat = new double[inputSize];
+                        // Gradient w.r.t. concat
+                        var dConcat = new Vector<T>(inputSize);
                         for (int i = 0; i < inputSize; i++)
                         {
+                            T sum = NumOps.Zero;
                             for (int j = 0; j < _hiddenDim; j++)
                             {
-                                dConcat[i] += _Wf![i, j] * dfPre[j];
-                                dConcat[i] += _Wi![i, j] * diPre[j];
-                                dConcat[i] += _Wc![i, j] * dcCandPre[j];
-                                dConcat[i] += _Wo![i, j] * doPre[j];
+                                sum = NumOps.Add(sum, NumOps.Multiply(Wf[i, j], dfPre[j]));
+                                sum = NumOps.Add(sum, NumOps.Multiply(Wi[i, j], diPre[j]));
+                                sum = NumOps.Add(sum, NumOps.Multiply(Wc[i, j], dcCandPre[j]));
+                                sum = NumOps.Add(sum, NumOps.Multiply(Wo[i, j], doPre[j]));
                             }
+                            dConcat[i] = sum;
                         }
 
-                        // Extract dh_prev from dConcat (last _hiddenDim elements)
-                        var dhPrev = new double[_hiddenDim];
+                        // Extract dh_prev from dConcat
+                        var dhPrev = new Vector<T>(_hiddenDim);
                         for (int i = 0; i < _hiddenDim; i++)
                         {
                             dhPrev[i] = dConcat[_inputDim + i];
                         }
 
-                        // Update dc for next iteration (dc_prev = dc * f)
-                        var dcPrev = new double[_hiddenDim];
+                        // Update dc for next iteration
+                        var dcPrev = new Vector<T>(_hiddenDim);
                         for (int i = 0; i < _hiddenDim; i++)
                         {
-                            dcPrev[i] = dc[i] * f[i];
+                            dcPrev[i] = NumOps.Multiply(dc[i], f[i]);
                         }
 
                         dh = dhPrev;
@@ -446,64 +481,99 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
                     }
                 }
 
-                // Apply gradients
+                // Apply gradients using NumOps
                 double lr = _learningRate / actualBatchSize;
-                double clipValue = 5.0; // Gradient clipping
+                double clipValue = 5.0;
 
                 for (int i = 0; i < inputSize; i++)
                 {
                     for (int j = 0; j < _hiddenDim; j++)
                     {
-                        _Wf![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dWf[i, j]));
-                        _Wi![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dWi[i, j]));
-                        _Wc![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dWc[i, j]));
-                        _Wo![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dWo[i, j]));
+                        double clippedGrad;
+                        clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, dWf[i, j]));
+                        Wf[i, j] = NumOps.Subtract(Wf[i, j], NumOps.FromDouble(lr * clippedGrad));
+                        clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, dWi[i, j]));
+                        Wi[i, j] = NumOps.Subtract(Wi[i, j], NumOps.FromDouble(lr * clippedGrad));
+                        clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, dWc[i, j]));
+                        Wc[i, j] = NumOps.Subtract(Wc[i, j], NumOps.FromDouble(lr * clippedGrad));
+                        clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, dWo[i, j]));
+                        Wo[i, j] = NumOps.Subtract(Wo[i, j], NumOps.FromDouble(lr * clippedGrad));
                     }
                 }
 
                 for (int j = 0; j < _hiddenDim; j++)
                 {
-                    _bf![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dbf[j]));
-                    _bi![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dbi[j]));
-                    _bc![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dbc[j]));
-                    _bo![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dbo[j]));
+                    bf[j] = NumOps.Subtract(bf[j], NumOps.FromDouble(lr * Math.Max(-clipValue, Math.Min(clipValue, dbf[j]))));
+                    bi[j] = NumOps.Subtract(bi[j], NumOps.FromDouble(lr * Math.Max(-clipValue, Math.Min(clipValue, dbi[j]))));
+                    bc[j] = NumOps.Subtract(bc[j], NumOps.FromDouble(lr * Math.Max(-clipValue, Math.Min(clipValue, dbc[j]))));
+                    bo[j] = NumOps.Subtract(bo[j], NumOps.FromDouble(lr * Math.Max(-clipValue, Math.Min(clipValue, dbo[j]))));
                 }
 
                 for (int i = 0; i < _hiddenDim; i++)
                 {
                     for (int j = 0; j < _inputDim; j++)
                     {
-                        _Wy![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dWy[i, j]));
+                        double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, dWy[i, j]));
+                        Wy[i, j] = NumOps.Subtract(Wy[i, j], NumOps.FromDouble(lr * clippedGrad));
                     }
                 }
 
                 for (int j = 0; j < _inputDim; j++)
                 {
-                    _by![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dby[j]));
+                    by[j] = NumOps.Subtract(by[j], NumOps.FromDouble(lr * Math.Max(-clipValue, Math.Min(clipValue, dby[j]))));
                 }
             }
         }
     }
 
-    private (double[] output, double[][] hStates, double[][] cStates,
-             double[][] fGates, double[][] iGates, double[][] cCandidates,
-             double[][] oGates, double[][] concats) ForwardWithCache(double[][] sequence)
+    private Vector<T> CreateZeroVector(int size)
     {
+        var v = new Vector<T>(size);
+        for (int i = 0; i < size; i++)
+        {
+            v[i] = NumOps.Zero;
+        }
+        return v;
+    }
+
+    private (Vector<T> output, Vector<T>[] hStates, Vector<T>[] cStates,
+             Vector<T>[] fGates, Vector<T>[] iGates, Vector<T>[] cCandidates,
+             Vector<T>[] oGates, Vector<T>[] concats) ForwardWithCache(Vector<T>[] sequence)
+    {
+        // Capture nullable fields for proper null checking
+        var Wf = _Wf;
+        var Wi = _Wi;
+        var Wc = _Wc;
+        var Wo = _Wo;
+        var bf = _bf;
+        var bi = _bi;
+        var bc = _bc;
+        var bo = _bo;
+        var Wy = _Wy;
+        var by = _by;
+
+        if (Wf == null || Wi == null || Wc == null || Wo == null ||
+            bf == null || bi == null || bc == null || bo == null ||
+            Wy == null || by == null)
+        {
+            throw new InvalidOperationException("Weights not initialized.");
+        }
+
         int seqLen = sequence.Length;
         int inputSize = _inputDim + _hiddenDim;
 
         // Initialize states
-        var hStates = new double[seqLen + 1][];
-        var cStates = new double[seqLen + 1][];
-        hStates[0] = new double[_hiddenDim];
-        cStates[0] = new double[_hiddenDim];
+        var hStates = new Vector<T>[seqLen + 1];
+        var cStates = new Vector<T>[seqLen + 1];
+        hStates[0] = CreateZeroVector(_hiddenDim);
+        cStates[0] = CreateZeroVector(_hiddenDim);
 
         // Cache for BPTT
-        var fGates = new double[seqLen][];
-        var iGates = new double[seqLen][];
-        var cCandidates = new double[seqLen][];
-        var oGates = new double[seqLen][];
-        var concats = new double[seqLen][];
+        var fGates = new Vector<T>[seqLen];
+        var iGates = new Vector<T>[seqLen];
+        var cCandidates = new Vector<T>[seqLen];
+        var oGates = new Vector<T>[seqLen];
+        var concats = new Vector<T>[seqLen];
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -512,70 +582,85 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
             var cPrev = cStates[t];
 
             // Concatenate input and previous hidden state
-            var concat = new double[inputSize];
-            Array.Copy(x, 0, concat, 0, _inputDim);
-            Array.Copy(hPrev, 0, concat, _inputDim, _hiddenDim);
+            var concat = new Vector<T>(inputSize);
+            for (int i = 0; i < _inputDim; i++)
+            {
+                concat[i] = x[i];
+            }
+            for (int i = 0; i < _hiddenDim; i++)
+            {
+                concat[_inputDim + i] = hPrev[i];
+            }
             concats[t] = concat;
 
             // Forget gate
-            var f = new double[_hiddenDim];
+            var f = new Vector<T>(_hiddenDim);
             for (int j = 0; j < _hiddenDim; j++)
             {
-                f[j] = _bf![j];
+                T sum = bf[j];
                 for (int i = 0; i < inputSize; i++)
                 {
-                    f[j] += concat[i] * _Wf![i, j];
+                    sum = NumOps.Add(sum, NumOps.Multiply(concat[i], Wf[i, j]));
                 }
-                f[j] = Sigmoid(f[j]);
+                double sigInput = NumOps.ToDouble(sum);
+                f[j] = NumOps.FromDouble(Sigmoid(sigInput));
             }
             fGates[t] = f;
 
             // Input gate
-            var ig = new double[_hiddenDim];
+            var ig = new Vector<T>(_hiddenDim);
             for (int j = 0; j < _hiddenDim; j++)
             {
-                ig[j] = _bi![j];
+                T sum = bi[j];
                 for (int i = 0; i < inputSize; i++)
                 {
-                    ig[j] += concat[i] * _Wi![i, j];
+                    sum = NumOps.Add(sum, NumOps.Multiply(concat[i], Wi[i, j]));
                 }
-                ig[j] = Sigmoid(ig[j]);
+                double sigInput = NumOps.ToDouble(sum);
+                ig[j] = NumOps.FromDouble(Sigmoid(sigInput));
             }
             iGates[t] = ig;
 
             // Cell candidate
-            var cCand = new double[_hiddenDim];
+            var cCand = new Vector<T>(_hiddenDim);
             for (int j = 0; j < _hiddenDim; j++)
             {
-                cCand[j] = _bc![j];
+                T sum = bc[j];
                 for (int i = 0; i < inputSize; i++)
                 {
-                    cCand[j] += concat[i] * _Wc![i, j];
+                    sum = NumOps.Add(sum, NumOps.Multiply(concat[i], Wc[i, j]));
                 }
-                cCand[j] = Math.Tanh(cCand[j]);
+                double tanhInput = NumOps.ToDouble(sum);
+                cCand[j] = NumOps.FromDouble(Math.Tanh(tanhInput));
             }
             cCandidates[t] = cCand;
 
             // Output gate
-            var o = new double[_hiddenDim];
+            var o = new Vector<T>(_hiddenDim);
             for (int j = 0; j < _hiddenDim; j++)
             {
-                o[j] = _bo![j];
+                T sum = bo[j];
                 for (int i = 0; i < inputSize; i++)
                 {
-                    o[j] += concat[i] * _Wo![i, j];
+                    sum = NumOps.Add(sum, NumOps.Multiply(concat[i], Wo[i, j]));
                 }
-                o[j] = Sigmoid(o[j]);
+                double sigInput = NumOps.ToDouble(sum);
+                o[j] = NumOps.FromDouble(Sigmoid(sigInput));
             }
             oGates[t] = o;
 
             // New cell and hidden state
-            var cNew = new double[_hiddenDim];
-            var hNew = new double[_hiddenDim];
+            var cNew = new Vector<T>(_hiddenDim);
+            var hNew = new Vector<T>(_hiddenDim);
             for (int j = 0; j < _hiddenDim; j++)
             {
-                cNew[j] = f[j] * cPrev[j] + ig[j] * cCand[j];
-                hNew[j] = o[j] * Math.Tanh(cNew[j]);
+                // c = f * cPrev + i * cCand
+                cNew[j] = NumOps.Add(
+                    NumOps.Multiply(f[j], cPrev[j]),
+                    NumOps.Multiply(ig[j], cCand[j]));
+                // h = o * tanh(c)
+                double tanhC = Math.Tanh(NumOps.ToDouble(cNew[j]));
+                hNew[j] = NumOps.Multiply(o[j], NumOps.FromDouble(tanhC));
             }
 
             hStates[t + 1] = hNew;
@@ -584,23 +669,33 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
 
         // Output layer
         var hFinal = hStates[seqLen];
-        var output = new double[_inputDim];
+        var output = new Vector<T>(_inputDim);
         for (int j = 0; j < _inputDim; j++)
         {
-            output[j] = _by![j];
+            T sum = by[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                output[j] += hFinal[i] * _Wy![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(hFinal[i], Wy[i, j]));
             }
+            output[j] = sum;
         }
 
         return (output, hStates, cStates, fGates, iGates, cCandidates, oGates, concats);
     }
 
-    private (double[] output, double[] h, double[] c) Forward(double[][] sequence)
+    private (Vector<T> output, Vector<T> h, Vector<T> c) Forward(Vector<T>[] sequence)
     {
-        var h = new double[_hiddenDim];
-        var c = new double[_hiddenDim];
+        // Capture nullable fields for proper null checking
+        var Wy = _Wy;
+        var by = _by;
+
+        if (Wy == null || by == null)
+        {
+            throw new InvalidOperationException("Weights not initialized.");
+        }
+
+        var h = CreateZeroVector(_hiddenDim);
+        var c = CreateZeroVector(_hiddenDim);
 
         foreach (var x in sequence)
         {
@@ -608,81 +703,115 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Output layer
-        var output = new double[_inputDim];
+        var output = new Vector<T>(_inputDim);
         for (int j = 0; j < _inputDim; j++)
         {
-            output[j] = _by![j];
+            T sum = by[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                output[j] += h[i] * _Wy![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h[i], Wy[i, j]));
             }
+            output[j] = sum;
         }
 
         return (output, h, c);
     }
 
-    private (double[] h, double[] c) LSTMCell(double[] x, double[] hPrev, double[] cPrev)
+    private (Vector<T> h, Vector<T> c) LSTMCell(Vector<T> x, Vector<T> hPrev, Vector<T> cPrev)
     {
+        // Capture nullable fields for proper null checking
+        var Wf = _Wf;
+        var Wi = _Wi;
+        var Wc = _Wc;
+        var Wo = _Wo;
+        var bf = _bf;
+        var bi = _bi;
+        var bc = _bc;
+        var bo = _bo;
+
+        if (Wf == null || Wi == null || Wc == null || Wo == null ||
+            bf == null || bi == null || bc == null || bo == null)
+        {
+            throw new InvalidOperationException("Weights not initialized.");
+        }
+
         int inputSize = _inputDim + _hiddenDim;
-        var concat = new double[inputSize];
-        Array.Copy(x, 0, concat, 0, _inputDim);
-        Array.Copy(hPrev, 0, concat, _inputDim, _hiddenDim);
+
+        // Concatenate input and previous hidden state
+        var concat = new Vector<T>(inputSize);
+        for (int i = 0; i < _inputDim; i++)
+        {
+            concat[i] = x[i];
+        }
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            concat[_inputDim + i] = hPrev[i];
+        }
 
         // Forget gate
-        var f = new double[_hiddenDim];
+        var f = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            f[j] = _bf![j];
+            T sum = bf[j];
             for (int i = 0; i < inputSize; i++)
             {
-                f[j] += concat[i] * _Wf![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(concat[i], Wf[i, j]));
             }
-            f[j] = Sigmoid(f[j]);
+            double sigInput = NumOps.ToDouble(sum);
+            f[j] = NumOps.FromDouble(Sigmoid(sigInput));
         }
 
         // Input gate
-        var ig = new double[_hiddenDim];
+        var ig = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            ig[j] = _bi![j];
+            T sum = bi[j];
             for (int i = 0; i < inputSize; i++)
             {
-                ig[j] += concat[i] * _Wi![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(concat[i], Wi[i, j]));
             }
-            ig[j] = Sigmoid(ig[j]);
+            double sigInput = NumOps.ToDouble(sum);
+            ig[j] = NumOps.FromDouble(Sigmoid(sigInput));
         }
 
         // Cell candidate
-        var cCandidate = new double[_hiddenDim];
+        var cCandidate = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            cCandidate[j] = _bc![j];
+            T sum = bc[j];
             for (int i = 0; i < inputSize; i++)
             {
-                cCandidate[j] += concat[i] * _Wc![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(concat[i], Wc[i, j]));
             }
-            cCandidate[j] = Math.Tanh(cCandidate[j]);
+            double tanhInput = NumOps.ToDouble(sum);
+            cCandidate[j] = NumOps.FromDouble(Math.Tanh(tanhInput));
         }
 
         // Output gate
-        var o = new double[_hiddenDim];
+        var o = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            o[j] = _bo![j];
+            T sum = bo[j];
             for (int i = 0; i < inputSize; i++)
             {
-                o[j] += concat[i] * _Wo![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(concat[i], Wo[i, j]));
             }
-            o[j] = Sigmoid(o[j]);
+            double sigInput = NumOps.ToDouble(sum);
+            o[j] = NumOps.FromDouble(Sigmoid(sigInput));
         }
 
         // New cell state and hidden state
-        var cNew = new double[_hiddenDim];
-        var hNew = new double[_hiddenDim];
+        var cNew = new Vector<T>(_hiddenDim);
+        var hNew = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            cNew[j] = f[j] * cPrev[j] + ig[j] * cCandidate[j];
-            hNew[j] = o[j] * Math.Tanh(cNew[j]);
+            // c = f * cPrev + i * cCand
+            cNew[j] = NumOps.Add(
+                NumOps.Multiply(f[j], cPrev[j]),
+                NumOps.Multiply(ig[j], cCandidate[j]));
+            // h = o * tanh(c)
+            double tanhC = Math.Tanh(NumOps.ToDouble(cNew[j]));
+            hNew[j] = NumOps.Multiply(o[j], NumOps.FromDouble(tanhC));
         }
 
         return (hNew, cNew);
@@ -721,50 +850,52 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         var scores = new Vector<T>(n);
 
-        // Convert to normalized double array
-        var data = new double[n][];
+        // Normalize data into Matrix<T>
+        var normalizedData = new Matrix<T>(n, _inputDim);
         for (int i = 0; i < n; i++)
         {
-            data[i] = new double[_inputDim];
             for (int j = 0; j < _inputDim; j++)
             {
-                data[i][j] = (NumOps.ToDouble(X[i, j]) - dataMeans[j]) / dataStds[j];
+                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
+                normalizedData[i, j] = NumOps.Divide(diff, dataStds[j]);
             }
         }
 
         // Score each point based on prediction error
         for (int i = 0; i < n; i++)
         {
-            double score;
+            T score;
 
             if (i < _seqLength)
             {
                 // Not enough history - use simple distance from mean
-                score = 0;
+                score = NumOps.Zero;
                 for (int j = 0; j < _inputDim; j++)
                 {
-                    score += data[i][j] * data[i][j];
+                    T val = normalizedData[i, j];
+                    score = NumOps.Add(score, NumOps.Multiply(val, val));
                 }
             }
             else
             {
                 // Build sequence from previous points
-                var seq = new double[_seqLength][];
+                var seq = new Vector<T>[_seqLength];
                 for (int t = 0; t < _seqLength; t++)
                 {
-                    seq[t] = data[i - _seqLength + t];
+                    seq[t] = normalizedData.GetRow(i - _seqLength + t);
                 }
 
                 // Predict and compute error
                 var (prediction, _, _) = Forward(seq);
-                score = 0;
+                score = NumOps.Zero;
                 for (int j = 0; j < _inputDim; j++)
                 {
-                    score += Math.Pow(data[i][j] - prediction[j], 2);
+                    T diff = NumOps.Subtract(normalizedData[i, j], prediction[j]);
+                    score = NumOps.Add(score, NumOps.Multiply(diff, diff));
                 }
             }
 
-            scores[i] = NumOps.FromDouble(score);
+            scores[i] = score;
         }
 
         return scores;

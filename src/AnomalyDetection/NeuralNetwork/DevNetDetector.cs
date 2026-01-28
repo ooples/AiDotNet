@@ -47,21 +47,21 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
     private readonly double _marginScale;
 
     // Network weights
-    private double[,]? _w1;
-    private double[]? _b1;
-    private double[,]? _w2;
-    private double[]? _b2;
-    private double[,]? _w3;
-    private double[]? _b3;
+    private Matrix<T>? _w1;
+    private Vector<T>? _b1;
+    private Matrix<T>? _w2;
+    private Vector<T>? _b2;
+    private Matrix<T>? _w3;
+    private Vector<T>? _b3;
 
-    // Reference statistics
-    private double _refMean;
-    private double _refStd;
+    // Reference statistics (initialized in Fit, default to zero before that)
+    private T _refMean;
+    private T _refStd;
     private int _inputDim;
 
     // Normalization parameters
-    private double[]? _dataMeans;
-    private double[]? _dataStds;
+    private Vector<T>? _dataMeans;
+    private Vector<T>? _dataStds;
 
     /// <summary>
     /// Gets the hidden dimensions.
@@ -110,6 +110,10 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         _epochs = epochs;
         _learningRate = learningRate;
         _marginScale = marginScale;
+
+        // Initialize reference statistics to default values (will be set in Fit)
+        _refMean = NumOps.Zero;
+        _refStd = NumOps.One;
     }
 
     /// <inheritdoc/>
@@ -120,25 +124,14 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         _inputDim = X.Columns;
 
-        // Convert to double array
-        var data = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            data[i] = new double[_inputDim];
-            for (int j = 0; j < _inputDim; j++)
-            {
-                data[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
-
         // Normalize data
-        var (normalizedData, means, stds) = NormalizeData(data);
+        var (normalizedData, means, stds) = NormalizeData(X);
         _dataMeans = means;
         _dataStds = stds;
 
         // Initialize reference statistics (Gaussian prior)
-        _refMean = 0.0;
-        _refStd = 1.0;
+        _refMean = NumOps.Zero;
+        _refStd = NumOps.One;
 
         // Initialize weights
         InitializeWeights();
@@ -153,37 +146,41 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private (double[][] normalized, double[] means, double[] stds) NormalizeData(double[][] data)
+    private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Length;
-        int d = data[0].Length;
+        int n = data.Rows;
+        int d = data.Columns;
 
-        var means = new double[d];
-        var stds = new double[d];
+        var means = new Vector<T>(d);
+        var stds = new Vector<T>(d);
 
         for (int j = 0; j < d; j++)
         {
+            T sum = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                means[j] += data[i][j];
+                sum = NumOps.Add(sum, data[i, j]);
             }
-            means[j] /= n;
+            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
 
+            T variance = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                stds[j] += Math.Pow(data[i][j] - means[j], 2);
+                T diff = NumOps.Subtract(data[i, j], means[j]);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
+            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
+            if (stdVal < 1e-10) stdVal = 1;
+            stds[j] = NumOps.FromDouble(stdVal);
         }
 
-        var normalized = new double[n][];
+        var normalized = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
         {
-            normalized[i] = new double[d];
             for (int j = 0; j < d; j++)
             {
-                normalized[i][j] = (data[i][j] - means[j]) / stds[j];
+                T diff = NumOps.Subtract(data[i, j], means[j]);
+                normalized[i, j] = NumOps.Divide(diff, stds[j]);
             }
         }
 
@@ -197,31 +194,53 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         double scale3 = Math.Sqrt(2.0 / (_hiddenDim + 1));
 
         _w1 = InitializeMatrix(_inputDim, _hiddenDim, scale1);
-        _b1 = new double[_hiddenDim];
+        _b1 = new Vector<T>(_hiddenDim);
         _w2 = InitializeMatrix(_hiddenDim, _hiddenDim, scale2);
-        _b2 = new double[_hiddenDim];
+        _b2 = new Vector<T>(_hiddenDim);
         _w3 = InitializeMatrix(_hiddenDim, 1, scale3);
-        _b3 = new double[1];
+        _b3 = new Vector<T>(1);
+
+        // Initialize biases to zero
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            _b1[i] = NumOps.Zero;
+            _b2[i] = NumOps.Zero;
+        }
+        _b3[0] = NumOps.Zero;
     }
 
-    private double[,] InitializeMatrix(int rows, int cols, double scale)
+    private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
     {
-        var matrix = new double[rows, cols];
+        var matrix = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
                 double u1 = 1.0 - _random.NextDouble();
                 double u2 = 1.0 - _random.NextDouble();
-                matrix[i, j] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
+                double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
+                matrix[i, j] = NumOps.FromDouble(val);
             }
         }
         return matrix;
     }
 
-    private void Train(double[][] data)
+    private void Train(Matrix<T> data)
     {
-        int n = data.Length;
+        // Capture nullable fields for proper null checking
+        var w1 = _w1;
+        var b1 = _b1;
+        var w2 = _w2;
+        var b2 = _b2;
+        var w3 = _w3;
+        var b3 = _b3;
+
+        if (w1 == null || b1 == null || w2 == null || b2 == null || w3 == null || b3 == null)
+        {
+            throw new InvalidOperationException("Weights not initialized.");
+        }
+
+        int n = data.Rows;
         int batchSize = Math.Min(64, n);
 
         for (int epoch = 0; epoch < _epochs; epoch++)
@@ -233,17 +252,22 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
                 int actualBatchSize = Math.Min(batchSize, n - batch);
 
                 // Accumulate gradients
-                var dW1 = new double[_inputDim, _hiddenDim];
-                var dB1 = new double[_hiddenDim];
-                var dW2 = new double[_hiddenDim, _hiddenDim];
-                var dB2 = new double[_hiddenDim];
-                var dW3 = new double[_hiddenDim, 1];
-                var dB3 = new double[1];
+                var dW1 = new Matrix<T>(_inputDim, _hiddenDim);
+                var dB1 = new Vector<T>(_hiddenDim);
+                var dW2 = new Matrix<T>(_hiddenDim, _hiddenDim);
+                var dB2 = new Vector<T>(_hiddenDim);
+                var dW3 = new Matrix<T>(_hiddenDim, 1);
+                var dB3 = new Vector<T>(1);
+
+                // Initialize gradients to zero
+                InitializeToZero(dW1, dB1);
+                InitializeToZero(dW2, dB2);
+                InitializeToZero(dW3, dB3);
 
                 for (int b = 0; b < actualBatchSize; b++)
                 {
                     int idx = indices[batch + b];
-                    var x = data[idx];
+                    var x = data.GetRow(idx);
 
                     // Forward pass
                     var (h1, h2, score) = ForwardWithCache(x);
@@ -251,61 +275,63 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
                     // Sample reference score from Gaussian
                     double u1 = 1.0 - _random.NextDouble();
                     double u2 = 1.0 - _random.NextDouble();
-                    double refScore = _refMean + _refStd * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                    double refMean = NumOps.ToDouble(_refMean);
+                    double refStd = NumOps.ToDouble(_refStd);
+                    T refScore = NumOps.FromDouble(refMean + refStd * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
 
                     // Deviation loss: push normal data close to reference
-                    // For unsupervised, assume all training data is normal
-                    // Normal samples should have low deviation from reference
-                    // Loss = deviation^2 pushes scores toward reference
-                    double deviation = score - refScore;
-
-                    // L2 loss: ||score - refScore||^2
-                    // This encourages normal data to have scores close to reference
-                    double loss = deviation * deviation;
+                    T deviation = NumOps.Subtract(score, refScore);
 
                     // Gradient of L2 loss: d/dscore (score - refScore)^2 = 2*(score - refScore)
-                    double dScore = 2 * deviation;
+                    T dScore = NumOps.Multiply(NumOps.FromDouble(2), deviation);
 
                     // Gradient clipping
-                    dScore = Math.Max(-10.0, Math.Min(10.0, dScore));
-
-                    // Unused: loss value (for debugging/logging if needed)
-                    _ = loss;
+                    double dScoreVal = NumOps.ToDouble(dScore);
+                    dScoreVal = Math.Max(-10.0, Math.Min(10.0, dScoreVal));
+                    dScore = NumOps.FromDouble(dScoreVal);
 
                     // Backprop through output layer
-                    var dH2 = new double[_hiddenDim];
+                    var dH2 = new Vector<T>(_hiddenDim);
                     for (int i = 0; i < _hiddenDim; i++)
                     {
-                        dW3[i, 0] += h2[i] * dScore;
-                        dH2[i] += _w3![i, 0] * dScore;
+                        dH2[i] = NumOps.Zero;
                     }
-                    dB3[0] += dScore;
+                    for (int i = 0; i < _hiddenDim; i++)
+                    {
+                        dW3[i, 0] = NumOps.Add(dW3[i, 0], NumOps.Multiply(h2[i], dScore));
+                        dH2[i] = NumOps.Add(dH2[i], NumOps.Multiply(w3[i, 0], dScore));
+                    }
+                    dB3[0] = NumOps.Add(dB3[0], dScore);
 
                     // ReLU derivative for h2
                     for (int i = 0; i < _hiddenDim; i++)
                     {
-                        if (h2[i] <= 0) dH2[i] = 0;
+                        if (NumOps.ToDouble(h2[i]) <= 0) dH2[i] = NumOps.Zero;
                     }
 
                     // Backprop through layer 2
-                    var dH1 = new double[_hiddenDim];
+                    var dH1 = new Vector<T>(_hiddenDim);
+                    for (int i = 0; i < _hiddenDim; i++)
+                    {
+                        dH1[i] = NumOps.Zero;
+                    }
                     for (int i = 0; i < _hiddenDim; i++)
                     {
                         for (int j = 0; j < _hiddenDim; j++)
                         {
-                            dW2[i, j] += h1[i] * dH2[j];
-                            dH1[i] += _w2![i, j] * dH2[j];
+                            dW2[i, j] = NumOps.Add(dW2[i, j], NumOps.Multiply(h1[i], dH2[j]));
+                            dH1[i] = NumOps.Add(dH1[i], NumOps.Multiply(w2[i, j], dH2[j]));
                         }
                     }
                     for (int j = 0; j < _hiddenDim; j++)
                     {
-                        dB2[j] += dH2[j];
+                        dB2[j] = NumOps.Add(dB2[j], dH2[j]);
                     }
 
                     // ReLU derivative for h1
                     for (int i = 0; i < _hiddenDim; i++)
                     {
-                        if (h1[i] <= 0) dH1[i] = 0;
+                        if (NumOps.ToDouble(h1[i]) <= 0) dH1[i] = NumOps.Zero;
                     }
 
                     // Backprop through layer 1
@@ -313,94 +339,139 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
                     {
                         for (int j = 0; j < _hiddenDim; j++)
                         {
-                            dW1[i, j] += x[i] * dH1[j];
+                            dW1[i, j] = NumOps.Add(dW1[i, j], NumOps.Multiply(x[i], dH1[j]));
                         }
                     }
                     for (int j = 0; j < _hiddenDim; j++)
                     {
-                        dB1[j] += dH1[j];
+                        dB1[j] = NumOps.Add(dB1[j], dH1[j]);
                     }
                 }
 
                 // Update weights
-                double lr = _learningRate / actualBatchSize;
-                UpdateWeights(_w1!, dW1, lr);
-                UpdateWeights(_b1!, dB1, lr);
-                UpdateWeights(_w2!, dW2, lr);
-                UpdateWeights(_b2!, dB2, lr);
-                UpdateWeights(_w3!, dW3, lr);
-                UpdateWeights(_b3!, dB3, lr);
+                T lr = NumOps.FromDouble(_learningRate / actualBatchSize);
+                UpdateWeights(w1, dW1, lr);
+                UpdateWeights(b1, dB1, lr);
+                UpdateWeights(w2, dW2, lr);
+                UpdateWeights(b2, dB2, lr);
+                UpdateWeights(w3, dW3, lr);
+                UpdateWeights(b3, dB3, lr);
             }
         }
     }
 
-    private double Forward(double[] x)
+    private void InitializeToZero(Matrix<T> matrix, Vector<T> vector)
     {
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                matrix[i, j] = NumOps.Zero;
+            }
+        }
+        for (int i = 0; i < vector.Length; i++)
+        {
+            vector[i] = NumOps.Zero;
+        }
+    }
+
+    private T Forward(Vector<T> x)
+    {
+        // Capture nullable fields for proper null checking
+        var w1 = _w1;
+        var b1 = _b1;
+        var w2 = _w2;
+        var b2 = _b2;
+        var w3 = _w3;
+        var b3 = _b3;
+
+        if (w1 == null || b1 == null || w2 == null || b2 == null || w3 == null || b3 == null)
+        {
+            throw new InvalidOperationException("Weights not initialized.");
+        }
+
         // Layer 1
-        var h1 = new double[_hiddenDim];
+        var h1 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h1[j] = _b1![j];
+            T sum = b1[j];
             for (int i = 0; i < _inputDim; i++)
             {
-                h1[j] += x[i] * _w1![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(x[i], w1[i, j]));
             }
-            h1[j] = ReLU(h1[j]);
+            double val = NumOps.ToDouble(sum);
+            h1[j] = NumOps.FromDouble(ReLU(val));
         }
 
         // Layer 2
-        var h2 = new double[_hiddenDim];
+        var h2 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h2[j] = _b2![j];
+            T sum = b2[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                h2[j] += h1[i] * _w2![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h1[i], w2[i, j]));
             }
-            h2[j] = ReLU(h2[j]);
+            double val = NumOps.ToDouble(sum);
+            h2[j] = NumOps.FromDouble(ReLU(val));
         }
 
         // Output layer (linear)
-        double score = _b3![0];
+        T score = b3[0];
         for (int i = 0; i < _hiddenDim; i++)
         {
-            score += h2[i] * _w3![i, 0];
+            score = NumOps.Add(score, NumOps.Multiply(h2[i], w3[i, 0]));
         }
 
         return score;
     }
 
-    private (double[] h1, double[] h2, double score) ForwardWithCache(double[] x)
+    private (Vector<T> h1, Vector<T> h2, T score) ForwardWithCache(Vector<T> x)
     {
+        // Capture nullable fields for proper null checking
+        var w1 = _w1;
+        var b1 = _b1;
+        var w2 = _w2;
+        var b2 = _b2;
+        var w3 = _w3;
+        var b3 = _b3;
+
+        if (w1 == null || b1 == null || w2 == null || b2 == null || w3 == null || b3 == null)
+        {
+            throw new InvalidOperationException("Weights not initialized.");
+        }
+
         // Layer 1
-        var h1 = new double[_hiddenDim];
+        var h1 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h1[j] = _b1![j];
+            T sum = b1[j];
             for (int i = 0; i < _inputDim; i++)
             {
-                h1[j] += x[i] * _w1![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(x[i], w1[i, j]));
             }
-            h1[j] = ReLU(h1[j]);
+            double val = NumOps.ToDouble(sum);
+            h1[j] = NumOps.FromDouble(ReLU(val));
         }
 
         // Layer 2
-        var h2 = new double[_hiddenDim];
+        var h2 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h2[j] = _b2![j];
+            T sum = b2[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                h2[j] += h1[i] * _w2![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h1[i], w2[i, j]));
             }
-            h2[j] = ReLU(h2[j]);
+            double val = NumOps.ToDouble(sum);
+            h2[j] = NumOps.FromDouble(ReLU(val));
         }
 
         // Output layer
-        double score = _b3![0];
+        T score = b3[0];
         for (int i = 0; i < _hiddenDim; i++)
         {
-            score += h2[i] * _w3![i, 0];
+            score = NumOps.Add(score, NumOps.Multiply(h2[i], w3[i, 0]));
         }
 
         return (h1, h2, score);
@@ -408,22 +479,24 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
 
     private static double ReLU(double x) => Math.Max(0, x);
 
-    private static void UpdateWeights(double[,] weights, double[,] gradients, double lr)
+    private void UpdateWeights(Matrix<T> weights, Matrix<T> gradients, T lr)
     {
-        for (int i = 0; i < weights.GetLength(0); i++)
+        for (int i = 0; i < weights.Rows; i++)
         {
-            for (int j = 0; j < weights.GetLength(1); j++)
+            for (int j = 0; j < weights.Columns; j++)
             {
-                weights[i, j] -= lr * gradients[i, j];
+                T update = NumOps.Multiply(lr, gradients[i, j]);
+                weights[i, j] = NumOps.Subtract(weights[i, j], update);
             }
         }
     }
 
-    private static void UpdateWeights(double[] weights, double[] gradients, double lr)
+    private void UpdateWeights(Vector<T> weights, Vector<T> gradients, T lr)
     {
         for (int i = 0; i < weights.Length; i++)
         {
-            weights[i] -= lr * gradients[i];
+            T update = NumOps.Multiply(lr, gradients[i]);
+            weights[i] = NumOps.Subtract(weights[i], update);
         }
     }
 
@@ -450,18 +523,21 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         for (int i = 0; i < X.Rows; i++)
         {
             // Normalize
-            var x = new double[_inputDim];
+            var x = new Vector<T>(_inputDim);
             for (int j = 0; j < _inputDim; j++)
             {
-                x[j] = (NumOps.ToDouble(X[i, j]) - dataMeans[j]) / dataStds[j];
+                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
+                x[j] = NumOps.Divide(diff, dataStds[j]);
             }
 
             // Get anomaly score
-            double score = Forward(x);
+            T score = Forward(x);
 
             // Convert to positive anomaly score (higher = more anomalous)
             // DevNet outputs deviation from reference
-            scores[i] = NumOps.FromDouble(Math.Abs(score - _refMean));
+            T deviation = NumOps.Subtract(score, _refMean);
+            double absDeviation = Math.Abs(NumOps.ToDouble(deviation));
+            scores[i] = NumOps.FromDouble(absDeviation);
         }
 
         return scores;

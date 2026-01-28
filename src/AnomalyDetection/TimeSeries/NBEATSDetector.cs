@@ -56,8 +56,8 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
     private int _inputDim;
 
     // Normalization parameters
-    private double[]? _dataMeans;
-    private double[]? _dataStds;
+    private Vector<T>? _dataMeans;
+    private Vector<T>? _dataStds;
 
     /// <summary>
     /// Gets the number of stacks.
@@ -149,19 +149,8 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        // Convert to double array
-        var data = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            data[i] = new double[_inputDim];
-            for (int j = 0; j < _inputDim; j++)
-            {
-                data[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
-
         // Normalize data
-        var (normalizedData, means, stds) = NormalizeData(data);
+        var (normalizedData, means, stds) = NormalizeData(X);
         _dataMeans = means;
         _dataStds = stds;
 
@@ -181,37 +170,41 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private (double[][] normalized, double[] means, double[] stds) NormalizeData(double[][] data)
+    private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Length;
-        int d = data[0].Length;
+        int n = data.Rows;
+        int d = data.Columns;
 
-        var means = new double[d];
-        var stds = new double[d];
+        var means = new Vector<T>(d);
+        var stds = new Vector<T>(d);
 
         for (int j = 0; j < d; j++)
         {
+            T sum = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                means[j] += data[i][j];
+                sum = NumOps.Add(sum, data[i, j]);
             }
-            means[j] /= n;
+            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
 
+            T variance = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                stds[j] += Math.Pow(data[i][j] - means[j], 2);
+                T diff = NumOps.Subtract(data[i, j], means[j]);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
+            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
+            if (stdVal < 1e-10) stdVal = 1;
+            stds[j] = NumOps.FromDouble(stdVal);
         }
 
-        var normalized = new double[n][];
+        var normalized = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
         {
-            normalized[i] = new double[d];
             for (int j = 0; j < d; j++)
             {
-                normalized[i][j] = (data[i][j] - means[j]) / stds[j];
+                T diff = NumOps.Subtract(data[i, j], means[j]);
+                normalized[i, j] = NumOps.Divide(diff, stds[j]);
             }
         }
 
@@ -230,13 +223,13 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
             var block = new BlockWeights
             {
                 W1 = InitializeMatrix(inputSize, _hiddenDim),
-                B1 = new double[_hiddenDim],
+                B1 = InitializeVector(_hiddenDim),
                 W2 = InitializeMatrix(_hiddenDim, _hiddenDim),
-                B2 = new double[_hiddenDim],
+                B2 = InitializeVector(_hiddenDim),
                 W3 = InitializeMatrix(_hiddenDim, _hiddenDim),
-                B3 = new double[_hiddenDim],
+                B3 = InitializeVector(_hiddenDim),
                 W4 = InitializeMatrix(_hiddenDim, _hiddenDim),
-                B4 = new double[_hiddenDim],
+                B4 = InitializeVector(_hiddenDim),
                 // Theta for backcast and forecast
                 WTheta_b = InitializeMatrix(_hiddenDim, inputSize),
                 WTheta_f = InitializeMatrix(_hiddenDim, _inputDim) // Forecast horizon = 1
@@ -245,46 +238,67 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private double[,] InitializeMatrix(int rows, int cols)
+    private Matrix<T> InitializeMatrix(int rows, int cols)
     {
         double scale = Math.Sqrt(2.0 / (rows + cols));
-        var matrix = new double[rows, cols];
+        var matrix = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
                 double u1 = 1.0 - _random.NextDouble();
                 double u2 = 1.0 - _random.NextDouble();
-                matrix[i, j] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
+                double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
+                matrix[i, j] = NumOps.FromDouble(val);
             }
         }
         return matrix;
     }
 
-    private (double[][] inputs, double[][] targets) CreateSequences(double[][] data)
+    private Vector<T> InitializeVector(int size)
     {
-        int n = data.Length - _lookback;
-        var inputs = new double[n][];
-        var targets = new double[n][];
+        var vector = new Vector<T>(size);
+        for (int i = 0; i < size; i++)
+        {
+            vector[i] = NumOps.Zero;
+        }
+        return vector;
+    }
+
+    private Vector<T> CreateZeroVector(int size)
+    {
+        var v = new Vector<T>(size);
+        for (int i = 0; i < size; i++)
+        {
+            v[i] = NumOps.Zero;
+        }
+        return v;
+    }
+
+    private (Vector<T>[] inputs, Vector<T>[] targets) CreateSequences(Matrix<T> data)
+    {
+        int n = data.Rows - _lookback;
+        var inputs = new Vector<T>[n];
+        var targets = new Vector<T>[n];
 
         for (int i = 0; i < n; i++)
         {
             // Flatten lookback window
-            inputs[i] = new double[_lookback * _inputDim];
+            inputs[i] = new Vector<T>(_lookback * _inputDim);
             for (int t = 0; t < _lookback; t++)
             {
                 for (int j = 0; j < _inputDim; j++)
                 {
-                    inputs[i][t * _inputDim + j] = data[i + t][j];
+                    inputs[i][t * _inputDim + j] = data[i + t, j];
                 }
             }
-            targets[i] = data[i + _lookback];
+            targets[i] = data.GetRow(i + _lookback);
         }
 
         return (inputs, targets);
     }
 
-    private void Train(double[][] inputs, double[][] targets)
+    private void Train(Vector<T>[] inputs, Vector<T>[] targets)
     {
         int n = inputs.Length;
         int batchSize = Math.Min(32, n);
@@ -304,7 +318,7 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
             {
                 int actualBatchSize = Math.Min(batchSize, n - batch);
 
-                // Initialize gradient accumulators for all blocks
+                // Initialize gradient accumulators for all blocks (use double for intermediate computation)
                 var blockGradients = new List<BlockGradients>();
                 for (int b = 0; b < blocks.Count; b++)
                 {
@@ -333,10 +347,11 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                     var (forecast, residuals, hValues) = ForwardWithCache(input);
 
                     // Compute loss gradient (MSE loss)
-                    var gradForecast = new double[_inputDim];
+                    var gradForecast = new Vector<T>(_inputDim);
                     for (int j = 0; j < _inputDim; j++)
                     {
-                        gradForecast[j] = 2 * (forecast[j] - target[j]);
+                        T diff = NumOps.Subtract(forecast[j], target[j]);
+                        gradForecast[j] = NumOps.Multiply(NumOps.FromDouble(2.0), diff);
                     }
 
                     // Backprop through all blocks (reverse order)
@@ -347,126 +362,155 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                         var h = hValues[blockIdx];
                         var residual = residuals[blockIdx];
 
+                        // Capture weights with null checks
+                        var wThetaF = block.WTheta_f;
+                        var w1 = block.W1;
+                        var b1 = block.B1;
+                        var w2 = block.W2;
+                        var b2 = block.B2;
+                        var w3 = block.W3;
+                        var b3 = block.B3;
+                        var w4 = block.W4;
+                        var b4 = block.B4;
+
+                        if (wThetaF == null || w1 == null || b1 == null || w2 == null || b2 == null ||
+                            w3 == null || b3 == null || w4 == null || b4 == null)
+                        {
+                            throw new InvalidOperationException("Block weights not initialized.");
+                        }
+
                         // Gradient through WTheta_f (forecast theta)
                         for (int i = 0; i < _hiddenDim; i++)
                         {
                             for (int j = 0; j < _inputDim; j++)
                             {
-                                grad.dWTheta_f[i, j] += h[i] * gradForecast[j];
+                                grad.dWTheta_f[i, j] += NumOps.ToDouble(h[i]) * NumOps.ToDouble(gradForecast[j]);
                             }
                         }
 
                         // Gradient through h (from forecast)
-                        var dH = new double[_hiddenDim];
+                        var dH = new Vector<T>(_hiddenDim);
                         for (int i = 0; i < _hiddenDim; i++)
                         {
+                            T sum = NumOps.Zero;
                             for (int j = 0; j < _inputDim; j++)
                             {
-                                dH[i] += block.WTheta_f![i, j] * gradForecast[j];
+                                sum = NumOps.Add(sum, NumOps.Multiply(wThetaF[i, j], gradForecast[j]));
                             }
+                            dH[i] = sum;
                         }
 
                         // Note: In full N-BEATS, backcast gradients would also contribute
                         // For simplicity, we focus on forecast gradients
 
                         // Backprop through FC4 (ReLU)
-                        var h3 = ForwardFC(residual, block.W1!, block.B1!);
+                        var h3 = ForwardFC(residual, w1, b1);
                         h3 = ApplyReLU(h3);
-                        h3 = ForwardFC(h3, block.W2!, block.B2!);
+                        h3 = ForwardFC(h3, w2, b2);
                         h3 = ApplyReLU(h3);
-                        h3 = ForwardFC(h3, block.W3!, block.B3!);
+                        h3 = ForwardFC(h3, w3, b3);
                         h3 = ApplyReLU(h3);
 
                         // ReLU derivative for h
                         for (int i = 0; i < _hiddenDim; i++)
                         {
-                            if (h[i] <= 0) dH[i] = 0;
+                            if (NumOps.ToDouble(h[i]) <= 0) dH[i] = NumOps.Zero;
                         }
 
                         // Update W4, B4
                         for (int i = 0; i < _hiddenDim; i++)
                         {
+                            double h3i = NumOps.ToDouble(h3[i]);
                             for (int j = 0; j < _hiddenDim; j++)
                             {
-                                grad.dW4[i, j] += h3[i] * dH[j];
+                                grad.dW4[i, j] += h3i * NumOps.ToDouble(dH[j]);
                             }
-                            grad.dB4[i] += dH[i];
+                            grad.dB4[i] += NumOps.ToDouble(dH[i]);
                         }
 
                         // Continue backprop through FC3
-                        var dH3 = new double[_hiddenDim];
+                        var dH3 = new Vector<T>(_hiddenDim);
                         for (int i = 0; i < _hiddenDim; i++)
                         {
+                            T sum = NumOps.Zero;
                             for (int j = 0; j < _hiddenDim; j++)
                             {
-                                dH3[i] += block.W4![i, j] * dH[j];
+                                sum = NumOps.Add(sum, NumOps.Multiply(w4[i, j], dH[j]));
                             }
-                            if (h3[i] <= 0) dH3[i] = 0;
+                            double h3i = NumOps.ToDouble(h3[i]);
+                            dH3[i] = h3i <= 0 ? NumOps.Zero : sum;
                         }
 
-                        var h2 = ForwardFC(residual, block.W1!, block.B1!);
+                        var h2 = ForwardFC(residual, w1, b1);
                         h2 = ApplyReLU(h2);
-                        h2 = ForwardFC(h2, block.W2!, block.B2!);
+                        h2 = ForwardFC(h2, w2, b2);
                         h2 = ApplyReLU(h2);
 
                         for (int i = 0; i < _hiddenDim; i++)
                         {
+                            double h2i = NumOps.ToDouble(h2[i]);
                             for (int j = 0; j < _hiddenDim; j++)
                             {
-                                grad.dW3[i, j] += h2[i] * dH3[j];
+                                grad.dW3[i, j] += h2i * NumOps.ToDouble(dH3[j]);
                             }
-                            grad.dB3[i] += dH3[i];
+                            grad.dB3[i] += NumOps.ToDouble(dH3[i]);
                         }
 
                         // Continue backprop through FC2
-                        var dH2 = new double[_hiddenDim];
+                        var dH2 = new Vector<T>(_hiddenDim);
                         for (int i = 0; i < _hiddenDim; i++)
                         {
+                            T sum = NumOps.Zero;
                             for (int j = 0; j < _hiddenDim; j++)
                             {
-                                dH2[i] += block.W3![i, j] * dH3[j];
+                                sum = NumOps.Add(sum, NumOps.Multiply(w3[i, j], dH3[j]));
                             }
-                            if (h2[i] <= 0) dH2[i] = 0;
+                            double h2i = NumOps.ToDouble(h2[i]);
+                            dH2[i] = h2i <= 0 ? NumOps.Zero : sum;
                         }
 
-                        var h1 = ForwardFC(residual, block.W1!, block.B1!);
+                        var h1 = ForwardFC(residual, w1, b1);
                         h1 = ApplyReLU(h1);
 
                         for (int i = 0; i < _hiddenDim; i++)
                         {
+                            double h1i = NumOps.ToDouble(h1[i]);
                             for (int j = 0; j < _hiddenDim; j++)
                             {
-                                grad.dW2[i, j] += h1[i] * dH2[j];
+                                grad.dW2[i, j] += h1i * NumOps.ToDouble(dH2[j]);
                             }
-                            grad.dB2[i] += dH2[i];
+                            grad.dB2[i] += NumOps.ToDouble(dH2[i]);
                         }
 
                         // Continue backprop through FC1
-                        var dH1 = new double[_hiddenDim];
+                        var dH1 = new Vector<T>(_hiddenDim);
                         for (int i = 0; i < _hiddenDim; i++)
                         {
+                            T sum = NumOps.Zero;
                             for (int j = 0; j < _hiddenDim; j++)
                             {
-                                dH1[i] += block.W2![i, j] * dH2[j];
+                                sum = NumOps.Add(sum, NumOps.Multiply(w2[i, j], dH2[j]));
                             }
-                            if (h1[i] <= 0) dH1[i] = 0;
+                            double h1i = NumOps.ToDouble(h1[i]);
+                            dH1[i] = h1i <= 0 ? NumOps.Zero : sum;
                         }
 
                         for (int i = 0; i < inputSize; i++)
                         {
+                            double residualI = NumOps.ToDouble(residual[i]);
                             for (int j = 0; j < _hiddenDim; j++)
                             {
-                                grad.dW1[i, j] += residual[i] * dH1[j];
+                                grad.dW1[i, j] += residualI * NumOps.ToDouble(dH1[j]);
                             }
                         }
                         for (int j = 0; j < _hiddenDim; j++)
                         {
-                            grad.dB1[j] += dH1[j];
+                            grad.dB1[j] += NumOps.ToDouble(dH1[j]);
                         }
                     }
                 }
 
-                // Apply gradients to all blocks
+                // Apply gradients to all blocks using NumOps
                 double lr = _learningRate / actualBatchSize;
                 double clipValue = 5.0;
 
@@ -475,17 +519,36 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                     var block = blocks[blockIdx];
                     var grad = blockGradients[blockIdx];
 
+                    // Capture weights with null checks
+                    var w1 = block.W1;
+                    var b1 = block.B1;
+                    var w2 = block.W2;
+                    var b2 = block.B2;
+                    var w3 = block.W3;
+                    var b3 = block.B3;
+                    var w4 = block.W4;
+                    var b4 = block.B4;
+                    var wThetaF = block.WTheta_f;
+
+                    if (w1 == null || b1 == null || w2 == null || b2 == null ||
+                        w3 == null || b3 == null || w4 == null || b4 == null || wThetaF == null)
+                    {
+                        throw new InvalidOperationException("Block weights not initialized.");
+                    }
+
                     // Update W1, B1
                     for (int i = 0; i < inputSize; i++)
                     {
                         for (int j = 0; j < _hiddenDim; j++)
                         {
-                            block.W1![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dW1[i, j]));
+                            double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dW1[i, j]));
+                            w1[i, j] = NumOps.Subtract(w1[i, j], NumOps.FromDouble(lr * clippedGrad));
                         }
                     }
                     for (int j = 0; j < _hiddenDim; j++)
                     {
-                        block.B1![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dB1[j]));
+                        double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dB1[j]));
+                        b1[j] = NumOps.Subtract(b1[j], NumOps.FromDouble(lr * clippedGrad));
                     }
 
                     // Update W2, B2
@@ -493,12 +556,14 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                     {
                         for (int j = 0; j < _hiddenDim; j++)
                         {
-                            block.W2![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dW2[i, j]));
+                            double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dW2[i, j]));
+                            w2[i, j] = NumOps.Subtract(w2[i, j], NumOps.FromDouble(lr * clippedGrad));
                         }
                     }
                     for (int j = 0; j < _hiddenDim; j++)
                     {
-                        block.B2![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dB2[j]));
+                        double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dB2[j]));
+                        b2[j] = NumOps.Subtract(b2[j], NumOps.FromDouble(lr * clippedGrad));
                     }
 
                     // Update W3, B3
@@ -506,12 +571,14 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                     {
                         for (int j = 0; j < _hiddenDim; j++)
                         {
-                            block.W3![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dW3[i, j]));
+                            double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dW3[i, j]));
+                            w3[i, j] = NumOps.Subtract(w3[i, j], NumOps.FromDouble(lr * clippedGrad));
                         }
                     }
                     for (int j = 0; j < _hiddenDim; j++)
                     {
-                        block.B3![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dB3[j]));
+                        double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dB3[j]));
+                        b3[j] = NumOps.Subtract(b3[j], NumOps.FromDouble(lr * clippedGrad));
                     }
 
                     // Update W4, B4
@@ -519,12 +586,14 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                     {
                         for (int j = 0; j < _hiddenDim; j++)
                         {
-                            block.W4![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dW4[i, j]));
+                            double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dW4[i, j]));
+                            w4[i, j] = NumOps.Subtract(w4[i, j], NumOps.FromDouble(lr * clippedGrad));
                         }
                     }
                     for (int j = 0; j < _hiddenDim; j++)
                     {
-                        block.B4![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dB4[j]));
+                        double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dB4[j]));
+                        b4[j] = NumOps.Subtract(b4[j], NumOps.FromDouble(lr * clippedGrad));
                     }
 
                     // Update WTheta_f
@@ -532,7 +601,8 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                     {
                         for (int j = 0; j < _inputDim; j++)
                         {
-                            block.WTheta_f![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dWTheta_f[i, j]));
+                            double clippedGrad = Math.Max(-clipValue, Math.Min(clipValue, grad.dWTheta_f[i, j]));
+                            wThetaF[i, j] = NumOps.Subtract(wThetaF[i, j], NumOps.FromDouble(lr * clippedGrad));
                         }
                     }
                 }
@@ -540,7 +610,7 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private (double[] forecast, double[][] residuals, double[][] hValues) ForwardWithCache(double[] input)
+    private (Vector<T> forecast, Vector<T>[] residuals, Vector<T>[] hValues) ForwardWithCache(Vector<T> input)
     {
         var blocks = _blocks;
         if (blocks == null)
@@ -549,43 +619,75 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
         }
 
         int inputSize = input.Length;
-        var residual = (double[])input.Clone();
-        var totalForecast = new double[_inputDim];
 
-        var residuals = new double[blocks.Count][];
-        var hValues = new double[blocks.Count][];
+        // Clone input for residual
+        var residual = new Vector<T>(inputSize);
+        for (int i = 0; i < inputSize; i++)
+        {
+            residual[i] = input[i];
+        }
+
+        var totalForecast = CreateZeroVector(_inputDim);
+
+        var residuals = new Vector<T>[blocks.Count];
+        var hValues = new Vector<T>[blocks.Count];
 
         for (int blockIdx = 0; blockIdx < blocks.Count; blockIdx++)
         {
             var block = blocks[blockIdx];
-            residuals[blockIdx] = (double[])residual.Clone();
+
+            // Clone residual for caching
+            residuals[blockIdx] = new Vector<T>(inputSize);
+            for (int i = 0; i < inputSize; i++)
+            {
+                residuals[blockIdx][i] = residual[i];
+            }
+
+            // Capture weights with null checks
+            var w1 = block.W1;
+            var b1 = block.B1;
+            var w2 = block.W2;
+            var b2 = block.B2;
+            var w3 = block.W3;
+            var b3 = block.B3;
+            var w4 = block.W4;
+            var b4 = block.B4;
+            var wThetaB = block.WTheta_b;
+            var wThetaF = block.WTheta_f;
+
+            if (w1 == null || b1 == null || w2 == null || b2 == null ||
+                w3 == null || b3 == null || w4 == null || b4 == null ||
+                wThetaB == null || wThetaF == null)
+            {
+                throw new InvalidOperationException("Block weights not initialized.");
+            }
 
             // FC stack (4 layers with ReLU)
-            var h = ForwardFC(residual, block.W1!, block.B1!);
+            var h = ForwardFC(residual, w1, b1);
             h = ApplyReLU(h);
-            h = ForwardFC(h, block.W2!, block.B2!);
+            h = ForwardFC(h, w2, b2);
             h = ApplyReLU(h);
-            h = ForwardFC(h, block.W3!, block.B3!);
+            h = ForwardFC(h, w3, b3);
             h = ApplyReLU(h);
-            h = ForwardFC(h, block.W4!, block.B4!);
+            h = ForwardFC(h, w4, b4);
             h = ApplyReLU(h);
 
             hValues[blockIdx] = h;
 
             // Generate backcast and forecast
-            var backcast = ForwardFC(h, block.WTheta_b!, new double[inputSize]);
-            var forecast = ForwardFC(h, block.WTheta_f!, new double[_inputDim]);
+            var backcast = ForwardFCNoOffset(h, wThetaB, inputSize);
+            var forecast = ForwardFCNoOffset(h, wThetaF, _inputDim);
 
             // Update residual (subtract backcast)
             for (int i = 0; i < inputSize; i++)
             {
-                residual[i] -= backcast[i];
+                residual[i] = NumOps.Subtract(residual[i], backcast[i]);
             }
 
             // Accumulate forecast
             for (int i = 0; i < _inputDim; i++)
             {
-                totalForecast[i] += forecast[i];
+                totalForecast[i] = NumOps.Add(totalForecast[i], forecast[i]);
             }
         }
 
@@ -606,7 +708,7 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
         public required double[,] dWTheta_f { get; init; }
     }
 
-    private (double[] forecast, double[] backcast) Forward(double[] input)
+    private (Vector<T> forecast, Vector<T> backcast) Forward(Vector<T> input)
     {
         var blocks = _blocks;
         if (blocks == null)
@@ -615,71 +717,116 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
         }
 
         int inputSize = input.Length;
-        var residual = (double[])input.Clone();
-        var totalForecast = new double[_inputDim];
-        var totalBackcast = new double[inputSize];
+
+        // Clone input for residual
+        var residual = new Vector<T>(inputSize);
+        for (int i = 0; i < inputSize; i++)
+        {
+            residual[i] = input[i];
+        }
+
+        var totalForecast = CreateZeroVector(_inputDim);
+        var totalBackcast = CreateZeroVector(inputSize);
 
         foreach (var block in blocks)
         {
+            // Capture weights with null checks
+            var w1 = block.W1;
+            var b1 = block.B1;
+            var w2 = block.W2;
+            var b2 = block.B2;
+            var w3 = block.W3;
+            var b3 = block.B3;
+            var w4 = block.W4;
+            var b4 = block.B4;
+            var wThetaB = block.WTheta_b;
+            var wThetaF = block.WTheta_f;
+
+            if (w1 == null || b1 == null || w2 == null || b2 == null ||
+                w3 == null || b3 == null || w4 == null || b4 == null ||
+                wThetaB == null || wThetaF == null)
+            {
+                throw new InvalidOperationException("Block weights not initialized.");
+            }
+
             // FC stack (4 layers with ReLU)
-            var h = ForwardFC(residual, block.W1!, block.B1!);
+            var h = ForwardFC(residual, w1, b1);
             h = ApplyReLU(h);
-            h = ForwardFC(h, block.W2!, block.B2!);
+            h = ForwardFC(h, w2, b2);
             h = ApplyReLU(h);
-            h = ForwardFC(h, block.W3!, block.B3!);
+            h = ForwardFC(h, w3, b3);
             h = ApplyReLU(h);
-            h = ForwardFC(h, block.W4!, block.B4!);
+            h = ForwardFC(h, w4, b4);
             h = ApplyReLU(h);
 
             // Generate backcast and forecast
-            var backcast = ForwardFC(h, block.WTheta_b!, new double[inputSize]);
-            var forecast = ForwardFC(h, block.WTheta_f!, new double[_inputDim]);
+            var backcast = ForwardFCNoOffset(h, wThetaB, inputSize);
+            var forecast = ForwardFCNoOffset(h, wThetaF, _inputDim);
 
             // Update residual (subtract backcast)
             for (int i = 0; i < inputSize; i++)
             {
-                residual[i] -= backcast[i];
+                residual[i] = NumOps.Subtract(residual[i], backcast[i]);
             }
 
             // Accumulate forecast
             for (int i = 0; i < _inputDim; i++)
             {
-                totalForecast[i] += forecast[i];
+                totalForecast[i] = NumOps.Add(totalForecast[i], forecast[i]);
             }
 
             // Accumulate backcast
             for (int i = 0; i < inputSize; i++)
             {
-                totalBackcast[i] += backcast[i];
+                totalBackcast[i] = NumOps.Add(totalBackcast[i], backcast[i]);
             }
         }
 
         return (totalForecast, totalBackcast);
     }
 
-    private double[] ForwardFC(double[] input, double[,] W, double[] b)
+    private Vector<T> ForwardFC(Vector<T> input, Matrix<T> W, Vector<T> b)
     {
-        int outputSize = W.GetLength(1);
-        var output = new double[outputSize];
+        int outputSize = W.Columns;
+        var output = new Vector<T>(outputSize);
 
         for (int j = 0; j < outputSize; j++)
         {
-            output[j] = b[j];
+            T sum = b[j];
             for (int i = 0; i < input.Length; i++)
             {
-                output[j] += input[i] * W[i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(input[i], W[i, j]));
             }
+            output[j] = sum;
         }
 
         return output;
     }
 
-    private static double[] ApplyReLU(double[] x)
+    private Vector<T> ForwardFCNoOffset(Vector<T> input, Matrix<T> W, int outputSize)
     {
-        var output = new double[x.Length];
+        var output = new Vector<T>(outputSize);
+
+        for (int j = 0; j < outputSize; j++)
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < input.Length; i++)
+            {
+                sum = NumOps.Add(sum, NumOps.Multiply(input[i], W[i, j]));
+            }
+            output[j] = sum;
+        }
+
+        return output;
+    }
+
+    private Vector<T> ApplyReLU(Vector<T> x)
+    {
+        var output = new Vector<T>(x.Length);
         for (int i = 0; i < x.Length; i++)
         {
-            output[i] = Math.Max(0, x[i]);
+            double val = NumOps.ToDouble(x[i]);
+            output[i] = NumOps.FromDouble(Math.Max(0, val));
         }
         return output;
     }
@@ -705,53 +852,55 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         var scores = new Vector<T>(n);
 
-        // Convert to normalized double array
-        var data = new double[n][];
+        // Normalize data into Matrix<T>
+        var normalizedData = new Matrix<T>(n, _inputDim);
         for (int i = 0; i < n; i++)
         {
-            data[i] = new double[_inputDim];
             for (int j = 0; j < _inputDim; j++)
             {
-                data[i][j] = (NumOps.ToDouble(X[i, j]) - dataMeans[j]) / dataStds[j];
+                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
+                normalizedData[i, j] = NumOps.Divide(diff, dataStds[j]);
             }
         }
 
         // Score each point
         for (int i = 0; i < n; i++)
         {
-            double score;
+            T score;
 
             if (i < _lookback)
             {
                 // Not enough history
-                score = 0;
+                score = NumOps.Zero;
                 for (int j = 0; j < _inputDim; j++)
                 {
-                    score += data[i][j] * data[i][j];
+                    T val = normalizedData[i, j];
+                    score = NumOps.Add(score, NumOps.Multiply(val, val));
                 }
             }
             else
             {
                 // Build input from lookback window
-                var input = new double[_lookback * _inputDim];
+                var input = new Vector<T>(_lookback * _inputDim);
                 for (int t = 0; t < _lookback; t++)
                 {
                     for (int j = 0; j < _inputDim; j++)
                     {
-                        input[t * _inputDim + j] = data[i - _lookback + t][j];
+                        input[t * _inputDim + j] = normalizedData[i - _lookback + t, j];
                     }
                 }
 
                 // Predict and compute error
                 var (forecast, _) = Forward(input);
-                score = 0;
+                score = NumOps.Zero;
                 for (int j = 0; j < _inputDim; j++)
                 {
-                    score += Math.Pow(data[i][j] - forecast[j], 2);
+                    T diff = NumOps.Subtract(normalizedData[i, j], forecast[j]);
+                    score = NumOps.Add(score, NumOps.Multiply(diff, diff));
                 }
             }
 
-            scores[i] = NumOps.FromDouble(score);
+            scores[i] = score;
         }
 
         return scores;
@@ -759,15 +908,15 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
 
     private class BlockWeights
     {
-        public double[,]? W1 { get; set; }
-        public double[]? B1 { get; set; }
-        public double[,]? W2 { get; set; }
-        public double[]? B2 { get; set; }
-        public double[,]? W3 { get; set; }
-        public double[]? B3 { get; set; }
-        public double[,]? W4 { get; set; }
-        public double[]? B4 { get; set; }
-        public double[,]? WTheta_b { get; set; }
-        public double[,]? WTheta_f { get; set; }
+        public Matrix<T>? W1 { get; set; }
+        public Vector<T>? B1 { get; set; }
+        public Matrix<T>? W2 { get; set; }
+        public Vector<T>? B2 { get; set; }
+        public Matrix<T>? W3 { get; set; }
+        public Vector<T>? B3 { get; set; }
+        public Matrix<T>? W4 { get; set; }
+        public Vector<T>? B4 { get; set; }
+        public Matrix<T>? WTheta_b { get; set; }
+        public Matrix<T>? WTheta_f { get; set; }
     }
 }

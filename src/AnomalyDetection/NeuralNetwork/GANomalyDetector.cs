@@ -48,28 +48,28 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
     private readonly double _learningRate;
 
     // Encoder weights
-    private double[,]? _encW1;
-    private double[]? _encB1;
-    private double[,]? _encW2;
-    private double[]? _encB2;
+    private Matrix<T>? _encW1;
+    private Vector<T>? _encB1;
+    private Matrix<T>? _encW2;
+    private Vector<T>? _encB2;
 
     // Decoder weights
-    private double[,]? _decW1;
-    private double[]? _decB1;
-    private double[,]? _decW2;
-    private double[]? _decB2;
+    private Matrix<T>? _decW1;
+    private Vector<T>? _decB1;
+    private Matrix<T>? _decW2;
+    private Vector<T>? _decB2;
 
     // Re-encoder weights (separate encoder for reconstruction)
-    private double[,]? _reEncW1;
-    private double[]? _reEncB1;
-    private double[,]? _reEncW2;
-    private double[]? _reEncB2;
+    private Matrix<T>? _reEncW1;
+    private Vector<T>? _reEncB1;
+    private Matrix<T>? _reEncW2;
+    private Vector<T>? _reEncB2;
 
     private int _inputDim;
 
     // Normalization parameters
-    private double[]? _dataMeans;
-    private double[]? _dataStds;
+    private Vector<T>? _dataMeans;
+    private Vector<T>? _dataStds;
 
     /// <summary>
     /// Gets the latent dimensions.
@@ -132,19 +132,8 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         _inputDim = X.Columns;
 
-        // Convert to double array
-        var data = new double[n][];
-        for (int i = 0; i < n; i++)
-        {
-            data[i] = new double[_inputDim];
-            for (int j = 0; j < _inputDim; j++)
-            {
-                data[i][j] = NumOps.ToDouble(X[i, j]);
-            }
-        }
-
         // Normalize data
-        var (normalizedData, means, stds) = NormalizeData(data);
+        var (normalizedData, means, stds) = NormalizeData(X);
         _dataMeans = means;
         _dataStds = stds;
 
@@ -161,37 +150,41 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private (double[][] normalized, double[] means, double[] stds) NormalizeData(double[][] data)
+    private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Length;
-        int d = data[0].Length;
+        int n = data.Rows;
+        int d = data.Columns;
 
-        var means = new double[d];
-        var stds = new double[d];
+        var means = new Vector<T>(d);
+        var stds = new Vector<T>(d);
 
         for (int j = 0; j < d; j++)
         {
+            T sum = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                means[j] += data[i][j];
+                sum = NumOps.Add(sum, data[i, j]);
             }
-            means[j] /= n;
+            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
 
+            T variance = NumOps.Zero;
             for (int i = 0; i < n; i++)
             {
-                stds[j] += Math.Pow(data[i][j] - means[j], 2);
+                T diff = NumOps.Subtract(data[i, j], means[j]);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
+            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
+            if (stdVal < 1e-10) stdVal = 1;
+            stds[j] = NumOps.FromDouble(stdVal);
         }
 
-        var normalized = new double[n][];
+        var normalized = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
         {
-            normalized[i] = new double[d];
             for (int j = 0; j < d; j++)
             {
-                normalized[i][j] = (data[i][j] - means[j]) / stds[j];
+                T diff = NumOps.Subtract(data[i, j], means[j]);
+                normalized[i, j] = NumOps.Divide(diff, stds[j]);
             }
         }
 
@@ -207,41 +200,52 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
 
         // Encoder: input -> hidden -> latent
         _encW1 = InitializeMatrix(_inputDim, _hiddenDim, scale1);
-        _encB1 = new double[_hiddenDim];
+        _encB1 = InitializeVector(_hiddenDim);
         _encW2 = InitializeMatrix(_hiddenDim, _latentDim, scale2);
-        _encB2 = new double[_latentDim];
+        _encB2 = InitializeVector(_latentDim);
 
         // Decoder: latent -> hidden -> input
         _decW1 = InitializeMatrix(_latentDim, _hiddenDim, scale3);
-        _decB1 = new double[_hiddenDim];
+        _decB1 = InitializeVector(_hiddenDim);
         _decW2 = InitializeMatrix(_hiddenDim, _inputDim, scale4);
-        _decB2 = new double[_inputDim];
+        _decB2 = InitializeVector(_inputDim);
 
         // Re-encoder: input -> hidden -> latent
         _reEncW1 = InitializeMatrix(_inputDim, _hiddenDim, scale1);
-        _reEncB1 = new double[_hiddenDim];
+        _reEncB1 = InitializeVector(_hiddenDim);
         _reEncW2 = InitializeMatrix(_hiddenDim, _latentDim, scale2);
-        _reEncB2 = new double[_latentDim];
+        _reEncB2 = InitializeVector(_latentDim);
     }
 
-    private double[,] InitializeMatrix(int rows, int cols, double scale)
+    private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
     {
-        var matrix = new double[rows, cols];
+        var matrix = new Matrix<T>(rows, cols);
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
                 double u1 = 1.0 - _random.NextDouble();
                 double u2 = 1.0 - _random.NextDouble();
-                matrix[i, j] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
+                double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
+                matrix[i, j] = NumOps.FromDouble(val);
             }
         }
         return matrix;
     }
 
-    private void Train(double[][] data)
+    private Vector<T> InitializeVector(int size)
     {
-        int n = data.Length;
+        var vector = new Vector<T>(size);
+        for (int i = 0; i < size; i++)
+        {
+            vector[i] = NumOps.Zero;
+        }
+        return vector;
+    }
+
+    private void Train(Matrix<T> data)
+    {
+        int n = data.Rows;
         int batchSize = Math.Min(32, n);
 
         for (int epoch = 0; epoch < _epochs; epoch++)
@@ -252,21 +256,20 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
             {
                 int actualBatchSize = Math.Min(batchSize, n - batch);
 
-                // Accumulate gradients
+                // Accumulate gradients (use double for intermediate computation)
                 var gradients = InitializeGradients();
 
                 for (int b = 0; b < actualBatchSize; b++)
                 {
                     int idx = indices[batch + b];
-                    var x = data[idx];
+                    var x = data.GetRow(idx);
 
                     // Forward pass
                     var z = Encode(x);
                     var xRecon = Decode(z);
                     var zRecon = ReEncode(xRecon);
 
-                    // Compute gradients for encoder-decoder reconstruction loss
-                    // and latent consistency loss (z vs zRecon)
+                    // Compute gradients
                     AccumulateGradients(x, z, xRecon, zRecon, gradients);
                 }
 
@@ -276,85 +279,121 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private double[] Encode(double[] x)
+    private Vector<T> Encode(Vector<T> x)
     {
+        var encW1 = _encW1;
+        var encB1 = _encB1;
+        var encW2 = _encW2;
+        var encB2 = _encB2;
+
+        if (encW1 == null || encB1 == null || encW2 == null || encB2 == null)
+        {
+            throw new InvalidOperationException("Encoder weights not initialized.");
+        }
+
         // Layer 1
-        var h = new double[_hiddenDim];
+        var h = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h[j] = _encB1![j];
+            T sum = encB1[j];
             for (int i = 0; i < _inputDim; i++)
             {
-                h[j] += x[i] * _encW1![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(x[i], encW1[i, j]));
             }
-            h[j] = LeakyReLU(h[j]);
+            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
+            h[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Layer 2
-        var z = new double[_latentDim];
+        var z = new Vector<T>(_latentDim);
         for (int j = 0; j < _latentDim; j++)
         {
-            z[j] = _encB2![j];
+            T sum = encB2[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                z[j] += h[i] * _encW2![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h[i], encW2[i, j]));
             }
+            z[j] = sum;
         }
 
         return z;
     }
 
-    private double[] Decode(double[] z)
+    private Vector<T> Decode(Vector<T> z)
     {
+        var decW1 = _decW1;
+        var decB1 = _decB1;
+        var decW2 = _decW2;
+        var decB2 = _decB2;
+
+        if (decW1 == null || decB1 == null || decW2 == null || decB2 == null)
+        {
+            throw new InvalidOperationException("Decoder weights not initialized.");
+        }
+
         // Layer 1
-        var h = new double[_hiddenDim];
+        var h = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h[j] = _decB1![j];
+            T sum = decB1[j];
             for (int i = 0; i < _latentDim; i++)
             {
-                h[j] += z[i] * _decW1![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(z[i], decW1[i, j]));
             }
-            h[j] = LeakyReLU(h[j]);
+            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
+            h[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Layer 2
-        var xRecon = new double[_inputDim];
+        var xRecon = new Vector<T>(_inputDim);
         for (int j = 0; j < _inputDim; j++)
         {
-            xRecon[j] = _decB2![j];
+            T sum = decB2[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                xRecon[j] += h[i] * _decW2![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h[i], decW2[i, j]));
             }
+            xRecon[j] = sum;
         }
 
         return xRecon;
     }
 
-    private double[] ReEncode(double[] xRecon)
+    private Vector<T> ReEncode(Vector<T> xRecon)
     {
+        var reEncW1 = _reEncW1;
+        var reEncB1 = _reEncB1;
+        var reEncW2 = _reEncW2;
+        var reEncB2 = _reEncB2;
+
+        if (reEncW1 == null || reEncB1 == null || reEncW2 == null || reEncB2 == null)
+        {
+            throw new InvalidOperationException("Re-encoder weights not initialized.");
+        }
+
         // Layer 1
-        var h = new double[_hiddenDim];
+        var h = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h[j] = _reEncB1![j];
+            T sum = reEncB1[j];
             for (int i = 0; i < _inputDim; i++)
             {
-                h[j] += xRecon[i] * _reEncW1![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(xRecon[i], reEncW1[i, j]));
             }
-            h[j] = LeakyReLU(h[j]);
+            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
+            h[j] = NumOps.FromDouble(leakyVal);
         }
 
         // Layer 2
-        var zRecon = new double[_latentDim];
+        var zRecon = new Vector<T>(_latentDim);
         for (int j = 0; j < _latentDim; j++)
         {
-            zRecon[j] = _reEncB2![j];
+            T sum = reEncB2[j];
             for (int i = 0; i < _hiddenDim; i++)
             {
-                zRecon[j] += h[i] * _reEncW2![i, j];
+                sum = NumOps.Add(sum, NumOps.Multiply(h[i], reEncW2[i, j]));
             }
+            zRecon[j] = sum;
         }
 
         return zRecon;
@@ -365,47 +404,64 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         return x >= 0 ? x : alpha * x;
     }
 
-    private Dictionary<string, object> InitializeGradients()
+    private GradientAccumulators InitializeGradients()
     {
-        return new Dictionary<string, object>
+        return new GradientAccumulators
         {
-            ["encW1"] = new double[_inputDim, _hiddenDim],
-            ["encB1"] = new double[_hiddenDim],
-            ["encW2"] = new double[_hiddenDim, _latentDim],
-            ["encB2"] = new double[_latentDim],
-            ["decW1"] = new double[_latentDim, _hiddenDim],
-            ["decB1"] = new double[_hiddenDim],
-            ["decW2"] = new double[_hiddenDim, _inputDim],
-            ["decB2"] = new double[_inputDim],
-            ["reEncW1"] = new double[_inputDim, _hiddenDim],
-            ["reEncB1"] = new double[_hiddenDim],
-            ["reEncW2"] = new double[_hiddenDim, _latentDim],
-            ["reEncB2"] = new double[_latentDim]
+            encW1 = new double[_inputDim, _hiddenDim],
+            encB1 = new double[_hiddenDim],
+            encW2 = new double[_hiddenDim, _latentDim],
+            encB2 = new double[_latentDim],
+            decW1 = new double[_latentDim, _hiddenDim],
+            decB1 = new double[_hiddenDim],
+            decW2 = new double[_hiddenDim, _inputDim],
+            decB2 = new double[_inputDim],
+            reEncW1 = new double[_inputDim, _hiddenDim],
+            reEncB1 = new double[_hiddenDim],
+            reEncW2 = new double[_hiddenDim, _latentDim],
+            reEncB2 = new double[_latentDim]
         };
     }
 
-    private void AccumulateGradients(double[] x, double[] z, double[] xRecon, double[] zRecon,
-        Dictionary<string, object> gradients)
+    private class GradientAccumulators
     {
-        // GANomaly has two losses:
-        // 1. Reconstruction loss: ||x - xRecon||^2
-        // 2. Latent consistency loss: ||z - zRecon||^2
+        public required double[,] encW1 { get; init; }
+        public required double[] encB1 { get; init; }
+        public required double[,] encW2 { get; init; }
+        public required double[] encB2 { get; init; }
+        public required double[,] decW1 { get; init; }
+        public required double[] decB1 { get; init; }
+        public required double[,] decW2 { get; init; }
+        public required double[] decB2 { get; init; }
+        public required double[,] reEncW1 { get; init; }
+        public required double[] reEncB1 { get; init; }
+        public required double[,] reEncW2 { get; init; }
+        public required double[] reEncB2 { get; init; }
+    }
+
+    private void AccumulateGradients(Vector<T> x, Vector<T> z, Vector<T> xRecon, Vector<T> zRecon,
+        GradientAccumulators gradients)
+    {
+        var encW1 = _encW1;
+        var encB1 = _encB1;
+        var encW2 = _encW2;
+        var decW1 = _decW1;
+        var decB1 = _decB1;
+        var decW2 = _decW2;
+        var reEncW1 = _reEncW1;
+        var reEncB1 = _reEncB1;
+        var reEncW2 = _reEncW2;
+
+        if (encW1 == null || encB1 == null || encW2 == null ||
+            decW1 == null || decB1 == null || decW2 == null ||
+            reEncW1 == null || reEncB1 == null || reEncW2 == null)
+        {
+            throw new InvalidOperationException("Weights not initialized.");
+        }
+
+        // Weights for the two losses
         double reconWeight = 1.0;
         double latentWeight = 1.0;
-
-        // Get gradient arrays
-        var encW1Grad = (double[,])gradients["encW1"];
-        var encB1Grad = (double[])gradients["encB1"];
-        var encW2Grad = (double[,])gradients["encW2"];
-        var encB2Grad = (double[])gradients["encB2"];
-        var decW1Grad = (double[,])gradients["decW1"];
-        var decB1Grad = (double[])gradients["decB1"];
-        var decW2Grad = (double[,])gradients["decW2"];
-        var decB2Grad = (double[])gradients["decB2"];
-        var reEncW1Grad = (double[,])gradients["reEncW1"];
-        var reEncB1Grad = (double[])gradients["reEncB1"];
-        var reEncW2Grad = (double[,])gradients["reEncW2"];
-        var reEncB2Grad = (double[])gradients["reEncB2"];
 
         // === Forward pass with caching ===
         // Encoder layer 1
@@ -413,10 +469,10 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         var encH1 = new double[_hiddenDim];
         for (int j = 0; j < _hiddenDim; j++)
         {
-            encH1Pre[j] = _encB1![j];
+            encH1Pre[j] = NumOps.ToDouble(encB1[j]);
             for (int i = 0; i < _inputDim; i++)
             {
-                encH1Pre[j] += x[i] * _encW1![i, j];
+                encH1Pre[j] += NumOps.ToDouble(x[i]) * NumOps.ToDouble(encW1[i, j]);
             }
             encH1[j] = LeakyReLU(encH1Pre[j]);
         }
@@ -426,10 +482,10 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         var decH1 = new double[_hiddenDim];
         for (int j = 0; j < _hiddenDim; j++)
         {
-            decH1Pre[j] = _decB1![j];
+            decH1Pre[j] = NumOps.ToDouble(decB1[j]);
             for (int i = 0; i < _latentDim; i++)
             {
-                decH1Pre[j] += z[i] * _decW1![i, j];
+                decH1Pre[j] += NumOps.ToDouble(z[i]) * NumOps.ToDouble(decW1[i, j]);
             }
             decH1[j] = LeakyReLU(decH1Pre[j]);
         }
@@ -439,20 +495,19 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         var reEncH1 = new double[_hiddenDim];
         for (int j = 0; j < _hiddenDim; j++)
         {
-            reEncH1Pre[j] = _reEncB1![j];
+            reEncH1Pre[j] = NumOps.ToDouble(reEncB1[j]);
             for (int i = 0; i < _inputDim; i++)
             {
-                reEncH1Pre[j] += xRecon[i] * _reEncW1![i, j];
+                reEncH1Pre[j] += NumOps.ToDouble(xRecon[i]) * NumOps.ToDouble(reEncW1[i, j]);
             }
             reEncH1[j] = LeakyReLU(reEncH1Pre[j]);
         }
 
         // === Backprop for reconstruction loss: ||x - xRecon||^2 ===
-        // Gradient w.r.t. xRecon
         var dXRecon = new double[_inputDim];
         for (int j = 0; j < _inputDim; j++)
         {
-            dXRecon[j] = reconWeight * 2 * (xRecon[j] - x[j]);
+            dXRecon[j] = reconWeight * 2 * (NumOps.ToDouble(xRecon[j]) - NumOps.ToDouble(x[j]));
         }
 
         // Backprop through decoder layer 2
@@ -461,13 +516,13 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = 0; j < _inputDim; j++)
             {
-                decW2Grad[i, j] += decH1[i] * dXRecon[j];
-                dDecH1[i] += _decW2![i, j] * dXRecon[j];
+                gradients.decW2[i, j] += decH1[i] * dXRecon[j];
+                dDecH1[i] += NumOps.ToDouble(decW2[i, j]) * dXRecon[j];
             }
         }
         for (int j = 0; j < _inputDim; j++)
         {
-            decB2Grad[j] += dXRecon[j];
+            gradients.decB2[j] += dXRecon[j];
         }
 
         // LeakyReLU derivative for decoder h1
@@ -482,28 +537,26 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = 0; j < _hiddenDim; j++)
             {
-                decW1Grad[i, j] += z[i] * dDecH1[j];
-                dZ_fromRecon[i] += _decW1![i, j] * dDecH1[j];
+                gradients.decW1[i, j] += NumOps.ToDouble(z[i]) * dDecH1[j];
+                dZ_fromRecon[i] += NumOps.ToDouble(decW1[i, j]) * dDecH1[j];
             }
         }
         for (int j = 0; j < _hiddenDim; j++)
         {
-            decB1Grad[j] += dDecH1[j];
+            gradients.decB1[j] += dDecH1[j];
         }
 
         // === Backprop for latent consistency loss: ||z - zRecon||^2 ===
-        // Gradient w.r.t. z
         var dZ_fromLatent = new double[_latentDim];
         for (int j = 0; j < _latentDim; j++)
         {
-            dZ_fromLatent[j] = latentWeight * 2 * (z[j] - zRecon[j]);
+            dZ_fromLatent[j] = latentWeight * 2 * (NumOps.ToDouble(z[j]) - NumOps.ToDouble(zRecon[j]));
         }
 
-        // Gradient w.r.t. zRecon
         var dZRecon = new double[_latentDim];
         for (int j = 0; j < _latentDim; j++)
         {
-            dZRecon[j] = latentWeight * 2 * (zRecon[j] - z[j]);
+            dZRecon[j] = latentWeight * 2 * (NumOps.ToDouble(zRecon[j]) - NumOps.ToDouble(z[j]));
         }
 
         // Backprop through re-encoder layer 2
@@ -512,13 +565,13 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = 0; j < _latentDim; j++)
             {
-                reEncW2Grad[i, j] += reEncH1[i] * dZRecon[j];
-                dReEncH1[i] += _reEncW2![i, j] * dZRecon[j];
+                gradients.reEncW2[i, j] += reEncH1[i] * dZRecon[j];
+                dReEncH1[i] += NumOps.ToDouble(reEncW2[i, j]) * dZRecon[j];
             }
         }
         for (int j = 0; j < _latentDim; j++)
         {
-            reEncB2Grad[j] += dZRecon[j];
+            gradients.reEncB2[j] += dZRecon[j];
         }
 
         // LeakyReLU derivative for re-encoder h1
@@ -532,16 +585,15 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = 0; j < _hiddenDim; j++)
             {
-                reEncW1Grad[i, j] += xRecon[i] * dReEncH1[j];
+                gradients.reEncW1[i, j] += NumOps.ToDouble(xRecon[i]) * dReEncH1[j];
             }
         }
         for (int j = 0; j < _hiddenDim; j++)
         {
-            reEncB1Grad[j] += dReEncH1[j];
+            gradients.reEncB1[j] += dReEncH1[j];
         }
 
         // === Backprop through encoder ===
-        // Total gradient w.r.t. z
         var dZ = new double[_latentDim];
         for (int j = 0; j < _latentDim; j++)
         {
@@ -554,13 +606,13 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = 0; j < _latentDim; j++)
             {
-                encW2Grad[i, j] += encH1[i] * dZ[j];
-                dEncH1[i] += _encW2![i, j] * dZ[j];
+                gradients.encW2[i, j] += encH1[i] * dZ[j];
+                dEncH1[i] += NumOps.ToDouble(encW2[i, j]) * dZ[j];
             }
         }
         for (int j = 0; j < _latentDim; j++)
         {
-            encB2Grad[j] += dZ[j];
+            gradients.encB2[j] += dZ[j];
         }
 
         // LeakyReLU derivative for encoder h1
@@ -574,49 +626,69 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = 0; j < _hiddenDim; j++)
             {
-                encW1Grad[i, j] += x[i] * dEncH1[j];
+                gradients.encW1[i, j] += NumOps.ToDouble(x[i]) * dEncH1[j];
             }
         }
         for (int j = 0; j < _hiddenDim; j++)
         {
-            encB1Grad[j] += dEncH1[j];
+            gradients.encB1[j] += dEncH1[j];
         }
     }
 
-    private void UpdateWeights(Dictionary<string, object> gradients, int batchSize)
+    private void UpdateWeights(GradientAccumulators gradients, int batchSize)
     {
         double lr = _learningRate / batchSize;
 
-        UpdateMatrix(_encW1!, (double[,])gradients["encW1"], lr);
-        UpdateVector(_encB1!, (double[])gradients["encB1"], lr);
-        UpdateMatrix(_encW2!, (double[,])gradients["encW2"], lr);
-        UpdateVector(_encB2!, (double[])gradients["encB2"], lr);
-        UpdateMatrix(_decW1!, (double[,])gradients["decW1"], lr);
-        UpdateVector(_decB1!, (double[])gradients["decB1"], lr);
-        UpdateMatrix(_decW2!, (double[,])gradients["decW2"], lr);
-        UpdateVector(_decB2!, (double[])gradients["decB2"], lr);
-        UpdateMatrix(_reEncW1!, (double[,])gradients["reEncW1"], lr);
-        UpdateVector(_reEncB1!, (double[])gradients["reEncB1"], lr);
-        UpdateMatrix(_reEncW2!, (double[,])gradients["reEncW2"], lr);
-        UpdateVector(_reEncB2!, (double[])gradients["reEncB2"], lr);
+        var encW1 = _encW1;
+        var encB1 = _encB1;
+        var encW2 = _encW2;
+        var encB2 = _encB2;
+        var decW1 = _decW1;
+        var decB1 = _decB1;
+        var decW2 = _decW2;
+        var decB2 = _decB2;
+        var reEncW1 = _reEncW1;
+        var reEncB1 = _reEncB1;
+        var reEncW2 = _reEncW2;
+        var reEncB2 = _reEncB2;
+
+        if (encW1 == null || encB1 == null || encW2 == null || encB2 == null ||
+            decW1 == null || decB1 == null || decW2 == null || decB2 == null ||
+            reEncW1 == null || reEncB1 == null || reEncW2 == null || reEncB2 == null)
+        {
+            throw new InvalidOperationException("Weights not initialized.");
+        }
+
+        UpdateMatrixWeights(encW1, gradients.encW1, lr);
+        UpdateVectorWeights(encB1, gradients.encB1, lr);
+        UpdateMatrixWeights(encW2, gradients.encW2, lr);
+        UpdateVectorWeights(encB2, gradients.encB2, lr);
+        UpdateMatrixWeights(decW1, gradients.decW1, lr);
+        UpdateVectorWeights(decB1, gradients.decB1, lr);
+        UpdateMatrixWeights(decW2, gradients.decW2, lr);
+        UpdateVectorWeights(decB2, gradients.decB2, lr);
+        UpdateMatrixWeights(reEncW1, gradients.reEncW1, lr);
+        UpdateVectorWeights(reEncB1, gradients.reEncB1, lr);
+        UpdateMatrixWeights(reEncW2, gradients.reEncW2, lr);
+        UpdateVectorWeights(reEncB2, gradients.reEncB2, lr);
     }
 
-    private static void UpdateMatrix(double[,] w, double[,] grad, double lr)
+    private void UpdateMatrixWeights(Matrix<T> w, double[,] grad, double lr)
     {
-        for (int i = 0; i < w.GetLength(0); i++)
+        for (int i = 0; i < w.Rows; i++)
         {
-            for (int j = 0; j < w.GetLength(1); j++)
+            for (int j = 0; j < w.Columns; j++)
             {
-                w[i, j] -= lr * grad[i, j];
+                w[i, j] = NumOps.Subtract(w[i, j], NumOps.FromDouble(lr * grad[i, j]));
             }
         }
     }
 
-    private static void UpdateVector(double[] w, double[] grad, double lr)
+    private void UpdateVectorWeights(Vector<T> w, double[] grad, double lr)
     {
         for (int i = 0; i < w.Length; i++)
         {
-            w[i] -= lr * grad[i];
+            w[i] = NumOps.Subtract(w[i], NumOps.FromDouble(lr * grad[i]));
         }
     }
 
@@ -643,10 +715,11 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         for (int i = 0; i < X.Rows; i++)
         {
             // Normalize
-            var x = new double[_inputDim];
+            var x = new Vector<T>(_inputDim);
             for (int j = 0; j < _inputDim; j++)
             {
-                x[j] = (NumOps.ToDouble(X[i, j]) - dataMeans[j]) / dataStds[j];
+                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
+                x[j] = NumOps.Divide(diff, dataStds[j]);
             }
 
             // Encode, decode, re-encode
@@ -655,13 +728,14 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
             var zRecon = ReEncode(xRecon);
 
             // Anomaly score: ||z - zRecon||^2 (latent consistency)
-            double score = 0;
+            T score = NumOps.Zero;
             for (int j = 0; j < _latentDim; j++)
             {
-                score += Math.Pow(z[j] - zRecon[j], 2);
+                T diff = NumOps.Subtract(z[j], zRecon[j]);
+                score = NumOps.Add(score, NumOps.Multiply(diff, diff));
             }
 
-            scores[i] = NumOps.FromDouble(score);
+            scores[i] = score;
         }
 
         return scores;
