@@ -60,6 +60,10 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
     private Matrix<T>? _decoderW2;
     private Vector<T>? _decoderB2;
 
+    // Normalization parameters
+    private Vector<T>? _dataMeans;
+    private Vector<T>? _dataStds;
+
     private int _inputDim;
 
     /// <summary>
@@ -103,6 +107,12 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
                 "Epochs must be at least 1. Recommended is 100.");
         }
 
+        if (learningRate <= 0 || double.IsNaN(learningRate) || double.IsInfinity(learningRate))
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate),
+                "Learning rate must be a positive, finite number. Recommended is 0.001.");
+        }
+
         _latentDim = latentDim;
         _hiddenDim = hiddenDim;
         _epochs = epochs;
@@ -117,8 +127,10 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         _inputDim = X.Columns;
 
-        // Normalize data
-        var (normalizedData, _, _) = NormalizeData(X);
+        // Normalize data and store parameters
+        var (normalizedData, means, stds) = NormalizeData(X);
+        _dataMeans = means;
+        _dataStds = stds;
 
         // Initialize weights
         InitializeWeights();
@@ -622,12 +634,26 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        var dataMeans = _dataMeans;
+        var dataStds = _dataStds;
+        if (dataMeans == null || dataStds == null)
+        {
+            throw new InvalidOperationException("Model not properly fitted. Normalization parameters missing.");
+        }
+
         int n = X.Rows;
         var scores = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
-            var x = X.GetRow(i);
+            // Normalize input using stored parameters
+            var x = new Vector<T>(_inputDim);
+            for (int j = 0; j < _inputDim; j++)
+            {
+                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
+                x[j] = NumOps.Divide(diff, dataStds[j]);
+            }
+
             var (_, mean, logVar, _, reconstruction) = Forward(x);
 
             // Reconstruction error

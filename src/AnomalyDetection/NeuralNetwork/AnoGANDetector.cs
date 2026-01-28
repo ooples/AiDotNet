@@ -835,6 +835,13 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        if (X.Columns != _inputDim)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features but model was trained on {_inputDim} features.",
+                nameof(X));
+        }
+
         var dataMeans = _dataMeans;
         var dataStds = _dataStds;
         if (dataMeans == null || dataStds == null)
