@@ -4,7 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Normalizers;
 using AiDotNet.FeatureSelectors;
-using AiDotNet.OutlierRemoval;
+using AiDotNet.AnomalyDetection;
 
 namespace AiDotNet.Tests.IntegrationTests.DataProcessor;
 

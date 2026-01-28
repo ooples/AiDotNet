@@ -6,7 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Normalizers;
-using AiDotNet.OutlierRemoval;
+using AiDotNet.AnomalyDetection;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
