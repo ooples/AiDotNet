@@ -307,15 +307,8 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
     /// <returns>The average path length c(n).</returns>
     private static double AveragePathLength(int n)
     {
-        if (n <= 1)
-        {
-            return 0;
-        }
-
-        if (n == 2)
-        {
-            return 1;
-        }
+        // Handle base cases with ternary
+        if (n <= 2) return n <= 1 ? 0 : 1;
 
         // c(n) = 2H(n-1) - 2(n-1)/n
         // where H(i) is the harmonic number ≈ ln(i) + Euler's constant

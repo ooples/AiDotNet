@@ -270,10 +270,9 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
             T neighborLrd = lrd[neighborIdx];
 
             // LOF contribution from this neighbor
-            if (NumOps.GreaterThan(pointLrd, NumOps.Zero))
-            {
-                lofSum = NumOps.Add(lofSum, NumOps.Divide(neighborLrd, pointLrd));
-            }
+            lofSum = NumOps.GreaterThan(pointLrd, NumOps.Zero)
+                ? NumOps.Add(lofSum, NumOps.Divide(neighborLrd, pointLrd))
+                : lofSum;
         }
 
         // LOF = average of ratios
@@ -316,10 +315,9 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
             int neighborIdx = neighbors[j];
             T neighborLrd = lrd[neighborIdx];
 
-            if (NumOps.GreaterThan(pointLrd, NumOps.Zero))
-            {
-                lofSum = NumOps.Add(lofSum, NumOps.Divide(neighborLrd, pointLrd));
-            }
+            lofSum = NumOps.GreaterThan(pointLrd, NumOps.Zero)
+                ? NumOps.Add(lofSum, NumOps.Divide(neighborLrd, pointLrd))
+                : lofSum;
         }
 
         return NumOps.ToDouble(lofSum) / _numNeighbors;
