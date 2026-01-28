@@ -427,7 +427,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < seqLen; i++)
         {
-            T kl = NumOps.Zero;
+            double klDouble = 0;
             for (int j = 0; j < seqLen; j++)
             {
                 T p = NumOps.Add(attention[i, j], epsilon);
@@ -435,9 +435,10 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 double pVal = NumOps.ToDouble(p);
                 double qVal = NumOps.ToDouble(q);
                 double klTerm = pVal * Math.Log(pVal / qVal);
-                kl = NumOps.Add(kl, NumOps.FromDouble(klTerm));
+                klDouble += klTerm;
             }
-            assocDisc[i] = kl;
+            // Apply absolute value for consistency with inference
+            assocDisc[i] = NumOps.FromDouble(Math.Abs(klDouble));
         }
 
         return (output, attention, assocDisc);

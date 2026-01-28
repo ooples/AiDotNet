@@ -127,6 +127,12 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                 "Epochs must be at least 1. Recommended is 100.");
         }
 
+        if (learningRate <= 0 || double.IsNaN(learningRate) || double.IsInfinity(learningRate))
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate),
+                "Learning rate must be a positive, finite number. Recommended is 0.0001.");
+        }
+
         _latentDim = latentDim;
         _hiddenDim = hiddenDim;
         _numMixtures = numMixtures;
@@ -724,7 +730,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         double eucDist = Math.Sqrt(NumOps.ToDouble(eucDistSq));
         double normX = Math.Sqrt(NumOps.ToDouble(normXSq));
         double normRecon = Math.Sqrt(NumOps.ToDouble(normReconSq));
-        double cosSim = (normX > 0 && normRecon > 0)
+        double cosSim = (normX > 1e-10 && normRecon > 1e-10)
             ? NumOps.ToDouble(dotProduct) / (normX * normRecon)
             : 0;
 
@@ -777,7 +783,8 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
             {
                 sum = NumOps.Add(sum, NumOps.Multiply(h[i], encW2[i, j]));
             }
-            z[j] = sum;
+            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
+            z[j] = NumOps.FromDouble(tanhVal);
         }
 
         return z;
@@ -883,6 +890,16 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
     {
         int n = allZ.Length;
 
+        // Capture nullable fields
+        var phi = _phi;
+        var mu = _mu;
+        var sigma = _sigma;
+
+        if (phi == null || mu == null || sigma == null)
+        {
+            throw new InvalidOperationException("GMM parameters not initialized.");
+        }
+
         // Update phi (mixture weights)
         for (int k = 0; k < _numMixtures; k++)
         {
@@ -891,7 +908,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
             {
                 sumGamma += allGamma[i][k];
             }
-            _phi![k] = sumGamma / n;
+            phi[k] = sumGamma / n;
         }
 
         // Update mu (means)
@@ -910,7 +927,7 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                 {
                     sumWeighted += allGamma[i][k] * allZ[i][j];
                 }
-                _mu![k][j] = sumGamma > 0 ? sumWeighted / sumGamma : 0;
+                mu[k][j] = sumGamma > 0 ? sumWeighted / sumGamma : 0;
             }
         }
 
@@ -928,16 +945,26 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                 double sumWeighted = 0;
                 for (int i = 0; i < n; i++)
                 {
-                    double diff = allZ[i][j] - _mu![k][j];
+                    double diff = allZ[i][j] - mu[k][j];
                     sumWeighted += allGamma[i][k] * diff * diff;
                 }
-                _sigma![k][j][j] = sumGamma > 0 ? Math.Max(1e-6, sumWeighted / sumGamma) : 1.0;
+                sigma[k][j][j] = sumGamma > 0 ? Math.Max(1e-6, sumWeighted / sumGamma) : 1.0;
             }
         }
     }
 
     private double ComputeEnergy(Vector<T> zc)
     {
+        // Capture nullable fields
+        var phi = _phi;
+        var mu = _mu;
+        var sigma = _sigma;
+
+        if (phi == null || mu == null || sigma == null)
+        {
+            throw new InvalidOperationException("GMM parameters not initialized.");
+        }
+
         // Compute negative log-likelihood under GMM
         double energy = 0;
 
@@ -948,13 +975,13 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
 
             for (int j = 0; j < _zDim; j++)
             {
-                logDet += Math.Log(_sigma![k][j][j]);
-                double diff = NumOps.ToDouble(zc[j]) - _mu![k][j];
-                mahal += diff * diff / _sigma[k][j][j];
+                logDet += Math.Log(sigma[k][j][j]);
+                double diff = NumOps.ToDouble(zc[j]) - mu[k][j];
+                mahal += diff * diff / sigma[k][j][j];
             }
 
             double logPdf = -0.5 * (_zDim * Math.Log(2 * Math.PI) + logDet + mahal);
-            energy += _phi![k] * Math.Exp(logPdf);
+            energy += phi[k] * Math.Exp(logPdf);
         }
 
         return -Math.Log(energy + 1e-10);
