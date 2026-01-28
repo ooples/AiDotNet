@@ -112,6 +112,12 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
                 "Epochs must be at least 1. Recommended is 100.");
         }
 
+        if (learningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate),
+                "Learning rate must be positive. Recommended is 0.0002.");
+        }
+
         _latentDim = latentDim;
         _hiddenDim = hiddenDim;
         _epochs = epochs;
@@ -381,40 +387,199 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
     private void AccumulateGradients(double[] x, double[] z, double[] xRecon, double[] zRecon,
         Dictionary<string, object> gradients)
     {
-        // Simplified gradient computation for latent consistency loss: ||z - zRecon||^2
-        var dz = new double[_latentDim];
-        for (int j = 0; j < _latentDim; j++)
-        {
-            dz[j] = 2 * (z[j] - zRecon[j]);
-        }
+        // GANomaly has two losses:
+        // 1. Reconstruction loss: ||x - xRecon||^2
+        // 2. Latent consistency loss: ||z - zRecon||^2
+        double reconWeight = 1.0;
+        double latentWeight = 1.0;
 
-        // Backprop through encoder (simplified - full backprop is complex)
+        // Get gradient arrays
+        var encW1Grad = (double[,])gradients["encW1"];
+        var encB1Grad = (double[])gradients["encB1"];
         var encW2Grad = (double[,])gradients["encW2"];
         var encB2Grad = (double[])gradients["encB2"];
+        var decW1Grad = (double[,])gradients["decW1"];
+        var decB1Grad = (double[])gradients["decB1"];
+        var decW2Grad = (double[,])gradients["decW2"];
+        var decB2Grad = (double[])gradients["decB2"];
+        var reEncW1Grad = (double[,])gradients["reEncW1"];
+        var reEncB1Grad = (double[])gradients["reEncB1"];
+        var reEncW2Grad = (double[,])gradients["reEncW2"];
+        var reEncB2Grad = (double[])gradients["reEncB2"];
 
-        // Encoder hidden layer
-        var h = new double[_hiddenDim];
+        // === Forward pass with caching ===
+        // Encoder layer 1
+        var encH1Pre = new double[_hiddenDim];
+        var encH1 = new double[_hiddenDim];
         for (int j = 0; j < _hiddenDim; j++)
         {
-            h[j] = _encB1![j];
+            encH1Pre[j] = _encB1![j];
             for (int i = 0; i < _inputDim; i++)
             {
-                h[j] += x[i] * _encW1![i, j];
+                encH1Pre[j] += x[i] * _encW1![i, j];
             }
-            h[j] = LeakyReLU(h[j]);
+            encH1[j] = LeakyReLU(encH1Pre[j]);
         }
 
+        // Decoder layer 1
+        var decH1Pre = new double[_hiddenDim];
+        var decH1 = new double[_hiddenDim];
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            decH1Pre[j] = _decB1![j];
+            for (int i = 0; i < _latentDim; i++)
+            {
+                decH1Pre[j] += z[i] * _decW1![i, j];
+            }
+            decH1[j] = LeakyReLU(decH1Pre[j]);
+        }
+
+        // Re-encoder layer 1
+        var reEncH1Pre = new double[_hiddenDim];
+        var reEncH1 = new double[_hiddenDim];
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            reEncH1Pre[j] = _reEncB1![j];
+            for (int i = 0; i < _inputDim; i++)
+            {
+                reEncH1Pre[j] += xRecon[i] * _reEncW1![i, j];
+            }
+            reEncH1[j] = LeakyReLU(reEncH1Pre[j]);
+        }
+
+        // === Backprop for reconstruction loss: ||x - xRecon||^2 ===
+        // Gradient w.r.t. xRecon
+        var dXRecon = new double[_inputDim];
+        for (int j = 0; j < _inputDim; j++)
+        {
+            dXRecon[j] = reconWeight * 2 * (xRecon[j] - x[j]);
+        }
+
+        // Backprop through decoder layer 2
+        var dDecH1 = new double[_hiddenDim];
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            for (int j = 0; j < _inputDim; j++)
+            {
+                decW2Grad[i, j] += decH1[i] * dXRecon[j];
+                dDecH1[i] += _decW2![i, j] * dXRecon[j];
+            }
+        }
+        for (int j = 0; j < _inputDim; j++)
+        {
+            decB2Grad[j] += dXRecon[j];
+        }
+
+        // LeakyReLU derivative for decoder h1
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            if (decH1Pre[i] < 0) dDecH1[i] *= 0.2;
+        }
+
+        // Backprop through decoder layer 1
+        var dZ_fromRecon = new double[_latentDim];
+        for (int i = 0; i < _latentDim; i++)
+        {
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                decW1Grad[i, j] += z[i] * dDecH1[j];
+                dZ_fromRecon[i] += _decW1![i, j] * dDecH1[j];
+            }
+        }
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            decB1Grad[j] += dDecH1[j];
+        }
+
+        // === Backprop for latent consistency loss: ||z - zRecon||^2 ===
+        // Gradient w.r.t. z
+        var dZ_fromLatent = new double[_latentDim];
+        for (int j = 0; j < _latentDim; j++)
+        {
+            dZ_fromLatent[j] = latentWeight * 2 * (z[j] - zRecon[j]);
+        }
+
+        // Gradient w.r.t. zRecon
+        var dZRecon = new double[_latentDim];
+        for (int j = 0; j < _latentDim; j++)
+        {
+            dZRecon[j] = latentWeight * 2 * (zRecon[j] - z[j]);
+        }
+
+        // Backprop through re-encoder layer 2
+        var dReEncH1 = new double[_hiddenDim];
         for (int i = 0; i < _hiddenDim; i++)
         {
             for (int j = 0; j < _latentDim; j++)
             {
-                encW2Grad[i, j] += h[i] * dz[j];
+                reEncW2Grad[i, j] += reEncH1[i] * dZRecon[j];
+                dReEncH1[i] += _reEncW2![i, j] * dZRecon[j];
             }
         }
-
         for (int j = 0; j < _latentDim; j++)
         {
-            encB2Grad[j] += dz[j];
+            reEncB2Grad[j] += dZRecon[j];
+        }
+
+        // LeakyReLU derivative for re-encoder h1
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            if (reEncH1Pre[i] < 0) dReEncH1[i] *= 0.2;
+        }
+
+        // Backprop through re-encoder layer 1
+        for (int i = 0; i < _inputDim; i++)
+        {
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                reEncW1Grad[i, j] += xRecon[i] * dReEncH1[j];
+            }
+        }
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            reEncB1Grad[j] += dReEncH1[j];
+        }
+
+        // === Backprop through encoder ===
+        // Total gradient w.r.t. z
+        var dZ = new double[_latentDim];
+        for (int j = 0; j < _latentDim; j++)
+        {
+            dZ[j] = dZ_fromRecon[j] + dZ_fromLatent[j];
+        }
+
+        // Backprop through encoder layer 2
+        var dEncH1 = new double[_hiddenDim];
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            for (int j = 0; j < _latentDim; j++)
+            {
+                encW2Grad[i, j] += encH1[i] * dZ[j];
+                dEncH1[i] += _encW2![i, j] * dZ[j];
+            }
+        }
+        for (int j = 0; j < _latentDim; j++)
+        {
+            encB2Grad[j] += dZ[j];
+        }
+
+        // LeakyReLU derivative for encoder h1
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            if (encH1Pre[i] < 0) dEncH1[i] *= 0.2;
+        }
+
+        // Backprop through encoder layer 1
+        for (int i = 0; i < _inputDim; i++)
+        {
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                encW1Grad[i, j] += x[i] * dEncH1[j];
+            }
+        }
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            encB1Grad[j] += dEncH1[j];
         }
     }
 

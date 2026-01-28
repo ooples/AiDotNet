@@ -133,6 +133,18 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 "Epochs must be at least 1. Recommended is 10.");
         }
 
+        if (learningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate),
+                "Learning rate must be positive. Recommended is 0.0001.");
+        }
+
+        if (seqLength < 2)
+        {
+            throw new ArgumentOutOfRangeException(nameof(seqLength),
+                "Sequence length must be at least 2 for sliding window scoring. Recommended is 100.");
+        }
+
         _modelDim = modelDim;
         _numHeads = numHeads;
         _seqLength = seqLength;
@@ -557,8 +569,13 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             }
         }
 
+        // Track which points have been scored
+        var hasScore = new bool[n];
+
         // Score using sliding window
         int windowStart = 0;
+        int stepSize = Math.Max(1, _seqLength / 2); // Ensure step size is at least 1
+
         while (windowStart + _seqLength <= n)
         {
             var seq = new double[_seqLength][];
@@ -573,18 +590,26 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             for (int t = 0; t < _seqLength; t++)
             {
                 int idx = windowStart + t;
-                double currentScore = NumOps.ToDouble(scores[idx]);
-                // Take max of overlapping scores
-                scores[idx] = NumOps.FromDouble(Math.Max(currentScore, assocDisc[t]));
+                if (hasScore[idx])
+                {
+                    // Take max of overlapping scores
+                    double currentScore = NumOps.ToDouble(scores[idx]);
+                    scores[idx] = NumOps.FromDouble(Math.Max(currentScore, assocDisc[t]));
+                }
+                else
+                {
+                    scores[idx] = NumOps.FromDouble(assocDisc[t]);
+                    hasScore[idx] = true;
+                }
             }
 
-            windowStart += _seqLength / 2; // 50% overlap
+            windowStart += stepSize;
         }
 
         // Handle remaining points that weren't scored
         for (int i = 0; i < n; i++)
         {
-            if (NumOps.ToDouble(scores[i]) == 0)
+            if (!hasScore[i])
             {
                 // Use simple distance for points without window coverage
                 double dist = 0;

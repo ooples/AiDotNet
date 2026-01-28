@@ -118,6 +118,12 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
                 "Inference steps must be at least 1. Recommended is 100.");
         }
 
+        if (learningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate),
+                "Learning rate must be positive. Recommended is 0.0002.");
+        }
+
         _latentDim = latentDim;
         _hiddenDim = hiddenDim;
         _epochs = epochs;
@@ -370,30 +376,318 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
 
     private void UpdateDiscriminator(double[] realData, double[] fakeData)
     {
-        var (realOut, _) = Discriminate(realData);
-        var (fakeOut, _) = Discriminate(fakeData);
+        double lr = _learningRate;
 
-        // Binary cross-entropy gradients
-        double realGrad = -(1.0 / (realOut + 1e-8));
-        double fakeGrad = 1.0 / (1.0 - fakeOut + 1e-8);
+        // Forward pass for real data with cache
+        var (realH1, realH2, realOut) = DiscriminateWithCache(realData);
+        // Forward pass for fake data with cache
+        var (fakeH1, fakeH2, fakeOut) = DiscriminateWithCache(fakeData);
 
-        // Simplified update - full backprop is complex
-        // Just update biases as a proxy
-        double lr = _learningRate * 0.1;
-        _discB3![0] -= lr * (realGrad + fakeGrad);
+        // Binary cross-entropy gradients: d/dz sigmoid_cross_entropy = sigmoid(z) - target
+        // For real data, target = 1: gradient = realOut - 1
+        // For fake data, target = 0: gradient = fakeOut - 0 = fakeOut
+        double dRealOut = realOut - 1.0;
+        double dFakeOut = fakeOut;
+
+        // Backprop through discriminator for real data
+        BackpropDiscriminator(realData, realH1, realH2, dRealOut, lr);
+        // Backprop through discriminator for fake data
+        BackpropDiscriminator(fakeData, fakeH1, fakeH2, dFakeOut, lr);
+    }
+
+    private (double[] h1, double[] h2, double output) DiscriminateWithCache(double[] x)
+    {
+        // Layer 1
+        var h1Pre = new double[_hiddenDim];
+        var h1 = new double[_hiddenDim];
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            h1Pre[j] = _discB1![j];
+            for (int i = 0; i < _inputDim; i++)
+            {
+                h1Pre[j] += x[i] * _discW1![i, j];
+            }
+            h1[j] = LeakyReLU(h1Pre[j]);
+        }
+
+        // Layer 2
+        var h2Pre = new double[_hiddenDim];
+        var h2 = new double[_hiddenDim];
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            h2Pre[j] = _discB2![j];
+            for (int i = 0; i < _hiddenDim; i++)
+            {
+                h2Pre[j] += h1[i] * _discW2![i, j];
+            }
+            h2[j] = LeakyReLU(h2Pre[j]);
+        }
+
+        // Output layer
+        double outPre = _discB3![0];
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            outPre += h2[i] * _discW3![i, 0];
+        }
+        double output = Sigmoid(outPre);
+
+        return (h1, h2, output);
+    }
+
+    private void BackpropDiscriminator(double[] x, double[] h1, double[] h2, double dOut, double lr)
+    {
+        // Gradient through output layer
+        var dH2 = new double[_hiddenDim];
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            _discW3![i, 0] -= lr * h2[i] * dOut;
+            dH2[i] = _discW3[i, 0] * dOut;
+        }
+        _discB3![0] -= lr * dOut;
+
+        // LeakyReLU derivative for h2
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            if (h2[i] < 0) dH2[i] *= 0.2;
+        }
+
+        // Gradient through layer 2
+        var dH1 = new double[_hiddenDim];
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                _discW2![i, j] -= lr * h1[i] * dH2[j];
+                dH1[i] += _discW2[i, j] * dH2[j];
+            }
+        }
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            _discB2![j] -= lr * dH2[j];
+        }
+
+        // LeakyReLU derivative for h1
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            if (h1[i] < 0) dH1[i] *= 0.2;
+        }
+
+        // Gradient through layer 1
+        for (int i = 0; i < _inputDim; i++)
+        {
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                _discW1![i, j] -= lr * x[i] * dH1[j];
+            }
+        }
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            _discB1![j] -= lr * dH1[j];
+        }
     }
 
     private void UpdateGenerator(double[] z)
     {
-        var fakeData = Generate(z);
-        var (fakeOut, _) = Discriminate(fakeData);
+        double lr = _learningRate;
+
+        // Forward pass through generator with cache
+        var (h1, h2, fakeData) = GenerateWithCache(z);
+
+        // Forward pass through discriminator
+        var (_, discH2, fakeOut) = DiscriminateWithCache(fakeData);
 
         // Generator wants discriminator to output 1 for fake
-        double grad = -(1.0 / (fakeOut + 1e-8));
+        // Gradient: d/dz BCE(sigmoid(z), 1) = sigmoid(z) - 1
+        double dOut = fakeOut - 1.0;
 
-        // Simplified update
-        double lr = _learningRate * 0.1;
-        _genB3![0] -= lr * grad * 0.01;
+        // Backprop through discriminator to get gradient w.r.t. fakeData
+        var dFakeData = BackpropDiscriminatorToInput(fakeData, discH2, dOut);
+
+        // Backprop through generator
+        BackpropGenerator(z, h1, h2, dFakeData, lr);
+    }
+
+    private (double[] h1, double[] h2, double[] output) GenerateWithCache(double[] z)
+    {
+        // Layer 1
+        var h1 = new double[_hiddenDim];
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            h1[j] = _genB1![j];
+            for (int i = 0; i < _latentDim; i++)
+            {
+                h1[j] += z[i] * _genW1![i, j];
+            }
+            h1[j] = LeakyReLU(h1[j]);
+        }
+
+        // Layer 2
+        var h2 = new double[_hiddenDim];
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            h2[j] = _genB2![j];
+            for (int i = 0; i < _hiddenDim; i++)
+            {
+                h2[j] += h1[i] * _genW2![i, j];
+            }
+            h2[j] = LeakyReLU(h2[j]);
+        }
+
+        // Output layer (tanh for bounded output)
+        var output = new double[_inputDim];
+        for (int j = 0; j < _inputDim; j++)
+        {
+            output[j] = _genB3![j];
+            for (int i = 0; i < _hiddenDim; i++)
+            {
+                output[j] += h2[i] * _genW3![i, j];
+            }
+            output[j] = Math.Tanh(output[j]);
+        }
+
+        return (h1, h2, output);
+    }
+
+    private double[] BackpropDiscriminatorToInput(double[] x, double[] h2, double dOut)
+    {
+        // Backprop through discriminator without updating weights
+        // to get gradient w.r.t. input
+
+        // Gradient through output layer
+        var dH2 = new double[_hiddenDim];
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            dH2[i] = _discW3![i, 0] * dOut;
+        }
+
+        // LeakyReLU derivative for h2
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            if (h2[i] < 0) dH2[i] *= 0.2;
+        }
+
+        // We need h1 to continue backprop - recompute it
+        var h1 = new double[_hiddenDim];
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            h1[j] = _discB1![j];
+            for (int i = 0; i < _inputDim; i++)
+            {
+                h1[j] += x[i] * _discW1![i, j];
+            }
+            h1[j] = LeakyReLU(h1[j]);
+        }
+
+        // Gradient through layer 2
+        var dH1 = new double[_hiddenDim];
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                dH1[i] += _discW2![i, j] * dH2[j];
+            }
+        }
+
+        // LeakyReLU derivative for h1
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            if (h1[i] < 0) dH1[i] *= 0.2;
+        }
+
+        // Gradient through layer 1 to input
+        var dX = new double[_inputDim];
+        for (int i = 0; i < _inputDim; i++)
+        {
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                dX[i] += _discW1![i, j] * dH1[j];
+            }
+        }
+
+        return dX;
+    }
+
+    private void BackpropGenerator(double[] z, double[] h1, double[] h2, double[] dOutput, double lr)
+    {
+        // Tanh derivative: d/dx tanh(x) = 1 - tanh(x)^2
+        // We need the pre-tanh values, but we stored the post-tanh values
+        // We can recover: if output = tanh(pre), then pre = atanh(output)
+        // Alternatively, dOutput * (1 - output^2) gives us the gradient through tanh
+
+        // Recompute output layer pre-activation and tanh values
+        var outputPre = new double[_inputDim];
+        var output = new double[_inputDim];
+        for (int j = 0; j < _inputDim; j++)
+        {
+            outputPre[j] = _genB3![j];
+            for (int i = 0; i < _hiddenDim; i++)
+            {
+                outputPre[j] += h2[i] * _genW3![i, j];
+            }
+            output[j] = Math.Tanh(outputPre[j]);
+        }
+
+        // Apply tanh derivative
+        var dOutputPre = new double[_inputDim];
+        for (int j = 0; j < _inputDim; j++)
+        {
+            dOutputPre[j] = dOutput[j] * (1 - output[j] * output[j]);
+        }
+
+        // Gradient through output layer
+        var dH2 = new double[_hiddenDim];
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            for (int j = 0; j < _inputDim; j++)
+            {
+                _genW3![i, j] -= lr * h2[i] * dOutputPre[j];
+                dH2[i] += _genW3[i, j] * dOutputPre[j];
+            }
+        }
+        for (int j = 0; j < _inputDim; j++)
+        {
+            _genB3![j] -= lr * dOutputPre[j];
+        }
+
+        // LeakyReLU derivative for h2
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            if (h2[i] < 0) dH2[i] *= 0.2;
+        }
+
+        // Gradient through layer 2
+        var dH1 = new double[_hiddenDim];
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                _genW2![i, j] -= lr * h1[i] * dH2[j];
+                dH1[i] += _genW2[i, j] * dH2[j];
+            }
+        }
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            _genB2![j] -= lr * dH2[j];
+        }
+
+        // LeakyReLU derivative for h1
+        for (int i = 0; i < _hiddenDim; i++)
+        {
+            if (h1[i] < 0) dH1[i] *= 0.2;
+        }
+
+        // Gradient through layer 1
+        for (int i = 0; i < _latentDim; i++)
+        {
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                _genW1![i, j] -= lr * z[i] * dH1[j];
+            }
+        }
+        for (int j = 0; j < _hiddenDim; j++)
+        {
+            _genB1![j] -= lr * dH1[j];
+        }
     }
 
     private static double LeakyReLU(double x, double alpha = 0.2)
@@ -437,7 +731,9 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
 
             // Find optimal z via gradient descent
             var z = SampleLatent();
+            var bestZ = (double[])z.Clone();
             double bestLoss = double.MaxValue;
+            double zLr = 0.1; // Learning rate for z optimization
 
             for (int step = 0; step < _inferenceSteps; step++)
             {
@@ -463,12 +759,53 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
                 if (loss < bestLoss)
                 {
                     bestLoss = loss;
+                    Array.Copy(z, bestZ, _latentDim);
                 }
 
-                // Update z
+                // Compute gradient of loss w.r.t. z using finite differences
+                // dL/dz_j = (L(z + eps*e_j) - L(z - eps*e_j)) / (2*eps)
+                double eps = 1e-4;
+                var dz = new double[_latentDim];
+
                 for (int j = 0; j < _latentDim; j++)
                 {
-                    z[j] -= 0.01 * (z[j] * 0.001); // Regularization
+                    // Perturb z[j] positively
+                    z[j] += eps;
+                    var xGenPlus = Generate(z);
+                    var (_, featGenPlus) = Discriminate(xGenPlus);
+                    double lossPlus = 0;
+                    for (int k = 0; k < _inputDim; k++)
+                    {
+                        lossPlus += Math.Pow(x[k] - xGenPlus[k], 2);
+                    }
+                    for (int k = 0; k < _hiddenDim; k++)
+                    {
+                        lossPlus += 0.1 * Math.Pow(featReal[k] - featGenPlus[k], 2);
+                    }
+
+                    // Perturb z[j] negatively
+                    z[j] -= 2 * eps;
+                    var xGenMinus = Generate(z);
+                    var (_, featGenMinus) = Discriminate(xGenMinus);
+                    double lossMinus = 0;
+                    for (int k = 0; k < _inputDim; k++)
+                    {
+                        lossMinus += Math.Pow(x[k] - xGenMinus[k], 2);
+                    }
+                    for (int k = 0; k < _hiddenDim; k++)
+                    {
+                        lossMinus += 0.1 * Math.Pow(featReal[k] - featGenMinus[k], 2);
+                    }
+
+                    // Restore z[j] and compute gradient
+                    z[j] += eps;
+                    dz[j] = (lossPlus - lossMinus) / (2 * eps);
+                }
+
+                // Update z using gradient descent with regularization
+                for (int j = 0; j < _latentDim; j++)
+                {
+                    z[j] -= zLr * (dz[j] + 0.001 * z[j]); // Gradient + L2 regularization
                 }
             }
 

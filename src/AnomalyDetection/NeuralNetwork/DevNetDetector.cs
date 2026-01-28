@@ -94,6 +94,18 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
                 "Epochs must be at least 1. Recommended is 50.");
         }
 
+        if (learningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate),
+                "Learning rate must be positive. Recommended is 0.001.");
+        }
+
+        if (marginScale <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(marginScale),
+                "Margin scale must be positive. Recommended is 5.0.");
+        }
+
         _hiddenDim = hiddenDim;
         _epochs = epochs;
         _learningRate = learningRate;
@@ -241,18 +253,24 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
                     double u2 = 1.0 - _random.NextDouble();
                     double refScore = _refMean + _refStd * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
 
-                    // Deviation loss: push normal data close to reference, anomalies away
+                    // Deviation loss: push normal data close to reference
                     // For unsupervised, assume all training data is normal
-                    double margin = _marginScale * _refStd;
+                    // Normal samples should have low deviation from reference
+                    // Loss = deviation^2 pushes scores toward reference
                     double deviation = score - refScore;
-                    double loss = Math.Max(0, margin - Math.Abs(deviation));
 
-                    // Gradient of deviation loss
-                    double dScore = 0;
-                    if (loss > 0)
-                    {
-                        dScore = deviation >= 0 ? 1.0 : -1.0;
-                    }
+                    // L2 loss: ||score - refScore||^2
+                    // This encourages normal data to have scores close to reference
+                    double loss = deviation * deviation;
+
+                    // Gradient of L2 loss: d/dscore (score - refScore)^2 = 2*(score - refScore)
+                    double dScore = 2 * deviation;
+
+                    // Gradient clipping
+                    dScore = Math.Max(-10.0, Math.Min(10.0, dScore));
+
+                    // Unused: loss value (for debugging/logging if needed)
+                    _ = loss;
 
                     // Backprop through output layer
                     var dH2 = new double[_hiddenDim];

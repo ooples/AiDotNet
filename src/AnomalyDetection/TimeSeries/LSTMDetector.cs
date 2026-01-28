@@ -108,6 +108,12 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
                 "Epochs must be at least 1. Recommended is 50.");
         }
 
+        if (learningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate),
+                "Learning rate must be positive. Recommended is 0.001.");
+        }
+
         _hiddenDim = hiddenDim;
         _seqLength = seqLength;
         _epochs = epochs;
@@ -126,6 +132,13 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         {
             throw new ArgumentException(
                 $"Not enough samples for sequence length {_seqLength}. Need at least {_seqLength + 1} samples.",
+                nameof(X));
+        }
+
+        if (_inputDim < 1)
+        {
+            throw new ArgumentException(
+                "Input must have at least 1 feature.",
                 nameof(X));
         }
 
@@ -262,6 +275,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
     {
         int n = sequences.Length;
         int batchSize = Math.Min(32, n);
+        int inputSize = _inputDim + _hiddenDim;
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
@@ -271,8 +285,17 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
             {
                 int actualBatchSize = Math.Min(batchSize, n - batch);
 
-                // Accumulate gradients (simplified - just update based on loss)
-                double totalLoss = 0;
+                // Initialize gradient accumulators
+                var dWf = new double[inputSize, _hiddenDim];
+                var dWi = new double[inputSize, _hiddenDim];
+                var dWc = new double[inputSize, _hiddenDim];
+                var dWo = new double[inputSize, _hiddenDim];
+                var dbf = new double[_hiddenDim];
+                var dbi = new double[_hiddenDim];
+                var dbc = new double[_hiddenDim];
+                var dbo = new double[_hiddenDim];
+                var dWy = new double[_hiddenDim, _inputDim];
+                var dby = new double[_inputDim];
 
                 for (int b = 0; b < actualBatchSize; b++)
                 {
@@ -280,31 +303,298 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
                     var seq = sequences[idx];
                     var target = targets[idx];
 
-                    // Forward pass
-                    var (prediction, h, c) = Forward(seq);
+                    // Forward pass with caching all intermediate values
+                    var (prediction, hStates, cStates, fGates, iGates, cCandidates, oGates, concats) =
+                        ForwardWithCache(seq);
 
-                    // Compute loss
-                    double loss = 0;
+                    // Compute output layer gradient
+                    var dOutput = new double[_inputDim];
                     for (int j = 0; j < _inputDim; j++)
                     {
-                        loss += Math.Pow(prediction[j] - target[j], 2);
+                        dOutput[j] = 2 * (prediction[j] - target[j]);
                     }
-                    totalLoss += loss;
 
-                    // Simplified gradient update (SGD on output layer)
-                    double lr = _learningRate / actualBatchSize;
+                    // Backprop through output layer
+                    var hFinal = hStates[seq.Length];
                     for (int j = 0; j < _inputDim; j++)
                     {
-                        double grad = 2 * (prediction[j] - target[j]);
-                        _by![j] -= lr * grad;
+                        dby[j] += dOutput[j];
                         for (int i = 0; i < _hiddenDim; i++)
                         {
-                            _Wy![i, j] -= lr * grad * h[i];
+                            dWy[i, j] += hFinal[i] * dOutput[j];
                         }
                     }
+
+                    // Gradient w.r.t. final hidden state
+                    var dh = new double[_hiddenDim];
+                    for (int i = 0; i < _hiddenDim; i++)
+                    {
+                        for (int j = 0; j < _inputDim; j++)
+                        {
+                            dh[i] += _Wy![i, j] * dOutput[j];
+                        }
+                    }
+
+                    // BPTT through time steps
+                    var dc = new double[_hiddenDim];
+                    for (int t = seq.Length - 1; t >= 0; t--)
+                    {
+                        var f = fGates[t];
+                        var ig = iGates[t];
+                        var cCand = cCandidates[t];
+                        var o = oGates[t];
+                        var cPrev = t > 0 ? cStates[t] : new double[_hiddenDim];
+                        var cCurr = cStates[t + 1];
+                        var concat = concats[t];
+
+                        // Gradient of h = o * tanh(c)
+                        // dL/do = dL/dh * tanh(c)
+                        // dL/dc += dL/dh * o * (1 - tanh(c)^2)
+                        var tanhC = new double[_hiddenDim];
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            tanhC[i] = Math.Tanh(cCurr[i]);
+                        }
+
+                        var do_gate = new double[_hiddenDim];
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            do_gate[i] = dh[i] * tanhC[i];
+                            dc[i] += dh[i] * o[i] * (1 - tanhC[i] * tanhC[i]);
+                        }
+
+                        // Gradient of c = f * c_prev + i * c_candidate
+                        // dL/df = dL/dc * c_prev
+                        // dL/di = dL/dc * c_candidate
+                        // dL/dc_candidate = dL/dc * i
+                        // dL/dc_prev = dL/dc * f (carried to next iteration)
+                        var df = new double[_hiddenDim];
+                        var di = new double[_hiddenDim];
+                        var dcCand = new double[_hiddenDim];
+
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            df[i] = dc[i] * cPrev[i];
+                            di[i] = dc[i] * cCand[i];
+                            dcCand[i] = dc[i] * ig[i];
+                        }
+
+                        // Apply gate derivatives (sigmoid: s' = s*(1-s), tanh: t' = 1-t^2)
+                        var dfPre = new double[_hiddenDim];
+                        var diPre = new double[_hiddenDim];
+                        var doPre = new double[_hiddenDim];
+                        var dcCandPre = new double[_hiddenDim];
+
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            dfPre[i] = df[i] * f[i] * (1 - f[i]);
+                            diPre[i] = di[i] * ig[i] * (1 - ig[i]);
+                            doPre[i] = do_gate[i] * o[i] * (1 - o[i]);
+                            dcCandPre[i] = dcCand[i] * (1 - cCand[i] * cCand[i]);
+                        }
+
+                        // Accumulate gradients for gate weights
+                        for (int i = 0; i < inputSize; i++)
+                        {
+                            for (int j = 0; j < _hiddenDim; j++)
+                            {
+                                dWf[i, j] += concat[i] * dfPre[j];
+                                dWi[i, j] += concat[i] * diPre[j];
+                                dWc[i, j] += concat[i] * dcCandPre[j];
+                                dWo[i, j] += concat[i] * doPre[j];
+                            }
+                        }
+
+                        for (int j = 0; j < _hiddenDim; j++)
+                        {
+                            dbf[j] += dfPre[j];
+                            dbi[j] += diPre[j];
+                            dbc[j] += dcCandPre[j];
+                            dbo[j] += doPre[j];
+                        }
+
+                        // Gradient w.r.t. concat = [x, h_prev]
+                        // We need dL/dh_prev for the next iteration
+                        var dConcat = new double[inputSize];
+                        for (int i = 0; i < inputSize; i++)
+                        {
+                            for (int j = 0; j < _hiddenDim; j++)
+                            {
+                                dConcat[i] += _Wf![i, j] * dfPre[j];
+                                dConcat[i] += _Wi![i, j] * diPre[j];
+                                dConcat[i] += _Wc![i, j] * dcCandPre[j];
+                                dConcat[i] += _Wo![i, j] * doPre[j];
+                            }
+                        }
+
+                        // Extract dh_prev from dConcat (last _hiddenDim elements)
+                        var dhPrev = new double[_hiddenDim];
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            dhPrev[i] = dConcat[_inputDim + i];
+                        }
+
+                        // Update dc for next iteration (dc_prev = dc * f)
+                        var dcPrev = new double[_hiddenDim];
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            dcPrev[i] = dc[i] * f[i];
+                        }
+
+                        dh = dhPrev;
+                        dc = dcPrev;
+                    }
+                }
+
+                // Apply gradients
+                double lr = _learningRate / actualBatchSize;
+                double clipValue = 5.0; // Gradient clipping
+
+                for (int i = 0; i < inputSize; i++)
+                {
+                    for (int j = 0; j < _hiddenDim; j++)
+                    {
+                        _Wf![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dWf[i, j]));
+                        _Wi![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dWi[i, j]));
+                        _Wc![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dWc[i, j]));
+                        _Wo![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dWo[i, j]));
+                    }
+                }
+
+                for (int j = 0; j < _hiddenDim; j++)
+                {
+                    _bf![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dbf[j]));
+                    _bi![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dbi[j]));
+                    _bc![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dbc[j]));
+                    _bo![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dbo[j]));
+                }
+
+                for (int i = 0; i < _hiddenDim; i++)
+                {
+                    for (int j = 0; j < _inputDim; j++)
+                    {
+                        _Wy![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dWy[i, j]));
+                    }
+                }
+
+                for (int j = 0; j < _inputDim; j++)
+                {
+                    _by![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, dby[j]));
                 }
             }
         }
+    }
+
+    private (double[] output, double[][] hStates, double[][] cStates,
+             double[][] fGates, double[][] iGates, double[][] cCandidates,
+             double[][] oGates, double[][] concats) ForwardWithCache(double[][] sequence)
+    {
+        int seqLen = sequence.Length;
+        int inputSize = _inputDim + _hiddenDim;
+
+        // Initialize states
+        var hStates = new double[seqLen + 1][];
+        var cStates = new double[seqLen + 1][];
+        hStates[0] = new double[_hiddenDim];
+        cStates[0] = new double[_hiddenDim];
+
+        // Cache for BPTT
+        var fGates = new double[seqLen][];
+        var iGates = new double[seqLen][];
+        var cCandidates = new double[seqLen][];
+        var oGates = new double[seqLen][];
+        var concats = new double[seqLen][];
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            var x = sequence[t];
+            var hPrev = hStates[t];
+            var cPrev = cStates[t];
+
+            // Concatenate input and previous hidden state
+            var concat = new double[inputSize];
+            Array.Copy(x, 0, concat, 0, _inputDim);
+            Array.Copy(hPrev, 0, concat, _inputDim, _hiddenDim);
+            concats[t] = concat;
+
+            // Forget gate
+            var f = new double[_hiddenDim];
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                f[j] = _bf![j];
+                for (int i = 0; i < inputSize; i++)
+                {
+                    f[j] += concat[i] * _Wf![i, j];
+                }
+                f[j] = Sigmoid(f[j]);
+            }
+            fGates[t] = f;
+
+            // Input gate
+            var ig = new double[_hiddenDim];
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                ig[j] = _bi![j];
+                for (int i = 0; i < inputSize; i++)
+                {
+                    ig[j] += concat[i] * _Wi![i, j];
+                }
+                ig[j] = Sigmoid(ig[j]);
+            }
+            iGates[t] = ig;
+
+            // Cell candidate
+            var cCand = new double[_hiddenDim];
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                cCand[j] = _bc![j];
+                for (int i = 0; i < inputSize; i++)
+                {
+                    cCand[j] += concat[i] * _Wc![i, j];
+                }
+                cCand[j] = Math.Tanh(cCand[j]);
+            }
+            cCandidates[t] = cCand;
+
+            // Output gate
+            var o = new double[_hiddenDim];
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                o[j] = _bo![j];
+                for (int i = 0; i < inputSize; i++)
+                {
+                    o[j] += concat[i] * _Wo![i, j];
+                }
+                o[j] = Sigmoid(o[j]);
+            }
+            oGates[t] = o;
+
+            // New cell and hidden state
+            var cNew = new double[_hiddenDim];
+            var hNew = new double[_hiddenDim];
+            for (int j = 0; j < _hiddenDim; j++)
+            {
+                cNew[j] = f[j] * cPrev[j] + ig[j] * cCand[j];
+                hNew[j] = o[j] * Math.Tanh(cNew[j]);
+            }
+
+            hStates[t + 1] = hNew;
+            cStates[t + 1] = cNew;
+        }
+
+        // Output layer
+        var hFinal = hStates[seqLen];
+        var output = new double[_inputDim];
+        for (int j = 0; j < _inputDim; j++)
+        {
+            output[j] = _by![j];
+            for (int i = 0; i < _hiddenDim; i++)
+            {
+                output[j] += hFinal[i] * _Wy![i, j];
+            }
+        }
+
+        return (output, hStates, cStates, fGates, iGates, cCandidates, oGates, concats);
     }
 
     private (double[] output, double[] h, double[] c) Forward(double[][] sequence)
@@ -413,6 +703,13 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
     private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
     {
         ValidateInput(X);
+
+        if (X.Columns != _inputDim)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features but model was trained with {_inputDim} features.",
+                nameof(X));
+        }
 
         var dataMeans = _dataMeans;
         var dataStds = _dataStds;

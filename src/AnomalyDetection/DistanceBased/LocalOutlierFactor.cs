@@ -253,14 +253,21 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
 
     private double ComputeLOFScore(int pointIndex)
     {
+        var neighborIndices = _neighborIndices;
+        var lrd = _lrd;
+        if (neighborIndices == null || lrd == null)
+        {
+            throw new InvalidOperationException("Model not properly fitted.");
+        }
+
         T lofSum = NumOps.Zero;
-        var neighbors = _neighborIndices![pointIndex];
-        T pointLrd = _lrd![pointIndex];
+        var neighbors = neighborIndices[pointIndex];
+        T pointLrd = lrd[pointIndex];
 
         for (int j = 0; j < _numNeighbors; j++)
         {
             int neighborIdx = neighbors[j];
-            T neighborLrd = _lrd[neighborIdx];
+            T neighborLrd = lrd[neighborIdx];
 
             // LOF contribution from this neighbor
             if (NumOps.GreaterThan(pointLrd, NumOps.Zero))
@@ -275,6 +282,13 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
 
     private double ComputeLOFScoreForNewPoint(Vector<T> point)
     {
+        var kDistances = _kDistances;
+        var lrd = _lrd;
+        if (kDistances == null || lrd == null)
+        {
+            throw new InvalidOperationException("Model not properly fitted.");
+        }
+
         // Find k-nearest neighbors in training data
         var (neighbors, distances) = FindKNearestNeighborsInTraining(point, _numNeighbors);
 
@@ -284,7 +298,7 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _numNeighbors; j++)
         {
             int neighborIdx = neighbors[j];
-            T kDistNeighbor = _kDistances![neighborIdx][_numNeighbors - 1];
+            T kDistNeighbor = kDistances[neighborIdx][_numNeighbors - 1];
             T distToNeighbor = distances[j];
 
             T reachDist = NumOps.GreaterThan(kDistNeighbor, distToNeighbor) ? kDistNeighbor : distToNeighbor;
@@ -300,7 +314,7 @@ public class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _numNeighbors; j++)
         {
             int neighborIdx = neighbors[j];
-            T neighborLrd = _lrd![neighborIdx];
+            T neighborLrd = lrd[neighborIdx];
 
             if (NumOps.GreaterThan(pointLrd, NumOps.Zero))
             {

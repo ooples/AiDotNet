@@ -42,6 +42,7 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
     private readonly int _maxSamples;
     private List<FCFTree>? _trees;
     private int _inputDim;
+    private int _effectiveMaxSamples;
 
     /// <summary>
     /// Gets the number of trees in the forest.
@@ -87,9 +88,9 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
 
         int n = X.Rows;
         _inputDim = X.Columns;
-        int effectiveMaxSamples = Math.Min(_maxSamples, n);
+        _effectiveMaxSamples = Math.Min(_maxSamples, n);
 
-        if (effectiveMaxSamples < 2)
+        if (_effectiveMaxSamples < 2)
         {
             throw new ArgumentException(
                 $"Fair-Cut Forest requires at least 2 samples. Got {n} samples.",
@@ -111,13 +112,13 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
         var featureImportances = ComputeFeatureImportances(data);
 
         // Build trees
-        int maxDepth = (int)Math.Ceiling(Math.Log(effectiveMaxSamples) / Math.Log(2));
+        int maxDepth = (int)Math.Ceiling(Math.Log(_effectiveMaxSamples) / Math.Log(2));
         _trees = new List<FCFTree>(_numTrees);
 
         for (int t = 0; t < _numTrees; t++)
         {
             // Sample data
-            var sampleIndices = SampleIndices(n, effectiveMaxSamples);
+            var sampleIndices = SampleIndices(n, _effectiveMaxSamples);
             var sample = sampleIndices.Select(i => data[i]).ToArray();
 
             // Build tree with fair cuts
@@ -316,7 +317,8 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
 
             // Anomaly score: 2^(-avgPathLength / c(n))
             // where c(n) is the average path length in an unsuccessful search in a BST
-            double cn = ComputeCn(_maxSamples);
+            // Use effective sample size (actual samples per tree) for normalization
+            double cn = ComputeCn(_effectiveMaxSamples);
             double score = Math.Pow(2, -avgPathLength / cn);
 
             scores[i] = NumOps.FromDouble(score);

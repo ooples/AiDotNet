@@ -102,6 +102,12 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
                 "Epochs must be at least 1. Recommended is 100.");
         }
 
+        if (learningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate),
+                "Learning rate must be positive. Recommended is 0.001.");
+        }
+
         _hiddenDim = hiddenDim;
         _outputDim = outputDim;
         _epochs = epochs;

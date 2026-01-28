@@ -281,18 +281,21 @@ public class OneClassSVM<T> : AnomalyDetectorBase<T>
         }
 
         // SMO iterations
+        // SMO requires at least 2 samples to optimize pairs
+        if (n < 2)
+        {
+            return alphas;
+        }
+
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             bool changed = false;
 
             for (int i = 0; i < n; i++)
             {
-                // Select a random j != i
-                int j = _random.Next(n);
-                while (j == i)
-                {
-                    j = _random.Next(n);
-                }
+                // Select a random j != i using modular arithmetic to avoid infinite loop
+                int offset = 1 + _random.Next(n - 1);
+                int j = (i + offset) % n;
 
                 // Compute gradient components
                 T gi = NumOps.Zero;

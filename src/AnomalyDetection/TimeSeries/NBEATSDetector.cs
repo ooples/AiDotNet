@@ -120,6 +120,12 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                 "Epochs must be at least 1. Recommended is 50.");
         }
 
+        if (learningRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate),
+                "Learning rate must be positive. Recommended is 0.001.");
+        }
+
         _numStacks = numStacks;
         _numBlocks = numBlocks;
         _hiddenDim = hiddenDim;
@@ -282,6 +288,13 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
     {
         int n = inputs.Length;
         int batchSize = Math.Min(32, n);
+        int inputSize = _lookback * _inputDim;
+
+        var blocks = _blocks;
+        if (blocks == null)
+        {
+            throw new InvalidOperationException("Model not initialized.");
+        }
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
@@ -291,37 +304,306 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
             {
                 int actualBatchSize = Math.Min(batchSize, n - batch);
 
+                // Initialize gradient accumulators for all blocks
+                var blockGradients = new List<BlockGradients>();
+                for (int b = 0; b < blocks.Count; b++)
+                {
+                    blockGradients.Add(new BlockGradients
+                    {
+                        dW1 = new double[inputSize, _hiddenDim],
+                        dB1 = new double[_hiddenDim],
+                        dW2 = new double[_hiddenDim, _hiddenDim],
+                        dB2 = new double[_hiddenDim],
+                        dW3 = new double[_hiddenDim, _hiddenDim],
+                        dB3 = new double[_hiddenDim],
+                        dW4 = new double[_hiddenDim, _hiddenDim],
+                        dB4 = new double[_hiddenDim],
+                        dWTheta_b = new double[_hiddenDim, inputSize],
+                        dWTheta_f = new double[_hiddenDim, _inputDim]
+                    });
+                }
+
                 for (int b = 0; b < actualBatchSize; b++)
                 {
                     int idx = indices[batch + b];
                     var input = inputs[idx];
                     var target = targets[idx];
 
-                    // Forward pass
-                    var (forecast, _) = Forward(input);
+                    // Forward pass with caching
+                    var (forecast, residuals, hValues) = ForwardWithCache(input);
 
-                    // Compute loss gradient
+                    // Compute loss gradient (MSE loss)
                     var gradForecast = new double[_inputDim];
                     for (int j = 0; j < _inputDim; j++)
                     {
                         gradForecast[j] = 2 * (forecast[j] - target[j]);
                     }
 
-                    // Simplified backward pass - update last block's theta
-                    double lr = _learningRate / actualBatchSize;
-                    var lastBlock = _blocks![_blocks.Count - 1];
+                    // Backprop through all blocks (reverse order)
+                    for (int blockIdx = blocks.Count - 1; blockIdx >= 0; blockIdx--)
+                    {
+                        var block = blocks[blockIdx];
+                        var grad = blockGradients[blockIdx];
+                        var h = hValues[blockIdx];
+                        var residual = residuals[blockIdx];
 
-                    // Update forecast theta
+                        // Gradient through WTheta_f (forecast theta)
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            for (int j = 0; j < _inputDim; j++)
+                            {
+                                grad.dWTheta_f[i, j] += h[i] * gradForecast[j];
+                            }
+                        }
+
+                        // Gradient through h (from forecast)
+                        var dH = new double[_hiddenDim];
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            for (int j = 0; j < _inputDim; j++)
+                            {
+                                dH[i] += block.WTheta_f![i, j] * gradForecast[j];
+                            }
+                        }
+
+                        // Note: In full N-BEATS, backcast gradients would also contribute
+                        // For simplicity, we focus on forecast gradients
+
+                        // Backprop through FC4 (ReLU)
+                        var h3 = ForwardFC(residual, block.W1!, block.B1!);
+                        h3 = ApplyReLU(h3);
+                        h3 = ForwardFC(h3, block.W2!, block.B2!);
+                        h3 = ApplyReLU(h3);
+                        h3 = ForwardFC(h3, block.W3!, block.B3!);
+                        h3 = ApplyReLU(h3);
+
+                        // ReLU derivative for h
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            if (h[i] <= 0) dH[i] = 0;
+                        }
+
+                        // Update W4, B4
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            for (int j = 0; j < _hiddenDim; j++)
+                            {
+                                grad.dW4[i, j] += h3[i] * dH[j];
+                            }
+                            grad.dB4[i] += dH[i];
+                        }
+
+                        // Continue backprop through FC3
+                        var dH3 = new double[_hiddenDim];
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            for (int j = 0; j < _hiddenDim; j++)
+                            {
+                                dH3[i] += block.W4![i, j] * dH[j];
+                            }
+                            if (h3[i] <= 0) dH3[i] = 0;
+                        }
+
+                        var h2 = ForwardFC(residual, block.W1!, block.B1!);
+                        h2 = ApplyReLU(h2);
+                        h2 = ForwardFC(h2, block.W2!, block.B2!);
+                        h2 = ApplyReLU(h2);
+
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            for (int j = 0; j < _hiddenDim; j++)
+                            {
+                                grad.dW3[i, j] += h2[i] * dH3[j];
+                            }
+                            grad.dB3[i] += dH3[i];
+                        }
+
+                        // Continue backprop through FC2
+                        var dH2 = new double[_hiddenDim];
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            for (int j = 0; j < _hiddenDim; j++)
+                            {
+                                dH2[i] += block.W3![i, j] * dH3[j];
+                            }
+                            if (h2[i] <= 0) dH2[i] = 0;
+                        }
+
+                        var h1 = ForwardFC(residual, block.W1!, block.B1!);
+                        h1 = ApplyReLU(h1);
+
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            for (int j = 0; j < _hiddenDim; j++)
+                            {
+                                grad.dW2[i, j] += h1[i] * dH2[j];
+                            }
+                            grad.dB2[i] += dH2[i];
+                        }
+
+                        // Continue backprop through FC1
+                        var dH1 = new double[_hiddenDim];
+                        for (int i = 0; i < _hiddenDim; i++)
+                        {
+                            for (int j = 0; j < _hiddenDim; j++)
+                            {
+                                dH1[i] += block.W2![i, j] * dH2[j];
+                            }
+                            if (h1[i] <= 0) dH1[i] = 0;
+                        }
+
+                        for (int i = 0; i < inputSize; i++)
+                        {
+                            for (int j = 0; j < _hiddenDim; j++)
+                            {
+                                grad.dW1[i, j] += residual[i] * dH1[j];
+                            }
+                        }
+                        for (int j = 0; j < _hiddenDim; j++)
+                        {
+                            grad.dB1[j] += dH1[j];
+                        }
+                    }
+                }
+
+                // Apply gradients to all blocks
+                double lr = _learningRate / actualBatchSize;
+                double clipValue = 5.0;
+
+                for (int blockIdx = 0; blockIdx < blocks.Count; blockIdx++)
+                {
+                    var block = blocks[blockIdx];
+                    var grad = blockGradients[blockIdx];
+
+                    // Update W1, B1
+                    for (int i = 0; i < inputSize; i++)
+                    {
+                        for (int j = 0; j < _hiddenDim; j++)
+                        {
+                            block.W1![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dW1[i, j]));
+                        }
+                    }
+                    for (int j = 0; j < _hiddenDim; j++)
+                    {
+                        block.B1![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dB1[j]));
+                    }
+
+                    // Update W2, B2
+                    for (int i = 0; i < _hiddenDim; i++)
+                    {
+                        for (int j = 0; j < _hiddenDim; j++)
+                        {
+                            block.W2![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dW2[i, j]));
+                        }
+                    }
+                    for (int j = 0; j < _hiddenDim; j++)
+                    {
+                        block.B2![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dB2[j]));
+                    }
+
+                    // Update W3, B3
+                    for (int i = 0; i < _hiddenDim; i++)
+                    {
+                        for (int j = 0; j < _hiddenDim; j++)
+                        {
+                            block.W3![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dW3[i, j]));
+                        }
+                    }
+                    for (int j = 0; j < _hiddenDim; j++)
+                    {
+                        block.B3![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dB3[j]));
+                    }
+
+                    // Update W4, B4
+                    for (int i = 0; i < _hiddenDim; i++)
+                    {
+                        for (int j = 0; j < _hiddenDim; j++)
+                        {
+                            block.W4![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dW4[i, j]));
+                        }
+                    }
+                    for (int j = 0; j < _hiddenDim; j++)
+                    {
+                        block.B4![j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dB4[j]));
+                    }
+
+                    // Update WTheta_f
                     for (int i = 0; i < _hiddenDim; i++)
                     {
                         for (int j = 0; j < _inputDim; j++)
                         {
-                            lastBlock.WTheta_f![i, j] -= lr * gradForecast[j] * 0.01;
+                            block.WTheta_f![i, j] -= lr * Math.Max(-clipValue, Math.Min(clipValue, grad.dWTheta_f[i, j]));
                         }
                     }
                 }
             }
         }
+    }
+
+    private (double[] forecast, double[][] residuals, double[][] hValues) ForwardWithCache(double[] input)
+    {
+        var blocks = _blocks;
+        if (blocks == null)
+        {
+            throw new InvalidOperationException("Model not initialized.");
+        }
+
+        int inputSize = input.Length;
+        var residual = (double[])input.Clone();
+        var totalForecast = new double[_inputDim];
+
+        var residuals = new double[blocks.Count][];
+        var hValues = new double[blocks.Count][];
+
+        for (int blockIdx = 0; blockIdx < blocks.Count; blockIdx++)
+        {
+            var block = blocks[blockIdx];
+            residuals[blockIdx] = (double[])residual.Clone();
+
+            // FC stack (4 layers with ReLU)
+            var h = ForwardFC(residual, block.W1!, block.B1!);
+            h = ApplyReLU(h);
+            h = ForwardFC(h, block.W2!, block.B2!);
+            h = ApplyReLU(h);
+            h = ForwardFC(h, block.W3!, block.B3!);
+            h = ApplyReLU(h);
+            h = ForwardFC(h, block.W4!, block.B4!);
+            h = ApplyReLU(h);
+
+            hValues[blockIdx] = h;
+
+            // Generate backcast and forecast
+            var backcast = ForwardFC(h, block.WTheta_b!, new double[inputSize]);
+            var forecast = ForwardFC(h, block.WTheta_f!, new double[_inputDim]);
+
+            // Update residual (subtract backcast)
+            for (int i = 0; i < inputSize; i++)
+            {
+                residual[i] -= backcast[i];
+            }
+
+            // Accumulate forecast
+            for (int i = 0; i < _inputDim; i++)
+            {
+                totalForecast[i] += forecast[i];
+            }
+        }
+
+        return (totalForecast, residuals, hValues);
+    }
+
+    private class BlockGradients
+    {
+        public required double[,] dW1 { get; init; }
+        public required double[] dB1 { get; init; }
+        public required double[,] dW2 { get; init; }
+        public required double[] dB2 { get; init; }
+        public required double[,] dW3 { get; init; }
+        public required double[] dB3 { get; init; }
+        public required double[,] dW4 { get; init; }
+        public required double[] dB4 { get; init; }
+        public required double[,] dWTheta_b { get; init; }
+        public required double[,] dWTheta_f { get; init; }
     }
 
     private (double[] forecast, double[] backcast) Forward(double[] input)
