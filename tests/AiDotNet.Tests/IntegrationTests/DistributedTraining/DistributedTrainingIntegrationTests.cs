@@ -1,11 +1,11 @@
-using Xunit;
-using AiDotNet.DistributedTraining;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Interfaces;
-using AiDotNet.Models;
-using AiDotNet.Enums;
 using AiDotNet.Autodiff;
+using AiDotNet.DistributedTraining;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 

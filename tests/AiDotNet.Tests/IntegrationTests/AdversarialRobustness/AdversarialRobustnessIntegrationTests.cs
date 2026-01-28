@@ -1,4 +1,3 @@
-using Xunit;
 using AiDotNet.AdversarialRobustness.Attacks;
 using AiDotNet.AdversarialRobustness.CertifiedRobustness;
 using AiDotNet.AdversarialRobustness.Defenses;
@@ -11,6 +10,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.AdversarialRobustness;
 

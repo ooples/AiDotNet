@@ -1221,7 +1221,7 @@ public class PhysicsInformedIntegrationTests
         // Note: FNO might not update parameters in all cases depending on its internal implementation.
         // At minimum, verify the training completes without error and returns valid parameters.
         Assert.True(after.Length > 0);
-        Assert.False(after.Any(double.IsNaN));
+        Assert.DoesNotContain(after, double.IsNaN);
     }
 
     #endregion

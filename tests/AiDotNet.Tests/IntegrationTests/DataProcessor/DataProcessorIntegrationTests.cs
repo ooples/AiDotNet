@@ -1,10 +1,10 @@
-using Xunit;
 using AiDotNet.DataProcessor;
+using AiDotNet.FeatureSelectors;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Normalizers;
-using AiDotNet.FeatureSelectors;
 using AiDotNet.OutlierRemoval;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.DataProcessor;
 
