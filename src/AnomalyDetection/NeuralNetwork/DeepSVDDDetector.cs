@@ -57,6 +57,10 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
     private double[]? _center;
     private int _inputDim;
 
+    // Normalization parameters
+    private double[]? _dataMeans;
+    private double[]? _dataStds;
+
     /// <summary>
     /// Gets the hidden layer dimensions.
     /// </summary>
@@ -123,8 +127,10 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
             }
         }
 
-        // Normalize data
-        var (normalizedData, _, _) = NormalizeData(data);
+        // Normalize data and store normalization parameters
+        var (normalizedData, means, stds) = NormalizeData(data);
+        _dataMeans = means;
+        _dataStds = stds;
 
         // Initialize network weights
         InitializeWeights();
@@ -445,15 +451,23 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        var dataMeans = _dataMeans;
+        var dataStds = _dataStds;
+        if (dataMeans == null || dataStds == null)
+        {
+            throw new InvalidOperationException("Model not properly fitted. Normalization parameters missing.");
+        }
+
         int n = X.Rows;
         var scores = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
+            // Apply same normalization as training data
             var x = new double[_inputDim];
             for (int j = 0; j < _inputDim; j++)
             {
-                x[j] = NumOps.ToDouble(X[i, j]);
+                x[j] = (NumOps.ToDouble(X[i, j]) - dataMeans[j]) / dataStds[j];
             }
 
             var output = Forward(x);
