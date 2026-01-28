@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
 using AiDotNet.Interpretability;
 using AiDotNet.LinearAlgebra;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Interpretability;
 
@@ -73,9 +73,19 @@ public class InterpretabilityIntegrationTests
             InterpretationMethod.FeatureImportance
         };
 
+
+<<<<<<< TODO: Unmerged change from project 'AiDotNetTests(net471)', Before:
         Assert.True(enabledMethods.Contains(InterpretationMethod.SHAP));
         Assert.True(enabledMethods.Contains(InterpretationMethod.LIME));
         Assert.False(enabledMethods.Contains(InterpretationMethod.Anchor));
+=======
+        Assert.Contains(InterpretationMethod.SHAP, enabledMethods);
+        Assert.Contains(InterpretationMethod.LIME, enabledMethods);
+        Assert.DoesNotContain(InterpretationMethod.Anchor, enabledMethods);
+>>>>>>> After
+        Assert.Contains(InterpretationMethod.SHAP, enabledMethods);
+        Assert.Contains(InterpretationMethod.LIME, enabledMethods);
+        Assert.DoesNotContain(InterpretationMethod.Anchor, enabledMethods);
     }
 
     #endregion
@@ -889,7 +899,13 @@ public class InterpretabilityIntegrationTests
         var result = detector.DetectBias(predictions, sensitiveFeature, actualLabels);
 
         Assert.NotNull(result.GroupTruePositiveRates);
+
+<<<<<<< TODO: Unmerged change from project 'AiDotNetTests(net471)', Before:
         Assert.NotNull(result.EqualOpportunityDifference);
+    }
+=======
+    }
+>>>>>>> After
     }
 
     [Fact]
@@ -1366,7 +1382,13 @@ public class InterpretabilityIntegrationTests
         // Equal opportunity difference = 1.0 - 0.333... > 0.1 threshold
         Assert.True(result.HasBias);
         Assert.NotNull(result.GroupTruePositiveRates);
+
+<<<<<<< TODO: Unmerged change from project 'AiDotNetTests(net471)', Before:
         Assert.NotNull(result.EqualOpportunityDifference);
+    }
+=======
+    }
+>>>>>>> After
     }
 
     [Fact]

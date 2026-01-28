@@ -1,6 +1,6 @@
-using Xunit;
 using AiDotNet.ExperimentTracking;
 using AiDotNet.Models;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.ExperimentTracking;
 

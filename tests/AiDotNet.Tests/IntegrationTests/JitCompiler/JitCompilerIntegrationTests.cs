@@ -5,11 +5,11 @@ using System.Linq;
 using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
-using Xunit;
 using AiDotNet.JitCompiler;
+using AiDotNet.JitCompiler.CodeGen;
 using AiDotNet.JitCompiler.IR;
 using AiDotNet.JitCompiler.IR.Operations;
-using AiDotNet.JitCompiler.CodeGen;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.JitCompiler;
 

@@ -1,4 +1,3 @@
-using Xunit;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -6,6 +5,7 @@ using AiDotNet.Reasoning.Aggregation;
 using AiDotNet.Reasoning.Components;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Search;
+using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Reasoning;
 
@@ -795,7 +795,13 @@ public class ReasoningIntegrationTests
 
         var result = aggregator.Aggregate(answers, scores);
 
+
+<<<<<<< TODO: Unmerged change from project 'AiDotNetTests(net471)', Before:
         Assert.True(result.Equals("Yes", StringComparison.OrdinalIgnoreCase));
+=======
+        Assert.Equal(result, "Yes", ignoreCase: true);
+>>>>>>> After
+        Assert.Equal(result, "Yes", ignoreCase: true);
     }
 
     [Fact]
