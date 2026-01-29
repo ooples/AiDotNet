@@ -13,7 +13,8 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
 /// <summary>
@@ -44,7 +45,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// in Time Series Forecasting", NeurIPS 2022. https://arxiv.org/abs/2205.14415
 /// </para>
 /// </remarks>
-public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class NonStationaryTransformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -62,26 +63,7 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
 
     #endregion
 
-    #region ONNX Mode Fields
-
-    /// <summary>
-    /// The ONNX inference session for running pretrained models.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> ONNX (Open Neural Network Exchange) is a standard format
-    /// that allows models trained in one framework to run in another.
-    /// </para>
-    /// </remarks>
-    private readonly InferenceSession? _onnxSession;
-
-    /// <summary>
-    /// Path to the ONNX model file.
-    /// </summary>
-    private readonly string? _onnxModelPath;
-
-    #endregion
-
+    
     #region Native Mode Fields
 
     /// <summary>
@@ -258,12 +240,12 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
     /// the entire sequence without dividing it into patches.
     /// </para>
     /// </remarks>
-    public int PatchSize => 1;
+    public override int PatchSize => 1;
 
     /// <summary>
     /// Gets the stride. Non-stationary Transformer does not use patches (returns 1).
     /// </summary>
-    public int Stride => 1;
+    public override int Stride => 1;
 
     /// <summary>
     /// Gets whether the model processes channels independently.
@@ -274,27 +256,27 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
     /// to capture cross-feature relationships through attention.
     /// </para>
     /// </remarks>
-    public bool IsChannelIndependent => false;
+    public override bool IsChannelIndependent => false;
 
     /// <summary>
     /// Gets whether the model uses native mode (true) or ONNX mode (false).
     /// </summary>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     /// <summary>
     /// Gets the input sequence length.
     /// </summary>
-    public int SequenceLength => _sequenceLength;
+    public override int SequenceLength => _sequenceLength;
 
     /// <summary>
     /// Gets the prediction horizon.
     /// </summary>
-    public int PredictionHorizon => _predictionHorizon;
+    public override int PredictionHorizon => _predictionHorizon;
 
     /// <summary>
     /// Gets the number of input features.
     /// </summary>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     #endregion
 
@@ -333,8 +315,8 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
             throw new ArgumentException($"Invalid options: {string.Join(", ", errors)}");
 
         _useNativeMode = false;
-        _onnxSession = new InferenceSession(onnxModelPath);
-        _onnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
 
         _sequenceLength = opts.SequenceLength;
         _predictionHorizon = opts.PredictionHorizon;
@@ -597,7 +579,7 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
         var predictions = Forward(input);
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
@@ -750,7 +732,7 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
     /// Quantiles can be specified for uncertainty estimation.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
         // Apply Series Stationarization if enabled
         if (_useSeriesStationarization)
@@ -778,7 +760,7 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
     /// for long horizons but is slower.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         if (steps <= 0)
             throw new ArgumentOutOfRangeException(nameof(steps), "Steps must be positive.");
@@ -827,7 +809,7 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
     /// it hasn't seen before. Common metrics include MSE (mean squared error) and MAE (mean absolute error).
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> testData, Tensor<T> testLabels)
+    public override Dictionary<string, T> Evaluate(Tensor<T> testData, Tensor<T> testLabels)
     {
         var predictions = Predict(testData);
         var mse = _lossFunction.CalculateLoss(predictions.ToVector(), testLabels.ToVector());
@@ -861,7 +843,7 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
     /// Non-stationary Transformer uses a variant called Series Stationarization.
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         if (!_useSeriesStationarization)
             return input;
@@ -879,7 +861,7 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
     /// the model's performance that's relevant to trading and forecasting applications.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
         {
@@ -1025,9 +1007,9 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
     /// This is typically faster than native mode but doesn't support training.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = ConvertToFloatArray(input);
@@ -1040,7 +1022,7 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
             NamedOnnxValue.CreateFromTensor("input", inputTensor)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         return ConvertFromOnnxTensor(outputTensor);
     }
@@ -1242,10 +1224,11 @@ public class NonStationaryTransformer<T> : NeuralNetworkBase<T>, IForecastingMod
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
         base.Dispose(disposing);
     }
 
     #endregion
 }
+

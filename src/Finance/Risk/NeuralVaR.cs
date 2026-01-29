@@ -117,7 +117,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
         }
         else if (UseNativeMode)
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralVaRLayers(Architecture, _numFeatures));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralVaRLayers(Architecture, NumFeatures));
         }
     }
 
@@ -189,13 +189,13 @@ public class NeuralVaR<T> : RiskModelBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
-        if (!_useNativeMode) throw new InvalidOperationException("Training not supported in ONNX mode.");
+        if (!UseNativeMode) throw new InvalidOperationException("Training not supported in ONNX mode.");
         
         SetTrainingMode(true);
         var output = Predict(input);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
         
-        var currentGrad = Tensor<T>.FromVector(grad);
+        var currentGrad = Tensor<T>.FromVector(grad, output.Shape);
         for (int i = Layers.Count - 1; i >= 0; i--)
             currentGrad = Layers[i].Backward(currentGrad);
 
@@ -256,7 +256,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new VaROptions<T> { NumFeatures = _numFeatures, ConfidenceLevel = _confidenceLevel, TimeHorizon = _timeHorizon };
+        var options = new VaROptions<T> { NumFeatures = NumFeatures, ConfidenceLevel = _confidenceLevel, TimeHorizon = _timeHorizon };
         return new NeuralVaR<T>(Architecture, options, _optimizer, LossFunction);
     }
 

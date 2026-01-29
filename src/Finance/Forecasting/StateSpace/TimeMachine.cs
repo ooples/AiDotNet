@@ -14,7 +14,8 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.StateSpace;
 
 /// <summary>
@@ -61,17 +62,13 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 /// https://arxiv.org/abs/2403.09898
 /// </para>
 /// </remarks>
-public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class TimeMachine<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;
     #endregion
 
-    #region ONNX Mode Fields
-    private readonly InferenceSession? _onnxSession;
-    private readonly string? _onnxModelPath;
-    #endregion
-
+    
     #region Native Mode Fields
     private DenseLayer<T>? _inputEmbedding;
     private List<DenseLayer<T>>? _temporalDecompLayers;
@@ -102,25 +99,25 @@ public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Properties
 
     /// <inheritdoc/>
-    public int SequenceLength => _contextLength;
+    public override int SequenceLength => _contextLength;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _forecastHorizon;
+    public override int PredictionHorizon => _forecastHorizon;
 
     /// <inheritdoc/>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     /// <inheritdoc/>
-    public int PatchSize => 1; // TimeMachine operates on individual time steps
+    public override int PatchSize => 1; // TimeMachine operates on individual time steps
 
     /// <inheritdoc/>
-    public int Stride => 1;
+    public override int Stride => 1;
 
     /// <inheritdoc/>
-    public bool IsChannelIndependent => true;
+    public override bool IsChannelIndependent => true;
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     /// <summary>
     /// Gets the input context length for the model.
@@ -215,8 +212,8 @@ public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             throw new System.IO.FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _onnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new TimeMachineOptions<T>();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -435,7 +432,7 @@ public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -568,7 +565,7 @@ public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// using SSM blocks and produces future predictions.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
         var output = _useNativeMode ? Forward(historicalData) : ForecastOnnx(historicalData);
 
@@ -626,7 +623,7 @@ public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// structure helps maintain coherent predictions across multiple steps.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         var predictions = new List<Tensor<T>>();
         var currentInput = input;
@@ -654,7 +651,7 @@ public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// standard forecasting metrics to measure how well the model performed.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
 
@@ -692,7 +689,7 @@ public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// the forward normalization step, storing mean and variance for later reversal.
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         if (!_useReversibleNormalization)
             return input;
@@ -736,7 +733,7 @@ public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// applications, such as the last training loss and model configuration info.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
 
@@ -844,9 +841,9 @@ public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// trained elsewhere or want maximum inference speed.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session not initialized.");
 
         var flatInput = FlattenInput(input);
@@ -865,7 +862,7 @@ public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             NamedOnnxValue.CreateFromTensor("input", inputTensor)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results[0].AsTensor<float>();
 
         var output = new Tensor<T>(new[] { _forecastHorizon });
@@ -1002,7 +999,7 @@ public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// for the complete forecast.
     /// </para>
     /// </remarks>
-    private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
+        protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
     {
         if (predictions.Count == 0)
             return new Tensor<T>(new[] { 0 });
@@ -1086,10 +1083,13 @@ public class TimeMachine<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
         base.Dispose(disposing);
     }
 
     #endregion
 }
+
+
+

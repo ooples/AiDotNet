@@ -17,6 +17,7 @@ using AiDotNet.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Trading.Factors;
 
 /// <summary>
@@ -37,7 +38,7 @@ namespace AiDotNet.Finance.Trading.Factors;
 /// Reference: Kim &amp; Mnih (2019). "Disentangling by Factorising"
 /// </para>
 /// </remarks>
-public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
+public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 {
     #region Execution Mode
 
@@ -45,13 +46,7 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
 
     #endregion
 
-    #region ONNX Mode Fields
-
-    private readonly InferenceSession? _onnxSession;
-    private readonly string? _onnxModelPath;
-
-    #endregion
-
+    
     #region Shared Fields
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -81,7 +76,7 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> Native mode supports training, ONNX mode is for fast predictions.
     /// </para>
     /// </remarks>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     /// <summary>
     /// Gets whether training is supported in the current mode.
@@ -121,7 +116,7 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> Each asset has this many features (prices, indicators, etc.).
     /// </para>
     /// </remarks>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     /// <summary>
     /// Gets the input sequence length.
@@ -131,7 +126,7 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> How many time steps of history the model sees at once.
     /// </para>
     /// </remarks>
-    public int SequenceLength => _sequenceLength;
+    public override int SequenceLength => _sequenceLength;
 
     /// <summary>
     /// Gets the prediction horizon.
@@ -141,7 +136,7 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> How far ahead the model is trained to forecast.
     /// </para>
     /// </remarks>
-    public int PredictionHorizon => _predictionHorizon;
+    public override int PredictionHorizon => _predictionHorizon;
 
     /// <summary>
     /// Gets the dimension of the latent space.
@@ -185,8 +180,8 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _onnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
 
         _options = options ?? new FactorVAEOptions<T>();
         _options.Validate();
@@ -232,8 +227,8 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         _useNativeMode = true;
-        _onnxModelPath = null;
-        _onnxSession = null;
+        OnnxModelPath = null;
+        OnnxSession = null;
 
         _options = options ?? new FactorVAEOptions<T>();
         _options.Validate();
@@ -336,7 +331,7 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
         SetTrainingMode(true);
         var output = PredictNative(input);
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var gradTensor = Tensor<T>.FromVector(gradient);
+        var gradTensor = Tensor<T>.FromVector(gradient, output.Shape);
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
@@ -591,7 +586,7 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// predict the next returns or reconstructed outputs.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         return Predict(input);
     }
@@ -605,7 +600,7 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> Provides factor-focused metrics from this model.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         return GetFactorMetrics();
     }
@@ -646,7 +641,7 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// </remarks>
     private Tensor<T> PredictOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
@@ -654,9 +649,9 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
-        string inputName = _onnxSession.InputMetadata.Keys.First();
+        string inputName = OnnxSession.InputMetadata.Keys.First();
 
-        using var results = _onnxSession.Run(new[]
+        using var results = OnnxSession.Run(new[]
         {
             NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
         });
@@ -688,7 +683,7 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
             foreach (var layer in Layers)
             {
                 if (layer is IDisposable disposable)
@@ -700,3 +695,4 @@ public class FactorVAE<T> : NeuralNetworkBase<T>, IFactorModel<T>
 
     #endregion
 }
+

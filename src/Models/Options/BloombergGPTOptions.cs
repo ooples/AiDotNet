@@ -92,4 +92,35 @@ public class BloombergGPTOptions<T>
     /// Task type: "classification", "ner", "qa", "generation" (default: "classification").
     /// </summary>
     public string TaskType { get; set; } = "classification";
+
+    /// <summary>
+    /// Validates the BloombergGPT options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This checks that model dimensions and settings are valid
+    /// before creating the network.
+    /// </para>
+    /// </remarks>
+    public void Validate()
+    {
+        if (MaxSequenceLength < 1)
+            throw new ArgumentException("MaxSequenceLength must be at least 1.", nameof(MaxSequenceLength));
+        if (VocabularySize < 1)
+            throw new ArgumentException("VocabularySize must be at least 1.", nameof(VocabularySize));
+        if (HiddenDimension < 1)
+            throw new ArgumentException("HiddenDimension must be at least 1.", nameof(HiddenDimension));
+        if (NumAttentionHeads < 1)
+            throw new ArgumentException("NumAttentionHeads must be at least 1.", nameof(NumAttentionHeads));
+        if (IntermediateDimension < 1)
+            throw new ArgumentException("IntermediateDimension must be at least 1.", nameof(IntermediateDimension));
+        if (NumLayers < 1)
+            throw new ArgumentException("NumLayers must be at least 1.", nameof(NumLayers));
+        if (NumClasses < 1)
+            throw new ArgumentException("NumClasses must be at least 1.", nameof(NumClasses));
+        if (DropoutRate < 0 || DropoutRate >= 1)
+            throw new ArgumentException("DropoutRate must be between 0 (inclusive) and 1 (exclusive).", nameof(DropoutRate));
+        if (string.IsNullOrWhiteSpace(TaskType))
+            throw new ArgumentException("TaskType cannot be null or empty.", nameof(TaskType));
+    }
 }

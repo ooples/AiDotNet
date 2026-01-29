@@ -190,4 +190,52 @@ public class NeuralStressTest<T> : RiskModelBase<T>
         // We stick to standard Predict which outputs scenario impacts.
         return Predict(input);
     }
+
+    #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Updates the model parameters from a flat parameter vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This allows all model weights to be set at once,
+    /// which is useful when cloning or restoring a trained model.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
+            offset += layerParams.Length;
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the NeuralStressTest model with the same configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is used by the framework to clone the model setup
+    /// so it can create a fresh instance with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var options = new NeuralStressTestOptions<T>
+        {
+            NumFeatures = _options.NumFeatures,
+            ConfidenceLevel = _options.ConfidenceLevel,
+            TimeHorizon = _options.TimeHorizon,
+            HiddenDimension = _options.HiddenDimension,
+            NumScenarios = _options.NumScenarios,
+            DropoutRate = _options.DropoutRate
+        };
+
+        return new NeuralStressTest<T>(Architecture, options, _optimizer, LossFunction);
+    }
+
+    #endregion
 }

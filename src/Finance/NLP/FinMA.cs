@@ -60,12 +60,12 @@ public class FinMA<T> : FinancialNLPModelBase<T>
         : base(architecture, onnxModelPath, 
                options?.MaxSequenceLength ?? 512, 
                options?.VocabularySize ?? 32000,
-               options?.HiddenSize ?? 768)
+               options?.HiddenDimension ?? 768)
     {
         options ??= new ModelOptions.FinMAOptions<T>();
         options.Validate();
 
-        _dropout = options.DropoutProbability;
+        _dropout = options.DropoutRate;
         _numAgents = options.NumAgents;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -88,14 +88,14 @@ public class FinMA<T> : FinancialNLPModelBase<T>
         : base(architecture, 
                options?.MaxSequenceLength ?? 512, 
                options?.VocabularySize ?? 32000,
-               options?.HiddenSize ?? 768,
+               options?.HiddenDimension ?? 768,
                3,
                lossFunction)
     {
         options ??= new ModelOptions.FinMAOptions<T>();
         options.Validate();
 
-        _dropout = options.DropoutProbability;
+        _dropout = options.DropoutRate;
         _numAgents = options.NumAgents;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -124,8 +124,8 @@ public class FinMA<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinMALayers(
-                Architecture, _maxSequenceLength, _vocabularySize, _numAgents,
-                _hiddenDimension, 12, 12, _dropout));
+                Architecture, MaxSequenceLength, VocabularySize, _numAgents,
+                HiddenDimension, 12, 12, _dropout));
 
             ExtractLayerReferences();
         }
@@ -177,7 +177,7 @@ public class FinMA<T> : FinancialNLPModelBase<T>
     {
         SetTrainingMode(true);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(grad));
+        Backward(Tensor<T>.FromVector(grad, output.Shape));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
@@ -225,7 +225,13 @@ public class FinMA<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new ModelOptions.FinMAOptions<T> { MaxSequenceLength = _maxSequenceLength, NumAgents = _numAgents, VocabularySize = _vocabularySize, HiddenSize = _hiddenDimension };
+        var options = new ModelOptions.FinMAOptions<T>
+        {
+            MaxSequenceLength = MaxSequenceLength,
+            NumAgents = _numAgents,
+            VocabularySize = VocabularySize,
+            HiddenDimension = HiddenDimension
+        };
         return new FinMA<T>(Architecture, options, _optimizer, LossFunction);
     }
 

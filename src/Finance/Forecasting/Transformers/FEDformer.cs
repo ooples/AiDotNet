@@ -10,7 +10,8 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
 /// <summary>
@@ -38,7 +39,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// ICML 2022. https://arxiv.org/abs/2201.12740
 /// </para>
 /// </remarks>
-public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class FEDformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -49,20 +50,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
     #endregion
 
-    #region ONNX Mode Fields
-
-    /// <summary>
-    /// The ONNX inference session for the model.
-    /// </summary>
-    private readonly InferenceSession? _onnxSession;
-
-    /// <summary>
-    /// Path to the ONNX model file.
-    /// </summary>
-    private readonly string? _onnxModelPath;
-
-    #endregion
-
+    
     #region Native Mode Fields
 
     /// <summary>
@@ -193,13 +181,13 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Properties
 
     /// <inheritdoc/>
-    public int SequenceLength => _sequenceLength;
+    public override int SequenceLength => _sequenceLength;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _predictionHorizon;
+    public override int PredictionHorizon => _predictionHorizon;
 
     /// <inheritdoc/>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -208,10 +196,10 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// in the frequency domain. This property returns 0.
     /// </para>
     /// </remarks>
-    public int PatchSize => 0;
+    public override int PatchSize => 0;
 
     /// <inheritdoc/>
-    public int Stride => 0;
+    public override int Stride => 0;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -220,10 +208,10 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// dependencies, so channels are not independent.
     /// </para>
     /// </remarks>
-    public bool IsChannelIndependent => false;
+    public override bool IsChannelIndependent => false;
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     #endregion
 
@@ -263,7 +251,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
+        OnnxModelPath = onnxModelPath;
         _sequenceLength = sequenceLength;
         _predictionHorizon = predictionHorizon;
         _numFeatures = numFeatures;
@@ -281,7 +269,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         try
         {
             session = new InferenceSession(onnxModelPath);
-            _onnxSession = session;
+            OnnxSession = session;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
             InitializeLayers();
@@ -526,7 +514,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient));
+        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -600,7 +588,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         else
         {
             return new FEDformer<T>(
-                Architecture, _onnxModelPath ?? string.Empty,
+                Architecture, OnnxModelPath ?? string.Empty,
                 _sequenceLength, _predictionHorizon, _numFeatures,
                 _optimizer, _lossFunction);
         }
@@ -660,7 +648,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the FEDformer model, Forecast produces predictions from input data. This is the main inference step of the FEDformer architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -674,7 +662,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the FEDformer model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the FEDformer architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -707,7 +695,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the FEDformer model, Evaluate performs a supporting step in the workflow. It keeps the FEDformer architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
+    public override Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
     {
         if (inputs is null)
             throw new ArgumentNullException(nameof(inputs));
@@ -744,7 +732,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the FEDformer model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the FEDformer architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         if (!_useInstanceNormalization)
             return input;
@@ -758,7 +746,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the FEDformer model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the FEDformer architecture is performing.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
         {
@@ -844,7 +832,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the FEDformer model, ForecastNative produces predictions from input data. This is the main inference step of the FEDformer architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
+    protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         SetTrainingMode(false);
         return Forward(input);
@@ -858,9 +846,9 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the FEDformer model, ForecastOnnx produces predictions from input data. This is the main inference step of the FEDformer architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
@@ -870,7 +858,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
-        var inputMeta = _onnxSession.InputMetadata;
+        var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
         var inputs = new List<NamedOnnxValue>
@@ -878,7 +866,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
         var outputShape = outputTensor.Dimensions.ToArray();
@@ -999,7 +987,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the FEDformer model, ShiftInputWithPredictions produces predictions from input data. This is the main inference step of the FEDformer architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsToShift)
+    protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsToShift)
     {
         var newData = new T[input.Length];
         int shiftAmount = stepsToShift * _numFeatures;
@@ -1018,7 +1006,7 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the FEDformer model, ConcatenatePredictions produces predictions from input data. This is the main inference step of the FEDformer architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
+    protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         var outputData = new T[totalSteps * _numFeatures];
         int currentIdx = 0;
@@ -1052,10 +1040,12 @@ public class FEDformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
         base.Dispose(disposing);
     }
 
     #endregion
 }
+
+

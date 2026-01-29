@@ -59,12 +59,12 @@ public class FinGPT<T> : FinancialNLPModelBase<T>
         : base(architecture, onnxModelPath, 
                options?.MaxSequenceLength ?? 1024, 
                options?.VocabularySize ?? 50257,
-               options?.HiddenSize ?? 768)
+               options?.HiddenDimension ?? 768)
     {
         options ??= new ModelOptions.FinGPTOptions<T>();
         options.Validate();
 
-        _dropout = options.DropoutProbability;
+        _dropout = options.DropoutRate;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -86,14 +86,14 @@ public class FinGPT<T> : FinancialNLPModelBase<T>
         : base(architecture, 
                options?.MaxSequenceLength ?? 1024, 
                options?.VocabularySize ?? 50257,
-               options?.HiddenSize ?? 768,
+               options?.HiddenDimension ?? 768,
                3,
                lossFunction)
     {
         options ??= new ModelOptions.FinGPTOptions<T>();
         options.Validate();
 
-        _dropout = options.DropoutProbability;
+        _dropout = options.DropoutRate;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -121,8 +121,8 @@ public class FinGPT<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinGPTLayers(
-                Architecture, _maxSequenceLength, _vocabularySize, 
-                _hiddenDimension, 12, 12, _dropout));
+                Architecture, MaxSequenceLength, VocabularySize, 
+                HiddenDimension, 12, 12, _dropout));
 
             ExtractLayerReferences();
         }
@@ -174,7 +174,7 @@ public class FinGPT<T> : FinancialNLPModelBase<T>
     {
         SetTrainingMode(true);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(grad));
+        Backward(Tensor<T>.FromVector(grad, output.Shape));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
@@ -222,7 +222,12 @@ public class FinGPT<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new ModelOptions.FinGPTOptions<T> { MaxSequenceLength = _maxSequenceLength, VocabularySize = _vocabularySize, HiddenSize = _hiddenDimension };
+        var options = new ModelOptions.FinGPTOptions<T>
+        {
+            MaxSequenceLength = MaxSequenceLength,
+            VocabularySize = VocabularySize,
+            HiddenDimension = HiddenDimension
+        };
         return new FinGPT<T>(Architecture, options, _optimizer, LossFunction);
     }
 

@@ -7,6 +7,7 @@ using AiDotNet.Finance.Forecasting.Transformers;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
@@ -30,6 +31,54 @@ internal static class FinanceModelTestFactory
             .ToList();
     }
 
+    internal static IReadOnlyList<Type> GetFinancialModelTypes<T>()
+    {
+        return GetFinanceTypesByInterface<T>(typeof(IFinancialModel<>));
+    }
+
+    internal static IReadOnlyList<Type> GetForecastingModelTypes<T>()
+    {
+        return GetFinanceTypesByInterface<T>(typeof(IForecastingModel<>));
+    }
+
+    internal static IReadOnlyList<Type> GetFinancialNlpModelTypes<T>()
+    {
+        return GetFinanceTypesByInterface<T>(typeof(IFinancialNLPModel<>));
+    }
+
+    internal static IReadOnlyList<Type> GetRiskModelTypes<T>()
+    {
+        return GetFinanceTypesByInterface<T>(typeof(IRiskModel<>));
+    }
+
+    internal static IReadOnlyList<Type> GetPortfolioModelTypes<T>()
+    {
+        return GetFinanceTypesByInterface<T>(typeof(IPortfolioOptimizer<>));
+    }
+
+    internal static IReadOnlyList<Type> GetVolatilityModelTypes<T>()
+    {
+        return GetFinanceTypesByInterface<T>(typeof(IVolatilityModel<>));
+    }
+
+    internal static IReadOnlyList<Type> GetFactorModelTypes<T>()
+    {
+        return GetFinanceTypesByInterface<T>(typeof(IFactorModel<>));
+    }
+
+    internal static IReadOnlyList<Type> GetAutoMlModelTypes<T>()
+    {
+        var numericType = typeof(T);
+        var tensorType = typeof(Tensor<>).MakeGenericType(numericType);
+        var autoMlInterface = typeof(IAutoMLModel<,,>).MakeGenericType(numericType, tensorType, tensorType);
+
+        return GetFinanceTypes()
+            .Select(type => type.IsGenericTypeDefinition ? type.MakeGenericType(numericType) : type)
+            .Where(type => autoMlInterface.IsAssignableFrom(type))
+            .OrderBy(type => type.FullName, StringComparer.Ordinal)
+            .ToList();
+    }
+
     internal static IReadOnlyList<Type> GetTradingAgentTypes<T>()
     {
         var numericType = typeof(T);
@@ -42,10 +91,37 @@ internal static class FinanceModelTestFactory
             .ToList();
     }
 
+    internal static IReadOnlyList<Type> GetFinanceModelTypesByNamespace<T>(string namespacePrefix)
+    {
+        if (string.IsNullOrWhiteSpace(namespacePrefix))
+        {
+            throw new ArgumentException("Namespace prefix cannot be null or empty.", nameof(namespacePrefix));
+        }
+
+        var numericType = typeof(T);
+        var tensorType = typeof(Tensor<>).MakeGenericType(numericType);
+        var modelInterface = typeof(IFullModel<,,>).MakeGenericType(numericType, tensorType, tensorType);
+
+        return GetFinanceTypes()
+            .Where(type => type.Namespace != null
+                && type.Namespace.StartsWith(namespacePrefix, StringComparison.Ordinal))
+            .Select(type => type.IsGenericTypeDefinition ? type.MakeGenericType(numericType) : type)
+            .Where(type => modelInterface.IsAssignableFrom(type))
+            .OrderBy(type => type.FullName, StringComparer.Ordinal)
+            .ToList();
+    }
+
     internal static void RunFullModelSmokeTest<T>(Type modelType)
+    {
+        RunFullModelSmokeTest<T>(modelType, includeQuantileForecast: false);
+    }
+
+    internal static void RunFullModelSmokeTest<T>(Type modelType, bool includeQuantileForecast)
     {
         object? instance = null;
         object? clone = null;
+        object? fileClone = null;
+        object? stateClone = null;
 
         try
         {
@@ -61,6 +137,8 @@ internal static class FinanceModelTestFactory
                 return;
             }
 
+            RunCommonModelAssertions(model);
+
             if (model is IFinancialNLPModel<T> nlpModel)
             {
                 var input = FinanceTestHelpers.CreateTokenTensor<T>(
@@ -71,6 +149,33 @@ internal static class FinanceModelTestFactory
                 var output = nlpModel.Predict(input);
                 Assert.NotNull(output);
 
+                var sentimentFromTokens = nlpModel.AnalyzeSentiment(input);
+                Assert.NotNull(sentimentFromTokens);
+
+                var embeddings = nlpModel.GetEmbeddings(input);
+                Assert.NotNull(embeddings);
+
+                var sequenceEmbedding = nlpModel.GetSequenceEmbedding(input);
+                Assert.NotNull(sequenceEmbedding);
+
+                int safeMaxLength = Math.Max(1, nlpModel.MaxSequenceLength);
+                var tokenIds = nlpModel.Tokenize("Markets are steady.", safeMaxLength);
+                Assert.NotNull(tokenIds);
+                _ = nlpModel.Detokenize(tokenIds);
+
+                if (nlpModel.MaxSequenceLength > 0)
+                {
+                    var sentimentFromText = nlpModel.AnalyzeSentiment(new[] { "Earnings beat expectations." });
+                    Assert.NotNull(sentimentFromText);
+                    Assert.NotEmpty(sentimentFromText);
+                }
+
+                if (model is IFinancialModel<T> nlpFinancialModel)
+                {
+                    var nlpMetrics = nlpFinancialModel.GetFinancialMetrics();
+                    Assert.NotNull(nlpMetrics);
+                }
+
                 if (nlpModel.SupportsTraining)
                 {
                     nlpModel.Train(input, output);
@@ -79,6 +184,9 @@ internal static class FinanceModelTestFactory
                 var serialized = nlpModel.Serialize();
                 clone = CreateNativeModel<T>(modelType);
                 ((IFullModel<T, Tensor<T>, Tensor<T>>)clone).Deserialize(serialized);
+
+                RunCheckpointRoundTrip(model, modelType, ref stateClone);
+                RunFileRoundTrip(model, modelType, ref fileClone);
                 return;
             }
 
@@ -92,6 +200,129 @@ internal static class FinanceModelTestFactory
                 var output = financialModel.Predict(input);
                 Assert.NotNull(output);
 
+                if (includeQuantileForecast)
+                {
+                    var quantileForecast = financialModel.Forecast(input, new[] { 0.1, 0.5, 0.9 });
+                    Assert.NotNull(quantileForecast);
+                }
+
+                var forecast = financialModel.Forecast(input);
+                Assert.NotNull(forecast);
+
+                var financialMetrics = financialModel.GetFinancialMetrics();
+                Assert.NotNull(financialMetrics);
+
+                if (financialModel is IForecastingModel<T> forecastingModel)
+                {
+                    var normalized = forecastingModel.ApplyInstanceNormalization(input);
+                    Assert.NotNull(normalized);
+
+                    int steps = Math.Max(1, financialModel.PredictionHorizon);
+                    var autoreg = forecastingModel.AutoregressiveForecast(input, steps);
+                    Assert.NotNull(autoreg);
+
+                    var evalMetrics = forecastingModel.Evaluate(input, output);
+                    Assert.NotNull(evalMetrics);
+                }
+
+                if (financialModel is IRiskModel<T> riskModel)
+                {
+                    var numOps = MathHelper.GetNumericOperations<T>();
+                    int assets = Math.Max(1, financialModel.NumFeatures);
+                    var returns = FinanceTestHelpers.CreateReturnsMatrix<T>(samples: 8, assets: assets);
+                    var weights = FinanceTestHelpers.CreateUniformWeights<T>(assets);
+                    var scenarios = FinanceTestHelpers.CreateScenarioMatrix<T>(scenarios: 3, assets: assets);
+
+                    _ = riskModel.CalculateVaR(returns, weights);
+                    _ = riskModel.CalculateCVaR(returns, weights);
+
+                    var stress = riskModel.StressTest(weights, scenarios);
+                    Assert.NotNull(stress);
+
+                    var contributions = riskModel.DecomposeRisk(returns, weights);
+                    Assert.NotNull(contributions);
+
+                    _ = riskModel.EstimateExceedanceProbability(returns, weights, numOps.FromDouble(0.01));
+
+                    var riskMetrics = riskModel.GetRiskMetrics();
+                    Assert.NotNull(riskMetrics);
+                }
+
+                if (financialModel is IPortfolioOptimizer<T> portfolioModel)
+                {
+                    var numOps = MathHelper.GetNumericOperations<T>();
+                    int assets = Math.Max(1, portfolioModel.NumAssets);
+                    var expectedReturns = FinanceTestHelpers.CreateExpectedReturns<T>(assets);
+                    var covariance = FinanceTestHelpers.CreateDiagonalMatrix<T>(assets);
+                    var weights = FinanceTestHelpers.CreateUniformWeights<T>(assets);
+
+                    _ = portfolioModel.OptimizeWeights(expectedReturns, covariance);
+                    _ = portfolioModel.ComputeRiskContribution(weights, covariance);
+                    _ = portfolioModel.CalculateExpectedReturn(weights, expectedReturns);
+                    _ = portfolioModel.CalculateVolatility(weights, covariance);
+                    _ = portfolioModel.CalculateSharpeRatio(weights, expectedReturns, covariance, numOps.Zero);
+
+                    var portfolioMetrics = portfolioModel.GetPortfolioMetrics();
+                    Assert.NotNull(portfolioMetrics);
+                }
+
+                if (financialModel is IVolatilityModel<T> volatilityModel)
+                {
+                    int assets = Math.Max(1, financialModel.NumFeatures);
+                    int lookback = Math.Max(1, financialModel.SequenceLength);
+                    int horizon = Math.Max(1, financialModel.PredictionHorizon);
+
+                    var returnsSequence = FinanceTestHelpers.CreateReturnsMatrix<T>(lookback, assets);
+                    var forecastVol = volatilityModel.ForecastVolatility(returnsSequence, horizon);
+                    Assert.NotNull(forecastVol);
+
+                    var currentVol = volatilityModel.EstimateCurrentVolatility(returnsSequence);
+                    Assert.NotNull(currentVol);
+
+                    var returnsMatrix = FinanceTestHelpers.CreateReturnsMatrix<T>(Math.Max(2, lookback), assets);
+                    var covariance = volatilityModel.ComputeCovarianceMatrix(returnsMatrix);
+                    Assert.NotNull(covariance);
+
+                    var correlation = volatilityModel.ComputeCorrelationMatrix(returnsMatrix);
+                    Assert.NotNull(correlation);
+
+                    var realized = volatilityModel.CalculateRealizedVolatility(returnsMatrix);
+                    Assert.NotNull(realized);
+
+                    var volatilityMetrics = volatilityModel.GetVolatilityMetrics();
+                    Assert.NotNull(volatilityMetrics);
+                }
+
+                if (financialModel is IFactorModel<T> factorModel)
+                {
+                    int batchSize = 1;
+                    int sequenceLength = Math.Max(1, financialModel.SequenceLength);
+                    int assets = Math.Max(1, factorModel.NumAssets);
+                    int factors = Math.Max(1, factorModel.NumFactors);
+
+                    var returns = FinanceTestHelpers.CreateReturnsSeries<T>(batchSize, sequenceLength, assets);
+                    var factorReturns = FinanceTestHelpers.CreateFactorSeries<T>(batchSize, sequenceLength, factors);
+                    var exposures = FinanceTestHelpers.CreateFactorExposure<T>(batchSize, factors);
+
+                    var extracted = factorModel.ExtractFactors(returns);
+                    Assert.NotNull(extracted);
+
+                    var loadings = factorModel.GetFactorLoadings(returns);
+                    Assert.NotNull(loadings);
+
+                    var expected = factorModel.PredictReturns(exposures);
+                    Assert.NotNull(expected);
+
+                    var covariance = factorModel.GetFactorCovariance(returns);
+                    Assert.NotNull(covariance);
+
+                    var alpha = factorModel.ComputeAlpha(returns, factorReturns);
+                    Assert.NotNull(alpha);
+
+                    var factorMetrics = factorModel.GetFactorMetrics();
+                    Assert.NotNull(factorMetrics);
+                }
+
                 if (financialModel.SupportsTraining)
                 {
                     financialModel.Train(input, output);
@@ -100,6 +331,9 @@ internal static class FinanceModelTestFactory
                 var serialized = financialModel.Serialize();
                 clone = CreateNativeModel<T>(modelType);
                 ((IFullModel<T, Tensor<T>, Tensor<T>>)clone).Deserialize(serialized);
+
+                RunCheckpointRoundTrip(model, modelType, ref stateClone);
+                RunFileRoundTrip(model, modelType, ref fileClone);
                 return;
             }
 
@@ -110,6 +344,9 @@ internal static class FinanceModelTestFactory
             var fallbackSerialized = model.Serialize();
             clone = CreateNativeModel<T>(modelType);
             ((IFullModel<T, Tensor<T>, Tensor<T>>)clone).Deserialize(fallbackSerialized);
+
+            RunCheckpointRoundTrip(model, modelType, ref stateClone);
+            RunFileRoundTrip(model, modelType, ref fileClone);
         }
         finally
         {
@@ -121,6 +358,16 @@ internal static class FinanceModelTestFactory
             if (clone is IDisposable cloneDisposable)
             {
                 cloneDisposable.Dispose();
+            }
+
+            if (stateClone is IDisposable stateCloneDisposable)
+            {
+                stateCloneDisposable.Dispose();
+            }
+
+            if (fileClone is IDisposable fileCloneDisposable)
+            {
+                fileCloneDisposable.Dispose();
             }
         }
     }
@@ -150,8 +397,11 @@ internal static class FinanceModelTestFactory
             var action = agent.SelectTradingAction(state, training: false);
             Assert.Equal(result.ActionSize, action.Length);
 
-            var nextState = FinanceTestHelpers.CreateRandomVector<T>(result.StateSize, seed: 321);
             var numOps = MathHelper.GetNumericOperations<T>();
+            var constrained = agent.ExecuteTradeWithRiskManagement(state, numOps.FromDouble(0.5));
+            Assert.Equal(result.ActionSize, constrained.Length);
+
+            var nextState = FinanceTestHelpers.CreateRandomVector<T>(result.StateSize, seed: 321);
             var reward = numOps.FromDouble(0.01);
             var pnl = numOps.FromDouble(0.02);
 
@@ -160,12 +410,129 @@ internal static class FinanceModelTestFactory
 
             var metrics = agent.GetTradingMetrics();
             Assert.NotNull(metrics);
+
+            agent.ResetTrading(numOps.FromDouble(10000.0));
+
+            var metadata = agent.GetModelMetadata();
+            Assert.NotNull(metadata);
+
+            if (agent is IFullModel<T, Vector<T>, Vector<T>> fullModel)
+            {
+                var parameters = fullModel.GetParameters();
+                Assert.Equal(fullModel.ParameterCount, parameters.Length);
+
+                var withParams = fullModel.WithParameters(parameters);
+                Assert.NotNull(withParams);
+
+                if (withParams is IDisposable withParamsDisposable)
+                {
+                    withParamsDisposable.Dispose();
+                }
+
+                var serialized = fullModel.Serialize();
+                fullModel.Deserialize(serialized);
+
+                using var stateStream = new MemoryStream();
+                fullModel.SaveState(stateStream);
+                stateStream.Position = 0;
+                fullModel.LoadState(stateStream);
+
+                var tempPath = Path.GetTempFileName();
+                try
+                {
+                    fullModel.SaveModel(tempPath);
+                    fullModel.LoadModel(tempPath);
+                }
+                finally
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                    }
+                }
+            }
         }
         finally
         {
             if (result.Agent is IDisposable disposable)
             {
                 disposable.Dispose();
+            }
+        }
+    }
+
+    private static IReadOnlyList<Type> GetFinanceTypesByInterface<T>(Type openInterfaceType)
+    {
+        var numericType = typeof(T);
+        var interfaceType = openInterfaceType.IsGenericTypeDefinition
+            ? openInterfaceType.MakeGenericType(numericType)
+            : openInterfaceType;
+
+        return GetFinanceTypes()
+            .Select(type => type.IsGenericTypeDefinition ? type.MakeGenericType(numericType) : type)
+            .Where(type => interfaceType.IsAssignableFrom(type))
+            .OrderBy(type => type.FullName, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static void RunCommonModelAssertions<T>(IFullModel<T, Tensor<T>, Tensor<T>> model)
+    {
+        var metadata = model.GetModelMetadata();
+        Assert.NotNull(metadata);
+
+        var featureImportance = model.GetFeatureImportance();
+        Assert.NotNull(featureImportance);
+
+        var activeFeatures = model.GetActiveFeatureIndices()?.ToList() ?? new List<int>();
+        model.SetActiveFeatureIndices(activeFeatures.Take(1));
+
+        if (activeFeatures.Count > 0)
+        {
+            Assert.True(model.IsFeatureUsed(activeFeatures[0]));
+        }
+
+        var parameters = model.GetParameters();
+        Assert.Equal(model.ParameterCount, parameters.Length);
+
+        var withParams = model.WithParameters(parameters);
+        Assert.NotNull(withParams);
+
+        if (withParams is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+    }
+
+    private static void RunCheckpointRoundTrip<T>(
+        IFullModel<T, Tensor<T>, Tensor<T>> model,
+        Type modelType,
+        ref object? stateClone)
+    {
+        using var stateStream = new MemoryStream();
+        model.SaveState(stateStream);
+        stateStream.Position = 0;
+
+        stateClone = CreateNativeModel<T>(modelType);
+        ((IFullModel<T, Tensor<T>, Tensor<T>>)stateClone).LoadState(stateStream);
+    }
+
+    private static void RunFileRoundTrip<T>(
+        IFullModel<T, Tensor<T>, Tensor<T>> model,
+        Type modelType,
+        ref object? fileClone)
+    {
+        string tempPath = Path.GetTempFileName();
+        try
+        {
+            model.SaveModel(tempPath);
+            fileClone = CreateNativeModel<T>(modelType);
+            ((IFullModel<T, Tensor<T>, Tensor<T>>)fileClone).LoadModel(tempPath);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
             }
         }
     }
@@ -550,10 +917,13 @@ internal static class FinanceModelTestFactory
         SetInt(options, "HistoryLength", 8);
         SetInt(options, "InputLength", 8);
         SetInt(options, "WindowSize", 8);
+        SetInt(options, "InputSize", 4);
         SetInt(options, "ForecastHorizon", 4);
         SetInt(options, "PredictionHorizon", 4);
+        SetInt(options, "PredictionLength", 4);
         SetInt(options, "ForecastLength", 4);
         SetInt(options, "OutputLength", 4);
+        SetInt(options, "OutputSize", 4);
         SetInt(options, "NumFeatures", 4);
         SetInt(options, "InputDim", 4);
         SetInt(options, "FeatureCount", 4);
@@ -563,23 +933,34 @@ internal static class FinanceModelTestFactory
         SetInt(options, "NodeCount", 4);
         SetInt(options, "NumSentimentClasses", 3);
         SetInt(options, "VocabularySize", 128);
+        SetInt(options, "NumTokens", 32);
         SetInt(options, "MaxSequenceLength", 16);
         SetInt(options, "HiddenDimension", 8);
+        SetInt(options, "HiddenDim", 8);
+        SetInt(options, "HiddenSize", 8);
         SetInt(options, "EmbeddingDim", 8);
+        SetInt(options, "EmbeddingSize", 8);
+        SetInt(options, "LLMDimension", 8);
         SetInt(options, "ModelDimension", 8);
+        SetInt(options, "ModelDim", 8);
         SetInt(options, "FeedForwardDimension", 16);
+        SetInt(options, "FeedForwardDim", 16);
         SetInt(options, "IntermediateDimension", 16);
         SetInt(options, "NumLayers", 1);
         SetInt(options, "NumEncoderLayers", 1);
         SetInt(options, "NumDecoderLayers", 1);
         SetInt(options, "NumAttentionHeads", 2);
         SetInt(options, "NumHeads", 2);
+        SetInt(options, "HeadCount", 2);
         SetInt(options, "PatchSize", 2);
+        SetInt(options, "PatchLength", 1);
+        SetInt(options, "PatchStride", 1);
         SetInt(options, "Stride", 1);
         SetInt(options, "MovingAverageKernel", 3);
         SetInt(options, "AutoCorrelationFactor", 2);
         SetInt(options, "TopK", 2);
         SetInt(options, "KernelSize", 3);
+        SetInt(options, "ConvKernelSize", 3);
         SetInt(options, "NumStacks", 1);
         SetInt(options, "NumBlocks", 1);
         SetInt(options, "NumLevels", 1);
@@ -592,6 +973,9 @@ internal static class FinanceModelTestFactory
         SetInt(options, "StateSize", 8);
         SetInt(options, "ActionSize", 3);
         SetInt(options, "MaxInventory", 10);
+        SetInt(options, "LabelLength", 4);
+        SetInt(options, "SegmentLength", 4);
+        SetInt(options, "NumPrototypes", 4);
 
         SetDouble(options, "Dropout", 0.0);
         SetDouble(options, "DropoutRate", 0.0);

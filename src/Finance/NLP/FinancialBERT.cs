@@ -60,12 +60,12 @@ public class FinancialBERT<T> : FinancialNLPModelBase<T>
         : base(architecture, onnxModelPath, 
                options?.MaxSequenceLength ?? 512, 
                options?.VocabularySize ?? 30522,
-               options?.HiddenSize ?? 768)
+               options?.HiddenDimension ?? 768)
     {
         options ??= new ModelOptions.FinancialBERTOptions<T>();
         options.Validate();
 
-        _dropout = options.DropoutProbability;
+        _dropout = options.DropoutRate;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -87,14 +87,14 @@ public class FinancialBERT<T> : FinancialNLPModelBase<T>
         : base(architecture, 
                options?.MaxSequenceLength ?? 512, 
                options?.VocabularySize ?? 30522,
-               options?.HiddenSize ?? 768,
+               options?.HiddenDimension ?? 768,
                3,
                lossFunction)
     {
         options ??= new ModelOptions.FinancialBERTOptions<T>();
         options.Validate();
 
-        _dropout = options.DropoutProbability;
+        _dropout = options.DropoutRate;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -122,7 +122,7 @@ public class FinancialBERT<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinancialBERTLayers(
-                Architecture, _maxSequenceLength, _vocabularySize, _hiddenDimension,
+                Architecture, MaxSequenceLength, VocabularySize, HiddenDimension,
                 12, 12, _dropout));
 
             ExtractLayerReferences();
@@ -176,7 +176,7 @@ public class FinancialBERT<T> : FinancialNLPModelBase<T>
     {
         SetTrainingMode(true);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(grad));
+        Backward(Tensor<T>.FromVector(grad, output.Shape));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
@@ -224,7 +224,12 @@ public class FinancialBERT<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new ModelOptions.FinancialBERTOptions<T> { MaxSequenceLength = _maxSequenceLength, VocabularySize = _vocabularySize, HiddenSize = _hiddenDimension };
+        var options = new ModelOptions.FinancialBERTOptions<T>
+        {
+            MaxSequenceLength = MaxSequenceLength,
+            VocabularySize = VocabularySize,
+            HiddenDimension = HiddenDimension
+        };
         return new FinancialBERT<T>(Architecture, options, _optimizer, LossFunction);
     }
 

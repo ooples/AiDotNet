@@ -11,7 +11,8 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
 /// <summary>
@@ -39,7 +40,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// NeurIPS 2021. https://arxiv.org/abs/2106.13008
 /// </para>
 /// </remarks>
-public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class Autoformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -50,20 +51,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
     #endregion
 
-    #region ONNX Mode Fields
-
-    /// <summary>
-    /// The ONNX inference session for running pretrained models.
-    /// </summary>
-    private readonly InferenceSession? _onnxSession;
-
-    /// <summary>
-    /// Path to the ONNX model file.
-    /// </summary>
-    private readonly string? _onnxModelPath;
-
-    #endregion
-
+    
     #region Native Mode Fields
 
     /// <summary>
@@ -143,25 +131,25 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Properties
 
     /// <inheritdoc/>
-    public int SequenceLength => _sequenceLength;
+    public override int SequenceLength => _sequenceLength;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _predictionHorizon;
+    public override int PredictionHorizon => _predictionHorizon;
 
     /// <inheritdoc/>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     /// <inheritdoc/>
-    public int PatchSize => 1;
+    public override int PatchSize => 1;
 
     /// <inheritdoc/>
-    public int Stride => 1;
+    public override int Stride => 1;
 
     /// <inheritdoc/>
-    public bool IsChannelIndependent => false;
+    public override bool IsChannelIndependent => false;
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     #endregion
 
@@ -196,8 +184,8 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         options ??= new AutoformerOptions<T>();
 
         _useNativeMode = false;
-        _onnxSession = new InferenceSession(onnxModelPath);
-        _onnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -238,8 +226,8 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         options ??= new AutoformerOptions<T>();
 
         _useNativeMode = true;
-        _onnxSession = null;
-        _onnxModelPath = null;
+        OnnxSession = null;
+        OnnxModelPath = null;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -385,7 +373,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient));
+        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -465,7 +453,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
         return _useNativeMode
             ? new Autoformer<T>(Architecture, options, _optimizer, _lossFunction)
-            : new Autoformer<T>(Architecture, _onnxModelPath!, options, _optimizer, _lossFunction);
+            : new Autoformer<T>(Architecture, OnnxModelPath!, options, _optimizer, _lossFunction);
     }
 
     /// <inheritdoc/>
@@ -522,7 +510,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Autoformer model, Forecast produces predictions from input data. This is the main inference step of the Autoformer architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -536,7 +524,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Autoformer model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the Autoformer architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -569,7 +557,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Autoformer model, Evaluate performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
+    public override Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
     {
         if (inputs is null)
             throw new ArgumentNullException(nameof(inputs));
@@ -606,7 +594,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Autoformer model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the Autoformer architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         if (!_useInstanceNormalization)
             return input;
@@ -620,7 +608,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Autoformer model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the Autoformer architecture is performing.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
         {
@@ -721,7 +709,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Autoformer model, ForecastNative produces predictions from input data. This is the main inference step of the Autoformer architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
+    protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         SetTrainingMode(false);
         return Forward(input);
@@ -735,12 +723,12 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Autoformer model, ForecastOnnx produces predictions from input data. This is the main inference step of the Autoformer architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
-        var inputName = _onnxSession.InputMetadata.Keys.First();
+        var inputName = OnnxSession.InputMetadata.Keys.First();
         var inputShape = input.Shape.Select(d => (long)d).ToArray();
         var onnxInput = new OnnxTensors.DenseTensor<float>(
             input.ToArray().Select(x => Convert.ToSingle(x)).ToArray(),
@@ -751,7 +739,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var output = results.First().AsTensor<float>();
         var outputArray = output.ToArray().Select(x => NumOps.FromDouble(x)).ToArray();
         return new Tensor<T>(outputArray, output.Dimensions.ToArray());
@@ -990,7 +978,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Autoformer model, ShiftInputWithPredictions produces predictions from input data. This is the main inference step of the Autoformer architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int steps)
+    protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int steps)
     {
         int batchSize = input.Shape[0];
         int features = input.Shape[2];
@@ -1027,7 +1015,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Autoformer model, ConcatenatePredictions produces predictions from input data. This is the main inference step of the Autoformer architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
+    protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         if (predictions.Count == 0)
             return new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
@@ -1071,7 +1059,7 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
 
         base.Dispose(disposing);
@@ -1079,3 +1067,5 @@ public class Autoformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
     #endregion
 }
+
+

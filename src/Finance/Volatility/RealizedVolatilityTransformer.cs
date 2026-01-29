@@ -225,7 +225,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
     {
         SetTrainingMode(true);
         var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var currentGrad = Tensor<T>.FromVector(outputGradient);
+        var currentGrad = Tensor<T>.FromVector(outputGradient, output.Shape);
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
@@ -269,7 +269,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
                 { "ModelType", "RealizedVolatilityTransformer" },
                 { "NumAssets", _numAssets },
                 { "LookbackWindow", _lookbackWindow },
-                { "ForecastHorizon", _predictionHorizon },
+                { "ForecastHorizon", PredictionHorizon },
                 { "NumHeads", _numHeads },
                 { "NumLayers", _numLayers }
             }
@@ -288,7 +288,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
         {
             NumAssets = _numAssets,
             LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _predictionHorizon,
+            ForecastHorizon = PredictionHorizon,
             HiddenSize = _hiddenSize,
             NumHeads = _numHeads,
             NumLayers = _numLayers,

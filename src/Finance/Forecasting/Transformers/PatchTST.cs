@@ -28,7 +28,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// with Transformers", ICLR 2023. https://arxiv.org/abs/2211.14730
 /// </para>
 /// </remarks>
-public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
+public class PatchTST<T> : ForecastingModelBase<T>
 {
     #region Native Mode Fields
 
@@ -488,7 +488,7 @@ public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
 
         // Backward pass
         var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient));
+        Backward(Tensor<T>.FromVector(outputGradient, output.Shape));
 
         // Update parameters
         _optimizer.UpdateParameters(Layers);
@@ -1079,10 +1079,10 @@ public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
     private Tensor<T> ProcessChannelIndependent(Tensor<T> input)
     {
         int batchSize = input.Rank == 3 ? input.Shape[0] : 1;
-        int numChannels = _numFeatures;
+        int numChannels = NumFeatures;
 
-        var outputShape = new[] { batchSize, _predictionHorizon, numChannels };
-        var outputData = new T[batchSize * _predictionHorizon * numChannels];
+        var outputShape = new[] { batchSize, PredictionHorizon, numChannels };
+        var outputData = new T[batchSize * PredictionHorizon * numChannels];
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1091,9 +1091,9 @@ public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
                 var channelSeq = ExtractChannel(input, b, c);
                 var channelOutput = ProcessSingleChannel(channelSeq);
 
-                for (int h = 0; h < _predictionHorizon; h++)
+                for (int h = 0; h < PredictionHorizon; h++)
                 {
-                    int outIdx = (b * _predictionHorizon * numChannels) + (h * numChannels) + c;
+                    int outIdx = (b * PredictionHorizon * numChannels) + (h * numChannels) + c;
                     outputData[outIdx] = channelOutput.Data.Span[h];
                 }
             }
@@ -1195,7 +1195,7 @@ public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
     /// </remarks>
     private int CalculateNumPatches()
     {
-        return (_sequenceLength - _patchSize) / _stride + 1;
+        return (SequenceLength - _patchSize) / _stride + 1;
     }
 
     /// <summary>
@@ -1311,25 +1311,25 @@ public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
     /// </remarks>
     private Tensor<T> ExtractChannel(Tensor<T> input, int batchIdx, int channelIdx)
     {
-        var channelData = new T[_sequenceLength];
+        var channelData = new T[SequenceLength];
 
         if (input.Rank == 3)
         {
-            for (int t = 0; t < _sequenceLength; t++)
+            for (int t = 0; t < SequenceLength; t++)
             {
-                int idx = (batchIdx * _sequenceLength * _numFeatures) + (t * _numFeatures) + channelIdx;
+                int idx = (batchIdx * SequenceLength * NumFeatures) + (t * NumFeatures) + channelIdx;
                 channelData[t] = input.Data.Span[idx];
             }
         }
         else
         {
-            for (int t = 0; t < _sequenceLength; t++)
+            for (int t = 0; t < SequenceLength; t++)
             {
-                channelData[t] = input.Data.Span[(t * _numFeatures) + channelIdx];
+                channelData[t] = input.Data.Span[(t * NumFeatures) + channelIdx];
             }
         }
 
-        return new Tensor<T>(new[] { _sequenceLength }, new Vector<T>(channelData));
+        return new Tensor<T>(new[] { SequenceLength }, new Vector<T>(channelData));
     }
 
     /// <summary>
@@ -1372,7 +1372,7 @@ public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
 
             for (int i = 0; i < input.Length; i++)
             {
-                int statIdx = i % _numFeatures;
+                int statIdx = i % NumFeatures;
                 T centered = NumOps.Subtract(input.Data.Span[i], _instanceMean.Data.Span[statIdx]);
                 T stdVal = NumOps.Add(_instanceStd.Data.Span[statIdx], epsilon);
                 result.Data.Span[i] = NumOps.Divide(centered, stdVal);
@@ -1385,7 +1385,7 @@ public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
 
             for (int i = 0; i < input.Length; i++)
             {
-                int statIdx = i % _numFeatures;
+                int statIdx = i % NumFeatures;
                 T scaled = NumOps.Multiply(input.Data.Span[i], _instanceStd.Data.Span[statIdx]);
                 result.Data.Span[i] = NumOps.Add(scaled, _instanceMean.Data.Span[statIdx]);
             }
@@ -1412,20 +1412,20 @@ public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
     /// </remarks>
     private Tensor<T> CalculateInstanceMean(Tensor<T> input)
     {
-        var mean = new T[_numFeatures];
-        int samplesPerFeature = input.Length / _numFeatures;
+        var mean = new T[NumFeatures];
+        int samplesPerFeature = input.Length / NumFeatures;
 
-        for (int f = 0; f < _numFeatures; f++)
+        for (int f = 0; f < NumFeatures; f++)
         {
             T sum = NumOps.Zero;
-            for (int i = f; i < input.Length; i += _numFeatures)
+            for (int i = f; i < input.Length; i += NumFeatures)
             {
                 sum = NumOps.Add(sum, input.Data.Span[i]);
             }
             mean[f] = NumOps.Divide(sum, NumOps.FromDouble(samplesPerFeature));
         }
 
-        return new Tensor<T>(new[] { _numFeatures }, new Vector<T>(mean));
+        return new Tensor<T>(new[] { NumFeatures }, new Vector<T>(mean));
     }
 
     /// <summary>
@@ -1451,13 +1451,13 @@ public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
     /// </remarks>
     private Tensor<T> CalculateInstanceStd(Tensor<T> input, Tensor<T> mean)
     {
-        var std = new T[_numFeatures];
-        int samplesPerFeature = input.Length / _numFeatures;
+        var std = new T[NumFeatures];
+        int samplesPerFeature = input.Length / NumFeatures;
 
-        for (int f = 0; f < _numFeatures; f++)
+        for (int f = 0; f < NumFeatures; f++)
         {
             T sumSq = NumOps.Zero;
-            for (int i = f; i < input.Length; i += _numFeatures)
+            for (int i = f; i < input.Length; i += NumFeatures)
             {
                 T diff = NumOps.Subtract(input.Data.Span[i], mean.Data.Span[f]);
                 sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
@@ -1466,7 +1466,7 @@ public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
             std[f] = NumOps.Sqrt(variance);
         }
 
-        return new Tensor<T>(new[] { _numFeatures }, new Vector<T>(std));
+        return new Tensor<T>(new[] { NumFeatures }, new Vector<T>(std));
     }
 
     /// <summary>
@@ -1498,7 +1498,7 @@ public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsToShift)
     {
         var newData = new T[input.Length];
-        int shiftAmount = stepsToShift * _numFeatures;
+        int shiftAmount = stepsToShift * NumFeatures;
 
         Array.Copy(input.Data.ToArray(), shiftAmount, newData, 0, input.Length - shiftAmount);
         Array.Copy(predictions.Data.ToArray(), 0, newData, input.Length - shiftAmount, shiftAmount);
@@ -1534,22 +1534,22 @@ public class PatchTST<T> : FinancialModelBase<T>, IForecastingModel<T>
     /// </remarks>
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
-        var outputData = new T[totalSteps * _numFeatures];
+        var outputData = new T[totalSteps * NumFeatures];
         int currentIdx = 0;
 
         foreach (var pred in predictions)
         {
-            int stepsToCopy = Math.Min(_predictionHorizon, totalSteps - currentIdx / _numFeatures);
-            int elementsToCopy = stepsToCopy * _numFeatures;
+            int stepsToCopy = Math.Min(PredictionHorizon, totalSteps - currentIdx / NumFeatures);
+            int elementsToCopy = stepsToCopy * NumFeatures;
 
             Array.Copy(pred.Data.ToArray(), 0, outputData, currentIdx, elementsToCopy);
             currentIdx += elementsToCopy;
 
-            if (currentIdx >= totalSteps * _numFeatures)
+            if (currentIdx >= totalSteps * NumFeatures)
                 break;
         }
 
-        return new Tensor<T>(new[] { totalSteps, _numFeatures }, new Vector<T>(outputData));
+        return new Tensor<T>(new[] { totalSteps, NumFeatures }, new Vector<T>(outputData));
     }
 
     #endregion

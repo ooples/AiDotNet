@@ -15,7 +15,8 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Graph;
 
 /// <summary>
@@ -64,17 +65,13 @@ namespace AiDotNet.Finance.Graph;
 /// https://arxiv.org/abs/1703.06103
 /// </para>
 /// </remarks>
-public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class RelationalGCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;
     #endregion
 
-    #region ONNX Mode Fields
-    private readonly InferenceSession? _onnxSession;
-    private readonly string? _onnxModelPath;
-    #endregion
-
+    
     #region Native Mode Fields
     private DenseLayer<T>? _inputProjection;
     private List<DenseLayer<T>>? _basisLayers;
@@ -130,25 +127,25 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Properties
 
     /// <inheritdoc/>
-    public int SequenceLength => _sequenceLength;
+    public override int SequenceLength => _sequenceLength;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _forecastHorizon;
+    public override int PredictionHorizon => _forecastHorizon;
 
     /// <inheritdoc/>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     /// <inheritdoc/>
-    public int PatchSize => 1;
+    public override int PatchSize => 1;
 
     /// <inheritdoc/>
-    public int Stride => 1;
+    public override int Stride => 1;
 
     /// <inheritdoc/>
-    public bool IsChannelIndependent => false;
+    public override bool IsChannelIndependent => false;
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     /// <summary>
     /// Gets the number of nodes (entities) in the knowledge graph.
@@ -253,8 +250,8 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _onnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new RelationalGCNOptions<T>();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -564,7 +561,7 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -819,7 +816,7 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// to aggregate information across the knowledge graph, then projects to forecasts.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
         if (quantiles is not null && quantiles.Length > 0)
         {
@@ -860,7 +857,7 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// feeds predictions back as input to generate longer forecasts.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         var predictions = new List<Tensor<T>>();
         var currentInput = input;
@@ -886,7 +883,7 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// to assess how well the model's predictions match reality.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
 
@@ -926,7 +923,7 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// in R-GCN. This method returns the input unchanged.
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         return input;
     }
@@ -940,7 +937,7 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// including model configuration values.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
 
@@ -1035,9 +1032,9 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// with a pretrained model, enabling deployment without the training framework.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session not initialized.");
 
         var flatInput = FlattenInput(input);
@@ -1056,7 +1053,7 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             NamedOnnxValue.CreateFromTensor("input", inputTensor)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
         var outputData = new T[outputTensor.Length];
@@ -1408,7 +1405,7 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// extended forecast tensor.
     /// </para>
     /// </remarks>
-    private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
+        protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
     {
         if (predictions.Count == 0)
             return new Tensor<T>(new[] { _numNodes, 0 });
@@ -1444,7 +1441,7 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
 
         base.Dispose(disposing);
@@ -1452,3 +1449,6 @@ public class RelationalGCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
     #endregion
 }
+
+
+

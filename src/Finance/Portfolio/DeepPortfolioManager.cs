@@ -118,7 +118,7 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
         }
-        else if (_useNativeMode)
+        else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultDeepPortfolioLayers(Architecture, _numAssets));
         }
@@ -182,13 +182,13 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
-        if (!_useNativeMode) throw new InvalidOperationException("Training not supported in ONNX mode.");
+        if (!UseNativeMode) throw new InvalidOperationException("Training not supported in ONNX mode.");
         
         SetTrainingMode(true);
         var output = Predict(input);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
         
-        var currentGrad = Tensor<T>.FromVector(grad);
+        var currentGrad = Tensor<T>.FromVector(grad, output.Shape);
         for (int i = Layers.Count - 1; i >= 0; i--)
             currentGrad = Layers[i].Backward(currentGrad);
 

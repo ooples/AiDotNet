@@ -109,4 +109,33 @@ public class FinBERTToneOptions<T>
     /// </para>
     /// </remarks>
     public bool UseFinegrainedTone { get; set; } = true;
+
+    /// <summary>
+    /// Validates the FinBERT-Tone options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This checks that the dimensions and class counts
+    /// are sensible before building the model.
+    /// </para>
+    /// </remarks>
+    public void Validate()
+    {
+        if (MaxSequenceLength < 1)
+            throw new ArgumentException("MaxSequenceLength must be at least 1.", nameof(MaxSequenceLength));
+        if (VocabularySize < 1)
+            throw new ArgumentException("VocabularySize must be at least 1.", nameof(VocabularySize));
+        if (HiddenDimension < 1)
+            throw new ArgumentException("HiddenDimension must be at least 1.", nameof(HiddenDimension));
+        if (NumAttentionHeads < 1)
+            throw new ArgumentException("NumAttentionHeads must be at least 1.", nameof(NumAttentionHeads));
+        if (IntermediateDimension < 1)
+            throw new ArgumentException("IntermediateDimension must be at least 1.", nameof(IntermediateDimension));
+        if (NumLayers < 1)
+            throw new ArgumentException("NumLayers must be at least 1.", nameof(NumLayers));
+        if (NumToneClasses < 1)
+            throw new ArgumentException("NumToneClasses must be at least 1.", nameof(NumToneClasses));
+        if (DropoutRate < 0 || DropoutRate >= 1)
+            throw new ArgumentException("DropoutRate must be between 0 (inclusive) and 1 (exclusive).", nameof(DropoutRate));
+    }
 }

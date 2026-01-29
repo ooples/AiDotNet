@@ -92,24 +92,63 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
     #region ITradingAgent Properties
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This summarizes how much extra return the strategy gets
+    /// per unit of risk. Higher values mean better risk-adjusted performance.
+    /// </para>
+    /// </remarks>
     public T SharpeRatio => CalculateSharpeRatio();
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the largest drop from a previous peak in portfolio
+    /// value. It tells you the worst loss the strategy experienced.
+    /// </para>
+    /// </remarks>
     public T MaxDrawdown => CalculateMaxDrawdown();
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the total growth (or loss) of the portfolio since
+    /// trading started, expressed as a percentage.
+    /// </para>
+    /// </remarks>
     public T CumulativeReturn => CalculateCumulativeReturn();
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the percentage of trades that made money.
+    /// It measures consistency, but not how big the wins or losses were.
+    /// </para>
+    /// </remarks>
     public T WinRate => CalculateWinRate();
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The total count of trades the agent has executed so far.
+    /// </para>
+    /// </remarks>
     public int TotalTrades => _totalTrades;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The current dollar (or unit) value of the portfolio.
+    /// </para>
+    /// </remarks>
     public T PortfolioValue => _portfolioValue;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The starting amount of capital the agent began trading with.
+    /// </para>
+    /// </remarks>
     public T InitialCapital => _initialCapital;
 
     #endregion

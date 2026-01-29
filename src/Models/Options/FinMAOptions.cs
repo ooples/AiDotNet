@@ -95,4 +95,35 @@ public class FinMAOptions<T>
     /// </para>
     /// </remarks>
     public int NumAgents { get; set; } = 4;
+
+    /// <summary>
+    /// Validates the FinMA options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This ensures the model sizes and agent counts are
+    /// valid so the architecture can be created safely.
+    /// </para>
+    /// </remarks>
+    public void Validate()
+    {
+        if (MaxSequenceLength < 1)
+            throw new ArgumentException("MaxSequenceLength must be at least 1.", nameof(MaxSequenceLength));
+        if (VocabularySize < 1)
+            throw new ArgumentException("VocabularySize must be at least 1.", nameof(VocabularySize));
+        if (HiddenDimension < 1)
+            throw new ArgumentException("HiddenDimension must be at least 1.", nameof(HiddenDimension));
+        if (NumAttentionHeads < 1)
+            throw new ArgumentException("NumAttentionHeads must be at least 1.", nameof(NumAttentionHeads));
+        if (IntermediateDimension < 1)
+            throw new ArgumentException("IntermediateDimension must be at least 1.", nameof(IntermediateDimension));
+        if (NumLayers < 1)
+            throw new ArgumentException("NumLayers must be at least 1.", nameof(NumLayers));
+        if (NumClasses < 1)
+            throw new ArgumentException("NumClasses must be at least 1.", nameof(NumClasses));
+        if (NumAgents < 1)
+            throw new ArgumentException("NumAgents must be at least 1.", nameof(NumAgents));
+        if (DropoutRate < 0 || DropoutRate >= 1)
+            throw new ArgumentException("DropoutRate must be between 0 (inclusive) and 1 (exclusive).", nameof(DropoutRate));
+    }
 }

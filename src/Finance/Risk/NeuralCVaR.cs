@@ -199,4 +199,51 @@ public class NeuralCVaR<T> : RiskModelBase<T>
         var cvar = CalculateRisk(portfolioReturns); // Using returns as input state proxy
         return NumOps.Multiply(cvar, NumOps.FromDouble(0.8));
     }
+
+    #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Updates the model parameters from a flat parameter vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This lets you load or apply all model weights at once,
+    /// which is useful for cloning or restoring a trained model.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
+            offset += layerParams.Length;
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the NeuralCVaR model with the same configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is used by the framework to clone the model's setup
+    /// so it can create a fresh instance with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var options = new NeuralCVaROptions<T>
+        {
+            NumFeatures = _options.NumFeatures,
+            ConfidenceLevel = _options.ConfidenceLevel,
+            TimeHorizon = _options.TimeHorizon,
+            HiddenLayers = _options.HiddenLayers,
+            HiddenDimension = _options.HiddenDimension
+        };
+
+        return new NeuralCVaR<T>(Architecture, options, _optimizer, LossFunction);
+    }
+
+    #endregion
 }

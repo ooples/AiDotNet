@@ -192,6 +192,22 @@ public static class DeserializationHelper
         {
             instance = CreateMultiHeadAttentionLayer<T>(type, inputShape, additionalParams);
         }
+        else if (genericDef == typeof(TransformerEncoderLayer<>))
+        {
+            // TransformerEncoderLayer(int embeddingSize, int numHeads, int feedForwardDim)
+            int embeddingSize = inputShape[0];
+            int numHeads = TryGetInt(additionalParams, "NumHeads") ?? ResolveDefaultHeadCount(embeddingSize);
+            int feedForwardDim = TryGetInt(additionalParams, "FeedForwardDim")
+                ?? TryGetInt(additionalParams, "FeedForwardDimension")
+                ?? embeddingSize * 4;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int) });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find TransformerEncoderLayer constructor with (int, int, int).");
+            }
+            instance = ctor.Invoke(new object[] { embeddingSize, numHeads, feedForwardDim });
+        }
         else if (genericDef == typeof(SelfAttentionLayer<>))
         {
             // SelfAttentionLayer(int sequenceLength, int embeddingDimension, int headCount = 8, IActivationFunction<T>? = null)

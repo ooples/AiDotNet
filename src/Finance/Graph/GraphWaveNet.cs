@@ -15,7 +15,8 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Graph;
 
 /// <summary>
@@ -64,17 +65,13 @@ namespace AiDotNet.Finance.Graph;
 /// https://arxiv.org/abs/1906.00121
 /// </para>
 /// </remarks>
-public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class GraphWaveNet<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;
     #endregion
 
-    #region ONNX Mode Fields
-    private readonly InferenceSession? _onnxSession;
-    private readonly string? _onnxModelPath;
-    #endregion
-
+    
     #region Native Mode Fields
     private DenseLayer<T>? _inputProjection;
     private List<DenseLayer<T>>? _filterLayers;
@@ -120,25 +117,25 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Properties
 
     /// <inheritdoc/>
-    public int SequenceLength => _sequenceLength;
+    public override int SequenceLength => _sequenceLength;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _forecastHorizon;
+    public override int PredictionHorizon => _forecastHorizon;
 
     /// <inheritdoc/>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     /// <inheritdoc/>
-    public int PatchSize => 1;
+    public override int PatchSize => 1;
 
     /// <inheritdoc/>
-    public int Stride => 1;
+    public override int Stride => 1;
 
     /// <inheritdoc/>
-    public bool IsChannelIndependent => false;
+    public override bool IsChannelIndependent => false;
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     /// <summary>
     /// Gets the number of nodes in the graph.
@@ -163,21 +160,45 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <summary>
     /// Gets the number of diffusion steps (K).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Diffusion steps control how far information can travel
+    /// across the graph. More steps let the model capture longer-range relationships.
+    /// </para>
+    /// </remarks>
     public int DiffusionSteps => _diffusionSteps;
 
     /// <summary>
     /// Gets whether adaptive graph learning is enabled.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When enabled, the model learns the graph connections
+    /// directly from data instead of relying only on a predefined graph.
+    /// </para>
+    /// </remarks>
     public bool UseAdaptiveGraph => _useAdaptiveGraph;
 
     /// <summary>
     /// Gets the number of samples for uncertainty estimation.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is how many times the model samples predictions
+    /// to estimate uncertainty around its forecasts.
+    /// </para>
+    /// </remarks>
     public int NumSamples => _numSamples;
 
     /// <summary>
     /// Gets the learned adaptive adjacency matrix.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the graph the model has learned, showing how
+    /// strongly each node influences others.
+    /// </para>
+    /// </remarks>
     public double[,]? LearnedAdjacency => _adaptiveAdjacency is not null ? (double[,])_adaptiveAdjacency.Clone() : null;
 
     #endregion
@@ -207,8 +228,8 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             throw new System.IO.FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _onnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new GraphWaveNetOptions<T>();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -546,7 +567,7 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -734,7 +755,7 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, Forecast produces predictions from input data. This is the main inference step of the GraphWaveNet architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
         if (quantiles is not null && quantiles.Length > 0)
         {
@@ -767,7 +788,7 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the GraphWaveNet architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         var predictions = new List<Tensor<T>>();
         var currentInput = input;
@@ -790,7 +811,7 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, Evaluate performs a supporting step in the workflow. It keeps the GraphWaveNet architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
         T mse = NumOps.Zero;
@@ -824,7 +845,7 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the GraphWaveNet architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input) => input;
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) => input;
 
     /// <summary>
     /// Gets financial metrics.
@@ -834,7 +855,7 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the GraphWaveNet architecture is performing.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
         {
@@ -1015,9 +1036,9 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, ForecastOnnx produces predictions from input data. This is the main inference step of the GraphWaveNet architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session not initialized.");
 
         var flatInput = FlattenInput(input);
@@ -1030,7 +1051,7 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("input", inputTensor) };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
         var outputData = new T[outputTensor.Length];
@@ -1116,7 +1137,7 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the GraphWaveNet model, ConcatenatePredictions produces predictions from input data. This is the main inference step of the GraphWaveNet architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
+        protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
     {
         int totalLen = predictions.Sum(p => p.ToVector().Length);
         var result = new T[totalLen];
@@ -1213,9 +1234,12 @@ public class GraphWaveNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     protected override void Dispose(bool disposing)
     {
         if (disposing)
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         base.Dispose(disposing);
     }
 
     #endregion
 }
+
+
+

@@ -4,6 +4,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Optimizers;
@@ -47,7 +48,7 @@ public class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
         BlackLittermanNeuralOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, options?.NumAssets ?? 10, options?.NumFeatures ?? architecture.CalculatedInputSize, lossFunction)
+        : base(architecture, options?.NumAssets ?? 10, architecture.CalculatedInputSize, lossFunction)
     {
         _options = options ?? new BlackLittermanNeuralOptions<T>();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -73,7 +74,7 @@ public class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
         BlackLittermanNeuralOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, onnxModelPath, options?.NumAssets ?? 10, options?.NumFeatures ?? architecture.CalculatedInputSize)
+        : base(architecture, onnxModelPath, options?.NumAssets ?? 10, architecture.CalculatedInputSize)
     {
         _options = options ?? new BlackLittermanNeuralOptions<T>();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -106,7 +107,7 @@ public class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultBlackLittermanNeuralLayers(
                 Architecture,
-                _numFeatures,
+                NumFeatures,
                 _hiddenDimension,
                 _numAssets,
                 _dropout));
@@ -137,4 +138,49 @@ public class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
         }
         return weights; // Should normalize
     }
+
+    #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Updates the model parameters from a flat parameter vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method lets you load a complete set of weights
+    /// in one call, which is useful for cloning or external optimization.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
+            offset += layerParams.Length;
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the BlackLittermanNeural model with the same configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is used by the framework to clone the model's setup
+    /// so it can create a fresh instance with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var optionsCopy = new BlackLittermanNeuralOptions<T>
+        {
+            NumAssets = _options.NumAssets,
+            HiddenDimension = _hiddenDimension,
+            DropoutRate = _dropout
+        };
+
+        return new BlackLittermanNeural<T>(Architecture, optionsCopy, lossFunction: _lossFunction);
+    }
+
+    #endregion
 }

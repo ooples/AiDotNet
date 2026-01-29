@@ -11,7 +11,8 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
 /// <summary>
@@ -41,7 +42,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// Time Series Analysis", ICLR 2023. https://arxiv.org/abs/2210.02186
 /// </para>
 /// </remarks>
-public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class TimesNet<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -52,20 +53,7 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
     #endregion
 
-    #region ONNX Mode Fields
-
-    /// <summary>
-    /// The ONNX inference session for running pretrained models.
-    /// </summary>
-    private readonly InferenceSession? _onnxSession;
-
-    /// <summary>
-    /// Path to the ONNX model file.
-    /// </summary>
-    private readonly string? _onnxModelPath;
-
-    #endregion
-
+    
     #region Native Mode Fields
 
     /// <summary>
@@ -182,25 +170,25 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Properties
 
     /// <inheritdoc/>
-    public int SequenceLength => _sequenceLength;
+    public override int SequenceLength => _sequenceLength;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _predictionHorizon;
+    public override int PredictionHorizon => _predictionHorizon;
 
     /// <inheritdoc/>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     /// <inheritdoc/>
-    public int PatchSize => 1; // TimesNet doesn't use patching in the traditional sense
+    public override int PatchSize => 1; // TimesNet doesn't use patching in the traditional sense
 
     /// <inheritdoc/>
-    public int Stride => 1;
+    public override int Stride => 1;
 
     /// <inheritdoc/>
-    public bool IsChannelIndependent => false; // TimesNet processes all channels together
+    public override bool IsChannelIndependent => false; // TimesNet processes all channels together
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     #endregion
 
@@ -236,8 +224,8 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         options ??= new TimesNetOptions<T>();
 
         _useNativeMode = false;
-        _onnxSession = new InferenceSession(onnxModelPath);
-        _onnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -280,8 +268,8 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         options ??= new TimesNetOptions<T>();
 
         _useNativeMode = true;
-        _onnxSession = null;
-        _onnxModelPath = null;
+        OnnxSession = null;
+        OnnxModelPath = null;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -444,7 +432,7 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
         // Backward pass - convert gradient back to tensor
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -577,7 +565,7 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TimesNet model, Forecast produces predictions from input data. This is the main inference step of the TimesNet architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
         if (_useInstanceNormalization)
             historicalData = ApplyInstanceNormalization(historicalData);
@@ -596,7 +584,7 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TimesNet model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the TimesNet architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         var predictions = new List<Tensor<T>>();
         var currentInput = input;
@@ -625,7 +613,7 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TimesNet model, Evaluate performs a supporting step in the workflow. It keeps the TimesNet architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
 
@@ -661,7 +649,7 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TimesNet model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the TimesNet architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         return ApplyRevIN(input, normalize: true);
     }
@@ -672,7 +660,7 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TimesNet model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the TimesNet architecture is performing.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
         {
@@ -719,8 +707,17 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         {
             var residual = current;
 
-            // Convolution
-            current = _convLayers[i].Forward(current);
+            // Convolution expects NCHW; reshape [B, S, C] -> [B, C, 1, S]
+            int batchSize = current.Shape[0];
+            int seqLen = current.Shape[1];
+            int channels = current.Shape[2];
+            var convInput = current.Transpose(new[] { 0, 2, 1 }).Reshape(batchSize, channels, 1, seqLen);
+            var convOutput = _convLayers[i].Forward(convInput);
+
+            // Reshape back to [B, S, C]
+            int outSeqLen = convOutput.Shape[3];
+            int outChannels = convOutput.Shape[1];
+            current = convOutput.Transpose(new[] { 0, 3, 1, 2 }).Reshape(batchSize, outSeqLen, outChannels);
 
             // FFN (2 layers)
             if (ffnIdx < _ffnLayers.Count)
@@ -799,8 +796,17 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             if (ffnIdx >= 0)
                 grad = _ffnLayers[ffnIdx--].Backward(grad);
 
-            // Conv backward
-            grad = _convLayers[i].Backward(grad);
+            // Conv backward: reshape grad to NCHW [B, C, 1, S]
+            int batchSize = grad.Shape[0];
+            int seqLen = grad.Shape[1];
+            int channels = grad.Shape[2];
+            var convGradInput = grad.Transpose(new[] { 0, 2, 1 }).Reshape(batchSize, channels, 1, seqLen);
+            var convGradOutput = _convLayers[i].Backward(convGradInput);
+
+            // Reshape back to [B, S, C] for previous layers
+            int outSeqLen = convGradOutput.Shape[3];
+            int outChannels = convGradOutput.Shape[1];
+            grad = convGradOutput.Transpose(new[] { 0, 3, 1, 2 }).Reshape(batchSize, outSeqLen, outChannels);
         }
 
         // Backward through embedding
@@ -838,9 +844,9 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// This is typically faster but doesn't support training.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         // Convert to ONNX format
@@ -851,7 +857,7 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
-        var inputMeta = _onnxSession.InputMetadata;
+        var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
         var inputs = new List<NamedOnnxValue>
@@ -859,7 +865,7 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
         var outputShape = outputTensor.Dimensions.ToArray();
@@ -1033,7 +1039,7 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// we need to "roll" the input window forward.
     /// </para>
     /// </remarks>
-    private Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int steps)
+    protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int steps)
     {
         int batchSize = input.Shape[0];
         int features = input.Shape[2];
@@ -1074,7 +1080,7 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// we accumulate predictions and combine them into a single output.
     /// </para>
     /// </remarks>
-    private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
+    protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         if (predictions.Count == 0)
             return new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
@@ -1120,10 +1126,11 @@ public class TimesNet<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
         base.Dispose(disposing);
     }
 
     #endregion
 }
+

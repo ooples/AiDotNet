@@ -12,10 +12,10 @@ namespace AiDotNet.Finance.Base;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinancialNLPModel<T>
 {
-    protected readonly int _maxSequenceLength;
-    protected readonly int _vocabularySize;
-    protected readonly int _hiddenDimension;
-    protected readonly int _numSentimentClasses;
+    protected readonly int _baseMaxSequenceLength;
+    protected readonly int _baseVocabularySize;
+    protected readonly int _baseHiddenDimension;
+    protected readonly int _baseNumSentimentClasses;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -24,7 +24,7 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
     /// Longer texts are truncated or split to fit this length.
     /// </para>
     /// </remarks>
-    public int MaxSequenceLength => _maxSequenceLength;
+    public virtual int MaxSequenceLength => _baseMaxSequenceLength;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -33,7 +33,7 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
     /// Larger vocabularies allow more precise language understanding but require more memory.
     /// </para>
     /// </remarks>
-    public int VocabularySize => _vocabularySize;
+    public virtual int VocabularySize => _baseVocabularySize;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -42,7 +42,7 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
     /// Think of this as the number of features describing each word.
     /// </para>
     /// </remarks>
-    public int HiddenDimension => _hiddenDimension;
+    public virtual int HiddenDimension => _baseHiddenDimension;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -51,7 +51,7 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
     /// (e.g., negative/neutral/positive).
     /// </para>
     /// </remarks>
-    public int NumSentimentClasses => _numSentimentClasses;
+    public virtual int NumSentimentClasses => _baseNumSentimentClasses;
 
     /// <summary>
     /// Initializes a new NLP model base for training (native mode).
@@ -78,10 +78,10 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
         ILossFunction<T>? lossFunction = null)
         : base(architecture, maxSequenceLength, 1, architecture.InputSize, lossFunction)
     {
-        _maxSequenceLength = maxSequenceLength;
-        _vocabularySize = vocabularySize;
-        _hiddenDimension = hiddenDimension;
-        _numSentimentClasses = numSentimentClasses;
+        _baseMaxSequenceLength = maxSequenceLength;
+        _baseVocabularySize = vocabularySize;
+        _baseHiddenDimension = hiddenDimension;
+        _baseNumSentimentClasses = numSentimentClasses;
     }
 
     /// <summary>
@@ -108,10 +108,34 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
         int numSentimentClasses = 3)
         : base(architecture, onnxModelPath, maxSequenceLength, 1, architecture.InputSize)
     {
-        _maxSequenceLength = maxSequenceLength;
-        _vocabularySize = vocabularySize;
-        _hiddenDimension = hiddenDimension;
-        _numSentimentClasses = numSentimentClasses;
+        _baseMaxSequenceLength = maxSequenceLength;
+        _baseVocabularySize = vocabularySize;
+        _baseHiddenDimension = hiddenDimension;
+        _baseNumSentimentClasses = numSentimentClasses;
+    }
+
+    /// <summary>
+    /// Initializes a new instance with deferred NLP configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="lossFunction">Optional loss function.</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for clipping.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor keeps the legacy pattern where
+    /// derived NLP models configure vocabulary size and sequence length later.
+    /// </para>
+    /// </remarks>
+    protected FinancialNLPModelBase(
+        NeuralNetworkArchitecture<T> architecture,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0)
+        : base(architecture, lossFunction, maxGradNorm)
+    {
+        _baseMaxSequenceLength = 0;
+        _baseVocabularySize = 0;
+        _baseHiddenDimension = 0;
+        _baseNumSentimentClasses = 0;
     }
 
     /// <inheritdoc/>
@@ -175,7 +199,7 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
     /// This default implementation is a placeholder and should be overridden by real tokenizers.
     /// </para>
     /// </remarks>
-    public virtual int[] Tokenize(string text, int? maxLength = null) => new int[maxLength ?? _maxSequenceLength];
+    public virtual int[] Tokenize(string text, int? maxLength = null) => new int[maxLength ?? MaxSequenceLength];
 
     /// <inheritdoc/>
     /// <remarks>
@@ -196,9 +220,9 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
     public override Dictionary<string, T> GetFinancialMetrics()
     {
         var metrics = base.GetFinancialMetrics();
-        metrics["MaxSequenceLength"] = NumOps.FromDouble(_maxSequenceLength);
-        metrics["VocabularySize"] = NumOps.FromDouble(_vocabularySize);
-        metrics["HiddenDimension"] = NumOps.FromDouble(_hiddenDimension);
+        metrics["MaxSequenceLength"] = NumOps.FromDouble(MaxSequenceLength);
+        metrics["VocabularySize"] = NumOps.FromDouble(VocabularySize);
+        metrics["HiddenDimension"] = NumOps.FromDouble(HiddenDimension);
         
         return metrics;
     }

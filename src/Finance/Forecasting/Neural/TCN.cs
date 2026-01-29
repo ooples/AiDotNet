@@ -12,7 +12,8 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Neural;
 
 /// <summary>
@@ -55,7 +56,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// Recurrent Networks for Sequence Modeling", 2018. https://arxiv.org/abs/1803.01271
 /// </para>
 /// </remarks>
-public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class TCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -72,20 +73,7 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
     #endregion
 
-    #region ONNX Mode Fields
-
-    /// <summary>
-    /// The ONNX inference session for running pretrained models.
-    /// </summary>
-    private readonly InferenceSession? _onnxSession;
-
-    /// <summary>
-    /// Path to the ONNX model file.
-    /// </summary>
-    private readonly string? _onnxModelPath;
-
-    #endregion
-
+    
     #region Native Mode Fields
 
     /// <summary>
@@ -179,25 +167,25 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Properties
 
     /// <inheritdoc/>
-    public int SequenceLength => _lookbackWindow;
+    public override int SequenceLength => _lookbackWindow;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _forecastHorizon;
+    public override int PredictionHorizon => _forecastHorizon;
 
     /// <inheritdoc/>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     /// <inheritdoc/>
-    public int PatchSize => _kernelSize;
+    public override int PatchSize => _kernelSize;
 
     /// <inheritdoc/>
-    public int Stride => 1;
+    public override int Stride => 1;
 
     /// <inheritdoc/>
-    public bool IsChannelIndependent => false;
+    public override bool IsChannelIndependent => false;
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     #endregion
 
@@ -234,8 +222,8 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         ValidateOptions(options);
 
         _useNativeMode = false;
-        _onnxSession = new InferenceSession(onnxModelPath);
-        _onnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -277,8 +265,8 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         ValidateOptions(options);
 
         _useNativeMode = true;
-        _onnxSession = null;
-        _onnxModelPath = null;
+        OnnxSession = null;
+        OnnxModelPath = null;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -449,7 +437,7 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -572,7 +560,7 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TCN model, Forecast produces predictions from input data. This is the main inference step of the TCN architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
         return _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
     }
@@ -583,7 +571,7 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TCN model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the TCN architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         var predictions = new List<Tensor<T>>();
         var currentInput = input;
@@ -612,7 +600,7 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TCN model, Evaluate performs a supporting step in the workflow. It keeps the TCN architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
 
@@ -647,7 +635,7 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TCN model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the TCN architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         return input;
     }
@@ -658,7 +646,7 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TCN model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the TCN architecture is performing.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
         int receptiveField = 1 + 2 * (_kernelSize - 1) * ((1 << _numLayers) - 1);
@@ -805,9 +793,9 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TCN model, ForecastOnnx produces predictions from input data. This is the main inference step of the TCN architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
@@ -817,7 +805,7 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
-        var inputMeta = _onnxSession.InputMetadata;
+        var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
         var inputs = new List<NamedOnnxValue>
@@ -825,7 +813,7 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
         var outputShape = outputTensor.Dimensions.ToArray();
@@ -881,7 +869,7 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TCN model, ShiftInputWithPredictions produces predictions from input data. This is the main inference step of the TCN architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
+    protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
         int batchSize = input.Shape[0];
         int inputLen = input.Length / batchSize;
@@ -926,7 +914,7 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the TCN model, ConcatenatePredictions produces predictions from input data. This is the main inference step of the TCN architecture.
     /// </para>
     /// </remarks>
-    private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
+    protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         if (predictions.Count == 0)
             return new Tensor<T>(new[] { 1, totalSteps });
@@ -977,10 +965,11 @@ public class TCN<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
         base.Dispose(disposing);
     }
 
     #endregion
 }
+

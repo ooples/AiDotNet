@@ -229,7 +229,7 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
     {
         SetTrainingMode(true);
         var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var currentGrad = Tensor<T>.FromVector(outputGradient);
+        var currentGrad = Tensor<T>.FromVector(outputGradient, output.Shape);
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
@@ -274,7 +274,7 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
                 { "ModelType", "NeuralGARCH" },
                 { "NumAssets", _numAssets },
                 { "LookbackWindow", _lookbackWindow },
-                { "ForecastHorizon", _predictionHorizon }
+                { "ForecastHorizon", PredictionHorizon }
             }
         };
     }
@@ -291,7 +291,7 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
         {
             NumAssets = _numAssets,
             LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _predictionHorizon,
+            ForecastHorizon = PredictionHorizon,
             HiddenSize = _hiddenSize,
             NumLayers = _numLayers,
             DropoutRate = _dropoutRate

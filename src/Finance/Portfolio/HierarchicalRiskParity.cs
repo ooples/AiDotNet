@@ -4,6 +4,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Optimizers;
@@ -47,7 +48,7 @@ public class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
         HierarchicalRiskParityOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, options?.NumAssets ?? 10, options?.NumFeatures ?? architecture.CalculatedInputSize, lossFunction)
+        : base(architecture, options?.NumAssets ?? 10, architecture.CalculatedInputSize, lossFunction)
     {
         _options = options ?? new HierarchicalRiskParityOptions<T>();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -73,7 +74,7 @@ public class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
         HierarchicalRiskParityOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, onnxModelPath, options?.NumAssets ?? 10, options?.NumFeatures ?? architecture.CalculatedInputSize)
+        : base(architecture, onnxModelPath, options?.NumAssets ?? 10, architecture.CalculatedInputSize)
     {
         _options = options ?? new HierarchicalRiskParityOptions<T>();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -106,7 +107,7 @@ public class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultHierarchicalRiskParityLayers(
                 Architecture,
-                _numFeatures,
+                NumFeatures,
                 _hiddenDimension,
                 _numAssets,
                 _dropout));
@@ -128,7 +129,74 @@ public class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
     /// </remarks>
     public override Vector<T> OptimizePortfolio(Tensor<T> marketData)
     {
-        var prediction = Predict(marketData);
+        var prediction = UseNativeMode ? Forward(marketData) : ForecastOnnx(marketData);
         return prediction.ToVector();
     }
+
+    /// <summary>
+    /// Executes a forward pass through the network layers.
+    /// </summary>
+    /// <param name="input">Input tensor.</param>
+    /// <returns>Model output tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This runs the input through each layer to produce
+    /// portfolio weight scores without calling the forecasting wrapper.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> Forward(Tensor<T> input)
+    {
+        var current = input;
+        foreach (var layer in Layers)
+        {
+            current = layer.Forward(current);
+        }
+
+        return current;
+    }
+
+    #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Updates the model parameters from a flat parameter vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This lets the model load or apply all its weights at once,
+    /// which is helpful when cloning or restoring trained parameters.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
+            offset += layerParams.Length;
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the HierarchicalRiskParity model with the same configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is used by the framework to clone the model's configuration
+    /// so it can create a fresh instance with identical settings.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var optionsCopy = new HierarchicalRiskParityOptions<T>
+        {
+            NumAssets = _options.NumAssets,
+            HiddenDimension = _hiddenDimension,
+            DropoutRate = _dropout
+        };
+
+        return new HierarchicalRiskParity<T>(Architecture, optionsCopy, lossFunction: _lossFunction);
+    }
+
+    #endregion
 }

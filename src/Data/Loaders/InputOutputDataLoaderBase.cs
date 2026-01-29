@@ -57,6 +57,21 @@ public abstract class InputOutputDataLoaderBase<T, TInput, TOutput> :
     private int _currentBatchStartIndex;
     private bool _isShuffled;
 
+    /// <summary>
+    /// Initializes a new instance of the InputOutputDataLoaderBase class.
+    /// </summary>
+    /// <param name="batchSize">The batch size for iteration. Default is 32.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This sets how many samples you get per batch when training.
+    /// Larger batches are faster but use more memory.
+    /// </para>
+    /// </remarks>
+    protected InputOutputDataLoaderBase(int batchSize = 32)
+        : base(batchSize)
+    {
+    }
+
     /// <inheritdoc/>
     public TInput Features
     {

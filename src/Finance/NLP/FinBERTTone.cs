@@ -60,13 +60,13 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
         : base(architecture, onnxModelPath, 
                options?.MaxSequenceLength ?? 512, 
                options?.VocabularySize ?? 30522,
-               options?.HiddenSize ?? 768,
-               options?.NumClasses ?? 3)
+               options?.HiddenDimension ?? 768,
+               options?.NumToneClasses ?? 5)
     {
         options ??= new ModelOptions.FinBERTToneOptions<T>();
         options.Validate();
 
-        _dropout = options.DropoutProbability;
+        _dropout = options.DropoutRate;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -88,14 +88,14 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
         : base(architecture, 
                options?.MaxSequenceLength ?? 512, 
                options?.VocabularySize ?? 30522,
-               options?.HiddenSize ?? 768,
-               options?.NumClasses ?? 3,
+               options?.HiddenDimension ?? 768,
+               options?.NumToneClasses ?? 5,
                lossFunction)
     {
         options ??= new ModelOptions.FinBERTToneOptions<T>();
         options.Validate();
 
-        _dropout = options.DropoutProbability;
+        _dropout = options.DropoutRate;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -123,8 +123,8 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
         else if (UseNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultFinBERTToneLayers(
-                Architecture, _maxSequenceLength, _vocabularySize, _numSentimentClasses, 
-                _hiddenDimension, 12, 12, _dropout));
+                Architecture, MaxSequenceLength, VocabularySize, NumSentimentClasses, 
+                HiddenDimension, 12, 12, _dropout));
 
             ExtractLayerReferences();
         }
@@ -177,7 +177,7 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
     {
         SetTrainingMode(true);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(grad));
+        Backward(Tensor<T>.FromVector(grad, output.Shape));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
@@ -225,7 +225,13 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new ModelOptions.FinBERTToneOptions<T> { MaxSequenceLength = _maxSequenceLength, VocabularySize = _vocabularySize, HiddenSize = _hiddenDimension, NumClasses = _numSentimentClasses };
+        var options = new ModelOptions.FinBERTToneOptions<T>
+        {
+            MaxSequenceLength = MaxSequenceLength,
+            VocabularySize = VocabularySize,
+            HiddenDimension = HiddenDimension,
+            NumToneClasses = NumSentimentClasses
+        };
         return new FinBERTTone<T>(Architecture, options, _optimizer, LossFunction);
     }
 

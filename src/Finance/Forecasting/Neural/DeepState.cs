@@ -12,7 +12,8 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Neural;
 
 /// <summary>
@@ -62,7 +63,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// https://papers.nips.cc/paper/2018/hash/5cf68969fb67aa6082363a6d4e6468e2-Abstract.html
 /// </para>
 /// </remarks>
-public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class DeepState<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -79,20 +80,7 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
     #endregion
 
-    #region ONNX Mode Fields
-
-    /// <summary>
-    /// The ONNX inference session for running pretrained models.
-    /// </summary>
-    private readonly InferenceSession? _onnxSession;
-
-    /// <summary>
-    /// Path to the ONNX model file.
-    /// </summary>
-    private readonly string? _onnxModelPath;
-
-    #endregion
-
+    
     #region Native Mode Fields
 
     /// <summary>
@@ -193,25 +181,25 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Properties
 
     /// <inheritdoc/>
-    public int SequenceLength => _lookbackWindow;
+    public override int SequenceLength => _lookbackWindow;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _forecastHorizon;
+    public override int PredictionHorizon => _forecastHorizon;
 
     /// <inheritdoc/>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     /// <inheritdoc/>
-    public int PatchSize => 1;
+    public override int PatchSize => 1;
 
     /// <inheritdoc/>
-    public int Stride => 1;
+    public override int Stride => 1;
 
     /// <inheritdoc/>
-    public bool IsChannelIndependent => false;
+    public override bool IsChannelIndependent => false;
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     /// <summary>
     /// Gets the state dimension of the SSM.
@@ -260,8 +248,8 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         ValidateOptions(options);
 
         _useNativeMode = false;
-        _onnxSession = new InferenceSession(onnxModelPath);
-        _onnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -305,8 +293,8 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         ValidateOptions(options);
 
         _useNativeMode = true;
-        _onnxSession = null;
-        _onnxModelPath = null;
+        OnnxSession = null;
+        OnnxModelPath = null;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -488,7 +476,7 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -618,7 +606,7 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the DeepState model, Forecast produces predictions from input data. This is the main inference step of the DeepState architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
         return _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
     }
@@ -630,7 +618,7 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// the state forward using the learned SSM dynamics.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         var predictions = new List<Tensor<T>>();
         var currentInput = input;
@@ -659,7 +647,7 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the DeepState model, Evaluate performs a supporting step in the workflow. It keeps the DeepState architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
 
@@ -694,7 +682,7 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the DeepState model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the DeepState architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         return input;
     }
@@ -705,7 +693,7 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the DeepState model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the DeepState architecture is performing.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
 
@@ -861,9 +849,9 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> Uses a pretrained ONNX model for fast inference.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
@@ -873,7 +861,7 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
-        var inputMeta = _onnxSession.InputMetadata;
+        var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
         var inputs = new List<NamedOnnxValue>
@@ -881,7 +869,7 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
         var outputShape = outputTensor.Dimensions.ToArray();
@@ -907,7 +895,7 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// and add our predictions as new "history".
     /// </para>
     /// </remarks>
-    private Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
+    protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
         int totalElements = _lookbackWindow * _numFeatures;
         var newInput = new Tensor<T>(input.Shape);
@@ -939,7 +927,7 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// we combine multiple prediction batches into one result.
     /// </para>
     /// </remarks>
-    private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
+    protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         var result = new Tensor<T>(new[] { totalSteps });
 
@@ -981,10 +969,11 @@ public class DeepState<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
         base.Dispose(disposing);
     }
 
     #endregion
 }
+

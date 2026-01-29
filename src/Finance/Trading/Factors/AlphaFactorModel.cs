@@ -17,6 +17,7 @@ using AiDotNet.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Trading.Factors;
 
 /// <summary>
@@ -37,7 +38,7 @@ namespace AiDotNet.Finance.Trading.Factors;
 /// Reference: Chen et al. (2020). "Deep Learning for Alpha Generation"
 /// </para>
 /// </remarks>
-public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
+public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
 {
     #region Execution Mode
 
@@ -45,13 +46,7 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
 
     #endregion
 
-    #region ONNX Mode Fields
-
-    private readonly InferenceSession? _onnxSession;
-    private readonly string? _onnxModelPath;
-
-    #endregion
-
+    
     #region Shared Fields
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -78,7 +73,7 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// ONNX mode is read-only and optimized for fast predictions.
     /// </para>
     /// </remarks>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     /// <summary>
     /// Gets whether training is supported in the current mode.
@@ -119,7 +114,7 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> Features can be prices, volumes, and technical indicators.
     /// </para>
     /// </remarks>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     /// <summary>
     /// Gets the input sequence length.
@@ -129,7 +124,7 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> How many time steps of history the model sees at once.
     /// </para>
     /// </remarks>
-    public int SequenceLength => _sequenceLength;
+    public override int SequenceLength => _sequenceLength;
 
     /// <summary>
     /// Gets the prediction horizon.
@@ -139,7 +134,7 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> How many steps ahead the model is trained to predict.
     /// </para>
     /// </remarks>
-    public int PredictionHorizon => _predictionHorizon;
+    public override int PredictionHorizon => _predictionHorizon;
 
     #endregion
 
@@ -173,8 +168,8 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _onnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
 
         _options = options ?? new AlphaFactorOptions<T>();
         _options.Validate();
@@ -214,8 +209,8 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         _useNativeMode = true;
-        _onnxModelPath = null;
-        _onnxSession = null;
+        OnnxModelPath = null;
+        OnnxSession = null;
 
         _options = options ?? new AlphaFactorOptions<T>();
         _options.Validate();
@@ -312,7 +307,7 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
         SetTrainingMode(true);
         var output = PredictNative(input);
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var gradTensor = Tensor<T>.FromVector(gradient);
+        var gradTensor = Tensor<T>.FromVector(gradient, output.Shape);
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
@@ -568,7 +563,7 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// based on the current market features.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         return Predict(input);
     }
@@ -582,7 +577,7 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> Provides the factor-focused metrics that describe this model.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         return GetFactorMetrics();
     }
@@ -624,7 +619,7 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
     /// </remarks>
     private Tensor<T> PredictOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
@@ -632,9 +627,9 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
-        string inputName = _onnxSession.InputMetadata.Keys.First();
+        string inputName = OnnxSession.InputMetadata.Keys.First();
 
-        using var results = _onnxSession.Run(new[]
+        using var results = OnnxSession.Run(new[]
         {
             NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
         });
@@ -666,7 +661,7 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
             foreach (var layer in Layers)
             {
                 if (layer is IDisposable disposable)
@@ -678,3 +673,4 @@ public class AlphaFactorModel<T> : NeuralNetworkBase<T>, IFactorModel<T>
 
     #endregion
 }
+

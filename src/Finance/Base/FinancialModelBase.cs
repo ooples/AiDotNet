@@ -49,7 +49,7 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// <summary>
     /// Indicates whether this model uses native layers (true) or ONNX model (false).
     /// </summary>
-    protected readonly bool _useNativeMode;
+    protected readonly bool _baseUseNativeMode;
 
     #endregion
 
@@ -58,12 +58,12 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// <summary>
     /// The ONNX inference session for the model.
     /// </summary>
-    protected readonly InferenceSession? OnnxSession;
+    protected InferenceSession? OnnxSession;
 
     /// <summary>
     /// Path to the ONNX model file.
     /// </summary>
-    protected readonly string? OnnxModelPath;
+    protected string? OnnxModelPath;
 
     #endregion
 
@@ -72,21 +72,27 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// <summary>
     /// The model's expected input sequence length.
     /// </summary>
-    protected readonly int _sequenceLength;
+    protected readonly int _baseSequenceLength;
 
     /// <summary>
     /// The model's prediction horizon.
     /// </summary>
-    protected readonly int _predictionHorizon;
+    protected readonly int _basePredictionHorizon;
 
     /// <summary>
     /// The number of input features.
     /// </summary>
-    protected readonly int _numFeatures;
+    protected readonly int _baseNumFeatures;
 
     /// <summary>
     /// Loss history for training monitoring.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This list tracks recent training errors so you can
+    /// see whether the model is improving over time.
+    /// </para>
+    /// </remarks>
     protected readonly List<T> _lossHistory = new();
 
     /// <summary>
@@ -99,23 +105,60 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     #region Properties
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> True means the model is using trainable C# layers.
+    /// False means it's using a pretrained ONNX model for fast inference only.
+    /// </para>
+    /// </remarks>
+    public virtual bool UseNativeMode => _baseUseNativeMode;
 
     /// <inheritdoc/>
-    public override bool SupportsTraining => _useNativeMode;
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Training only works in native mode. ONNX mode is
+    /// inference-only, so this returns false there.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsTraining => UseNativeMode;
 
     /// <inheritdoc/>
-    public int SequenceLength => _sequenceLength;
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is how many past time steps the model expects
+    /// as input for each prediction.
+    /// </para>
+    /// </remarks>
+    public virtual int SequenceLength => _baseSequenceLength;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _predictionHorizon;
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is how far into the future the model predicts
+    /// for each forecast.
+    /// </para>
+    /// </remarks>
+    public virtual int PredictionHorizon => _basePredictionHorizon;
 
     /// <inheritdoc/>
-    public int NumFeatures => _numFeatures;
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is how many variables (features) the model
+    /// expects at each time step (e.g., price, volume, indicators).
+    /// </para>
+    /// </remarks>
+    public virtual int NumFeatures => _baseNumFeatures;
 
     /// <summary>
     /// Gets the last recorded training loss.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the most recent "how wrong was the model?" number
+    /// from training. Smaller values mean the model's predictions are closer to the
+    /// expected output.
+    /// </para>
+    /// </remarks>
     public T LastTrainingLoss => _lastTrainingLoss;
 
     #endregion
@@ -160,10 +203,10 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     {
         ValidateConstructorArguments(sequenceLength, predictionHorizon, numFeatures);
 
-        _useNativeMode = true;
-        _sequenceLength = sequenceLength;
-        _predictionHorizon = predictionHorizon;
-        _numFeatures = numFeatures;
+        _baseUseNativeMode = true;
+        _baseSequenceLength = sequenceLength;
+        _basePredictionHorizon = predictionHorizon;
+        _baseNumFeatures = numFeatures;
         _lastTrainingLoss = NumOps.Zero;
 
     }
@@ -208,11 +251,11 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
 
         ValidateConstructorArguments(sequenceLength, predictionHorizon, numFeatures);
 
-        _useNativeMode = false;
+        _baseUseNativeMode = false;
         OnnxModelPath = onnxModelPath;
-        _sequenceLength = sequenceLength;
-        _predictionHorizon = predictionHorizon;
-        _numFeatures = numFeatures;
+        _baseSequenceLength = sequenceLength;
+        _basePredictionHorizon = predictionHorizon;
+        _baseNumFeatures = numFeatures;
         _lastTrainingLoss = NumOps.Zero;
 
         // Load ONNX model
@@ -225,6 +268,32 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
             throw new InvalidOperationException($"Failed to load ONNX model: {ex.Message}", ex);
         }
 
+    }
+
+    /// <summary>
+    /// Initializes a new instance with deferred configuration.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="lossFunction">Optional loss function. Defaults to MSE.</param>
+    /// <param name="maxGradNorm">Maximum gradient norm for clipping.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This constructor lets derived models set up their
+    /// sequence length and other settings after the base class is created.
+    /// It mirrors the legacy pattern used by earlier financial models.
+    /// </para>
+    /// </remarks>
+    protected FinancialModelBase(
+        NeuralNetworkArchitecture<T> architecture,
+        ILossFunction<T>? lossFunction = null,
+        double maxGradNorm = 1.0)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
+    {
+        _baseUseNativeMode = true;
+        _baseSequenceLength = 0;
+        _basePredictionHorizon = 0;
+        _baseNumFeatures = architecture.InputSize;
+        _lastTrainingLoss = NumOps.Zero;
     }
 
     /// <summary>
@@ -270,7 +339,7 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         // Validate input shape
         ValidateInputShape(input);
 
-        if (_useNativeMode)
+        if (UseNativeMode)
         {
             return ForecastNative(input, quantiles);
         }
@@ -306,9 +375,9 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         }
 
         // Add model configuration
-        metrics["SequenceLength"] = NumOps.FromDouble(_sequenceLength);
-        metrics["PredictionHorizon"] = NumOps.FromDouble(_predictionHorizon);
-        metrics["NumFeatures"] = NumOps.FromDouble(_numFeatures);
+        metrics["SequenceLength"] = NumOps.FromDouble(SequenceLength);
+        metrics["PredictionHorizon"] = NumOps.FromDouble(PredictionHorizon);
+        metrics["NumFeatures"] = NumOps.FromDouble(NumFeatures);
 
         return metrics;
     }
@@ -329,7 +398,10 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// Derived models implement their own forward pass here using C# layers.
     /// </para>
     /// </remarks>
-    protected abstract Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles);
+    protected virtual Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
+    {
+        throw new NotSupportedException("ForecastNative is not implemented for this model.");
+    }
 
     /// <summary>
     /// Validates the input tensor shape.
@@ -341,7 +413,9 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// before the model tries to process it. This avoids shape mismatch errors.
     /// </para>
     /// </remarks>
-    protected abstract void ValidateInputShape(Tensor<T> input);
+    protected virtual void ValidateInputShape(Tensor<T> input)
+    {
+    }
 
     #endregion
 
@@ -412,7 +486,7 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!_useNativeMode)
+        if (!UseNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode for training.");
 
         if (input is null)
@@ -448,7 +522,10 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// including backward passes and optimizer updates.
     /// </para>
     /// </remarks>
-    protected abstract void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output);
+    protected virtual void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
+    {
+        throw new NotSupportedException("TrainCore is not implemented for this model.");
+    }
 
     #endregion
 
@@ -481,13 +558,13 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     {
         var additionalInfo = new Dictionary<string, object>
         {
-            { "SequenceLength", _sequenceLength },
-            { "PredictionHorizon", _predictionHorizon },
-            { "NumFeatures", _numFeatures },
-            { "UseNativeMode", _useNativeMode }
+            { "SequenceLength", SequenceLength },
+            { "PredictionHorizon", PredictionHorizon },
+            { "NumFeatures", NumFeatures },
+            { "UseNativeMode", UseNativeMode }
         };
 
-        if (!_useNativeMode && OnnxModelPath is not null)
+        if (!UseNativeMode && OnnxModelPath is not null)
         {
             additionalInfo["OnnxModelPath"] = OnnxModelPath;
         }
@@ -496,7 +573,7 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         {
             ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = additionalInfo,
-            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+            ModelData = UseNativeMode ? this.Serialize() : Array.Empty<byte>()
         };
     }
 
@@ -509,12 +586,12 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        if (!_useNativeMode)
+        if (!UseNativeMode)
             throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
+        writer.Write(SequenceLength);
+        writer.Write(PredictionHorizon);
+        writer.Write(NumFeatures);
 
         // Derived classes add their own data via override
         SerializeModelSpecificData(writer);
@@ -529,7 +606,7 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        if (!_useNativeMode)
+        if (!UseNativeMode)
             throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
         // Read configuration (values are set in constructor, just advance reader)

@@ -15,7 +15,8 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.NLP;
 
 /// <summary>
@@ -67,17 +68,13 @@ namespace AiDotNet.Finance.NLP;
 /// https://arxiv.org/abs/1908.10063
 /// </para>
 /// </remarks>
-public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
+public class FinBERT<T> : FinancialNLPModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;
     #endregion
 
-    #region ONNX Mode Fields
-    private readonly InferenceSession? _onnxSession;
-    private readonly string? _onnxModelPath;
-    #endregion
-
+    
     #region Native Mode Fields
     private EmbeddingLayer<T>? _tokenEmbedding;
     private EmbeddingLayer<T>? _positionEmbedding;
@@ -118,22 +115,22 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
     #region IFinancialNLPModel Properties
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
-    public int MaxSequenceLength => _maxSequenceLength;
+    public override int MaxSequenceLength => _maxSequenceLength;
 
     /// <inheritdoc/>
-    public int VocabularySize => _vocabularySize;
+    public override int VocabularySize => _vocabularySize;
 
     /// <inheritdoc/>
-    public int HiddenDimension => _hiddenDimension;
+    public override int HiddenDimension => _hiddenDimension;
 
     /// <inheritdoc/>
-    public int NumSentimentClasses => _numSentimentClasses;
+    public override int NumSentimentClasses => _numSentimentClasses;
 
     /// <summary>
     /// Gets the number of transformer layers.
@@ -187,8 +184,8 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _onnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new FinBERTOptions<T>();
         _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -433,7 +430,7 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -571,7 +568,7 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
     /// For a 3-class model: [P(negative), P(neutral), P(positive)].
     /// </para>
     /// </remarks>
-    public Tensor<T> AnalyzeSentiment(Tensor<T> tokenIds)
+    public override Tensor<T> AnalyzeSentiment(Tensor<T> tokenIds)
     {
         var logits = Predict(tokenIds);
         return ApplySoftmax(logits);
@@ -587,7 +584,7 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
     /// Returns structured results with predicted class, confidence, and all class probabilities.
     /// </para>
     /// </remarks>
-    public SentimentResult<T>[] AnalyzeSentiment(string[] texts)
+    public override SentimentResult<T>[] AnalyzeSentiment(string[] texts)
     {
         var results = new SentimentResult<T>[texts.Length];
 
@@ -636,7 +633,7 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
     /// These can be used for similarity search, clustering, or as features for downstream tasks.
     /// </para>
     /// </remarks>
-    public Tensor<T> GetEmbeddings(Tensor<T> tokenIds)
+    public override Tensor<T> GetEmbeddings(Tensor<T> tokenIds)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("GetEmbeddings requires native mode.");
@@ -662,7 +659,7 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
     /// tasks and document similarity.
     /// </para>
     /// </remarks>
-    public Tensor<T> GetSequenceEmbedding(Tensor<T> tokenIds)
+    public override Tensor<T> GetSequenceEmbedding(Tensor<T> tokenIds)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("GetSequenceEmbedding requires native mode.");
@@ -688,7 +685,7 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
     /// use WordPiece tokenization for proper subword handling.
     /// </para>
     /// </remarks>
-    public int[] Tokenize(string text, int? maxLength = null)
+    public override int[] Tokenize(string text, int? maxLength = null)
     {
         int maxLen = maxLength ?? _maxSequenceLength;
         var tokens = new List<int> { _vocabulary["[CLS]"] };
@@ -727,7 +724,7 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
     /// Useful for debugging and understanding what the model sees.
     /// </para>
     /// </remarks>
-    public string Detokenize(int[] tokenIds)
+    public override string Detokenize(int[] tokenIds)
     {
         var words = new List<string>();
 
@@ -758,7 +755,7 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
     /// including model configuration and training status.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
 
@@ -854,7 +851,7 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
     /// </remarks>
     private Tensor<T> ForwardOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session not initialized.");
 
         var inputData = new long[input.Data.Length];
@@ -872,7 +869,7 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
             NamedOnnxValue.CreateFromTensor("input_ids", inputTensor)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
         var outputData = new T[outputTensor.Length];
@@ -965,7 +962,7 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
 
         base.Dispose(disposing);
@@ -973,3 +970,4 @@ public class FinBERT<T> : NeuralNetworkBase<T>, IFinancialNLPModel<T>
 
     #endregion
 }
+

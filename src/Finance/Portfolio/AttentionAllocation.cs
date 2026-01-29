@@ -4,6 +4,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Optimizers;
@@ -48,7 +49,7 @@ public class AttentionAllocation<T> : PortfolioOptimizerBase<T>
         AttentionAllocationOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, options?.NumAssets ?? 10, options?.NumFeatures ?? architecture.CalculatedInputSize, lossFunction)
+        : base(architecture, options?.NumAssets ?? 10, architecture.CalculatedInputSize, lossFunction)
     {
         _options = options ?? new AttentionAllocationOptions<T>();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -76,7 +77,7 @@ public class AttentionAllocation<T> : PortfolioOptimizerBase<T>
         AttentionAllocationOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, onnxModelPath, options?.NumAssets ?? 10, options?.NumFeatures ?? architecture.CalculatedInputSize)
+        : base(architecture, onnxModelPath, options?.NumAssets ?? 10, architecture.CalculatedInputSize)
     {
         _options = options ?? new AttentionAllocationOptions<T>();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -111,7 +112,7 @@ public class AttentionAllocation<T> : PortfolioOptimizerBase<T>
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultAttentionAllocationLayers(
                 Architecture,
-                _numFeatures,
+                NumFeatures,
                 _hiddenDimension,
                 _numHeads,
                 _numAssets,
@@ -135,4 +136,51 @@ public class AttentionAllocation<T> : PortfolioOptimizerBase<T>
         var prediction = Predict(marketData);
         return prediction.ToVector();
     }
+
+    #region NeuralNetworkBase Overrides
+
+    /// <summary>
+    /// Updates the model parameters from a flat parameter vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This lets you load or apply a full set of weights at once,
+    /// which is useful for cloning models or applying externally optimized parameters.
+    /// </para>
+    /// </remarks>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var layer in Layers)
+        {
+            var layerParams = layer.GetParameters();
+            layer.SetParameters(parameters.Slice(offset, layerParams.Length));
+            offset += layerParams.Length;
+        }
+    }
+
+    /// <summary>
+    /// Creates a new instance of the AttentionAllocation model with the same configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is used to clone the model settings so the framework
+    /// can create fresh instances with identical behavior.
+    /// </para>
+    /// </remarks>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        var optionsCopy = new AttentionAllocationOptions<T>
+        {
+            NumAssets = _options.NumAssets,
+            HiddenDimension = _hiddenDimension,
+            NumHeads = _numHeads,
+            SequenceLength = _sequenceLength,
+            DropoutRate = _dropout
+        };
+
+        return new AttentionAllocation<T>(Architecture, optionsCopy, lossFunction: _lossFunction);
+    }
+
+    #endregion
 }

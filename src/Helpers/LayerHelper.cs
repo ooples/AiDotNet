@@ -12851,9 +12851,14 @@ public static class LayerHelper<T>
 
         // Input size includes: value + lag features + time features
         int inputSize = numFeatures * (1 + numLags);
+        int flattenedInputSize = contextLength * numFeatures;
 
         // === Input Embedding ===
         // Project lag features to hidden dimension
+        yield return new ReshapeLayer<T>(
+            inputShape: new[] { contextLength, numFeatures },
+            outputShape: new[] { flattenedInputSize });
+
         yield return new DenseLayer<T>(
             inputSize: contextLength * inputSize,
             outputSize: contextLength * hiddenDim,
@@ -13119,25 +13124,35 @@ public static class LayerHelper<T>
         {
             totalPatches += contextLength / patchSize;
         }
+        int flattenedInputSize = contextLength * numFeatures;
+        int flattenedPatchSize = totalPatches * hiddenDim;
 
         // === Multi-Scale Patch Embedding ===
         // For MOIRAI, we embed patches at different scales into the same hidden dimension
         // In practice, this is done with separate embedding layers per scale
         // Here we approximate with a unified embedding
+        yield return new ReshapeLayer<T>(
+            inputShape: new[] { contextLength, numFeatures },
+            outputShape: new[] { flattenedInputSize });
+
         yield return new DenseLayer<T>(
-            inputSize: contextLength * numFeatures,
-            outputSize: totalPatches * hiddenDim,
+            inputSize: flattenedInputSize,
+            outputSize: flattenedPatchSize,
             activationFunction: null);
 
         // === Positional Encoding ===
         // Add learnable positional encoding for the multi-scale patches
-        yield return new BatchNormalizationLayer<T>(totalPatches * hiddenDim);
+        yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
 
         // === Masked Encoder Transformer Blocks ===
         for (int i = 0; i < numLayers; i++)
         {
             // Layer normalization (pre-norm architecture)
-            yield return new BatchNormalizationLayer<T>(totalPatches * hiddenDim);
+            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
+
+            yield return new ReshapeLayer<T>(
+                inputShape: new[] { flattenedPatchSize },
+                outputShape: new[] { totalPatches, hiddenDim });
 
             // Multi-head self-attention across all scales
             yield return new MultiHeadAttentionLayer<T>(
@@ -13145,23 +13160,27 @@ public static class LayerHelper<T>
                 embeddingDimension: hiddenDim,
                 headCount: numHeads);
 
+            yield return new ReshapeLayer<T>(
+                inputShape: new[] { totalPatches, hiddenDim },
+                outputShape: new[] { flattenedPatchSize });
+
             if (dropout > 0)
             {
                 yield return new DropoutLayer<T>(dropout);
             }
 
             // Layer normalization before FFN
-            yield return new BatchNormalizationLayer<T>(totalPatches * hiddenDim);
+            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
 
             // Feed-forward network (GELU activation)
             yield return new DenseLayer<T>(
-                inputSize: totalPatches * hiddenDim,
+                inputSize: flattenedPatchSize,
                 outputSize: totalPatches * intermediateSize,
                 activationFunction: new GELUActivation<T>());
 
             yield return new DenseLayer<T>(
                 inputSize: totalPatches * intermediateSize,
-                outputSize: totalPatches * hiddenDim,
+                outputSize: flattenedPatchSize,
                 activationFunction: null);
 
             if (dropout > 0)
@@ -13171,12 +13190,12 @@ public static class LayerHelper<T>
         }
 
         // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(totalPatches * hiddenDim);
+        yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
 
         // === Prediction Head ===
         // Project to forecast dimension
         yield return new DenseLayer<T>(
-            inputSize: totalPatches * hiddenDim,
+            inputSize: flattenedPatchSize,
             outputSize: forecastHorizon * hiddenDim,
             activationFunction: new GELUActivation<T>());
 
@@ -13229,25 +13248,35 @@ public static class LayerHelper<T>
     {
         // Calculate number of patches
         int numPatches = (contextLength - patchLength) / patchStride + 1;
+        int flattenedPatchSize = numPatches * llmDim;
+        int flattenedInputSize = contextLength * numFeatures;
 
         // === Patch Embedding ===
         // Project each patch to LLM dimension
+        yield return new ReshapeLayer<T>(
+            inputShape: new[] { contextLength, numFeatures },
+            outputShape: new[] { flattenedInputSize });
+
         yield return new DenseLayer<T>(
-            inputSize: contextLength * numFeatures,
-            outputSize: numPatches * llmDim,
+            inputSize: flattenedInputSize,
+            outputSize: flattenedPatchSize,
             activationFunction: null);
 
         // === Text Prototype Layer ===
         // These learned embeddings help bridge time series to text domain
         // Implemented as a dense layer that expands prototype information
-        yield return new BatchNormalizationLayer<T>(numPatches * llmDim);
+        yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
 
         // === Reprogramming Transformer Blocks ===
         // These learn to translate time series patterns to LLM-compatible representations
         for (int i = 0; i < numLayers; i++)
         {
             // Layer normalization (pre-norm)
-            yield return new BatchNormalizationLayer<T>(numPatches * llmDim);
+            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
+
+            yield return new ReshapeLayer<T>(
+                inputShape: new[] { flattenedPatchSize },
+                outputShape: new[] { numPatches, llmDim });
 
             // Self-attention for cross-patch interaction
             yield return new MultiHeadAttentionLayer<T>(
@@ -13255,22 +13284,26 @@ public static class LayerHelper<T>
                 embeddingDimension: llmDim,
                 headCount: numHeads);
 
+            yield return new ReshapeLayer<T>(
+                inputShape: new[] { numPatches, llmDim },
+                outputShape: new[] { flattenedPatchSize });
+
             if (dropout > 0)
             {
                 yield return new DropoutLayer<T>(dropout);
             }
 
             // FFN with GELU (matches GPT-style)
-            yield return new BatchNormalizationLayer<T>(numPatches * llmDim);
+            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
 
             yield return new DenseLayer<T>(
-                inputSize: numPatches * llmDim,
-                outputSize: numPatches * llmDim * 4,
+                inputSize: flattenedPatchSize,
+                outputSize: flattenedPatchSize * 4,
                 activationFunction: new GELUActivation<T>());
 
             yield return new DenseLayer<T>(
-                inputSize: numPatches * llmDim * 4,
-                outputSize: numPatches * llmDim,
+                inputSize: flattenedPatchSize * 4,
+                outputSize: flattenedPatchSize,
                 activationFunction: null);
 
             if (dropout > 0)
@@ -13284,33 +13317,41 @@ public static class LayerHelper<T>
         // In ONNX mode, the actual frozen LLM would be used
         for (int i = 0; i < 2; i++) // Simplified LLM simulation
         {
-            yield return new BatchNormalizationLayer<T>(numPatches * llmDim);
+            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
+
+            yield return new ReshapeLayer<T>(
+                inputShape: new[] { flattenedPatchSize },
+                outputShape: new[] { numPatches, llmDim });
 
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: numPatches,
                 embeddingDimension: llmDim,
                 headCount: numHeads);
 
-            yield return new BatchNormalizationLayer<T>(numPatches * llmDim);
+            yield return new ReshapeLayer<T>(
+                inputShape: new[] { numPatches, llmDim },
+                outputShape: new[] { flattenedPatchSize });
+
+            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
 
             yield return new DenseLayer<T>(
-                inputSize: numPatches * llmDim,
-                outputSize: numPatches * llmDim * 4,
+                inputSize: flattenedPatchSize,
+                outputSize: flattenedPatchSize * 4,
                 activationFunction: new GELUActivation<T>());
 
             yield return new DenseLayer<T>(
-                inputSize: numPatches * llmDim * 4,
-                outputSize: numPatches * llmDim,
+                inputSize: flattenedPatchSize * 4,
+                outputSize: flattenedPatchSize,
                 activationFunction: null);
         }
 
         // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(numPatches * llmDim);
+        yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
 
         // === Output Projection ===
         // Project from LLM space back to forecast values
         yield return new DenseLayer<T>(
-            inputSize: numPatches * llmDim,
+            inputSize: flattenedPatchSize,
             outputSize: forecastHorizon * llmDim / 4,
             activationFunction: new GELUActivation<T>());
 
@@ -13368,12 +13409,18 @@ public static class LayerHelper<T>
 
         int numFeatures = architecture.InputSize > 0 ? architecture.InputSize : 1;
         int numScales = convKernelSizes.Length;
+        int flattenedInputSize = numFeatures * contextLength;
+        int flattenedSize = hiddenDim * contextLength;
 
         // === Input Embedding ===
         // Project input features to hidden dimension
+        yield return new ReshapeLayer<T>(
+            inputShape: new[] { contextLength, numFeatures },
+            outputShape: new[] { flattenedInputSize });
+
         yield return new DenseLayer<T>(
-            inputSize: numFeatures * contextLength,
-            outputSize: hiddenDim * contextLength,
+            inputSize: flattenedInputSize,
+            outputSize: flattenedSize,
             activationFunction: new GELUActivation<T>());
 
         // === Multi-Scale Temporal Processing ===
@@ -13395,8 +13442,8 @@ public static class LayerHelper<T>
         // === Scale Aggregation ===
         // Combine multi-scale features
         yield return new DenseLayer<T>(
-            inputSize: hiddenDim * contextLength,
-            outputSize: hiddenDim * contextLength,
+            inputSize: flattenedSize,
+            outputSize: flattenedSize,
             activationFunction: new GELUActivation<T>());
 
         // === Transformer Encoder Stack ===
@@ -13404,13 +13451,21 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Pre-normalization for stability
-            yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+            yield return new BatchNormalizationLayer<T>(flattenedSize);
+
+            yield return new ReshapeLayer<T>(
+                inputShape: new[] { flattenedSize },
+                outputShape: new[] { contextLength, hiddenDim });
 
             // Multi-head self-attention
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: contextLength,
                 embeddingDimension: hiddenDim,
                 headCount: numHeads);
+
+            yield return new ReshapeLayer<T>(
+                inputShape: new[] { contextLength, hiddenDim },
+                outputShape: new[] { flattenedSize });
 
             // Dropout for regularization
             if (dropout > 0)
@@ -13419,16 +13474,16 @@ public static class LayerHelper<T>
             }
 
             // Feed-forward network with GELU activation
-            yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+            yield return new BatchNormalizationLayer<T>(flattenedSize);
 
             yield return new DenseLayer<T>(
-                inputSize: hiddenDim * contextLength,
-                outputSize: hiddenDim * 4 * contextLength,
+                inputSize: flattenedSize,
+                outputSize: flattenedSize * 4,
                 activationFunction: new GELUActivation<T>());
 
             yield return new DenseLayer<T>(
-                inputSize: hiddenDim * 4 * contextLength,
-                outputSize: hiddenDim * contextLength,
+                inputSize: flattenedSize * 4,
+                outputSize: flattenedSize,
                 activationFunction: null);
 
             if (dropout > 0)
@@ -13438,7 +13493,7 @@ public static class LayerHelper<T>
         }
 
         // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+        yield return new BatchNormalizationLayer<T>(flattenedSize);
 
         // === Task-Specific Output Heads ===
         // Different projection heads for different tasks
@@ -13487,7 +13542,7 @@ public static class LayerHelper<T>
             default:
                 // Forecasting projection head
                 yield return new DenseLayer<T>(
-                    inputSize: hiddenDim * contextLength,
+                    inputSize: flattenedSize,
                     outputSize: hiddenDim * forecastHorizon / 4,
                     activationFunction: new GELUActivation<T>());
 
@@ -13545,6 +13600,7 @@ public static class LayerHelper<T>
     {
         // Calculate number of patches
         int numPatches = (contextLength - patchLength) / patchStride + 1;
+        int flattenedPatchSize = hiddenDim * numPatches;
 
         // === Patch Embedding ===
         // Convert raw time series patches to hidden dimension tokens
@@ -13553,13 +13609,17 @@ public static class LayerHelper<T>
             outputSize: hiddenDim,
             activationFunction: new GELUActivation<T>());
 
+        yield return new ReshapeLayer<T>(
+            inputShape: new[] { contextLength, hiddenDim },
+            outputShape: new[] { flattenedPatchSize });
+
         // === Positional Encoding ===
         // Add learned position information (simulated with batch norm + projection)
-        yield return new BatchNormalizationLayer<T>(hiddenDim * numPatches);
+        yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
 
         yield return new DenseLayer<T>(
-            inputSize: hiddenDim * numPatches,
-            outputSize: hiddenDim * numPatches,
+            inputSize: flattenedPatchSize,
+            outputSize: flattenedPatchSize,
             activationFunction: null);
 
         // === GPT-Style Decoder Transformer Stack ===
@@ -13567,13 +13627,21 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Pre-norm for stability
-            yield return new BatchNormalizationLayer<T>(hiddenDim * numPatches);
+            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
+
+            yield return new ReshapeLayer<T>(
+                inputShape: new[] { flattenedPatchSize },
+                outputShape: new[] { numPatches, hiddenDim });
 
             // Multi-head self-attention (causal masking applied during forward)
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: numPatches,
                 embeddingDimension: hiddenDim,
                 headCount: numHeads);
+
+            yield return new ReshapeLayer<T>(
+                inputShape: new[] { numPatches, hiddenDim },
+                outputShape: new[] { flattenedPatchSize });
 
             // Dropout for regularization
             if (dropout > 0)
@@ -13582,17 +13650,17 @@ public static class LayerHelper<T>
             }
 
             // Pre-norm for FFN
-            yield return new BatchNormalizationLayer<T>(hiddenDim * numPatches);
+            yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
 
             // Feed-forward network with GELU activation
             yield return new DenseLayer<T>(
-                inputSize: hiddenDim * numPatches,
-                outputSize: hiddenDim * 4 * numPatches,
+                inputSize: flattenedPatchSize,
+                outputSize: flattenedPatchSize * 4,
                 activationFunction: new GELUActivation<T>());
 
             yield return new DenseLayer<T>(
-                inputSize: hiddenDim * 4 * numPatches,
-                outputSize: hiddenDim * numPatches,
+                inputSize: flattenedPatchSize * 4,
+                outputSize: flattenedPatchSize,
                 activationFunction: null);
 
             if (dropout > 0)
@@ -13602,12 +13670,12 @@ public static class LayerHelper<T>
         }
 
         // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(hiddenDim * numPatches);
+        yield return new BatchNormalizationLayer<T>(flattenedPatchSize);
 
         // === Autoregressive Generation Head ===
         // Project to forecast space for next-token prediction
         yield return new DenseLayer<T>(
-            inputSize: hiddenDim * numPatches,
+            inputSize: flattenedPatchSize,
             outputSize: hiddenDim * forecastHorizon / 4,
             activationFunction: new GELUActivation<T>());
 
@@ -13657,20 +13725,27 @@ public static class LayerHelper<T>
         int numHeads = 16,
         double dropout = 0.0)
     {
+        int flattenedInputSize = contextLength * numFeatures;
+        int flattenedSize = hiddenDim * contextLength;
+
         // === Input Embedding ===
         // Project input time series to hidden dimension
+        yield return new ReshapeLayer<T>(
+            inputShape: new[] { contextLength, numFeatures },
+            outputShape: new[] { flattenedInputSize });
+
         yield return new DenseLayer<T>(
-            inputSize: numFeatures * contextLength,
-            outputSize: hiddenDim * contextLength,
+            inputSize: flattenedInputSize,
+            outputSize: flattenedSize,
             activationFunction: new GELUActivation<T>());
 
         // === Positional Encoding ===
         // Simulated with batch normalization and projection
-        yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+        yield return new BatchNormalizationLayer<T>(flattenedSize);
 
         yield return new DenseLayer<T>(
-            inputSize: hiddenDim * contextLength,
-            outputSize: hiddenDim * contextLength,
+            inputSize: flattenedSize,
+            outputSize: flattenedSize,
             activationFunction: null);
 
         // === Large Transformer Backbone ===
@@ -13678,13 +13753,21 @@ public static class LayerHelper<T>
         for (int i = 0; i < numLayers; i++)
         {
             // Pre-norm for stability
-            yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+            yield return new BatchNormalizationLayer<T>(flattenedSize);
+
+            yield return new ReshapeLayer<T>(
+                inputShape: new[] { flattenedSize },
+                outputShape: new[] { contextLength, hiddenDim });
 
             // Multi-head self-attention
             yield return new MultiHeadAttentionLayer<T>(
                 sequenceLength: contextLength,
                 embeddingDimension: hiddenDim,
                 headCount: numHeads);
+
+            yield return new ReshapeLayer<T>(
+                inputShape: new[] { contextLength, hiddenDim },
+                outputShape: new[] { flattenedSize });
 
             // Dropout (disabled for zero-shot inference)
             if (dropout > 0)
@@ -13693,17 +13776,17 @@ public static class LayerHelper<T>
             }
 
             // Pre-norm for FFN
-            yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+            yield return new BatchNormalizationLayer<T>(flattenedSize);
 
             // Large feed-forward network (4x hidden dim is standard)
             yield return new DenseLayer<T>(
-                inputSize: hiddenDim * contextLength,
-                outputSize: hiddenDim * 4 * contextLength,
+                inputSize: flattenedSize,
+                outputSize: flattenedSize * 4,
                 activationFunction: new GELUActivation<T>());
 
             yield return new DenseLayer<T>(
-                inputSize: hiddenDim * 4 * contextLength,
-                outputSize: hiddenDim * contextLength,
+                inputSize: flattenedSize * 4,
+                outputSize: flattenedSize,
                 activationFunction: null);
 
             if (dropout > 0)
@@ -13713,12 +13796,12 @@ public static class LayerHelper<T>
         }
 
         // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(hiddenDim * contextLength);
+        yield return new BatchNormalizationLayer<T>(flattenedSize);
 
         // === Forecast Projection Head ===
         // Project to forecast horizon (with intermediate layer for capacity)
         yield return new DenseLayer<T>(
-            inputSize: hiddenDim * contextLength,
+            inputSize: flattenedSize,
             outputSize: hiddenDim * forecastHorizon / 4,
             activationFunction: new GELUActivation<T>());
 

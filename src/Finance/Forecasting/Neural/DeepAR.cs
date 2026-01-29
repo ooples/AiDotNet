@@ -45,7 +45,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// https://arxiv.org/abs/1704.04110
 /// </para>
 /// </remarks>
-public class DeepAR<T> : FinancialModelBase<T>, IForecastingModel<T>
+public class DeepAR<T> : ForecastingModelBase<T>
 {
     #region Native Mode Fields
 
@@ -599,6 +599,84 @@ public class DeepAR<T> : FinancialModelBase<T>, IForecastingModel<T>
     }
 
     /// <summary>
+    /// Generates multi-step forecasts by feeding predictions back into the model.
+    /// </summary>
+    /// <param name="input">Input tensor containing historical data.</param>
+    /// <param name="steps">Number of future steps to predict.</param>
+    /// <returns>Tensor containing the concatenated multi-step forecast.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepAR can predict multiple steps ahead by repeatedly
+    /// using its own predictions as new input. This "rolling forward" approach
+    /// lets it forecast farther into the future than a single step.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    {
+        var predictions = new List<Tensor<T>>();
+        var currentInput = input;
+
+        int stepsRemaining = steps;
+        while (stepsRemaining > 0)
+        {
+            var prediction = Forecast(currentInput, null);
+            predictions.Add(prediction);
+
+            int stepsUsed = Math.Min(PredictionHorizon, stepsRemaining);
+            stepsRemaining -= stepsUsed;
+
+            if (stepsRemaining > 0)
+            {
+                currentInput = ShiftInputWithPredictions(currentInput, prediction, stepsUsed);
+            }
+        }
+
+        return ConcatenatePredictions(predictions, steps);
+    }
+
+    /// <summary>
+    /// Evaluates forecast accuracy using common error metrics.
+    /// </summary>
+    /// <param name="predictions">Predicted values.</param>
+    /// <param name="actuals">Actual ground-truth values.</param>
+    /// <returns>Dictionary of metric names and values.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method reports how far the predictions are from
+    /// the true values using familiar statistics like MAE and RMSE.
+    /// Lower values mean better forecasts.
+    /// </para>
+    /// </remarks>
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    {
+        var metrics = new Dictionary<string, T>();
+
+        T mse = NumOps.Zero;
+        T mae = NumOps.Zero;
+        int count = 0;
+
+        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
+        {
+            var diff = NumOps.Subtract(predictions[i], actuals[i]);
+            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
+            mae = NumOps.Add(mae, NumOps.Abs(diff));
+            count++;
+        }
+
+        if (count > 0)
+        {
+            mse = NumOps.Divide(mse, NumOps.FromDouble(count));
+            mae = NumOps.Divide(mae, NumOps.FromDouble(count));
+        }
+
+        metrics["MSE"] = mse;
+        metrics["MAE"] = mae;
+        metrics["RMSE"] = NumOps.Sqrt(mse);
+
+        return metrics;
+    }
+
+    /// <summary>
     /// Applies scaling to the input tensor for DeepAR processing.
     /// </summary>
     /// <param name="input">Input tensor to scale.</param>
@@ -1008,7 +1086,7 @@ public class DeepAR<T> : FinancialModelBase<T>, IForecastingModel<T>
     private Tensor<T> ComputeGradient(Tensor<T> predictions, Tensor<T> targets)
     {
         var gradVector = LossFunction.CalculateDerivative(predictions.ToVector(), targets.ToVector());
-        return Tensor<T>.FromVector(gradVector);
+        return Tensor<T>.FromVector(gradVector, predictions.Shape);
     }
 
     /// <summary>
@@ -1108,10 +1186,10 @@ public class DeepAR<T> : FinancialModelBase<T>, IForecastingModel<T>
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         if (predictions.Count == 0)
-            return new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
+            return new Tensor<T>(new[] { 1, totalSteps, NumFeatures });
 
         int batchSize = predictions[0].Shape[0];
-        int features = predictions[0].Shape.Length > 2 ? predictions[0].Shape[2] : _numFeatures;
+        int features = predictions[0].Shape.Length > 2 ? predictions[0].Shape[2] : NumFeatures;
 
         var result = new Tensor<T>(new[] { batchSize, totalSteps, features });
         int currentStep = 0;

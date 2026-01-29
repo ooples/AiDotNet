@@ -15,7 +15,8 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Probabilistic;
 
 /// <summary>
@@ -64,17 +65,13 @@ namespace AiDotNet.Finance.Probabilistic;
 /// https://arxiv.org/abs/2107.03502
 /// </para>
 /// </remarks>
-public class CSDI<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class CSDI<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
     private readonly bool _useNativeMode;
     #endregion
 
-    #region ONNX Mode Fields
-    private readonly InferenceSession? _onnxSession;
-    private readonly string? _onnxModelPath;
-    #endregion
-
+    
     #region Native Mode Fields
     private DenseLayer<T>? _inputProjection;
     private List<DenseLayer<T>>? _transformerLayers;
@@ -112,25 +109,25 @@ public class CSDI<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Properties
 
     /// <inheritdoc/>
-    public int SequenceLength => _sequenceLength;
+    public override int SequenceLength => _sequenceLength;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _sequenceLength; // For imputation, horizon = sequence length
+    public override int PredictionHorizon => _sequenceLength; // For imputation, horizon = sequence length
 
     /// <inheritdoc/>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     /// <inheritdoc/>
-    public int PatchSize => 1;
+    public override int PatchSize => 1;
 
     /// <inheritdoc/>
-    public int Stride => 1;
+    public override int Stride => 1;
 
     /// <inheritdoc/>
-    public bool IsChannelIndependent => false; // Captures cross-feature dependencies
+    public override bool IsChannelIndependent => false; // Captures cross-feature dependencies
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     /// <summary>
     /// Gets the hidden dimension of the score network.
@@ -203,8 +200,8 @@ public class CSDI<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             throw new System.IO.FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
-        _onnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new CSDIOptions<T>();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -504,7 +501,7 @@ public class CSDI<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(maskedOutput.ToVector(), maskedNoise.ToVector());
-        Backward(Tensor<T>.FromVector(gradient));
+        Backward(Tensor<T>.FromVector(gradient, maskedOutput.Shape));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -634,7 +631,7 @@ public class CSDI<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// If quantiles are specified, generates multiple samples and computes percentiles.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
         if (quantiles is not null && quantiles.Length > 0)
         {
@@ -675,7 +672,7 @@ public class CSDI<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the CSDI model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the CSDI architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         // CSDI imputes all missing values at once, not autoregressively
         return Forecast(input, null);
@@ -692,7 +689,7 @@ public class CSDI<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// how well the imputed values match the ground truth. Lower values are better.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
 
@@ -733,7 +730,7 @@ public class CSDI<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// handled internally during the imputation process.
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         return input;
     }
@@ -747,7 +744,7 @@ public class CSDI<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// that are useful for understanding the model's state and performance.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
 
@@ -898,7 +895,7 @@ public class CSDI<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// </remarks>
     private Tensor<T> ImputeOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session not initialized.");
 
         var inputVector = input.ToVector();
@@ -914,7 +911,7 @@ public class CSDI<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             NamedOnnxValue.CreateFromTensor("input", onnxInput)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
         var outputData = new T[outputTensor.Length];
@@ -1348,10 +1345,12 @@ public class CSDI<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
         base.Dispose(disposing);
     }
 
     #endregion
 }
+
+

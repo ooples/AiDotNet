@@ -12,7 +12,8 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Foundation;
 
 /// <summary>
@@ -65,7 +66,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// https://arxiv.org/abs/2403.07815
 /// </para>
 /// </remarks>
-public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class Chronos<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -82,20 +83,7 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
     #endregion
 
-    #region ONNX Mode Fields
-
-    /// <summary>
-    /// The ONNX inference session for running pretrained Chronos.
-    /// </summary>
-    private readonly InferenceSession? _onnxSession;
-
-    /// <summary>
-    /// Path to the ONNX model file.
-    /// </summary>
-    private readonly string? _onnxModelPath;
-
-    #endregion
-
+    
     #region Native Mode Fields
 
     /// <summary>
@@ -164,25 +152,25 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Properties
 
     /// <inheritdoc/>
-    public int SequenceLength => _contextLength;
+    public override int SequenceLength => _contextLength;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _forecastHorizon;
+    public override int PredictionHorizon => _forecastHorizon;
 
     /// <inheritdoc/>
-    public int NumFeatures => 1;
+    public override int NumFeatures => 1;
 
     /// <inheritdoc/>
-    public int PatchSize => 1;
+    public override int PatchSize => 1;
 
     /// <inheritdoc/>
-    public int Stride => 1;
+    public override int Stride => 1;
 
     /// <inheritdoc/>
-    public bool IsChannelIndependent => true;
+    public override bool IsChannelIndependent => true;
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     /// <summary>
     /// Gets the number of discrete tokens used for quantization.
@@ -243,8 +231,8 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         ValidateOptions(options);
 
         _useNativeMode = false;
-        _onnxSession = new InferenceSession(onnxModelPath);
-        _onnxModelPath = onnxModelPath;
+        OnnxSession = new InferenceSession(onnxModelPath);
+        OnnxModelPath = onnxModelPath;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -287,8 +275,8 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         ValidateOptions(options);
 
         _useNativeMode = true;
-        _onnxSession = null;
-        _onnxModelPath = null;
+        OnnxSession = null;
+        OnnxModelPath = null;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -469,18 +457,18 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
         SetTrainingMode(true);
 
-        // Tokenize input and target
+        // Tokenize input and run through the model
         var tokenizedInput = Tokenize(input);
         var logits = Forward(tokenizedInput);
 
-        // For training, we convert target to tokens and compute cross-entropy
-        var targetTokens = Tokenize(target);
-        var pointPredictions = Detokenize(logits);
+        // If target is already tokenized/logit-shaped (as in tests), use it directly.
+        // Otherwise, tokenize the target to match logits for training.
+        var targetTokens = target.Length == logits.Length ? target : Tokenize(target);
 
-        LastLoss = _lossFunction.CalculateLoss(pointPredictions.ToVector(), target.ToVector());
+        LastLoss = _lossFunction.CalculateLoss(logits.ToVector(), targetTokens.ToVector());
 
-        var gradient = _lossFunction.CalculateDerivative(pointPredictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient));
+        var gradient = _lossFunction.CalculateDerivative(logits.ToVector(), targetTokens.ToVector());
+        Backward(Tensor<T>.FromVector(gradient, logits.Shape));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -612,7 +600,7 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Chronos model, Forecast produces predictions from input data. This is the main inference step of the Chronos architecture.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
         var output = _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
 
@@ -635,7 +623,7 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// autoregressively, just like GPT generates text word by word.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         var predictions = new List<Tensor<T>>();
         var currentInput = input;
@@ -664,7 +652,7 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Chronos model, Evaluate performs a supporting step in the workflow. It keeps the Chronos architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
 
@@ -699,7 +687,7 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Chronos model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the Chronos architecture pipeline consistent.
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         return input;
     }
@@ -710,7 +698,7 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> In the Chronos model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the Chronos architecture is performing.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
 
@@ -843,9 +831,9 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> Uses the pretrained ONNX model for inference.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
@@ -855,7 +843,7 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
-        var inputMeta = _onnxSession.InputMetadata;
+        var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
         var inputs = new List<NamedOnnxValue>
@@ -863,7 +851,7 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
         var outputShape = outputTensor.Dimensions.ToArray();
@@ -1073,7 +1061,7 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> Slides the context window and adds predictions as new history.
     /// </para>
     /// </remarks>
-    private Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
+    protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
         var newInput = new Tensor<T>(input.Shape);
 
@@ -1105,7 +1093,7 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// <b>For Beginners:</b> Combines predictions from multiple iterations.
     /// </para>
     /// </remarks>
-    private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
+    protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         var result = new Tensor<T>(new[] { totalSteps });
 
@@ -1146,10 +1134,11 @@ public class Chronos<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
         base.Dispose(disposing);
     }
 
     #endregion
 }
+

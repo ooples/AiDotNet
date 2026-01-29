@@ -10,7 +10,8 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
+using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
 /// <summary>
@@ -34,7 +35,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// ICLR 2024. https://arxiv.org/abs/2310.06625
 /// </para>
 /// </remarks>
-public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
+public class ITransformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
 
@@ -45,20 +46,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
 
     #endregion
 
-    #region ONNX Mode Fields
-
-    /// <summary>
-    /// The ONNX inference session for the model.
-    /// </summary>
-    private readonly InferenceSession? _onnxSession;
-
-    /// <summary>
-    /// Path to the ONNX model file.
-    /// </summary>
-    private readonly string? _onnxModelPath;
-
-    #endregion
-
+    
     #region Native Mode Fields
 
     /// <summary>
@@ -169,13 +157,13 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     #region IForecastingModel Properties
 
     /// <inheritdoc/>
-    public int SequenceLength => _sequenceLength;
+    public override int SequenceLength => _sequenceLength;
 
     /// <inheritdoc/>
-    public int PredictionHorizon => _predictionHorizon;
+    public override int PredictionHorizon => _predictionHorizon;
 
     /// <inheritdoc/>
-    public int NumFeatures => _numFeatures;
+    public override int NumFeatures => _numFeatures;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -184,7 +172,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// time series as tokens. This property returns 0 to indicate patching is not used.
     /// </para>
     /// </remarks>
-    public int PatchSize => 0;
+    public override int PatchSize => 0;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -193,7 +181,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// This property returns 0.
     /// </para>
     /// </remarks>
-    public int Stride => 0;
+    public override int Stride => 0;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -204,10 +192,10 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// interact through attention.
     /// </para>
     /// </remarks>
-    public bool IsChannelIndependent => false;
+    public override bool IsChannelIndependent => false;
 
     /// <inheritdoc/>
-    public bool UseNativeMode => _useNativeMode;
+    public override bool UseNativeMode => _useNativeMode;
 
     #endregion
 
@@ -260,7 +248,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         _useNativeMode = false;
-        _onnxModelPath = onnxModelPath;
+        OnnxModelPath = onnxModelPath;
         _sequenceLength = sequenceLength;
         _predictionHorizon = predictionHorizon;
         _numFeatures = numFeatures;
@@ -275,7 +263,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         try
         {
             session = new InferenceSession(onnxModelPath);
-            _onnxSession = session;
+            OnnxSession = session;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
             InitializeLayers();
@@ -571,7 +559,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient));
+        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -663,7 +651,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         else
         {
             return new ITransformer<T>(
-                Architecture, _onnxModelPath ?? string.Empty,
+                Architecture, OnnxModelPath ?? string.Empty,
                 _sequenceLength, _predictionHorizon, _numFeatures,
                 _optimizer, _lossFunction);
         }
@@ -737,7 +725,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// relationships before generating forecasts.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
+    public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -775,7 +763,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// Note: Accuracy decreases for distant predictions because errors compound.
     /// </para>
     /// </remarks>
-    public Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
@@ -824,7 +812,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// Lower values are better for all metrics.
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
+    public override Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
     {
         if (inputs is null)
             throw new ArgumentNullException(nameof(inputs));
@@ -867,7 +855,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// so the model sees consistent, standardized data regardless of the absolute scale.
     /// </para>
     /// </remarks>
-    public Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
         if (!_useInstanceNormalization)
             return input;
@@ -892,7 +880,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// </list>
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFinancialMetrics()
+    public override Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
         {
@@ -1002,7 +990,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// predictions.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
+    protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         SetTrainingMode(false);
         return Forward(input);
@@ -1019,9 +1007,9 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// The process converts data to ONNX format, runs the model, and converts back.
     /// </para>
     /// </remarks>
-    private Tensor<T> ForecastOnnx(Tensor<T> input)
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null)
+        if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
@@ -1031,7 +1019,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
-        var inputMeta = _onnxSession.InputMetadata;
+        var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
         var inputs = new List<NamedOnnxValue>
@@ -1039,7 +1027,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
             NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
         };
 
-        using var results = _onnxSession.Run(inputs);
+        using var results = OnnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
         var outputShape = outputTensor.Dimensions.ToArray();
@@ -1263,7 +1251,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// forward by dropping old data and adding predictions as new data.
     /// </para>
     /// </remarks>
-    private Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsToShift)
+    protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsToShift)
     {
         var newData = new T[input.Length];
         int shiftAmount = stepsToShift * _numFeatures;
@@ -1286,7 +1274,7 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     /// Used when autoregressive forecasting produces multiple chunks of predictions.
     /// </para>
     /// </remarks>
-    private Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
+    protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         var outputData = new T[totalSteps * _numFeatures];
         int currentIdx = 0;
@@ -1330,10 +1318,12 @@ public class ITransformer<T> : NeuralNetworkBase<T>, IForecastingModel<T>
     {
         if (disposing)
         {
-            _onnxSession?.Dispose();
+            OnnxSession?.Dispose();
         }
         base.Dispose(disposing);
     }
 
     #endregion
 }
+
+
