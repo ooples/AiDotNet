@@ -37,11 +37,18 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _mean;
     private Matrix<T>? _covarianceInverse;
     private double _chiSquareCritical;
+    private int _nFeatures;
 
     /// <summary>
     /// Gets the significance level (alpha) for the test.
     /// </summary>
     public double Alpha => _alpha;
+
+    /// <summary>
+    /// Gets the Chi-Square critical value based on the fitted degrees of freedom (number of features) and alpha.
+    /// Use this for statistical threshold-based anomaly detection.
+    /// </summary>
+    public double ChiSquareCritical => _chiSquareCritical;
 
     /// <summary>
     /// Creates a new Chi-Square anomaly detector.
@@ -80,7 +87,8 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
         }
 
         int n = X.Rows;
-        int p = X.Columns;
+        _nFeatures = X.Columns;
+        int p = _nFeatures;
 
         // Calculate mean
         _mean = new Vector<T>(p);
@@ -137,8 +145,15 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
+
         var scores = new Vector<T>(X.Rows);
-        int p = X.Columns;
+        int p = _nFeatures;
 
         for (int i = 0; i < X.Rows; i++)
         {
@@ -173,6 +188,30 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
         }
 
         return scores;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Uses the Chi-Square critical value for statistical anomaly classification.
+    /// Points with Mahalanobis distance squared greater than the critical value are classified as anomalies.
+    /// </remarks>
+    public override Vector<T> Predict(Matrix<T> X)
+    {
+        EnsureFitted();
+
+        var scores = ScoreAnomalies(X);
+        var predictions = new Vector<T>(scores.Length);
+        T criticalT = NumOps.FromDouble(_chiSquareCritical);
+
+        for (int i = 0; i < scores.Length; i++)
+        {
+            // Points with D^2 > chi-square critical are anomalies (-1), otherwise inliers (1)
+            predictions[i] = NumOps.GreaterThan(scores[i], criticalT)
+                ? NumOps.FromDouble(-1)
+                : NumOps.FromDouble(1);
+        }
+
+        return predictions;
     }
 
     private Matrix<T> ComputeInverse(Matrix<T> matrix)

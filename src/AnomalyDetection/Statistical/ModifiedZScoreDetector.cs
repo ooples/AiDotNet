@@ -41,6 +41,7 @@ public class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
     private readonly double _modifiedZThreshold;
     private Vector<T>? _medians;
     private Vector<T>? _mads;
+    private int _nFeatures;
 
     /// <summary>
     /// Gets the Modified Z-Score threshold. Points with |Modified Z| > threshold are anomalies.
@@ -88,12 +89,12 @@ public class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        int nFeatures = X.Columns;
-        _medians = new Vector<T>(nFeatures);
-        _mads = new Vector<T>(nFeatures);
+        _nFeatures = X.Columns;
+        _medians = new Vector<T>(_nFeatures);
+        _mads = new Vector<T>(_nFeatures);
 
         // Calculate median and MAD for each feature
-        for (int j = 0; j < nFeatures; j++)
+        for (int j = 0; j < _nFeatures; j++)
         {
             var column = X.GetColumn(j);
 
@@ -158,6 +159,13 @@ public class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
     private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
     {
         ValidateInput(X);
+
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
 
         var scores = new Vector<T>(X.Rows);
         T scaleFactor = NumOps.FromDouble(MAD_SCALE_FACTOR);

@@ -95,6 +95,16 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
         }
 
         int n = X.Rows;
+
+        // Validate that series length is at least the season length
+        if (n < _seasonLength)
+        {
+            throw new ArgumentException(
+                $"Time series length ({n}) must be at least the season length ({_seasonLength}). " +
+                "Either provide more data or use a smaller season length.",
+                nameof(X));
+        }
+
         var values = new double[n];
         for (int i = 0; i < n; i++)
         {

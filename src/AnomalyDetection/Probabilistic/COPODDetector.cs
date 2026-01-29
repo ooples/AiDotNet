@@ -37,8 +37,9 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 /// </remarks>
 public class COPODDetector<T> : AnomalyDetectorBase<T>
 {
-    private Matrix<T>? _trainingData;
+    private double[][]? _sortedFeatureValues;
     private int _nFeatures;
+    private int _nSamples;
 
     /// <summary>
     /// Creates a new COPOD anomaly detector.
@@ -55,8 +56,21 @@ public class COPODDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        _trainingData = X;
         _nFeatures = X.Columns;
+        _nSamples = X.Rows;
+
+        // Pre-sort feature values for O(log n) ECDF lookups
+        _sortedFeatureValues = new double[_nFeatures][];
+        for (int j = 0; j < _nFeatures; j++)
+        {
+            var values = new double[_nSamples];
+            for (int i = 0; i < _nSamples; i++)
+            {
+                values[i] = NumOps.ToDouble(X[i, j]);
+            }
+            Array.Sort(values);
+            _sortedFeatureValues[j] = values;
+        }
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -109,26 +123,34 @@ public class COPODDetector<T> : AnomalyDetectorBase<T>
 
     private double ComputeECDF(int featureIndex, double value)
     {
-        var trainingData = _trainingData;
-        if (trainingData == null)
+        var sortedValues = _sortedFeatureValues;
+        if (sortedValues == null)
         {
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        // Compute the empirical CDF: P(X <= value)
-        int count = 0;
-        int total = trainingData.Rows;
+        // Use binary search for O(log n) lookup
+        var featureValues = sortedValues[featureIndex];
+        int index = Array.BinarySearch(featureValues, value);
 
-        for (int i = 0; i < total; i++)
+        // BinarySearch returns bitwise complement of insertion point if not found
+        int count;
+        if (index >= 0)
         {
-            double trainValue = NumOps.ToDouble(trainingData[i, featureIndex]);
-            if (trainValue <= value)
+            // Value found - count all values <= value (handle duplicates)
+            count = index + 1;
+            while (count < featureValues.Length && featureValues[count] <= value)
             {
                 count++;
             }
         }
+        else
+        {
+            // Value not found - insertion point is the count of values < value
+            count = ~index;
+        }
 
         // Return proportion, adjusted to avoid 0 and 1
-        return (count + 0.5) / (total + 1);
+        return (count + 0.5) / (_nSamples + 1);
     }
 }

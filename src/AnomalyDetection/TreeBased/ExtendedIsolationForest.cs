@@ -87,6 +87,12 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
                 "MaxSamples must be at least 1. Recommended is 256.");
         }
 
+        if (extensionLevel < -1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(extensionLevel),
+                "ExtensionLevel must be -1 (full extension) or >= 0. Use 0 for standard Isolation Forest behavior.");
+        }
+
         _numTrees = numTrees;
         _maxSamples = maxSamples;
         _extensionLevel = extensionLevel;
@@ -148,6 +154,13 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
     private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
     {
         ValidateInput(X);
+
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
 
         var trees = _trees;
         if (trees == null)

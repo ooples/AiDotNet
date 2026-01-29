@@ -211,17 +211,20 @@ public class FastABODDetector<T> : AnomalyDetectorBase<T>
         if (weights.Count == 0) return double.MaxValue;
 
         // Compute weighted variance
+        // Formula: mean = Σ(w_i * v_i) / Σ(w_i)
+        //          variance = Σ(w_i * (v_i - mean)²) / Σ(w_i)
         double sumWeights = weights.Sum();
         if (sumWeights < 1e-10) return double.MaxValue;
 
+        // weightedAngles[i] = cosAngle_i * weight_i, so weighted mean is correct
         double mean = weightedAngles.Sum() / sumWeights;
 
         double variance = 0;
         for (int i = 0; i < weightedAngles.Count; i++)
         {
-            double normalizedAngle = weightedAngles[i] / weights[i];
-            double normalizedMean = mean / weights.Average();
-            double diff = normalizedAngle - normalizedMean;
+            // Extract the original angle from the weighted angle
+            double angle = weightedAngles[i] / weights[i];
+            double diff = angle - mean;
             variance += weights[i] * diff * diff;
         }
         variance /= sumWeights;

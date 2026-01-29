@@ -48,7 +48,16 @@ public class MaximumDetector<T> : AnomalyDetectorBase<T>
         ValidateInput(X);
 
         int n = X.Rows;
-        int k = Math.Min(10, n - 1);
+
+        // Guard against tiny datasets - need at least 2 samples for neighbor-based methods
+        if (n < 2)
+        {
+            throw new ArgumentException(
+                $"MaximumDetector requires at least 2 samples, but got {n}.",
+                nameof(X));
+        }
+
+        int k = Math.Max(1, Math.Min(10, n - 1));
 
         // Create default base detectors
         _baseDetectors = new List<IAnomalyDetector<T>>

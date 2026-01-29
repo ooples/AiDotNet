@@ -129,7 +129,7 @@ public class RobustPCADetector<T> : AnomalyDetectorBase<T>
         SolveADMM(data, effectiveLambda);
 
         // Calculate scores for training data to set threshold
-        var trainingScores = ScoreAnomaliesInternal(X);
+        var trainingScores = ScoreAnomaliesInternal(X, isTrainingData: true);
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;
@@ -316,39 +316,49 @@ public class RobustPCADetector<T> : AnomalyDetectorBase<T>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
     {
         EnsureFitted();
-        return ScoreAnomaliesInternal(X);
+        return ScoreAnomaliesInternal(X, isTrainingData: false);
     }
 
-    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
+    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X, bool isTrainingData)
     {
         ValidateInput(X);
+
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
 
         var scores = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
         {
-            // For new points, project and compute sparse magnitude
-            var point = new double[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                point[j] = NumOps.ToDouble(X[i, j]) - _mean![j];
-            }
+            double score;
 
-            // Score based on distance from low-rank subspace
-            // Approximate using projection onto training low-rank basis
-            double score = 0;
-            for (int j = 0; j < X.Columns; j++)
-            {
-                score += point[j] * point[j];
-            }
-
-            // If this is training data, use sparse component magnitude
-            if (i < _nSamples && _sparse != null)
+            // For training data, use the precomputed sparse component magnitude
+            if (isTrainingData && i < _nSamples && _sparse != null)
             {
                 score = 0;
                 for (int j = 0; j < _nFeatures; j++)
                 {
                     score += _sparse[i, j] * _sparse[i, j];
+                }
+            }
+            else
+            {
+                // For new points, project and compute distance from low-rank subspace
+                var point = new double[X.Columns];
+                for (int j = 0; j < X.Columns; j++)
+                {
+                    point[j] = NumOps.ToDouble(X[i, j]) - _mean![j];
+                }
+
+                // Score based on distance from low-rank subspace
+                score = 0;
+                for (int j = 0; j < X.Columns; j++)
+                {
+                    score += point[j] * point[j];
                 }
             }
 

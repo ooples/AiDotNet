@@ -46,6 +46,8 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
     private double[][]? _trainingData;
     private int[]? _labels;
     private double[]? _outlierScores;
+    private double _maxCoreDistance;
+    private int _nFeatures;
 
     /// <summary>
     /// Gets the minimum cluster size.
@@ -93,6 +95,7 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
 
         int n = X.Rows;
         int d = X.Columns;
+        _nFeatures = d;
 
         // Convert to double array
         _trainingData = new double[n][];
@@ -324,6 +327,10 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
             // Else remains -1 (noise)
         }
 
+        // Store max core distance for proper normalization when scoring new data
+        _maxCoreDistance = coreDistances.Max();
+        if (_maxCoreDistance < 1e-10) _maxCoreDistance = 1.0;
+
         // Compute outlier scores based on core distances and cluster membership
         for (int i = 0; i < n; i++)
         {
@@ -335,7 +342,7 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
             else
             {
                 // Cluster members: score based on core distance relative to cluster
-                _outlierScores[i] = coreDistances[i] / (coreDistances.Max() + 1e-10);
+                _outlierScores[i] = coreDistances[i] / _maxCoreDistance;
             }
         }
     }
@@ -381,6 +388,13 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
+
         var trainingData = _trainingData;
         var labels = _labels;
         var outlierScores = _outlierScores;
@@ -424,8 +438,8 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
             }
             else
             {
-                // Score based on distance relative to training data spread
-                score = minDist / (outlierScores.Max() + 1e-10);
+                // Score based on distance normalized by max core distance from training
+                score = minDist / _maxCoreDistance;
             }
 
             scores[i] = NumOps.FromDouble(Math.Min(score, 1.0));

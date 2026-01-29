@@ -36,6 +36,7 @@ public class KNNDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
     private Matrix<T>? _trainingData;
+    private int _nFeatures;
 
     /// <summary>
     /// Gets the number of neighbors used for detection.
@@ -73,6 +74,7 @@ public class KNNDetector<T> : AnomalyDetectorBase<T>
         }
 
         _trainingData = X;
+        _nFeatures = X.Columns;
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -92,6 +94,13 @@ public class KNNDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
+
         var scores = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
@@ -99,23 +108,32 @@ public class KNNDetector<T> : AnomalyDetectorBase<T>
             // Get distances to all training points
             var distances = ComputeDistances(X, i, _trainingData!);
 
-            // Sort and get k-nearest (excluding self if in training data)
+            // Sort and get k-nearest
             var sortedDistances = distances.ToArray()
                 .Select((d, idx) => (Distance: NumOps.ToDouble(d), Index: idx))
                 .OrderBy(x => x.Distance)
                 .ToList();
 
-            // Take k nearest neighbors (skip first if distance is 0, meaning it's the same point)
+            // Take k nearest neighbors
+            // Only skip the FIRST zero-distance point as the potential self-match
+            // Include subsequent zero-distance points (legitimate duplicates)
             double avgDistance = 0;
             int count = 0;
+            bool skippedSelf = false;
+
             foreach (var (distance, _) in sortedDistances)
             {
                 if (count >= _k) break;
-                if (distance > 0 || count > 0) // Skip exact matches (self)
+
+                // Skip only the first exact self-match (distance == 0)
+                if (!skippedSelf && distance == 0)
                 {
-                    avgDistance += distance;
-                    count++;
+                    skippedSelf = true;
+                    continue;
                 }
+
+                avgDistance += distance;
+                count++;
             }
 
             avgDistance = count > 0 ? avgDistance / count : 0;

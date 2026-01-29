@@ -43,6 +43,8 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
     private double[]? _localDensities;
     private List<int>[]? _knnLists;
     private List<int>[]? _rknnLists;
+    private HashSet<int>[]? _influenceSpaces;
+    private int _nFeatures;
 
     /// <summary>
     /// Gets the number of neighbors used for detection.
@@ -80,9 +82,22 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
         }
 
         _trainingData = X;
+        _nFeatures = X.Columns;
 
         // Build kNN and RkNN lists
         BuildNeighborLists(X);
+
+        // Precompute influence spaces (kNN union RkNN) for each training point
+        int n = X.Rows;
+        _influenceSpaces = new HashSet<int>[n];
+        for (int i = 0; i < n; i++)
+        {
+            _influenceSpaces[i] = new HashSet<int>(_knnLists![i]);
+            foreach (int rknnIdx in _rknnLists![i])
+            {
+                _influenceSpaces[i].Add(rknnIdx);
+            }
+        }
 
         // Compute local densities
         _localDensities = ComputeLocalDensities(X);
@@ -105,39 +120,45 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
+
+        var localDensities = _localDensities;
+        var influenceSpaces = _influenceSpaces;
+        if (localDensities == null || influenceSpaces == null)
+        {
+            throw new InvalidOperationException("Model not properly fitted.");
+        }
+
         var scores = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
         {
-            // Get k-nearest neighbors to this point
+            // Get k-nearest neighbors from training data to this point
             var knn = GetKNearestNeighbors(X, i);
 
-            // For each kNN, check if this point is in their RkNN (reverse neighbor relationship)
-            // Influence space = kNN union RkNN
+            // For new data, use the union of the precomputed influence spaces
+            // of the k-nearest training neighbors as an approximation
             var influenceSpace = new HashSet<int>(knn);
-
-            // Find RkNN: points that have this point as one of their k-nearest neighbors
-            foreach (int trainingIdx in knn)
+            foreach (int neighborIdx in knn)
             {
-                if (_rknnLists != null && trainingIdx < _rknnLists.Length)
+                if (neighborIdx < influenceSpaces.Length)
                 {
-                    foreach (int rknnIdx in _rknnLists[trainingIdx])
+                    foreach (int influenceIdx in influenceSpaces[neighborIdx])
                     {
-                        influenceSpace.Add(rknnIdx);
+                        influenceSpace.Add(influenceIdx);
                     }
                 }
             }
 
-            // Compute local density for this point
+            // Compute local density for this point using its k-nearest neighbors
             double localDensity = ComputeLocalDensityForPoint(X, i, knn);
 
             // Compute average local density of influence space
-            var localDensities = _localDensities;
-            if (localDensities == null)
-            {
-                throw new InvalidOperationException("Model not properly fitted.");
-            }
-
             double avgInfluenceDensity = 0;
             int validCount = 0;
             foreach (int neighborIdx in influenceSpace)

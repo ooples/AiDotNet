@@ -40,6 +40,7 @@ public class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _means;
     private Vector<T>? _stds;
     private Vector<T>? _criticalValues;
+    private int _nFeatures;
 
     /// <summary>
     /// Gets the significance level (alpha) for the test.
@@ -80,6 +81,16 @@ public class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         int nFeatures = X.Columns;
 
+        // Grubbs' test requires at least 3 samples (df = n - 2 must be positive)
+        if (n < 3)
+        {
+            throw new ArgumentException(
+                $"Grubbs' test requires at least 3 samples, but got {n}.",
+                nameof(X));
+        }
+
+        _nFeatures = nFeatures;
+
         _means = new Vector<T>(nFeatures);
         _stds = new Vector<T>(nFeatures);
         _criticalValues = new Vector<T>(nFeatures);
@@ -117,11 +128,19 @@ public class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
+
         var scores = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
         {
             T maxGrubbsStatistic = NumOps.Zero;
+            T maxCriticalExceedance = NumOps.Zero;
 
             for (int j = 0; j < X.Columns; j++)
             {
@@ -135,12 +154,22 @@ public class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
                 T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], _means![j]));
                 T grubbsStatistic = NumOps.Divide(deviation, _stds[j]);
 
+                // Compute how much the statistic exceeds the critical value
+                // Score = max(0, G - G_critical) across features
+                T exceedance = NumOps.Subtract(grubbsStatistic, _criticalValues![j]);
+                if (NumOps.GreaterThan(exceedance, maxCriticalExceedance))
+                {
+                    maxCriticalExceedance = exceedance;
+                }
+
                 if (NumOps.GreaterThan(grubbsStatistic, maxGrubbsStatistic))
                 {
                     maxGrubbsStatistic = grubbsStatistic;
                 }
             }
 
+            // Use the maximum Grubbs statistic as the score
+            // Points exceeding the critical value are clear outliers
             scores[i] = maxGrubbsStatistic;
         }
 

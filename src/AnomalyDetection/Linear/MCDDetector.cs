@@ -77,7 +77,18 @@ public class MCDDetector<T> : AnomalyDetectorBase<T>
 
         int n = X.Rows;
         _nFeatures = X.Columns;
-        int h = (int)(n * _supportFraction);
+
+        // Validate that we have more samples than features for covariance estimation
+        if (n <= _nFeatures)
+        {
+            throw new ArgumentException(
+                $"MCD requires more samples ({n}) than features ({_nFeatures}). " +
+                "Consider reducing dimensions or adding more samples.",
+                nameof(X));
+        }
+
+        // Compute h and ensure it's at least d + 1 for valid covariance estimation
+        int h = Math.Max(_nFeatures + 1, (int)(n * _supportFraction));
 
         // Convert to double array
         var data = new double[n][];

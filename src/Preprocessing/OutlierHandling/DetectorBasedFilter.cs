@@ -129,11 +129,9 @@ public class DetectorBasedFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="data">The training data matrix.</param>
     protected override void FitCore(Matrix<T> data)
     {
-        // Fit the detector
-        if (!_detector.IsFitted)
-        {
-            _detector.Fit(data);
-        }
+        // Always refit the detector to avoid stale models when data changes
+        // The detector's Fit method handles re-initialization
+        _detector.Fit(data);
 
         // Calculate statistics for replacement modes
         if (_mode == FilterMode.ReplaceWithMedian || _mode == FilterMode.ReplaceWithMean)

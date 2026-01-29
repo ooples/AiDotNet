@@ -186,6 +186,13 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
         var a = new double[p];
         var aNew = new double[p];
 
+        // Guard against division by zero (constant series has r[0] = 0)
+        if (Math.Abs(r[0]) < 1e-10)
+        {
+            // Return zero coefficients for constant series
+            return new double[p];
+        }
+
         a[0] = r[1] / r[0];
         double e = r[0] * (1 - a[0] * a[0]);
 

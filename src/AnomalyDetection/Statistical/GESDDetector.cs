@@ -45,6 +45,7 @@ public class GESDDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _stds;
     private double[]? _criticalValues;
     private int _fittedN;
+    private int _nFeatures;
 
     /// <summary>
     /// Gets the significance level (alpha) for the test.
@@ -106,11 +107,11 @@ public class GESDDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        int nFeatures = X.Columns;
-        _means = new Vector<T>(nFeatures);
-        _stds = new Vector<T>(nFeatures);
+        _nFeatures = X.Columns;
+        _means = new Vector<T>(_nFeatures);
+        _stds = new Vector<T>(_nFeatures);
 
-        for (int j = 0; j < nFeatures; j++)
+        for (int j = 0; j < _nFeatures; j++)
         {
             var column = X.GetColumn(j);
             var (mean, std) = StatisticsHelper<T>.CalculateMeanAndStandardDeviation(column);
@@ -143,6 +144,13 @@ public class GESDDetector<T> : AnomalyDetectorBase<T>
     private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
     {
         ValidateInput(X);
+
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
 
         var scores = new Vector<T>(X.Rows);
 

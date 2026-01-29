@@ -93,28 +93,40 @@ public class XGBODDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         _nOriginalFeatures = X.Columns;
 
+        // Guard against tiny datasets - need at least 3 samples for meaningful detection
+        if (n < 3)
+        {
+            throw new ArgumentException(
+                $"XGBOD requires at least 3 samples, but got {n}.",
+                nameof(X));
+        }
+
         // Create diverse base detectors
         _baseDetectors = new List<IAnomalyDetector<T>>();
         var tosScores = new List<double[]>(); // Transformed Outlier Scores
 
-        int k = Math.Min(10, n - 1);
+        // Base k for neighbor-based detectors, capped at n - 1
+        int baseK = Math.Min(10, n - 1);
 
         for (int e = 0; e < _nEstimators; e++)
         {
             IAnomalyDetector<T> detector;
 
             // Create diverse detector types
+            // Cap neighbor count at n - 1 to avoid exceeding sample count
+            int neighborCount = Math.Min(Math.Max(1, baseK + e), n - 1);
+
             switch (e % 5)
             {
                 case 0:
                     detector = new DistanceBased.LocalOutlierFactor<T>(
-                        numNeighbors: Math.Max(1, k + e),
+                        numNeighbors: neighborCount,
                         contamination: _contamination,
                         randomSeed: _randomSeed + e);
                     break;
                 case 1:
                     detector = new DistanceBased.KNNDetector<T>(
-                        k: Math.Max(1, k + e),
+                        k: neighborCount,
                         contamination: _contamination,
                         randomSeed: _randomSeed + e);
                     break;
@@ -324,6 +336,13 @@ public class XGBODDetector<T> : AnomalyDetectorBase<T>
     private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
     {
         ValidateInput(X);
+
+        if (X.Columns != _nOriginalFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nOriginalFeatures} features.",
+                nameof(X));
+        }
 
         int n = X.Rows;
         int nEnhancedFeatures = _nOriginalFeatures + _nEstimators;

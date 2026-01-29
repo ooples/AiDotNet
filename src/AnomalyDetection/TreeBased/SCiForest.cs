@@ -151,6 +151,13 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
+
         var scores = new Vector<T>(X.Rows);
         int nSamples = Math.Min(_maxSamples, X.Rows);
 

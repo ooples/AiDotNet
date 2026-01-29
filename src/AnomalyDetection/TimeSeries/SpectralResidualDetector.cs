@@ -250,27 +250,100 @@ public class SpectralResidualDetector<T> : AnomalyDetectorBase<T>
         return (real, imag);
     }
 
-    private (double[] real, double[] imag) ComputeIFFT(double[] real, double[] imag)
+    private (double[] real, double[] imag) ComputeIFFT(double[] realInput, double[] imagInput)
     {
-        int n = real.Length;
+        int n = realInput.Length;
 
-        // Conjugate
-        var conjImag = imag.Select(x => -x).ToArray();
+        // Standard IFFT: IFFT(X) = (1/N) * conj(FFT(conj(X)))
+        // Step 1: Conjugate the input (negate imaginary part)
+        var conjReal = (double[])realInput.Clone();
+        var conjImag = imagInput.Select(x => -x).ToArray();
 
-        // FFT
-        var (fftReal, fftImag) = ComputeFFT(real);
-        var (_, fftImag2) = ComputeFFT(conjImag);
+        // Step 2: Combine into a single array for FFT (real part only, with conjugated input)
+        // We need to compute FFT of the complex conjugate
+        // Use the FFT implementation which expects real input, so we need a different approach:
+        // For complex input FFT: FFT(a + bi) = FFT(a) + i*FFT(b)
+        // But our FFT takes real input. Instead, use the property:
+        // IFFT(X) = conj(FFT(conj(X))) / N
 
-        // Combine and scale
+        // Create combined input by interleaving real/imag into the FFT
+        // Alternative: Compute FFT with complex input by modifying the FFT to accept complex
+
+        // Simpler approach: swap real and imag, apply FFT, swap back, scale
+        // IFFT via FFT: IFFT(real, imag) = FFT(real, -imag) with result scaled and imag negated
+
+        // Correct IFFT implementation:
+        // Apply FFT to (real, -imag), then scale by 1/N and negate the imaginary result
+        var (fftReal, fftImag) = ComputeFFTComplex(conjReal, conjImag);
+
+        // Step 3: Conjugate the result and scale by 1/N
         var resultReal = new double[n];
         var resultImag = new double[n];
         for (int i = 0; i < n; i++)
         {
-            resultReal[i] = (fftReal[i] - fftImag2[i]) / n;
-            resultImag[i] = (fftImag[i] + fftImag2[i]) / n;
+            resultReal[i] = fftReal[i] / n;
+            resultImag[i] = -fftImag[i] / n;
         }
 
         return (resultReal, resultImag);
+    }
+
+    private (double[] real, double[] imag) ComputeFFTComplex(double[] realInput, double[] imagInput)
+    {
+        int n = realInput.Length;
+        var real = (double[])realInput.Clone();
+        var imag = (double[])imagInput.Clone();
+
+        // Cooley-Tukey FFT (iterative, radix-2) for complex input
+        // Bit-reverse permutation
+        int bits = (int)Math.Log(n, 2);
+        for (int i = 0; i < n; i++)
+        {
+            int j = ReverseBits(i, bits);
+            if (j > i)
+            {
+                double tempReal = real[i];
+                real[i] = real[j];
+                real[j] = tempReal;
+
+                double tempImag = imag[i];
+                imag[i] = imag[j];
+                imag[j] = tempImag;
+            }
+        }
+
+        // Butterfly computations
+        for (int len = 2; len <= n; len *= 2)
+        {
+            double angle = -2 * Math.PI / len;
+            double wReal = Math.Cos(angle);
+            double wImag = Math.Sin(angle);
+
+            for (int i = 0; i < n; i += len)
+            {
+                double curReal = 1, curImag = 0;
+                for (int j = 0; j < len / 2; j++)
+                {
+                    int u = i + j;
+                    int v = i + j + len / 2;
+
+                    double tReal = curReal * real[v] - curImag * imag[v];
+                    double tImag = curReal * imag[v] + curImag * real[v];
+
+                    real[v] = real[u] - tReal;
+                    imag[v] = imag[u] - tImag;
+                    real[u] = real[u] + tReal;
+                    imag[u] = imag[u] + tImag;
+
+                    double nextReal = curReal * wReal - curImag * wImag;
+                    double nextImag = curReal * wImag + curImag * wReal;
+                    curReal = nextReal;
+                    curImag = nextImag;
+                }
+            }
+        }
+
+        return (real, imag);
     }
 
     private static int ReverseBits(int num, int bits)

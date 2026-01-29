@@ -39,6 +39,10 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _minValues;
     private Vector<T>? _maxValues;
     private Vector<T>? _ranges;
+    private Vector<T>? _secondMin;
+    private Vector<T>? _secondMax;
+    private int _nFeatures;
+    private int _nSamples;
 
     /// <summary>
     /// Gets the significance level (alpha) for the test.
@@ -81,12 +85,15 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        int nFeatures = X.Columns;
-        _minValues = new Vector<T>(nFeatures);
-        _maxValues = new Vector<T>(nFeatures);
-        _ranges = new Vector<T>(nFeatures);
+        _nFeatures = X.Columns;
+        _nSamples = X.Rows;
+        _minValues = new Vector<T>(_nFeatures);
+        _maxValues = new Vector<T>(_nFeatures);
+        _ranges = new Vector<T>(_nFeatures);
+        _secondMin = new Vector<T>(_nFeatures);
+        _secondMax = new Vector<T>(_nFeatures);
 
-        for (int j = 0; j < nFeatures; j++)
+        for (int j = 0; j < _nFeatures; j++)
         {
             var column = X.GetColumn(j);
             var sorted = column.ToArray();
@@ -94,6 +101,8 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
 
             _minValues[j] = sorted[0];
             _maxValues[j] = sorted[sorted.Length - 1];
+            _secondMin[j] = sorted[1];
+            _secondMax[j] = sorted[sorted.Length - 2];
             _ranges[j] = NumOps.Subtract(_maxValues[j], _minValues[j]);
         }
 
@@ -115,6 +124,13 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
+
         var scores = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
@@ -129,21 +145,58 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
                     continue;
                 }
 
-                // Calculate gap from extremes
-                T gapFromMin = NumOps.Abs(NumOps.Subtract(X[i, j], _minValues![j]));
-                T gapFromMax = NumOps.Abs(NumOps.Subtract(X[i, j], _maxValues![j]));
+                // Classic Dixon's Q test:
+                // For minimum: Q = (x2 - x1) / (xn - x1)
+                // For maximum: Q = (xn - x(n-1)) / (xn - x1)
+                // For general points, compute how "extreme" they are using the same logic:
+                // If closer to min: Q = (x - min) / range compared to (x2 - min) / range
+                // If closer to max: Q = (max - x) / range compared to (max - x(n-1)) / range
 
-                // Q statistic: ratio of gap to range
-                // For points near extremes, this is how "extreme" they are
-                // For points in the middle, we use distance from center relative to range
-                T centerValue = NumOps.Divide(NumOps.Add(_minValues[j], _maxValues[j]), NumOps.FromDouble(2));
-                T distFromCenter = NumOps.Abs(NumOps.Subtract(X[i, j], centerValue));
+                T value = X[i, j];
+                T distFromMin = NumOps.Subtract(value, _minValues![j]);
+                T distFromMax = NumOps.Subtract(_maxValues![j], value);
 
-                // Normalized distance from center (0 to 1, where 1 is at the edge)
-                T halfRange = NumOps.Divide(_ranges[j], NumOps.FromDouble(2));
-                T qStatistic = NumOps.GreaterThan(halfRange, NumOps.Zero)
-                    ? NumOps.Divide(distFromCenter, halfRange)
-                    : NumOps.Zero;
+                double distMinD = NumOps.ToDouble(distFromMin);
+                double distMaxD = NumOps.ToDouble(distFromMax);
+                double rangeD = NumOps.ToDouble(_ranges[j]);
+
+                T qStatistic;
+                if (distMinD <= distMaxD)
+                {
+                    // Point is closer to minimum - compute Q relative to the min extreme
+                    // Classic Q for testing if min is outlier: (x2 - x1) / range
+                    // For this point: higher score if it's MORE extreme than the training min
+                    T gapToSecond = NumOps.Subtract(_secondMin![j], _minValues[j]);
+                    double gapD = NumOps.ToDouble(gapToSecond);
+
+                    if (distMinD < gapD)
+                    {
+                        // This point is even more extreme than training min (potential outlier)
+                        qStatistic = NumOps.FromDouble((gapD - distMinD) / rangeD + 1.0);
+                    }
+                    else
+                    {
+                        // This point is within the training range
+                        qStatistic = NumOps.FromDouble(distMinD / rangeD);
+                    }
+                }
+                else
+                {
+                    // Point is closer to maximum - compute Q relative to the max extreme
+                    T gapFromSecond = NumOps.Subtract(_maxValues[j], _secondMax![j]);
+                    double gapD = NumOps.ToDouble(gapFromSecond);
+
+                    if (distMaxD < gapD)
+                    {
+                        // This point is even more extreme than training max (potential outlier)
+                        qStatistic = NumOps.FromDouble((gapD - distMaxD) / rangeD + 1.0);
+                    }
+                    else
+                    {
+                        // This point is within the training range
+                        qStatistic = NumOps.FromDouble(distMaxD / rangeD);
+                    }
+                }
 
                 if (NumOps.GreaterThan(qStatistic, maxQStatistic))
                 {
@@ -157,12 +210,36 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
         return scores;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Uses the Dixon's Q critical value for statistical anomaly classification based on sample size.
+    /// </remarks>
+    public override Vector<T> Predict(Matrix<T> X)
+    {
+        EnsureFitted();
+
+        var scores = ScoreAnomalies(X);
+        var predictions = new Vector<T>(scores.Length);
+        double qCritical = GetQCritical(_nSamples);
+        T criticalT = NumOps.FromDouble(qCritical);
+
+        for (int i = 0; i < scores.Length; i++)
+        {
+            // Points with Q > Q critical are anomalies (-1), otherwise inliers (1)
+            predictions[i] = NumOps.GreaterThan(scores[i], criticalT)
+                ? NumOps.FromDouble(-1)
+                : NumOps.FromDouble(1);
+        }
+
+        return predictions;
+    }
+
     /// <summary>
     /// Gets the critical Q value for Dixon's test based on sample size and alpha level.
     /// </summary>
     /// <param name="n">Sample size.</param>
     /// <returns>Critical Q value.</returns>
-    private double GetQCritical(int n)
+    public double GetQCritical(int n)
     {
         // Critical values for Dixon's Q test at alpha = 0.05
         // Source: Dixon (1950)

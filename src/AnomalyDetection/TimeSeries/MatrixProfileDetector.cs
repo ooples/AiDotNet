@@ -44,6 +44,7 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
     private readonly int _exclusionZone;
     private double[]? _matrixProfile;
     private double[]? _trainingValues;
+    private double _trainingChecksum;
 
     /// <summary>
     /// Gets the subsequence length.
@@ -74,8 +75,15 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
                 "SubsequenceLength must be at least 4. Recommended is 50 or one period length.");
         }
 
+        if (exclusionZone < -1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(exclusionZone),
+                "ExclusionZone must be -1 (auto), 0 (no exclusion), or a positive value.");
+        }
+
         _subsequenceLength = subsequenceLength;
-        _exclusionZone = exclusionZone > 0 ? exclusionZone : subsequenceLength / 4;
+        // -1 = auto (m/4), 0 = no exclusion zone, positive = explicit value
+        _exclusionZone = exclusionZone == -1 ? subsequenceLength / 4 : exclusionZone;
     }
 
     /// <inheritdoc/>
@@ -101,10 +109,14 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
 
         // Extract values
         _trainingValues = new double[n];
+        double checksum = 0;
         for (int i = 0; i < n; i++)
         {
             _trainingValues[i] = NumOps.ToDouble(X[i, 0]);
+            // Compute a weighted checksum for same-data detection
+            checksum += _trainingValues[i] * (i + 1);
         }
+        _trainingChecksum = checksum;
 
         // Compute Matrix Profile using STOMP algorithm (simplified)
         _matrixProfile = ComputeMatrixProfile(_trainingValues);
@@ -223,19 +235,20 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        bool isSameData = n == trainingValues.Length;
-        if (isSameData)
+        // Check if this is the same data as training using length and checksum
+        bool isSameData = false;
+        if (n == trainingValues.Length)
         {
-            bool same = true;
-            for (int i = 0; i < Math.Min(10, n); i++)
+            double checksum = 0;
+            for (int i = 0; i < n; i++)
             {
-                if (Math.Abs(values[i] - trainingValues[i]) > 1e-10)
-                {
-                    same = false;
-                    break;
-                }
+                checksum += values[i] * (i + 1);
             }
-            if (same)
+            // Allow small floating point tolerance in checksum comparison
+            isSameData = Math.Abs(checksum - _trainingChecksum) < 1e-6;
+        }
+
+        if (isSameData)
             {
                 var matrixProfile = _matrixProfile;
                 if (matrixProfile == null)
@@ -264,7 +277,6 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
                 }
 
                 return scores;
-            }
         }
 
         // For new data, compute distances to training subsequences

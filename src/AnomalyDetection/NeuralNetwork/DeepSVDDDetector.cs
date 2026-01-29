@@ -549,6 +549,13 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        if (X.Columns != _inputDim)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_inputDim} features.",
+                nameof(X));
+        }
+
         var dataMeans = _dataMeans;
         var dataStds = _dataStds;
         var center = _center;

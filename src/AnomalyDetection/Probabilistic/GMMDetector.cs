@@ -40,6 +40,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>[]? _means;
     private Matrix<T>[]? _covariances;
     private Vector<T>? _weights;
+    private int _nFeatures;
 
     /// <summary>
     /// Gets the number of Gaussian components.
@@ -79,7 +80,7 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
         ValidateInput(X);
 
         int n = X.Rows;
-        int d = X.Columns;
+        _nFeatures = X.Columns;
 
         if (n < _nComponents)
         {
@@ -111,6 +112,13 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
     private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
     {
         ValidateInput(X);
+
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
 
         var scores = new Vector<T>(X.Rows);
 
@@ -257,13 +265,8 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                     }
                 }
 
-                // Regularization
+                // Normalize covariance first, then apply regularization
                 double epsilon = 1e-6;
-                for (int j = 0; j < d; j++)
-                {
-                    newCov[j, j] = NumOps.Add(newCov[j, j], NumOps.FromDouble(epsilon));
-                }
-
                 if (Nc > epsilon)
                 {
                     for (int j1 = 0; j1 < d; j1++)
@@ -272,6 +275,12 @@ public class GMMDetector<T> : AnomalyDetectorBase<T>
                         {
                             _covariances![c][j1, j2] = NumOps.Divide(newCov[j1, j2], NumOps.FromDouble(Nc));
                         }
+                    }
+
+                    // Apply regularization AFTER normalization
+                    for (int j = 0; j < d; j++)
+                    {
+                        _covariances![c][j, j] = NumOps.Add(_covariances[c][j, j], NumOps.FromDouble(epsilon));
                     }
                 }
             }

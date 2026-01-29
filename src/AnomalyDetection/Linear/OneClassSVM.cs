@@ -150,6 +150,14 @@ public class OneClassSVM<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         int numFeatures = X.Columns;
 
+        // One-class SVM requires at least 2 samples for meaningful optimization
+        if (n < 2)
+        {
+            throw new ArgumentException(
+                $"One-class SVM requires at least 2 samples, but got {n}.",
+                nameof(X));
+        }
+
         // Auto-detect gamma if not specified
         double effectiveGamma = _gamma > 0 ? _gamma : 1.0 / numFeatures;
 

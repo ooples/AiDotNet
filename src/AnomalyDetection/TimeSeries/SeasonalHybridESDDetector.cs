@@ -46,6 +46,8 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
     private double[]? _seasonalPattern;
     private double _trend;
     private double _residualStd;
+    private double _esdCriticalValue;
+    private int _nSamples;
 
     /// <summary>
     /// Gets the season length (period).
@@ -106,6 +108,15 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
         }
 
         int n = X.Rows;
+        _nSamples = n;
+
+        // Validate series length is sufficient for seasonal decomposition
+        if (n < _seasonLength)
+        {
+            throw new ArgumentException(
+                $"Time series length ({n}) must be at least the season length ({_seasonLength}).",
+                nameof(X));
+        }
 
         // Extract time series values
         var values = new double[n];
@@ -117,11 +128,70 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
         // Compute seasonal decomposition
         DecomposeTimeSeries(values);
 
+        // Compute ESD critical value based on maxAnomalies
+        int effectiveMaxAnomalies = _maxAnomalies ?? Math.Max(1, (int)(n * _contamination));
+        _esdCriticalValue = ComputeESDCriticalValue(n, effectiveMaxAnomalies);
+
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;
+    }
+
+    private double ComputeESDCriticalValue(int n, int maxAnomalies)
+    {
+        // Compute the critical value for the generalized ESD test
+        // Using approximation based on the t-distribution
+        // Critical value = t_(p,df) * (n-1) / sqrt((n-2 + t^2) * n)
+        // where p = alpha / (2 * (n - i + 1)) for iteration i
+
+        // For simplicity, use the first iteration's critical value
+        double p = _alpha / (2 * n);
+        int df = n - 2;
+        double tCritical = GetTCriticalApprox(p, df);
+
+        double criticalValue = (n - 1) * tCritical / Math.Sqrt((n - 2 + tCritical * tCritical) * n);
+        return criticalValue;
+    }
+
+    private double GetTCriticalApprox(double p, int df)
+    {
+        // Approximate t-distribution critical value using normal approximation for large df
+        if (df > 30)
+        {
+            // Use normal approximation
+            return GetZCriticalApprox(p);
+        }
+
+        // For smaller df, use a more accurate approximation
+        double z = GetZCriticalApprox(p);
+        double g1 = (z * z * z + z) / 4;
+        double g2 = ((5 * Math.Pow(z, 5)) + (16 * z * z * z) + (3 * z)) / 96;
+        double g3 = ((3 * Math.Pow(z, 7)) + (19 * Math.Pow(z, 5)) + (17 * z * z * z) - (15 * z)) / 384;
+
+        return z + g1 / df + g2 / (df * df) + g3 / (df * df * df);
+    }
+
+    private double GetZCriticalApprox(double p)
+    {
+        // Approximate inverse normal CDF using rational approximation
+        // For p close to 0, use the approximation for the upper tail
+        double sign = 1;
+        if (p > 0.5)
+        {
+            p = 1 - p;
+            sign = -1;
+        }
+
+        if (p < 1e-10) p = 1e-10;
+
+        double t = Math.Sqrt(-2 * Math.Log(p));
+        double c0 = 2.515517, c1 = 0.802853, c2 = 0.010328;
+        double d1 = 1.432788, d2 = 0.189269, d3 = 0.001308;
+
+        double z = t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
+        return sign * z;
     }
 
     /// <inheritdoc/>

@@ -70,6 +70,14 @@ public class OutlierRemovalAdapter<T, TInput, TOutput> : IOutlierRemoval<T, TInp
         // Convert to concrete types for anomaly detection
         var (inputMatrix, outputVector) = ConvertToMatrixVector(inputs, outputs);
 
+        // Validate that outputs length matches inputs rows
+        if (outputVector.Length != inputMatrix.Rows)
+        {
+            throw new ArgumentException(
+                $"Outputs length ({outputVector.Length}) must match inputs row count ({inputMatrix.Rows}).",
+                nameof(outputs));
+        }
+
         // Fit the detector if not already fitted
         if (!_detector.IsFitted)
         {

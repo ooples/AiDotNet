@@ -44,6 +44,7 @@ public class RandomSubspaceDetector<T> : AnomalyDetectorBase<T>
     private readonly int _maxFeatures;
     private List<IAnomalyDetector<T>>? _baseDetectors;
     private List<int[]>? _featureSubsets;
+    private int _nFeatures;
 
     /// <summary>
     /// Gets the number of estimators.
@@ -74,6 +75,12 @@ public class RandomSubspaceDetector<T> : AnomalyDetectorBase<T>
                 "NEstimators must be at least 1. Recommended is 20.");
         }
 
+        if (maxFeatures < -1 || maxFeatures == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxFeatures),
+                "MaxFeatures must be -1 (auto-detect) or >= 1. Use -1 for sqrt(n_features).");
+        }
+
         _nEstimators = nEstimators;
         _maxFeatures = maxFeatures;
     }
@@ -84,7 +91,8 @@ public class RandomSubspaceDetector<T> : AnomalyDetectorBase<T>
         ValidateInput(X);
 
         int n = X.Rows;
-        int d = X.Columns;
+        _nFeatures = X.Columns;
+        int d = _nFeatures;
 
         // Determine subspace size
         int subspaceSize = _maxFeatures > 0
@@ -152,6 +160,13 @@ public class RandomSubspaceDetector<T> : AnomalyDetectorBase<T>
     private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
     {
         ValidateInput(X);
+
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
 
         var allScores = new double[_nEstimators][];
 
