@@ -1,3 +1,5 @@
+using AiDotNet.Preprocessing.DataPreparation;
+
 namespace AiDotNet.DataProcessor;
 
 /// <summary>
@@ -6,14 +8,16 @@ namespace AiDotNet.DataProcessor;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> Data preprocessing is like preparing ingredients before cooking a meal. 
+/// <b>For Beginners:</b> Data preprocessing is like preparing ingredients before cooking a meal.
 /// Raw data often needs to be cleaned and transformed before a machine learning algorithm can use it effectively.
-/// 
-/// This class handles three important preprocessing steps:
-/// 1. Removing outliers - Getting rid of unusual data points that might confuse the algorithm
-/// 2. Normalizing data - Adjusting values so they're on similar scales (like converting inches and feet to all inches)
-/// 3. Selecting features - Choosing which information is most relevant (like deciding which ingredients to include in a recipe)
-/// 
+///
+/// This class handles two important preprocessing steps:
+/// 1. Normalizing data - Adjusting values so they're on similar scales (like converting inches and feet to all inches)
+/// 2. Selecting features - Choosing which information is most relevant (like deciding which ingredients to include in a recipe)
+///
+/// Note: Outlier removal is now handled separately via the DataPreparationPipeline configured through
+/// AiModelBuilder.ConfigureDataPreparation(). This provides a cleaner separation of concerns.
+///
 /// These steps help machine learning algorithms work better and learn more efficiently from your data.
 /// </para>
 /// </remarks>
@@ -30,11 +34,6 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
     private readonly IFeatureSelector<T, TInput> _featureSelector;
 
     /// <summary>
-    /// Component responsible for identifying and removing outliers from the dataset.
-    /// </summary>
-    private readonly IOutlierRemoval<T, TInput, TOutput> _outlierRemoval;
-
-    /// <summary>
     /// Configuration options for the data preprocessing operations.
     /// </summary>
     private readonly DataProcessorOptions _options;
@@ -44,7 +43,6 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
     /// </summary>
     /// <param name="normalizer">Component for normalizing data values.</param>
     /// <param name="featureSelector">Component for selecting relevant features.</param>
-    /// <param name="outlierRemoval">Component for removing outliers.</param>
     /// <param name="options">Optional configuration settings for data processing.</param>
     /// <remarks>
     /// <para>
@@ -52,16 +50,17 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
     /// Think of it like assembling a toolkit before starting a project:
     /// - The normalizer adjusts the scale of your data
     /// - The feature selector helps choose which parts of your data are most important
-    /// - The outlier removal tool identifies and removes unusual data points
     /// - The options parameter lets you customize how these tools work together
+    ///
+    /// Note: Outlier removal has been moved to the DataPreparationPipeline. Configure it via
+    /// AiModelBuilder.ConfigureDataPreparation() for a cleaner, more modular approach.
     /// </para>
     /// </remarks>
     public DefaultDataPreprocessor(INormalizer<T, TInput, TOutput> normalizer, IFeatureSelector<T, TInput> featureSelector,
-        IOutlierRemoval<T, TInput, TOutput> outlierRemoval, DataProcessorOptions? options = null)
+        DataProcessorOptions? options = null)
     {
         _normalizer = normalizer;
         _featureSelector = featureSelector;
-        _outlierRemoval = outlierRemoval;
         _options = options ?? new();
     }
 
@@ -93,7 +92,8 @@ public class DefaultDataPreprocessor<T, TInput, TOutput> : IDataPreprocessor<T, 
         NormalizationInfo<T, TInput, TOutput> normInfo = new();
         normInfo.Normalizer = _normalizer;
 
-        (X, y) = _outlierRemoval.RemoveOutliers(X, y);
+        // Note: Outlier removal is now handled separately via DataPreparationPipeline
+        // configured through AiModelBuilder.ConfigureDataPreparation()
 
         if (_options.NormalizeBeforeFeatureSelection)
         {
