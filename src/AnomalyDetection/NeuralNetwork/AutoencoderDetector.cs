@@ -212,34 +212,28 @@ public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
         _decoderWeights = new Matrix<T>(encodingDim, inputDim);
         _decoderBias = new Vector<T>(inputDim);
 
-        // Initialize encoder weights
-        for (int i = 0; i < inputDim; i++)
+        InitializeWeightMatrix(_encoderWeights, encoderStd);
+        InitializeBiasVector(_encoderBias);
+        InitializeWeightMatrix(_decoderWeights, decoderStd);
+        InitializeBiasVector(_decoderBias);
+    }
+
+    private void InitializeWeightMatrix(Matrix<T> weights, double stdDev)
+    {
+        for (int i = 0; i < weights.Rows; i++)
         {
-            for (int j = 0; j < encodingDim; j++)
+            for (int j = 0; j < weights.Columns; j++)
             {
-                _encoderWeights[i, j] = NumOps.FromDouble(SampleGaussian(0, encoderStd));
+                weights[i, j] = NumOps.FromDouble(SampleGaussian(0, stdDev));
             }
         }
+    }
 
-        // Initialize encoder bias to zero
-        for (int i = 0; i < encodingDim; i++)
+    private void InitializeBiasVector(Vector<T> bias)
+    {
+        for (int i = 0; i < bias.Length; i++)
         {
-            _encoderBias[i] = NumOps.Zero;
-        }
-
-        // Initialize decoder weights
-        for (int i = 0; i < encodingDim; i++)
-        {
-            for (int j = 0; j < inputDim; j++)
-            {
-                _decoderWeights[i, j] = NumOps.FromDouble(SampleGaussian(0, decoderStd));
-            }
-        }
-
-        // Initialize decoder bias to zero
-        for (int i = 0; i < inputDim; i++)
-        {
-            _decoderBias[i] = NumOps.Zero;
+            bias[i] = NumOps.Zero;
         }
     }
 

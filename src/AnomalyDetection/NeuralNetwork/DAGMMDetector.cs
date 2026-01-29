@@ -466,16 +466,70 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                     }
 
                     // Backprop through estimation network
-                    // For softmax, we compute gradient w.r.t. energy loss
-                    // Using a simplified gradient signal based on deviation from uniform
+                    // Compute energy-based gradient for end-to-end DAGMM training
                     var dGamma = new double[_numMixtures];
-                    double uniformProb = 1.0 / _numMixtures;
-                    for (int k = 0; k < _numMixtures; k++)
+
+                    // Compute GMM component log-likelihoods for this sample
+                    var componentLogLikelihood = new double[_numMixtures];
+                    double maxLogLik = double.MinValue;
+
+                    // Use current GMM parameters (if available) to compute responsibilities
+                    var phi = _phi;
+                    var mu = _mu;
+                    var sigma = _sigma;
+
+                    if (phi != null && mu != null && sigma != null)
                     {
-                        double g = gammaDouble[k];
-                        // Softmax derivative: g * (1 - g) for diagonal, -g_i * g_j for off-diagonal
-                        // Simplified: encourage diverse mixture usage
-                        dGamma[k] = (g - uniformProb) * 0.01;
+                        // Compute log-likelihood for each component
+                        for (int k = 0; k < _numMixtures; k++)
+                        {
+                            double logDet = 0;
+                            double mahal = 0;
+
+                            for (int d = 0; d < _zDim; d++)
+                            {
+                                logDet += Math.Log(sigma[k][d][d] + 1e-10);
+                                double diff = zcDouble[d] - mu[k][d];
+                                mahal += diff * diff / (sigma[k][d][d] + 1e-10);
+                            }
+
+                            // log N(z|mu_k, sigma_k) + log phi_k
+                            componentLogLikelihood[k] = -0.5 * (_zDim * Math.Log(2 * Math.PI) + logDet + mahal)
+                                                       + Math.Log(phi[k] + 1e-10);
+                            if (componentLogLikelihood[k] > maxLogLik)
+                                maxLogLik = componentLogLikelihood[k];
+                        }
+
+                        // Compute soft responsibilities via softmax over log-likelihoods
+                        var responsibilities = new double[_numMixtures];
+                        double sumResp = 0;
+                        for (int k = 0; k < _numMixtures; k++)
+                        {
+                            responsibilities[k] = Math.Exp(componentLogLikelihood[k] - maxLogLik);
+                            sumResp += responsibilities[k];
+                        }
+                        for (int k = 0; k < _numMixtures; k++)
+                        {
+                            responsibilities[k] /= (sumResp + 1e-10);
+                        }
+
+                        // Energy gradient: encourage gamma to match GMM responsibilities
+                        // dGamma[k] = (gamma[k] - responsibility[k]) is the gradient to minimize KL divergence
+                        // This provides end-to-end training signal from GMM to estimation network
+                        double energyWeight = 0.1; // Weight for energy loss relative to reconstruction
+                        for (int k = 0; k < _numMixtures; k++)
+                        {
+                            dGamma[k] = energyWeight * (gammaDouble[k] - responsibilities[k]);
+                        }
+                    }
+                    else
+                    {
+                        // GMM not yet initialized, use uniform target as fallback
+                        double uniformProb = 1.0 / _numMixtures;
+                        for (int k = 0; k < _numMixtures; k++)
+                        {
+                            dGamma[k] = (gammaDouble[k] - uniformProb) * 0.01;
+                        }
                     }
 
                     var dEstH = new double[_hiddenDim];

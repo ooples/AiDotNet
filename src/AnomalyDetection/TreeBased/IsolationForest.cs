@@ -288,15 +288,12 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
 
     private double PathLength(Vector<T> point, IsolationTree node, int currentDepth)
     {
-        if (node.IsExternal)
-        {
-            // Add adjustment for external node based on size
-            return currentDepth + AveragePathLength(node.Size);
-        }
-
-        return NumOps.LessThan(point[node.SplitFeature], node.SplitValue)
-            ? PathLength(point, node.Left!, currentDepth + 1)
-            : PathLength(point, node.Right!, currentDepth + 1);
+        // External nodes add adjustment based on size, internal nodes recurse
+        return node.IsExternal
+            ? currentDepth + AveragePathLength(node.Size)
+            : NumOps.LessThan(point[node.SplitFeature], node.SplitValue)
+                ? PathLength(point, node.Left!, currentDepth + 1)
+                : PathLength(point, node.Right!, currentDepth + 1);
     }
 
     /// <summary>
