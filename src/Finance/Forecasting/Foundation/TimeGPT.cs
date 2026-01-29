@@ -924,6 +924,15 @@ public class TimeGPT<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Fine-tuning is only supported in native mode.");
 
+        if (trainingData is null)
+            throw new ArgumentNullException(nameof(trainingData));
+        if (targets is null)
+            throw new ArgumentNullException(nameof(targets));
+        if (trainingData.Count == 0 || targets.Count == 0)
+            throw new ArgumentException("Fine-tuning requires non-empty training data and targets.");
+        if (trainingData.Count != targets.Count)
+            throw new ArgumentException("Training data and targets must have the same number of samples.");
+
         if (_fineTuningSteps <= 0)
             return;
 
@@ -957,17 +966,18 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     {
         var result = new Tensor<T>(input.Shape);
         int contextLen = _contextLength;
+        int steps = Math.Min(stepsUsed, contextLen);
 
         // Shift old values left
-        for (int i = 0; i < contextLen - stepsUsed; i++)
+        for (int i = 0; i < contextLen - steps; i++)
         {
-            result.Data.Span[i] = input.Data.Span[i + stepsUsed];
+            result.Data.Span[i] = input.Data.Span[i + steps];
         }
 
         // Append predictions
-        for (int i = 0; i < stepsUsed && i < predictions.Length; i++)
+        for (int i = 0; i < steps && i < predictions.Length; i++)
         {
-            result.Data.Span[contextLen - stepsUsed + i] = predictions.Data.Span[i];
+            result.Data.Span[contextLen - steps + i] = predictions.Data.Span[i];
         }
 
         return result;

@@ -792,11 +792,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
         var grad = gradOutput;
 
         // Backward through distribution heads
-        if (_sigmaProjection is not null)
-        {
-            grad = _sigmaProjection.Backward(grad);
-        }
-
+        // Forward returns mu only, so propagate gradients through mu projection.
         if (_muProjection is not null)
         {
             grad = _muProjection.Backward(grad);

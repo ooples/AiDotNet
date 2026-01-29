@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Data.Loaders;
-using AiDotNet.Helpers;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.Finance.Data;
@@ -186,14 +185,10 @@ public sealed class FinancialDataLoader<T> : InputOutputDataLoaderBase<T, Tensor
 
         var (trainSize, valSize, _) = ComputeSplitSizes(_sampleCount, trainRatio, validationRatio);
 
-        var random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
-        var shuffledIndices = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
-
-        var trainIndices = shuffledIndices.Take(trainSize).ToArray();
-        var valIndices = shuffledIndices.Skip(trainSize).Take(valSize).ToArray();
-        var testIndices = shuffledIndices.Skip(trainSize + valSize).ToArray();
+        // Sequential split to preserve temporal order and prevent leakage
+        var trainIndices = Enumerable.Range(0, trainSize).ToArray();
+        var valIndices = Enumerable.Range(trainSize, valSize).ToArray();
+        var testIndices = Enumerable.Range(trainSize + valSize, _sampleCount - trainSize - valSize).ToArray();
 
         var trainLoader = CreateSubsetLoader(trainIndices);
         var valLoader = CreateSubsetLoader(valIndices);

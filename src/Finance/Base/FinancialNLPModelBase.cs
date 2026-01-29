@@ -161,17 +161,63 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
         {
             var tokenIds = Tokenize(texts[i]);
             var prediction = AnalyzeSentiment(Tensor<T>.FromVector(new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray())));
-            
+
+            if (prediction.Length == 0)
+            {
+                results[i] = new SentimentResult<T>
+                {
+                    OriginalText = texts[i],
+                    PredictedClass = "unknown",
+                    Confidence = NumOps.Zero,
+                    ClassProbabilities = new Dictionary<string, T>()
+                };
+                continue;
+            }
+
+            int classCount = Math.Max(1, NumSentimentClasses);
+            int count = Math.Min(classCount, prediction.Length);
+            int bestIdx = 0;
+            T bestVal = prediction.Data.Span[0];
+            var probabilities = new Dictionary<string, T>();
+
+            for (int c = 0; c < count; c++)
+            {
+                var value = prediction.Data.Span[c];
+                if (NumOps.GreaterThan(value, bestVal))
+                {
+                    bestVal = value;
+                    bestIdx = c;
+                }
+
+                probabilities[GetSentimentLabel(c, classCount)] = value;
+            }
+
             results[i] = new SentimentResult<T>
             {
                 OriginalText = texts[i],
-                PredictedClass = "neutral", // Simplified placeholder
-                Confidence = prediction.Data.Span[0], // Simplified
-                ClassProbabilities = new Dictionary<string, T> { ["neutral"] = prediction.Data.Span[0] }
+                PredictedClass = GetSentimentLabel(bestIdx, classCount),
+                Confidence = bestVal,
+                ClassProbabilities = probabilities
             };
         }
 
         return results;
+    }
+
+    private static string GetSentimentLabel(int index, int classCount)
+    {
+        if (classCount == 3)
+        {
+            return index switch
+            {
+                0 => "negative",
+                1 => "neutral",
+                2 => "positive",
+                _ => $"class_{index}"
+            };
+        }
+
+        return $"class_{index}";
     }
 
     /// <inheritdoc/>

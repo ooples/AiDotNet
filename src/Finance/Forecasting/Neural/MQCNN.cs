@@ -143,15 +143,15 @@ public class MQCNN<T> : ForecastingModelBase<T>
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly int _lookbackWindow;
-    private readonly int _forecastHorizon;
-    private readonly int _numFeatures;
-    private readonly double[] _quantiles;
-    private readonly int _encoderChannels;
-    private readonly int _decoderChannels;
-    private readonly int _numEncoderLayers;
-    private readonly int _numDecoderLayers;
-    private readonly double _dropout;
+    private int _lookbackWindow;
+    private int _forecastHorizon;
+    private int _numFeatures;
+    private double[] _quantiles;
+    private int _encoderChannels;
+    private int _decoderChannels;
+    private int _numEncoderLayers;
+    private int _numDecoderLayers;
+    private double _dropout;
 
     #endregion
 
@@ -588,17 +588,18 @@ public class MQCNN<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // lookbackWindow
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numFeatures
+        _lookbackWindow = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
         int numQuantiles = reader.ReadInt32();
+        _quantiles = new double[numQuantiles];
         for (int i = 0; i < numQuantiles; i++)
-            _ = reader.ReadDouble(); // quantile value
-        _ = reader.ReadInt32(); // encoderChannels
-        _ = reader.ReadInt32(); // decoderChannels
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numDecoderLayers
-        _ = reader.ReadDouble(); // dropout
+            _quantiles[i] = reader.ReadDouble();
+        _encoderChannels = reader.ReadInt32();
+        _decoderChannels = reader.ReadInt32();
+        _numEncoderLayers = reader.ReadInt32();
+        _numDecoderLayers = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
     }
 
     #endregion

@@ -560,6 +560,10 @@ public class TimeLLM<T> : ForecastingModelBase<T>
         // For quantile forecasts, we generate samples through dropout variation
         if (quantiles is not null && quantiles.Length > 0)
         {
+            if (!_useNativeMode)
+            {
+                return output;
+            }
             return GenerateQuantilePredictions(historicalData, quantiles);
         }
 
@@ -779,6 +783,11 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> GenerateQuantilePredictions(Tensor<T> input, double[] quantiles)
     {
+        if (!_useNativeMode)
+        {
+            return ForecastOnnx(input);
+        }
+
         int numSamples = 100;
         var samples = new List<Tensor<T>>();
 
@@ -832,19 +841,46 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
+        int contextLen = input.Shape.Length > 1 ? input.Shape[1] : _contextLength;
+        int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
+        int steps = Math.Min(stepsUsed, contextLen);
+
         var result = new Tensor<T>(input.Shape);
-        int contextLen = _contextLength;
 
-        // Shift old values left
-        for (int i = 0; i < contextLen - stepsUsed; i++)
-        {
-            result.Data.Span[i] = input.Data.Span[i + stepsUsed];
-        }
+        int predSteps = predictions.Shape.Length > 1 ? predictions.Shape[1] : predictions.Length / Math.Max(1, batchSize);
+        int predFeatures = predictions.Shape.Length > 2 ? predictions.Shape[2] : 1;
+        int featureCopy = Math.Min(features, predFeatures);
 
-        // Append predictions
-        for (int i = 0; i < stepsUsed && i < predictions.Length; i++)
+        for (int b = 0; b < batchSize; b++)
         {
-            result.Data.Span[contextLen - stepsUsed + i] = predictions.Data.Span[i];
+            for (int t = 0; t < contextLen - steps; t++)
+            {
+                for (int f = 0; f < features; f++)
+                {
+                    int srcIdx = b * contextLen * features + (t + steps) * features + f;
+                    int dstIdx = b * contextLen * features + t * features + f;
+                    if (srcIdx < input.Length && dstIdx < result.Length)
+                    {
+                        result.Data.Span[dstIdx] = input.Data.Span[srcIdx];
+                    }
+                }
+            }
+
+            for (int t = 0; t < steps && t < predSteps; t++)
+            {
+                for (int f = 0; f < featureCopy; f++)
+                {
+                    int predIdx = predFeatures > 1
+                        ? b * predSteps * predFeatures + t * predFeatures + f
+                        : b * predSteps + t;
+                    int dstIdx = b * contextLen * features + (contextLen - steps + t) * features + f;
+                    if (predIdx < predictions.Length && dstIdx < result.Length)
+                    {
+                        result.Data.Span[dstIdx] = predictions.Data.Span[predIdx];
+                    }
+                }
+            }
         }
 
         return result;
@@ -863,17 +899,57 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
-        var result = new Tensor<T>(new[] { 1, totalSteps, 1 });
+        if (predictions.Count == 0)
+        {
+            return new Tensor<T>(new[] { 1, totalSteps });
+        }
+
+        int batchSize = predictions[0].Shape.Length > 1 ? predictions[0].Shape[0] : 1;
+        int predFeatures = predictions[0].Shape.Length > 2 ? predictions[0].Shape[2] : 1;
+        bool hasFeatureDim = predictions[0].Shape.Length > 2;
+        var resultShape = hasFeatureDim
+            ? new[] { batchSize, totalSteps, predFeatures }
+            : new[] { batchSize, totalSteps };
+
+        var result = new Tensor<T>(resultShape);
         int position = 0;
 
         foreach (var pred in predictions)
         {
-            int toCopy = Math.Min(pred.Length, totalSteps - position);
-            for (int i = 0; i < toCopy; i++)
+            int predSteps = pred.Shape.Length > 1 ? pred.Shape[1] : pred.Length / Math.Max(1, batchSize);
+            int toCopy = Math.Min(predSteps, totalSteps - position);
+
+            for (int b = 0; b < batchSize; b++)
             {
-                result.Data.Span[position + i] = pred.Data.Span[i];
+                for (int t = 0; t < toCopy; t++)
+                {
+                    if (hasFeatureDim)
+                    {
+                        for (int f = 0; f < predFeatures; f++)
+                        {
+                            int srcIdx = b * predSteps * predFeatures + t * predFeatures + f;
+                            int dstIdx = b * totalSteps * predFeatures + (position + t) * predFeatures + f;
+                            if (srcIdx < pred.Length && dstIdx < result.Length)
+                            {
+                                result.Data.Span[dstIdx] = pred.Data.Span[srcIdx];
+                            }
+                        }
+                    }
+                    else
+                    {
+                        int srcIdx = b * predSteps + t;
+                        int dstIdx = b * totalSteps + position + t;
+                        if (srcIdx < pred.Length && dstIdx < result.Length)
+                        {
+                            result.Data.Span[dstIdx] = pred.Data.Span[srcIdx];
+                        }
+                    }
+                }
             }
+
             position += toCopy;
+            if (position >= totalSteps)
+                break;
         }
 
         return result;

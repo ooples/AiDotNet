@@ -146,6 +146,9 @@ public class Chronos<T> : ForecastingModelBase<T>
     private readonly double _dropout;
     private readonly double _temperature;
     private readonly string _modelSize;
+    private T _lastTokenMin = default!;
+    private T _lastTokenRange = default!;
+    private bool _hasTokenScale;
 
     #endregion
 
@@ -894,6 +897,10 @@ public class Chronos<T> : ForecastingModelBase<T>
         if (NumOps.Equals(range, NumOps.Zero))
             range = NumOps.One;
 
+        _lastTokenMin = min;
+        _lastTokenRange = range;
+        _hasTokenScale = true;
+
         // Create one-hot encoded tokens
         var tokenized = new Tensor<T>(new[] { values.Length * _numTokens });
 
@@ -946,9 +953,19 @@ public class Chronos<T> : ForecastingModelBase<T>
                 }
             }
 
-            // Convert bin index to value (in [-1, 1] range)
-            double normalizedValue = (maxIdx / (double)(_numTokens - 1)) * 2 - 1;
-            result.Data.Span[step] = NumOps.FromDouble(normalizedValue);
+            double scaledValue = maxIdx / (double)(_numTokens - 1);
+            if (_hasTokenScale)
+            {
+                double minVal = NumOps.ToDouble(_lastTokenMin);
+                double rangeVal = NumOps.ToDouble(_lastTokenRange);
+                result.Data.Span[step] = NumOps.FromDouble((scaledValue * rangeVal) + minVal);
+            }
+            else
+            {
+                // Fallback to normalized range if scale is unknown
+                double normalizedValue = (scaledValue * 2) - 1;
+                result.Data.Span[step] = NumOps.FromDouble(normalizedValue);
+            }
         }
 
         return result;
@@ -980,7 +997,18 @@ public class Chronos<T> : ForecastingModelBase<T>
             {
                 // Sample from softmax distribution with temperature
                 int tokenIdx = SampleFromLogits(logits, step, rand);
-                sample[step] = (tokenIdx / (double)(_numTokens - 1)) * 2 - 1;
+                double scaledValue = tokenIdx / (double)(_numTokens - 1);
+
+                if (_hasTokenScale)
+                {
+                    double minVal = NumOps.ToDouble(_lastTokenMin);
+                    double rangeVal = NumOps.ToDouble(_lastTokenRange);
+                    sample[step] = (scaledValue * rangeVal) + minVal;
+                }
+                else
+                {
+                    sample[step] = (scaledValue * 2) - 1;
+                }
             }
 
             allSamples.Add(sample);

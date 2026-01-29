@@ -133,16 +133,16 @@ public class LagLlama<T> : ForecastingModelBase<T>
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly int _contextLength;
-    private readonly int _forecastHorizon;
-    private readonly int _hiddenDimension;
-    private readonly int _numLayers;
-    private readonly int _numHeads;
-    private readonly int _intermediateSize;
-    private readonly int[] _lagIndices;
-    private readonly double _dropout;
-    private readonly string _distributionOutput;
-    private readonly bool _useRoPE;
+    private int _contextLength;
+    private int _forecastHorizon;
+    private int _hiddenDimension;
+    private int _numLayers;
+    private int _numHeads;
+    private int _intermediateSize;
+    private int[] _lagIndices;
+    private double _dropout;
+    private string _distributionOutput;
+    private bool _useRoPE;
 
     #endregion
 
@@ -568,18 +568,19 @@ public class LagLlama<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // contextLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // intermediateSize
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _intermediateSize = reader.ReadInt32();
         int lagCount = reader.ReadInt32();
+        _lagIndices = new int[lagCount];
         for (int i = 0; i < lagCount; i++)
-            _ = reader.ReadInt32();
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadString(); // distributionOutput
-        _ = reader.ReadBoolean(); // useRoPE
+            _lagIndices[i] = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _distributionOutput = reader.ReadString();
+        _useRoPE = reader.ReadBoolean();
     }
 
     #endregion
@@ -971,27 +972,66 @@ public class LagLlama<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        // For Lag-Llama, we need to update the lag features
-        // Simplified: shift the context and add predictions
+        // For Lag-Llama, update lag features after shifting.
         var newInput = new Tensor<T>(input.Shape);
 
         int featureSize = 1 + _lagIndices.Length; // value + lags
-        int shift = stepsUsed * featureSize;
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length / featureSize;
 
-        // Shift existing data
-        for (int i = 0; i < input.Length - shift; i++)
-        {
-            if (i + shift < input.Length)
-                newInput.Data.Span[i] = input.Data.Span[i + shift];
-        }
+        int steps = Math.Min(stepsUsed, seqLen);
+        int shift = steps * featureSize;
 
-        // Add predictions at the end
-        for (int i = 0; i < stepsUsed && i < predictions.Length; i++)
+        for (int b = 0; b < batchSize; b++)
         {
-            int targetIdx = input.Length - shift + i * featureSize;
-            if (targetIdx < input.Length)
+            int baseOffset = b * seqLen * featureSize;
+
+            // Shift existing data
+            for (int i = 0; i < (seqLen * featureSize) - shift; i++)
             {
-                newInput.Data.Span[targetIdx] = predictions[i];
+                int srcIdx = baseOffset + i + shift;
+                int dstIdx = baseOffset + i;
+                if (srcIdx < input.Length && dstIdx < newInput.Length)
+                {
+                    newInput.Data.Span[dstIdx] = input.Data.Span[srcIdx];
+                }
+            }
+
+            // Add predictions at the end (value feature only)
+            for (int i = 0; i < steps; i++)
+            {
+                int predIdx = b * steps + i;
+                int targetIdx = baseOffset + (seqLen - steps + i) * featureSize;
+                if (predIdx < predictions.Length && targetIdx < newInput.Length)
+                {
+                    newInput.Data.Span[targetIdx] = predictions.Data.Span[predIdx];
+                }
+            }
+
+            // Recompute lag features based on updated values
+            for (int t = 0; t < seqLen; t++)
+            {
+                int valueIdx = baseOffset + t * featureSize;
+
+                for (int l = 0; l < _lagIndices.Length; l++)
+                {
+                    int lag = _lagIndices[l];
+                    int lagFeatureIdx = valueIdx + 1 + l;
+                    int sourceStep = t - lag;
+
+                    if (lagFeatureIdx >= newInput.Length)
+                        continue;
+
+                    if (sourceStep >= 0)
+                    {
+                        int sourceIdx = baseOffset + sourceStep * featureSize;
+                        newInput.Data.Span[lagFeatureIdx] = newInput.Data.Span[sourceIdx];
+                    }
+                    else
+                    {
+                        newInput.Data.Span[lagFeatureIdx] = NumOps.Zero;
+                    }
+                }
             }
         }
 

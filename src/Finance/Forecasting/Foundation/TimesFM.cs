@@ -928,19 +928,24 @@ public class TimesFM<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
+        int batchSize = input.Shape.Length > 0 ? input.Shape[0] : 1;
+        if (batchSize > 1)
+            throw new InvalidOperationException("TimesFM autoregressive helpers currently support batchSize = 1.");
+
         var newInput = new Tensor<T>(input.Shape);
+        int steps = Math.Min(stepsUsed, _contextLength);
 
         // Shift existing data left by stepsUsed
-        for (int i = 0; i < _contextLength - stepsUsed; i++)
+        for (int i = 0; i < _contextLength - steps; i++)
         {
-            if (i + stepsUsed < input.Length)
-                newInput.Data.Span[i] = input.Data.Span[i + stepsUsed];
+            if (i + steps < input.Length)
+                newInput.Data.Span[i] = input.Data.Span[i + steps];
         }
 
         // Fill end with predictions
-        for (int i = 0; i < stepsUsed && i < predictions.Length; i++)
+        for (int i = 0; i < steps && i < predictions.Length; i++)
         {
-            int targetIdx = _contextLength - stepsUsed + i;
+            int targetIdx = _contextLength - steps + i;
             if (targetIdx < _contextLength)
             {
                 newInput.Data.Span[targetIdx] = predictions[i];
@@ -961,6 +966,13 @@ public class TimesFM<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
+        if (predictions.Count > 0)
+        {
+            int batchSize = predictions[0].Shape.Length > 0 ? predictions[0].Shape[0] : 1;
+            if (batchSize > 1)
+                throw new InvalidOperationException("TimesFM autoregressive helpers currently support batchSize = 1.");
+        }
+
         var result = new Tensor<T>(new[] { totalSteps });
 
         int resultIdx = 0;

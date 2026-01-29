@@ -403,10 +403,10 @@ public class DeepState<T> : ForecastingModelBase<T>
     protected override void ValidateCustomLayers(List<ILayer<T>> layers)
     {
         base.ValidateCustomLayers(layers);
-        if (layers.Count < 6)
+        if (layers.Count < 7)
         {
             throw new ArgumentException(
-                "DeepState requires at least 6 layers: input, RNN, transition, observation, initial state, evolution, and output.",
+                "DeepState requires at least 7 layers: input, RNN, transition, observation, initial state, evolution, and output.",
                 nameof(layers));
         }
     }
@@ -767,10 +767,21 @@ public class DeepState<T> : ForecastingModelBase<T>
         if (_initialStateLayer is not null)
             initialState = _initialStateLayer.Forward(rnnOutput);
 
-        // State evolution
+        // State evolution (incorporate transition parameters if present)
         current = initialState ?? rnnOutput;
+        if (transitionParams is not null)
+        {
+            current = AddTensors(current, transitionParams);
+        }
+
         if (_stateEvolutionLayer is not null)
             current = _stateEvolutionLayer.Forward(current);
+
+        // Observation adjustment before output
+        if (observationParams is not null)
+        {
+            current = AddTensors(current, observationParams);
+        }
 
         // Output projection
         if (_outputLayer is not null)
@@ -798,29 +809,50 @@ public class DeepState<T> : ForecastingModelBase<T>
         if (_outputLayer is not null)
             current = _outputLayer.Backward(current);
 
+        Tensor<T>? rnnGradient = null;
+
+        // Observation layer backward (shares gradient with main path)
+        if (_observationLayer is not null)
+        {
+            var obsGrad = _observationLayer.Backward(current);
+            rnnGradient = obsGrad;
+        }
+
         // State evolution backward
         if (_stateEvolutionLayer is not null)
             current = _stateEvolutionLayer.Backward(current);
 
-        // SSM parameter layers backward
-        // For simplicity, we pass gradient through initial state path
-        if (_initialStateLayer is not null)
-            current = _initialStateLayer.Backward(current);
+        // Transition layer backward (shares gradient with main path)
+        if (_transitionLayer is not null)
+        {
+            var transGrad = _transitionLayer.Backward(current);
+            rnnGradient = rnnGradient == null ? transGrad : AddTensors(rnnGradient, transGrad);
+        }
 
-        // Note: Full DeepState would also backprop through transition/observation
-        // but this simplified version focuses on the main path
+        // Initial state path backward
+        if (_initialStateLayer is not null)
+        {
+            var initGrad = _initialStateLayer.Backward(current);
+            rnnGradient = rnnGradient == null ? initGrad : AddTensors(rnnGradient, initGrad);
+        }
+        else
+        {
+            rnnGradient = rnnGradient == null ? current : AddTensors(rnnGradient, current);
+        }
+
+        var gradToRnn = rnnGradient ?? current;
 
         // RNN layers backward
         for (int i = _rnnLayers.Count - 1; i >= 0; i--)
         {
-            current = _rnnLayers[i].Backward(current);
+            gradToRnn = _rnnLayers[i].Backward(gradToRnn);
         }
 
         // Input projection backward
         if (_inputProjection is not null)
-            current = _inputProjection.Backward(current);
+            gradToRnn = _inputProjection.Backward(gradToRnn);
 
-        return current;
+        return gradToRnn;
     }
 
     #endregion
@@ -887,6 +919,27 @@ public class DeepState<T> : ForecastingModelBase<T>
     #region Helper Methods
 
     /// <summary>
+    /// Adds two tensors element-wise.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This combines gradients or activations by adding them together.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Length != b.Length)
+            return a;
+
+        var result = new Tensor<T>(a.Shape);
+        for (int i = 0; i < a.Length; i++)
+        {
+            result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Shifts input tensor by incorporating predictions for autoregressive forecasting.
     /// </summary>
     /// <remarks>
@@ -897,21 +950,39 @@ public class DeepState<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
         int totalElements = _lookbackWindow * _numFeatures;
         var newInput = new Tensor<T>(input.Shape);
 
-        int shift = stepsUsed * _numFeatures;
-        for (int i = 0; i < totalElements - shift; i++)
-        {
-            newInput.Data.Span[i] = input.Data.Span[i + shift];
-        }
+        int steps = Math.Min(stepsUsed, _lookbackWindow);
+        int shift = steps * _numFeatures;
 
-        for (int i = 0; i < stepsUsed && i < predictions.Length; i++)
+        int predSteps = predictions.Shape.Length > 1
+            ? predictions.Shape[1]
+            : predictions.Length / Math.Max(1, batchSize);
+
+        for (int b = 0; b < batchSize; b++)
         {
-            int targetIdx = totalElements - shift + i * _numFeatures;
-            if (targetIdx < totalElements)
+            int baseOffset = b * totalElements;
+
+            for (int i = 0; i < totalElements - shift; i++)
             {
-                newInput.Data.Span[targetIdx] = predictions[i];
+                int srcIdx = baseOffset + i + shift;
+                int dstIdx = baseOffset + i;
+                if (srcIdx < input.Length && dstIdx < newInput.Length)
+                {
+                    newInput.Data.Span[dstIdx] = input.Data.Span[srcIdx];
+                }
+            }
+
+            for (int i = 0; i < steps && i < predSteps; i++)
+            {
+                int predIdx = b * predSteps + i;
+                int targetIdx = baseOffset + (totalElements - shift) + i * _numFeatures;
+                if (predIdx < predictions.Length && targetIdx < newInput.Length)
+                {
+                    newInput.Data.Span[targetIdx] = predictions.Data.Span[predIdx];
+                }
             }
         }
 
@@ -929,23 +1000,35 @@ public class DeepState<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
-        var result = new Tensor<T>(new[] { totalSteps });
+        if (predictions.Count == 0)
+        {
+            return new Tensor<T>(new[] { 1, totalSteps });
+        }
 
-        int resultIdx = 0;
-        int stepsAdded = 0;
+        int batchSize = predictions[0].Shape.Length > 1 ? predictions[0].Shape[0] : 1;
+        var result = new Tensor<T>(new[] { batchSize, totalSteps });
+        int currentStep = 0;
 
         foreach (var pred in predictions)
         {
-            int stepsToAdd = Math.Min(_forecastHorizon, totalSteps - stepsAdded);
+            int predSteps = pred.Shape.Length > 1 ? pred.Shape[1] : pred.Length / batchSize;
+            int stepsToCopy = Math.Min(predSteps, totalSteps - currentStep);
 
-            for (int i = 0; i < stepsToAdd && resultIdx < totalSteps; i++)
+            for (int b = 0; b < batchSize; b++)
             {
-                if (i < pred.Length)
-                    result.Data.Span[resultIdx++] = pred[i];
+                for (int t = 0; t < stepsToCopy; t++)
+                {
+                    int srcIdx = b * predSteps + t;
+                    int dstIdx = b * totalSteps + currentStep + t;
+                    if (srcIdx < pred.Length && dstIdx < result.Length)
+                    {
+                        result.Data.Span[dstIdx] = pred.Data.Span[srcIdx];
+                    }
+                }
             }
 
-            stepsAdded += stepsToAdd;
-            if (stepsAdded >= totalSteps)
+            currentStep += stepsToCopy;
+            if (currentStep >= totalSteps)
                 break;
         }
 

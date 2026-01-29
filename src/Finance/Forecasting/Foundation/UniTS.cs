@@ -283,7 +283,7 @@ public class UniTS<T> : ForecastingModelBase<T>
         _numHeads = options.NumHeads;
         _convKernelSizes = options.ConvKernelSizes ?? new[] { 3, 5, 7 };
         _dropout = options.DropoutRate;
-        _taskType = options.TaskType;
+        _taskType = NormalizeTaskType(options.TaskType);
         _numClasses = options.NumClasses;
         _numFeatures = 1;
 
@@ -327,7 +327,7 @@ public class UniTS<T> : ForecastingModelBase<T>
         _numHeads = options.NumHeads;
         _convKernelSizes = options.ConvKernelSizes ?? new[] { 3, 5, 7 };
         _dropout = options.DropoutRate;
-        _taskType = options.TaskType;
+        _taskType = NormalizeTaskType(options.TaskType);
         _numClasses = options.NumClasses;
         _numFeatures = numFeatures;
 
@@ -578,6 +578,10 @@ public class UniTS<T> : ForecastingModelBase<T>
         // For quantile forecasts, we generate samples through dropout variation
         if (quantiles is not null && quantiles.Length > 0)
         {
+            if (!_useNativeMode)
+            {
+                return output;
+            }
             return GenerateQuantilePredictions(historicalData, quantiles);
         }
 
@@ -782,6 +786,13 @@ public class UniTS<T> : ForecastingModelBase<T>
 
     #region Model-Specific Processing
 
+    private static string NormalizeTaskType(string? taskType)
+    {
+        return string.IsNullOrWhiteSpace(taskType)
+            ? "forecasting"
+            : taskType.Trim().ToLowerInvariant();
+    }
+
     /// <summary>
     /// Generates quantile predictions through Monte Carlo dropout.
     /// </summary>
@@ -796,6 +807,11 @@ public class UniTS<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> GenerateQuantilePredictions(Tensor<T> input, double[] quantiles)
     {
+        if (!_useNativeMode)
+        {
+            return ForecastOnnx(input);
+        }
+
         int numSamples = 100;
         var samples = new List<Tensor<T>>();
 
@@ -851,17 +867,18 @@ public class UniTS<T> : ForecastingModelBase<T>
     {
         var result = new Tensor<T>(input.Shape);
         int contextLen = _contextLength;
+        int steps = Math.Min(stepsUsed, contextLen);
 
         // Shift old values left
-        for (int i = 0; i < contextLen - stepsUsed; i++)
+        for (int i = 0; i < contextLen - steps; i++)
         {
-            result.Data.Span[i] = input.Data.Span[i + stepsUsed];
+            result.Data.Span[i] = input.Data.Span[i + steps];
         }
 
         // Append predictions
-        for (int i = 0; i < stepsUsed && i < predictions.Length; i++)
+        for (int i = 0; i < steps && i < predictions.Length; i++)
         {
-            result.Data.Span[contextLen - stepsUsed + i] = predictions.Data.Span[i];
+            result.Data.Span[contextLen - steps + i] = predictions.Data.Span[i];
         }
 
         return result;
@@ -909,7 +926,7 @@ public class UniTS<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Classify(Tensor<T> input)
     {
-        if (_taskType.ToLowerInvariant() != "classification")
+        if (_taskType != "classification")
         {
             throw new InvalidOperationException(
                 $"Classification is only supported when TaskType is 'classification'. Current TaskType: {_taskType}");
@@ -934,7 +951,7 @@ public class UniTS<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> DetectAnomalies(Tensor<T> input)
     {
-        if (_taskType.ToLowerInvariant() != "anomaly")
+        if (_taskType != "anomaly")
         {
             throw new InvalidOperationException(
                 $"Anomaly detection is only supported when TaskType is 'anomaly'. Current TaskType: {_taskType}");
@@ -967,7 +984,7 @@ public class UniTS<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Impute(Tensor<T> input, Tensor<T>? mask = null)
     {
-        if (_taskType.ToLowerInvariant() != "imputation")
+        if (_taskType != "imputation")
         {
             throw new InvalidOperationException(
                 $"Imputation is only supported when TaskType is 'imputation'. Current TaskType: {_taskType}");
@@ -1007,6 +1024,11 @@ public class UniTS<T> : ForecastingModelBase<T>
     private Tensor<T> ApplySoftmax(Tensor<T> input)
     {
         var result = new Tensor<T>(input.Shape);
+
+        if (input.Length == 0)
+        {
+            return result;
+        }
 
         // Find max for numerical stability
         T maxVal = input.Data.Span[0];

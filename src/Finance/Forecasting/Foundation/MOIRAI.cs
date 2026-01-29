@@ -118,67 +118,67 @@ public class MOIRAI<T> : ForecastingModelBase<T>
     /// <summary>
     /// Context length for the input sequence.
     /// </summary>
-    private readonly int _contextLength;
+    private int _contextLength;
 
     /// <summary>
     /// Forecast horizon for predictions.
     /// </summary>
-    private readonly int _forecastHorizon;
+    private int _forecastHorizon;
 
     /// <summary>
     /// Patch sizes for multi-scale patching.
     /// </summary>
-    private readonly int[] _patchSizes;
+    private int[] _patchSizes;
 
     /// <summary>
     /// Hidden dimension of the transformer.
     /// </summary>
-    private readonly int _hiddenDimension;
+    private int _hiddenDimension;
 
     /// <summary>
     /// Number of transformer layers.
     /// </summary>
-    private readonly int _numLayers;
+    private int _numLayers;
 
     /// <summary>
     /// Number of attention heads.
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
     /// Intermediate size for FFN.
     /// </summary>
-    private readonly int _intermediateSize;
+    private int _intermediateSize;
 
     /// <summary>
     /// Number of mixture components.
     /// </summary>
-    private readonly int _numMixtures;
+    private int _numMixtures;
 
     /// <summary>
     /// Dropout rate.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     /// <summary>
     /// Mask ratio for training.
     /// </summary>
-    private readonly double _maskRatio;
+    private double _maskRatio;
 
     /// <summary>
     /// Number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     /// <summary>
     /// Total number of patches across all scales.
     /// </summary>
-    private readonly int _totalPatches;
+    private int _totalPatches;
 
     /// <summary>
     /// Model size variant.
     /// </summary>
-    private readonly string _modelSize;
+    private string _modelSize;
 
     #endregion
 
@@ -558,22 +558,29 @@ public class MOIRAI<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // contextLength
-        _ = reader.ReadInt32(); // forecastHorizon
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
         int patchCount = reader.ReadInt32();
+        _patchSizes = new int[patchCount];
         for (int i = 0; i < patchCount; i++)
         {
-            _ = reader.ReadInt32(); // patchSize
+            _patchSizes[i] = reader.ReadInt32();
         }
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // intermediateSize
-        _ = reader.ReadInt32(); // numMixtures
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadDouble(); // maskRatio
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadString(); // modelSize
+        _hiddenDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _intermediateSize = reader.ReadInt32();
+        _numMixtures = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _maskRatio = reader.ReadDouble();
+        _numFeatures = reader.ReadInt32();
+        _modelSize = reader.ReadString();
+
+        _totalPatches = 0;
+        foreach (var patchSize in _patchSizes)
+        {
+            _totalPatches += _contextLength / Math.Max(1, patchSize);
+        }
     }
 
     #endregion

@@ -709,7 +709,7 @@ public class DeepFactor<T> : ForecastingModelBase<T>
     /// </remarks>
     public override Dictionary<string, T> GetFinancialMetrics()
     {
-        T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
+        T lastLoss = LastLoss;
 
         return new Dictionary<string, T>
         {
@@ -890,7 +890,18 @@ public class DeepFactor<T> : ForecastingModelBase<T>
         if (_localInputProjection is not null)
             localCurrent = _localInputProjection.Backward(localCurrent);
 
-        // Combine input gradients (simplified: use factor path gradient)
+        // Combine input gradients from both paths
+        if (factorCurrent.Length == localCurrent.Length)
+        {
+            var combined = new Tensor<T>(factorCurrent.Shape);
+            for (int i = 0; i < combined.Length; i++)
+            {
+                combined.Data.Span[i] = NumOps.Add(factorCurrent.Data.Span[i], localCurrent.Data.Span[i]);
+            }
+
+            return combined;
+        }
+
         return factorCurrent;
     }
 

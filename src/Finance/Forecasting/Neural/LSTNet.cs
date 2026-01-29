@@ -175,57 +175,57 @@ public class LSTNet<T> : ForecastingModelBase<T>
     /// <summary>
     /// The lookback window size.
     /// </summary>
-    private readonly int _lookbackWindow;
+    private int _lookbackWindow;
 
     /// <summary>
     /// The forecast horizon.
     /// </summary>
-    private readonly int _forecastHorizon;
+    private int _forecastHorizon;
 
     /// <summary>
     /// Number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     /// <summary>
     /// Hidden size for main recurrent layer.
     /// </summary>
-    private readonly int _hiddenRecurrentSize;
+    private int _hiddenRecurrentSize;
 
     /// <summary>
     /// Hidden size for skip recurrent layer.
     /// </summary>
-    private readonly int _hiddenSkipSize;
+    private int _hiddenSkipSize;
 
     /// <summary>
     /// Number of convolutional filters.
     /// </summary>
-    private readonly int _convolutionFilters;
+    private int _convolutionFilters;
 
     /// <summary>
     /// Kernel size for convolutional layer.
     /// </summary>
-    private readonly int _convolutionKernelSize;
+    private int _convolutionKernelSize;
 
     /// <summary>
     /// Skip period for skip-RNN.
     /// </summary>
-    private readonly int _skipPeriod;
+    private int _skipPeriod;
 
     /// <summary>
     /// Window size for autoregressive component.
     /// </summary>
-    private readonly int _autoregressiveWindow;
+    private int _autoregressiveWindow;
 
     /// <summary>
     /// Whether to use highway connections.
     /// </summary>
-    private readonly bool _useHighway;
+    private bool _useHighway;
 
     /// <summary>
     /// Dropout rate for regularization.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     #endregion
 
@@ -642,17 +642,17 @@ public class LSTNet<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // lookbackWindow
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // hiddenRecurrentSize
-        _ = reader.ReadInt32(); // hiddenSkipSize
-        _ = reader.ReadInt32(); // convolutionFilters
-        _ = reader.ReadInt32(); // convolutionKernelSize
-        _ = reader.ReadInt32(); // skipPeriod
-        _ = reader.ReadInt32(); // autoregressiveWindow
-        _ = reader.ReadBoolean(); // useHighway
-        _ = reader.ReadDouble(); // dropout
+        _lookbackWindow = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _hiddenRecurrentSize = reader.ReadInt32();
+        _hiddenSkipSize = reader.ReadInt32();
+        _convolutionFilters = reader.ReadInt32();
+        _convolutionKernelSize = reader.ReadInt32();
+        _skipPeriod = reader.ReadInt32();
+        _autoregressiveWindow = reader.ReadInt32();
+        _useHighway = reader.ReadBoolean();
+        _dropout = reader.ReadDouble();
     }
 
     #endregion
@@ -847,7 +847,7 @@ public class LSTNet<T> : ForecastingModelBase<T>
         }
 
         // === Component 5: Combine All Outputs ===
-        var combined = CombineOutputs(gruOutput, skipOutput, highwayOutput);
+        var combined = CombineOutputs(gruOutput, skipOutput);
 
         if (_combinationLayer is not null)
         {
@@ -860,6 +860,14 @@ public class LSTNet<T> : ForecastingModelBase<T>
         if (_outputLayer is not null)
         {
             output = _outputLayer.Forward(combined);
+        }
+
+        if (highwayOutput is not null && highwayOutput.Length == output.Length)
+        {
+            for (int i = 0; i < output.Length; i++)
+            {
+                output.Data.Span[i] = NumOps.Add(output.Data.Span[i], highwayOutput.Data.Span[i]);
+            }
         }
 
         return output;
@@ -892,9 +900,9 @@ public class LSTNet<T> : ForecastingModelBase<T>
         }
 
         // Backward through highway
-        if (_highwayLayer is not null)
+        if (_highwayLayer is not null && _useHighway)
         {
-            _ = _highwayLayer.Backward(grad);
+            _ = _highwayLayer.Backward(gradOutput);
         }
 
         // Backward through skip GRU
@@ -1097,7 +1105,7 @@ public class LSTNet<T> : ForecastingModelBase<T>
     /// into one combined representation that will be used for the final prediction.
     /// </para>
     /// </remarks>
-    private Tensor<T> CombineOutputs(Tensor<T> gruOutput, Tensor<T>? skipOutput, Tensor<T>? highwayOutput)
+    private Tensor<T> CombineOutputs(Tensor<T> gruOutput, Tensor<T>? skipOutput)
     {
         int batchSize = gruOutput.Shape[0];
         int gruSize = gruOutput.Length / batchSize;
@@ -1133,13 +1141,6 @@ public class LSTNet<T> : ForecastingModelBase<T>
                     }
                 }
             }
-        }
-
-        // Add highway output directly to combined (residual connection style)
-        if (highwayOutput is not null)
-        {
-            // Highway output gets added as a residual to the final output
-            // The combination layer will handle the final transformation
         }
 
         return combined;

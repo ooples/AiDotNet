@@ -1,7 +1,8 @@
 using AiDotNet.Finance.Interfaces;
+using AiDotNet.Helpers;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.LossFunctions;
 using System.IO;
 
 namespace AiDotNet.Finance.Base;
@@ -27,12 +28,12 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     /// <summary>
     /// The confidence level used for risk calculations (e.g., 0.95 or 0.99).
     /// </summary>
-    protected readonly double _confidenceLevel;
+    protected double _confidenceLevel;
 
     /// <summary>
     /// The time horizon for risk calculations in days.
     /// </summary>
-    protected readonly int _timeHorizon;
+    protected int _timeHorizon;
 
     /// <summary>
     /// Gets the confidence level for risk calculations.
@@ -75,6 +76,10 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     protected RiskModelBase(NeuralNetworkArchitecture<T> architecture, int numFeatures, double confidenceLevel = 0.95, int timeHorizon = 1, ILossFunction<T>? lossFunction = null)
         : base(architecture, 1, 1, numFeatures, lossFunction)
     {
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must be between 0 and 1 (exclusive).");
+        if (timeHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(timeHorizon), "Time horizon must be at least 1.");
         _confidenceLevel = confidenceLevel;
         _timeHorizon = timeHorizon;
     }
@@ -96,6 +101,10 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     protected RiskModelBase(NeuralNetworkArchitecture<T> architecture, string onnxModelPath, int numFeatures, double confidenceLevel = 0.95, int timeHorizon = 1)
         : base(architecture, onnxModelPath, 1, 1, numFeatures)
     {
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must be between 0 and 1 (exclusive).");
+        if (timeHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(timeHorizon), "Time horizon must be at least 1.");
         _confidenceLevel = confidenceLevel;
         _timeHorizon = timeHorizon;
     }
@@ -295,8 +304,8 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     /// </remarks>
     protected override void DeserializeModelSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadDouble(); // confidenceLevel
-        _ = reader.ReadInt32(); // timeHorizon
+        _confidenceLevel = reader.ReadDouble();
+        _timeHorizon = reader.ReadInt32();
     }
 
     /// <summary>
@@ -315,7 +324,16 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     {
         SetTrainingMode(true);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        // Backward pass implementation specific to risk model
+        var gradTensor = Tensor<T>.FromVector(grad, output.Shape);
+
+        Backpropagate(gradTensor);
+
+        // Default SGD-style update for layers
+        var learningRate = MathHelper.GetNumericOperations<T>().FromDouble(0.001);
+        foreach (var layer in Layers)
+        {
+            layer.UpdateParameters(learningRate);
+        }
         SetTrainingMode(false);
     }
 }

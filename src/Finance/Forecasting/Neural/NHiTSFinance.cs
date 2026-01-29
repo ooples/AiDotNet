@@ -280,6 +280,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
@@ -659,12 +660,12 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
             int kernelSize = stackIdx < _poolingKernelSizes.Length ?
                 _poolingKernelSizes[stackIdx] : 1;
 
-            // Pool input to stack's resolution
-            var pooledInput = ApplyPooling(residual, kernelSize);
-
             foreach (var blockLayers in _stackBlocks[stackIdx])
             {
                 if (blockLayers.Count == 0) continue;
+
+                // Pool input to stack's resolution (updated per block to reflect residuals)
+                var pooledInput = ApplyPooling(residual, kernelSize);
 
                 // Forward through block layers
                 var current = pooledInput;
@@ -951,22 +952,23 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length / batchSize;
+        int steps = Math.Min(stepsUsed, seqLen);
 
         var shifted = new Tensor<T>(input.Shape);
 
         for (int b = 0; b < batchSize; b++)
         {
-            for (int t = 0; t < seqLen - stepsUsed; t++)
+            for (int t = 0; t < seqLen - steps; t++)
             {
-                int srcIdx = b * seqLen + t + stepsUsed;
+                int srcIdx = b * seqLen + t + steps;
                 int dstIdx = b * seqLen + t;
                 if (srcIdx < input.Length && dstIdx < shifted.Length)
                     shifted.Data.Span[dstIdx] = input.Data.Span[srcIdx];
             }
 
-            for (int t = seqLen - stepsUsed; t < seqLen; t++)
+            for (int t = seqLen - steps; t < seqLen; t++)
             {
-                int predIdx = b * stepsUsed + (t - (seqLen - stepsUsed));
+                int predIdx = b * steps + (t - (seqLen - steps));
                 int dstIdx = b * seqLen + t;
                 if (predIdx < prediction.Length && dstIdx < shifted.Length)
                     shifted.Data.Span[dstIdx] = prediction.Data.Span[predIdx];

@@ -27,7 +27,7 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
     /// <summary>
     /// The number of assets in the portfolio universe.
     /// </summary>
-    protected readonly int _numAssets;
+    protected int _numAssets;
 
     /// <summary>
     /// Gets the number of assets in the portfolio universe.
@@ -258,7 +258,7 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
     /// </remarks>
     protected override void DeserializeModelSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // numAssets
+        _numAssets = reader.ReadInt32();
     }
 
     /// <summary>

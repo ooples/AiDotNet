@@ -285,6 +285,15 @@ public class Timer<T> : ForecastingModelBase<T>
         _generationTemperature = options.GenerationTemperature;
         _numFeatures = 1;
 
+        if (_patchLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(options.PatchLength), "Patch length must be at least 1.");
+        if (_patchStride < 1)
+            throw new ArgumentOutOfRangeException(nameof(options.PatchStride), "Patch stride must be at least 1.");
+        if (_patchLength > _contextLength)
+            throw new ArgumentOutOfRangeException(nameof(options.PatchLength), "Patch length cannot exceed context length.");
+        if (_maskRatio < 0 || _maskRatio >= 1)
+            throw new ArgumentOutOfRangeException(nameof(options.MaskRatio), "Mask ratio must be between 0 and 1.");
+
         // Calculate number of patches
         _numPatches = (_contextLength - _patchLength) / _patchStride + 1;
 
@@ -333,6 +342,15 @@ public class Timer<T> : ForecastingModelBase<T>
         _useAutoregressiveDecoding = options.UseAutoregressiveDecoding;
         _generationTemperature = options.GenerationTemperature;
         _numFeatures = numFeatures;
+
+        if (_patchLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(options.PatchLength), "Patch length must be at least 1.");
+        if (_patchStride < 1)
+            throw new ArgumentOutOfRangeException(nameof(options.PatchStride), "Patch stride must be at least 1.");
+        if (_patchLength > _contextLength)
+            throw new ArgumentOutOfRangeException(nameof(options.PatchLength), "Patch length cannot exceed context length.");
+        if (_maskRatio < 0 || _maskRatio >= 1)
+            throw new ArgumentOutOfRangeException(nameof(options.MaskRatio), "Mask ratio must be between 0 and 1.");
 
         // Calculate number of patches
         _numPatches = (_contextLength - _patchLength) / _patchStride + 1;
@@ -986,17 +1004,18 @@ public class Timer<T> : ForecastingModelBase<T>
     {
         var result = new Tensor<T>(input.Shape);
         int contextLen = _contextLength;
+        int steps = Math.Min(stepsUsed, contextLen);
 
         // Shift old values left
-        for (int i = 0; i < contextLen - stepsUsed; i++)
+        for (int i = 0; i < contextLen - steps; i++)
         {
-            result.Data.Span[i] = input.Data.Span[i + stepsUsed];
+            result.Data.Span[i] = input.Data.Span[i + steps];
         }
 
         // Append predictions
-        for (int i = 0; i < stepsUsed && i < predictions.Length; i++)
+        for (int i = 0; i < steps && i < predictions.Length; i++)
         {
-            result.Data.Span[contextLen - stepsUsed + i] = predictions.Data.Span[i];
+            result.Data.Span[contextLen - steps + i] = predictions.Data.Span[i];
         }
 
         return result;

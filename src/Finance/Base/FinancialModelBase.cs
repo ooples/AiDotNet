@@ -450,6 +450,9 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
 
         // Get input name from model
         var inputMeta = OnnxSession.InputMetadata;
+        if (inputMeta.Count == 0)
+            throw new InvalidOperationException("ONNX model has no input metadata.");
+
         string inputName = inputMeta.Keys.First();
 
         // Run inference
