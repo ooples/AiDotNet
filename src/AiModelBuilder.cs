@@ -1043,6 +1043,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreparation(
         Action<DataPreparationPipeline<T>> pipelineBuilder)
     {
+        if (pipelineBuilder is null)
+        {
+            throw new ArgumentNullException(nameof(pipelineBuilder));
+        }
+
         _dataPreparationPipeline = new DataPreparationPipeline<T>();
         pipelineBuilder(_dataPreparationPipeline);
         DataPreparationRegistry<T>.Current = _dataPreparationPipeline;
@@ -1534,6 +1539,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     autoMLPreparedX = (TInput)(object)prepX;
                     autoMLPreparedY = (TOutput)(object)prepY;
                 }
+                else if (x is Tensor<T> xTensor && y is Tensor<T> yTensor)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(xTensor, yTensor);
+                    autoMLPreparedX = (TInput)(object)prepX;
+                    autoMLPreparedY = (TOutput)(object)prepY;
+                }
             }
 
             // Step 2: Apply preprocessing pipeline (scaling, encoding, etc.) - doesn't change row count
@@ -1736,6 +1747,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             if (x is Matrix<T> xMatrix && y is Vector<T> yVector)
             {
                 var (prepX, prepY) = _dataPreparationPipeline.FitResample(xMatrix, yVector);
+                preparedX = (TInput)(object)prepX;
+                preparedY = (TOutput)(object)prepY;
+            }
+            else if (x is Tensor<T> xTensor && y is Tensor<T> yTensor)
+            {
+                var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(xTensor, yTensor);
                 preparedX = (TInput)(object)prepX;
                 preparedY = (TOutput)(object)prepY;
             }

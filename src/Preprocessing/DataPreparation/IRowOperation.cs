@@ -1,3 +1,4 @@
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.DataPreparation;
@@ -33,7 +34,7 @@ public interface IRowOperation<T>
     bool IsFitted { get; }
 
     /// <summary>
-    /// Fits the operation to data and applies the row modification.
+    /// Fits the operation to data and applies the row modification for Matrix/Vector data.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -50,6 +51,23 @@ public interface IRowOperation<T>
     /// <param name="y">The label vector where each element corresponds to a row in X.</param>
     /// <returns>A tuple containing the modified (X, y) with rows added or removed.</returns>
     (Matrix<T> X, Vector<T> y) FitResample(Matrix<T> X, Vector<T> y);
+
+    /// <summary>
+    /// Fits the operation to data and applies the row modification for Tensor data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method learns any necessary parameters from the data and applies the row operation
+    /// to tensor data (e.g., images, sequences, or other multi-dimensional structures).
+    /// </para>
+    /// <para>
+    /// <b>Important:</b> The first dimension of the tensor is assumed to be the sample/batch dimension.
+    /// </para>
+    /// </remarks>
+    /// <param name="X">The feature tensor where the first dimension is samples.</param>
+    /// <param name="y">The label tensor where the first dimension corresponds to samples in X.</param>
+    /// <returns>A tuple containing the modified (X, y) with samples added or removed.</returns>
+    (Tensor<T> X, Tensor<T> y) FitResampleTensor(Tensor<T> X, Tensor<T> y);
 
     /// <summary>
     /// Gets a description of what this operation does.

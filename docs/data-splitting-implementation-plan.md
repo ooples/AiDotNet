@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the implementation plan for 50+ data splitting methods as part of the DataPreparation pipeline in AiDotNet.
+This document outlines the implementation plan for 59 data-splitting methods as part of the DataPreparation pipeline in AiDotNet.
 
 ---
 
@@ -30,7 +30,7 @@ This document outlines the implementation plan for 50+ data splitting methods as
 **Why it's separate:** These operations preserve dataset structure and can be applied to new data.
 
 ### The Pipeline Flow
-```
+```text
 Raw Data
     ↓
 [Data Preparation] ← Outlier removal, Augmentation, Splitting (changes rows)
@@ -381,7 +381,7 @@ private IDataSplitter<T> GetDefaultSplitter(Matrix<T> X, Vector<T>? y)
 
 ## File Structure
 
-```
+```text
 src/Preprocessing/DataPreparation/
 ├── IDataSplitter.cs                    # Interface
 ├── DataSplitResult.cs                  # Result class

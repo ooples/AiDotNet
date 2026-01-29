@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.DataPreparation;
@@ -137,6 +138,151 @@ public class OutlierRemovalOperation<T> : IRowOperation<T>
 
         _isFitted = true;
         return result;
+    }
+
+    /// <inheritdoc/>
+    public (Tensor<T> X, Tensor<T> y) FitResampleTensor(Tensor<T> X, Tensor<T> y)
+    {
+        if (X is null) throw new ArgumentNullException(nameof(X));
+        if (y is null) throw new ArgumentNullException(nameof(y));
+
+        if (X.Shape[0] != y.Shape[0])
+        {
+            throw new ArgumentException(
+                $"X has {X.Shape[0]} samples but y has {y.Shape[0]} samples. They must match.",
+                nameof(y));
+        }
+
+        // Convert tensor to matrix for outlier detection (flatten non-batch dimensions)
+        int nSamples = X.Shape[0];
+        int nFeatures = 1;
+        for (int i = 1; i < X.Rank; i++)
+        {
+            nFeatures *= X.Shape[i];
+        }
+
+        var matrixX = new Matrix<T>(nSamples, nFeatures);
+        for (int i = 0; i < nSamples; i++)
+        {
+            int flatIdx = 0;
+            FlattenSampleToRow(X, i, matrixX, i, ref flatIdx);
+        }
+
+        // Fit the detector if not already fitted
+        if (!_detector.IsFitted)
+        {
+            _detector.Fit(matrixX);
+        }
+
+        // Get predictions: 1 = normal, -1 = anomaly
+        var predictions = _detector.Predict(matrixX);
+
+        // For tensor data, only Remove mode is supported (replacement doesn't make sense for complex structures)
+        if (_mode != OutlierHandlingMode.Remove)
+        {
+            throw new NotSupportedException(
+                $"Outlier handling mode '{_mode}' is not supported for tensor data. Only 'Remove' mode is available.");
+        }
+
+        // Count inliers
+        T one = NumOps.FromDouble(1);
+        int inlierCount = 0;
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            if (NumOps.Equals(predictions[i], one))
+            {
+                inlierCount++;
+            }
+        }
+
+        // If no outliers, return original data
+        if (inlierCount == nSamples)
+        {
+            _isFitted = true;
+            return (X, y);
+        }
+
+        // Create new tensors with only inliers
+        int[] newXShape = (int[])X.Shape.Clone();
+        newXShape[0] = inlierCount;
+        var newX = new Tensor<T>(newXShape);
+
+        int[] newYShape = (int[])y.Shape.Clone();
+        newYShape[0] = inlierCount;
+        var newY = new Tensor<T>(newYShape);
+
+        int destIdx = 0;
+        for (int i = 0; i < nSamples; i++)
+        {
+            if (NumOps.Equals(predictions[i], one))
+            {
+                CopyTensorSample(X, newX, i, destIdx);
+                CopyTensorSample(y, newY, i, destIdx);
+                destIdx++;
+            }
+        }
+
+        _isFitted = true;
+        return (newX, newY);
+    }
+
+    private void FlattenSampleToRow(Tensor<T> tensor, int sampleIdx, Matrix<T> matrix, int rowIdx, ref int flatIdx)
+    {
+        if (tensor.Rank == 1)
+        {
+            matrix[rowIdx, flatIdx++] = tensor[sampleIdx];
+            return;
+        }
+
+        int[] indices = new int[tensor.Rank];
+        indices[0] = sampleIdx;
+        FlattenRecursive(tensor, matrix, rowIdx, indices, 1, ref flatIdx);
+    }
+
+    private void FlattenRecursive(Tensor<T> tensor, Matrix<T> matrix, int rowIdx, int[] indices, int dim, ref int flatIdx)
+    {
+        if (dim == tensor.Rank)
+        {
+            matrix[rowIdx, flatIdx++] = tensor[indices];
+            return;
+        }
+
+        for (int i = 0; i < tensor.Shape[dim]; i++)
+        {
+            indices[dim] = i;
+            FlattenRecursive(tensor, matrix, rowIdx, indices, dim + 1, ref flatIdx);
+        }
+    }
+
+    private void CopyTensorSample(Tensor<T> source, Tensor<T> dest, int srcIdx, int destIdx)
+    {
+        if (source.Rank == 1)
+        {
+            dest[destIdx] = source[srcIdx];
+            return;
+        }
+
+        int[] srcIndices = new int[source.Rank];
+        int[] destIndices = new int[dest.Rank];
+        srcIndices[0] = srcIdx;
+        destIndices[0] = destIdx;
+        CopyRecursive(source, dest, srcIndices, destIndices, 1);
+    }
+
+    private void CopyRecursive(Tensor<T> source, Tensor<T> dest, int[] srcIndices, int[] destIndices, int dim)
+    {
+        if (dim == source.Rank)
+        {
+            dest[destIndices] = source[srcIndices];
+            return;
+        }
+
+        for (int i = 0; i < source.Shape[dim]; i++)
+        {
+            srcIndices[dim] = i;
+            destIndices[dim] = i;
+            CopyRecursive(source, dest, srcIndices, destIndices, dim + 1);
+        }
     }
 
     private void CalculateStatistics(Matrix<T> X)

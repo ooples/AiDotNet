@@ -2,6 +2,7 @@ using AiDotNet.Preprocessing.DataPreparation.Splitting.Basic;
 using AiDotNet.Preprocessing.DataPreparation.Splitting.CrossValidation;
 using AiDotNet.Preprocessing.DataPreparation.Splitting.TimeSeries;
 using AiDotNet.Preprocessing.DataPreparation.Splitting.Stratified;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.DataPreparation;
@@ -334,6 +335,105 @@ public class DataPreparationPipeline<T>
 
         _isFitted = true;
         return (currentX, currentY);
+    }
+
+    /// <summary>
+    /// Fits all operations and applies row modifications to tensor data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Each operation is fitted and applied in sequence. The output of one operation
+    /// becomes the input to the next.
+    /// </para>
+    /// <para>
+    /// <b>Important:</b> This is the ONLY time row operations are applied. There is no
+    /// separate Transform method because row operations cannot be applied during prediction.
+    /// </para>
+    /// </remarks>
+    /// <param name="X">The feature tensor.</param>
+    /// <param name="y">The label tensor.</param>
+    /// <returns>A tuple containing the modified (X, y) after all operations.</returns>
+    public (Tensor<T> X, Tensor<T> y) FitResampleTensor(Tensor<T> X, Tensor<T> y)
+    {
+        if (X is null)
+        {
+            throw new ArgumentNullException(nameof(X));
+        }
+
+        if (y is null)
+        {
+            throw new ArgumentNullException(nameof(y));
+        }
+
+        if (X.Shape[0] != y.Shape[0])
+        {
+            throw new ArgumentException(
+                $"X has {X.Shape[0]} samples but y has {y.Shape[0]} samples. They must match.",
+                nameof(y));
+        }
+
+        // If no operations, return data unchanged
+        if (_operations.Count == 0)
+        {
+            _isFitted = true;
+            return (X, y);
+        }
+
+        // Apply each operation in sequence
+        Tensor<T> currentX = X;
+        Tensor<T> currentY = y;
+
+        foreach (var (name, operation) in _operations)
+        {
+            (currentX, currentY) = operation.FitResampleTensor(currentX, currentY);
+        }
+
+        _isFitted = true;
+        return (currentX, currentY);
+    }
+
+    /// <summary>
+    /// Applies row operations and then splits the tensor data.
+    /// </summary>
+    /// <param name="X">The feature tensor.</param>
+    /// <param name="y">The label tensor.</param>
+    /// <returns>The split result containing train/test (and optionally validation) sets.</returns>
+    /// <exception cref="InvalidOperationException">If no splitter is configured.</exception>
+    public TensorSplitResult<T> FitResampleAndSplitTensor(Tensor<T> X, Tensor<T> y)
+    {
+        if (_splitter is null)
+        {
+            throw new InvalidOperationException(
+                "No splitter configured. Use WithSplitter(), WithTrainTestSplit(), WithKFold(), or similar methods first.");
+        }
+
+        // Apply row operations first
+        var (preparedX, preparedY) = FitResampleTensor(X, y);
+
+        // Then split
+        return _splitter.SplitTensor(preparedX, preparedY);
+    }
+
+    /// <summary>
+    /// Applies row operations and returns multiple tensor splits (for cross-validation).
+    /// </summary>
+    /// <param name="X">The feature tensor.</param>
+    /// <param name="y">The label tensor.</param>
+    /// <returns>An enumerable of split results, one for each fold/iteration.</returns>
+    /// <exception cref="InvalidOperationException">If no splitter is configured.</exception>
+    public IEnumerable<TensorSplitResult<T>> FitResampleAndGetTensorSplits(Tensor<T> X, Tensor<T> y)
+    {
+        if (_splitter is null)
+        {
+            throw new InvalidOperationException(
+                "No splitter configured. Use WithSplitter(), WithKFold(), or similar methods first.");
+        }
+
+        // Apply row operations first
+        var (preparedX, preparedY) = FitResampleTensor(X, y);
+
+        // Then generate splits
+        return _splitter.GetTensorSplits(preparedX, preparedY);
     }
 
     /// <summary>
