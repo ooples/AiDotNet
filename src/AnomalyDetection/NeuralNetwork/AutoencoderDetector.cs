@@ -486,6 +486,13 @@ public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
         EnsureFitted();
         ValidateInput(X);
 
+        if (_inputDim != 0 && X.Columns != _inputDim)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_inputDim} features.",
+                nameof(X));
+        }
+
         var encoderWeights = _encoderWeights;
         if (encoderWeights == null)
         {
