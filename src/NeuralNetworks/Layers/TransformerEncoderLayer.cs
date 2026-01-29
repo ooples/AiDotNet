@@ -299,6 +299,24 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _norm2.ParameterCount;
 
     /// <summary>
+    /// Returns layer-specific metadata for serialization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> These settings let the layer be reconstructed with the
+    /// same attention head count and feed-forward size when loading a saved model.
+    /// </para>
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["EmbeddingSize"] = _embeddingSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["NumHeads"] = _numHeads.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["FeedForwardDim"] = _feedForwardDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="TransformerEncoderLayer{T}"/> class.
     /// </summary>
     /// <param name="embeddingSize">The size of the embeddings.</param>

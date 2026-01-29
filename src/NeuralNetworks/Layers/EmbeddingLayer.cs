@@ -233,6 +233,23 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
            (_projectionWeights?.Length ?? 0);
 
     /// <summary>
+    /// Returns layer-specific metadata for serialization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Metadata stores the vocabulary size so the layer can be rebuilt
+    /// correctly when loading a saved model.
+    /// </para>
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["VocabularySize"] = _embeddingTensor.Shape[0].ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["EmbeddingDimension"] = _embeddingTensor.Shape[1].ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="EmbeddingLayer{T}"/> class.
     /// </summary>
     /// <param name="vocabularySize">The number of unique tokens in the vocabulary.</param>
