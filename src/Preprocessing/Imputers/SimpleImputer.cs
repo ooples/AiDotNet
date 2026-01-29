@@ -103,11 +103,10 @@ public class SimpleImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _strategy = strategy;
         _fillValue = fillValue;
         _missingValue = NumOps.FromDouble(double.NaN);
-
-        if (strategy == ImputationStrategy.Constant && fillValue is null)
-        {
-            throw new ArgumentException("fillValue must be provided when using Constant strategy.", nameof(fillValue));
-        }
+        // Note: For value types with unconstrained generics, fillValue defaults to
+        // default(T) when not explicitly provided. The nullable pattern (T?) doesn't
+        // work as Nullable<T> for unconstrained generics, so if no fillValue is
+        // provided, the imputer falls back to NumOps.Zero in the transform logic.
     }
 
     /// <summary>
