@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using AiDotNet.Finance.Data;
 using AiDotNet.Finance.Trading.Environments;
@@ -169,6 +170,41 @@ public class FinanceEnvironmentIntegrationTests
         }
 
         env.Close();
+    }
+
+    [Fact]
+    public async Task FinancialDataLoaderFactory_CreatesLoaderFromProvider()
+    {
+        var series = FinanceTestHelpers.CreateMarketSeries<float>(30);
+        var provider = new MarketDataProvider<float>();
+        provider.AddRange(series);
+
+        var loader = FinancialDataLoaderFactory.FromProvider(provider, sequenceLength: 5, predictionHorizon: 2);
+
+        await loader.LoadAsync();
+        Assert.True(loader.TotalCount > 0);
+    }
+
+    [Fact]
+    public void TradingEnvironmentFactory_CreatesPortfolioEnvironment()
+    {
+        var numOps = MathHelper.GetNumericOperations<double>();
+        var start = DateTime.UtcNow;
+        var seriesA = FinanceTestHelpers.CreateMarketSeries<double>(20, start);
+        var seriesB = FinanceTestHelpers.CreateMarketSeries<double>(20, start);
+        var series = new System.Collections.Generic.List<System.Collections.Generic.IReadOnlyList<MarketDataPoint<double>>>
+        {
+            seriesA,
+            seriesB
+        };
+
+        var env = TradingEnvironmentFactory.CreatePortfolioTradingEnvironment(
+            series,
+            windowSize: 5,
+            initialCapital: numOps.FromDouble(1000));
+
+        var state = env.Reset();
+        Assert.Equal(env.ObservationSpaceDimension, state.Length);
     }
 
     private static void RunEnvironmentSmokeTest<T>()
