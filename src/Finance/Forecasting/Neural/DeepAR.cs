@@ -300,8 +300,10 @@ public class DeepAR<T> : ForecastingModelBase<T>
     protected override void InitializeLayers()
     {
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {            Layers.AddRange(Architecture.Layers);
+        {
+            Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            ExtractLayerReferences();
         }
         else if (UseNativeMode)
         {
@@ -523,8 +525,9 @@ public class DeepAR<T> : ForecastingModelBase<T>
                 throw new InvalidOperationException(
                     "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
             }
-            // Null-forgiving operator is safe here: we just validated OnnxModelPath is not null/empty
-            return new DeepAR<T>(Architecture, OnnxModelPath!, options, _optimizer, LossFunction);
+            // Store in local variable after validation to satisfy null analysis
+            string onnxPath = OnnxModelPath;
+            return new DeepAR<T>(Architecture, onnxPath, options, _optimizer, LossFunction);
         }
     }
 

@@ -581,8 +581,9 @@ public class DeepFactor<T> : ForecastingModelBase<T>
                 throw new InvalidOperationException(
                     "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
             }
-            // Null-forgiving operator is safe here: we just validated OnnxModelPath is not null/empty
-            return new DeepFactor<T>(Architecture, OnnxModelPath!, options);
+            // Store in local variable after validation to satisfy null analysis
+            string onnxPath = OnnxModelPath;
+            return new DeepFactor<T>(Architecture, onnxPath, options);
         }
     }
 
@@ -864,17 +865,18 @@ public class DeepFactor<T> : ForecastingModelBase<T>
             current = _combinationLayer.Backward(current);
 
         // Split gradient for factor and local paths
-        // (simplified: pass full gradient to each path)
-        var factorGrad = new Tensor<T>(new[] { _forecastHorizon });
-        var localGrad = new Tensor<T>(new[] { _forecastHorizon });
+        // Account for multivariate outputs: chunk size = forecastHorizon * numFeatures
+        int outputElements = _forecastHorizon * Math.Max(_numFeatures, 1);
+        var factorGrad = new Tensor<T>(new[] { outputElements });
+        var localGrad = new Tensor<T>(new[] { outputElements });
 
-        for (int i = 0; i < _forecastHorizon && i < current.Length; i++)
+        for (int i = 0; i < outputElements && i < current.Length; i++)
         {
             factorGrad.Data.Span[i] = current.Data.Span[i];
         }
-        for (int i = 0; i < _forecastHorizon && i + _forecastHorizon < current.Length; i++)
+        for (int i = 0; i < outputElements && i + outputElements < current.Length; i++)
         {
-            localGrad.Data.Span[i] = current.Data.Span[i + _forecastHorizon];
+            localGrad.Data.Span[i] = current.Data.Span[i + outputElements];
         }
 
         // === Factor Path Backward ===
@@ -1049,7 +1051,10 @@ public class DeepFactor<T> : ForecastingModelBase<T>
         foreach (var pred in predictions)
         {
             int stepsToAdd = Math.Min(_forecastHorizon, totalSteps - stepsAdded);
-            int predFeatures = pred.Shape.Length > 1 ? pred.Shape[^1] : 1;
+            // For 1D tensors, derive feature count from length/steps to preserve multivariate outputs
+            int predFeatures = pred.Shape.Length > 1
+                ? pred.Shape[^1]
+                : (stepsToAdd > 0 ? Math.Max(1, pred.Length / stepsToAdd) : 1);
             int featuresToCopy = Math.Min(features, predFeatures);
 
             for (int i = 0; i < stepsToAdd; i++)
