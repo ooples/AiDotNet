@@ -406,9 +406,10 @@ public class DeepAR<T> : ForecastingModelBase<T>
         if (options.NumSamples < 1)
             errors.Add("NumSamples must be at least 1.");
 
-        var validDistributions = new[] { "Gaussian", "gaussian", "StudentT", "student_t", "NegativeBinomial", "negative_binomial" };
+        // Only Gaussian is implemented in native mode (mu/sigma heads only)
+        var validDistributions = new[] { "Gaussian", "gaussian" };
         if (!validDistributions.Contains(options.LikelihoodType, StringComparer.OrdinalIgnoreCase))
-            errors.Add($"LikelihoodType must be one of: Gaussian, StudentT, NegativeBinomial.");
+            errors.Add("LikelihoodType must be Gaussian in native mode (StudentT and NegativeBinomial not yet implemented).");
 
         if (errors.Count > 0)
             throw new ArgumentException($"Invalid options: {string.Join(", ", errors)}");
@@ -999,44 +1000,58 @@ public class DeepAR<T> : ForecastingModelBase<T>
     private Tensor<T> SampleQuantiles(Tensor<T> forecast, double[] quantiles)
     {
         // For Gaussian distribution, quantiles can be computed analytically
-        // For simplicity, we use a standard deviation estimate
         int batchSize = forecast.Shape[0];
         int seqLen = forecast.Shape.Length > 1 ? forecast.Shape[1] : 1;
+        int features = forecast.Shape.Length > 2 ? forecast.Shape[2] : 1;
         int numQuantiles = quantiles.Length;
 
-        var quantileForecast = new Tensor<T>(new[] { batchSize, seqLen, numQuantiles });
+        // Output shape includes features dimension to preserve multivariate outputs
+        var quantileForecast = new Tensor<T>(new[] { batchSize, seqLen, features * numQuantiles });
 
         for (int b = 0; b < batchSize; b++)
         {
             for (int t = 0; t < seqLen; t++)
             {
-                int muIdx = b * seqLen + t;
-                T mu = muIdx < forecast.Length ? forecast.Data.Span[muIdx] : NumOps.Zero;
-
-                // Use learned sigma from Forward if available, otherwise estimate
-                T sigma;
-                if (_lastSigma is not null && muIdx < _lastSigma.Length)
+                for (int f = 0; f < features; f++)
                 {
-                    sigma = _lastSigma.Data.Span[muIdx];
+                    // Feature-aware indexing
+                    int muIdx = b * seqLen * features + t * features + f;
+                    T mu = muIdx < forecast.Length ? forecast.Data.Span[muIdx] : NumOps.Zero;
+
+                    // Use learned sigma from Forward if available, otherwise estimate
+                    T sigma;
+                    if (_lastSigma is not null && muIdx < _lastSigma.Length)
+                    {
+                        sigma = _lastSigma.Data.Span[muIdx];
+                        // If scaling was applied, unscale sigma to match unscaled mu
+                        if (_useScaling && _scaleStd is not null)
+                        {
+                            int scaleIdx = b * features + f;
+                            if (scaleIdx < _scaleStd.Length)
+                            {
+                                sigma = NumOps.Multiply(sigma, _scaleStd.Data.Span[scaleIdx]);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Fallback: estimate sigma as 10% of mu
+                        sigma = NumOps.Multiply(NumOps.Abs(mu), NumOps.FromDouble(0.1));
+                    }
+
                     // Ensure sigma is positive with a minimum floor
                     sigma = NumOps.Add(NumOps.Abs(sigma), NumOps.FromDouble(0.01));
-                }
-                else
-                {
-                    // Fallback: estimate sigma as 10% of mu
-                    sigma = NumOps.Multiply(NumOps.Abs(mu), NumOps.FromDouble(0.1));
-                    sigma = NumOps.Add(sigma, NumOps.FromDouble(0.01)); // Minimum sigma
-                }
 
-                for (int q = 0; q < numQuantiles; q++)
-                {
-                    // Standard normal quantile (approximation)
-                    double z = GetStandardNormalQuantile(quantiles[q]);
-                    T quantileValue = NumOps.Add(mu, NumOps.Multiply(sigma, NumOps.FromDouble(z)));
+                    for (int q = 0; q < numQuantiles; q++)
+                    {
+                        // Standard normal quantile (approximation)
+                        double z = GetStandardNormalQuantile(quantiles[q]);
+                        T quantileValue = NumOps.Add(mu, NumOps.Multiply(sigma, NumOps.FromDouble(z)));
 
-                    int outIdx = b * seqLen * numQuantiles + t * numQuantiles + q;
-                    if (outIdx < quantileForecast.Length)
-                        quantileForecast.Data.Span[outIdx] = quantileValue;
+                        int outIdx = b * seqLen * features * numQuantiles + t * features * numQuantiles + f * numQuantiles + q;
+                        if (outIdx < quantileForecast.Length)
+                            quantileForecast.Data.Span[outIdx] = quantileValue;
+                    }
                 }
             }
         }
