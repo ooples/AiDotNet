@@ -25,9 +25,9 @@ namespace AiDotNet.AnomalyDetection;
 /// // Wrap it for use with DefaultDataPreprocessor
 /// var outlierRemoval = new OutlierRemovalAdapter&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(detector);
 ///
-/// // Use with AiModelBuilder
+/// // Use with AiModelBuilder via ConfigureDataPreparation
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-///     .ConfigureOutlierRemoval(outlierRemoval);
+///     .ConfigureDataPreparation(prep =&gt; prep.Add(new OutlierRemovalOperation&lt;double&gt;(detector)));
 /// </code>
 /// </para>
 /// </remarks>
