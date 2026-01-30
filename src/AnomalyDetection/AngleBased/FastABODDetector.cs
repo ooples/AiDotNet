@@ -154,7 +154,13 @@ public class FastABODDetector<T> : AnomalyDetectorBase<T>
             }
 
             dist = Math.Sqrt(dist);
-            distances.Add((i, point, dist));
+
+            // Only add neighbors with non-zero distance (zero distance = duplicate point)
+            // Zero-distance neighbors cause divide-by-zero in ComputeABOF
+            if (dist > 0)
+            {
+                distances.Add((i, point, dist));
+            }
         }
 
         return distances

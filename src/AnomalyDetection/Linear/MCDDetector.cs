@@ -41,8 +41,8 @@ namespace AiDotNet.AnomalyDetection.Linear;
 public class MCDDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _supportFraction;
-    private double[]? _robustMean;
-    private double[,]? _robustPrecision;
+    private Vector<T>? _robustMean;
+    private Matrix<T>? _robustPrecision;
     private int _nFeatures;
 
     /// <summary>
@@ -102,10 +102,26 @@ public class MCDDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Run Fast-MCD algorithm (simplified)
-        (_robustMean, var robustCov) = FastMCD(data, h);
+        var (robustMeanDouble, robustCov) = FastMCD(data, h);
 
         // Compute precision matrix (inverse of covariance)
-        _robustPrecision = InvertMatrix(robustCov);
+        var robustPrecisionDouble = InvertMatrix(robustCov);
+
+        // Convert to generic types for storage
+        _robustMean = new Vector<T>(_nFeatures);
+        for (int j = 0; j < _nFeatures; j++)
+        {
+            _robustMean[j] = NumOps.FromDouble(robustMeanDouble[j]);
+        }
+
+        _robustPrecision = new Matrix<T>(_nFeatures, _nFeatures);
+        for (int j1 = 0; j1 < _nFeatures; j1++)
+        {
+            for (int j2 = 0; j2 < _nFeatures; j2++)
+            {
+                _robustPrecision[j1, j2] = NumOps.FromDouble(robustPrecisionDouble[j1, j2]);
+            }
+        }
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -143,7 +159,7 @@ public class MCDDetector<T> : AnomalyDetectorBase<T>
 
                 for (int i = 0; i < n; i++)
                 {
-                    distances[i] = (MahalanobisDistance(data[i], mean, precision), i);
+                    distances[i] = (MahalanobisDistanceDouble(data[i], mean, precision), i);
                 }
 
                 // Select h points with smallest distances
@@ -221,7 +237,7 @@ public class MCDDetector<T> : AnomalyDetectorBase<T>
         return (mean, cov);
     }
 
-    private double MahalanobisDistance(double[] point, double[] mean, double[,] precision)
+    private double MahalanobisDistanceDouble(double[] point, double[] mean, double[,] precision)
     {
         double dist = 0;
         for (int i = 0; i < _nFeatures; i++)
@@ -234,6 +250,23 @@ public class MCDDetector<T> : AnomalyDetectorBase<T>
             }
         }
         return Math.Sqrt(Math.Max(0, dist));
+    }
+
+    private T MahalanobisDistance(double[] point, Vector<T> mean, Matrix<T> precision)
+    {
+        T dist = NumOps.Zero;
+        for (int i = 0; i < _nFeatures; i++)
+        {
+            T diff1 = NumOps.Subtract(NumOps.FromDouble(point[i]), mean[i]);
+            for (int j = 0; j < _nFeatures; j++)
+            {
+                T diff2 = NumOps.Subtract(NumOps.FromDouble(point[j]), mean[j]);
+                T contrib = NumOps.Multiply(diff1, NumOps.Multiply(precision[i, j], diff2));
+                dist = NumOps.Add(dist, contrib);
+            }
+        }
+        double distDouble = NumOps.ToDouble(dist);
+        return NumOps.FromDouble(Math.Sqrt(Math.Max(0, distDouble)));
     }
 
     private double[,] InvertMatrix(double[,] matrix)
@@ -385,8 +418,7 @@ public class MCDDetector<T> : AnomalyDetectorBase<T>
                 point[j] = NumOps.ToDouble(X[i, j]);
             }
 
-            double dist = MahalanobisDistance(point, robustMean, robustPrecision);
-            scores[i] = NumOps.FromDouble(dist);
+            scores[i] = MahalanobisDistance(point, robustMean, robustPrecision);
         }
 
         return scores;
