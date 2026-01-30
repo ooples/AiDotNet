@@ -980,14 +980,29 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
     {
         var current = FlattenInput(input);
 
-        // Apply layers
-        foreach (var layer in Layers)
+        // Track shape before last layer for backward pass
+        _preOutputShape = null;
+
+        // Apply layers with shape handling for GRU/Dense transitions
+        for (int i = 0; i < Layers.Count; i++)
         {
+            var layer = Layers[i];
+
+            // Before final Dense layer, flatten if needed (GRU outputs 3D)
+            if (i == Layers.Count - 1 && layer is DenseLayer<T> && current.Rank > 2)
+            {
+                _preOutputShape = current.Shape;
+                current = current.Reshape(new[] { current.Length });
+            }
+
             current = layer.Forward(current);
         }
 
         return ReshapeOutput(current);
     }
+
+    // Store shape before output layer for backward pass
+    private int[]? _preOutputShape;
 
     /// <summary>
     /// Performs the backward pass for gradient computation.
@@ -1007,7 +1022,15 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
         // Backward through layers in reverse
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            current = Layers[i].Backward(current);
+            var layer = Layers[i];
+
+            current = layer.Backward(current);
+
+            // After final Dense backward, reshape to match what previous layer (Dropout/GRU) expects
+            if (i == Layers.Count - 1 && _preOutputShape is not null && current.Length == _preOutputShape.Aggregate(1, (a, b) => a * b))
+            {
+                current = current.Reshape(_preOutputShape);
+            }
         }
 
         return current;

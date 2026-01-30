@@ -126,7 +126,12 @@ public class DCRNN<T> : ForecastingModelBase<T>
     public override int PredictionHorizon => _forecastHorizon;
 
     /// <inheritdoc/>
-    public override int NumFeatures => _numFeatures;
+    /// <remarks>
+    /// <para><b>For Beginners:</b> For DCRNN (a graph model), the expected input feature
+    /// dimension is numNodes * numFeatures since we process all nodes together.
+    /// </para>
+    /// </remarks>
+    public override int NumFeatures => _numNodes * _numFeatures;
 
     /// <inheritdoc/>
     public override int PatchSize => 1;

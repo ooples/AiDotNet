@@ -764,6 +764,14 @@ public class Chronos<T> : ForecastingModelBase<T>
 
         var current = input;
 
+        // Add batch dimension if input is 1D (layers expect at least 2D [batch, features])
+        bool addedBatchDim = false;
+        if (current.Rank == 1)
+        {
+            current = current.Reshape(new[] { 1, current.Length });
+            addedBatchDim = true;
+        }
+
         // Token embedding
         if (_tokenEmbedding is not null)
             current = _tokenEmbedding.Forward(current);
@@ -781,6 +789,12 @@ public class Chronos<T> : ForecastingModelBase<T>
         // Language model head
         if (_lmHead is not null)
             current = _lmHead.Forward(current);
+
+        // Remove batch dimension if we added it
+        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+        {
+            current = current.Reshape(new[] { current.Shape[1] });
+        }
 
         return current;
     }
@@ -800,6 +814,14 @@ public class Chronos<T> : ForecastingModelBase<T>
     {
         var current = gradOutput;
 
+        // Add batch dimension if gradient is 1D (layers expect at least 2D [batch, features])
+        bool addedBatchDim = false;
+        if (current.Rank == 1)
+        {
+            current = current.Reshape(new[] { 1, current.Length });
+            addedBatchDim = true;
+        }
+
         // LM head backward
         if (_lmHead is not null)
             current = _lmHead.Backward(current);
@@ -817,6 +839,12 @@ public class Chronos<T> : ForecastingModelBase<T>
         // Token embedding backward
         if (_tokenEmbedding is not null)
             current = _tokenEmbedding.Backward(current);
+
+        // Remove batch dimension if we added it
+        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+        {
+            current = current.Reshape(new[] { current.Shape[1] });
+        }
 
         return current;
     }
