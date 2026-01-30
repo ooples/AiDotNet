@@ -423,21 +423,39 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
     /// <remarks>
     /// <para><b>For Beginners:</b> Returns a summary of settings and current status.</para>
     /// </remarks>
+    [ThreadStatic]
+    private static bool _inGetVolatilityMetrics;
+
     public Dictionary<string, T> GetVolatilityMetrics()
     {
-        // Build base metrics directly to avoid infinite recursion with GetFinancialMetrics
-        var metrics = new Dictionary<string, T>
+        // Guard against infinite recursion - return empty metrics if already in this method
+        if (_inGetVolatilityMetrics)
         {
-            ["NumAssets"] = NumOps.FromDouble(_numAssets),
-            ["LookbackWindow"] = NumOps.FromDouble(_lookbackWindow),
-            ["ForecastHorizon"] = NumOps.FromDouble(PredictionHorizon),
-            ["HiddenSize"] = NumOps.FromDouble(_hiddenSize),
-            ["NumHeads"] = NumOps.FromDouble(_numHeads),
-            ["NumLayers"] = NumOps.FromDouble(_numLayers),
-            ["ParameterCount"] = NumOps.FromDouble(ParameterCount)
-        };
+            return new Dictionary<string, T>();
+        }
 
-        return metrics;
+        try
+        {
+            _inGetVolatilityMetrics = true;
+
+            // Build base metrics directly to avoid infinite recursion with GetFinancialMetrics
+            var metrics = new Dictionary<string, T>
+            {
+                ["NumAssets"] = NumOps.FromDouble(_numAssets),
+                ["LookbackWindow"] = NumOps.FromDouble(_lookbackWindow),
+                ["ForecastHorizon"] = NumOps.FromDouble(PredictionHorizon),
+                ["HiddenSize"] = NumOps.FromDouble(_hiddenSize),
+                ["NumHeads"] = NumOps.FromDouble(_numHeads),
+                ["NumLayers"] = NumOps.FromDouble(_numLayers),
+                ["ParameterCount"] = NumOps.FromDouble(ParameterCount)
+            };
+
+            return metrics;
+        }
+        finally
+        {
+            _inGetVolatilityMetrics = false;
+        }
     }
 
     /// <summary>

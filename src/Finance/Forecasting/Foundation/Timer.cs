@@ -821,37 +821,58 @@ public class Timer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> AutoregressiveGenerate(Tensor<T> input, int steps)
     {
-        // Handle different input shapes - flatten to 1D if needed
-        Tensor<T> flatInput;
+        // Normalize input to 3D [1, seqLen, features] for Forward pass
+        Tensor<T> normalizedInput;
+        int seqLen;
+        int features;
+
         if (input.Shape.Length == 1)
         {
-            flatInput = input;
+            // 1D input [seqLen] - reshape to [1, seqLen, 1]
+            seqLen = input.Shape[0];
+            features = 1;
+            normalizedInput = input.Reshape(new[] { 1, seqLen, features });
         }
-        else if (input.Shape.Length == 3 && input.Shape[0] == 1 && input.Shape[2] == 1)
+        else if (input.Shape.Length == 2)
         {
-            // 3D input [1, seqLen, 1] - flatten to [seqLen]
-            flatInput = input.Reshape(new[] { input.Shape[1] });
+            // 2D input [batch, seqLen] or [seqLen, features]
+            if (input.Shape[0] == 1)
+            {
+                // [1, seqLen] - reshape to [1, seqLen, 1]
+                seqLen = input.Shape[1];
+                features = 1;
+                normalizedInput = input.Reshape(new[] { 1, seqLen, features });
+            }
+            else
+            {
+                // [seqLen, features] - reshape to [1, seqLen, features]
+                seqLen = input.Shape[0];
+                features = input.Shape[1];
+                normalizedInput = input.Reshape(new[] { 1, seqLen, features });
+            }
         }
-        else if (input.Shape.Length == 2 && input.Shape[0] == 1)
+        else if (input.Shape.Length == 3 && input.Shape[0] == 1)
         {
-            // 2D input [1, seqLen] - flatten to [seqLen]
-            flatInput = input.Reshape(new[] { input.Shape[1] });
+            // Already 3D [1, seqLen, features]
+            seqLen = input.Shape[1];
+            features = input.Shape[2];
+            normalizedInput = input;
         }
         else
         {
             throw new InvalidOperationException(
                 $"Autoregressive generation currently supports a single univariate series with shape [context_length], " +
-                $"[1, context_length], or [1, context_length, 1]. " +
+                $"[1, context_length], [context_length, features], or [1, context_length, features]. " +
                 $"Got input shape [{string.Join(", ", input.Shape)}].");
         }
 
         var result = new Tensor<T>(new[] { 1, steps, 1 });
-        var currentInput = flatInput;
+        var currentInput = normalizedInput;
         var rand = RandomHelper.CreateSecureRandom();
 
         for (int step = 0; step < steps; step++)
         {
-            // Get next value prediction
+            // Get next value prediction - pass 3D input to Forward
             var prediction = Forward(currentInput);
 
             // Apply temperature scaling and sample
@@ -870,15 +891,34 @@ public class Timer<T> : ForecastingModelBase<T>
 
             result.Data.Span[step] = nextValue;
 
-            // Shift input and append generated value
+            // Shift input and append generated value - currentInput is [1, seqLen, features]
             if (step < steps - 1)
             {
                 var shifted = new Tensor<T>(currentInput.Shape);
-                for (int i = 0; i < _contextLength - 1; i++)
+                int actualSeqLen = currentInput.Shape[1];
+                int actualFeatures = currentInput.Shape[2];
+
+                // Shift along time dimension: copy data from t+1 to t
+                for (int t = 0; t < actualSeqLen - 1; t++)
                 {
-                    shifted.Data.Span[i] = currentInput.Data.Span[i + 1];
+                    for (int f = 0; f < actualFeatures; f++)
+                    {
+                        int srcIdx = (t + 1) * actualFeatures + f;
+                        int dstIdx = t * actualFeatures + f;
+                        shifted.Data.Span[dstIdx] = currentInput.Data.Span[srcIdx];
+                    }
                 }
-                shifted.Data.Span[_contextLength - 1] = nextValue;
+
+                // Append generated value at the last time step (first feature)
+                int lastTimeIdx = (actualSeqLen - 1) * actualFeatures;
+                shifted.Data.Span[lastTimeIdx] = nextValue;
+
+                // Zero out remaining features at last time step (if any)
+                for (int f = 1; f < actualFeatures; f++)
+                {
+                    shifted.Data.Span[lastTimeIdx + f] = NumOps.Zero;
+                }
+
                 currentInput = shifted;
             }
         }

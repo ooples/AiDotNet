@@ -811,6 +811,18 @@ internal static class FinanceModelTestFactory
     {
         var args = new object?[parameters.Length];
 
+        // Extract input size from architecture for numFeatures parameters
+        int? inputSizeFromArch = null;
+        var inputSizeProp = architectureType.GetProperty("InputSize", BindingFlags.Public | BindingFlags.Instance);
+        if (inputSizeProp != null)
+        {
+            var val = inputSizeProp.GetValue(architecture);
+            if (val is int intVal)
+            {
+                inputSizeFromArch = intVal;
+            }
+        }
+
         for (int i = 0; i < parameters.Length; i++)
         {
             var param = parameters[i];
@@ -821,6 +833,14 @@ internal static class FinanceModelTestFactory
             else if (optionsInstance != null && param.ParameterType.IsInstanceOfType(optionsInstance))
             {
                 args[i] = optionsInstance;
+            }
+            else if (param.ParameterType == typeof(int) && param.Name != null &&
+                     (param.Name.Equals("numFeatures", StringComparison.OrdinalIgnoreCase) ||
+                      param.Name.Equals("features", StringComparison.OrdinalIgnoreCase) ||
+                      param.Name.Equals("inputFeatures", StringComparison.OrdinalIgnoreCase)))
+            {
+                // Use architecture's InputSize for numFeatures parameters to match layer dimensions
+                args[i] = inputSizeFromArch ?? GetIntOption(optionsInstance, "NumFeatures") ?? 1;
             }
             else if (param.HasDefaultValue)
             {
