@@ -191,17 +191,21 @@ public class GESDDetector<T> : AnomalyDetectorBase<T>
     /// <returns>Critical value.</returns>
     private double ComputeLambda(int n, double alpha)
     {
-        // lambda_i = (n - i) * t_p,n-i-1 / sqrt((n - i - 1 + t^2_p,n-i-1) * (n - i + 1))
-        // where p = 1 - alpha / (2(n - i + 1))
+        // Rosner 1983 GESD critical value formula:
+        // lambda = n * t_{p, n-2} / sqrt((n - 1 + t^2) * (n + 1))
+        // where p = 1 - alpha / (2(n + 1))
+        // Note: n here is the current sample size (original n minus outliers removed so far)
 
-        double p = 1 - alpha / (2 * n);
+        if (n < 3) return double.MaxValue; // Cannot compute for very small samples
+
+        double p = 1 - alpha / (2.0 * (n + 1));
         int df = n - 2;
 
         // Get t-critical value
         double t = GetTCritical(p, Math.Max(1, df));
 
-        // Compute lambda
-        double lambda = ((n - 1) * t) / Math.Sqrt((n - 2 + t * t) * n);
+        // Compute lambda using correct Rosner formula
+        double lambda = (n * t) / Math.Sqrt((n - 1 + t * t) * (n + 1));
 
         return lambda;
     }
