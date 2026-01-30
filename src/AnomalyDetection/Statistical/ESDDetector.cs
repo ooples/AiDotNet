@@ -5,32 +5,30 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.AnomalyDetection.Statistical;
 
 /// <summary>
-/// Detects anomalies using the Extreme Studentized Deviate (ESD) test.
+/// Detects anomalies using ESD-based (Extreme Studentized Deviate) scoring.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> The ESD test is an extension of Grubbs' test that can detect multiple outliers.
-/// It iteratively identifies potential outliers by finding the point furthest from the mean,
-/// checking if it exceeds a critical value, and if so, removing it and repeating.
+/// <b>For Beginners:</b> This detector uses standardized residuals (the core statistic from the ESD test)
+/// to identify outliers. Points that deviate significantly from the mean (measured in standard deviations)
+/// are flagged as anomalies.
 /// </para>
 /// <para>
-/// The algorithm works by:
-/// 1. Compute the test statistic R_i = max|x_j - mean| / std for remaining data
-/// 2. Compare R_i to the critical value lambda_i
-/// 3. If R_i > lambda_i, the point is an outlier; remove it and repeat
-/// 4. Continue until no more outliers are found or max outliers reached
+/// <b>Implementation:</b> This is a scoring-based approach rather than iterative ESD:
+/// 1. Compute the ESD statistic for each point: max|x - mean| / std across features
+/// 2. Use contamination-based threshold to classify anomalies (top X% of scores)
 /// </para>
 /// <para>
 /// <b>When to use:</b>
 /// - When you expect multiple outliers
 /// - Data is approximately normally distributed
-/// - You have an upper bound on the number of outliers
+/// - You want Z-score style detection with contamination-based thresholding
 /// </para>
 /// <para>
 /// <b>Industry Standard Defaults:</b>
-/// - Alpha (significance level): 0.05 (5%)
-/// - Max outliers: 10% of data or sqrt(n)
+/// - Alpha (significance level): 0.05 (5%) - used for critical value computation
+/// - Contamination: 10% of data flagged as outliers
 /// </para>
 /// <para>
 /// Reference: Rosner, B. (1983). "Percentage Points for a Generalized ESD Many-Outlier Procedure."

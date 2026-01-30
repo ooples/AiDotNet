@@ -337,6 +337,12 @@ public class RobustPCADetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        var mean = _mean;
+        if (mean == null)
+        {
+            throw new InvalidOperationException("Model has not been fitted. Call Fit() first.");
+        }
+
         if (X.Columns != _nFeatures)
         {
             throw new ArgumentException(
@@ -365,7 +371,7 @@ public class RobustPCADetector<T> : AnomalyDetectorBase<T>
                 var point = new double[X.Columns];
                 for (int j = 0; j < X.Columns; j++)
                 {
-                    point[j] = NumOps.ToDouble(X[i, j]) - _mean![j];
+                    point[j] = NumOps.ToDouble(X[i, j]) - mean[j];
                 }
 
                 // Estimate reconstruction using mean low-rank pattern

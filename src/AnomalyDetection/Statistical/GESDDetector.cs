@@ -5,32 +5,29 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.AnomalyDetection.Statistical;
 
 /// <summary>
-/// Detects anomalies using the Generalized Extreme Studentized Deviate (GESD) test.
+/// Detects anomalies using GESD-based (Generalized Extreme Studentized Deviate) scoring.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> The GESD test is an iterative procedure for detecting up to k outliers
-/// in a univariate dataset. It extends the ESD test by explicitly specifying the maximum number
-/// of outliers to look for.
+/// <b>For Beginners:</b> This detector uses standardized residuals (the core statistic from the GESD test)
+/// to identify outliers. Points that deviate significantly from the mean are flagged as anomalies.
 /// </para>
 /// <para>
-/// The algorithm works by:
-/// 1. Set an upper bound k on the number of outliers
-/// 2. Compute k test statistics R_1, R_2, ..., R_k
-/// 3. Compute k critical values lambda_1, lambda_2, ..., lambda_k
-/// 4. Find the largest i where R_i > lambda_i; there are i outliers
+/// <b>Implementation:</b> This is a scoring-based approach:
+/// 1. Compute the GESD statistic for each point: max|x - mean| / std across features
+/// 2. Use contamination-based threshold to classify anomalies (top X% of scores)
+/// Critical values are computed from alpha for reference but thresholding uses contamination.
 /// </para>
 /// <para>
 /// <b>When to use:</b>
-/// - When you have an upper bound on the number of outliers
 /// - Data is approximately normally distributed
-/// - You want to detect multiple outliers
+/// - You want Z-score style detection with contamination-based thresholding
 /// </para>
 /// <para>
 /// <b>Industry Standard Defaults:</b>
 /// - Alpha (significance level): 0.05 (5%)
-/// - Max outliers k: Often set to 10% of sample size
+/// - Contamination: 10% of data flagged as outliers
 /// </para>
 /// <para>
 /// Reference: Rosner, B. (1983). "Percentage Points for a Generalized ESD Many-Outlier Procedure."
