@@ -16802,5 +16802,158 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenSize, numAssets, (IActivationFunction<T>)new SoftPlusActivation<T>());
     }
 
+    /// <summary>
+    /// Creates default layers for an OpenSora video generation model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="height">Output frame height.</param>
+    /// <param name="width">Output frame width.</param>
+    /// <param name="channels">Number of output channels (typically 3 for RGB).</param>
+    /// <param name="hiddenDim">Hidden dimension of the DiT blocks.</param>
+    /// <param name="numLayers">Number of DiT transformer layers.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <returns>A collection of layers forming the OpenSora architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> OpenSora is a video generation model that uses Diffusion
+    /// Transformers (DiT) to generate videos from text descriptions or images.
+    /// The architecture consists of:
+    /// </para>
+    /// <para>
+    /// <list type="bullet">
+    /// <item><b>Patch Embedding:</b> Converts spatiotemporal video patches into embeddings.</item>
+    /// <item><b>DiT Blocks:</b> Transformer layers with multi-head self-attention and FFN.</item>
+    /// <item><b>Text/Time Projections:</b> Project conditioning signals into the hidden space.</item>
+    /// <item><b>VAE Encoder/Decoder:</b> Compress images to latent space and back.</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultOpenSoraLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int height = 256,
+        int width = 256,
+        int channels = 3,
+        int hiddenDim = 1152,
+        int numLayers = 28,
+        int numHeads = 16)
+    {
+        int latentH = height / 8;
+        int latentW = width / 8;
+        int latentDim = 4;
+        int featH = latentH / 2;
+        int featW = latentW / 2;
+        int headDim = hiddenDim / numHeads;
+
+        // Patch embedding (2x2x2 spatiotemporal patches)
+        yield return new ConvolutionalLayer<T>(latentDim, latentH, latentW, hiddenDim, 2, 2, 0);
+
+        // DiT blocks with QKV, attention projection, and FFN layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            // QKV projection (combined Q, K, V projection)
+            yield return new ConvolutionalLayer<T>(hiddenDim, featH, featW, hiddenDim * 3, 1, 1, 0);
+
+            // Attention output projection
+            yield return new ConvolutionalLayer<T>(hiddenDim, featH, featW, hiddenDim, 1, 1, 0);
+
+            // FFN with expansion (4x hidden dim as per transformer standard)
+            yield return new ConvolutionalLayer<T>(hiddenDim, featH, featW, hiddenDim * 4, 1, 1, 0);
+            yield return new ConvolutionalLayer<T>(hiddenDim * 4, featH, featW, hiddenDim, 1, 1, 0);
+        }
+
+        // Text projection (from CLIP-like encoder)
+        yield return new ConvolutionalLayer<T>(768, 1, 1, hiddenDim, 1, 1, 0);
+
+        // Time embedding
+        yield return new ConvolutionalLayer<T>(1, 1, 1, hiddenDim, 1, 1, 0);
+
+        // Final layer (predict noise)
+        yield return new ConvolutionalLayer<T>(hiddenDim, featH, featW, latentDim * 4, 1, 1, 0);
+
+        // VAE decoder
+        yield return new ConvolutionalLayer<T>(latentDim, latentH, latentW, 256, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(256, latentH * 2, latentW * 2, 128, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(128, latentH * 4, latentW * 4, 64, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(64, height, width, channels, 3, 1, 1);
+
+        // VAE encoder (reverse of decoder for learned image compression)
+        yield return new ConvolutionalLayer<T>(channels, height, width, 64, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(64, height / 2, width / 2, 128, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(128, height / 4, width / 4, 256, 3, 2, 1);
+        yield return new ConvolutionalLayer<T>(256, latentH, latentW, latentDim, 3, 1, 1);
+    }
+
+    /// <summary>
+    /// Creates default layers for a FILM (Frame Interpolation for Large Motion) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="height">Input frame height.</param>
+    /// <param name="width">Input frame width.</param>
+    /// <param name="channels">Number of input channels (typically 3 for RGB).</param>
+    /// <param name="numScales">Number of pyramid scales for multi-scale processing.</param>
+    /// <param name="numFeatures">Base number of feature channels.</param>
+    /// <returns>A collection of layers forming the FILM architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> FILM generates smooth intermediate frames between two input frames,
+    /// even when there's significant motion between them. The architecture includes:
+    /// </para>
+    /// <para>
+    /// <list type="bullet">
+    /// <item><b>Feature Extractor:</b> Extracts features from both input frames.</item>
+    /// <item><b>Pyramid Layers:</b> Multi-scale feature pyramid for handling large motions.</item>
+    /// <item><b>Flow Estimator:</b> Bi-directional optical flow estimation.</item>
+    /// <item><b>Fusion Layers:</b> Combines features for frame synthesis.</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultFILMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int height = 256,
+        int width = 256,
+        int channels = 3,
+        int numScales = 7,
+        int numFeatures = 64)
+    {
+        // Multi-scale feature extractor (shared for both frames)
+        yield return new ConvolutionalLayer<T>(channels, height, width, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, height, width, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, height, width, numFeatures * 2, 3, 2, 1);
+
+        // Pyramid layers for each scale
+        int currentH = height / 2;
+        int currentW = width / 2;
+        int currentC = numFeatures * 2;
+
+        for (int s = 0; s < numScales - 1; s++)
+        {
+            yield return new ConvolutionalLayer<T>(currentC, currentH, currentW, Math.Min(currentC * 2, 512), 3, 2, 1);
+            currentH /= 2;
+            currentW /= 2;
+            currentC = Math.Min(currentC * 2, 512);
+            if (currentH < 4 || currentW < 4) break;
+        }
+
+        // Bi-directional flow estimator
+        int flowInputC = numFeatures * 2 * 2; // Concatenated features from both frames
+        yield return new ConvolutionalLayer<T>(flowInputC, height / 2, width / 2, numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 2, width / 2, numFeatures, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures, height / 2, width / 2, 4, 3, 1, 1); // 4 = 2 flows x 2 coords
+
+        // Flow refinement
+        yield return new ConvolutionalLayer<T>(4 + numFeatures, height / 2, width / 2, 4, 3, 1, 1);
+
+        // Occlusion estimator
+        yield return new ConvolutionalLayer<T>(flowInputC + 4, height / 2, width / 2, 2, 3, 1, 1);
+
+        // Feature fusion for synthesis
+        int fusionInputC = numFeatures * 2 * 2 + 4 + 2; // Features + flow + occlusion
+        yield return new ConvolutionalLayer<T>(fusionInputC, height / 2, width / 2, numFeatures * 2, 3, 1, 1);
+        yield return new ConvolutionalLayer<T>(numFeatures * 2, height / 2, width / 2, numFeatures, 3, 1, 1);
+
+        // Synthesis head
+        yield return new ConvolutionalLayer<T>(numFeatures, height, width, channels, 3, 1, 1);
+    }
+
     #endregion
 }

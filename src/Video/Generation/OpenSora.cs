@@ -82,8 +82,8 @@ public class OpenSora<T> : NeuralNetworkBase<T>
     private List<ConvolutionalLayer<T>> _vaeEncoder = [];
 
     // Noise schedule
-    private double[] _betas;
-    private double[] _alphasCumprod;
+    private double[] _betas = [];
+    private double[] _alphasCumprod = [];
 
     #endregion
 
@@ -118,6 +118,30 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
     #region Constructors
 
+    /// <summary>
+    /// Creates an OpenSora video generation model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFrames">Number of frames to generate (default: 16).</param>
+    /// <param name="hiddenDim">Hidden dimension of DiT blocks (default: 1152).</param>
+    /// <param name="numLayers">Number of DiT transformer layers (default: 28).</param>
+    /// <param name="numInferenceSteps">Number of diffusion inference steps (default: 50).</param>
+    /// <param name="guidanceScale">Classifier-free guidance scale (default: 7.5).</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> OpenSora generates videos from text descriptions, similar to
+    /// how DALL-E generates images from text. Key parameters:
+    /// </para>
+    /// <para>
+    /// <list type="bullet">
+    /// <item><b>numFrames:</b> How many video frames to generate.</item>
+    /// <item><b>hiddenDim:</b> Model capacity - larger values give better quality but slower.</item>
+    /// <item><b>numLayers:</b> Number of transformer layers - more layers = deeper reasoning.</item>
+    /// <item><b>numInferenceSteps:</b> More steps = higher quality but slower generation.</item>
+    /// <item><b>guidanceScale:</b> How closely to follow the text prompt (higher = more faithful).</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     public OpenSora(
         NeuralNetworkArchitecture<T> architecture,
         int numFrames = 16,
@@ -136,89 +160,14 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         _numInferenceSteps = numInferenceSteps;
         _guidanceScale = guidanceScale;
         GuidanceScale = guidanceScale;
-
-        // Initialize noise schedule
-        (_betas, _alphasCumprod) = InitializeNoiseSchedule(_numInferenceSteps);
-
-        // Initialize all network layers
-        InitializeNetworkLayers();
-    }
-
-    /// <summary>
-    /// Initializes all network layers based on current configuration.
-    /// </summary>
-    /// <remarks>
-    /// This method is called both from the constructor and during deserialization
-    /// to ensure layers are properly initialized with the correct dimensions.
-    /// </remarks>
-    private void InitializeNetworkLayers()
-    {
-        // Clear existing layers
-        ClearLayers();
-        _ditQKV.Clear();
-        _ditAttnProj.Clear();
-        _ditFFN1.Clear();
-        _ditFFN2.Clear();
-        _vaeDecoder.Clear();
-        _vaeEncoder.Clear();
-
-        int latentH = _height / 8;
-        int latentW = _width / 8;
-        int latentDim = 4;
-
-        // Patch embedding (2x2x2 spatiotemporal patches)
-        _patchEmbed = new ConvolutionalLayer<T>(latentDim, latentH, latentW, _hiddenDim, 2, 2, 0);
-
-        // DiT blocks with proper multi-head self-attention
-        int featH = latentH / 2;
-        int featW = latentW / 2;
+        _numHeads = 16;
         _headDim = _hiddenDim / _numHeads;
 
-        for (int i = 0; i < _numLayers; i++)
-        {
-            // QKV projection (combined Q, K, V projection)
-            _ditQKV.Add(new ConvolutionalLayer<T>(_hiddenDim, featH, featW, _hiddenDim * 3, 1, 1, 0));
+        // Initialize noise schedule before InitializeLayers
+        (_betas, _alphasCumprod) = InitializeNoiseSchedule(_numInferenceSteps);
 
-            // Attention output projection
-            _ditAttnProj.Add(new ConvolutionalLayer<T>(_hiddenDim, featH, featW, _hiddenDim, 1, 1, 0));
-
-            // FFN with expansion (4x hidden dim as per transformer standard)
-            _ditFFN1.Add(new ConvolutionalLayer<T>(_hiddenDim, featH, featW, _hiddenDim * 4, 1, 1, 0));
-            _ditFFN2.Add(new ConvolutionalLayer<T>(_hiddenDim * 4, featH, featW, _hiddenDim, 1, 1, 0));
-        }
-
-        // Text projection (from CLIP-like encoder)
-        _textProjection = new ConvolutionalLayer<T>(768, 1, 1, _hiddenDim, 1, 1, 0);
-
-        // Time embedding
-        _timeEmbed = new ConvolutionalLayer<T>(1, 1, 1, _hiddenDim, 1, 1, 0);
-
-        // Final layer (predict noise)
-        _finalLayer = new ConvolutionalLayer<T>(_hiddenDim, featH, featW, latentDim * 4, 1, 1, 0);
-
-        // VAE decoder
-        _vaeDecoder.Add(new ConvolutionalLayer<T>(latentDim, latentH, latentW, 256, 3, 1, 1));
-        _vaeDecoder.Add(new ConvolutionalLayer<T>(256, latentH * 2, latentW * 2, 128, 3, 1, 1));
-        _vaeDecoder.Add(new ConvolutionalLayer<T>(128, latentH * 4, latentW * 4, 64, 3, 1, 1));
-        _vaeDecoder.Add(new ConvolutionalLayer<T>(64, _height, _width, _channels, 3, 1, 1));
-
-        // VAE encoder (reverse of decoder for learned image compression)
-        _vaeEncoder.Add(new ConvolutionalLayer<T>(_channels, _height, _width, 64, 3, 2, 1));
-        _vaeEncoder.Add(new ConvolutionalLayer<T>(64, _height / 2, _width / 2, 128, 3, 2, 1));
-        _vaeEncoder.Add(new ConvolutionalLayer<T>(128, _height / 4, _width / 4, 256, 3, 2, 1));
-        _vaeEncoder.Add(new ConvolutionalLayer<T>(256, latentH, latentW, latentDim, 3, 1, 1));
-
-        // Register layers
-        Layers.Add(_patchEmbed);
-        foreach (var l in _ditQKV) Layers.Add(l);
-        foreach (var l in _ditAttnProj) Layers.Add(l);
-        foreach (var l in _ditFFN1) Layers.Add(l);
-        foreach (var l in _ditFFN2) Layers.Add(l);
-        Layers.Add(_textProjection);
-        Layers.Add(_timeEmbed);
-        Layers.Add(_finalLayer);
-        foreach (var l in _vaeDecoder) Layers.Add(l);
-        foreach (var l in _vaeEncoder) Layers.Add(l);
+        // Initialize layers using the proper pattern
+        InitializeLayers();
     }
 
     #endregion
@@ -1062,7 +1011,138 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
     #region Abstract Implementation
 
-    protected override void InitializeLayers() => ClearLayers();
+    /// <summary>
+    /// Initializes the neural network layers for OpenSora.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method sets up all the building blocks of the OpenSora model.
+    /// OpenSora uses a Diffusion Transformer (DiT) architecture for video generation.
+    /// </para>
+    /// <para>
+    /// The layers include:
+    /// <list type="bullet">
+    /// <item><b>Patch Embedding:</b> Converts spatiotemporal video patches into embeddings.</item>
+    /// <item><b>DiT Blocks:</b> Transformer layers with multi-head self-attention and FFN.</item>
+    /// <item><b>Text/Time Projections:</b> Project conditioning signals into the hidden space.</item>
+    /// <item><b>VAE Encoder/Decoder:</b> Compress images to latent space and back.</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// If you provide custom layers in the architecture, those are used instead.
+    /// Otherwise, the default OpenSora layers are created automatically.
+    /// </para>
+    /// </remarks>
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            // Use the layers provided by the user
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            // Use default layer configuration
+            Layers.AddRange(LayerHelper<T>.CreateDefaultOpenSoraLayers(
+                Architecture, _height, _width, _channels, _hiddenDim, _numLayers, _numHeads));
+
+            // Store references to specific layers for direct access
+            ExtractLayerReferences();
+        }
+    }
+
+    /// <summary>
+    /// Extracts references to specific layers from the layer collection for direct access.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> OpenSora has several distinct components that need to be
+    /// accessed individually during the forward pass. This method organizes these layers:
+    /// </para>
+    /// <para>
+    /// <list type="bullet">
+    /// <item><b>Patch Embedding:</b> The first layer that converts video patches into embeddings.</item>
+    /// <item><b>DiT Layers:</b> QKV projections, attention output projections, and FFN layers.</item>
+    /// <item><b>Text/Time Projections:</b> Conditioning signal projections.</item>
+    /// <item><b>VAE Layers:</b> Encoder and decoder for latent space compression.</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    private void ExtractLayerReferences()
+    {
+        int idx = 0;
+
+        // Patch embedding
+        if (Layers.Count > idx && Layers[idx] is ConvolutionalLayer<T> patchEmbed)
+        {
+            _patchEmbed = patchEmbed;
+            idx++;
+        }
+
+        // DiT blocks: QKV, AttnProj, FFN1, FFN2 for each layer
+        _ditQKV.Clear();
+        _ditAttnProj.Clear();
+        _ditFFN1.Clear();
+        _ditFFN2.Clear();
+
+        for (int i = 0; i < _numLayers && idx + 3 < Layers.Count; i++)
+        {
+            if (Layers[idx] is ConvolutionalLayer<T> qkv)
+                _ditQKV.Add(qkv);
+            idx++;
+
+            if (Layers[idx] is ConvolutionalLayer<T> attnProj)
+                _ditAttnProj.Add(attnProj);
+            idx++;
+
+            if (Layers[idx] is ConvolutionalLayer<T> ffn1)
+                _ditFFN1.Add(ffn1);
+            idx++;
+
+            if (Layers[idx] is ConvolutionalLayer<T> ffn2)
+                _ditFFN2.Add(ffn2);
+            idx++;
+        }
+
+        // Text projection
+        if (Layers.Count > idx && Layers[idx] is ConvolutionalLayer<T> textProj)
+        {
+            _textProjection = textProj;
+            idx++;
+        }
+
+        // Time embedding
+        if (Layers.Count > idx && Layers[idx] is ConvolutionalLayer<T> timeEmb)
+        {
+            _timeEmbed = timeEmb;
+            idx++;
+        }
+
+        // Final layer
+        if (Layers.Count > idx && Layers[idx] is ConvolutionalLayer<T> finalLyr)
+        {
+            _finalLayer = finalLyr;
+            idx++;
+        }
+
+        // VAE decoder (4 layers)
+        _vaeDecoder.Clear();
+        for (int i = 0; i < 4 && idx < Layers.Count; i++)
+        {
+            if (Layers[idx] is ConvolutionalLayer<T> decLayer)
+                _vaeDecoder.Add(decLayer);
+            idx++;
+        }
+
+        // VAE encoder (4 layers)
+        _vaeEncoder.Clear();
+        for (int i = 0; i < 4 && idx < Layers.Count; i++)
+        {
+            if (Layers[idx] is ConvolutionalLayer<T> encLayer)
+                _vaeEncoder.Add(encLayer);
+            idx++;
+        }
+    }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
@@ -1112,10 +1192,19 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         writer.Write(_guidanceScale);
     }
 
+    /// <summary>
+    /// Restores model configuration from serialized data.
+    /// </summary>
     /// <remarks>
-    /// Restores all model configuration fields and reinitializes layers to match
-    /// the deserialized state. This ensures the model structure is properly
-    /// reconstructed after loading from a serialized format.
+    /// <para>
+    /// <b>For Beginners:</b> When you load a saved model, this method reads back all
+    /// the configuration values (like dimensions, number of layers, etc.) and rebuilds
+    /// the network architecture to match what was saved.
+    /// </para>
+    /// <para>
+    /// This ensures that after loading, the model has exactly the same structure
+    /// as when it was saved, including all the learned weights.
+    /// </para>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
@@ -1129,13 +1218,16 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         _numInferenceSteps = reader.ReadInt32();
         _guidanceScale = reader.ReadDouble();
         GuidanceScale = _guidanceScale;
+        _numHeads = 16;
+        _headDim = _hiddenDim / _numHeads;
 
-        // Re-initialize noise schedule with the restored inference steps
+        // Re-initialize noise schedule with restored inference steps
         (_betas, _alphasCumprod) = InitializeNoiseSchedule(_numInferenceSteps);
 
         // Reinitialize layers with the restored configuration
-        // This is necessary because the layer structure depends on these parameters
-        InitializeNetworkLayers();
+        // Clear existing layers and re-initialize using the proper pattern
+        Layers.Clear();
+        InitializeLayers();
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
