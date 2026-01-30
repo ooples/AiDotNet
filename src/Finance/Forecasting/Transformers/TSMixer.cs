@@ -338,6 +338,8 @@ public class TSMixer<T> : ForecastingModelBase<T>
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            // Always extract layer references even for custom layers
+            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
@@ -784,13 +786,64 @@ public class TSMixer<T> : ForecastingModelBase<T>
         // Apply RevIN if enabled
         var normalized = _useRevIN ? ApplyRevIN(input, normalize: true) : input;
 
-        // Input projection
-        var current = _inputProjection?.Forward(normalized) ?? normalized;
+        // Input projection - transforms features from numFeatures to hiddenDim
+        // If _inputProjection is null but we have layers, use Layers[0] as fallback
+        Tensor<T> current;
+        if (_inputProjection != null)
+        {
+            current = _inputProjection.Forward(normalized);
+        }
+        else if (Layers.Count > 0)
+        {
+            // Defensive fallback: use first layer if _inputProjection wasn't set
+            current = Layers[0].Forward(normalized);
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "TSMixer requires an input projection layer. Ensure InitializeLayers was called.");
+        }
 
-        // Mixer blocks
+        // Validate the projection transformed the input correctly
+        // Input should be [batch, seq, numFeatures], output should be [batch, seq, hiddenDim]
+        int currentLastDim = current.Shape[^1];
+        if (currentLastDim != _hiddenDim)
+        {
+            // Identify which layer was used for projection
+            string layerType = _inputProjection?.GetType().Name ?? "Layers[0]=" + (Layers.Count > 0 ? Layers[0].GetType().Name : "none");
+            throw new InvalidOperationException(
+                $"Input projection failed to transform features. " +
+                $"Expected output last dimension = {_hiddenDim}, got {currentLastDim}. " +
+                $"Input shape: [{string.Join(", ", normalized.Shape)}], " +
+                $"Output shape: [{string.Join(", ", current.Shape)}]. " +
+                $"Layer used: {layerType}. " +
+                $"NumFeatures={_numFeatures}, HiddenDim={_hiddenDim}.");
+        }
+
+        // Mixer blocks - TSMixer alternates between time-mixing and feature-mixing
+        // Time-mixing requires transposing to [batch, features, seq] so Dense operates on seq dimension
+        // Feature-mixing operates on [batch, seq, features] so Dense operates on features dimension
+        int blockLayerIdx = 0;
         foreach (var layer in _mixerBlocks)
         {
-            current = layer.Forward(current);
+            // Within each block of 8 layers:
+            // 0-3: Time-mixing (LayerNorm, Dense, Dense, Dropout) - need transpose
+            // 4-7: Feature-mixing (LayerNorm, Dense, Dense, Dropout) - no transpose
+            int positionInBlock = blockLayerIdx % 8;
+            bool isTimeMixingLayer = positionInBlock < 4;
+
+            if (isTimeMixingLayer && layer is not LayerNormalizationLayer<T> && layer is not DropoutLayer<T>)
+            {
+                // Time-mixing Dense layers: transpose to [batch, features, seq], apply, transpose back
+                current = current.Transpose([0, 2, 1]);  // [batch, seq, features] -> [batch, features, seq]
+                current = layer.Forward(current);
+                current = current.Transpose([0, 2, 1]);  // [batch, features, seq] -> [batch, seq, features]
+            }
+            else
+            {
+                current = layer.Forward(current);
+            }
+            blockLayerIdx++;
         }
 
         // Process remaining layers (final norm, projections)
