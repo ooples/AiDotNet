@@ -252,14 +252,21 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     /// <para>
     /// <b>For Beginners:</b> Adapts the risk calculation to the standard forecasting interface.
     /// It treats "future risk" as the thing being forecasted.
+    /// This method uses Forward directly instead of CalculateRisk to avoid
+    /// infinite recursion (Predict → Forecast → ForecastNative → CalculateRisk → Predict).
     /// </para>
     /// </remarks>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         // Default forecasting implementation for risk models
-        // Can be overridden to provide risk forecasts
-        var risk = CalculateRisk(input);
-        return new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { risk }));
+        // Uses Forward directly to avoid recursion with CalculateRisk
+        // (CalculateRisk calls Predict which calls Forecast which calls ForecastNative)
+        var current = input;
+        foreach (var layer in Layers)
+        {
+            current = layer.Forward(current);
+        }
+        return current;
     }
 
     /// <summary>

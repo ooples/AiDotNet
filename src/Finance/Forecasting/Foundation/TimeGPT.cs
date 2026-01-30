@@ -410,19 +410,23 @@ public class TimeGPT<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("Training is only supported in native mode.");
 
         SetTrainingMode(true);
+        try
+        {
+            var output = Forward(input);
 
-        var output = Forward(input);
+            // Compute loss
+            LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
-        // Compute loss
-        LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
+            // Backward pass
+            var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
+            Backward(Tensor<T>.FromVector(gradient, output.Shape));
 
-        // Backward pass
-        var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
-
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+            _optimizer.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -498,6 +502,7 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
+        writer.Write(_useNativeMode);
         writer.Write(_contextLength);
         writer.Write(_forecastHorizon);
         writer.Write(_hiddenDimension);
@@ -531,6 +536,7 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        _useNativeMode = reader.ReadBoolean();
         _contextLength = reader.ReadInt32();
         _forecastHorizon = reader.ReadInt32();
         _hiddenDimension = reader.ReadInt32();
@@ -875,13 +881,17 @@ public class TimeGPT<T> : ForecastingModelBase<T>
 
         // Enable dropout for MC sampling
         SetTrainingMode(true);
-
-        for (int s = 0; s < numSamples; s++)
+        try
         {
-            samples.Add(Forward(input));
+            for (int s = 0; s < numSamples; s++)
+            {
+                samples.Add(Forward(input));
+            }
         }
-
-        SetTrainingMode(false);
+        finally
+        {
+            SetTrainingMode(false);
+        }
 
         // Compute quantiles
         var result = new Tensor<T>(new[] { 1, _forecastHorizon, quantiles.Length });
@@ -895,6 +905,16 @@ public class TimeGPT<T> : ForecastingModelBase<T>
                 {
                     values.Add(NumOps.ToDouble(sample.Data.Span[t]));
                 }
+            }
+
+            // Guard against empty values list - use default value if no samples available
+            if (values.Count == 0)
+            {
+                for (int q = 0; q < quantiles.Length; q++)
+                {
+                    result.Data.Span[t * quantiles.Length + q] = NumOps.Zero;
+                }
+                continue;
             }
 
             values.Sort();
@@ -965,19 +985,24 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
         var result = new Tensor<T>(input.Shape);
-        int contextLen = _contextLength;
-        int steps = Math.Min(stepsUsed, contextLen);
+        // Use effective context length based on actual input size
+        int effectiveContext = Math.Min(_contextLength, input.Length);
+        int steps = Math.Min(stepsUsed, effectiveContext);
 
-        // Shift old values left
-        for (int i = 0; i < contextLen - steps; i++)
+        // Shift old values left - guard against input.Length < _contextLength
+        for (int i = 0; i < effectiveContext - steps && i + steps < input.Length; i++)
         {
             result.Data.Span[i] = input.Data.Span[i + steps];
         }
 
-        // Append predictions
+        // Append predictions - guard against result and predictions bounds
         for (int i = 0; i < steps && i < predictions.Length; i++)
         {
-            result.Data.Span[contextLen - steps + i] = predictions.Data.Span[i];
+            int targetIdx = effectiveContext - steps + i;
+            if (targetIdx >= 0 && targetIdx < result.Length)
+            {
+                result.Data.Span[targetIdx] = predictions.Data.Span[i];
+            }
         }
 
         return result;

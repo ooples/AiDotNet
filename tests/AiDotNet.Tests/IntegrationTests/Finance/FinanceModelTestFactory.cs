@@ -938,6 +938,7 @@ internal static class FinanceModelTestFactory
         SetInt(options, "HiddenDimension", 8);
         SetInt(options, "HiddenDim", 8);
         SetInt(options, "HiddenSize", 8);
+        SetInt(options, "HiddenLayerSize", 8);
         SetInt(options, "EmbeddingDim", 8);
         SetInt(options, "EmbeddingSize", 8);
         SetInt(options, "LLMDimension", 8);
@@ -947,6 +948,7 @@ internal static class FinanceModelTestFactory
         SetInt(options, "FeedForwardDim", 16);
         SetInt(options, "IntermediateDimension", 16);
         SetInt(options, "NumLayers", 1);
+        SetInt(options, "NumHiddenLayers", 1);
         SetInt(options, "NumEncoderLayers", 1);
         SetInt(options, "NumDecoderLayers", 1);
         SetInt(options, "NumAttentionHeads", 2);

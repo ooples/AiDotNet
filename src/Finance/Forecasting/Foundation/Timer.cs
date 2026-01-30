@@ -821,6 +821,14 @@ public class Timer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> AutoregressiveGenerate(Tensor<T> input, int steps)
     {
+        // Guard: AutoregressiveGenerate currently supports single univariate series only
+        if (input.Shape.Length != 1 || _numFeatures != 1)
+        {
+            throw new InvalidOperationException(
+                $"Autoregressive generation currently supports a single univariate series with shape [context_length]. " +
+                $"Got input shape [{string.Join(", ", input.Shape)}] with numFeatures={_numFeatures}.");
+        }
+
         var result = new Tensor<T>(new[] { 1, steps, 1 });
         var currentInput = input;
         var rand = RandomHelper.CreateSecureRandom();
@@ -1002,6 +1010,14 @@ public class Timer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
+        // Guard: ShiftInputWithPredictions currently supports single univariate series only
+        if (input.Shape.Length != 1 || _numFeatures != 1)
+        {
+            throw new InvalidOperationException(
+                $"ShiftInputWithPredictions currently supports a single univariate series with shape [context_length]. " +
+                $"Got input shape [{string.Join(", ", input.Shape)}] with numFeatures={_numFeatures}.");
+        }
+
         var result = new Tensor<T>(input.Shape);
         int contextLen = _contextLength;
         int steps = Math.Min(stepsUsed, contextLen);

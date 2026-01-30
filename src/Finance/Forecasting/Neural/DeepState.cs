@@ -930,7 +930,11 @@ public class DeepState<T> : ForecastingModelBase<T>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         if (a.Length != b.Length)
-            return a;
+        {
+            throw new ArgumentException(
+                $"Tensor shape mismatch in AddTensors: {a.Length} vs {b.Length}. " +
+                "This may indicate a layer configuration issue.");
+        }
 
         var result = new Tensor<T>(a.Shape);
         for (int i = 0; i < a.Length; i++)

@@ -207,13 +207,20 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
     /// <para>
     /// <b>For Beginners:</b> Adapts the optimizer to the standard forecasting interface.
     /// In this context, the "forecast" is the set of optimal portfolio weights for the next period.
+    /// This method uses Forward directly instead of OptimizePortfolio to avoid
+    /// infinite recursion (Predict → Forecast → ForecastNative → OptimizePortfolio → Predict).
     /// </para>
     /// </remarks>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
-        // Default implementation for portfolio optimizer returns optimized weights as "prediction"
-        var weights = OptimizePortfolio(input);
-        return Tensor<T>.FromVector(weights);
+        // Uses Forward directly to avoid recursion with OptimizePortfolio
+        // (OptimizePortfolio may call Predict which calls Forecast which calls ForecastNative)
+        var current = input;
+        foreach (var layer in Layers)
+        {
+            current = layer.Forward(current);
+        }
+        return current;
     }
 
     /// <summary>

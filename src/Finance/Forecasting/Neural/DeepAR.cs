@@ -846,11 +846,13 @@ public class DeepAR<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void ValidateInputShape(Tensor<T> input)
     {
-        if (input.Rank != 2 && input.Rank != 3)
-            throw new ArgumentException("Input tensor must be 2D [context_length, num_features] or 3D [batch_size, context_length, num_features].", nameof(input));
+        // Currently only rank-3 is properly supported by ApplyScaling, ReverseScaling, and ShiftInputWithPredictions
+        // TODO: Add rank-2 support to helper methods if unbatched input is needed
+        if (input.Rank != 3)
+            throw new ArgumentException("Input tensor must be 3D [batch_size, context_length, num_features].", nameof(input));
 
-        int actualSeqLen = input.Rank == 3 ? input.Shape[1] : input.Shape[0];
-        int actualNumFeatures = input.Rank == 3 ? input.Shape[2] : input.Shape[1];
+        int actualSeqLen = input.Shape[1];
+        int actualNumFeatures = input.Shape[2];
 
         if (actualSeqLen != SequenceLength)
             throw new ArgumentException($"Input sequence length {actualSeqLen} does not match expected {SequenceLength}.", nameof(input));

@@ -459,23 +459,27 @@ public class Chronos<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("Training is only supported in native mode.");
 
         SetTrainingMode(true);
+        try
+        {
+            // Tokenize input and run through the model
+            var tokenizedInput = Tokenize(input);
+            var logits = Forward(tokenizedInput);
 
-        // Tokenize input and run through the model
-        var tokenizedInput = Tokenize(input);
-        var logits = Forward(tokenizedInput);
+            // If target is already tokenized/logit-shaped (as in tests), use it directly.
+            // Otherwise, tokenize the target to match logits for training.
+            var targetTokens = target.Length == logits.Length ? target : Tokenize(target);
 
-        // If target is already tokenized/logit-shaped (as in tests), use it directly.
-        // Otherwise, tokenize the target to match logits for training.
-        var targetTokens = target.Length == logits.Length ? target : Tokenize(target);
+            LastLoss = _lossFunction.CalculateLoss(logits.ToVector(), targetTokens.ToVector());
 
-        LastLoss = _lossFunction.CalculateLoss(logits.ToVector(), targetTokens.ToVector());
+            var gradient = _lossFunction.CalculateDerivative(logits.ToVector(), targetTokens.ToVector());
+            Backward(Tensor<T>.FromVector(gradient, logits.Shape));
 
-        var gradient = _lossFunction.CalculateDerivative(logits.ToVector(), targetTokens.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, logits.Shape));
-
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+            _optimizer.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -568,6 +572,11 @@ public class Chronos<T> : ForecastingModelBase<T>
         writer.Write(_dropout);
         writer.Write(_temperature);
         writer.Write(_modelSize);
+
+        // Serialize tokenization scaling state
+        writer.Write(_hasTokenScale);
+        writer.Write(NumOps.ToDouble(_lastTokenMin));
+        writer.Write(NumOps.ToDouble(_lastTokenRange));
     }
 
     /// <summary>
@@ -591,6 +600,11 @@ public class Chronos<T> : ForecastingModelBase<T>
         _dropout = reader.ReadDouble();
         _temperature = reader.ReadDouble();
         _modelSize = reader.ReadString();
+
+        // Deserialize tokenization scaling state
+        _hasTokenScale = reader.ReadBoolean();
+        _lastTokenMin = NumOps.FromDouble(reader.ReadDouble());
+        _lastTokenRange = NumOps.FromDouble(reader.ReadDouble());
     }
 
     #endregion
@@ -953,7 +967,8 @@ public class Chronos<T> : ForecastingModelBase<T>
                 }
             }
 
-            double scaledValue = maxIdx / (double)(_numTokens - 1);
+            // Guard against division by zero when _numTokens == 1
+            double scaledValue = _numTokens > 1 ? maxIdx / (double)(_numTokens - 1) : 0.5;
             if (_hasTokenScale)
             {
                 double minVal = NumOps.ToDouble(_lastTokenMin);
@@ -997,7 +1012,8 @@ public class Chronos<T> : ForecastingModelBase<T>
             {
                 // Sample from softmax distribution with temperature
                 int tokenIdx = SampleFromLogits(logits, step, rand);
-                double scaledValue = tokenIdx / (double)(_numTokens - 1);
+                // Guard against division by zero when _numTokens == 1
+                double scaledValue = _numTokens > 1 ? tokenIdx / (double)(_numTokens - 1) : 0.5;
 
                 if (_hasTokenScale)
                 {

@@ -415,6 +415,14 @@ public static class DeserializationHelper
         {
             instance = CreateActivationLayer<T>(type, inputShape, additionalParams);
         }
+        else if (genericDef == typeof(GRULayer<>))
+        {
+            instance = CreateGRULayer<T>(type, inputShape, outputShape, additionalParams);
+        }
+        else if (genericDef == typeof(LSTMLayer<>))
+        {
+            instance = CreateLSTMLayer<T>(type, inputShape, outputShape, additionalParams);
+        }
         else
         {
             // Default: pass inputShape as first parameter
@@ -682,6 +690,59 @@ public static class DeserializationHelper
             throw new InvalidOperationException("Cannot find ActivationLayer constructor with (int[], IActivationFunction<T>).");
         }
         return scalarCtor.Invoke(new object[] { inputShape, activationFunction });
+    }
+
+    /// <summary>
+    /// Creates a GRU layer during deserialization.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> GRU (Gated Recurrent Unit) layers process sequences of data
+    /// and maintain memory of previous inputs. This method recreates a GRU layer with the
+    /// correct input size and hidden size from the serialized shape data.</para>
+    /// </remarks>
+    private static object CreateGRULayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
+    {
+        // GRULayer(int inputSize, int hiddenSize, bool returnSequences = false, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null)
+        // inputSize comes from last dimension of inputShape, hiddenSize from outputShape
+        int inputSize = inputShape.Length >= 2 ? inputShape[^1] : inputShape[0];
+        int hiddenSize = outputShape.Length >= 2 ? outputShape[^1] : outputShape[0];
+        bool returnSequences = TryGetBool(additionalParams, "ReturnSequences") ?? true;
+
+        var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(bool), activationFuncType, activationFuncType });
+        if (ctor is null)
+        {
+            throw new InvalidOperationException("Cannot find GRULayer constructor with (int, int, bool, IActivationFunction<T>, IActivationFunction<T>).");
+        }
+
+        object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+        return ctor.Invoke(new object?[] { inputSize, hiddenSize, returnSequences, activation, null });
+    }
+
+    /// <summary>
+    /// Creates an LSTM layer during deserialization.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> LSTM (Long Short-Term Memory) layers are a type of recurrent
+    /// neural network that can learn long-term dependencies. This method recreates an LSTM layer
+    /// with the correct input size, hidden size, and input shape from serialized data.</para>
+    /// </remarks>
+    private static object CreateLSTMLayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
+    {
+        // LSTMLayer(int inputSize, int hiddenSize, int[] inputShape, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null, IEngine? engine = null)
+        int inputSize = inputShape.Length >= 2 ? inputShape[^1] : inputShape[0];
+        int hiddenSize = outputShape.Length >= 2 ? outputShape[^1] : outputShape[0];
+
+        var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+        var engineType = typeof(IEngine);
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int[]), activationFuncType, activationFuncType, engineType });
+        if (ctor is null)
+        {
+            throw new InvalidOperationException("Cannot find LSTMLayer constructor with (int, int, int[], IActivationFunction<T>, IActivationFunction<T>, IEngine).");
+        }
+
+        object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+        return ctor.Invoke(new object?[] { inputSize, hiddenSize, inputShape, activation, null, null });
     }
 
     private static bool TryParseLayerTypeIdentifier(

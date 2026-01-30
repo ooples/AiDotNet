@@ -269,6 +269,16 @@ public class TimeLLM<T> : ForecastingModelBase<T>
         _llmBackbone = options.LLMBackbone;
         _numFeatures = 1;
 
+        // Validate patch parameters before computing _numPatches
+        if (_contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(options.ContextLength), "Context length must be at least 1.");
+        if (_patchLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(options.PatchLength), "Patch length must be at least 1.");
+        if (_patchStride < 1)
+            throw new ArgumentOutOfRangeException(nameof(options.PatchStride), "Patch stride must be at least 1.");
+        if (_patchLength > _contextLength)
+            throw new ArgumentOutOfRangeException(nameof(options.PatchLength), "Patch length cannot exceed context length.");
+
         // Calculate number of patches
         _numPatches = (_contextLength - _patchLength) / _patchStride + 1;
 
@@ -315,6 +325,16 @@ public class TimeLLM<T> : ForecastingModelBase<T>
         _dropout = options.DropoutRate;
         _llmBackbone = options.LLMBackbone;
         _numFeatures = numFeatures;
+
+        // Validate patch parameters before computing _numPatches
+        if (_contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(options.ContextLength), "Context length must be at least 1.");
+        if (_patchLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(options.PatchLength), "Patch length must be at least 1.");
+        if (_patchStride < 1)
+            throw new ArgumentOutOfRangeException(nameof(options.PatchStride), "Patch stride must be at least 1.");
+        if (_patchLength > _contextLength)
+            throw new ArgumentOutOfRangeException(nameof(options.PatchLength), "Patch length cannot exceed context length.");
 
         // Calculate number of patches
         _numPatches = (_contextLength - _patchLength) / _patchStride + 1;

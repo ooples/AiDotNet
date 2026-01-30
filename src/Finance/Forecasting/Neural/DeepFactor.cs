@@ -342,6 +342,7 @@ public class DeepFactor<T> : ForecastingModelBase<T>
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
@@ -994,12 +995,17 @@ public class DeepFactor<T> : ForecastingModelBase<T>
             newInput.Data.Span[i] = input.Data.Span[i + shift];
         }
 
-        for (int i = 0; i < stepsUsed && i < predictions.Length; i++)
+        // Copy all features for each time step from predictions
+        for (int step = 0; step < stepsUsed; step++)
         {
-            int targetIdx = totalElements - shift + i * _numFeatures;
-            if (targetIdx < totalElements)
+            for (int f = 0; f < _numFeatures; f++)
             {
-                newInput.Data.Span[targetIdx] = predictions[i];
+                int predIdx = step * _numFeatures + f;
+                int targetIdx = totalElements - shift + step * _numFeatures + f;
+                if (predIdx < predictions.Length && targetIdx >= 0 && targetIdx < totalElements)
+                {
+                    newInput.Data.Span[targetIdx] = predictions.Data.Span[predIdx];
+                }
             }
         }
 
