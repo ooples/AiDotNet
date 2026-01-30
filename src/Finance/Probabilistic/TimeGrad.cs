@@ -65,10 +65,10 @@ namespace AiDotNet.Finance.Probabilistic;
 public class TimeGrad<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
     #endregion
 
-    
+
     #region Native Mode Fields
     private DenseLayer<T>? _inputEmbedding;
     private List<DenseLayer<T>>? _rnnLayers;
@@ -90,15 +90,15 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly TimeGradOptions<T> _options;
-    private readonly int _contextLength;
-    private readonly int _forecastHorizon;
-    private readonly int _hiddenDimension;
-    private readonly int _numRnnLayers;
-    private readonly int _numDiffusionSteps;
-    private readonly int _numSamples;
-    private readonly int _denoisingDim;
-    private readonly string _betaSchedule;
-    private readonly int _numFeatures;
+    private int _contextLength;
+    private int _forecastHorizon;
+    private int _hiddenDimension;
+    private int _numRnnLayers;
+    private int _numDiffusionSteps;
+    private int _numSamples;
+    private int _denoisingDim;
+    private string _betaSchedule;
+    private int _numFeatures;
     #endregion
 
     #region IForecastingModel Properties
@@ -578,14 +578,14 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // contextLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numRnnLayers
-        _ = reader.ReadInt32(); // numDiffusionSteps
-        _ = reader.ReadInt32(); // numSamples
-        _ = reader.ReadInt32(); // denoisingDim
-        _ = reader.ReadString(); // betaSchedule
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numRnnLayers = reader.ReadInt32();
+        _numDiffusionSteps = reader.ReadInt32();
+        _numSamples = reader.ReadInt32();
+        _denoisingDim = reader.ReadInt32();
+        _betaSchedule = reader.ReadString();
     }
 
     #endregion

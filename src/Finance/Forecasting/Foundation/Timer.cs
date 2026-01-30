@@ -63,11 +63,11 @@ public class Timer<T> : ForecastingModelBase<T>
     /// - ONNX mode: Inference using pretrained ONNX model
     /// </para>
     /// </remarks>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
-    
+
     #region Native Mode Fields
 
     /// <summary>
@@ -117,67 +117,67 @@ public class Timer<T> : ForecastingModelBase<T>
     /// <summary>
     /// Context length for the input sequence.
     /// </summary>
-    private readonly int _contextLength;
+    private int _contextLength;
 
     /// <summary>
     /// Forecast horizon for predictions.
     /// </summary>
-    private readonly int _forecastHorizon;
+    private int _forecastHorizon;
 
     /// <summary>
     /// Patch length for tokenization.
     /// </summary>
-    private readonly int _patchLength;
+    private int _patchLength;
 
     /// <summary>
     /// Patch stride.
     /// </summary>
-    private readonly int _patchStride;
+    private int _patchStride;
 
     /// <summary>
     /// Hidden dimension size.
     /// </summary>
-    private readonly int _hiddenDimension;
+    private int _hiddenDimension;
 
     /// <summary>
     /// Number of transformer layers.
     /// </summary>
-    private readonly int _numLayers;
+    private int _numLayers;
 
     /// <summary>
     /// Number of attention heads.
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
     /// Dropout rate.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     /// <summary>
     /// Mask ratio for masked modeling.
     /// </summary>
-    private readonly double _maskRatio;
+    private double _maskRatio;
 
     /// <summary>
     /// Whether to use autoregressive decoding.
     /// </summary>
-    private readonly bool _useAutoregressiveDecoding;
+    private bool _useAutoregressiveDecoding;
 
     /// <summary>
     /// Temperature for sampling during generation.
     /// </summary>
-    private readonly double _generationTemperature;
+    private double _generationTemperature;
 
     /// <summary>
     /// Number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     /// <summary>
     /// Number of patches.
     /// </summary>
-    private readonly int _numPatches;
+    private int _numPatches;
 
     #endregion
 
@@ -568,18 +568,18 @@ public class Timer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // contextLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // patchLength
-        _ = reader.ReadInt32(); // patchStride
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadDouble(); // maskRatio
-        _ = reader.ReadBoolean(); // useAutoregressiveDecoding
-        _ = reader.ReadDouble(); // generationTemperature
-        _ = reader.ReadInt32(); // numFeatures
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _patchLength = reader.ReadInt32();
+        _patchStride = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _maskRatio = reader.ReadDouble();
+        _useAutoregressiveDecoding = reader.ReadBoolean();
+        _generationTemperature = reader.ReadDouble();
+        _numFeatures = reader.ReadInt32();
     }
 
     #endregion

@@ -66,10 +66,10 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 public class Hippo<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
     #endregion
 
-    
+
     #region Native Mode Fields
     private DenseLayer<T>? _inputEmbedding;
     private List<DenseLayer<T>>? _hippoBLayers;
@@ -84,17 +84,17 @@ public class Hippo<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly HippoOptions<T> _options;
-    private readonly int _contextLength;
-    private readonly int _forecastHorizon;
-    private readonly int _modelDimension;
-    private readonly int _stateDimension;
-    private readonly int _numLayers;
-    private readonly string _hippoMethod;
-    private readonly string _discretizationMethod;
-    private readonly double _timescaleMin;
-    private readonly double _timescaleMax;
-    private readonly bool _useNormalization;
-    private readonly int _numFeatures;
+    private int _contextLength;
+    private int _forecastHorizon;
+    private int _modelDimension;
+    private int _stateDimension;
+    private int _numLayers;
+    private string _hippoMethod;
+    private string _discretizationMethod;
+    private double _timescaleMin;
+    private double _timescaleMax;
+    private bool _useNormalization;
+    private int _numFeatures;
     #endregion
 
     #region IForecastingModel Properties
@@ -520,16 +520,16 @@ public class Hippo<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // contextLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // modelDimension
-        _ = reader.ReadInt32(); // stateDimension
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadString(); // hippoMethod
-        _ = reader.ReadString(); // discretizationMethod
-        _ = reader.ReadDouble(); // timescaleMin
-        _ = reader.ReadDouble(); // timescaleMax
-        _ = reader.ReadBoolean(); // useNormalization
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _modelDimension = reader.ReadInt32();
+        _stateDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _hippoMethod = reader.ReadString();
+        _discretizationMethod = reader.ReadString();
+        _timescaleMin = reader.ReadDouble();
+        _timescaleMax = reader.ReadDouble();
+        _useNormalization = reader.ReadBoolean();
     }
 
     #endregion

@@ -69,11 +69,11 @@ public class TCN<T> : ForecastingModelBase<T>
     /// be trained. ONNX mode means we're using a pre-trained model file.
     /// </para>
     /// </remarks>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
-    
+
     #region Native Mode Fields
 
     /// <summary>
@@ -125,42 +125,42 @@ public class TCN<T> : ForecastingModelBase<T>
     /// <summary>
     /// The lookback window size.
     /// </summary>
-    private readonly int _lookbackWindow;
+    private int _lookbackWindow;
 
     /// <summary>
     /// The forecast horizon.
     /// </summary>
-    private readonly int _forecastHorizon;
+    private int _forecastHorizon;
 
     /// <summary>
     /// Number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     /// <summary>
     /// Number of channels in each layer.
     /// </summary>
-    private readonly int _numChannels;
+    private int _numChannels;
 
     /// <summary>
     /// Kernel size for convolutions.
     /// </summary>
-    private readonly int _kernelSize;
+    private int _kernelSize;
 
     /// <summary>
     /// Number of TCN layers.
     /// </summary>
-    private readonly int _numLayers;
+    private int _numLayers;
 
     /// <summary>
     /// Dropout rate for regularization.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     /// <summary>
     /// Whether to use residual connections.
     /// </summary>
-    private readonly bool _useResidualConnections;
+    private bool _useResidualConnections;
 
     #endregion
 
@@ -540,14 +540,14 @@ public class TCN<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // lookbackWindow
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // numChannels
-        _ = reader.ReadInt32(); // kernelSize
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadBoolean(); // useResidualConnections
+        _lookbackWindow = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _numChannels = reader.ReadInt32();
+        _kernelSize = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _useResidualConnections = reader.ReadBoolean();
     }
 
     #endregion

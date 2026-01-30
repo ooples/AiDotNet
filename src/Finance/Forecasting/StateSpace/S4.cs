@@ -65,10 +65,10 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 public class S4<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
     #endregion
 
-    
+
     #region Native Mode Fields
     private DenseLayer<T>? _inputEmbedding;
     private List<DenseLayer<T>>? _ssmBLayers;
@@ -85,16 +85,16 @@ public class S4<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly S4Options<T> _options;
-    private readonly int _contextLength;
-    private readonly int _forecastHorizon;
-    private readonly int _modelDimension;
-    private readonly int _stateDimension;
-    private readonly int _numLayers;
-    private readonly bool _useLowRankCorrection;
-    private readonly int _lowRankRank;
-    private readonly string _hippoMethod;
-    private readonly string _discretizationMethod;
-    private readonly int _numFeatures;
+    private int _contextLength;
+    private int _forecastHorizon;
+    private int _modelDimension;
+    private int _stateDimension;
+    private int _numLayers;
+    private bool _useLowRankCorrection;
+    private int _lowRankRank;
+    private string _hippoMethod;
+    private string _discretizationMethod;
+    private int _numFeatures;
     #endregion
 
     #region IForecastingModel Properties
@@ -513,15 +513,15 @@ public class S4<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // contextLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // modelDimension
-        _ = reader.ReadInt32(); // stateDimension
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadString(); // hippoMethod
-        _ = reader.ReadString(); // discretizationMethod
-        _ = reader.ReadBoolean(); // useLowRankCorrection
-        _ = reader.ReadInt32(); // lowRankRank
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _modelDimension = reader.ReadInt32();
+        _stateDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _hippoMethod = reader.ReadString();
+        _discretizationMethod = reader.ReadString();
+        _useLowRankCorrection = reader.ReadBoolean();
+        _lowRankRank = reader.ReadInt32();
     }
 
     #endregion

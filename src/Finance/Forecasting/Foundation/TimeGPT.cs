@@ -63,11 +63,11 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     /// - ONNX mode: Use pretrained foundation model
     /// </para>
     /// </remarks>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
-    
+
     #region Native Mode Fields
 
     /// <summary>
@@ -115,57 +115,57 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     /// <summary>
     /// Context length for the input sequence.
     /// </summary>
-    private readonly int _contextLength;
+    private int _contextLength;
 
     /// <summary>
     /// Forecast horizon for predictions.
     /// </summary>
-    private readonly int _forecastHorizon;
+    private int _forecastHorizon;
 
     /// <summary>
     /// Hidden dimension size.
     /// </summary>
-    private readonly int _hiddenDimension;
+    private int _hiddenDimension;
 
     /// <summary>
     /// Number of transformer layers.
     /// </summary>
-    private readonly int _numLayers;
+    private int _numLayers;
 
     /// <summary>
     /// Number of attention heads.
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
     /// Dropout rate.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     /// <summary>
     /// Whether to use conformal prediction for uncertainty.
     /// </summary>
-    private readonly bool _useConformalPrediction;
+    private bool _useConformalPrediction;
 
     /// <summary>
     /// Confidence level for prediction intervals.
     /// </summary>
-    private readonly double _confidenceLevel;
+    private double _confidenceLevel;
 
     /// <summary>
     /// Number of fine-tuning steps.
     /// </summary>
-    private readonly int _fineTuningSteps;
+    private int _fineTuningSteps;
 
     /// <summary>
     /// Learning rate for fine-tuning.
     /// </summary>
-    private readonly double _fineTuningLearningRate;
+    private double _fineTuningLearningRate;
 
     /// <summary>
     /// Number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     /// <summary>
     /// Calibration residuals for conformal prediction.
@@ -531,17 +531,17 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // contextLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadBoolean(); // useConformalPrediction
-        _ = reader.ReadDouble(); // confidenceLevel
-        _ = reader.ReadInt32(); // fineTuningSteps
-        _ = reader.ReadDouble(); // fineTuningLearningRate
-        _ = reader.ReadInt32(); // numFeatures
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _useConformalPrediction = reader.ReadBoolean();
+        _confidenceLevel = reader.ReadDouble();
+        _fineTuningSteps = reader.ReadInt32();
+        _fineTuningLearningRate = reader.ReadDouble();
+        _numFeatures = reader.ReadInt32();
 
         int residualCount = reader.ReadInt32();
         if (residualCount > 0)

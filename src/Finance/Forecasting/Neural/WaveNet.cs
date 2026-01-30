@@ -66,11 +66,11 @@ public class WaveNet<T> : ForecastingModelBase<T>
     /// <summary>
     /// Indicates whether this network uses native layers (true) or ONNX model (false).
     /// </summary>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
-    
+
     #region Native Mode Fields
 
     /// <summary>
@@ -109,16 +109,16 @@ public class WaveNet<T> : ForecastingModelBase<T>
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly int _lookbackWindow;
-    private readonly int _forecastHorizon;
-    private readonly int _numFeatures;
-    private readonly int _residualChannels;
-    private readonly int _skipChannels;
-    private readonly int _dilationDepth;
-    private readonly int _numStacks;
-    private readonly int _kernelSize;
-    private readonly bool _useGatedActivations;
-    private readonly double _dropout;
+    private int _lookbackWindow;
+    private int _forecastHorizon;
+    private int _numFeatures;
+    private int _residualChannels;
+    private int _skipChannels;
+    private int _dilationDepth;
+    private int _numStacks;
+    private int _kernelSize;
+    private bool _useGatedActivations;
+    private double _dropout;
 
     #endregion
 
@@ -511,16 +511,16 @@ public class WaveNet<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // lookbackWindow
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // residualChannels
-        _ = reader.ReadInt32(); // skipChannels
-        _ = reader.ReadInt32(); // dilationDepth
-        _ = reader.ReadInt32(); // numStacks
-        _ = reader.ReadInt32(); // kernelSize
-        _ = reader.ReadBoolean(); // useGatedActivations
-        _ = reader.ReadDouble(); // dropout
+        _lookbackWindow = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _residualChannels = reader.ReadInt32();
+        _skipChannels = reader.ReadInt32();
+        _dilationDepth = reader.ReadInt32();
+        _numStacks = reader.ReadInt32();
+        _kernelSize = reader.ReadInt32();
+        _useGatedActivations = reader.ReadBoolean();
+        _dropout = reader.ReadDouble();
     }
 
     #endregion

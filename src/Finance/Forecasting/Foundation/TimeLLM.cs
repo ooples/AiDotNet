@@ -62,11 +62,11 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// - ONNX mode: Inference using pretrained ONNX model with real frozen LLM
     /// </para>
     /// </remarks>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
-    
+
     #region Native Mode Fields
 
     /// <summary>
@@ -116,62 +116,62 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// <summary>
     /// Context length for the input sequence.
     /// </summary>
-    private readonly int _contextLength;
+    private int _contextLength;
 
     /// <summary>
     /// Forecast horizon for predictions.
     /// </summary>
-    private readonly int _forecastHorizon;
+    private int _forecastHorizon;
 
     /// <summary>
     /// Patch length for input segmentation.
     /// </summary>
-    private readonly int _patchLength;
+    private int _patchLength;
 
     /// <summary>
     /// Patch stride.
     /// </summary>
-    private readonly int _patchStride;
+    private int _patchStride;
 
     /// <summary>
     /// LLM hidden dimension.
     /// </summary>
-    private readonly int _llmDimension;
+    private int _llmDimension;
 
     /// <summary>
     /// Number of text prototypes.
     /// </summary>
-    private readonly int _numPrototypes;
+    private int _numPrototypes;
 
     /// <summary>
     /// Number of reprogramming layers.
     /// </summary>
-    private readonly int _numLayers;
+    private int _numLayers;
 
     /// <summary>
     /// Number of attention heads.
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
     /// Dropout rate.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     /// <summary>
     /// LLM backbone type.
     /// </summary>
-    private readonly string _llmBackbone;
+    private string _llmBackbone;
 
     /// <summary>
     /// Number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     /// <summary>
     /// Number of patches.
     /// </summary>
-    private readonly int _numPatches;
+    private int _numPatches;
 
     #endregion
 
@@ -530,17 +530,17 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // contextLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // patchLength
-        _ = reader.ReadInt32(); // patchStride
-        _ = reader.ReadInt32(); // llmDimension
-        _ = reader.ReadInt32(); // numPrototypes
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadString(); // llmBackbone
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _patchLength = reader.ReadInt32();
+        _patchStride = reader.ReadInt32();
+        _llmDimension = reader.ReadInt32();
+        _numPrototypes = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _numFeatures = reader.ReadInt32();
+        _llmBackbone = reader.ReadString();
     }
 
     #endregion

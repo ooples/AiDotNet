@@ -63,11 +63,11 @@ public class Mamba<T> : ForecastingModelBase<T>
     /// - ONNX mode: Use pretrained ONNX model for inference
     /// </para>
     /// </remarks>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
-    
+
     #region Native Mode Fields
 
     /// <summary>
@@ -115,57 +115,57 @@ public class Mamba<T> : ForecastingModelBase<T>
     /// <summary>
     /// Context length for the input sequence.
     /// </summary>
-    private readonly int _contextLength;
+    private int _contextLength;
 
     /// <summary>
     /// Forecast horizon for predictions.
     /// </summary>
-    private readonly int _forecastHorizon;
+    private int _forecastHorizon;
 
     /// <summary>
     /// Model dimension (d_model).
     /// </summary>
-    private readonly int _modelDimension;
+    private int _modelDimension;
 
     /// <summary>
     /// State dimension for SSM.
     /// </summary>
-    private readonly int _stateDimension;
+    private int _stateDimension;
 
     /// <summary>
     /// Expansion factor for inner dimension.
     /// </summary>
-    private readonly int _expandFactor;
+    private int _expandFactor;
 
     /// <summary>
     /// Convolution kernel size.
     /// </summary>
-    private readonly int _convKernelSize;
+    private int _convKernelSize;
 
     /// <summary>
     /// Number of Mamba layers.
     /// </summary>
-    private readonly int _numLayers;
+    private int _numLayers;
 
     /// <summary>
     /// Dropout rate.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     /// <summary>
     /// Delta rank for dt projection.
     /// </summary>
-    private readonly int _dtRank;
+    private int _dtRank;
 
     /// <summary>
     /// Whether to use bidirectional processing.
     /// </summary>
-    private readonly bool _useBidirectional;
+    private bool _useBidirectional;
 
     /// <summary>
     /// Number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     #endregion
 
@@ -524,17 +524,17 @@ public class Mamba<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // contextLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // modelDimension
-        _ = reader.ReadInt32(); // stateDimension
-        _ = reader.ReadInt32(); // expandFactor
-        _ = reader.ReadInt32(); // convKernelSize
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadInt32(); // dtRank
-        _ = reader.ReadBoolean(); // useBidirectional
-        _ = reader.ReadInt32(); // numFeatures
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _modelDimension = reader.ReadInt32();
+        _stateDimension = reader.ReadInt32();
+        _expandFactor = reader.ReadInt32();
+        _convKernelSize = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _dtRank = reader.ReadInt32();
+        _useBidirectional = reader.ReadBoolean();
+        _numFeatures = reader.ReadInt32();
     }
 
     #endregion

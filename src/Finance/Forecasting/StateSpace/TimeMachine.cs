@@ -65,10 +65,10 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 public class TimeMachine<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
     #endregion
 
-    
+
     #region Native Mode Fields
     private DenseLayer<T>? _inputEmbedding;
     private List<DenseLayer<T>>? _temporalDecompLayers;
@@ -82,18 +82,18 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly TimeMachineOptions<T> _options;
-    private readonly int _contextLength;
-    private readonly int _forecastHorizon;
-    private readonly int _modelDimension;
-    private readonly int _stateDimension;
-    private readonly int _numScales;
-    private readonly int _numLayers;
-    private readonly int _expandFactor;
-    private readonly int _convKernelSize;
-    private readonly bool _useMultiScaleAttention;
-    private readonly bool _useReversibleNormalization;
-    private readonly string _decompositionMethod;
-    private readonly int _numFeatures;
+    private int _contextLength;
+    private int _forecastHorizon;
+    private int _modelDimension;
+    private int _stateDimension;
+    private int _numScales;
+    private int _numLayers;
+    private int _expandFactor;
+    private int _convKernelSize;
+    private bool _useMultiScaleAttention;
+    private bool _useReversibleNormalization;
+    private string _decompositionMethod;
+    private int _numFeatures;
     #endregion
 
     #region IForecastingModel Properties
@@ -536,17 +536,17 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // contextLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // modelDimension
-        _ = reader.ReadInt32(); // stateDimension
-        _ = reader.ReadInt32(); // numScales
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // expandFactor
-        _ = reader.ReadInt32(); // convKernelSize
-        _ = reader.ReadBoolean(); // useMultiScaleAttention
-        _ = reader.ReadBoolean(); // useReversibleNormalization
-        _ = reader.ReadString(); // decompositionMethod
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _modelDimension = reader.ReadInt32();
+        _stateDimension = reader.ReadInt32();
+        _numScales = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _expandFactor = reader.ReadInt32();
+        _convKernelSize = reader.ReadInt32();
+        _useMultiScaleAttention = reader.ReadBoolean();
+        _useReversibleNormalization = reader.ReadBoolean();
+        _decompositionMethod = reader.ReadString();
     }
 
     #endregion

@@ -54,11 +54,11 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     /// <summary>
     /// Indicates whether this network uses native layers (true) or ONNX model (false).
     /// </summary>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
-    
+
     #region Native Mode Fields
 
     /// <summary>
@@ -88,52 +88,52 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     /// <summary>
     /// The lookback window size.
     /// </summary>
-    private readonly int _lookbackWindow;
+    private int _lookbackWindow;
 
     /// <summary>
     /// The forecast horizon.
     /// </summary>
-    private readonly int _forecastHorizon;
+    private int _forecastHorizon;
 
     /// <summary>
     /// Number of stacks.
     /// </summary>
-    private readonly int _numStacks;
+    private int _numStacks;
 
     /// <summary>
     /// Number of blocks per stack.
     /// </summary>
-    private readonly int _numBlocksPerStack;
+    private int _numBlocksPerStack;
 
     /// <summary>
     /// Size of hidden layers.
     /// </summary>
-    private readonly int _hiddenSize;
+    private int _hiddenSize;
 
     /// <summary>
     /// Number of hidden layers per block.
     /// </summary>
-    private readonly int _numHiddenLayers;
+    private int _numHiddenLayers;
 
     /// <summary>
     /// Pooling kernel sizes for each stack.
     /// </summary>
-    private readonly int[] _poolingKernelSizes;
+    private int[] _poolingKernelSizes;
 
     /// <summary>
     /// Pooling modes for each stack.
     /// </summary>
-    private readonly string[] _poolingModes;
+    private string[] _poolingModes;
 
     /// <summary>
     /// Interpolation modes for each stack.
     /// </summary>
-    private readonly string[] _interpolationModes;
+    private string[] _interpolationModes;
 
     /// <summary>
     /// Dropout rate for regularization.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     #endregion
 
@@ -511,16 +511,17 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // lookbackWindow
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numStacks
-        _ = reader.ReadInt32(); // numBlocksPerStack
-        _ = reader.ReadInt32(); // hiddenSize
-        _ = reader.ReadInt32(); // numHiddenLayers
+        _lookbackWindow = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numStacks = reader.ReadInt32();
+        _numBlocksPerStack = reader.ReadInt32();
+        _hiddenSize = reader.ReadInt32();
+        _numHiddenLayers = reader.ReadInt32();
         int kernelCount = reader.ReadInt32();
+        _poolingKernelSizes = new int[kernelCount];
         for (int i = 0; i < kernelCount; i++)
-            _ = reader.ReadInt32();
-        _ = reader.ReadDouble(); // dropout
+            _poolingKernelSizes[i] = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
     }
 
     #endregion

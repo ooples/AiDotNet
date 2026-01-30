@@ -107,52 +107,52 @@ public class ETSformer<T> : ForecastingModelBase<T>
     /// <summary>
     /// The input sequence length.
     /// </summary>
-    private readonly int _sequenceLength;
+    private int _sequenceLength;
 
     /// <summary>
     /// The prediction horizon.
     /// </summary>
-    private readonly int _predictionHorizon;
+    private int _predictionHorizon;
 
     /// <summary>
     /// The number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     /// <summary>
     /// The model dimension (embedding size).
     /// </summary>
-    private readonly int _modelDimension;
+    private int _modelDimension;
 
     /// <summary>
     /// The number of encoder layers.
     /// </summary>
-    private readonly int _numEncoderLayers;
+    private int _numEncoderLayers;
 
     /// <summary>
     /// The number of decoder layers.
     /// </summary>
-    private readonly int _numDecoderLayers;
+    private int _numDecoderLayers;
 
     /// <summary>
     /// The number of attention heads.
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
     /// The dropout rate.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     /// <summary>
     /// Top-K frequencies for seasonal decomposition.
     /// </summary>
-    private readonly int _topK;
+    private int _topK;
 
     /// <summary>
     /// Whether to use instance normalization (RevIN).
     /// </summary>
-    private readonly bool _useInstanceNormalization;
+    private bool _useInstanceNormalization;
 
     #endregion
 
@@ -526,16 +526,16 @@ public class ETSformer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // predictionHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // modelDimension
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numDecoderLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadInt32(); // topK
-        _ = reader.ReadBoolean(); // useInstanceNormalization
+        _sequenceLength = reader.ReadInt32();
+        _predictionHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _modelDimension = reader.ReadInt32();
+        _numEncoderLayers = reader.ReadInt32();
+        _numDecoderLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _topK = reader.ReadInt32();
+        _useInstanceNormalization = reader.ReadBoolean();
     }
 
     #endregion

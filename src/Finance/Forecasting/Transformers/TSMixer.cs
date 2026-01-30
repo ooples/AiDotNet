@@ -55,7 +55,7 @@ public class TSMixer<T> : ForecastingModelBase<T>
     /// - ONNX mode: Uses a pre-trained model for inference only
     /// </para>
     /// </remarks>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
@@ -128,47 +128,47 @@ public class TSMixer<T> : ForecastingModelBase<T>
     /// <summary>
     /// The input sequence length (lookback window).
     /// </summary>
-    private readonly int _sequenceLength;
+    private int _sequenceLength;
 
     /// <summary>
     /// The prediction horizon.
     /// </summary>
-    private readonly int _predictionHorizon;
+    private int _predictionHorizon;
 
     /// <summary>
     /// Number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     /// <summary>
     /// Hidden dimension for MLP layers.
     /// </summary>
-    private readonly int _hiddenDim;
+    private int _hiddenDim;
 
     /// <summary>
     /// Number of mixer blocks.
     /// </summary>
-    private readonly int _numBlocks;
+    private int _numBlocks;
 
     /// <summary>
     /// Feedforward expansion factor.
     /// </summary>
-    private readonly double _feedForwardExpansion;
+    private double _feedForwardExpansion;
 
     /// <summary>
     /// Whether to mix features before time.
     /// </summary>
-    private readonly bool _featuresFirst;
+    private bool _featuresFirst;
 
     /// <summary>
     /// Whether to use RevIN normalization.
     /// </summary>
-    private readonly bool _useRevIN;
+    private bool _useRevIN;
 
     /// <summary>
     /// Dropout rate.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     #endregion
 
@@ -595,16 +595,16 @@ public class TSMixer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // predictionHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // hiddenDim
-        _ = reader.ReadInt32(); // numBlocks
-        _ = reader.ReadDouble(); // feedForwardExpansion
-        _ = reader.ReadBoolean(); // featuresFirst
-        _ = reader.ReadBoolean(); // useRevIN
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadBoolean(); // useNativeMode
+        _sequenceLength = reader.ReadInt32();
+        _predictionHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _hiddenDim = reader.ReadInt32();
+        _numBlocks = reader.ReadInt32();
+        _feedForwardExpansion = reader.ReadDouble();
+        _featuresFirst = reader.ReadBoolean();
+        _useRevIN = reader.ReadBoolean();
+        _dropout = reader.ReadDouble();
+        _useNativeMode = reader.ReadBoolean();
     }
 
     #endregion

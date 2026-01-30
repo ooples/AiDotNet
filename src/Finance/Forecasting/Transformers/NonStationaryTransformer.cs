@@ -59,7 +59,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// - ONNX mode: Uses a pre-trained model for inference only
     /// </para>
     /// </remarks>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
@@ -170,62 +170,62 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// <summary>
     /// The input sequence length (lookback window).
     /// </summary>
-    private readonly int _sequenceLength;
+    private int _sequenceLength;
 
     /// <summary>
     /// The prediction horizon.
     /// </summary>
-    private readonly int _predictionHorizon;
+    private int _predictionHorizon;
 
     /// <summary>
     /// Number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     /// <summary>
     /// Model dimension (embedding size).
     /// </summary>
-    private readonly int _modelDimension;
+    private int _modelDimension;
 
     /// <summary>
     /// Number of encoder layers.
     /// </summary>
-    private readonly int _numEncoderLayers;
+    private int _numEncoderLayers;
 
     /// <summary>
     /// Number of decoder layers.
     /// </summary>
-    private readonly int _numDecoderLayers;
+    private int _numDecoderLayers;
 
     /// <summary>
     /// Number of attention heads.
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
     /// Feedforward dimension.
     /// </summary>
-    private readonly int _feedForwardDim;
+    private int _feedForwardDim;
 
     /// <summary>
     /// Projection dimension for de-stationarization.
     /// </summary>
-    private readonly int _projectionDim;
+    private int _projectionDim;
 
     /// <summary>
     /// Whether to use Series Stationarization.
     /// </summary>
-    private readonly bool _useSeriesStationarization;
+    private bool _useSeriesStationarization;
 
     /// <summary>
     /// Whether to use De-stationary Attention.
     /// </summary>
-    private readonly bool _useDeStationaryAttention;
+    private bool _useDeStationaryAttention;
 
     /// <summary>
     /// Dropout rate.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     #endregion
 
@@ -700,19 +700,19 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // predictionHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // modelDimension
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numDecoderLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // feedForwardDim
-        _ = reader.ReadInt32(); // projectionDim
-        _ = reader.ReadBoolean(); // useSeriesStationarization
-        _ = reader.ReadBoolean(); // useDeStationaryAttention
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadBoolean(); // useNativeMode
+        _sequenceLength = reader.ReadInt32();
+        _predictionHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _modelDimension = reader.ReadInt32();
+        _numEncoderLayers = reader.ReadInt32();
+        _numDecoderLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _feedForwardDim = reader.ReadInt32();
+        _projectionDim = reader.ReadInt32();
+        _useSeriesStationarization = reader.ReadBoolean();
+        _useDeStationaryAttention = reader.ReadBoolean();
+        _dropout = reader.ReadDouble();
+        _useNativeMode = reader.ReadBoolean();
     }
 
     #endregion

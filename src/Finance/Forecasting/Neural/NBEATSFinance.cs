@@ -60,11 +60,11 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     /// while ONNX mode uses pre-trained models for fast inference.
     /// </para>
     /// </remarks>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
-    
+
     #region Native Mode Fields
 
     /// <summary>
@@ -100,47 +100,47 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     /// <summary>
     /// The lookback window size.
     /// </summary>
-    private readonly int _lookbackWindow;
+    private int _lookbackWindow;
 
     /// <summary>
     /// The forecast horizon.
     /// </summary>
-    private readonly int _forecastHorizon;
+    private int _forecastHorizon;
 
     /// <summary>
     /// Number of stacks.
     /// </summary>
-    private readonly int _numStacks;
+    private int _numStacks;
 
     /// <summary>
     /// Number of blocks per stack.
     /// </summary>
-    private readonly int _numBlocksPerStack;
+    private int _numBlocksPerStack;
 
     /// <summary>
     /// Size of hidden layers.
     /// </summary>
-    private readonly int _hiddenSize;
+    private int _hiddenSize;
 
     /// <summary>
     /// Number of hidden layers per block.
     /// </summary>
-    private readonly int _numHiddenLayers;
+    private int _numHiddenLayers;
 
     /// <summary>
     /// Polynomial degree for trend basis.
     /// </summary>
-    private readonly int _polynomialDegree;
+    private int _polynomialDegree;
 
     /// <summary>
     /// Whether to use interpretable basis functions.
     /// </summary>
-    private readonly bool _useInterpretableBasis;
+    private bool _useInterpretableBasis;
 
     /// <summary>
     /// Whether to share weights within stacks.
     /// </summary>
-    private readonly bool _shareWeightsInStack;
+    private bool _shareWeightsInStack;
 
     #endregion
 
@@ -536,15 +536,15 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();   // lookbackWindow
-        _ = reader.ReadInt32();   // forecastHorizon
-        _ = reader.ReadInt32();   // numStacks
-        _ = reader.ReadInt32();   // numBlocksPerStack
-        _ = reader.ReadInt32();   // hiddenSize
-        _ = reader.ReadInt32();   // numHiddenLayers
-        _ = reader.ReadInt32();   // polynomialDegree
-        _ = reader.ReadBoolean(); // useInterpretableBasis
-        _ = reader.ReadBoolean(); // shareWeightsInStack
+        _lookbackWindow = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numStacks = reader.ReadInt32();
+        _numBlocksPerStack = reader.ReadInt32();
+        _hiddenSize = reader.ReadInt32();
+        _numHiddenLayers = reader.ReadInt32();
+        _polynomialDegree = reader.ReadInt32();
+        _useInterpretableBasis = reader.ReadBoolean();
+        _shareWeightsInStack = reader.ReadBoolean();
     }
 
     #endregion

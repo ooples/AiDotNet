@@ -118,52 +118,52 @@ public class TimesNet<T> : ForecastingModelBase<T>
     /// <summary>
     /// The input sequence length.
     /// </summary>
-    private readonly int _sequenceLength;
+    private int _sequenceLength;
 
     /// <summary>
     /// The prediction horizon.
     /// </summary>
-    private readonly int _predictionHorizon;
+    private int _predictionHorizon;
 
     /// <summary>
     /// The number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     /// <summary>
     /// The model dimension (embedding size).
     /// </summary>
-    private readonly int _modelDimension;
+    private int _modelDimension;
 
     /// <summary>
     /// The feedforward network dimension.
     /// </summary>
-    private readonly int _feedForwardDimension;
+    private int _feedForwardDimension;
 
     /// <summary>
     /// Number of TimesBlock layers.
     /// </summary>
-    private readonly int _numLayers;
+    private int _numLayers;
 
     /// <summary>
     /// Number of dominant periods to discover.
     /// </summary>
-    private readonly int _topK;
+    private int _topK;
 
     /// <summary>
     /// Convolution kernel size.
     /// </summary>
-    private readonly int _convKernelSize;
+    private int _convKernelSize;
 
     /// <summary>
     /// Dropout rate for regularization.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     /// <summary>
     /// Whether to use instance normalization (RevIN).
     /// </summary>
-    private readonly bool _useInstanceNormalization;
+    private bool _useInstanceNormalization;
 
     #endregion
 
@@ -537,22 +537,22 @@ public class TimesNet<T> : ForecastingModelBase<T>
     /// <param name="reader">Binary reader for input.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This reads back TimesNet settings when loading a saved model.
-    /// The values advance the reader but aren't used since constructor sets them.
+    /// <b>For Beginners:</b> This reads back TimesNet settings when loading a saved model
+    /// and restores the model configuration.
     /// </para>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // predictionHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // modelDimension
-        _ = reader.ReadInt32(); // feedForwardDimension
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // topK
-        _ = reader.ReadInt32(); // convKernelSize
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadBoolean(); // useInstanceNormalization
+        _sequenceLength = reader.ReadInt32();
+        _predictionHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _modelDimension = reader.ReadInt32();
+        _feedForwardDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _topK = reader.ReadInt32();
+        _convKernelSize = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _useInstanceNormalization = reader.ReadBoolean();
     }
 
     #endregion

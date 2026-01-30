@@ -79,11 +79,11 @@ public class TimesFM<T> : ForecastingModelBase<T>
     /// Native mode allows fine-tuning or training from scratch (though pre-training is recommended).
     /// </para>
     /// </remarks>
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
-    
+
     #region Native Mode Fields
 
     /// <summary>
@@ -150,14 +150,14 @@ public class TimesFM<T> : ForecastingModelBase<T>
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly int _contextLength;
-    private readonly int _forecastHorizon;
-    private readonly int _patchLength;
-    private readonly int _hiddenDimension;
-    private readonly int _numLayers;
-    private readonly int _numHeads;
-    private readonly double _dropout;
-    private readonly bool _usePretrainedWeights;
+    private int _contextLength;
+    private int _forecastHorizon;
+    private int _patchLength;
+    private int _hiddenDimension;
+    private int _numLayers;
+    private int _numHeads;
+    private double _dropout;
+    private bool _usePretrainedWeights;
 
     #endregion
 
@@ -581,14 +581,14 @@ public class TimesFM<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // contextLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // patchLength
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadBoolean(); // usePretrainedWeights
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _patchLength = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _usePretrainedWeights = reader.ReadBoolean();
     }
 
     #endregion
