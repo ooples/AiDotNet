@@ -65,6 +65,12 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Reference:</b> Ansari et al., "Chronos: Learning the Language of Time Series", 2024.
 /// https://arxiv.org/abs/2403.07815
 /// </para>
+/// <para>
+/// <b>Thread Safety:</b> This class is NOT thread-safe. Concurrent calls to
+/// <see cref="Forecast(Tensor{T}, double[]?)"/> or <see cref="Train(Tensor{T}, Tensor{T})"/>
+/// will result in undefined behavior due to shared tokenization state.
+/// Create separate instances for concurrent usage scenarios.
+/// </para>
 /// </remarks>
 public class Chronos<T> : ForecastingModelBase<T>
 {

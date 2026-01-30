@@ -551,7 +551,19 @@ public class DeepState<T> : ForecastingModelBase<T>
             DropoutRate = _dropout
         };
 
-        return new DeepState<T>(Architecture, options);
+        if (_useNativeMode)
+        {
+            return new DeepState<T>(Architecture, options);
+        }
+        else
+        {
+            if (string.IsNullOrEmpty(OnnxModelPath))
+            {
+                throw new InvalidOperationException(
+                    "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
+            }
+            return new DeepState<T>(Architecture, OnnxModelPath, options);
+        }
     }
 
     /// <summary>
