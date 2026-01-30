@@ -15,15 +15,16 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 /// are flagged as anomalies.
 /// </para>
 /// <para>
-/// <b>Implementation:</b> This is a scoring-based approach rather than iterative ESD:
+/// <b>Implementation:</b> This is a scoring-based approach:
 /// 1. Compute the ESD statistic for each point: max|x - mean| / std across features
-/// 2. Use contamination-based threshold to classify anomalies (top X% of scores)
+/// 2. Predict uses the ESD critical value (computed from alpha) for classification
+/// 3. ScoreAnomalies returns raw ESD statistics for flexible thresholding
 /// </para>
 /// <para>
 /// <b>When to use:</b>
 /// - When you expect multiple outliers
 /// - Data is approximately normally distributed
-/// - You want Z-score style detection with contamination-based thresholding
+/// - You want Z-score style detection with statistical significance testing
 /// </para>
 /// <para>
 /// <b>Industry Standard Defaults:</b>
@@ -83,6 +84,12 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
         {
             throw new ArgumentOutOfRangeException(nameof(alpha),
                 "Alpha must be between 0 and 1. Recommended value is 0.05.");
+        }
+
+        if (maxOutliers.HasValue && maxOutliers.Value <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxOutliers),
+                "MaxOutliers must be positive when specified.");
         }
 
         _alpha = alpha;
