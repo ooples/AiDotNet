@@ -78,6 +78,15 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
         ILossFunction<T>? lossFunction = null)
         : base(architecture, maxSequenceLength, 1, architecture.InputSize, lossFunction)
     {
+        if (maxSequenceLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxSequenceLength), "Must be positive.");
+        if (vocabularySize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(vocabularySize), "Must be positive.");
+        if (hiddenDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDimension), "Must be positive.");
+        if (numSentimentClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numSentimentClasses), "Must be positive.");
+
         _baseMaxSequenceLength = maxSequenceLength;
         _baseVocabularySize = vocabularySize;
         _baseHiddenDimension = hiddenDimension;
@@ -108,6 +117,15 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
         int numSentimentClasses = 3)
         : base(architecture, onnxModelPath, maxSequenceLength, 1, architecture.InputSize)
     {
+        if (maxSequenceLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxSequenceLength), "Must be positive.");
+        if (vocabularySize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(vocabularySize), "Must be positive.");
+        if (hiddenDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDimension), "Must be positive.");
+        if (numSentimentClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numSentimentClasses), "Must be positive.");
+
         _baseMaxSequenceLength = maxSequenceLength;
         _baseVocabularySize = vocabularySize;
         _baseHiddenDimension = hiddenDimension;
@@ -156,6 +174,9 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
     /// </remarks>
     public virtual SentimentResult<T>[] AnalyzeSentiment(string[] texts)
     {
+        if (texts is null)
+            throw new ArgumentNullException(nameof(texts));
+
         var results = new SentimentResult<T>[texts.Length];
         for (int i = 0; i < texts.Length; i++)
         {

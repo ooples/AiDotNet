@@ -1024,9 +1024,16 @@ public class Timer<T> : ForecastingModelBase<T>
             double temp = 0.5 + rand.NextDouble() * 1.5; // Range [0.5, 2.0]
 
             // Use dropout for additional diversity
+            Tensor<T> sample;
             SetTrainingMode(true);
-            var sample = Forward(input);
-            SetTrainingMode(false);
+            try
+            {
+                sample = Forward(input);
+            }
+            finally
+            {
+                SetTrainingMode(false);
+            }
 
             // Apply temperature scaling
             var scaled = new Tensor<T>(sample.Shape);

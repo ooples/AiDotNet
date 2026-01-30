@@ -62,6 +62,27 @@ public sealed class FinancialSearchSpace
             ModelType.NeuralVaR => GetNeuralVaRSearchSpace(),
             ModelType.TabNet => GetTabNetSearchSpace(),
             ModelType.TabTransformer => GetTabTransformerSearchSpace(),
+            _ => GetDomainAwareDefaultSearchSpace()
+        };
+    }
+
+    /// <summary>
+    /// Gets a domain-aware default search space when no specific model is requested.
+    /// </summary>
+    /// <returns>Default search space appropriate for the financial domain.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Different financial domains benefit from different default
+    /// hyperparameters. Forecasting tasks may need larger context windows, while
+    /// risk models may need higher precision settings.
+    /// </para>
+    /// </remarks>
+    private Dictionary<string, ParameterRange> GetDomainAwareDefaultSearchSpace()
+    {
+        return _domain switch
+        {
+            FinancialDomain.Forecasting => GetCommonForecastingSearchSpace(),
+            FinancialDomain.Risk => GetCommonRiskSearchSpace(),
             _ => GetDefaultSearchSpace()
         };
     }

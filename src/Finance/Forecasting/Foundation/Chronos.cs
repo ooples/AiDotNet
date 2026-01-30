@@ -321,6 +321,8 @@ public class Chronos<T> : ForecastingModelBase<T>
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            // Wire layer references for custom layers too
+            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
@@ -1027,6 +1029,17 @@ public class Chronos<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> GenerateQuantileSamples(Tensor<T> input, double[] quantiles)
     {
+        // Validate quantiles are within [0, 1]
+        for (int i = 0; i < quantiles.Length; i++)
+        {
+            if (quantiles[i] < 0 || quantiles[i] > 1)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(quantiles),
+                    $"Quantile at index {i} is {quantiles[i]}, but must be within [0, 1].");
+            }
+        }
+
         var allSamples = new List<double[]>();
         var rand = RandomHelper.CreateSecureRandom();
 

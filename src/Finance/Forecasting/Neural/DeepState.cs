@@ -336,6 +336,8 @@ public class DeepState<T> : ForecastingModelBase<T>
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            // Wire layer references for custom layers too
+            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
@@ -471,16 +473,20 @@ public class DeepState<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("Training is only supported in native mode.");
 
         SetTrainingMode(true);
+        try
+        {
+            var predictions = Forward(input);
+            LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
-        var predictions = Forward(input);
-        LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
+            var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
+            Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
 
-        var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
-
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+            _optimizer.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>

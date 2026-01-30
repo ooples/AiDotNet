@@ -467,9 +467,11 @@ public class LagLlama<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Training Lag-Llama uses negative log-likelihood loss
-    /// on the predicted distribution. The model learns to predict distribution
-    /// parameters that maximize the probability of observed values.
+    /// <b>For Beginners:</b> Training Lag-Llama by default uses MSE loss on point predictions
+    /// extracted from distribution parameters. For true probabilistic training with
+    /// negative log-likelihood, provide a custom NLL loss function in the constructor.
+    /// The model learns to predict distribution parameters (mu, sigma, nu for Student-t)
+    /// that best fit the observed values.
     /// </para>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> target)
@@ -1042,35 +1044,50 @@ public class LagLlama<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> SampleQuantiles(Tensor<T> distributionParams, double[] quantiles)
     {
-        // Branch on distribution type to use appropriate quantile function
-        var result = new Tensor<T>(new[] { _forecastHorizon * quantiles.Length });
+        // Determine batch size from distribution parameters
+        int paramsPerStep = 3; // mu, sigma, nu for Student-t (or mu, sigma for Normal)
+        int totalParams = distributionParams.Length;
+        int expectedParamsPerBatch = paramsPerStep * _forecastHorizon;
+        int batchSize = Math.Max(1, totalParams / expectedParamsPerBatch);
+
+        // Create batch-aware result tensor
+        var result = new Tensor<T>(batchSize == 1
+            ? new[] { _forecastHorizon, quantiles.Length }
+            : new[] { batchSize, _forecastHorizon, quantiles.Length });
+
         var pointPreds = ExtractPointPredictions(distributionParams);
 
         bool isStudentT = string.IsNullOrEmpty(_distributionOutput) ||
                           string.Equals(_distributionOutput, "StudentT", StringComparison.OrdinalIgnoreCase);
         bool isNormal = string.Equals(_distributionOutput, "Normal", StringComparison.OrdinalIgnoreCase);
 
-        for (int q = 0; q < quantiles.Length; q++)
+        for (int b = 0; b < batchSize; b++)
         {
-            double quantile = quantiles[q];
+            int batchOffset = b * expectedParamsPerBatch;
+            int pointBatchOffset = b * _forecastHorizon;
 
-            for (int i = 0; i < _forecastHorizon; i++)
+            for (int q = 0; q < quantiles.Length; q++)
             {
-                // Extract mu (mean) for this step - already in pointPreds
-                T mu = i < pointPreds.Length ? pointPreds.Data.Span[i] : NumOps.Zero;
+                double quantile = quantiles[q];
 
-                // Extract sigma (scale) for this step (index 1 in each 3-param group)
-                int sigmaIdx = i * 3 + 1;
-                T sigma = sigmaIdx < distributionParams.Length
-                    ? distributionParams.Data.Span[sigmaIdx]
-                    : NumOps.FromDouble(1.0);
+                for (int i = 0; i < _forecastHorizon; i++)
+                {
+                    // Extract mu (mean) for this step
+                    int muIdx = pointBatchOffset + i;
+                    T mu = muIdx < pointPreds.Length ? pointPreds.Data.Span[muIdx] : NumOps.Zero;
+
+                    // Extract sigma (scale) for this step (index 1 in each 3-param group)
+                    int sigmaIdx = batchOffset + i * paramsPerStep + 1;
+                    T sigma = sigmaIdx < distributionParams.Length
+                        ? distributionParams.Data.Span[sigmaIdx]
+                        : NumOps.FromDouble(1.0);
 
                 double adjustmentFactor;
 
                 if (isStudentT)
                 {
                     // Extract nu (degrees of freedom) for this step (index 2 in each 3-param group)
-                    int nuIdx = i * 3 + 2;
+                    int nuIdx = batchOffset + i * paramsPerStep + 2;
                     double nu = nuIdx < distributionParams.Length
                         ? NumOps.ToDouble(distributionParams.Data.Span[nuIdx])
                         : 3.0; // Default nu = 3 for heavy tails
@@ -1105,9 +1122,16 @@ public class LagLlama<T> : ForecastingModelBase<T>
                         $"is expected at index 2 of each 3-param group in distributionParams.");
                 }
 
-                // quantile_value = mu + adjustment * sigma
-                T adjustment = NumOps.Multiply(sigma, NumOps.FromDouble(adjustmentFactor));
-                result.Data.Span[q * _forecastHorizon + i] = NumOps.Add(mu, adjustment);
+                    // quantile_value = mu + adjustment * sigma
+                    T adjustment = NumOps.Multiply(sigma, NumOps.FromDouble(adjustmentFactor));
+
+                    // Batch-aware output index
+                    int outIdx = batchSize == 1
+                        ? i * quantiles.Length + q
+                        : b * _forecastHorizon * quantiles.Length + i * quantiles.Length + q;
+                    if (outIdx < result.Length)
+                        result.Data.Span[outIdx] = NumOps.Add(mu, adjustment);
+                }
             }
         }
 
