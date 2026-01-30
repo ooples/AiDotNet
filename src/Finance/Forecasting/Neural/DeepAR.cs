@@ -184,10 +184,6 @@ public class DeepAR<T> : ForecastingModelBase<T>
     /// </summary>
     public override bool IsChannelIndependent => false;
 
-    /// <summary>
-    /// Gets the name of the model architecture.
-    /// </summary>
-
     #endregion
 
     #region Constructors
@@ -435,15 +431,19 @@ public class DeepAR<T> : ForecastingModelBase<T>
     protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
     {
         SetTrainingMode(true);
+        try
+        {
+            // Backward pass
+            var gradient = ComputeGradient(output, target);
+            Backward(gradient);
 
-        // Backward pass
-        var gradient = ComputeGradient(output, target);
-        Backward(gradient);
-
-        // Update weights via optimizer
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+            // Update weights via optimizer
+            _optimizer.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
@@ -518,7 +518,12 @@ public class DeepAR<T> : ForecastingModelBase<T>
         }
         else
         {
-            return new DeepAR<T>(Architecture, OnnxModelPath ?? string.Empty, options, _optimizer, LossFunction);
+            if (string.IsNullOrEmpty(OnnxModelPath))
+            {
+                throw new InvalidOperationException(
+                    "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
+            }
+            return new DeepAR<T>(Architecture, OnnxModelPath, options, _optimizer, LossFunction);
         }
     }
 

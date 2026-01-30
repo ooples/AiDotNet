@@ -280,6 +280,13 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
     protected override void DeserializeModelSpecificData(BinaryReader reader)
     {
         _numAssets = reader.ReadInt32();
+
+        // Validate deserialized value matches constructor invariant
+        if (_numAssets <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized numAssets ({_numAssets}) is invalid. Must be greater than 0.");
+        }
     }
 
     /// <summary>

@@ -315,10 +315,11 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
         _timeHorizon = reader.ReadInt32();
 
         // Re-validate invariants after deserialize to prevent corrupt state
-        if (_confidenceLevel < 0 || _confidenceLevel > 1)
+        // Use same exclusive bounds as constructor: confidenceLevel must be in (0, 1)
+        if (_confidenceLevel <= 0 || _confidenceLevel >= 1)
         {
             throw new InvalidOperationException(
-                $"Deserialized confidenceLevel ({_confidenceLevel}) is invalid. Must be between 0 and 1.");
+                $"Deserialized confidenceLevel ({_confidenceLevel}) is invalid. Must be between 0 and 1 (exclusive).");
         }
         if (_timeHorizon < 1)
         {

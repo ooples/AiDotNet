@@ -480,75 +480,79 @@ public class LagLlama<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("Training is only supported in native mode.");
 
         SetTrainingMode(true);
-
-        var predictions = Forward(input);
-
-        // Extract point predictions from distribution parameters (use mean)
-        var pointPredictions = ExtractPointPredictions(predictions);
-        var predVector = pointPredictions.ToVector();
-
-        // Align target to match point predictions length
-        // Target may be raw distribution params or point values of different size
-        var targetVector = target.ToVector();
-        Vector<T> alignedTarget;
-        if (targetVector.Length == predVector.Length)
+        try
         {
-            alignedTarget = targetVector;
+            var predictions = Forward(input);
+
+            // Extract point predictions from distribution parameters (use mean)
+            var pointPredictions = ExtractPointPredictions(predictions);
+            var predVector = pointPredictions.ToVector();
+
+            // Align target to match point predictions length
+            // Target may be raw distribution params or point values of different size
+            var targetVector = target.ToVector();
+            Vector<T> alignedTarget;
+            if (targetVector.Length == predVector.Length)
+            {
+                alignedTarget = targetVector;
+            }
+            else if (targetVector.Length >= predVector.Length)
+            {
+                // Take first N elements if target is larger
+                alignedTarget = new Vector<T>(predVector.Length);
+                for (int i = 0; i < predVector.Length; i++)
+                {
+                    alignedTarget[i] = targetVector[i];
+                }
+            }
+            else
+            {
+                // Pad with last value if target is smaller
+                alignedTarget = new Vector<T>(predVector.Length);
+                for (int i = 0; i < targetVector.Length; i++)
+                {
+                    alignedTarget[i] = targetVector[i];
+                }
+                T lastVal = targetVector.Length > 0 ? targetVector[targetVector.Length - 1] : NumOps.Zero;
+                for (int i = targetVector.Length; i < predVector.Length; i++)
+                {
+                    alignedTarget[i] = lastVal;
+                }
+            }
+
+            LastLoss = _lossFunction.CalculateLoss(predVector, alignedTarget);
+
+            // Calculate gradient w.r.t. point predictions (mu values)
+            var pointGradient = _lossFunction.CalculateDerivative(predVector, alignedTarget);
+
+            // Map the point-prediction gradient back to full distribution-parameter gradient
+            // Forward outputs [mu, sigma, nu] per step (3 params), but loss is computed on mu only
+            // We need to create a full-sized gradient matching predictions.Shape with:
+            // - Gradient for mu positions = pointGradient values
+            // - Gradient for sigma/nu positions = 0 (no direct loss contribution)
+            int paramsPerStep = 3; // mu, sigma, nu for StudentT
+            int fullGradientLength = predictions.Length;
+            var fullGradient = new Vector<T>(fullGradientLength);
+
+            // Insert point gradients at mu positions (every 3rd value starting at 0)
+            for (int i = 0; i < pointGradient.Length; i++)
+            {
+                int muIdx = i * paramsPerStep;
+                if (muIdx < fullGradientLength)
+                {
+                    fullGradient[muIdx] = pointGradient[i];
+                }
+                // sigma (idx+1) and nu (idx+2) remain zero - no direct loss gradient
+            }
+
+            Backward(Tensor<T>.FromVector(fullGradient, predictions.Shape));
+
+            _optimizer.UpdateParameters(Layers);
         }
-        else if (targetVector.Length >= predVector.Length)
+        finally
         {
-            // Take first N elements if target is larger
-            alignedTarget = new Vector<T>(predVector.Length);
-            for (int i = 0; i < predVector.Length; i++)
-            {
-                alignedTarget[i] = targetVector[i];
-            }
+            SetTrainingMode(false);
         }
-        else
-        {
-            // Pad with last value if target is smaller
-            alignedTarget = new Vector<T>(predVector.Length);
-            for (int i = 0; i < targetVector.Length; i++)
-            {
-                alignedTarget[i] = targetVector[i];
-            }
-            T lastVal = targetVector.Length > 0 ? targetVector[targetVector.Length - 1] : NumOps.Zero;
-            for (int i = targetVector.Length; i < predVector.Length; i++)
-            {
-                alignedTarget[i] = lastVal;
-            }
-        }
-
-        LastLoss = _lossFunction.CalculateLoss(predVector, alignedTarget);
-
-        // Calculate gradient w.r.t. point predictions (mu values)
-        var pointGradient = _lossFunction.CalculateDerivative(predVector, alignedTarget);
-
-        // Map the point-prediction gradient back to full distribution-parameter gradient
-        // Forward outputs [mu, sigma, nu] per step (3 params), but loss is computed on mu only
-        // We need to create a full-sized gradient matching predictions.Shape with:
-        // - Gradient for mu positions = pointGradient values
-        // - Gradient for sigma/nu positions = 0 (no direct loss contribution)
-        int paramsPerStep = 3; // mu, sigma, nu for StudentT
-        int fullGradientLength = predictions.Length;
-        var fullGradient = new Vector<T>(fullGradientLength);
-
-        // Insert point gradients at mu positions (every 3rd value starting at 0)
-        for (int i = 0; i < pointGradient.Length; i++)
-        {
-            int muIdx = i * paramsPerStep;
-            if (muIdx < fullGradientLength)
-            {
-                fullGradient[muIdx] = pointGradient[i];
-            }
-            // sigma (idx+1) and nu (idx+2) remain zero - no direct loss gradient
-        }
-
-        Backward(Tensor<T>.FromVector(fullGradient, predictions.Shape));
-
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc/>

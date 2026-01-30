@@ -1073,27 +1073,34 @@ public class DeepState<T> : ForecastingModelBase<T>
     {
         if (predictions.Count == 0)
         {
-            return new Tensor<T>(new[] { 1, totalSteps });
+            return new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
         }
 
-        int batchSize = predictions[0].Shape.Length > 1 ? predictions[0].Shape[0] : 1;
-        var result = new Tensor<T>(new[] { batchSize, totalSteps });
+        // Determine dimensions from first prediction
+        var first = predictions[0];
+        int batchSize = first.Shape.Length > 0 ? first.Shape[0] : 1;
+        int numFeatures = first.Shape.Length > 2 ? first.Shape[2] : _numFeatures;
+
+        var result = new Tensor<T>(new[] { batchSize, totalSteps, numFeatures });
         int currentStep = 0;
 
         foreach (var pred in predictions)
         {
-            int predSteps = pred.Shape.Length > 1 ? pred.Shape[1] : pred.Length / batchSize;
+            int predSteps = pred.Shape.Length > 1 ? pred.Shape[1] : pred.Length / (batchSize * numFeatures);
             int stepsToCopy = Math.Min(predSteps, totalSteps - currentStep);
 
             for (int b = 0; b < batchSize; b++)
             {
                 for (int t = 0; t < stepsToCopy; t++)
                 {
-                    int srcIdx = b * predSteps + t;
-                    int dstIdx = b * totalSteps + currentStep + t;
-                    if (srcIdx < pred.Length && dstIdx < result.Length)
+                    for (int f = 0; f < numFeatures; f++)
                     {
-                        result.Data.Span[dstIdx] = pred.Data.Span[srcIdx];
+                        int srcIdx = b * predSteps * numFeatures + t * numFeatures + f;
+                        int dstIdx = b * totalSteps * numFeatures + (currentStep + t) * numFeatures + f;
+                        if (srcIdx < pred.Length && dstIdx < result.Length)
+                        {
+                            result.Data.Span[dstIdx] = pred.Data.Span[srcIdx];
+                        }
                     }
                 }
             }
