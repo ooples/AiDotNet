@@ -478,11 +478,14 @@ public class TSDiff<T> : ForecastingModelBase<T>
         // Forward pass: predict noise
         var output = Forward(noisyTarget);
 
-        // Calculate loss
-        LastLoss = _lossFunction.CalculateLoss(output.ToVector(), noise.ToVector());
+        // Flatten noise to match output shape (Forward flattens input)
+        var noiseFlattened = FlattenInput(noise);
+
+        // Calculate loss using flattened tensors
+        LastLoss = _lossFunction.CalculateLoss(output.ToVector(), noiseFlattened.ToVector());
 
         // Backward pass
-        var gradient = _lossFunction.CalculateDerivative(output.ToVector(), noise.ToVector());
+        var gradient = _lossFunction.CalculateDerivative(output.ToVector(), noiseFlattened.ToVector());
         Backward(Tensor<T>.FromVector(gradient, output.Shape));
 
         _optimizer.UpdateParameters(Layers);

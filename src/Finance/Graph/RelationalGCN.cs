@@ -1001,7 +1001,8 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Backward(Tensor<T> gradOutput)
     {
-        var current = gradOutput;
+        // Flatten gradient to match forward pass layer shapes
+        var current = FlattenInput(gradOutput);
 
         // Backward through layers in reverse
         for (int i = Layers.Count - 1; i >= 0; i--)
