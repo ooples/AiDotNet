@@ -15,16 +15,16 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 /// are flagged as anomalies.
 /// </para>
 /// <para>
-/// <b>Implementation:</b> This is a scoring-based approach:
+/// <b>Implementation:</b> This is a scoring-based approach following industry standards:
 /// 1. Compute the ESD statistic for each point: max|x - mean| / std across features
-/// 2. Predict uses the ESD critical value (computed from alpha) for classification
-/// 3. ScoreAnomalies returns raw ESD statistics for flexible thresholding
+/// 2. Use contamination-based threshold (top X% of scores are anomalies)
+/// 3. CriticalValue property available for users who need statistical significance testing
 /// </para>
 /// <para>
 /// <b>When to use:</b>
 /// - When you expect multiple outliers
 /// - Data is approximately normally distributed
-/// - You want Z-score style detection with statistical significance testing
+/// - You want Z-score style detection with contamination-based thresholding
 /// </para>
 /// <para>
 /// <b>Industry Standard Defaults:</b>
@@ -58,8 +58,12 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
 
     /// <summary>
     /// Gets the ESD critical value computed during fitting.
-    /// Use this for statistical threshold-based anomaly detection.
     /// </summary>
+    /// <remarks>
+    /// This value is provided for users who need statistical significance testing.
+    /// Compare ScoreAnomalies results against this value if you want hypothesis-test based detection
+    /// instead of contamination-based thresholding.
+    /// </remarks>
     public double CriticalValue => _criticalValue;
 
     /// <summary>
@@ -232,29 +236,5 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
         }
 
         return scores;
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Uses the ESD critical value for statistical anomaly classification.
-    /// Points with ESD statistic greater than the critical value are classified as anomalies.
-    /// </remarks>
-    public override Vector<T> Predict(Matrix<T> X)
-    {
-        EnsureFitted();
-
-        var scores = ScoreAnomalies(X);
-        var predictions = new Vector<T>(scores.Length);
-        T criticalT = NumOps.FromDouble(_criticalValue);
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            // Points with ESD > critical value are anomalies (-1), otherwise inliers (1)
-            predictions[i] = NumOps.GreaterThan(scores[i], criticalT)
-                ? NumOps.FromDouble(-1)
-                : NumOps.FromDouble(1);
-        }
-
-        return predictions;
     }
 }
