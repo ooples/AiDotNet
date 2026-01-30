@@ -821,16 +821,32 @@ public class Timer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> AutoregressiveGenerate(Tensor<T> input, int steps)
     {
-        // Guard: AutoregressiveGenerate currently supports single univariate series only
-        if (input.Shape.Length != 1 || _numFeatures != 1)
+        // Handle different input shapes - flatten to 1D if needed
+        Tensor<T> flatInput;
+        if (input.Shape.Length == 1)
+        {
+            flatInput = input;
+        }
+        else if (input.Shape.Length == 3 && input.Shape[0] == 1 && input.Shape[2] == 1)
+        {
+            // 3D input [1, seqLen, 1] - flatten to [seqLen]
+            flatInput = input.Reshape(new[] { input.Shape[1] });
+        }
+        else if (input.Shape.Length == 2 && input.Shape[0] == 1)
+        {
+            // 2D input [1, seqLen] - flatten to [seqLen]
+            flatInput = input.Reshape(new[] { input.Shape[1] });
+        }
+        else
         {
             throw new InvalidOperationException(
-                $"Autoregressive generation currently supports a single univariate series with shape [context_length]. " +
-                $"Got input shape [{string.Join(", ", input.Shape)}] with numFeatures={_numFeatures}.");
+                $"Autoregressive generation currently supports a single univariate series with shape [context_length], " +
+                $"[1, context_length], or [1, context_length, 1]. " +
+                $"Got input shape [{string.Join(", ", input.Shape)}].");
         }
 
         var result = new Tensor<T>(new[] { 1, steps, 1 });
-        var currentInput = input;
+        var currentInput = flatInput;
         var rand = RandomHelper.CreateSecureRandom();
 
         for (int step = 0; step < steps; step++)

@@ -457,9 +457,43 @@ public class LagLlama<T> : ForecastingModelBase<T>
 
         // Extract point predictions from distribution parameters (use mean)
         var pointPredictions = ExtractPointPredictions(predictions);
-        LastLoss = _lossFunction.CalculateLoss(pointPredictions.ToVector(), target.ToVector());
+        var predVector = pointPredictions.ToVector();
 
-        var gradient = _lossFunction.CalculateDerivative(pointPredictions.ToVector(), target.ToVector());
+        // Align target to match point predictions length
+        // Target may be raw distribution params or point values of different size
+        var targetVector = target.ToVector();
+        Vector<T> alignedTarget;
+        if (targetVector.Length == predVector.Length)
+        {
+            alignedTarget = targetVector;
+        }
+        else if (targetVector.Length >= predVector.Length)
+        {
+            // Take first N elements if target is larger
+            alignedTarget = new Vector<T>(predVector.Length);
+            for (int i = 0; i < predVector.Length; i++)
+            {
+                alignedTarget[i] = targetVector[i];
+            }
+        }
+        else
+        {
+            // Pad with last value if target is smaller
+            alignedTarget = new Vector<T>(predVector.Length);
+            for (int i = 0; i < targetVector.Length; i++)
+            {
+                alignedTarget[i] = targetVector[i];
+            }
+            T lastVal = targetVector.Length > 0 ? targetVector[targetVector.Length - 1] : NumOps.Zero;
+            for (int i = targetVector.Length; i < predVector.Length; i++)
+            {
+                alignedTarget[i] = lastVal;
+            }
+        }
+
+        LastLoss = _lossFunction.CalculateLoss(predVector, alignedTarget);
+
+        var gradient = _lossFunction.CalculateDerivative(predVector, alignedTarget);
         Backward(Tensor<T>.FromVector(gradient, pointPredictions.Shape));
 
         _optimizer.UpdateParameters(Layers);

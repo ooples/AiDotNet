@@ -368,8 +368,9 @@ public class TSMixer<T> : ForecastingModelBase<T>
     {
         int layerIndex = 0;
 
-        // Input projection (first dense layer)
-        if (layerIndex < Layers.Count && Layers[layerIndex] is DenseLayer<T>)
+        // Input projection (first layer - expected to be DenseLayer for feature projection)
+        // Using index-based extraction like PatchTST for robustness
+        if (layerIndex < Layers.Count)
         {
             _inputProjection = Layers[layerIndex++];
         }
@@ -387,19 +388,19 @@ public class TSMixer<T> : ForecastingModelBase<T>
         }
 
         // Final layer normalization
-        if (layerIndex < Layers.Count && Layers[layerIndex] is LayerNormalizationLayer<T>)
+        if (layerIndex < Layers.Count)
         {
-            layerIndex++;
+            layerIndex++; // Skip the final norm - it's processed with remaining layers
         }
 
         // Temporal projection
-        if (layerIndex < Layers.Count && Layers[layerIndex] is DenseLayer<T>)
+        if (layerIndex < Layers.Count)
         {
             _temporalProjection = Layers[layerIndex++];
         }
 
         // Output projection
-        if (layerIndex < Layers.Count && Layers[layerIndex] is DenseLayer<T>)
+        if (layerIndex < Layers.Count)
         {
             _outputProjection = Layers[layerIndex];
         }

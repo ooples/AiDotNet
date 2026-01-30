@@ -944,9 +944,9 @@ internal static class FinanceModelTestFactory
         SetInt(options, "ForecastLength", 4);
         SetInt(options, "OutputLength", 4);
         SetInt(options, "OutputSize", 4);
-        SetInt(options, "NumFeatures", 4);
-        SetInt(options, "InputDim", 4);
-        SetInt(options, "FeatureCount", 4);
+        SetInt(options, "NumFeatures", 8);   // Must be compatible with test input shapes
+        SetInt(options, "InputDim", 8);       // Must be compatible with test input shapes
+        SetInt(options, "FeatureCount", 8);   // Must be compatible with test input shapes
         SetInt(options, "NumAssets", 4);
         SetInt(options, "NumFactors", 3);
         SetInt(options, "NumNodes", 4);
