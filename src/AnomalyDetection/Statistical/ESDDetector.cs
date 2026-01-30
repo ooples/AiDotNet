@@ -18,7 +18,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 /// <b>Implementation:</b> This is a scoring-based approach following industry standards:
 /// 1. Compute the ESD statistic for each point: max|x - mean| / std across features
 /// 2. Use contamination-based threshold (top X% of scores are anomalies)
-/// 3. CriticalValue property available for users who need statistical significance testing
+/// 3. CriticalValue property available (computed from training sample size, valid for same n)
 /// </para>
 /// <para>
 /// <b>When to use:</b>
@@ -60,7 +60,8 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
     /// Gets the ESD critical value computed during fitting.
     /// </summary>
     /// <remarks>
-    /// This value is provided for users who need statistical significance testing.
+    /// This value is computed from the training sample size (n) and is only statistically valid
+    /// for batches of the same size. For different sample sizes, recompute using ESD formula.
     /// Compare ScoreAnomalies results against this value if you want hypothesis-test based detection
     /// instead of contamination-based thresholding.
     /// </remarks>
@@ -121,6 +122,14 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
         // Compute ESD critical value for the first iteration
         // lambda_1 = (n-1) * t_(alpha/(2n), n-2) / sqrt((n-2+t^2)*(n))
         int effectiveMaxOutliers = _maxOutliers ?? Math.Max(1, (int)(_nSamples * _contamination));
+
+        // Clamp maxOutliers to valid range: ESD requires at least 3 samples to remain for valid statistics
+        effectiveMaxOutliers = Math.Min(effectiveMaxOutliers, Math.Max(0, _nSamples - 3));
+        if (effectiveMaxOutliers < 1)
+        {
+            effectiveMaxOutliers = 1; // Need at least 1 for ESD to make sense
+        }
+
         _criticalValue = ComputeESDCriticalValue(_nSamples, 1, effectiveMaxOutliers);
 
         // Calculate scores for training data to set threshold
