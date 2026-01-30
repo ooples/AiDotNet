@@ -10970,14 +10970,27 @@ public static class LayerHelper<T>
         if (hiddenSize % numHeads != 0)
             throw new ArgumentException("Hidden size must be divisible by number of heads.", nameof(hiddenSize));
 
-        // Variable selection network (encoder)
+        // Variable selection networks (TFT uses 3: static, encoder, decoder)
+        // Static variable selection: processes time-invariant features
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: hiddenSize,
+            activationFunction: new ReLUActivation<T>());
+
+        // Encoder variable selection: processes historical time-varying features
+        yield return new DenseLayer<T>(
+            inputSize: numFeatures,
+            outputSize: hiddenSize,
+            activationFunction: new ReLUActivation<T>());
+
+        // Decoder variable selection: processes known future features
         yield return new DenseLayer<T>(
             inputSize: numFeatures,
             outputSize: hiddenSize,
             activationFunction: new ReLUActivation<T>());
 
         // LSTM Encoder
-        // Input shape: [batch, sequence, features] where features = hiddenSize after embedding
+        // Input shape: [batch, sequence, features] where features = hiddenSize after variable selection
         yield return new LSTMLayer<T>(
             inputSize: hiddenSize,
             hiddenSize: hiddenSize,
