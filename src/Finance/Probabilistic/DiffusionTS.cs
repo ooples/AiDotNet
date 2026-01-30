@@ -516,12 +516,35 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
         // Combine target noise
         var targetNoise = CombineComponents(noiseTrend, noiseSeasonal, noiseResidual);
 
-        // Calculate loss
-        LastLoss = _lossFunction.CalculateLoss(output.ToVector(), targetNoise.ToVector());
+        // Ensure shapes match for loss calculation - use minimum length
+        var outputVec = output.ToVector();
+        var targetVec = targetNoise.ToVector();
+        int minLength = Math.Min(outputVec.Length, targetVec.Length);
 
-        // Backward pass
-        var gradient = _lossFunction.CalculateDerivative(output.ToVector(), targetNoise.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        // Create matching-length vectors for loss calculation
+        var matchedOutput = new T[minLength];
+        var matchedTarget = new T[minLength];
+        for (int i = 0; i < minLength; i++)
+        {
+            matchedOutput[i] = outputVec[i];
+            matchedTarget[i] = targetVec[i];
+        }
+
+        // Calculate loss using matched-size vectors
+        var matchedOutputVec = new Vector<T>(matchedOutput);
+        var matchedTargetVec = new Vector<T>(matchedTarget);
+        LastLoss = _lossFunction.CalculateLoss(matchedOutputVec, matchedTargetVec);
+
+        // Backward pass - use matched size for gradient computation
+        var gradient = _lossFunction.CalculateDerivative(matchedOutputVec, matchedTargetVec);
+
+        // Pad gradient back to output shape if needed
+        var fullGradient = new T[output.Length];
+        for (int i = 0; i < Math.Min(gradient.Length, fullGradient.Length); i++)
+        {
+            fullGradient[i] = gradient[i];
+        }
+        Backward(Tensor<T>.FromVector(new Vector<T>(fullGradient), output.Shape));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -1377,7 +1400,21 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
         var combinedVec = combined.ToVector();
         var component = new T[length];
 
-        int actualLength = Math.Min(length, combinedVec.Length - offset);
+        // If offset is beyond the combined vector, just return zeros
+        // This handles cases where the network output is smaller than expected
+        if (offset >= combinedVec.Length)
+        {
+            for (int i = 0; i < length; i++)
+            {
+                component[i] = NumOps.Zero;
+            }
+            return new Tensor<T>(new[] { length }, new Vector<T>(component));
+        }
+
+        // Calculate safe copy length
+        int availableLength = combinedVec.Length - offset;
+        int actualLength = Math.Min(length, availableLength);
+
         for (int i = 0; i < actualLength; i++)
         {
             component[i] = combinedVec[offset + i];

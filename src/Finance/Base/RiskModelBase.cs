@@ -313,6 +313,18 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     {
         _confidenceLevel = reader.ReadDouble();
         _timeHorizon = reader.ReadInt32();
+
+        // Re-validate invariants after deserialize to prevent corrupt state
+        if (_confidenceLevel < 0 || _confidenceLevel > 1)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized confidenceLevel ({_confidenceLevel}) is invalid. Must be between 0 and 1.");
+        }
+        if (_timeHorizon < 1)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized timeHorizon ({_timeHorizon}) is invalid. Must be at least 1.");
+        }
     }
 
     /// <summary>
@@ -330,17 +342,23 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
     {
         SetTrainingMode(true);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var gradTensor = Tensor<T>.FromVector(grad, output.Shape);
-
-        Backpropagate(gradTensor);
-
-        // Default SGD-style update for layers
-        var learningRate = MathHelper.GetNumericOperations<T>().FromDouble(0.001);
-        foreach (var layer in Layers)
+        try
         {
-            layer.UpdateParameters(learningRate);
+            var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
+            var gradTensor = Tensor<T>.FromVector(grad, output.Shape);
+
+            Backpropagate(gradTensor);
+
+            // Default SGD-style update for layers
+            var learningRate = MathHelper.GetNumericOperations<T>().FromDouble(0.001);
+            foreach (var layer in Layers)
+            {
+                layer.UpdateParameters(learningRate);
+            }
         }
-        SetTrainingMode(false);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 }

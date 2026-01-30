@@ -1137,18 +1137,21 @@ public class Chronos<T> : ForecastingModelBase<T>
     {
         var newInput = new Tensor<T>(input.Shape);
 
+        // Clamp stepsUsed to prevent negative indices
+        int clampedSteps = Math.Min(stepsUsed, _contextLength);
+
         // Shift existing data
-        for (int i = 0; i < _contextLength - stepsUsed; i++)
+        for (int i = 0; i < _contextLength - clampedSteps; i++)
         {
-            if (i + stepsUsed < input.Length)
-                newInput.Data.Span[i] = input.Data.Span[i + stepsUsed];
+            if (i + clampedSteps < input.Length)
+                newInput.Data.Span[i] = input.Data.Span[i + clampedSteps];
         }
 
         // Add predictions at the end
-        for (int i = 0; i < stepsUsed && i < predictions.Length; i++)
+        for (int i = 0; i < clampedSteps && i < predictions.Length; i++)
         {
-            int targetIdx = _contextLength - stepsUsed + i;
-            if (targetIdx < _contextLength)
+            int targetIdx = _contextLength - clampedSteps + i;
+            if (targetIdx >= 0 && targetIdx < _contextLength)
             {
                 newInput.Data.Span[targetIdx] = predictions[i];
             }

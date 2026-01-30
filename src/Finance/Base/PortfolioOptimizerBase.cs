@@ -56,6 +56,13 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
     protected PortfolioOptimizerBase(NeuralNetworkArchitecture<T> architecture, int numAssets, int numFeatures = 10, ILossFunction<T>? lossFunction = null)
         : base(architecture, 1, 1, numFeatures, lossFunction)
     {
+        if (numAssets <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numAssets),
+                numAssets,
+                "numAssets must be greater than 0 to create valid tensor shapes.");
+        }
         _numAssets = numAssets;
     }
 
@@ -75,6 +82,13 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
     protected PortfolioOptimizerBase(NeuralNetworkArchitecture<T> architecture, string onnxModelPath, int numAssets, int numFeatures = 10)
         : base(architecture, onnxModelPath, 1, 1, numFeatures)
     {
+        if (numAssets <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numAssets),
+                numAssets,
+                "numAssets must be greater than 0 to create valid tensor shapes.");
+        }
         _numAssets = numAssets;
     }
 
@@ -284,8 +298,14 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
     {
         // Default training implementation
         SetTrainingMode(true);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        // Backward pass would be implemented here or in derived classes
-        SetTrainingMode(false);
+        try
+        {
+            var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
+            // Backward pass would be implemented here or in derived classes
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 }

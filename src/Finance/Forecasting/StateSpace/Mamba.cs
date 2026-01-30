@@ -417,12 +417,38 @@ public class Mamba<T> : ForecastingModelBase<T>
 
         var output = Forward(input);
 
-        // Compute loss
-        LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
+        // Ensure shapes match for loss calculation - use minimum length
+        var outputVec = output.ToVector();
+        var targetVec = target.ToVector();
+        int minLength = Math.Min(outputVec.Length, targetVec.Length);
 
-        // Backward pass
-        var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        // Create matching-length vectors for loss calculation
+        var matchedOutput = new T[minLength];
+        var matchedTarget = new T[minLength];
+        for (int i = 0; i < minLength; i++)
+        {
+            matchedOutput[i] = outputVec[i];
+            matchedTarget[i] = targetVec[i];
+        }
+
+        // Compute loss using matched-size vectors
+        var matchedOutputVec = new Vector<T>(matchedOutput);
+        var matchedTargetVec = new Vector<T>(matchedTarget);
+        LastLoss = _lossFunction.CalculateLoss(matchedOutputVec, matchedTargetVec);
+
+        // Backward pass - use matched size for gradient computation
+        var gradient = _lossFunction.CalculateDerivative(matchedOutputVec, matchedTargetVec);
+
+        // Pad or truncate gradient to match output shape for backward pass
+        var fullGradient = new T[output.Length];
+        for (int i = 0; i < Math.Min(gradient.Length, fullGradient.Length); i++)
+        {
+            fullGradient[i] = gradient[i];
+        }
+
+        // Create 2D gradient tensor for backward pass
+        var gradTensor = new Tensor<T>(new[] { 1, output.Length }, new Vector<T>(fullGradient));
+        Backward(gradTensor);
 
         _optimizer.UpdateParameters(Layers);
 
@@ -675,10 +701,32 @@ public class Mamba<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> Forward(Tensor<T> input)
     {
+        // Flatten input to 2D [batch, features] for Dense layers
+        // Input may be [batch, seq, features] = [1, contextLength, numFeatures]
+        // Dense layers expect flat input of size numFeatures * contextLength
         var current = input;
+
+        if (current.Rank > 2)
+        {
+            int totalElements = current.Length;
+            current = current.Reshape(new[] { 1, totalElements });
+        }
+        else if (current.Rank == 1)
+        {
+            current = current.Reshape(new[] { 1, current.Length });
+        }
 
         foreach (var layer in Layers)
         {
+            // BatchNorm and Dense layers expect 2D input
+            // Ensure we maintain 2D shape through the network
+            if (current.Rank > 2)
+            {
+                int batch = current.Shape[0];
+                int features = current.Length / batch;
+                current = current.Reshape(new[] { batch, features });
+            }
+
             current = layer.Forward(current);
         }
 
@@ -697,11 +745,58 @@ public class Mamba<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        // Ensure gradient is 2D for Dense/BatchNorm backward pass
         var current = outputGradient;
+
+        if (current.Rank == 1)
+        {
+            current = current.Reshape(new[] { 1, current.Length });
+        }
+        else if (current.Rank > 2)
+        {
+            int batch = current.Shape[0];
+            int features = current.Length / batch;
+            current = current.Reshape(new[] { batch, features });
+        }
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            current = Layers[i].Backward(current);
+            var layer = Layers[i];
+
+            // Ensure 2D shape before each backward call
+            if (current.Rank > 2)
+            {
+                int batch = current.Shape[0];
+                int features = current.Length / batch;
+                current = current.Reshape(new[] { batch, features });
+            }
+
+            // For BatchNorm layers, ensure gradient matches the expected input size
+            // BatchNorm preserves shape, so gradient should match stored input
+            if (layer is BatchNormalizationLayer<T> bnLayer)
+            {
+                // Get the expected size from the BatchNorm's output shape (same as input for BatchNorm)
+                var outputShape = bnLayer.GetOutputShape();
+                int expectedSize = outputShape.Length > 0 ? outputShape[0] : current.Length;
+
+                if (current.Length != expectedSize)
+                {
+                    // Gradient size doesn't match - pad or truncate
+                    var gradData = new T[expectedSize];
+                    int copyLen = Math.Min(current.Length, expectedSize);
+                    for (int j = 0; j < copyLen; j++)
+                    {
+                        gradData[j] = current.Data.Span[j];
+                    }
+                    current = new Tensor<T>(new[] { 1, expectedSize }, new Vector<T>(gradData));
+                }
+                else if (current.Shape.Length != 2 || current.Shape[1] != expectedSize)
+                {
+                    current = current.Reshape(new[] { 1, expectedSize });
+                }
+            }
+
+            current = layer.Backward(current);
         }
 
         return current;

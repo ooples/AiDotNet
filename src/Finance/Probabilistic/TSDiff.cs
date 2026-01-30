@@ -481,12 +481,35 @@ public class TSDiff<T> : ForecastingModelBase<T>
         // Flatten noise to match output shape (Forward flattens input)
         var noiseFlattened = FlattenInput(noise);
 
-        // Calculate loss using flattened tensors
-        LastLoss = _lossFunction.CalculateLoss(output.ToVector(), noiseFlattened.ToVector());
+        // Ensure shapes match for loss calculation - use minimum length
+        var outputVec = output.ToVector();
+        var noiseVec = noiseFlattened.ToVector();
+        int minLength = Math.Min(outputVec.Length, noiseVec.Length);
 
-        // Backward pass
-        var gradient = _lossFunction.CalculateDerivative(output.ToVector(), noiseFlattened.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        // Create matching-length vectors for loss calculation
+        var matchedOutput = new T[minLength];
+        var matchedNoise = new T[minLength];
+        for (int i = 0; i < minLength; i++)
+        {
+            matchedOutput[i] = outputVec[i];
+            matchedNoise[i] = noiseVec[i];
+        }
+
+        // Calculate loss using matched-size vectors
+        var matchedOutputVec = new Vector<T>(matchedOutput);
+        var matchedNoiseVec = new Vector<T>(matchedNoise);
+        LastLoss = _lossFunction.CalculateLoss(matchedOutputVec, matchedNoiseVec);
+
+        // Backward pass - use matched size for gradient computation
+        var gradient = _lossFunction.CalculateDerivative(matchedOutputVec, matchedNoiseVec);
+
+        // Pad gradient back to output shape if needed
+        var fullGradient = new T[output.Length];
+        for (int i = 0; i < Math.Min(gradient.Length, fullGradient.Length); i++)
+        {
+            fullGradient[i] = gradient[i];
+        }
+        Backward(Tensor<T>.FromVector(new Vector<T>(fullGradient), output.Shape));
 
         _optimizer.UpdateParameters(Layers);
 

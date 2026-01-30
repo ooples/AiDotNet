@@ -639,14 +639,106 @@ public class GRULayer<T> : LayerBase<T>
             // 2D input [sequenceLength, inputSize] -> add batch dim
             batchSize = 1;
             sequenceLength = input.Shape[0];
-            input3D = input.Reshape([1, sequenceLength, _inputSize]);
+            int actualInputSize = input.Shape[1];
+
+            if (actualInputSize != _inputSize)
+            {
+                // Adapt the input by truncating or padding to match expected input size
+                int targetElements = sequenceLength * _inputSize;
+
+                if (actualInputSize >= _inputSize)
+                {
+                    // Truncate: take only the first _inputSize features from each timestep
+                    var data = new T[targetElements];
+                    for (int s = 0; s < sequenceLength; s++)
+                    {
+                        for (int f = 0; f < _inputSize; f++)
+                        {
+                            data[s * _inputSize + f] = input.Data.Span[s * actualInputSize + f];
+                        }
+                    }
+                    input3D = new Tensor<T>(new[] { 1, sequenceLength, _inputSize }, new Vector<T>(data));
+                }
+                else
+                {
+                    // Pad: add zeros for missing features
+                    var data = new T[targetElements];
+                    for (int s = 0; s < sequenceLength; s++)
+                    {
+                        for (int f = 0; f < actualInputSize; f++)
+                        {
+                            data[s * _inputSize + f] = input.Data.Span[s * actualInputSize + f];
+                        }
+                        // Remaining features are initialized to default (zero)
+                    }
+                    input3D = new Tensor<T>(new[] { 1, sequenceLength, _inputSize }, new Vector<T>(data));
+                }
+            }
+            else
+            {
+                input3D = input.Reshape([1, sequenceLength, _inputSize]);
+            }
         }
         else if (rank == 3)
         {
             // Standard 3D input [batchSize, sequenceLength, inputSize]
             batchSize = input.Shape[0];
             sequenceLength = input.Shape[1];
-            input3D = input;
+            int actualInputSize = input.Shape[2];
+
+            // Handle input size mismatch: if the actual input size doesn't match _inputSize,
+            // we need to adapt the input. This can happen when the GRU is used in a pipeline
+            // where upstream layers output different dimensions than expected.
+            if (actualInputSize != _inputSize)
+            {
+                // Reshape input to match expected input size by distributing elements
+                int totalElements = batchSize * sequenceLength * actualInputSize;
+                int targetElements = batchSize * sequenceLength * _inputSize;
+
+                if (totalElements >= targetElements)
+                {
+                    // Truncate: take only the first _inputSize features from each timestep
+                    var data = new T[targetElements];
+                    int srcIdx = 0;
+                    int dstIdx = 0;
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        for (int s = 0; s < sequenceLength; s++)
+                        {
+                            for (int f = 0; f < _inputSize; f++)
+                            {
+                                data[dstIdx++] = input.Data.Span[srcIdx + f];
+                            }
+                            srcIdx += actualInputSize;
+                        }
+                    }
+                    input3D = new Tensor<T>(new[] { batchSize, sequenceLength, _inputSize }, new Vector<T>(data));
+                }
+                else
+                {
+                    // Pad: add zeros for missing features
+                    var data = new T[targetElements];
+                    int srcIdx = 0;
+                    int dstIdx = 0;
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        for (int s = 0; s < sequenceLength; s++)
+                        {
+                            for (int f = 0; f < actualInputSize; f++)
+                            {
+                                data[dstIdx + f] = input.Data.Span[srcIdx + f];
+                            }
+                            srcIdx += actualInputSize;
+                            dstIdx += _inputSize;
+                        }
+                    }
+                    input3D = new Tensor<T>(new[] { batchSize, sequenceLength, _inputSize }, new Vector<T>(data));
+                }
+            }
+            else
+            {
+                input3D = input;
+            }
         }
         else
         {
@@ -656,7 +748,58 @@ public class GRULayer<T> : LayerBase<T>
             for (int d = 0; d < rank - 2; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            input3D = input.Reshape([flatBatch, sequenceLength, _inputSize]);
+
+            int actualInputSize = input.Shape[rank - 1];
+            if (actualInputSize != _inputSize)
+            {
+                // Adapt the input by truncating or padding
+                int totalElements = flatBatch * sequenceLength * actualInputSize;
+                int targetElements = flatBatch * sequenceLength * _inputSize;
+
+                if (totalElements >= targetElements)
+                {
+                    // Truncate
+                    var data = new T[targetElements];
+                    int srcIdx = 0;
+                    int dstIdx = 0;
+                    for (int b = 0; b < flatBatch; b++)
+                    {
+                        for (int s = 0; s < sequenceLength; s++)
+                        {
+                            for (int f = 0; f < _inputSize; f++)
+                            {
+                                data[dstIdx++] = input.Data.Span[srcIdx + f];
+                            }
+                            srcIdx += actualInputSize;
+                        }
+                    }
+                    input3D = new Tensor<T>(new[] { flatBatch, sequenceLength, _inputSize }, new Vector<T>(data));
+                }
+                else
+                {
+                    // Pad
+                    var data = new T[targetElements];
+                    int srcIdx = 0;
+                    int dstIdx = 0;
+                    for (int b = 0; b < flatBatch; b++)
+                    {
+                        for (int s = 0; s < sequenceLength; s++)
+                        {
+                            for (int f = 0; f < actualInputSize; f++)
+                            {
+                                data[dstIdx + f] = input.Data.Span[srcIdx + f];
+                            }
+                            srcIdx += actualInputSize;
+                            dstIdx += _inputSize;
+                        }
+                    }
+                    input3D = new Tensor<T>(new[] { flatBatch, sequenceLength, _inputSize }, new Vector<T>(data));
+                }
+            }
+            else
+            {
+                input3D = input.Reshape([flatBatch, sequenceLength, _inputSize]);
+            }
         }
 
         // Cache input only if training

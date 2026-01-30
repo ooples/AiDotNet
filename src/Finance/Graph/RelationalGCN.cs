@@ -1024,12 +1024,24 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
         {
             var layer = Layers[i];
 
+            // Before Dense (output) backward, if GRU produced 3D, reshape to match
+            if (i == Layers.Count - 1 && layer is DenseLayer<T> && _preOutputShape is not null)
+            {
+                // Dense expects flat input, we already have it flattened
+            }
+
             current = layer.Backward(current);
 
-            // After final Dense backward, reshape to match what previous layer (Dropout/GRU) expects
+            // After Dense (output) backward, reshape to 3D for GRU backward
             if (i == Layers.Count - 1 && _preOutputShape is not null && current.Length == _preOutputShape.Aggregate(1, (a, b) => a * b))
             {
                 current = current.Reshape(_preOutputShape);
+            }
+
+            // After GRU backward, flatten back to 1D for Dropout and earlier layers
+            if (layer is GRULayer<T> && current.Rank > 2)
+            {
+                current = current.Reshape(new[] { current.Length });
             }
         }
 
