@@ -323,8 +323,9 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
         _aggregation = _options.Aggregation;
         _numSamples = _options.NumSamples;
 
-        _relationAdjacencies = relationAdjacencies ?? CreateDefaultRelationAdjacencies();
+        // Initialize random before CreateDefaultRelationAdjacencies which uses it
         _random = RandomHelper.CreateSecureRandom();
+        _relationAdjacencies = relationAdjacencies ?? CreateDefaultRelationAdjacencies();
 
         InitializeBasisDecomposition();
         InitializeLayers();

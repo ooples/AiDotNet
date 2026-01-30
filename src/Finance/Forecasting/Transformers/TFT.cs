@@ -964,19 +964,37 @@ public class TFT<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
+            // Check if input has at least 3 dimensions for denormalization
+            if (input.Shape.Length < 3)
+                return input;
+
             var denormalized = new Tensor<T>(input.Shape);
             int batchSize = input.Shape[0];
             int horizonLen = input.Shape[1];
             int features = input.Shape[2];
 
+            // Get the stored feature dimension from instance stats
+            int storedFeatures = _instanceMean.Shape[2];
+
+            // Only denormalize features that were in the original input
+            // If forecast has more features (e.g., from output projection), copy them unchanged
             for (int b = 0; b < batchSize; b++)
             {
+                int effectiveBatch = Math.Min(b, _instanceMean.Shape[0] - 1);
                 for (int t = 0; t < horizonLen; t++)
                 {
                     for (int f = 0; f < features; f++)
                     {
-                        var scaled = NumOps.Multiply(input[b, t, f], _instanceStd[b, 0, f]);
-                        denormalized[b, t, f] = NumOps.Add(scaled, _instanceMean[b, 0, f]);
+                        if (f < storedFeatures)
+                        {
+                            var scaled = NumOps.Multiply(input[b, t, f], _instanceStd[effectiveBatch, 0, f]);
+                            denormalized[b, t, f] = NumOps.Add(scaled, _instanceMean[effectiveBatch, 0, f]);
+                        }
+                        else
+                        {
+                            // Feature beyond stored stats - copy unchanged
+                            denormalized[b, t, f] = input[b, t, f];
+                        }
                     }
                 }
             }

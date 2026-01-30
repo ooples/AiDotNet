@@ -861,11 +861,30 @@ public class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
+        // Store original dimensions for reshape after dense layers
+        int origBatch = input.Rank >= 1 ? input.Shape[0] : 1;
+        int origSeq = input.Rank >= 2 ? input.Shape[1] : 1;
+
         var current = FlattenInput(input);
 
-        // Apply all layers
+        // Apply all layers with proper reshape between Dense and GRU
+        bool passedDense = false;
         foreach (var layer in Layers)
         {
+            // Before GRU layer, reshape from 2D [batch*seq, hidden] to 3D [batch, seq, hidden]
+            if (layer is GRULayer<T> && current.Rank == 2 && !passedDense)
+            {
+                int totalSamples = current.Shape[0];
+                int hiddenDim = current.Shape[1];
+                // Compute effective batch/seq that fits the total
+                int effectiveSeq = Math.Min(origSeq, totalSamples);
+                int effectiveBatch = totalSamples / effectiveSeq;
+                if (effectiveBatch * effectiveSeq == totalSamples)
+                {
+                    current = current.Reshape(new[] { effectiveBatch, effectiveSeq, hiddenDim });
+                }
+                passedDense = true;
+            }
             current = layer.Forward(current);
         }
 
