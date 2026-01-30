@@ -48,6 +48,11 @@ public static class FinancialDataLoaderFactory
         FinancialPreprocessor<T>? preprocessor = null,
         int batchSize = 32)
     {
+        if (series is null)
+        {
+            throw new ArgumentNullException(nameof(series));
+        }
+
         return new FinancialDataLoader<T>(
             series,
             sequenceLength,
