@@ -160,7 +160,10 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
         for (int i = 0; i < texts.Length; i++)
         {
             var tokenIds = Tokenize(texts[i]);
-            var prediction = AnalyzeSentiment(Tensor<T>.FromVector(new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray())));
+            // Create a 2D tensor [1, sequence_length] since NLP models expect batch dimension
+            var tokenVector = new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray());
+            var inputTensor = new Tensor<T>(new[] { 1, tokenIds.Length }, tokenVector);
+            var prediction = AnalyzeSentiment(inputTensor);
 
             if (prediction.Length == 0)
             {

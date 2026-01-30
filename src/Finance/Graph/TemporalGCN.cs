@@ -1072,18 +1072,25 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
         var inputVec = input.ToVector();
         var predVec = prediction.ToVector();
 
-        int inputSize = _numNodes * _sequenceLength * _numFeatures;
-        int shiftSize = _numNodes * _numFeatures;
+        // Use actual input size, not calculated expected size
+        int inputSize = inputVec.Length;
+        int shiftSize = Math.Min(_numNodes * _numFeatures, inputSize);
         var shifted = new T[inputSize];
 
-        // Remove oldest time step, add prediction
-        for (int i = 0; i < inputSize - shiftSize; i++)
+        // Copy shifted values from input (avoiding index out of range)
+        int copyLen = Math.Max(0, inputSize - shiftSize);
+        for (int i = 0; i < copyLen; i++)
         {
-            shifted[i] = inputVec[i + shiftSize];
+            int srcIdx = i + shiftSize;
+            if (srcIdx < inputVec.Length)
+                shifted[i] = inputVec[srcIdx];
         }
+        // Fill end with prediction values
         for (int i = 0; i < Math.Min(shiftSize, predVec.Length); i++)
         {
-            shifted[inputSize - shiftSize + i] = predVec[i];
+            int dstIdx = inputSize - shiftSize + i;
+            if (dstIdx >= 0 && dstIdx < inputSize)
+                shifted[dstIdx] = predVec[i];
         }
 
         return new Tensor<T>(new[] { inputSize }, new Vector<T>(shifted));

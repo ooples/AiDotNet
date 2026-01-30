@@ -193,10 +193,23 @@ internal static class FinanceModelTestFactory
 
             if (model is IFinancialModel<T> financialModel)
             {
-                var input = FinanceTestHelpers.CreateTimeSeriesInput<T>(
-                    batchSize: 1,
-                    sequenceLength: Math.Max(1, financialModel.SequenceLength),
-                    numFeatures: Math.Max(1, financialModel.NumFeatures));
+                // Risk models and Factor models expect 2D input [batch, features], not 3D time series
+                bool is2DModel = model is IRiskModel<T> || model is IFactorModel<T>;
+                Tensor<T> input;
+
+                if (is2DModel || financialModel.SequenceLength <= 1)
+                {
+                    // Create 2D input for risk/factor models
+                    input = FinanceTestHelpers.CreateRandomTensor<T>(
+                        new[] { 1, Math.Max(1, financialModel.NumFeatures) });
+                }
+                else
+                {
+                    input = FinanceTestHelpers.CreateTimeSeriesInput<T>(
+                        batchSize: 1,
+                        sequenceLength: Math.Max(1, financialModel.SequenceLength),
+                        numFeatures: Math.Max(1, financialModel.NumFeatures));
+                }
 
                 var output = financialModel.Predict(input);
                 Assert.NotNull(output);

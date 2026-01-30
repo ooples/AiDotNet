@@ -1235,7 +1235,9 @@ public class DCRNN<T> : ForecastingModelBase<T>
     {
         var shifted = new Tensor<T>(input.Shape);
 
-        int stepSize = _numNodes * _numFeatures;
+        // Guard against stepSize larger than input length
+        int stepSize = Math.Min(_numNodes * _numFeatures, input.Data.Length);
+        if (stepSize == 0) stepSize = 1;
         int totalSteps = input.Data.Length / stepSize;
 
         // Shift left by one time step

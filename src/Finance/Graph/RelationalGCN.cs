@@ -1382,19 +1382,25 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
     {
         var newData = new T[input.Data.Length];
-        int shiftAmount = _numNodes * _numFeatures;
+        // Guard against shiftAmount larger than input length
+        int shiftAmount = Math.Min(_numNodes * _numFeatures, input.Data.Length);
 
-        // Shift existing data left
-        for (int i = 0; i < input.Data.Length - shiftAmount; i++)
+        // Shift existing data left (avoiding index out of range)
+        int copyLen = Math.Max(0, input.Data.Length - shiftAmount);
+        for (int i = 0; i < copyLen; i++)
         {
-            newData[i] = input.Data.Span[i + shiftAmount];
+            int srcIdx = i + shiftAmount;
+            if (srcIdx < input.Data.Length)
+                newData[i] = input.Data.Span[srcIdx];
         }
 
         // Append prediction
         int predLength = Math.Min(shiftAmount, prediction.Data.Length);
         for (int i = 0; i < predLength; i++)
         {
-            newData[input.Data.Length - shiftAmount + i] = prediction.Data.Span[i];
+            int dstIdx = input.Data.Length - shiftAmount + i;
+            if (dstIdx >= 0 && dstIdx < input.Data.Length)
+                newData[dstIdx] = prediction.Data.Span[i];
         }
 
         return new Tensor<T>(input.Shape, new Vector<T>(newData));
