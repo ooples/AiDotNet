@@ -520,13 +520,14 @@ public class DeepAR<T> : ForecastingModelBase<T>
         }
         else
         {
-            if (string.IsNullOrEmpty(OnnxModelPath))
+            // Use null-coalescing throw to satisfy null analysis across all framework targets
+            string onnxPath = OnnxModelPath ?? throw new InvalidOperationException(
+                "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
+            if (onnxPath.Length == 0)
             {
                 throw new InvalidOperationException(
-                    "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
+                    "Cannot create new instance from ONNX mode when OnnxModelPath is empty.");
             }
-            // Store in local variable after validation to satisfy null analysis
-            string onnxPath = OnnxModelPath;
             return new DeepAR<T>(Architecture, onnxPath, options, _optimizer, LossFunction);
         }
     }
