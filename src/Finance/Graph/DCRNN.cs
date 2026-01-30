@@ -866,30 +866,64 @@ public class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // Store original dimensions for reshape after dense layers
+        // Store original dimensions for reshape calculations
         int origBatch = input.Rank >= 1 ? input.Shape[0] : 1;
         int origSeq = input.Rank >= 2 ? input.Shape[1] : 1;
 
         var current = FlattenInput(input);
 
         // Apply all layers with proper reshape between Dense and GRU
-        bool passedDense = false;
         foreach (var layer in Layers)
         {
-            // Before GRU layer, reshape from 2D [batch*seq, hidden] to 3D [batch, seq, hidden]
-            if (layer is GRULayer<T> && current.Rank == 2 && !passedDense)
+            // Before GRU layer, reshape from 2D to 3D
+            // Dense outputs [batch*seq, numNodes*hiddenDim] but GRU expects [batch, seq, hiddenDim]
+            if (layer is GRULayer<T> && current.Rank == 2)
             {
                 int totalSamples = current.Shape[0];
-                int hiddenDim = current.Shape[1];
-                // Compute effective batch/seq that fits the total
-                int effectiveSeq = Math.Min(origSeq, totalSamples);
-                int effectiveBatch = totalSamples / effectiveSeq;
-                if (effectiveBatch * effectiveSeq == totalSamples)
+                int totalFeatures = current.Shape[1];
+
+                // GRU expects inputSize = hiddenDimension
+                // Dense output has numNodes * hiddenDim features
+                int gruInputSize = _hiddenDimension;
+                if (totalFeatures % gruInputSize == 0)
                 {
-                    current = current.Reshape(new[] { effectiveBatch, effectiveSeq, hiddenDim });
+                    int nodesPerSample = totalFeatures / gruInputSize;
+                    int totalSeqLen = totalSamples * nodesPerSample;
+                    // Use batch=1 and expand sequence dimension to include nodes
+                    current = current.Reshape(new[] { 1, totalSeqLen, gruInputSize });
                 }
-                passedDense = true;
+                else
+                {
+                    // Features don't divide evenly by hiddenDim - use as-is but add batch dim
+                    current = current.Reshape(new[] { 1, totalSamples, totalFeatures });
+                }
             }
+
+            // Before Dense layer (not the final output projection), reshape from 3D to 2D
+            // GRU outputs [batch, seq, hiddenDim] but Dense expects [batch*seq, numNodes*hiddenDim]
+            if (layer is DenseLayer<T> && current.Rank == 3)
+            {
+                int batch = current.Shape[0];
+                int seqLen = current.Shape[1];
+                int hidden = current.Shape[2];
+
+                // Flatten to 2D: [batch * seq / numNodes, numNodes * hidden]
+                // This preserves total elements while matching Dense input expectations
+                int totalElements = batch * seqLen * hidden;
+                int denseFeatures = _numNodes * _hiddenDimension;
+
+                if (totalElements % denseFeatures == 0)
+                {
+                    int denseBatch = totalElements / denseFeatures;
+                    current = current.Reshape(new[] { denseBatch, denseFeatures });
+                }
+                else
+                {
+                    // Fallback: flatten to [total_samples, hidden]
+                    current = current.Reshape(new[] { batch * seqLen, hidden });
+                }
+            }
+
             current = layer.Forward(current);
         }
 
@@ -916,7 +950,44 @@ public class DCRNN<T> : ForecastingModelBase<T>
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
-            grad = Layers[i].Backward(grad);
+            var layer = Layers[i];
+
+            // Before GRU backward, if gradient is 2D but GRU expects 3D, reshape
+            // This reverses what we did in forward where we flattened 3D to 2D after GRU
+            if (layer is GRULayer<T> && grad.Rank == 2)
+            {
+                int totalElements = grad.Length;
+                int hidden = _hiddenDimension;
+                if (totalElements % hidden == 0)
+                {
+                    int seqLen = totalElements / hidden;
+                    grad = grad.Reshape(new[] { 1, seqLen, hidden });
+                }
+            }
+
+            grad = layer.Backward(grad);
+
+            // After GRU backward, if gradient is 3D but previous layer was Dense, flatten to 2D
+            // This reverses what we did in forward where we reshaped 2D to 3D before GRU
+            if (layer is GRULayer<T> && grad.Rank == 3 && i > 0 && Layers[i - 1] is DenseLayer<T>)
+            {
+                int batch = grad.Shape[0];
+                int seqLen = grad.Shape[1];
+                int hidden = grad.Shape[2];
+                int totalElements = batch * seqLen * hidden;
+                int denseFeatures = _numNodes * _hiddenDimension;
+
+                if (totalElements % denseFeatures == 0)
+                {
+                    int denseBatch = totalElements / denseFeatures;
+                    grad = grad.Reshape(new[] { denseBatch, denseFeatures });
+                }
+                else
+                {
+                    // Fallback: flatten to 2D
+                    grad = grad.Reshape(new[] { batch * seqLen, hidden });
+                }
+            }
         }
 
         return grad;
