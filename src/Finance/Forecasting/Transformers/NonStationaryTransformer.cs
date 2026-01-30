@@ -173,6 +173,11 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     private int _sequenceLength;
 
     /// <summary>
+    /// The label length for decoder start position.
+    /// </summary>
+    private int _labelLength;
+
+    /// <summary>
     /// The prediction horizon.
     /// </summary>
     private int _predictionHorizon;
@@ -319,6 +324,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
         OnnxModelPath = onnxModelPath;
 
         _sequenceLength = opts.SequenceLength;
+        _labelLength = opts.LabelLength;
         _predictionHorizon = opts.PredictionHorizon;
         _numFeatures = opts.NumFeatures;
         _modelDimension = opts.ModelDimension;
@@ -364,6 +370,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
         _useNativeMode = true;
 
         _sequenceLength = opts.SequenceLength;
+        _labelLength = opts.LabelLength;
         _predictionHorizon = opts.PredictionHorizon;
         _numFeatures = opts.NumFeatures;
         _modelDimension = opts.ModelDimension;
@@ -645,6 +652,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
         var options = new NonStationaryTransformerOptions<T>
         {
             SequenceLength = _sequenceLength,
+            LabelLength = _labelLength,
             PredictionHorizon = _predictionHorizon,
             NumFeatures = _numFeatures,
             ModelDimension = _modelDimension,
@@ -674,6 +682,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
         writer.Write(_sequenceLength);
+        writer.Write(_labelLength);
         writer.Write(_predictionHorizon);
         writer.Write(_numFeatures);
         writer.Write(_modelDimension);
@@ -701,6 +710,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _sequenceLength = reader.ReadInt32();
+        _labelLength = reader.ReadInt32();
         _predictionHorizon = reader.ReadInt32();
         _numFeatures = reader.ReadInt32();
         _modelDimension = reader.ReadInt32();

@@ -865,7 +865,8 @@ internal static class FinanceModelTestFactory
             ?? GetIntOption(options, "StateSize")
             ?? GetIntOption(options, "NumAssets")
             ?? GetIntOption(options, "NumNodes")
-            ?? GetIntOption(options, "NodeCount");
+            ?? GetIntOption(options, "NodeCount")
+            ?? GetIntOption(options, "HiddenDimension");  // For NLP models like FinBERT, InvestLM, etc.
     }
 
     private static int? GetOutputSizeFromOptions(object? options)
@@ -941,18 +942,18 @@ internal static class FinanceModelTestFactory
         SetInt(options, "VocabularySize", 128);
         SetInt(options, "NumTokens", 32);
         SetInt(options, "MaxSequenceLength", 16);
-        SetInt(options, "HiddenDimension", 8);
-        SetInt(options, "HiddenDim", 8);
-        SetInt(options, "HiddenSize", 8);
-        SetInt(options, "HiddenLayerSize", 8);
-        SetInt(options, "EmbeddingDim", 8);
-        SetInt(options, "EmbeddingSize", 8);
-        SetInt(options, "LLMDimension", 8);
-        SetInt(options, "ModelDimension", 8);
-        SetInt(options, "ModelDim", 8);
-        SetInt(options, "FeedForwardDimension", 16);
-        SetInt(options, "FeedForwardDim", 16);
-        SetInt(options, "IntermediateDimension", 16);
+        SetInt(options, "HiddenDimension", 24);  // Must be divisible by 12 (NLP model attention heads)
+        SetInt(options, "HiddenDim", 24);        // Must be divisible by 12 (NLP model attention heads)
+        SetInt(options, "HiddenSize", 24);       // Must be divisible by 12 (NLP model attention heads)
+        SetInt(options, "HiddenLayerSize", 24);  // Must be divisible by 12 (NLP model attention heads)
+        SetInt(options, "EmbeddingDim", 24);     // Must be divisible by 12 (NLP model attention heads)
+        SetInt(options, "EmbeddingSize", 24);    // Must be divisible by 12 (NLP model attention heads)
+        SetInt(options, "LLMDimension", 24);     // Must be divisible by 12 (NLP model attention heads)
+        SetInt(options, "ModelDimension", 24);   // Must be divisible by 12 (NLP model attention heads)
+        SetInt(options, "ModelDim", 24);         // Must be divisible by 12 (NLP model attention heads)
+        SetInt(options, "FeedForwardDimension", 48);  // Typically 2-4x hidden dimension
+        SetInt(options, "FeedForwardDim", 48);       // Typically 2-4x hidden dimension
+        SetInt(options, "IntermediateDimension", 48); // Typically 2-4x hidden dimension
         SetInt(options, "NumLayers", 1);
         SetInt(options, "NumHiddenLayers", 1);
         SetInt(options, "NumEncoderLayers", 1);
