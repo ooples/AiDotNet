@@ -1200,10 +1200,12 @@ public class DeepAR<T> : ForecastingModelBase<T>
                         shifted.Data.Span[dstIdx] = input.Data.Span[srcIdx];
                 }
 
-                // Add new predictions
+                // Add new predictions - use prediction's actual sequence length, not stepsUsed
+                int predSeqLen = prediction.Shape.Length > 1 ? prediction.Shape[1] : 1;
                 for (int t = seqLen - stepsUsed; t < seqLen; t++)
                 {
-                    int predIdx = b * stepsUsed * features + (t - (seqLen - stepsUsed)) * features + f;
+                    int predT = t - (seqLen - stepsUsed);
+                    int predIdx = b * predSeqLen * features + predT * features + f;
                     int dstIdx = b * seqLen * features + t * features + f;
                     if (predIdx < prediction.Length && dstIdx < shifted.Length)
                         shifted.Data.Span[dstIdx] = prediction.Data.Span[predIdx];
