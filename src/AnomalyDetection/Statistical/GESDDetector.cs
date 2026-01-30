@@ -145,6 +145,13 @@ public class GESDDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        var means = _means;
+        var stds = _stds;
+        if (means == null || stds == null)
+        {
+            throw new InvalidOperationException("Model has not been fitted. Call Fit() first.");
+        }
+
         if (X.Columns != _nFeatures)
         {
             throw new ArgumentException(
@@ -162,14 +169,14 @@ public class GESDDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < X.Columns; j++)
             {
                 // Skip features with zero std
-                if (NumOps.Equals(_stds![j], NumOps.Zero))
+                if (NumOps.Equals(stds[j], NumOps.Zero))
                 {
                     continue;
                 }
 
                 // R = |x - mean| / std
-                T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], _means![j]));
-                T r = NumOps.Divide(deviation, _stds[j]);
+                T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], means[j]));
+                T r = NumOps.Divide(deviation, stds[j]);
 
                 if (NumOps.GreaterThan(r, maxR))
                 {

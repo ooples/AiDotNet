@@ -86,6 +86,12 @@ public class RobustPCADetector<T> : AnomalyDetectorBase<T>
                 "Tolerance must be positive. Recommended is 1e-7.");
         }
 
+        if (lambda != -1 && lambda <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lambda),
+                "Lambda must be -1 (auto) or a positive value.");
+        }
+
         _lambda = lambda;
         _maxIterations = maxIterations;
         _tolerance = tolerance;

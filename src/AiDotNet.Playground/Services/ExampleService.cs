@@ -2059,7 +2059,7 @@ features[49, 0] = 500; features[49, 1] = 500; labels[49] = 1000;
 
 // Build model with AiModelBuilder + outlier removal using ZScoreDetector
 var loader = DataLoaders.FromArrays(features, labels);
-var detector = new ZScoreDetector<double>(threshold: 3.0);
+var detector = new ZScoreDetector<double>(zThreshold: 3.0);
 var outlierRemover = new OutlierRemovalAdapter<double, Matrix<double>, Vector<double>>(detector);
 
 var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
@@ -2120,7 +2120,7 @@ features[59, 0] = 60; features[59, 1] = 115; features[59, 2] = 28; labels[59] = 
 
 // Build model with AiModelBuilder + IQR outlier removal using IQRDetector
 var loader = DataLoaders.FromArrays(features, labels);
-var detector = new IQRDetector<double>(iqrMultiplier: 1.5);
+var detector = new IQRDetector<double>(multiplier: 1.5);
 var outlierRemover = new OutlierRemovalAdapter<double, Matrix<double>, Vector<double>>(detector);
 
 var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
