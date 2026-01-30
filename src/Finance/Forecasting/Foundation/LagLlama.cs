@@ -613,15 +613,14 @@ public class LagLlama<T> : ForecastingModelBase<T>
             UseRoPE = _useRoPE
         };
 
-        // Preserve ONNX mode: if current instance is ONNX-backed, the new instance
-        // should also be ONNX-backed with the same configuration
+        // ONNX mode cloning is not supported - throw explicitly rather than silently
+        // changing behavior by returning a native-mode clone
         if (!_useNativeMode && OnnxSession is not null)
         {
-            // For ONNX mode, we cannot easily clone the ONNX session/weights,
-            // but we can create a new native instance with the same configuration.
-            // This preserves the architecture and options while switching to native mode.
-            // If the caller needs true ONNX cloning, they should reload from the original ONNX file.
-            // Note: OnnxSession is read-only so we create a native-mode clone.
+            throw new NotSupportedException(
+                "CreateNewInstance is not supported for ONNX-backed LagLlama models. " +
+                "ONNX sessions cannot be cloned. To create a new instance, load the model " +
+                "from the original ONNX file using the ONNX constructor.");
         }
 
         return new LagLlama<T>(Architecture, options);

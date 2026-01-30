@@ -558,6 +558,19 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         _polynomialDegree = reader.ReadInt32();
         _useInterpretableBasis = reader.ReadBoolean();
         _shareWeightsInStack = reader.ReadBoolean();
+
+        // Validate deserialized values
+        if (_lookbackWindow < 1)
+            throw new InvalidOperationException($"Deserialized lookbackWindow ({_lookbackWindow}) must be at least 1.");
+        if (_forecastHorizon < 1)
+            throw new InvalidOperationException($"Deserialized forecastHorizon ({_forecastHorizon}) must be at least 1.");
+        if (_numStacks < 1)
+            throw new InvalidOperationException($"Deserialized numStacks ({_numStacks}) must be at least 1.");
+        if (_numBlocksPerStack < 1)
+            throw new InvalidOperationException($"Deserialized numBlocksPerStack ({_numBlocksPerStack}) must be at least 1.");
+
+        // Extract layer references from deserialized layers
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -914,9 +927,16 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> SubtractTensors(Tensor<T> a, Tensor<T> b)
     {
+        // Validate shapes match to avoid silent data corruption
+        if (a.Length != b.Length)
+        {
+            throw new ArgumentException(
+                $"Tensor shape mismatch in SubtractTensors: a.Length={a.Length}, b.Length={b.Length}. " +
+                "This may indicate a bug in the N-BEATS block architecture.");
+        }
+
         var result = new Tensor<T>(a.Shape);
-        int length = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < length; i++)
+        for (int i = 0; i < a.Length; i++)
         {
             result.Data.Span[i] = NumOps.Subtract(a.Data.Span[i], b.Data.Span[i]);
         }
@@ -937,9 +957,16 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
+        // Validate shapes match to avoid silent data corruption
+        if (a.Length != b.Length)
+        {
+            throw new ArgumentException(
+                $"Tensor shape mismatch in AddTensors: a.Length={a.Length}, b.Length={b.Length}. " +
+                "This may indicate a bug in the N-BEATS block architecture.");
+        }
+
         var result = new Tensor<T>(a.Shape);
-        int length = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < length; i++)
+        for (int i = 0; i < a.Length; i++)
         {
             result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
         }
@@ -1004,7 +1031,11 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         if (predictions.Count == 0)
-            return new Tensor<T>(new[] { 1, totalSteps });
+        {
+            throw new ArgumentException(
+                "Cannot concatenate empty predictions list. " +
+                "This likely indicates a logic error in the forecasting pipeline.");
+        }
 
         int batchSize = predictions[0].Shape[0];
         var result = new Tensor<T>(new[] { batchSize, totalSteps });

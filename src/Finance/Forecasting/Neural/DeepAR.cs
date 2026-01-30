@@ -100,9 +100,16 @@ public class DeepAR<T> : ForecastingModelBase<T>
     private ILayer<T>? _sigmaProjection;
 
     /// <summary>
-    /// Instance normalization mean for scaling.
+    /// The last computed sigma from Forward (used for quantile sampling).
     /// </summary>
-    private Tensor<T>? _scaleMean;
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This stores the learned uncertainty from the most recent
+    /// forward pass so SampleQuantiles can use the model's actual learned sigma
+    /// rather than a hardcoded estimate.
+    /// </para>
+    /// </remarks>
+    private Tensor<T>? _lastSigma;
 
     /// <summary>
     /// Instance normalization scale for denormalization.
@@ -769,6 +776,8 @@ public class DeepAR<T> : ForecastingModelBase<T>
         if (_sigmaProjection is not null)
         {
             sigma = _sigmaProjection.Forward(current);
+            // Store sigma for use in SampleQuantiles
+            _lastSigma = sigma;
         }
 
         // Combine mu and sigma into output
@@ -882,7 +891,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
         int seqLen = input.Shape[1];
         int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
 
-        _scaleMean = new Tensor<T>(new[] { batchSize, 1, features });
+        // Only _scaleStd is used for denormalization; _scaleMean is not needed for this scaling approach
         _scaleStd = new Tensor<T>(new[] { batchSize, 1, features });
 
         var scaled = new Tensor<T>(input.Shape);
@@ -994,9 +1003,20 @@ public class DeepAR<T> : ForecastingModelBase<T>
                 int muIdx = b * seqLen + t;
                 T mu = muIdx < forecast.Length ? forecast.Data.Span[muIdx] : NumOps.Zero;
 
-                // Estimate sigma as 10% of mu for simplicity
-                T sigma = NumOps.Multiply(NumOps.Abs(mu), NumOps.FromDouble(0.1));
-                sigma = NumOps.Add(sigma, NumOps.FromDouble(0.01)); // Minimum sigma
+                // Use learned sigma from Forward if available, otherwise estimate
+                T sigma;
+                if (_lastSigma is not null && muIdx < _lastSigma.Length)
+                {
+                    sigma = _lastSigma.Data.Span[muIdx];
+                    // Ensure sigma is positive with a minimum floor
+                    sigma = NumOps.Add(NumOps.Abs(sigma), NumOps.FromDouble(0.01));
+                }
+                else
+                {
+                    // Fallback: estimate sigma as 10% of mu
+                    sigma = NumOps.Multiply(NumOps.Abs(mu), NumOps.FromDouble(0.1));
+                    sigma = NumOps.Add(sigma, NumOps.FromDouble(0.01)); // Minimum sigma
+                }
 
                 for (int q = 0; q < numQuantiles; q++)
                 {

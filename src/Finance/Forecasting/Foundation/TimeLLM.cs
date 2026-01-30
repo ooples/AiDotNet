@@ -438,19 +438,23 @@ public class TimeLLM<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("Training is only supported in native mode.");
 
         SetTrainingMode(true);
+        try
+        {
+            var output = Forward(input);
 
-        var output = Forward(input);
+            // Compute loss
+            LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
-        // Compute loss
-        LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
+            // Backward pass
+            var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
+            Backward(Tensor<T>.FromVector(gradient, output.Shape));
 
-        // Backward pass
-        var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
-
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+            _optimizer.UpdateParameters(Layers);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
@@ -813,13 +817,17 @@ public class TimeLLM<T> : ForecastingModelBase<T>
 
         // Enable dropout for MC sampling
         SetTrainingMode(true);
-
-        for (int s = 0; s < numSamples; s++)
+        try
         {
-            samples.Add(Forward(input));
+            for (int s = 0; s < numSamples; s++)
+            {
+                samples.Add(Forward(input));
+            }
         }
-
-        SetTrainingMode(false);
+        finally
+        {
+            SetTrainingMode(false);
+        }
 
         // Compute quantiles
         var result = new Tensor<T>(new[] { 1, _forecastHorizon, quantiles.Length });
@@ -833,6 +841,16 @@ public class TimeLLM<T> : ForecastingModelBase<T>
                 {
                     values.Add(NumOps.ToDouble(sample.Data.Span[t]));
                 }
+            }
+
+            // Guard against empty values list
+            if (values.Count == 0)
+            {
+                for (int q = 0; q < quantiles.Length; q++)
+                {
+                    result.Data.Span[t * quantiles.Length + q] = NumOps.Zero;
+                }
+                continue;
             }
 
             values.Sort();

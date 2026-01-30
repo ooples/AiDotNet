@@ -611,7 +611,8 @@ public class Timer<T> : ForecastingModelBase<T>
         var output = _useNativeMode ? Forward(historicalData) : ForecastOnnx(historicalData);
 
         // For quantile forecasts, we generate samples through temperature scaling
-        if (quantiles is not null && quantiles.Length > 0)
+        // Only supported in native mode (requires MC dropout sampling)
+        if (quantiles is not null && quantiles.Length > 0 && _useNativeMode)
         {
             return GenerateQuantilePredictions(historicalData, quantiles);
         }
@@ -627,12 +628,13 @@ public class Timer<T> : ForecastingModelBase<T>
     /// </remarks>
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
-        if (_useAutoregressiveDecoding)
+        // Autoregressive decoding only works in native mode (uses Forward directly)
+        if (_useAutoregressiveDecoding && _useNativeMode)
         {
             return AutoregressiveGenerate(input, steps);
         }
 
-        // Fall back to standard multi-step forecasting
+        // Fall back to standard multi-step forecasting (works in both modes)
         var predictions = new List<Tensor<T>>();
         var currentInput = input;
 

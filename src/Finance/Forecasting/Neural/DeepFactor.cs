@@ -1023,19 +1023,27 @@ public class DeepFactor<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
-        var result = new Tensor<T>(new[] { totalSteps });
+        // Account for multivariate outputs
+        int features = _numFeatures > 0 ? _numFeatures : 1;
+        var result = new Tensor<T>(new[] { totalSteps, features });
 
-        int resultIdx = 0;
         int stepsAdded = 0;
 
         foreach (var pred in predictions)
         {
             int stepsToAdd = Math.Min(_forecastHorizon, totalSteps - stepsAdded);
+            int predFeatures = pred.Shape.Length > 1 ? pred.Shape[^1] : 1;
+            int featuresToCopy = Math.Min(features, predFeatures);
 
-            for (int i = 0; i < stepsToAdd && resultIdx < totalSteps; i++)
+            for (int i = 0; i < stepsToAdd; i++)
             {
-                if (i < pred.Length)
-                    result.Data.Span[resultIdx++] = pred[i];
+                for (int f = 0; f < featuresToCopy; f++)
+                {
+                    int srcIdx = i * predFeatures + f;
+                    int dstIdx = (stepsAdded + i) * features + f;
+                    if (srcIdx < pred.Length && dstIdx < result.Length)
+                        result.Data.Span[dstIdx] = pred.Data.Span[srcIdx];
+                }
             }
 
             stepsAdded += stepsToAdd;

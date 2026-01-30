@@ -581,10 +581,13 @@ public class TimeGPT<T> : ForecastingModelBase<T>
             {
                 return GenerateConformalIntervals(output, quantiles);
             }
-            else
+            else if (_useNativeMode)
             {
+                // Quantile generation via MC dropout only works in native mode
                 return GenerateQuantilePredictions(historicalData, quantiles);
             }
+            // In ONNX mode without conformal prediction, return point forecast
+            // (quantile estimation requires native mode dropout sampling)
         }
 
         return output;
