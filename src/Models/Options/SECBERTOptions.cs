@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Finance.Enums;
 
 namespace AiDotNet.Models.Options;
 
@@ -84,9 +85,16 @@ public class SECBERTOptions<T>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Task type: "classification", "ner", "qa" (default: "classification").
+    /// Task type for the SEC-BERT model (default: Classification).
     /// </summary>
-    public string TaskType { get; set; } = "classification";
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Different tasks require different output heads:
+    /// - Classification: Document-level labels (sentiment, type)
+    /// - NamedEntityRecognition: Token-level entity labels
+    /// - QuestionAnswering: Extract answer spans from context
+    /// </para>
+    /// </remarks>
+    public FinancialNLPTaskType TaskType { get; set; } = FinancialNLPTaskType.Classification;
 
     /// <summary>
     /// Validates the SEC-BERT options.
@@ -115,7 +123,7 @@ public class SECBERTOptions<T>
             throw new ArgumentException("NumClasses must be at least 1.", nameof(NumClasses));
         if (DropoutRate < 0 || DropoutRate >= 1)
             throw new ArgumentException("DropoutRate must be between 0 (inclusive) and 1 (exclusive).", nameof(DropoutRate));
-        if (string.IsNullOrWhiteSpace(TaskType))
-            throw new ArgumentException("TaskType cannot be null or empty.", nameof(TaskType));
+        if (!Enum.IsDefined(typeof(FinancialNLPTaskType), TaskType))
+            throw new ArgumentException("TaskType must be a valid FinancialNLPTaskType value.", nameof(TaskType));
     }
 }

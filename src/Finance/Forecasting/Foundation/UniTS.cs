@@ -788,9 +788,14 @@ public class UniTS<T> : ForecastingModelBase<T>
 
     private static string NormalizeTaskType(string? taskType)
     {
-        return string.IsNullOrWhiteSpace(taskType)
-            ? "forecasting"
-            : taskType.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(taskType))
+        {
+            return "forecasting";
+        }
+
+        // After null check, taskType is guaranteed non-null
+        string nonNullTaskType = taskType ?? "forecasting";
+        return nonNullTaskType.Trim().ToLowerInvariant();
     }
 
     /// <summary>

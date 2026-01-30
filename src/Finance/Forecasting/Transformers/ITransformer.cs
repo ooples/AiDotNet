@@ -110,47 +110,47 @@ public class ITransformer<T> : ForecastingModelBase<T>
     /// <summary>
     /// The input sequence length.
     /// </summary>
-    private readonly int _sequenceLength;
+    private int _sequenceLength;
 
     /// <summary>
     /// The prediction horizon.
     /// </summary>
-    private readonly int _predictionHorizon;
+    private int _predictionHorizon;
 
     /// <summary>
     /// The number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     /// <summary>
     /// The number of transformer layers.
     /// </summary>
-    private readonly int _numLayers;
+    private int _numLayers;
 
     /// <summary>
     /// The number of attention heads.
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
     /// The model dimension.
     /// </summary>
-    private readonly int _modelDimension;
+    private int _modelDimension;
 
     /// <summary>
     /// The feedforward dimension.
     /// </summary>
-    private readonly int _feedForwardDimension;
+    private int _feedForwardDimension;
 
     /// <summary>
     /// Whether to use instance normalization (RevIN).
     /// </summary>
-    private readonly bool _useInstanceNormalization;
+    private bool _useInstanceNormalization;
 
     /// <summary>
     /// Dropout rate.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     #endregion
 
@@ -693,15 +693,15 @@ public class ITransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // predictionHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // modelDimension
-        _ = reader.ReadInt32(); // feedForwardDimension
-        _ = reader.ReadBoolean(); // useInstanceNormalization
-        _ = reader.ReadDouble(); // dropout
+        _sequenceLength = reader.ReadInt32();
+        _predictionHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _modelDimension = reader.ReadInt32();
+        _feedForwardDimension = reader.ReadInt32();
+        _useInstanceNormalization = reader.ReadBoolean();
+        _dropout = reader.ReadDouble();
     }
 
     #endregion

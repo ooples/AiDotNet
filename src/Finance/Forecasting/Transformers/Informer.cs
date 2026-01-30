@@ -103,18 +103,18 @@ public class Informer<T> : ForecastingModelBase<T>
     /// </summary>
     private readonly ILossFunction<T> _lossFunction;
 
-    private readonly int _sequenceLength;
-    private readonly int _labelLength;
-    private readonly int _predictionHorizon;
-    private readonly int _numFeatures;
-    private readonly int _numEncoderLayers;
-    private readonly int _numDecoderLayers;
-    private readonly int _numHeads;
-    private readonly int _modelDimension;
-    private readonly int _feedForwardDimension;
-    private readonly int _distillingFactor;
-    private readonly double _dropout;
-    private readonly bool _useInstanceNormalization;
+    private int _sequenceLength;
+    private int _labelLength;
+    private int _predictionHorizon;
+    private int _numFeatures;
+    private int _numEncoderLayers;
+    private int _numDecoderLayers;
+    private int _numHeads;
+    private int _modelDimension;
+    private int _feedForwardDimension;
+    private int _distillingFactor;
+    private double _dropout;
+    private bool _useInstanceNormalization;
 
     #endregion
 
@@ -476,18 +476,18 @@ public class Informer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        _ = reader.ReadBoolean();
+        _sequenceLength = reader.ReadInt32();
+        _labelLength = reader.ReadInt32();
+        _predictionHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _numEncoderLayers = reader.ReadInt32();
+        _numDecoderLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _modelDimension = reader.ReadInt32();
+        _feedForwardDimension = reader.ReadInt32();
+        _distillingFactor = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _useInstanceNormalization = reader.ReadBoolean();
     }
 
     #endregion

@@ -135,17 +135,17 @@ public class Chronos<T> : ForecastingModelBase<T>
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly int _contextLength;
-    private readonly int _forecastHorizon;
-    private readonly int _numTokens;
-    private readonly int _hiddenDimension;
-    private readonly int _numLayers;
-    private readonly int _numHeads;
-    private readonly int _intermediateSize;
-    private readonly int _numSamples;
-    private readonly double _dropout;
-    private readonly double _temperature;
-    private readonly string _modelSize;
+    private int _contextLength;
+    private int _forecastHorizon;
+    private int _numTokens;
+    private int _hiddenDimension;
+    private int _numLayers;
+    private int _numHeads;
+    private int _intermediateSize;
+    private int _numSamples;
+    private double _dropout;
+    private double _temperature;
+    private string _modelSize;
     private T _lastTokenMin = default!;
     private T _lastTokenRange = default!;
     private bool _hasTokenScale;
@@ -580,17 +580,17 @@ public class Chronos<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // contextLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numTokens
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // intermediateSize
-        _ = reader.ReadInt32(); // numSamples
-        _ = reader.ReadDouble(); // dropout
-        _ = reader.ReadDouble(); // temperature
-        _ = reader.ReadString(); // modelSize
+        _contextLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numTokens = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _intermediateSize = reader.ReadInt32();
+        _numSamples = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _temperature = reader.ReadDouble();
+        _modelSize = reader.ReadString();
     }
 
     #endregion

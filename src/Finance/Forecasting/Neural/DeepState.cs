@@ -165,16 +165,16 @@ public class DeepState<T> : ForecastingModelBase<T>
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly int _lookbackWindow;
-    private readonly int _forecastHorizon;
-    private readonly int _numFeatures;
-    private readonly int _stateDimension;
-    private readonly int _hiddenDimension;
-    private readonly int _numRnnLayers;
-    private readonly int[] _seasonalPeriods;
-    private readonly bool _useTrend;
-    private readonly bool _useSeasonality;
-    private readonly double _dropout;
+    private int _lookbackWindow;
+    private int _forecastHorizon;
+    private int _numFeatures;
+    private int _stateDimension;
+    private int _hiddenDimension;
+    private int _numRnnLayers;
+    private int[] _seasonalPeriods;
+    private bool _useTrend;
+    private bool _useSeasonality;
+    private double _dropout;
 
     #endregion
 
@@ -582,18 +582,19 @@ public class DeepState<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // lookbackWindow
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // stateDimension
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numRnnLayers
+        _lookbackWindow = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _stateDimension = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numRnnLayers = reader.ReadInt32();
         int numPeriods = reader.ReadInt32();
+        _seasonalPeriods = new int[numPeriods];
         for (int i = 0; i < numPeriods; i++)
-            _ = reader.ReadInt32(); // seasonal period
-        _ = reader.ReadBoolean(); // useTrend
-        _ = reader.ReadBoolean(); // useSeasonality
-        _ = reader.ReadDouble(); // dropout
+            _seasonalPeriods[i] = reader.ReadInt32();
+        _useTrend = reader.ReadBoolean();
+        _useSeasonality = reader.ReadBoolean();
+        _dropout = reader.ReadDouble();
     }
 
     #endregion

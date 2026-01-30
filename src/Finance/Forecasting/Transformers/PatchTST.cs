@@ -79,47 +79,47 @@ public class PatchTST<T> : ForecastingModelBase<T>
     /// <summary>
     /// The patch size.
     /// </summary>
-    private readonly int _patchSize;
+    private int _patchSize;
 
     /// <summary>
     /// The stride between patches.
     /// </summary>
-    private readonly int _stride;
+    private int _stride;
 
     /// <summary>
     /// The number of transformer layers.
     /// </summary>
-    private readonly int _numLayers;
+    private int _numLayers;
 
     /// <summary>
     /// The number of attention heads.
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
     /// The model dimension.
     /// </summary>
-    private readonly int _modelDimension;
+    private int _modelDimension;
 
     /// <summary>
     /// The feedforward dimension.
     /// </summary>
-    private readonly int _feedForwardDimension;
+    private int _feedForwardDimension;
 
     /// <summary>
     /// Whether to use channel-independent mode.
     /// </summary>
-    private readonly bool _channelIndependent;
+    private bool _channelIndependent;
 
     /// <summary>
     /// Whether to use instance normalization (RevIN).
     /// </summary>
-    private readonly bool _useInstanceNormalization;
+    private bool _useInstanceNormalization;
 
     /// <summary>
     /// Dropout rate.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     #endregion
 
@@ -635,24 +635,20 @@ public class PatchTST<T> : ForecastingModelBase<T>
     /// <para>
     /// <b>For Beginners:</b> Deserialization is the process of loading a model from bytes
     /// (e.g., from a saved file). This method reads back all the PatchTST-specific settings
-    /// that were saved during serialization.
-    /// </para>
-    /// <para>
-    /// Note: The values are read to advance the reader position but are not used because
-    /// the constructor already sets these values based on the model configuration.
+    /// that were saved during serialization and restores the model state.
     /// </para>
     /// </remarks>
     protected override void DeserializeModelSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // patchSize
-        _ = reader.ReadInt32(); // stride
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // modelDimension
-        _ = reader.ReadInt32(); // feedForwardDimension
-        _ = reader.ReadBoolean(); // channelIndependent
-        _ = reader.ReadBoolean(); // useInstanceNormalization
-        _ = reader.ReadDouble(); // dropout
+        _patchSize = reader.ReadInt32();
+        _stride = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _modelDimension = reader.ReadInt32();
+        _feedForwardDimension = reader.ReadInt32();
+        _channelIndependent = reader.ReadBoolean();
+        _useInstanceNormalization = reader.ReadBoolean();
+        _dropout = reader.ReadDouble();
     }
 
     #endregion

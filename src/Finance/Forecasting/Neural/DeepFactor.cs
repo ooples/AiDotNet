@@ -176,15 +176,15 @@ public class DeepFactor<T> : ForecastingModelBase<T>
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly int _lookbackWindow;
-    private readonly int _forecastHorizon;
-    private readonly int _numFeatures;
-    private readonly int _numFactors;
-    private readonly int _factorHiddenDim;
-    private readonly int _localHiddenDim;
-    private readonly int _numFactorLayers;
-    private readonly int _numLocalLayers;
-    private readonly double _dropout;
+    private int _lookbackWindow;
+    private int _forecastHorizon;
+    private int _numFeatures;
+    private int _numFactors;
+    private int _factorHiddenDim;
+    private int _localHiddenDim;
+    private int _numFactorLayers;
+    private int _numLocalLayers;
+    private double _dropout;
 
     #endregion
 
@@ -599,15 +599,15 @@ public class DeepFactor<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // lookbackWindow
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // numFactors
-        _ = reader.ReadInt32(); // factorHiddenDim
-        _ = reader.ReadInt32(); // localHiddenDim
-        _ = reader.ReadInt32(); // numFactorLayers
-        _ = reader.ReadInt32(); // numLocalLayers
-        _ = reader.ReadDouble(); // dropout
+        _lookbackWindow = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _numFactors = reader.ReadInt32();
+        _factorHiddenDim = reader.ReadInt32();
+        _localHiddenDim = reader.ReadInt32();
+        _numFactorLayers = reader.ReadInt32();
+        _numLocalLayers = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
     }
 
     #endregion
@@ -709,7 +709,7 @@ public class DeepFactor<T> : ForecastingModelBase<T>
     /// </remarks>
     public override Dictionary<string, T> GetFinancialMetrics()
     {
-        T lastLoss = LastLoss;
+        T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
 
         return new Dictionary<string, T>
         {
@@ -891,18 +891,23 @@ public class DeepFactor<T> : ForecastingModelBase<T>
             localCurrent = _localInputProjection.Backward(localCurrent);
 
         // Combine input gradients from both paths
-        if (factorCurrent.Length == localCurrent.Length)
-        {
-            var combined = new Tensor<T>(factorCurrent.Shape);
-            for (int i = 0; i < combined.Length; i++)
-            {
-                combined.Data.Span[i] = NumOps.Add(factorCurrent.Data.Span[i], localCurrent.Data.Span[i]);
-            }
+        // Both paths receive the same input, so gradients should be summed
+        int maxLen = Math.Max(factorCurrent.Length, localCurrent.Length);
+        var combined = new Tensor<T>(new[] { maxLen });
 
-            return combined;
+        // Add factor path gradients
+        for (int i = 0; i < factorCurrent.Length && i < maxLen; i++)
+        {
+            combined.Data.Span[i] = factorCurrent.Data.Span[i];
         }
 
-        return factorCurrent;
+        // Add local path gradients (summed with factor gradients)
+        for (int i = 0; i < localCurrent.Length && i < maxLen; i++)
+        {
+            combined.Data.Span[i] = NumOps.Add(combined.Data.Span[i], localCurrent.Data.Span[i]);
+        }
+
+        return combined;
     }
 
     #endregion

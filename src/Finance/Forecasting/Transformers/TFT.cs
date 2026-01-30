@@ -128,57 +128,57 @@ public class TFT<T> : ForecastingModelBase<T>
     /// <summary>
     /// The input sequence length (lookback window).
     /// </summary>
-    private readonly int _sequenceLength;
+    private int _sequenceLength;
 
     /// <summary>
     /// The prediction horizon.
     /// </summary>
-    private readonly int _predictionHorizon;
+    private int _predictionHorizon;
 
     /// <summary>
     /// The number of input features.
     /// </summary>
-    private readonly int _numFeatures;
+    private int _numFeatures;
 
     /// <summary>
     /// Hidden state size for the model.
     /// </summary>
-    private readonly int _hiddenSize;
+    private int _hiddenSize;
 
     /// <summary>
     /// Number of attention heads.
     /// </summary>
-    private readonly int _numHeads;
+    private int _numHeads;
 
     /// <summary>
     /// Number of transformer/GRN layers.
     /// </summary>
-    private readonly int _numLayers;
+    private int _numLayers;
 
     /// <summary>
     /// Dropout rate for regularization.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     /// <summary>
     /// Quantile levels for probabilistic forecasting.
     /// </summary>
-    private readonly double[] _quantileLevels;
+    private double[] _quantileLevels;
 
     /// <summary>
     /// Whether to use variable selection networks.
     /// </summary>
-    private readonly bool _useVariableSelection;
+    private bool _useVariableSelection;
 
     /// <summary>
     /// Size of static covariate inputs.
     /// </summary>
-    private readonly int _staticCovariateSize;
+    private int _staticCovariateSize;
 
     /// <summary>
     /// Whether to use instance normalization (RevIN).
     /// </summary>
-    private readonly bool _useInstanceNormalization;
+    private bool _useInstanceNormalization;
 
     #endregion
 
@@ -552,23 +552,24 @@ public class TFT<T> : ForecastingModelBase<T>
     /// <param name="reader">Binary reader for input.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This reads back TFT settings when loading a saved model.
-    /// The values advance the reader but aren't used since constructor sets them.
+    /// <b>For Beginners:</b> This reads back TFT settings when loading a saved model
+    /// and restores the model configuration.
     /// </para>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // predictionHorizon
-        _ = reader.ReadInt32(); // hiddenSize
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadDouble(); // dropout
+        _sequenceLength = reader.ReadInt32();
+        _predictionHorizon = reader.ReadInt32();
+        _hiddenSize = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
         int quantileCount = reader.ReadInt32();
+        _quantileLevels = new double[quantileCount];
         for (int i = 0; i < quantileCount; i++)
-            _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); // useVariableSelection
-        _ = reader.ReadInt32(); // staticCovariateSize
+            _quantileLevels[i] = reader.ReadDouble();
+        _useVariableSelection = reader.ReadBoolean();
+        _staticCovariateSize = reader.ReadInt32();
     }
 
     #endregion
