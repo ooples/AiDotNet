@@ -29,7 +29,7 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 /// <para>
 /// <b>Industry Standard Defaults:</b>
 /// - Components: 3 (typical range 2-10)
-/// - Covariance type: full (allows different shapes)
+/// - Covariance type: diagonal (uses variance per feature for stability)
 /// - Contamination: 0.1 (10%)
 /// </para>
 /// </remarks>

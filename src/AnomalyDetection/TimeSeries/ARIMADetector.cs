@@ -136,9 +136,13 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
         _arCoeffs = FitARCoefficients(centered, _p);
         _maCoeffs = FitMACoefficients(centered, _arCoeffs, _q);
 
-        // Compute residuals
+        // Compute residuals (skip leading zeros from warm-up period)
         var residuals = ComputeResiduals(centered);
-        _residualStd = Math.Sqrt(residuals.Average(r => r * r));
+        int warmupPeriod = Math.Max(_p, _q);
+        var validResiduals = residuals.Skip(warmupPeriod).ToArray();
+        _residualStd = validResiduals.Length > 0
+            ? Math.Sqrt(validResiduals.Average(r => r * r))
+            : 1.0;
         if (_residualStd < 1e-10) _residualStd = 1;
 
         // Calculate scores for training data to set threshold

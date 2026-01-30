@@ -228,6 +228,13 @@ public class OneClassSVM<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
+        if (X.Columns != supportVectors.Columns)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {supportVectors.Columns} features.",
+                nameof(X));
+        }
+
         var scores = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)

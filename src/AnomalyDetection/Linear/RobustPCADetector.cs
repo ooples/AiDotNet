@@ -145,7 +145,15 @@ public class RobustPCADetector<T> : AnomalyDetectorBase<T>
         _sparse = new double[n, m];
         var Y = new double[n, m]; // Dual variable
 
-        double mu = n * m / (4 * NormL1(M));
+        // Guard against zero-norm inputs to avoid NaN/Inf
+        double normL1 = NormL1(M);
+        if (normL1 < 1e-10)
+        {
+            // If input is all zeros, low-rank is zeros and sparse is zeros
+            return;
+        }
+
+        double mu = n * m / (4 * normL1);
         double muInv = 1.0 / mu;
 
         for (int iter = 0; iter < _maxIterations; iter++)
@@ -347,18 +355,42 @@ public class RobustPCADetector<T> : AnomalyDetectorBase<T>
             }
             else
             {
-                // For new points, project and compute distance from low-rank subspace
+                // For new points, estimate sparse component by comparing to average low-rank pattern
                 var point = new double[X.Columns];
                 for (int j = 0; j < X.Columns; j++)
                 {
                     point[j] = NumOps.ToDouble(X[i, j]) - _mean![j];
                 }
 
-                // Score based on distance from low-rank subspace
-                score = 0;
-                for (int j = 0; j < X.Columns; j++)
+                // Estimate reconstruction using mean low-rank pattern
+                // The sparse component (anomaly indicator) is estimated as the residual
+                // This approximates what RPCA would compute for a single new point
+                if (_lowRank != null && _nSamples > 0)
                 {
-                    score += point[j] * point[j];
+                    // Compute average low-rank pattern per feature
+                    score = 0;
+                    for (int j = 0; j < X.Columns; j++)
+                    {
+                        double avgLowRank = 0;
+                        for (int k = 0; k < _nSamples; k++)
+                        {
+                            avgLowRank += _lowRank[k, j];
+                        }
+                        avgLowRank /= _nSamples;
+
+                        // Sparse estimate = point - expected low-rank contribution
+                        double sparseEst = point[j] - avgLowRank;
+                        score += sparseEst * sparseEst;
+                    }
+                }
+                else
+                {
+                    // Fallback to centered L2 norm
+                    score = 0;
+                    for (int j = 0; j < X.Columns; j++)
+                    {
+                        score += point[j] * point[j];
+                    }
                 }
             }
 

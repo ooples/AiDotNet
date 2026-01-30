@@ -152,6 +152,15 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
+        // Capture nullable fields into local variables
+        var mean = _mean;
+        var covarianceInverse = _covarianceInverse;
+
+        if (mean == null || covarianceInverse == null)
+        {
+            throw new InvalidOperationException("Model not properly fitted.");
+        }
+
         var scores = new Vector<T>(X.Rows);
         int p = _nFeatures;
 
@@ -162,7 +171,7 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
             var diff = new Vector<T>(p);
             for (int j = 0; j < p; j++)
             {
-                diff[j] = NumOps.Subtract(X[i, j], _mean![j]);
+                diff[j] = NumOps.Subtract(X[i, j], mean[j]);
             }
 
             // temp = Cov^(-1) * diff
@@ -172,7 +181,7 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
                 T sum = NumOps.Zero;
                 for (int k = 0; k < p; k++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_covarianceInverse![j, k], diff[k]));
+                    sum = NumOps.Add(sum, NumOps.Multiply(covarianceInverse[j, k], diff[k]));
                 }
                 temp[j] = sum;
             }

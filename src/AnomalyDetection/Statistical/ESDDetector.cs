@@ -58,6 +58,12 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
     public int? MaxOutliers => _maxOutliers;
 
     /// <summary>
+    /// Gets the ESD critical value computed during fitting.
+    /// Use this for statistical threshold-based anomaly detection.
+    /// </summary>
+    public double CriticalValue => _criticalValue;
+
+    /// <summary>
     /// Creates a new ESD anomaly detector.
     /// </summary>
     /// <param name="alpha">
@@ -214,5 +220,29 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
         }
 
         return scores;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Uses the ESD critical value for statistical anomaly classification.
+    /// Points with ESD statistic greater than the critical value are classified as anomalies.
+    /// </remarks>
+    public override Vector<T> Predict(Matrix<T> X)
+    {
+        EnsureFitted();
+
+        var scores = ScoreAnomalies(X);
+        var predictions = new Vector<T>(scores.Length);
+        T criticalT = NumOps.FromDouble(_criticalValue);
+
+        for (int i = 0; i < scores.Length; i++)
+        {
+            // Points with ESD > critical value are anomalies (-1), otherwise inliers (1)
+            predictions[i] = NumOps.GreaterThan(scores[i], criticalT)
+                ? NumOps.FromDouble(-1)
+                : NumOps.FromDouble(1);
+        }
+
+        return predictions;
     }
 }
