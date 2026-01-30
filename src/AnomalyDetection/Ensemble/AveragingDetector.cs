@@ -36,6 +36,7 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 public class AveragingDetector<T> : AnomalyDetectorBase<T>
 {
     private List<IAnomalyDetector<T>>? _baseDetectors;
+    private List<(double Min, double Max)>? _trainingScoreRanges;
 
     /// <summary>
     /// Creates a new Averaging ensemble anomaly detector with default base detectors.
@@ -84,10 +85,26 @@ public class AveragingDetector<T> : AnomalyDetectorBase<T>
                 randomSeed: _randomSeed + 2)
         };
 
-        // Fit all base detectors
+        // Fit all base detectors and compute training score ranges
+        _trainingScoreRanges = new List<(double Min, double Max)>();
+
         foreach (var detector in _baseDetectors)
         {
             detector.Fit(X);
+
+            // Compute training scores to establish min/max for normalization
+            var scores = detector.ScoreAnomalies(X);
+            double min = double.MaxValue;
+            double max = double.MinValue;
+
+            for (int i = 0; i < scores.Length; i++)
+            {
+                double val = NumOps.ToDouble(scores[i]);
+                if (val < min) min = val;
+                if (val > max) max = val;
+            }
+
+            _trainingScoreRanges.Add((min, max));
         }
 
         // Calculate scores for training data to set threshold
@@ -109,18 +126,20 @@ public class AveragingDetector<T> : AnomalyDetectorBase<T>
         ValidateInput(X);
 
         var baseDetectors = _baseDetectors;
-        if (baseDetectors == null)
+        var trainingRanges = _trainingScoreRanges;
+        if (baseDetectors == null || trainingRanges == null)
         {
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        // Collect and normalize scores from all detectors
+        // Collect and normalize scores from all detectors using training min/max
         var allScores = new List<double[]>();
 
-        foreach (var detector in baseDetectors)
+        for (int d = 0; d < baseDetectors.Count; d++)
         {
-            var scores = detector.ScoreAnomalies(X);
-            var doubleScores = NormalizeScores(scores);
+            var scores = baseDetectors[d].ScoreAnomalies(X);
+            var (trainMin, trainMax) = trainingRanges[d];
+            var doubleScores = NormalizeScores(scores, trainMin, trainMax);
             allScores.Add(doubleScores);
         }
 
@@ -140,27 +159,24 @@ public class AveragingDetector<T> : AnomalyDetectorBase<T>
         return avgScores;
     }
 
-    private double[] NormalizeScores(Vector<T> scores)
+    private double[] NormalizeScores(Vector<T> scores, double trainMin, double trainMax)
     {
         int n = scores.Length;
         var result = new double[n];
 
-        double min = double.MaxValue;
-        double max = double.MinValue;
+        double range = trainMax - trainMin;
 
         for (int i = 0; i < n; i++)
         {
-            result[i] = NumOps.ToDouble(scores[i]);
-            if (result[i] < min) min = result[i];
-            if (result[i] > max) max = result[i];
-        }
-
-        double range = max - min;
-        if (range > 1e-10)
-        {
-            for (int i = 0; i < n; i++)
+            double val = NumOps.ToDouble(scores[i]);
+            if (range > 1e-10)
             {
-                result[i] = (result[i] - min) / range;
+                // Normalize using training min/max, clamp to [0, 1]
+                result[i] = Math.Max(0, Math.Min(1, (val - trainMin) / range));
+            }
+            else
+            {
+                result[i] = 0.5; // Constant scores map to midpoint
             }
         }
 

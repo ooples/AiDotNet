@@ -161,41 +161,37 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
                 double rangeD = NumOps.ToDouble(_ranges[j]);
 
                 T qStatistic;
-                if (distMinD <= distMaxD)
+                double valueD = NumOps.ToDouble(value);
+                double minD = NumOps.ToDouble(_minValues![j]);
+                double maxD = NumOps.ToDouble(_maxValues![j]);
+
+                if (valueD < minD)
                 {
-                    // Point is closer to minimum - compute Q relative to the min extreme
-                    // Classic Q for testing if min is outlier: (x2 - x1) / range
-                    // For this point: higher score if it's MORE extreme than the training min
+                    // Point is MORE extreme than training minimum (beyond min)
+                    // Higher Q score indicates potential outlier
                     T gapToSecond = NumOps.Subtract(_secondMin![j], _minValues[j]);
                     double gapD = NumOps.ToDouble(gapToSecond);
-
-                    if (distMinD < gapD)
-                    {
-                        // This point is even more extreme than training min (potential outlier)
-                        qStatistic = NumOps.FromDouble((gapD - distMinD) / rangeD + 1.0);
-                    }
-                    else
-                    {
-                        // This point is within the training range
-                        qStatistic = NumOps.FromDouble(distMinD / rangeD);
-                    }
+                    double beyondMin = minD - valueD;
+                    qStatistic = NumOps.FromDouble((gapD + beyondMin) / rangeD + 1.0);
+                }
+                else if (valueD > maxD)
+                {
+                    // Point is MORE extreme than training maximum (beyond max)
+                    T gapFromSecond = NumOps.Subtract(_maxValues[j], _secondMax![j]);
+                    double gapD = NumOps.ToDouble(gapFromSecond);
+                    double beyondMax = valueD - maxD;
+                    qStatistic = NumOps.FromDouble((gapD + beyondMax) / rangeD + 1.0);
+                }
+                else if (distMinD <= distMaxD)
+                {
+                    // Point is within range, closer to minimum
+                    // Classic Dixon Q: ratio of gap to nearest neighbor vs total range
+                    qStatistic = NumOps.FromDouble(distMinD / rangeD);
                 }
                 else
                 {
-                    // Point is closer to maximum - compute Q relative to the max extreme
-                    T gapFromSecond = NumOps.Subtract(_maxValues[j], _secondMax![j]);
-                    double gapD = NumOps.ToDouble(gapFromSecond);
-
-                    if (distMaxD < gapD)
-                    {
-                        // This point is even more extreme than training max (potential outlier)
-                        qStatistic = NumOps.FromDouble((gapD - distMaxD) / rangeD + 1.0);
-                    }
-                    else
-                    {
-                        // This point is within the training range
-                        qStatistic = NumOps.FromDouble(distMaxD / rangeD);
-                    }
+                    // Point is within range, closer to maximum
+                    qStatistic = NumOps.FromDouble(distMaxD / rangeD);
                 }
 
                 if (NumOps.GreaterThan(qStatistic, maxQStatistic))
@@ -241,6 +237,19 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
     /// <returns>Critical Q value.</returns>
     public double GetQCritical(int n)
     {
+        // For n > 25, use approximation (must check before dictionary lookup)
+        if (n > 25)
+        {
+            double approxValue = 0.27 + 1.0 / n;
+            if (_alpha != 0.05)
+            {
+                // Adjust for different alpha
+                double adjustmentFactor = Math.Log(0.05) / Math.Log(_alpha);
+                return Math.Min(1.0, approxValue * adjustmentFactor);
+            }
+            return approxValue;
+        }
+
         // Critical values for Dixon's Q test at alpha = 0.05
         // Source: Dixon (1950)
         var criticalValues = new Dictionary<int, double>
@@ -257,18 +266,18 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
             // Adjust critical value for different alpha
             // This is an approximation
             double adjustmentFactor = Math.Log(0.05) / Math.Log(_alpha);
-            if (criticalValues.TryGetValue(Math.Min(n, 25), out double baseValue))
+            if (criticalValues.TryGetValue(n, out double baseValue))
             {
                 return Math.Min(1.0, baseValue * adjustmentFactor);
             }
         }
 
-        if (criticalValues.TryGetValue(Math.Min(n, 25), out double value))
+        if (criticalValues.TryGetValue(n, out double value))
         {
             return value;
         }
 
-        // For n > 25, use approximation
-        return 0.27 + 1.0 / n;
+        // Fallback for n < 3 (shouldn't happen due to validation)
+        return 1.0;
     }
 }

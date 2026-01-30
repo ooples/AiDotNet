@@ -290,8 +290,10 @@ public class HDBSCANDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Build clusters by removing long edges
+        // Ensure at least 1 edge is taken to avoid empty sequence from Take(0)
+        int takeCount = Math.Max(1, (int)(sortedEdges.Length * _contamination));
         double cutoff = sortedEdges.Length > 0
-            ? sortedEdges.Take((int)(sortedEdges.Length * _contamination)).LastOrDefault().weight
+            ? sortedEdges.Take(takeCount).Last().weight
             : double.MaxValue;
 
         // Process edges in ascending order to build clusters

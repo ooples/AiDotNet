@@ -140,7 +140,6 @@ public class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
         for (int i = 0; i < X.Rows; i++)
         {
             T maxGrubbsStatistic = NumOps.Zero;
-            T maxCriticalExceedance = NumOps.Zero;
 
             for (int j = 0; j < X.Columns; j++)
             {
@@ -154,14 +153,6 @@ public class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
                 T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], _means![j]));
                 T grubbsStatistic = NumOps.Divide(deviation, _stds[j]);
 
-                // Compute how much the statistic exceeds the critical value
-                // Score = max(0, G - G_critical) across features
-                T exceedance = NumOps.Subtract(grubbsStatistic, _criticalValues![j]);
-                if (NumOps.GreaterThan(exceedance, maxCriticalExceedance))
-                {
-                    maxCriticalExceedance = exceedance;
-                }
-
                 if (NumOps.GreaterThan(grubbsStatistic, maxGrubbsStatistic))
                 {
                     maxGrubbsStatistic = grubbsStatistic;
@@ -169,7 +160,6 @@ public class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
             }
 
             // Use the maximum Grubbs statistic as the score
-            // Points exceeding the critical value are clear outliers
             scores[i] = maxGrubbsStatistic;
         }
 
@@ -182,6 +172,14 @@ public class GrubbsTestDetector<T> : AnomalyDetectorBase<T>
         // Using approximation since we don't have a full t-distribution implementation
         double adjustedAlpha = _alpha / (2 * n);
         int df = n - 2;
+
+        // Guard against df < 2 which would cause NaN in the approximation
+        if (df < 2)
+        {
+            // For very small samples (n=3, df=1), use a conservative large critical value
+            // This essentially makes it harder to flag outliers with minimal data
+            return GetZCritical(adjustedAlpha) * 2.0;
+        }
 
         // Simple approximation for t-distribution critical value
         // For large df, t approaches z (standard normal)

@@ -360,6 +360,13 @@ public class MCDDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        if (X.Columns != _nFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
+        }
+
         var robustMean = _robustMean;
         var robustPrecision = _robustPrecision;
 

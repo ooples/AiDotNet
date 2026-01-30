@@ -87,6 +87,13 @@ public class OutlierRemovalAdapter<T, TInput, TOutput> : IOutlierRemoval<T, TInp
         // Get predictions: 1 = inlier, -1 = outlier
         var predictions = _detector.Predict(inputMatrix);
 
+        // Validate prediction count matches input rows
+        if (predictions.Length != inputMatrix.Rows)
+        {
+            throw new InvalidOperationException(
+                $"Detector returned {predictions.Length} predictions but input has {inputMatrix.Rows} rows.");
+        }
+
         // Filter out outliers
         var cleanedInputs = new List<Vector<T>>();
         var cleanedOutputs = new List<T>();
@@ -113,6 +120,16 @@ public class OutlierRemovalAdapter<T, TInput, TOutput> : IOutlierRemoval<T, TInp
 
     private static (Matrix<T> inputs, Vector<T> outputs) ConvertToMatrixVector(TInput inputs, TOutput outputs)
     {
+        if (inputs == null)
+        {
+            throw new ArgumentNullException(nameof(inputs), "Inputs cannot be null.");
+        }
+
+        if (outputs == null)
+        {
+            throw new ArgumentNullException(nameof(outputs), "Outputs cannot be null.");
+        }
+
         Matrix<T> inputMatrix;
         Vector<T> outputVector;
 

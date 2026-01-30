@@ -95,6 +95,9 @@ public class FastABODDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
+        // Check if X is the same as training data (for self-exclusion)
+        bool isSameAsTraining = ReferenceEquals(X, _trainingData);
+
         var scores = new Vector<T>(X.Rows);
 
         for (int p = 0; p < X.Rows; p++)
@@ -106,8 +109,9 @@ public class FastABODDetector<T> : AnomalyDetectorBase<T>
                 pointP[j] = NumOps.ToDouble(X[p, j]);
             }
 
-            // Find k-nearest neighbors
-            var neighbors = GetKNearestNeighbors(pointP);
+            // Find k-nearest neighbors (pass index for self-exclusion when scoring training data)
+            int queryIndex = isSameAsTraining ? p : -1;
+            var neighbors = GetKNearestNeighbors(pointP, queryIndex);
 
             // Compute ABOF using only neighbors
             double abof = ComputeABOF(pointP, neighbors);
@@ -120,7 +124,7 @@ public class FastABODDetector<T> : AnomalyDetectorBase<T>
         return scores;
     }
 
-    private List<(int Index, double[] Point, double Distance)> GetKNearestNeighbors(double[] queryPoint)
+    private List<(int Index, double[] Point, double Distance)> GetKNearestNeighbors(double[] queryPoint, int queryIndex = -1)
     {
         var trainingData = _trainingData;
         if (trainingData == null)
@@ -133,6 +137,12 @@ public class FastABODDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < trainingData.Rows; i++)
         {
+            // Skip self by index when queryIndex is provided (scoring training data)
+            if (i == queryIndex)
+            {
+                continue;
+            }
+
             var point = new double[d];
             double dist = 0;
 
@@ -144,11 +154,7 @@ public class FastABODDetector<T> : AnomalyDetectorBase<T>
             }
 
             dist = Math.Sqrt(dist);
-
-            if (dist > 1e-10) // Exclude the point itself
-            {
-                distances.Add((i, point, dist));
-            }
+            distances.Add((i, point, dist));
         }
 
         return distances

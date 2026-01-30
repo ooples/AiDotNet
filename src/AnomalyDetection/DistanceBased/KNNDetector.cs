@@ -101,6 +101,9 @@ public class KNNDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
+        // Check if X is the same as training data (for self-exclusion by index)
+        bool isSameAsTraining = ReferenceEquals(X, _trainingData);
+
         var scores = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
@@ -114,21 +117,17 @@ public class KNNDetector<T> : AnomalyDetectorBase<T>
                 .OrderBy(x => x.Distance)
                 .ToList();
 
-            // Take k nearest neighbors
-            // Only skip the FIRST zero-distance point as the potential self-match
-            // Include subsequent zero-distance points (legitimate duplicates)
+            // Take k nearest neighbors, excluding self by index when scoring training data
             double avgDistance = 0;
             int count = 0;
-            bool skippedSelf = false;
 
-            foreach (var (distance, _) in sortedDistances)
+            foreach (var (distance, idx) in sortedDistances)
             {
                 if (count >= _k) break;
 
-                // Skip only the first exact self-match (distance == 0)
-                if (!skippedSelf && distance == 0)
+                // Skip self by index when scoring training data
+                if (isSameAsTraining && idx == i)
                 {
-                    skippedSelf = true;
                     continue;
                 }
 
