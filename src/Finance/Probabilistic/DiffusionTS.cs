@@ -88,19 +88,19 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly DiffusionTSOptions<T> _options;
-    private readonly int _sequenceLength;
-    private readonly int _forecastHorizon;
-    private readonly int _numFeatures;
-    private readonly int _hiddenDimension;
-    private readonly int _trendHiddenDim;
-    private readonly int _seasonalHiddenDim;
-    private readonly int _numDiffusionSteps;
-    private readonly int _numSamples;
-    private readonly int _decompositionPeriod;
-    private readonly int _trendKernelSize;
-    private readonly bool _useTrendComponent;
-    private readonly bool _useSeasonalComponent;
-    private readonly string _betaSchedule;
+    private int _sequenceLength;
+    private int _forecastHorizon;
+    private int _numFeatures;
+    private int _hiddenDimension;
+    private int _trendHiddenDim;
+    private int _seasonalHiddenDim;
+    private int _numDiffusionSteps;
+    private int _numSamples;
+    private int _decompositionPeriod;
+    private int _trendKernelSize;
+    private bool _useTrendComponent;
+    private bool _useSeasonalComponent;
+    private string _betaSchedule;
     #endregion
 
     #region IForecastingModel Properties
@@ -630,19 +630,19 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // trendHiddenDim
-        _ = reader.ReadInt32(); // seasonalHiddenDim
-        _ = reader.ReadInt32(); // numDiffusionSteps
-        _ = reader.ReadInt32(); // numSamples
-        _ = reader.ReadInt32(); // decompositionPeriod
-        _ = reader.ReadInt32(); // trendKernelSize
-        _ = reader.ReadBoolean(); // useTrendComponent
-        _ = reader.ReadBoolean(); // useSeasonalComponent
-        _ = reader.ReadString(); // betaSchedule
+        _sequenceLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _trendHiddenDim = reader.ReadInt32();
+        _seasonalHiddenDim = reader.ReadInt32();
+        _numDiffusionSteps = reader.ReadInt32();
+        _numSamples = reader.ReadInt32();
+        _decompositionPeriod = reader.ReadInt32();
+        _trendKernelSize = reader.ReadInt32();
+        _useTrendComponent = reader.ReadBoolean();
+        _useSeasonalComponent = reader.ReadBoolean();
+        _betaSchedule = reader.ReadString();
     }
 
     #endregion

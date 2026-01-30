@@ -72,17 +72,17 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
     /// <summary>
     /// The model's expected input sequence length.
     /// </summary>
-    protected readonly int _baseSequenceLength;
+    protected int _baseSequenceLength;
 
     /// <summary>
     /// The model's prediction horizon.
     /// </summary>
-    protected readonly int _basePredictionHorizon;
+    protected int _basePredictionHorizon;
 
     /// <summary>
     /// The number of input features.
     /// </summary>
-    protected readonly int _baseNumFeatures;
+    protected int _baseNumFeatures;
 
     /// <summary>
     /// Loss history for training monitoring.
@@ -612,10 +612,10 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         if (!UseNativeMode)
             throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        // Read configuration (values are set in constructor, just advance reader)
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // predictionHorizon
-        _ = reader.ReadInt32(); // numFeatures
+        // Read configuration
+        _baseSequenceLength = reader.ReadInt32();
+        _basePredictionHorizon = reader.ReadInt32();
+        _baseNumFeatures = reader.ReadInt32();
 
         // Derived classes read their own data via override
         DeserializeModelSpecificData(reader);

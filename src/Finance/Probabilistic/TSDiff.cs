@@ -68,10 +68,10 @@ namespace AiDotNet.Finance.Probabilistic;
 public class TSDiff<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
     #endregion
 
-    
+
     #region Native Mode Fields
     private DenseLayer<T>? _inputEmbedding;
     private List<DenseLayer<T>>? _downsampleLayers;
@@ -93,18 +93,18 @@ public class TSDiff<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly TSDiffOptions<T> _options;
-    private readonly int _sequenceLength;
-    private readonly int _forecastHorizon;
-    private readonly int _numFeatures;
-    private readonly int _hiddenDimension;
-    private readonly int _numResidualBlocks;
-    private readonly int _numDiffusionSteps;
-    private readonly int _numSamples;
-    private readonly int _numAttentionHeads;
-    private readonly double _guidanceScale;
-    private readonly bool _useSelfGuidance;
-    private readonly bool _useObservationGuidance;
-    private readonly string _betaSchedule;
+    private int _sequenceLength;
+    private int _forecastHorizon;
+    private int _numFeatures;
+    private int _hiddenDimension;
+    private int _numResidualBlocks;
+    private int _numDiffusionSteps;
+    private int _numSamples;
+    private int _numAttentionHeads;
+    private double _guidanceScale;
+    private bool _useSelfGuidance;
+    private bool _useObservationGuidance;
+    private string _betaSchedule;
     #endregion
 
     #region IForecastingModel Properties
@@ -586,18 +586,18 @@ public class TSDiff<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numResidualBlocks
-        _ = reader.ReadInt32(); // numDiffusionSteps
-        _ = reader.ReadInt32(); // numSamples
-        _ = reader.ReadInt32(); // numAttentionHeads
-        _ = reader.ReadDouble(); // guidanceScale
-        _ = reader.ReadBoolean(); // useSelfGuidance
-        _ = reader.ReadBoolean(); // useObservationGuidance
-        _ = reader.ReadString(); // betaSchedule
+        _sequenceLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numResidualBlocks = reader.ReadInt32();
+        _numDiffusionSteps = reader.ReadInt32();
+        _numSamples = reader.ReadInt32();
+        _numAttentionHeads = reader.ReadInt32();
+        _guidanceScale = reader.ReadDouble();
+        _useSelfGuidance = reader.ReadBoolean();
+        _useObservationGuidance = reader.ReadBoolean();
+        _betaSchedule = reader.ReadString();
     }
 
     #endregion

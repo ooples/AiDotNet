@@ -97,21 +97,21 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly GraphWaveNetOptions<T> _options;
-    private readonly int _sequenceLength;
-    private readonly int _forecastHorizon;
-    private readonly int _numNodes;
-    private readonly int _numFeatures;
-    private readonly int _residualChannels;
-    private readonly int _dilationChannels;
-    private readonly int _skipChannels;
-    private readonly int _endChannels;
-    private readonly int _nodeEmbeddingDim;
-    private readonly int _numBlocks;
-    private readonly int _layersPerBlock;
-    private readonly int _diffusionSteps;
-    private readonly int _numSamples;
-    private readonly bool _useAdaptiveGraph;
-    private readonly bool _usePredefinedGraph;
+    private int _sequenceLength;
+    private int _forecastHorizon;
+    private int _numNodes;
+    private int _numFeatures;
+    private int _residualChannels;
+    private int _dilationChannels;
+    private int _skipChannels;
+    private int _endChannels;
+    private int _nodeEmbeddingDim;
+    private int _numBlocks;
+    private int _layersPerBlock;
+    private int _diffusionSteps;
+    private int _numSamples;
+    private bool _useAdaptiveGraph;
+    private bool _usePredefinedGraph;
     #endregion
 
     #region IForecastingModel Properties
@@ -713,20 +713,22 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        int numNodes = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        int embeddingDim = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadBoolean();
-        _ = reader.ReadBoolean();
-        _ = reader.ReadInt32();
+        _sequenceLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numNodes = reader.ReadInt32();
+        int numNodes = _numNodes;
+        _numFeatures = reader.ReadInt32();
+        _residualChannels = reader.ReadInt32();
+        _dilationChannels = reader.ReadInt32();
+        _skipChannels = reader.ReadInt32();
+        _nodeEmbeddingDim = reader.ReadInt32();
+        int embeddingDim = _nodeEmbeddingDim;
+        _numBlocks = reader.ReadInt32();
+        _layersPerBlock = reader.ReadInt32();
+        _diffusionSteps = reader.ReadInt32();
+        _useAdaptiveGraph = reader.ReadBoolean();
+        _usePredefinedGraph = reader.ReadBoolean();
+        _numSamples = reader.ReadInt32();
 
         bool hasEmbeddings = reader.ReadBoolean();
         if (hasEmbeddings)

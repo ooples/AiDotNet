@@ -95,20 +95,20 @@ public class MTGNN<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly MTGNNOptions<T> _options;
-    private readonly int _sequenceLength;
-    private readonly int _forecastHorizon;
-    private readonly int _numNodes;
-    private readonly int _numFeatures;
-    private readonly int _hiddenDimension;
-    private readonly int _nodeEmbeddingDim;
-    private readonly int _numLayers;
-    private readonly int _mixHopDepth;
-    private readonly int _temporalKernelSize;
-    private readonly int _dilationFactor;
-    private readonly int _numSamples;
-    private readonly bool _usePredefinedGraph;
-    private readonly bool _useSubgraphSampling;
-    private readonly int _subgraphSize;
+    private int _sequenceLength;
+    private int _forecastHorizon;
+    private int _numNodes;
+    private int _numFeatures;
+    private int _hiddenDimension;
+    private int _nodeEmbeddingDim;
+    private int _numLayers;
+    private int _mixHopDepth;
+    private int _temporalKernelSize;
+    private int _dilationFactor;
+    private int _numSamples;
+    private bool _usePredefinedGraph;
+    private bool _useSubgraphSampling;
+    private int _subgraphSize;
     #endregion
 
     #region IForecastingModel Properties
@@ -731,20 +731,22 @@ public class MTGNN<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        int numNodes = reader.ReadInt32();
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // hiddenDimension
-        int embeddingDim = reader.ReadInt32();
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // mixHopDepth
-        _ = reader.ReadInt32(); // temporalKernelSize
-        _ = reader.ReadInt32(); // dilationFactor
-        _ = reader.ReadBoolean(); // usePredefinedGraph
-        _ = reader.ReadBoolean(); // useSubgraphSampling
-        _ = reader.ReadInt32(); // subgraphSize
-        _ = reader.ReadInt32(); // numSamples
+        _sequenceLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numNodes = reader.ReadInt32();
+        int numNodes = _numNodes;
+        _numFeatures = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _nodeEmbeddingDim = reader.ReadInt32();
+        int embeddingDim = _nodeEmbeddingDim;
+        _numLayers = reader.ReadInt32();
+        _mixHopDepth = reader.ReadInt32();
+        _temporalKernelSize = reader.ReadInt32();
+        _dilationFactor = reader.ReadInt32();
+        _usePredefinedGraph = reader.ReadBoolean();
+        _useSubgraphSampling = reader.ReadBoolean();
+        _subgraphSize = reader.ReadInt32();
+        _numSamples = reader.ReadInt32();
 
         // Deserialize node embeddings
         bool hasEmbeddings = reader.ReadBoolean();

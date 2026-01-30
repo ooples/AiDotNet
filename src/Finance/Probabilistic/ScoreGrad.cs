@@ -87,19 +87,19 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly ScoreGradOptions<T> _options;
-    private readonly int _sequenceLength;
-    private readonly int _forecastHorizon;
-    private readonly int _numFeatures;
-    private readonly int _hiddenDimension;
-    private readonly int _numLayers;
-    private readonly int _numNoiseScales;
-    private readonly int _numLangevinSteps;
-    private readonly int _numSamples;
-    private readonly double _sigmaMin;
-    private readonly double _sigmaMax;
-    private readonly double _stepSize;
-    private readonly bool _useAnnealing;
-    private readonly double _annealingPower;
+    private int _sequenceLength;
+    private int _forecastHorizon;
+    private int _numFeatures;
+    private int _hiddenDimension;
+    private int _numLayers;
+    private int _numNoiseScales;
+    private int _numLangevinSteps;
+    private int _numSamples;
+    private double _sigmaMin;
+    private double _sigmaMax;
+    private double _stepSize;
+    private bool _useAnnealing;
+    private double _annealingPower;
     #endregion
 
     #region IForecastingModel Properties
@@ -566,19 +566,19 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numNoiseScales
-        _ = reader.ReadDouble(); // sigmaMin
-        _ = reader.ReadDouble(); // sigmaMax
-        _ = reader.ReadInt32(); // numLangevinSteps
-        _ = reader.ReadDouble(); // stepSize
-        _ = reader.ReadBoolean(); // useAnnealing
-        _ = reader.ReadDouble(); // annealingPower
-        _ = reader.ReadInt32(); // numSamples
+        _sequenceLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numNoiseScales = reader.ReadInt32();
+        _sigmaMin = reader.ReadDouble();
+        _sigmaMax = reader.ReadDouble();
+        _numLangevinSteps = reader.ReadInt32();
+        _stepSize = reader.ReadDouble();
+        _useAnnealing = reader.ReadBoolean();
+        _annealingPower = reader.ReadDouble();
+        _numSamples = reader.ReadInt32();
     }
 
     #endregion

@@ -52,16 +52,16 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly FactorVAEOptions<T> _options;
-    private readonly int _numFactors;
-    private readonly int _numAssets;
-    private readonly int _numFeatures;
-    private readonly int _hiddenDimension;
-    private readonly int _latentDimension;
-    private readonly int _sequenceLength;
-    private readonly int _predictionHorizon;
-    private readonly double _beta;
-    private readonly double _gamma;
-    private readonly double _dropoutRate;
+    private int _numFactors;
+    private int _numAssets;
+    private int _numFeatures;
+    private int _hiddenDimension;
+    private int _latentDimension;
+    private int _sequenceLength;
+    private int _predictionHorizon;
+    private double _beta;
+    private double _gamma;
+    private double _dropoutRate;
     private readonly Random _random;
 
     #endregion
@@ -451,16 +451,16 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // numFactors
-        _ = reader.ReadInt32(); // numAssets
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // latentDimension
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // predictionHorizon
-        _ = reader.ReadDouble(); // beta
-        _ = reader.ReadDouble(); // gamma
-        _ = reader.ReadDouble(); // dropoutRate
+        _numFactors = reader.ReadInt32();
+        _numAssets = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _latentDimension = reader.ReadInt32();
+        _sequenceLength = reader.ReadInt32();
+        _predictionHorizon = reader.ReadInt32();
+        _beta = reader.ReadDouble();
+        _gamma = reader.ReadDouble();
+        _dropoutRate = reader.ReadDouble();
     }
 
     #endregion

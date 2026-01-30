@@ -105,15 +105,15 @@ public class DCRNN<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly DCRNNOptions<T> _options;
-    private readonly int _sequenceLength;
-    private readonly int _forecastHorizon;
-    private readonly int _numNodes;
-    private readonly int _numFeatures;
-    private readonly int _hiddenDimension;
-    private readonly int _numEncoderLayers;
-    private readonly int _numDecoderLayers;
-    private readonly int _diffusionSteps;
-    private readonly int _numSamples;
+    private int _sequenceLength;
+    private int _forecastHorizon;
+    private int _numNodes;
+    private int _numFeatures;
+    private int _hiddenDimension;
+    private int _numEncoderLayers;
+    private int _numDecoderLayers;
+    private int _diffusionSteps;
+    private int _numSamples;
     private int _trainingStep;
     #endregion
 
@@ -681,14 +681,15 @@ public class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        int numNodes = reader.ReadInt32();
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numDecoderLayers
-        _ = reader.ReadInt32(); // diffusionSteps
+        _sequenceLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numNodes = reader.ReadInt32();
+        int numNodes = _numNodes;
+        _numFeatures = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numEncoderLayers = reader.ReadInt32();
+        _numDecoderLayers = reader.ReadInt32();
+        _diffusionSteps = reader.ReadInt32();
         _trainingStep = reader.ReadInt32();
 
         bool hasDiffusion = reader.ReadBoolean();

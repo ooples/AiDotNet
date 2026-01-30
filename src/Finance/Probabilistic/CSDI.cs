@@ -68,10 +68,10 @@ namespace AiDotNet.Finance.Probabilistic;
 public class CSDI<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
     #endregion
 
-    
+
     #region Native Mode Fields
     private DenseLayer<T>? _inputProjection;
     private List<DenseLayer<T>>? _transformerLayers;
@@ -93,17 +93,17 @@ public class CSDI<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly CSDIOptions<T> _options;
-    private readonly int _sequenceLength;
-    private readonly int _numFeatures;
-    private readonly int _hiddenDimension;
-    private readonly int _numResidualLayers;
-    private readonly int _numDiffusionSteps;
-    private readonly int _numSamples;
-    private readonly int _numHeads;
-    private readonly int _timeEmbeddingDim;
-    private readonly int _featureEmbeddingDim;
-    private readonly string _betaSchedule;
-    private readonly bool _useAttention;
+    private int _sequenceLength;
+    private int _numFeatures;
+    private int _hiddenDimension;
+    private int _numResidualLayers;
+    private int _numDiffusionSteps;
+    private int _numSamples;
+    private int _numHeads;
+    private int _timeEmbeddingDim;
+    private int _featureEmbeddingDim;
+    private string _betaSchedule;
+    private bool _useAttention;
     #endregion
 
     #region IForecastingModel Properties
@@ -603,17 +603,17 @@ public class CSDI<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numResidualLayers
-        _ = reader.ReadInt32(); // numDiffusionSteps
-        _ = reader.ReadInt32(); // numSamples
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // timeEmbeddingDim
-        _ = reader.ReadInt32(); // featureEmbeddingDim
-        _ = reader.ReadString(); // betaSchedule
-        _ = reader.ReadBoolean(); // useAttention
+        _sequenceLength = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numResidualLayers = reader.ReadInt32();
+        _numDiffusionSteps = reader.ReadInt32();
+        _numSamples = reader.ReadInt32();
+        _numHeads = reader.ReadInt32();
+        _timeEmbeddingDim = reader.ReadInt32();
+        _featureEmbeddingDim = reader.ReadInt32();
+        _betaSchedule = reader.ReadString();
+        _useAttention = reader.ReadBoolean();
     }
 
     #endregion

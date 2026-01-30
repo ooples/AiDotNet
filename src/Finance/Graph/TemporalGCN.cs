@@ -90,18 +90,18 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly TemporalGCNOptions<T> _options;
-    private readonly int _sequenceLength;
-    private readonly int _forecastHorizon;
-    private readonly int _numNodes;
-    private readonly int _numFeatures;
-    private readonly int _hiddenDimension;
-    private readonly int _numGCNLayers;
-    private readonly int _numTemporalLayers;
-    private readonly int _chebyshevOrder;
-    private readonly string _temporalCellType;
-    private readonly int _numSamples;
-    private readonly bool _useResidualConnections;
-    private readonly bool _useBatchNormalization;
+    private int _sequenceLength;
+    private int _forecastHorizon;
+    private int _numNodes;
+    private int _numFeatures;
+    private int _hiddenDimension;
+    private int _numGCNLayers;
+    private int _numTemporalLayers;
+    private int _chebyshevOrder;
+    private string _temporalCellType;
+    private int _numSamples;
+    private bool _useResidualConnections;
+    private bool _useBatchNormalization;
     #endregion
 
     #region IForecastingModel Properties
@@ -629,18 +629,18 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numNodes
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numGCNLayers
-        _ = reader.ReadInt32(); // numTemporalLayers
-        _ = reader.ReadInt32(); // chebyshevOrder
-        _ = reader.ReadString(); // temporalCellType
-        _ = reader.ReadBoolean(); // useResidualConnections
-        _ = reader.ReadBoolean(); // useBatchNormalization
-        _ = reader.ReadInt32(); // numSamples
+        _sequenceLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numNodes = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numGCNLayers = reader.ReadInt32();
+        _numTemporalLayers = reader.ReadInt32();
+        _chebyshevOrder = reader.ReadInt32();
+        _temporalCellType = reader.ReadString();
+        _useResidualConnections = reader.ReadBoolean();
+        _useBatchNormalization = reader.ReadBoolean();
+        _numSamples = reader.ReadInt32();
     }
 
     #endregion

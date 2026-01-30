@@ -102,14 +102,14 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly FinBERTOptions<T> _options;
-    private readonly int _maxSequenceLength;
-    private readonly int _vocabularySize;
-    private readonly int _hiddenDimension;
-    private readonly int _numAttentionHeads;
-    private readonly int _intermediateDimension;
-    private readonly int _numLayers;
-    private readonly int _numSentimentClasses;
-    private readonly double _dropoutRate;
+    private int _maxSequenceLength;
+    private int _vocabularySize;
+    private int _hiddenDimension;
+    private int _numAttentionHeads;
+    private int _intermediateDimension;
+    private int _numLayers;
+    private int _numSentimentClasses;
+    private double _dropoutRate;
     #endregion
 
     #region IFinancialNLPModel Properties
@@ -534,14 +534,14 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // maxSequenceLength
-        _ = reader.ReadInt32(); // vocabularySize
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numAttentionHeads
-        _ = reader.ReadInt32(); // intermediateDimension
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numSentimentClasses
-        _ = reader.ReadDouble(); // dropoutRate
+        _maxSequenceLength = reader.ReadInt32();
+        _vocabularySize = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numAttentionHeads = reader.ReadInt32();
+        _intermediateDimension = reader.ReadInt32();
+        _numLayers = reader.ReadInt32();
+        _numSentimentClasses = reader.ReadInt32();
+        _dropoutRate = reader.ReadDouble();
 
         // Deserialize vocabulary
         int vocabCount = reader.ReadInt32();

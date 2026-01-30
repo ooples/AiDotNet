@@ -40,7 +40,7 @@ public class SECBERT<T> : FinancialNLPModelBase<T>
     #region Shared Fields
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly double _dropout;
+    private double _dropout;
 
     #endregion
 
@@ -264,7 +264,7 @@ public class SECBERT<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override void DeserializeModelSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadDouble();
+        _dropout = reader.ReadDouble();
     }
 
     /// <summary>

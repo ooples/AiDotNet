@@ -31,8 +31,8 @@ public class FinMA<T> : FinancialNLPModelBase<T>
     #region Shared Fields
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly double _dropout;
-    private readonly int _numAgents;
+    private double _dropout;
+    private int _numAgents;
 
     #endregion
 
@@ -259,8 +259,8 @@ public class FinMA<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override void DeserializeModelSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadDouble();
-        _ = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _numAgents = reader.ReadInt32();
     }
 
     /// <summary>

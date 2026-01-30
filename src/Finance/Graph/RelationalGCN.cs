@@ -106,22 +106,22 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly RelationalGCNOptions<T> _options;
-    private readonly int _sequenceLength;
-    private readonly int _forecastHorizon;
-    private readonly int _numNodes;
-    private readonly int _numFeatures;
-    private readonly int _numRelations;
-    private readonly int _hiddenDimension;
-    private readonly int _numLayers;
-    private readonly int _numBases;
-    private readonly int _numBlocks;
-    private readonly double _regularization;
-    private readonly double _dropoutRate;
-    private readonly bool _useBasisDecomposition;
-    private readonly bool _useBlockDecomposition;
-    private readonly bool _useSelfLoop;
-    private readonly string _aggregation;
-    private readonly int _numSamples;
+    private int _sequenceLength;
+    private int _forecastHorizon;
+    private int _numNodes;
+    private int _numFeatures;
+    private int _numRelations;
+    private int _hiddenDimension;
+    private int _numLayers;
+    private int _numBases;
+    private int _numBlocks;
+    private double _regularization;
+    private double _dropoutRate;
+    private bool _useBasisDecomposition;
+    private bool _useBlockDecomposition;
+    private bool _useSelfLoop;
+    private string _aggregation;
+    private int _numSamples;
     #endregion
 
     #region IForecastingModel Properties
@@ -756,22 +756,27 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        int numNodes = reader.ReadInt32();
-        _ = reader.ReadInt32(); // numFeatures
-        int numRelations = reader.ReadInt32();
-        int hiddenDimension = reader.ReadInt32();
-        _ = reader.ReadInt32(); // numLayers
-        int numBases = reader.ReadInt32();
-        _ = reader.ReadInt32(); // numBlocks
-        _ = reader.ReadDouble(); // regularization
-        _ = reader.ReadDouble(); // dropoutRate
-        bool useBasisDecomposition = reader.ReadBoolean();
-        _ = reader.ReadBoolean(); // useBlockDecomposition
-        _ = reader.ReadBoolean(); // useSelfLoop
-        _ = reader.ReadString(); // aggregation
-        _ = reader.ReadInt32(); // numSamples
+        _sequenceLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numNodes = reader.ReadInt32();
+        int numNodes = _numNodes;
+        _numFeatures = reader.ReadInt32();
+        _numRelations = reader.ReadInt32();
+        int numRelations = _numRelations;
+        _hiddenDimension = reader.ReadInt32();
+        int hiddenDimension = _hiddenDimension;
+        _numLayers = reader.ReadInt32();
+        _numBases = reader.ReadInt32();
+        int numBases = _numBases;
+        _numBlocks = reader.ReadInt32();
+        _regularization = reader.ReadDouble();
+        _dropoutRate = reader.ReadDouble();
+        _useBasisDecomposition = reader.ReadBoolean();
+        bool useBasisDecomposition = _useBasisDecomposition;
+        _useBlockDecomposition = reader.ReadBoolean();
+        _useSelfLoop = reader.ReadBoolean();
+        _aggregation = reader.ReadString();
+        _numSamples = reader.ReadInt32();
 
         // Deserialize basis decomposition if present
         bool hasBasis = reader.ReadBoolean();

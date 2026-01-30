@@ -88,17 +88,17 @@ public class STGNN<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly STGNNOptions<T> _options;
-    private readonly int _sequenceLength;
-    private readonly int _forecastHorizon;
-    private readonly int _numNodes;
-    private readonly int _numFeatures;
-    private readonly int _hiddenDimension;
-    private readonly int _numSpatialLayers;
-    private readonly int _numTemporalLayers;
-    private readonly int _numSamples;
-    private readonly string _graphConvType;
-    private readonly bool _useGatedFusion;
-    private readonly bool _useResidualConnections;
+    private int _sequenceLength;
+    private int _forecastHorizon;
+    private int _numNodes;
+    private int _numFeatures;
+    private int _hiddenDimension;
+    private int _numSpatialLayers;
+    private int _numTemporalLayers;
+    private int _numSamples;
+    private string _graphConvType;
+    private bool _useGatedFusion;
+    private bool _useResidualConnections;
     #endregion
 
     #region IForecastingModel Properties
@@ -556,17 +556,17 @@ public class STGNN<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // sequenceLength
-        _ = reader.ReadInt32(); // forecastHorizon
-        _ = reader.ReadInt32(); // numNodes
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // hiddenDimension
-        _ = reader.ReadInt32(); // numSpatialLayers
-        _ = reader.ReadInt32(); // numTemporalLayers
-        _ = reader.ReadString(); // graphConvType
-        _ = reader.ReadBoolean(); // useGatedFusion
-        _ = reader.ReadBoolean(); // useResidualConnections
-        _ = reader.ReadInt32(); // numSamples
+        _sequenceLength = reader.ReadInt32();
+        _forecastHorizon = reader.ReadInt32();
+        _numNodes = reader.ReadInt32();
+        _numFeatures = reader.ReadInt32();
+        _hiddenDimension = reader.ReadInt32();
+        _numSpatialLayers = reader.ReadInt32();
+        _numTemporalLayers = reader.ReadInt32();
+        _graphConvType = reader.ReadString();
+        _useGatedFusion = reader.ReadBoolean();
+        _useResidualConnections = reader.ReadBoolean();
+        _numSamples = reader.ReadInt32();
     }
 
     #endregion

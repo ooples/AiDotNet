@@ -121,37 +121,37 @@ public class DeepAR<T> : ForecastingModelBase<T>
     /// <summary>
     /// The hidden size of LSTM cells.
     /// </summary>
-    private readonly int _hiddenSize;
+    private int _hiddenSize;
 
     /// <summary>
     /// The number of stacked LSTM layers.
     /// </summary>
-    private readonly int _numLstmLayers;
+    private int _numLstmLayers;
 
     /// <summary>
     /// Embedding dimension for categorical features.
     /// </summary>
-    private readonly int _embeddingDim;
+    private int _embeddingDim;
 
     /// <summary>
     /// The dropout rate for regularization.
     /// </summary>
-    private readonly double _dropout;
+    private double _dropout;
 
     /// <summary>
     /// The output distribution type (gaussian, negative_binomial, student_t).
     /// </summary>
-    private readonly string _distributionType;
+    private string _distributionType;
 
     /// <summary>
     /// Number of samples for Monte Carlo estimation.
     /// </summary>
-    private readonly int _numSamples;
+    private int _numSamples;
 
     /// <summary>
     /// Whether to use scaling (dividing by mean absolute value).
     /// </summary>
-    private readonly bool _useScaling;
+    private bool _useScaling;
 
     /// <summary>
     /// Random number generator for sampling.
@@ -548,13 +548,13 @@ public class DeepAR<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override void DeserializeModelSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32();   // hiddenSize
-        _ = reader.ReadInt32();   // numLstmLayers
-        _ = reader.ReadInt32();   // embeddingDim
-        _ = reader.ReadDouble();  // dropout
-        _ = reader.ReadString();  // distributionType
-        _ = reader.ReadInt32();   // numSamples
-        _ = reader.ReadBoolean(); // useScaling
+        _hiddenSize = reader.ReadInt32();
+        _numLstmLayers = reader.ReadInt32();
+        _embeddingDim = reader.ReadInt32();
+        _dropout = reader.ReadDouble();
+        _distributionType = reader.ReadString();
+        _numSamples = reader.ReadInt32();
+        _useScaling = reader.ReadBoolean();
     }
 
     #endregion
