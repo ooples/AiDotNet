@@ -619,51 +619,53 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         int numFeatures = _gamma.Length;
 
         // The Engine.BatchNormBackward expects 2D tensors [batch, features]
-        // We'll use batch=1 for the normalized backward pass
-        int[] targetShape2D = new[] { 1, numFeatures };
+        // Preserve the actual batch size from input
+        int batchSize = _lastInput.Shape.Length > 1 ? _lastInput.Shape[0] : 1;
+        int[] targetShape2D = new[] { batchSize, numFeatures };
 
-        // Adjust gradient to 2D [1, features] shape
-        if (adjustedGradient.Length != numFeatures)
+        // Adjust gradient to 2D [batch, features] shape
+        int totalElements = batchSize * numFeatures;
+        if (adjustedGradient.Length != totalElements)
         {
-            var gradData = new T[numFeatures];
-            int copyLen = Math.Min(adjustedGradient.Length, numFeatures);
+            var gradData = new T[totalElements];
+            int copyLen = Math.Min(adjustedGradient.Length, totalElements);
             for (int i = 0; i < copyLen; i++)
             {
                 gradData[i] = adjustedGradient.Data.Span[i];
             }
             // Fill remaining with zeros if gradient is smaller
-            for (int i = copyLen; i < numFeatures; i++)
+            for (int i = copyLen; i < totalElements; i++)
             {
                 gradData[i] = NumOps.Zero;
             }
             adjustedGradient = new Tensor<T>(targetShape2D, new Vector<T>(gradData));
         }
-        else if (adjustedGradient.Rank != 2 || adjustedGradient.Shape[0] != 1 || adjustedGradient.Shape[1] != numFeatures)
+        else if (adjustedGradient.Rank != 2 || adjustedGradient.Shape[0] != batchSize || adjustedGradient.Shape[1] != numFeatures)
         {
-            // Same length but different shape - reshape to 2D [1, features]
+            // Same length but different shape - reshape to 2D [batch, features]
             adjustedGradient = adjustedGradient.Reshape(targetShape2D);
         }
 
-        // Adjust input to 2D [1, features] shape
-        if (adjustedInput.Length != numFeatures)
+        // Adjust input to 2D [batch, features] shape
+        if (adjustedInput.Length != totalElements)
         {
-            var inputData = new T[numFeatures];
-            int copyLen = Math.Min(adjustedInput.Length, numFeatures);
+            var inputData = new T[totalElements];
+            int copyLen = Math.Min(adjustedInput.Length, totalElements);
             for (int i = 0; i < copyLen; i++)
             {
                 inputData[i] = adjustedInput.Data.Span[i];
             }
             // Fill remaining with mean value if input is smaller
             T fillValue = copyLen > 0 ? inputData[0] : NumOps.Zero;
-            for (int i = copyLen; i < numFeatures; i++)
+            for (int i = copyLen; i < totalElements; i++)
             {
                 inputData[i] = fillValue;
             }
             adjustedInput = new Tensor<T>(targetShape2D, new Vector<T>(inputData));
         }
-        else if (adjustedInput.Rank != 2 || adjustedInput.Shape[0] != 1 || adjustedInput.Shape[1] != numFeatures)
+        else if (adjustedInput.Rank != 2 || adjustedInput.Shape[0] != batchSize || adjustedInput.Shape[1] != numFeatures)
         {
-            // Same length but different shape - reshape to 2D [1, features]
+            // Same length but different shape - reshape to 2D [batch, features]
             adjustedInput = adjustedInput.Reshape(targetShape2D);
         }
 
