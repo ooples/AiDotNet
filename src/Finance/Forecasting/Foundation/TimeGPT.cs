@@ -839,9 +839,22 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     {
         if (_calibrationResiduals is null || _calibrationResiduals.Count == 0)
         {
-            // Fall back to standard quantile generation
-            var emptyInput = new Tensor<T>(pointForecast.Shape);
-            return GenerateQuantilePredictions(emptyInput, quantiles);
+            if (!_useNativeMode)
+            {
+                // Cannot generate quantile predictions in ONNX mode without calibration data
+                // Return point forecast replicated across quantiles
+                var fallbackResult = new Tensor<T>(new[] { 1, _forecastHorizon, quantiles.Length });
+                for (int t = 0; t < _forecastHorizon && t < pointForecast.Length; t++)
+                {
+                    for (int q = 0; q < quantiles.Length; q++)
+                    {
+                        fallbackResult.Data.Span[t * quantiles.Length + q] = pointForecast.Data.Span[t];
+                    }
+                }
+                return fallbackResult;
+            }
+            // Fall back to MC dropout quantile generation in native mode
+            return GenerateQuantilePredictions(pointForecast, quantiles);
         }
 
         var result = new Tensor<T>(new[] { 1, _forecastHorizon, quantiles.Length });

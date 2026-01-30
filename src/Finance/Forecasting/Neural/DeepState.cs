@@ -562,7 +562,8 @@ public class DeepState<T> : ForecastingModelBase<T>
                 throw new InvalidOperationException(
                     "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
             }
-            return new DeepState<T>(Architecture, OnnxModelPath, options);
+            // Null-forgiving operator is safe here: we just validated OnnxModelPath is not null/empty
+            return new DeepState<T>(Architecture, OnnxModelPath!, options);
         }
     }
 

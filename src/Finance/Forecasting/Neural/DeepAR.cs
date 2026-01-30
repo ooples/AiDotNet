@@ -523,7 +523,8 @@ public class DeepAR<T> : ForecastingModelBase<T>
                 throw new InvalidOperationException(
                     "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
             }
-            return new DeepAR<T>(Architecture, OnnxModelPath, options, _optimizer, LossFunction);
+            // Null-forgiving operator is safe here: we just validated OnnxModelPath is not null/empty
+            return new DeepAR<T>(Architecture, OnnxModelPath!, options, _optimizer, LossFunction);
         }
     }
 

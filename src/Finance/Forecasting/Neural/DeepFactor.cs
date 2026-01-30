@@ -570,7 +570,20 @@ public class DeepFactor<T> : ForecastingModelBase<T>
             DropoutRate = _dropout
         };
 
-        return new DeepFactor<T>(Architecture, options);
+        if (_useNativeMode)
+        {
+            return new DeepFactor<T>(Architecture, options);
+        }
+        else
+        {
+            if (string.IsNullOrEmpty(OnnxModelPath))
+            {
+                throw new InvalidOperationException(
+                    "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
+            }
+            // Null-forgiving operator is safe here: we just validated OnnxModelPath is not null/empty
+            return new DeepFactor<T>(Architecture, OnnxModelPath!, options);
+        }
     }
 
     /// <summary>
