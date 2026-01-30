@@ -187,8 +187,17 @@ public class NeuralStressTest<T> : RiskModelBase<T>
         // In this implementation, the model PREDICTS the impact of scenarios
         // So input is Portfolio Weights + Market State?
         // Or input is Market State and output is Scenario Impacts?
+
+        // Ensure input is at least 2D - reshape if 1D
+        Tensor<T> processedInput = input;
+        if (input.Rank == 1)
+        {
+            // Reshape 1D [features] to 2D [1, features]
+            processedInput = input.Reshape(new[] { 1, input.Shape[0] });
+        }
+
         // We stick to standard Predict which outputs scenario impacts.
-        return Predict(input);
+        return Predict(processedInput);
     }
 
     #region NeuralNetworkBase Overrides

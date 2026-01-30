@@ -908,19 +908,44 @@ public class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
-        int totalSize = 1;
-        foreach (var dim in input.Shape)
-        {
-            totalSize *= dim;
-        }
+        // For DCRNN, we need to preserve temporal structure for GRU layers
+        // Expected input: [batch, sequence, features] or [batch, sequence, nodes, features]
+        // First layer (DenseLayer) expects: [batch * sequence, numNodes * numFeatures]
+        // GRU layers expect: [batch, sequence, hiddenDim]
 
-        var flattened = new Tensor<T>(new[] { totalSize });
-        for (int i = 0; i < totalSize && i < input.Data.Length; i++)
+        if (input.Rank == 2)
         {
-            flattened.Data.Span[i] = input.Data.Span[i];
+            // Already [sequence, features] - add batch dimension
+            return input.Reshape(new[] { 1, input.Shape[0], input.Shape[1] });
         }
+        else if (input.Rank == 3)
+        {
+            // [batch, sequence, features] - flatten for first dense layer
+            int batchSize = input.Shape[0];
+            int seqLength = input.Shape[1];
+            int features = input.Shape[2];
 
-        return flattened;
+            // Reshape to [batch * seqLength, features] for dense layer
+            return input.Reshape(new[] { batchSize * seqLength, features });
+        }
+        else if (input.Rank == 4)
+        {
+            // [batch, sequence, nodes, features] - flatten nodes and features
+            int batchSize = input.Shape[0];
+            int seqLength = input.Shape[1];
+            int nodes = input.Shape[2];
+            int features = input.Shape[3];
+
+            // Reshape to [batch * seqLength, nodes * features] for dense layer
+            return input.Reshape(new[] { batchSize * seqLength, nodes * features });
+        }
+        else
+        {
+            // Fallback: flatten to 2D preserving first dimension as batch
+            int batchDim = input.Shape[0];
+            int restDim = input.Length / batchDim;
+            return input.Reshape(new[] { batchDim, restDim });
+        }
     }
 
     /// <summary>

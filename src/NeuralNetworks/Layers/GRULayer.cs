@@ -618,7 +618,23 @@ public class GRULayer<T> : LayerBase<T>
         int batchSize;
         int sequenceLength;
 
-        if (rank == 2)
+        if (rank == 1)
+        {
+            // 1D input [total] -> treat as single batch, single sequence step
+            batchSize = 1;
+            sequenceLength = 1;
+            int totalSize = input.Shape[0];
+            int inferredInputSize = Math.Min(totalSize, _inputSize);
+
+            // Reshape to [1, 1, inputSize], padding if needed
+            var data = new T[_inputSize];
+            for (int i = 0; i < inferredInputSize && i < input.Length; i++)
+            {
+                data[i] = input.Data.Span[i];
+            }
+            input3D = new Tensor<T>(new[] { 1, 1, _inputSize }, new Vector<T>(data));
+        }
+        else if (rank == 2)
         {
             // 2D input [sequenceLength, inputSize] -> add batch dim
             batchSize = 1;
