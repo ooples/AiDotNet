@@ -323,6 +323,15 @@ public class Timer<T> : ForecastingModelBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
+        // Validate numFeatures before any assignments to prevent invalid layer shapes
+        if (numFeatures <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numFeatures),
+                numFeatures,
+                "numFeatures must be greater than 0. Timer requires at least one input feature.");
+        }
+
         options ??= new TimerOptions<T>();
 
         _useNativeMode = true;
@@ -580,6 +589,11 @@ public class Timer<T> : ForecastingModelBase<T>
         _useAutoregressiveDecoding = reader.ReadBoolean();
         _generationTemperature = reader.ReadDouble();
         _numFeatures = reader.ReadInt32();
+
+        // Recompute _numPatches from deserialized values to keep derived field in sync
+        // Use same logic as constructor: (_contextLength - _patchLength) / _patchStride + 1
+        int computedPatches = (_contextLength - _patchLength) / _patchStride + 1;
+        _numPatches = Math.Max(0, computedPatches); // Clamp to zero if negative
     }
 
     #endregion
@@ -866,6 +880,44 @@ public class Timer<T> : ForecastingModelBase<T>
                 $"Got input shape [{string.Join(", ", input.Shape)}].");
         }
 
+        // Validate that normalized input sequence length matches _contextLength
+        // The shifting loop uses _contextLength to index into currentInput.Data.Span
+        int actualSeqLength = normalizedInput.Shape[1];
+        if (actualSeqLength != _contextLength)
+        {
+            // Handle mismatch: pad/truncate to _contextLength or throw
+            if (actualSeqLength < _contextLength)
+            {
+                // Pad with zeros at the beginning
+                var paddedInput = new Tensor<T>(new[] { 1, _contextLength, features });
+                int offset = _contextLength - actualSeqLength;
+                for (int t = 0; t < actualSeqLength; t++)
+                {
+                    for (int f = 0; f < features; f++)
+                    {
+                        paddedInput.Data.Span[(offset + t) * features + f] = normalizedInput.Data.Span[t * features + f];
+                    }
+                }
+                normalizedInput = paddedInput;
+                seqLen = _contextLength;
+            }
+            else
+            {
+                // Truncate to last _contextLength elements
+                var truncatedInput = new Tensor<T>(new[] { 1, _contextLength, features });
+                int offset = actualSeqLength - _contextLength;
+                for (int t = 0; t < _contextLength; t++)
+                {
+                    for (int f = 0; f < features; f++)
+                    {
+                        truncatedInput.Data.Span[t * features + f] = normalizedInput.Data.Span[(offset + t) * features + f];
+                    }
+                }
+                normalizedInput = truncatedInput;
+                seqLen = _contextLength;
+            }
+        }
+
         var result = new Tensor<T>(new[] { 1, steps, 1 });
         var currentInput = normalizedInput;
         var rand = RandomHelper.CreateSecureRandom();
@@ -939,6 +991,26 @@ public class Timer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> GenerateQuantilePredictions(Tensor<T> input, double[] quantiles)
     {
+        // Validate quantiles input
+        if (quantiles is null || quantiles.Length == 0)
+        {
+            throw new ArgumentException(
+                "GenerateQuantilePredictions requires non-null, non-empty quantiles array.",
+                nameof(quantiles));
+        }
+
+        // Validate each quantile is within [0, 1]
+        for (int i = 0; i < quantiles.Length; i++)
+        {
+            if (quantiles[i] < 0.0 || quantiles[i] > 1.0)
+            {
+                throw new ArgumentException(
+                    $"GenerateQuantilePredictions: quantile at index {i} is {quantiles[i]}, " +
+                    $"but must be within [0, 1].",
+                    nameof(quantiles));
+            }
+        }
+
         int numSamples = 100;
         var samples = new List<Tensor<T>>();
         var rand = RandomHelper.CreateSecureRandom();
@@ -980,11 +1052,24 @@ public class Timer<T> : ForecastingModelBase<T>
                 }
             }
 
+            // Handle case where Forward returns fewer than _forecastHorizon values
+            if (values.Count == 0)
+            {
+                // No samples available for this time step - fill with NaN/zero
+                for (int q = 0; q < quantiles.Length; q++)
+                {
+                    result.Data.Span[t * quantiles.Length + q] = NumOps.Zero;
+                }
+                continue;
+            }
+
             values.Sort();
 
             for (int q = 0; q < quantiles.Length; q++)
             {
-                int idx = Math.Min((int)(quantiles[q] * values.Count), values.Count - 1);
+                // Use safe clamping to avoid out-of-range indices
+                int idx = (int)(quantiles[q] * values.Count);
+                idx = Math.Max(0, Math.Min(idx, values.Count - 1));
                 result.Data.Span[t * quantiles.Length + q] = NumOps.FromDouble(values[idx]);
             }
         }
@@ -1072,6 +1157,14 @@ public class Timer<T> : ForecastingModelBase<T>
             throw new InvalidOperationException(
                 $"ShiftInputWithPredictions currently supports a single univariate series with shape [context_length]. " +
                 $"Got input shape [{string.Join(", ", input.Shape)}] with numFeatures={_numFeatures}.");
+        }
+
+        // Validate input length matches expected _contextLength
+        if (input.Length != _contextLength)
+        {
+            throw new InvalidOperationException(
+                $"ShiftInputWithPredictions: input length ({input.Length}) does not match expected " +
+                $"context length ({_contextLength}). Ensure input tensor has shape [_contextLength].");
         }
 
         var result = new Tensor<T>(input.Shape);

@@ -160,6 +160,21 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
         for (int i = 0; i < texts.Length; i++)
         {
             var tokenIds = Tokenize(texts[i]);
+
+            // Guard against empty tokenIds - if Tokenize returns empty, short-circuit
+            // with an "unknown" result instead of creating a [1,0] Tensor
+            if (tokenIds.Length == 0)
+            {
+                results[i] = new SentimentResult<T>
+                {
+                    OriginalText = texts[i],
+                    PredictedClass = "unknown",
+                    Confidence = NumOps.Zero,
+                    ClassProbabilities = new Dictionary<string, T>()
+                };
+                continue;
+            }
+
             // Create a 2D tensor [1, sequence_length] since NLP models expect batch dimension
             var tokenVector = new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray());
             var inputTensor = new Tensor<T>(new[] { 1, tokenIds.Length }, tokenVector);
@@ -272,7 +287,8 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
         metrics["MaxSequenceLength"] = NumOps.FromDouble(MaxSequenceLength);
         metrics["VocabularySize"] = NumOps.FromDouble(VocabularySize);
         metrics["HiddenDimension"] = NumOps.FromDouble(HiddenDimension);
-        
+        metrics["NumSentimentClasses"] = NumOps.FromDouble(NumSentimentClasses);
+
         return metrics;
     }
 }

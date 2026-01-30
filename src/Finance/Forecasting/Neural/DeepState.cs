@@ -894,8 +894,23 @@ public class DeepState<T> : ForecastingModelBase<T>
         }
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+
+        // Defensive check: verify OnnxSession.InputMetadata is not null/empty
         var inputMeta = OnnxSession.InputMetadata;
+        if (inputMeta is null || inputMeta.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "ForecastOnnx: OnnxSession.InputMetadata is null or empty. " +
+                "The ONNX model appears to be malformed or missing input definitions.");
+        }
+
         string inputName = inputMeta.Keys.First();
+        if (string.IsNullOrEmpty(inputName))
+        {
+            throw new InvalidOperationException(
+                "ForecastOnnx: inputName from OnnxSession.InputMetadata is null or empty. " +
+                "The ONNX model has an invalid input name.");
+        }
 
         var inputs = new List<NamedOnnxValue>
         {
@@ -903,7 +918,30 @@ public class DeepState<T> : ForecastingModelBase<T>
         };
 
         using var results = OnnxSession.Run(inputs);
-        var outputTensor = results.First().AsTensor<float>();
+
+        // Defensive check: verify results is not null/empty
+        if (results is null || !results.Any())
+        {
+            throw new InvalidOperationException(
+                "ForecastOnnx: OnnxSession.Run returned null or empty results. " +
+                "The ONNX model did not produce any output.");
+        }
+
+        var firstResult = results.First();
+        if (firstResult is null)
+        {
+            throw new InvalidOperationException(
+                "ForecastOnnx: results.First() is null. " +
+                "The ONNX model output is malformed.");
+        }
+
+        var outputTensor = firstResult.AsTensor<float>();
+        if (outputTensor is null)
+        {
+            throw new InvalidOperationException(
+                "ForecastOnnx: outputTensor from results.First().AsTensor<float>() is null. " +
+                "The ONNX model output could not be converted to a float tensor.");
+        }
 
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
