@@ -65,14 +65,25 @@ public static class DeserializationHelper
             throw new InvalidOperationException($"Type for layer {layerType} was registered as null.");
         }
 
-        // Validate input/output shapes
-        if (inputShape is null || inputShape.Length == 0)
+        // Determine if this is a shape-agnostic layer (layers that don't require specific input shapes)
+        // These layers adapt to whatever input shape they receive at runtime
+        Type genericDefForValidation = openGenericType.IsGenericTypeDefinition
+            ? openGenericType
+            : (openGenericType.IsGenericType ? openGenericType.GetGenericTypeDefinition() : openGenericType);
+
+        bool isShapeAgnosticLayer = genericDefForValidation == typeof(AiDotNet.NeuralNetworks.Layers.DropoutLayer<>);
+
+        // Validate input/output shapes (skip for shape-agnostic layers)
+        if (!isShapeAgnosticLayer)
         {
-            throw new ArgumentException("Input shape must have at least one dimension.", nameof(inputShape));
-        }
-        if (outputShape is null || outputShape.Length == 0)
-        {
-            throw new ArgumentException("Output shape must have at least one dimension.", nameof(outputShape));
+            if (inputShape is null || inputShape.Length == 0)
+            {
+                throw new ArgumentException("Input shape must have at least one dimension.", nameof(inputShape));
+            }
+            if (outputShape is null || outputShape.Length == 0)
+            {
+                throw new ArgumentException("Output shape must have at least one dimension.", nameof(outputShape));
+            }
         }
 
         // Close the generic type with the actual type parameter T
