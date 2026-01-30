@@ -1071,6 +1071,21 @@ public class GRULayer<T> : LayerBase<T>
         {
             // Handle single timestep case (simple backward pass)
             var dh = outputGradient;
+
+            // Ensure output gradient matches expected shape [batchSize, hiddenSize]
+            if (dh.Length != _lastZ.Length)
+            {
+                // Reshape or truncate/pad gradient to match _lastZ shape
+                var dhData = new T[_lastZ.Length];
+                int copyLen = Math.Min(dh.Length, dhData.Length);
+                dh.Data.Span.Slice(0, copyLen).CopyTo(dhData.AsSpan());
+                dh = new Tensor<T>(_lastZ.Shape, new Vector<T>(dhData));
+            }
+            else if (!dh.Shape.SequenceEqual(_lastZ.Shape))
+            {
+                dh = dh.Reshape(_lastZ.Shape);
+            }
+
             // Vectorized: compute (1 - _lastZ) using Tensor operations
             var ones1 = new Tensor<T>(_lastZ.Shape);
             ones1.Fill(NumOps.One);

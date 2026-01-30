@@ -425,9 +425,18 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
     /// </remarks>
     public Dictionary<string, T> GetVolatilityMetrics()
     {
-        var metrics = GetFinancialMetrics();
-        metrics["NumAssets"] = NumOps.FromDouble(_numAssets);
-        metrics["LookbackWindow"] = NumOps.FromDouble(_lookbackWindow);
+        // Build base metrics directly to avoid infinite recursion with GetFinancialMetrics
+        var metrics = new Dictionary<string, T>
+        {
+            ["NumAssets"] = NumOps.FromDouble(_numAssets),
+            ["LookbackWindow"] = NumOps.FromDouble(_lookbackWindow),
+            ["ForecastHorizon"] = NumOps.FromDouble(PredictionHorizon),
+            ["HiddenSize"] = NumOps.FromDouble(_hiddenSize),
+            ["NumHeads"] = NumOps.FromDouble(_numHeads),
+            ["NumLayers"] = NumOps.FromDouble(_numLayers),
+            ["ParameterCount"] = NumOps.FromDouble(ParameterCount)
+        };
+
         return metrics;
     }
 

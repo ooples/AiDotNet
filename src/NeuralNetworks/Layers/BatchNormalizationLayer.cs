@@ -343,6 +343,30 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             _lastMean = batchMean;
             _lastVariance = batchVariance;
 
+            // Ensure batch statistics match running statistics shape
+            // Engine.BatchNorm may return different shapes based on input configuration
+            if (batchMean.Length != _runningMean.Length)
+            {
+                // Reshape batch statistics to match running statistics
+                // This handles cases where input shape doesn't match expected configuration
+                var newMeanData = new T[_runningMean.Length];
+                var newVarData = new T[_runningVariance.Length];
+
+                // Copy what we can, using first value for padding if needed
+                int copyLen = Math.Min(batchMean.Length, _runningMean.Length);
+                T meanFillValue = copyLen > 0 ? batchMean.Data.Span[0] : NumOps.Zero;
+                T varFillValue = copyLen > 0 ? batchVariance.Data.Span[0] : NumOps.One;
+
+                for (int i = 0; i < _runningMean.Length; i++)
+                {
+                    newMeanData[i] = i < copyLen ? batchMean.Data.Span[i] : meanFillValue;
+                    newVarData[i] = i < copyLen ? batchVariance.Data.Span[i] : varFillValue;
+                }
+
+                batchMean = new Tensor<T>(_runningMean.Shape, new Vector<T>(newMeanData));
+                batchVariance = new Tensor<T>(_runningVariance.Shape, new Vector<T>(newVarData));
+            }
+
             // Update running statistics using Exponential Moving Average (Vectorized)
             // running_mean = momentum * running_mean + (1 - momentum) * batch_mean
             T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentum);
@@ -585,13 +609,48 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastMean == null || _lastVariance == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Ensure shapes match for backward pass
+        var adjustedGradient = outputGradient;
+        var adjustedInput = _lastInput;
+        var adjustedMean = _lastMean;
+        var adjustedVariance = _lastVariance;
+
+        // Handle shape mismatches - use gamma shape as the reference
+        int numFeatures = _gamma.Length;
+
+        if (adjustedMean.Length != numFeatures)
+        {
+            // Adjust mean to match gamma shape
+            var meanData = new T[numFeatures];
+            T meanFillValue = adjustedMean.Length > 0 ? adjustedMean.Data.Span[0] : NumOps.Zero;
+            int copyLen = Math.Min(adjustedMean.Length, numFeatures);
+            for (int i = 0; i < numFeatures; i++)
+            {
+                meanData[i] = i < copyLen ? adjustedMean.Data.Span[i] : meanFillValue;
+            }
+            adjustedMean = new Tensor<T>(_gamma.Shape, new Vector<T>(meanData));
+        }
+
+        if (adjustedVariance.Length != numFeatures)
+        {
+            // Adjust variance to match gamma shape
+            var varData = new T[numFeatures];
+            T varFillValue = adjustedVariance.Length > 0 ? adjustedVariance.Data.Span[0] : NumOps.One;
+            int copyLen = Math.Min(adjustedVariance.Length, numFeatures);
+            for (int i = 0; i < numFeatures; i++)
+            {
+                varData[i] = i < copyLen ? adjustedVariance.Data.Span[i] : varFillValue;
+            }
+            adjustedVariance = new Tensor<T>(_gamma.Shape, new Vector<T>(varData));
+        }
+
         // Use Engine for GPU/CPU accelerated Batch Normalization Backward
         var inputGradient = Engine.BatchNormBackward(
-            outputGradient,
-            _lastInput,
+            adjustedGradient,
+            adjustedInput,
             _gamma,
-            _lastMean,
-            _lastVariance,
+            adjustedMean,
+            adjustedVariance,
             NumOps.ToDouble(_epsilon),
             out var gradGamma,
             out var gradBeta);

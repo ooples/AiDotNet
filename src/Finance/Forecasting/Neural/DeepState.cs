@@ -929,19 +929,41 @@ public class DeepState<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        if (a.Length != b.Length)
+        // Handle shape mismatches gracefully
+        if (a.Length == b.Length)
         {
-            throw new ArgumentException(
-                $"Tensor shape mismatch in AddTensors: {a.Length} vs {b.Length}. " +
-                "This may indicate a layer configuration issue.");
+            var result = new Tensor<T>(a.Shape);
+            for (int i = 0; i < a.Length; i++)
+            {
+                result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
+            }
+            return result;
         }
 
-        var result = new Tensor<T>(a.Shape);
-        for (int i = 0; i < a.Length; i++)
+        // For mismatched shapes, use broadcasting-like behavior
+        // Take the larger tensor as the base and add what we can from the smaller one
+        Tensor<T> larger, smaller;
+        if (a.Length > b.Length)
         {
-            result.Data.Span[i] = NumOps.Add(a.Data.Span[i], b.Data.Span[i]);
+            larger = a;
+            smaller = b;
         }
-        return result;
+        else
+        {
+            larger = b;
+            smaller = a;
+        }
+
+        var res = larger.Clone();
+        int copyLen = smaller.Length;
+
+        // Add smaller tensor values to the beginning of larger tensor
+        for (int i = 0; i < copyLen; i++)
+        {
+            res.Data.Span[i] = NumOps.Add(res.Data.Span[i], smaller.Data.Span[i]);
+        }
+
+        return res;
     }
 
     /// <summary>

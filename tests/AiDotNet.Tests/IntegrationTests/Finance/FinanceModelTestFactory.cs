@@ -8,6 +8,7 @@ using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
@@ -592,7 +593,11 @@ internal static class FinanceModelTestFactory
         int actionSize = Math.Max(1, GetIntOption(optionsInstance, "ActionSize") ?? 3);
 
         var actorArchitecture = FinanceTestHelpers.CreateArchitecture<T>(stateSize, actionSize);
-        var criticArchitecture = FinanceTestHelpers.CreateArchitecture<T>(stateSize, 1);
+
+        // SAC agents need critic input = state + action size (Q-network takes both as input)
+        bool isSACAgent = closedModelType.Name.Contains("SAC", StringComparison.OrdinalIgnoreCase);
+        int criticInputSize = isSACAgent ? stateSize + actionSize : stateSize;
+        var criticArchitecture = FinanceTestHelpers.CreateArchitecture<T>(criticInputSize, 1);
 
         var args = new object?[parameters.Length];
         for (int i = 0; i < parameters.Length; i++)
@@ -602,7 +607,8 @@ internal static class FinanceModelTestFactory
             {
                 string paramName = param.Name ?? string.Empty;
                 if (paramName.Contains("critic", StringComparison.OrdinalIgnoreCase)
-                    || paramName.Contains("value", StringComparison.OrdinalIgnoreCase))
+                    || paramName.Contains("value", StringComparison.OrdinalIgnoreCase)
+                    || paramName.Contains("secondary", StringComparison.OrdinalIgnoreCase))
                 {
                     args[i] = criticArchitecture;
                 }
@@ -994,6 +1000,9 @@ internal static class FinanceModelTestFactory
         SetNumeric(options, "InitialCapital", 10000.0);
         SetNumeric(options, "MaxPositionSize", 1.0);
 
+        // Set LossFunction for RL agents (required by ReinforcementLearningAgentBase)
+        SetLossFunction(options);
+
         SetBool(options, "UseInstanceNormalization", false);
         SetBool(options, "ChannelIndependent", true);
 
@@ -1115,5 +1124,44 @@ internal static class FinanceModelTestFactory
         {
             property.SetValue(options, value);
         }
+    }
+
+    private static void SetLossFunction(object options)
+    {
+        var property = options.GetType().GetProperty("LossFunction", BindingFlags.Public | BindingFlags.Instance);
+        if (property == null || !property.CanWrite || property.GetValue(options) != null)
+        {
+            // Property doesn't exist, can't be written, or already has a value
+            return;
+        }
+
+        var propertyType = property.PropertyType;
+        if (!propertyType.IsGenericType)
+        {
+            return;
+        }
+
+        // Get ILossFunction<T> generic argument to determine T
+        var genericDef = propertyType.GetGenericTypeDefinition();
+        if (genericDef != typeof(ILossFunction<>))
+        {
+            // Also handle nullable ILossFunction<T>?
+            var underlyingType = Nullable.GetUnderlyingType(propertyType);
+            if (underlyingType != null && underlyingType.IsGenericType)
+            {
+                genericDef = underlyingType.GetGenericTypeDefinition();
+                propertyType = underlyingType;
+            }
+
+            if (genericDef != typeof(ILossFunction<>))
+            {
+                return;
+            }
+        }
+
+        var typeArg = propertyType.GetGenericArguments()[0];
+        var lossFunctionType = typeof(MeanSquaredErrorLoss<>).MakeGenericType(typeArg);
+        var lossFunction = Activator.CreateInstance(lossFunctionType);
+        property.SetValue(options, lossFunction);
     }
 }

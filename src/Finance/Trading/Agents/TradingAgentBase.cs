@@ -316,7 +316,7 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
     /// </remarks>
     public virtual Dictionary<string, T> GetTradingMetrics()
     {
-        var baseMetrics = GetMetrics();
+        var baseMetrics = base.GetMetrics();
 
         // Add financial metrics
         baseMetrics["SharpeRatio"] = SharpeRatio;
