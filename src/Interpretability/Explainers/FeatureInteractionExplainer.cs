@@ -119,9 +119,19 @@ public class FeatureInteractionExplainer<T> : IGlobalExplainer<T, FeatureInterac
         EnsurePDCached(feature2Index);
         EnsurePD2DCached(feature1Index, feature2Index);
 
+        // The 2D cache is keyed by (min, max) so get the canonical ordering
+        int minIdx = Math.Min(feature1Index, feature2Index);
+        int maxIdx = Math.Max(feature1Index, feature2Index);
+
         var (grid1, pd1) = _pdCache[feature1Index];
         var (grid2, pd2) = _pdCache[feature2Index];
-        var pd2D = _pd2DCache[(Math.Min(feature1Index, feature2Index), Math.Max(feature1Index, feature2Index))];
+        var pd2D = _pd2DCache[(minIdx, maxIdx)];
+
+        // If feature indices are reversed from canonical order, swap pd1/pd2 to match 2D PD indexing
+        if (feature1Index > feature2Index)
+        {
+            (pd1, pd2) = (pd2, pd1);
+        }
 
         // Compute H-statistic
         double numerator = 0;
@@ -194,6 +204,13 @@ public class FeatureInteractionExplainer<T> : IGlobalExplainer<T, FeatureInterac
     /// <inheritdoc/>
     public FeatureInteractionResult<T> ExplainGlobal(Matrix<T> data)
     {
+        // Validate that passed data matches the training data dimensions
+        // Note: PD caches are built from _data set in constructor
+        if (data.Columns != _data.Columns)
+            throw new ArgumentException(
+                $"Data has {data.Columns} features but explainer was initialized with {_data.Columns} features.",
+                nameof(data));
+
         int numFeatures = data.Columns;
         var pairwiseH = new Dictionary<(int, int), T>();
         var overallH = new T[numFeatures];
