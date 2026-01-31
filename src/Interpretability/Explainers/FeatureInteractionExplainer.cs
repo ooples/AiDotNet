@@ -82,6 +82,8 @@ public class FeatureInteractionExplainer<T> : IGlobalExplainer<T, FeatureInterac
             throw new ArgumentException("Data must have at least one row.", nameof(data));
         if (gridSize < 2)
             throw new ArgumentException("Grid size must be at least 2.", nameof(gridSize));
+        if (featureNames != null && featureNames.Length != data.Columns)
+            throw new ArgumentException($"featureNames length ({featureNames.Length}) must match data.Columns ({data.Columns}).", nameof(featureNames));
 
         _gridSize = gridSize;
         _featureNames = featureNames;

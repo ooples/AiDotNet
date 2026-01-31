@@ -85,6 +85,8 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
 
         if (numFeatures < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(numFeatures));
+        if (featureNames != null && featureNames.Length != numFeatures)
+            throw new ArgumentException($"featureNames length ({featureNames.Length}) must match numFeatures ({numFeatures}).", nameof(featureNames));
 
         NumFeatures = numFeatures;
         _featureNames = featureNames;
@@ -328,6 +330,11 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
             if (Math.Abs(augmented[i, i]) > 1e-10)
             {
                 x[i] /= augmented[i, i];
+            }
+            else
+            {
+                // Near-singular matrix: set to NaN to indicate unreliable result
+                x[i] = double.NaN;
             }
         }
 

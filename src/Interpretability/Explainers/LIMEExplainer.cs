@@ -86,6 +86,10 @@ public class LIMEExplainer<T> : ILocalExplainer<T, LIMEExplanationResult<T>>
             throw new ArgumentException("Number of samples must be at least 1.", nameof(nSamples));
         if (kernelWidth <= 0)
             throw new ArgumentException("Kernel width must be positive.", nameof(kernelWidth));
+        if (featureNames != null && featureNames.Length != numFeatures)
+            throw new ArgumentException($"featureNames length ({featureNames.Length}) must match numFeatures ({numFeatures}).", nameof(featureNames));
+        if (featureStdDevs != null && featureStdDevs.Length != numFeatures)
+            throw new ArgumentException($"featureStdDevs length ({featureStdDevs.Length}) must match numFeatures ({numFeatures}).", nameof(featureStdDevs));
 
         NumFeatures = numFeatures;
         _nSamples = nSamples;
@@ -378,6 +382,11 @@ public class LIMEExplainer<T> : ILocalExplainer<T, LIMEExplanationResult<T>>
             if (Math.Abs(augmented[i, i]) > 1e-10)
             {
                 x[i] /= augmented[i, i];
+            }
+            else
+            {
+                // Near-singular matrix: set to NaN to indicate unreliable result
+                x[i] = double.NaN;
             }
         }
 

@@ -96,6 +96,10 @@ public class CounterfactualExplainer<T> : ILocalExplainer<T, CounterfactualExpla
             throw new ArgumentOutOfRangeException(nameof(maxIterations), "Max iterations must be at least 1.");
         if (stepSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(stepSize), "Step size must be positive.");
+        if (maxChanges < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxChanges), "Max changes must be at least 1.");
+        if (targetThreshold <= 0)
+            throw new ArgumentOutOfRangeException(nameof(targetThreshold), "Target threshold must be positive.");
         if (featureNames != null && featureNames.Length != numFeatures)
             throw new ArgumentException($"featureNames length ({featureNames.Length}) must match numFeatures ({numFeatures}).", nameof(featureNames));
         if (featureMins != null && featureMins.Length != numFeatures)
