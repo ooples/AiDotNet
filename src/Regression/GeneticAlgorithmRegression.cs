@@ -122,7 +122,9 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
         _normalizer = normalizer ?? new NoNormalizer<T, Matrix<T>, Vector<T>>();
         _featureSelector = featureSelector ?? new NoFeatureSelector<T, Matrix<T>>();
         _outlierRemoval = outlierRemoval ?? new NoOutlierRemoval<T, Matrix<T>, Vector<T>>();
-        _dataPreprocessor = dataPreprocessor ?? new DefaultDataPreprocessor<T, Matrix<T>, Vector<T>>(_normalizer, _featureSelector, _outlierRemoval);
+        // Note: outlierRemoval is kept for backward compatibility but is no longer passed to DefaultDataPreprocessor
+        // Outlier removal should now be configured via DataPreparationPipeline through AiModelBuilder.ConfigureDataPreparation()
+        _dataPreprocessor = dataPreprocessor ?? new DefaultDataPreprocessor<T, Matrix<T>, Vector<T>>(_normalizer, _featureSelector);
     }
 
     /// <summary>

@@ -65,3 +65,14 @@ public record Experience<T, TState, TAction>(
     /// </remarks>
     public double Priority { get; set; } = 1.0;
 }
+
+/// <summary>
+/// Simplified Experience record for Vector-based states and actions.
+/// </summary>
+/// <typeparam name="T">The numeric type.</typeparam>
+public record Experience<T>(
+    Vector<T> State,
+    Vector<T> Action,
+    T Reward,
+    Vector<T> NextState,
+    bool Done) : Experience<T, Vector<T>, Vector<T>>(State, Action, Reward, NextState, Done);

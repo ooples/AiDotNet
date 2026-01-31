@@ -525,7 +525,9 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     protected LayerBase(int[][] inputShapes, int[] outputShape)
     {
         InputShapes = inputShapes;
-        InputShape = inputShapes.Length == 1 ? inputShapes[0] : [];
+        // For multi-input layers, use the first input shape as the primary input shape
+        // This ensures GetInputShape() always returns a valid (non-empty) shape
+        InputShape = inputShapes.Length > 0 ? inputShapes[0] : [];
         OutputShape = outputShape;
         Parameters = Vector<T>.Empty();
     }
@@ -691,7 +693,8 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// For layers with multiple inputs, this returns just the first input shape.
     /// </para>
     /// </remarks>
-    public virtual int[] GetInputShape() => InputShape ?? InputShapes[0];
+    public virtual int[] GetInputShape() =>
+        InputShape != null && InputShape.Length > 0 ? InputShape : InputShapes[0];
 
     /// <summary>
     /// Gets all input shapes for this layer.
