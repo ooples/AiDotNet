@@ -1,492 +1,330 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 
 /// <summary>
-/// Recursive Feature Elimination with Cross-Validation to find optimal feature count.
+/// Recursive Feature Elimination with Cross-Validation (RFECV).
 /// </summary>
 /// <remarks>
 /// <para>
-/// RFECV performs RFE multiple times using cross-validation to determine the optimal
-/// number of features. It evaluates model performance at each step of elimination.
+/// RFECV uses cross-validation to find the optimal number of features.
+/// It performs RFE for different feature counts and selects the count
+/// that maximizes cross-validated performance.
 /// </para>
-/// <para>
-/// The algorithm:
-/// 1. For each fold, run RFE and record validation scores at each number of features
-/// 2. Average scores across folds
-/// 3. Select the number of features with best average score
-/// </para>
-/// <para><b>For Beginners:</b> RFECV automatically finds how many features to keep:
-/// - Regular RFE requires you to specify the number of features
-/// - RFECV tests different numbers and picks the best one
-/// - Uses cross-validation to avoid overfitting the feature selection
+/// <para><b>For Beginners:</b> Regular RFE requires you to specify how many
+/// features to keep. RFECV figures out the best number automatically by
+/// testing different counts and seeing which gives the best validation score.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class RFECV<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
-    private readonly int _minFeaturesToSelect;
+    private readonly int _minFeatures;
     private readonly int _step;
-    private readonly int _cv;
-    private readonly RFEImportanceMethod _importanceMethod;
-    private readonly Func<double[], double[], double>? _scoringFunc;
+    private readonly int _nFolds;
+    private readonly int? _randomState;
+    private readonly Func<Matrix<T>, Vector<T>, double>? _scoringFunc;
+    private readonly Func<Matrix<T>, Vector<T>, double[]>? _importanceFunc;
 
-    // Fitted parameters
-    private int _nFeaturesSelected;
     private double[]? _cvScores;
-    private int[]? _ranking;
-    private bool[]? _supportMask;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
+    private int _optimalFeatureCount;
 
-    /// <summary>
-    /// Gets the number of features selected.
-    /// </summary>
-    public int NFeatures => _nFeaturesSelected;
-
-    /// <summary>
-    /// Gets the cross-validation scores at each number of features.
-    /// </summary>
+    public int MinFeatures => _minFeatures;
     public double[]? CVScores => _cvScores;
-
-    /// <summary>
-    /// Gets the feature ranking.
-    /// </summary>
-    public int[]? Ranking => _ranking;
-
-    /// <summary>
-    /// Gets the indices of selected features.
-    /// </summary>
     public int[]? SelectedIndices => _selectedIndices;
-
-    /// <summary>
-    /// Gets whether this transformer supports inverse transformation.
-    /// </summary>
+    public int OptimalFeatureCount => _optimalFeatureCount;
     public override bool SupportsInverseTransform => false;
 
-    /// <summary>
-    /// Creates a new instance of <see cref="RFECV{T}"/>.
-    /// </summary>
-    /// <param name="minFeaturesToSelect">Minimum number of features to consider. Defaults to 1.</param>
-    /// <param name="step">Number of features to remove at each iteration. Defaults to 1.</param>
-    /// <param name="cv">Number of cross-validation folds. Defaults to 5.</param>
-    /// <param name="importanceMethod">Method for computing feature importance. Defaults to Correlation.</param>
-    /// <param name="scoringFunc">Custom scoring function (y_true, y_pred) => score. Null for R² score.</param>
-    /// <param name="columnIndices">The column indices to evaluate, or null for all columns.</param>
     public RFECV(
-        int minFeaturesToSelect = 1,
+        Func<Matrix<T>, Vector<T>, double>? scoringFunc = null,
+        Func<Matrix<T>, Vector<T>, double[]>? importanceFunc = null,
+        int minFeatures = 1,
         int step = 1,
-        int cv = 5,
-        RFEImportanceMethod importanceMethod = RFEImportanceMethod.Correlation,
-        Func<double[], double[], double>? scoringFunc = null,
+        int nFolds = 5,
+        int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
-        if (minFeaturesToSelect < 1)
-        {
-            throw new ArgumentException("Minimum features to select must be at least 1.", nameof(minFeaturesToSelect));
-        }
-
+        if (minFeatures < 1)
+            throw new ArgumentException("Minimum features must be at least 1.", nameof(minFeatures));
         if (step < 1)
-        {
             throw new ArgumentException("Step must be at least 1.", nameof(step));
-        }
+        if (nFolds < 2)
+            throw new ArgumentException("Number of folds must be at least 2.", nameof(nFolds));
 
-        if (cv < 2)
-        {
-            throw new ArgumentException("Number of CV folds must be at least 2.", nameof(cv));
-        }
-
-        _minFeaturesToSelect = minFeaturesToSelect;
-        _step = step;
-        _cv = cv;
-        _importanceMethod = importanceMethod;
         _scoringFunc = scoringFunc;
+        _importanceFunc = importanceFunc;
+        _minFeatures = minFeatures;
+        _step = step;
+        _nFolds = nFolds;
+        _randomState = randomState;
     }
 
-    /// <summary>
-    /// Fits the selector (requires target via specialized Fit method).
-    /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
-            "RFECV requires target values for fitting. Use Fit(Matrix<T> data, Vector<T> target) instead.");
+            "RFECV requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
-    /// <summary>
-    /// Fits RFECV using cross-validation.
-    /// </summary>
-    /// <param name="data">The feature matrix.</param>
-    /// <param name="target">The target values.</param>
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
-        {
-            throw new ArgumentException("Target length must match the number of rows in data.");
-        }
+            throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
 
-        // Convert to double arrays
-        var X = new double[n, p];
-        var y = new double[n];
+        var random = _randomState.HasValue
+            ? RandomHelper.CreateSeededRandom(_randomState.Value)
+            : RandomHelper.CreateSecureRandom();
 
+        // Generate fold indices
+        var indices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).ToArray();
+        var foldIndices = new int[n];
         for (int i = 0; i < n; i++)
+            foldIndices[indices[i]] = i % _nFolds;
+
+        // Track which features are still active
+        var activeFeatures = Enumerable.Range(0, p).ToList();
+        var featureRankings = new int[p];
+        var cvScoresList = new List<double>();
+        int currentRank = p;
+
+        while (activeFeatures.Count >= _minFeatures)
         {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
+            // Cross-validation for current feature set
+            double totalScore = 0;
+
+            for (int fold = 0; fold < _nFolds; fold++)
             {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+                var trainIdx = new List<int>();
+                var valIdx = new List<int>();
+
+                for (int i = 0; i < n; i++)
+                {
+                    if (foldIndices[i] == fold)
+                        valIdx.Add(i);
+                    else
+                        trainIdx.Add(i);
+                }
+
+                var trainData = ExtractSubset(data, trainIdx, activeFeatures);
+                var trainTarget = ExtractVector(target, trainIdx);
+                var valData = ExtractSubset(data, valIdx, activeFeatures);
+                var valTarget = ExtractVector(target, valIdx);
+
+                double score = EvaluateScore(trainData, trainTarget, valData, valTarget);
+                totalScore += score;
+            }
+
+            cvScoresList.Add(totalScore / _nFolds);
+
+            if (activeFeatures.Count <= _minFeatures)
+                break;
+
+            // Get feature importances and eliminate least important
+            var importances = GetImportances(data, target, activeFeatures, n);
+            int nToRemove = Math.Min(_step, activeFeatures.Count - _minFeatures);
+
+            var toRemove = importances
+                .Select((imp, idx) => (Importance: imp, FeatureIdx: activeFeatures[idx]))
+                .OrderBy(x => x.Importance)
+                .Take(nToRemove)
+                .Select(x => x.FeatureIdx)
+                .ToList();
+
+            foreach (int f in toRemove)
+            {
+                featureRankings[f] = currentRank--;
+                activeFeatures.Remove(f);
             }
         }
 
-        // Generate CV fold indices
-        var foldIndices = GenerateCVFolds(n, _cv);
+        // Assign remaining features rank 1
+        foreach (int f in activeFeatures)
+            featureRankings[f] = 1;
 
-        // Determine number of feature counts to evaluate
-        int maxFeatures = p;
-        var featureCounts = new List<int>();
-        int nf = maxFeatures;
-        while (nf >= _minFeaturesToSelect)
+        _cvScores = cvScoresList.ToArray();
+
+        // Find optimal feature count
+        int bestIdx = 0;
+        double bestScore = _cvScores[0];
+        for (int i = 1; i < _cvScores.Length; i++)
         {
-            featureCounts.Add(nf);
-            nf -= _step;
-        }
-        if (featureCounts.Count == 0 || featureCounts[featureCounts.Count - 1] != _minFeaturesToSelect)
-        {
-            featureCounts.Add(_minFeaturesToSelect);
-        }
-        featureCounts.Reverse();
-
-        // Store scores for each feature count
-        var scoresByFeatureCount = new Dictionary<int, List<double>>();
-        foreach (int fc in featureCounts)
-        {
-            scoresByFeatureCount[fc] = new List<double>();
-        }
-
-        // Cross-validation
-        for (int fold = 0; fold < _cv; fold++)
-        {
-            var (trainIdx, testIdx) = foldIndices[fold];
-
-            // Extract train/test data
-            var (XTrain, yTrain) = ExtractSubset(X, y, trainIdx);
-            var (XTest, yTest) = ExtractSubset(X, y, testIdx);
-
-            // Run RFE on training data
-            var rfeResult = RunRFE(XTrain, yTrain, _minFeaturesToSelect);
-
-            // Evaluate at each feature count
-            foreach (int nFeatures in featureCounts)
+            if (_cvScores[i] > bestScore)
             {
-                var selectedFeatures = GetTopFeatures(rfeResult, nFeatures);
-                double score = EvaluateFeatures(XTrain, yTrain, XTest, yTest, selectedFeatures);
-                scoresByFeatureCount[nFeatures].Add(score);
+                bestScore = _cvScores[i];
+                bestIdx = i;
             }
         }
 
-        // Average scores and find optimal
-        _cvScores = new double[featureCounts.Count];
-        double bestScore = double.NegativeInfinity;
-        int bestNFeatures = _minFeaturesToSelect;
+        _optimalFeatureCount = p - bestIdx * _step;
+        if (_optimalFeatureCount < _minFeatures)
+            _optimalFeatureCount = _minFeatures;
 
-        for (int i = 0; i < featureCounts.Count; i++)
-        {
-            int nFeatures = featureCounts[i];
-            double avgScore = scoresByFeatureCount[nFeatures].Average();
-            _cvScores[i] = avgScore;
-
-            if (avgScore > bestScore)
-            {
-                bestScore = avgScore;
-                bestNFeatures = nFeatures;
-            }
-        }
-
-        _nFeaturesSelected = bestNFeatures;
-
-        // Final RFE on full data
-        var finalRfeResult = RunRFE(X, y, _minFeaturesToSelect);
-        _ranking = finalRfeResult;
-
-        // Create support mask and selected indices
-        _selectedIndices = GetTopFeatures(finalRfeResult, _nFeaturesSelected);
-        _supportMask = new bool[p];
-        foreach (int idx in _selectedIndices)
-        {
-            _supportMask[idx] = true;
-        }
+        // Select features with rank <= optimal count
+        _selectedIndices = featureRankings
+            .Select((rank, idx) => (Rank: rank, Index: idx))
+            .Where(x => x.Rank <= _optimalFeatureCount)
+            .OrderBy(x => x.Index)
+            .Select(x => x.Index)
+            .ToArray();
 
         IsFitted = true;
     }
 
-    private List<(int[] Train, int[] Test)> GenerateCVFolds(int n, int nFolds)
+    private Matrix<T> ExtractSubset(Matrix<T> data, List<int> rows, List<int> cols)
     {
-        var folds = new List<(int[], int[])>();
-        int foldSize = n / nFolds;
-        var indices = Enumerable.Range(0, n).ToArray();
-
-        for (int i = 0; i < nFolds; i++)
-        {
-            int start = i * foldSize;
-            int end = (i == nFolds - 1) ? n : (i + 1) * foldSize;
-
-            var testIdx = indices.Skip(start).Take(end - start).ToArray();
-            var trainIdx = indices.Where((_, idx) => idx < start || idx >= end).ToArray();
-            folds.Add((trainIdx, testIdx));
-        }
-
-        return folds;
+        var result = new T[rows.Count, cols.Count];
+        for (int i = 0; i < rows.Count; i++)
+            for (int j = 0; j < cols.Count; j++)
+                result[i, j] = data[rows[i], cols[j]];
+        return new Matrix<T>(result);
     }
 
-    private (double[,] X, double[] y) ExtractSubset(double[,] X, double[] y, int[] indices)
+    private Vector<T> ExtractVector(Vector<T> vec, List<int> indices)
     {
-        int n = indices.Length;
-        int p = X.GetLength(1);
-        var XSub = new double[n, p];
-        var ySub = new double[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            ySub[i] = y[indices[i]];
-            for (int j = 0; j < p; j++)
-            {
-                XSub[i, j] = X[indices[i], j];
-            }
-        }
-
-        return (XSub, ySub);
+        var result = new T[indices.Count];
+        for (int i = 0; i < indices.Count; i++)
+            result[i] = vec[indices[i]];
+        return new Vector<T>(result);
     }
 
-    private int[] RunRFE(double[,] X, double[] y, int minFeatures)
+    private double EvaluateScore(Matrix<T> trainData, Vector<T> trainTarget,
+        Matrix<T> valData, Vector<T> valTarget)
     {
-        int n = X.GetLength(0);
-        int p = X.GetLength(1);
+        if (_scoringFunc is not null)
+            return _scoringFunc(valData, valTarget);
 
-        var ranking = new int[p];
-        var remaining = new HashSet<int>(Enumerable.Range(0, p));
-        int currentRank = p;
-
-        while (remaining.Count > minFeatures)
-        {
-            var importances = ComputeImportances(X, y, remaining.ToArray(), n);
-
-            int nToRemove = Math.Min(_step, remaining.Count - minFeatures);
-            var toRemove = remaining
-                .OrderBy(i => importances[i])
-                .Take(nToRemove)
-                .ToArray();
-
-            foreach (int idx in toRemove)
-            {
-                ranking[idx] = currentRank--;
-                remaining.Remove(idx);
-            }
-        }
-
-        foreach (int idx in remaining)
-        {
-            ranking[idx] = 1;
-        }
-
-        return ranking;
+        // Default: correlation-based score
+        return ComputeCorrelationScore(trainData, trainTarget, valData, valTarget);
     }
 
-    private double[] ComputeImportances(double[,] X, double[] y, int[] featureIndices, int n)
+    private double ComputeCorrelationScore(Matrix<T> trainData, Vector<T> trainTarget,
+        Matrix<T> valData, Vector<T> valTarget)
     {
-        var importances = new double[X.GetLength(1)];
+        int p = trainData.Columns;
+        int nTrain = trainData.Rows;
 
-        foreach (int j in featureIndices)
+        double totalCorr = 0;
+        for (int j = 0; j < p; j++)
         {
-            double xMean = 0, yMean = y.Average();
-            for (int i = 0; i < n; i++)
+            double xMean = 0, yMean = 0;
+            for (int i = 0; i < nTrain; i++)
             {
-                xMean += X[i, j];
+                xMean += NumOps.ToDouble(trainData[i, j]);
+                yMean += NumOps.ToDouble(trainTarget[i]);
             }
-            xMean /= n;
+            xMean /= nTrain;
+            yMean /= nTrain;
 
             double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < nTrain; i++)
             {
-                double dx = X[i, j] - xMean;
-                double dy = y[i] - yMean;
+                double dx = NumOps.ToDouble(trainData[i, j]) - xMean;
+                double dy = NumOps.ToDouble(trainTarget[i]) - yMean;
                 ssXY += dx * dy;
                 ssXX += dx * dx;
                 ssYY += dy * dy;
             }
 
             if (ssXX > 1e-10 && ssYY > 1e-10)
+                totalCorr += Math.Abs(ssXY / Math.Sqrt(ssXX * ssYY));
+        }
+
+        return totalCorr / p;
+    }
+
+    private double[] GetImportances(Matrix<T> data, Vector<T> target, List<int> activeFeatures, int n)
+    {
+        if (_importanceFunc is not null)
+        {
+            var subsetData = ExtractSubset(data, Enumerable.Range(0, n).ToList(), activeFeatures);
+            return _importanceFunc(subsetData, target);
+        }
+
+        // Default: absolute correlation
+        var importances = new double[activeFeatures.Count];
+        double yMean = 0;
+        for (int i = 0; i < n; i++)
+            yMean += NumOps.ToDouble(target[i]);
+        yMean /= n;
+
+        for (int j = 0; j < activeFeatures.Count; j++)
+        {
+            int f = activeFeatures[j];
+            double xMean = 0;
+            for (int i = 0; i < n; i++)
+                xMean += NumOps.ToDouble(data[i, f]);
+            xMean /= n;
+
+            double ssXY = 0, ssXX = 0, ssYY = 0;
+            for (int i = 0; i < n; i++)
             {
-                double r = ssXY / Math.Sqrt(ssXX * ssYY);
-                importances[j] = Math.Abs(r);
+                double dx = NumOps.ToDouble(data[i, f]) - xMean;
+                double dy = NumOps.ToDouble(target[i]) - yMean;
+                ssXY += dx * dy;
+                ssXX += dx * dx;
+                ssYY += dy * dy;
             }
+
+            if (ssXX > 1e-10 && ssYY > 1e-10)
+                importances[j] = Math.Abs(ssXY / Math.Sqrt(ssXX * ssYY));
         }
 
         return importances;
     }
 
-    private int[] GetTopFeatures(int[] ranking, int nFeatures)
-    {
-        return Enumerable.Range(0, ranking.Length)
-            .Where(i => ranking[i] <= nFeatures)
-            .OrderBy(i => ranking[i])
-            .Take(nFeatures)
-            .OrderBy(i => i)
-            .ToArray();
-    }
-
-    private double EvaluateFeatures(double[,] XTrain, double[] yTrain, double[,] XTest, double[] yTest, int[] selectedFeatures)
-    {
-        int nTrain = XTrain.GetLength(0);
-        int nTest = XTest.GetLength(0);
-        int p = selectedFeatures.Length;
-
-        if (p == 0) return double.NegativeInfinity;
-
-        // Simple linear regression prediction
-        var yPred = new double[nTest];
-
-        // Compute mean of y_train as baseline
-        double yMean = yTrain.Average();
-
-        // For each selected feature, compute correlation-based prediction weight
-        var weights = new double[p];
-        for (int k = 0; k < p; k++)
-        {
-            int j = selectedFeatures[k];
-            double xMean = 0;
-            for (int i = 0; i < nTrain; i++)
-            {
-                xMean += XTrain[i, j];
-            }
-            xMean /= nTrain;
-
-            double ssXY = 0, ssXX = 0;
-            for (int i = 0; i < nTrain; i++)
-            {
-                double dx = XTrain[i, j] - xMean;
-                double dy = yTrain[i] - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-            }
-
-            weights[k] = ssXX > 1e-10 ? ssXY / ssXX : 0;
-        }
-
-        // Predict on test set
-        for (int i = 0; i < nTest; i++)
-        {
-            yPred[i] = yMean;
-            for (int k = 0; k < p; k++)
-            {
-                int j = selectedFeatures[k];
-                double xMean = 0;
-                for (int t = 0; t < nTrain; t++)
-                {
-                    xMean += XTrain[t, j];
-                }
-                xMean /= nTrain;
-
-                yPred[i] += weights[k] * (XTest[i, j] - xMean);
-            }
-        }
-
-        // Compute R² score
-        if (_scoringFunc is not null)
-        {
-            return _scoringFunc(yTest, yPred);
-        }
-
-        return ComputeR2Score(yTest, yPred);
-    }
-
-    private double ComputeR2Score(double[] yTrue, double[] yPred)
-    {
-        double yMean = yTrue.Average();
-        double ssRes = 0, ssTot = 0;
-
-        for (int i = 0; i < yTrue.Length; i++)
-        {
-            ssRes += (yTrue[i] - yPred[i]) * (yTrue[i] - yPred[i]);
-            ssTot += (yTrue[i] - yMean) * (yTrue[i] - yMean);
-        }
-
-        if (ssTot < 1e-10) return 0;
-        return 1 - ssRes / ssTot;
-    }
-
-    /// <summary>
-    /// Fits and transforms the data.
-    /// </summary>
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
-    /// <summary>
-    /// Transforms the data by selecting optimal features.
-    /// </summary>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
-        {
             throw new InvalidOperationException("RFECV has not been fitted.");
-        }
 
         int numRows = data.Rows;
         int numCols = _selectedIndices.Length;
         var result = new T[numRows, numCols];
 
         for (int i = 0; i < numRows; i++)
-        {
             for (int j = 0; j < numCols; j++)
-            {
                 result[i, j] = data[i, _selectedIndices[j]];
-            }
-        }
 
         return new Matrix<T>(result);
     }
 
-    /// <summary>
-    /// Inverse transformation is not supported.
-    /// </summary>
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("RFECV does not support inverse transformation.");
     }
 
-    /// <summary>
-    /// Gets the support mask indicating which features are selected.
-    /// </summary>
     public bool[] GetSupportMask()
     {
-        if (_supportMask is null)
-        {
+        if (_selectedIndices is null)
             throw new InvalidOperationException("RFECV has not been fitted.");
-        }
-        return (bool[])_supportMask.Clone();
+
+        var mask = new bool[_nInputFeatures];
+        foreach (int idx in _selectedIndices)
+            mask[idx] = true;
+
+        return mask;
     }
 
-    /// <summary>
-    /// Gets the output feature names after transformation.
-    /// </summary>
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        if (_selectedIndices is null)
-        {
-            return Array.Empty<string>();
-        }
+        if (_selectedIndices is null) return Array.Empty<string>();
 
         if (inputFeatureNames is null)
-        {
             return _selectedIndices.Select(i => $"Feature{i}").ToArray();
-        }
 
         return _selectedIndices
             .Where(i => i < inputFeatureNames.Length)

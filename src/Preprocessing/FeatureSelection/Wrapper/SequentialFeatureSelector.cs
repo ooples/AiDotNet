@@ -1,168 +1,124 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 
 /// <summary>
-/// Sequential feature selection using forward or backward selection.
+/// Direction for sequential feature selection.
+/// </summary>
+public enum SelectionDirection
+{
+    /// <summary>Start with no features and add one at a time.</summary>
+    Forward,
+    /// <summary>Start with all features and remove one at a time.</summary>
+    Backward
+}
+
+/// <summary>
+/// Sequential Feature Selector using greedy forward or backward selection.
 /// </summary>
 /// <remarks>
 /// <para>
-/// SequentialFeatureSelector performs feature selection by sequentially adding or removing
-/// features based on cross-validation scores.
+/// Sequential Feature Selection (SFS) is a wrapper method that evaluates feature subsets
+/// using a model's cross-validation score. Forward selection starts empty and adds features;
+/// backward selection starts full and removes features.
 /// </para>
-/// <para>
-/// - Forward selection: Start with no features, add the best one at each step
-/// - Backward selection: Start with all features, remove the worst one at each step
-/// </para>
-/// <para><b>For Beginners:</b> This is like building a team:
-/// - Forward: Start with no players, add the best available each round
-/// - Backward: Start with everyone, remove the weakest each round
-/// - Stop when you have the desired team size
+/// <para><b>For Beginners:</b> Think of forward selection like building a team: you start
+/// with no players and add the best candidate one at a time until you have enough.
+/// Backward selection is the opposite: start with everyone and cut the worst performer
+/// one at a time. The "best" is determined by how well a model performs with those features.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly SequentialDirection _direction;
-    private readonly int _cv;
-    private readonly Func<double[], double[], double>? _scoringFunc;
+    private readonly SelectionDirection _direction;
+    private readonly Func<Matrix<T>, Vector<T>, int[], double>? _scorer;
+    private readonly int _nFolds;
+    private readonly int? _randomState;
 
-    // Fitted parameters
+    private double[]? _featureScores;
     private int[]? _selectedIndices;
-    private bool[]? _supportMask;
     private int _nInputFeatures;
 
-    /// <summary>
-    /// Gets the number of features to select.
-    /// </summary>
     public int NFeaturesToSelect => _nFeaturesToSelect;
-
-    /// <summary>
-    /// Gets the selection direction.
-    /// </summary>
-    public SequentialDirection Direction => _direction;
-
-    /// <summary>
-    /// Gets the indices of selected features.
-    /// </summary>
+    public SelectionDirection Direction => _direction;
+    public double[]? FeatureScores => _featureScores;
     public int[]? SelectedIndices => _selectedIndices;
-
-    /// <summary>
-    /// Gets whether this transformer supports inverse transformation.
-    /// </summary>
     public override bool SupportsInverseTransform => false;
 
-    /// <summary>
-    /// Creates a new instance of <see cref="SequentialFeatureSelector{T}"/>.
-    /// </summary>
-    /// <param name="nFeaturesToSelect">Number of features to select.</param>
-    /// <param name="direction">Selection direction (Forward or Backward). Defaults to Forward.</param>
-    /// <param name="cv">Number of cross-validation folds. Defaults to 5.</param>
-    /// <param name="scoringFunc">Custom scoring function (y_true, y_pred) => score. Null for R² score.</param>
-    /// <param name="columnIndices">The column indices to evaluate, or null for all columns.</param>
     public SequentialFeatureSelector(
-        int nFeaturesToSelect,
-        SequentialDirection direction = SequentialDirection.Forward,
-        int cv = 5,
-        Func<double[], double[], double>? scoringFunc = null,
+        int nFeaturesToSelect = 5,
+        SelectionDirection direction = SelectionDirection.Forward,
+        Func<Matrix<T>, Vector<T>, int[], double>? scorer = null,
+        int nFolds = 5,
+        int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
         if (nFeaturesToSelect < 1)
-        {
-            throw new ArgumentException("Number of features to select must be at least 1.", nameof(nFeaturesToSelect));
-        }
-
-        if (cv < 2)
-        {
-            throw new ArgumentException("Number of CV folds must be at least 2.", nameof(cv));
-        }
+            throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _direction = direction;
-        _cv = cv;
-        _scoringFunc = scoringFunc;
+        _scorer = scorer;
+        _nFolds = nFolds;
+        _randomState = randomState;
     }
 
-    /// <summary>
-    /// Fits the selector (requires target via specialized Fit method).
-    /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
-            "SequentialFeatureSelector requires target values for fitting. Use Fit(Matrix<T> data, Vector<T> target) instead.");
+            "SequentialFeatureSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
-    /// <summary>
-    /// Fits the selector using sequential selection with cross-validation.
-    /// </summary>
-    /// <param name="data">The feature matrix.</param>
-    /// <param name="target">The target values.</param>
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
-        {
-            throw new ArgumentException("Target length must match the number of rows in data.");
-        }
+            throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
 
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
+        var random = _randomState.HasValue
+            ? RandomHelper.CreateSeededRandom(_randomState.Value)
+            : RandomHelper.CreateSecureRandom();
 
-        // Convert to double arrays
-        var X = new double[n, p];
-        var y = new double[n];
+        _featureScores = new double[p];
+        var scorer = _scorer ?? DefaultScorer;
 
-        for (int i = 0; i < n; i++)
+        if (_direction == SelectionDirection.Forward)
         {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
-
-        // Generate CV fold indices
-        var foldIndices = GenerateCVFolds(n, _cv);
-
-        if (_direction == SequentialDirection.Forward)
-        {
-            _selectedIndices = ForwardSelection(X, y, foldIndices, nToSelect);
+            _selectedIndices = ForwardSelection(data, target, p, scorer);
         }
         else
         {
-            _selectedIndices = BackwardSelection(X, y, foldIndices, nToSelect);
-        }
-
-        // Create support mask
-        _supportMask = new bool[p];
-        foreach (int idx in _selectedIndices)
-        {
-            _supportMask[idx] = true;
+            _selectedIndices = BackwardSelection(data, target, p, scorer);
         }
 
         IsFitted = true;
     }
 
-    private int[] ForwardSelection(double[,] X, double[] y, List<(int[] Train, int[] Test)> folds, int nToSelect)
+    private int[] ForwardSelection(Matrix<T> data, Vector<T> target, int p,
+        Func<Matrix<T>, Vector<T>, int[], double> scorer)
     {
-        int p = X.GetLength(1);
-        var selected = new HashSet<int>();
-        var remaining = new HashSet<int>(Enumerable.Range(0, p));
+        var selected = new List<int>();
+        var remaining = Enumerable.Range(0, p).ToHashSet();
 
-        while (selected.Count < nToSelect && remaining.Count > 0)
+        int numToSelect = Math.Min(_nFeaturesToSelect, p);
+
+        while (selected.Count < numToSelect && remaining.Count > 0)
         {
-            int bestFeature = -1;
             double bestScore = double.NegativeInfinity;
+            int bestFeature = -1;
 
             foreach (int candidate in remaining)
             {
-                var testSet = selected.Concat(new[] { candidate }).ToArray();
-                double score = EvaluateFeatureSetCV(X, y, folds, testSet);
+                var testSet = selected.Concat([candidate]).ToArray();
+                double score = scorer(data, target, testSet);
 
                 if (score > bestScore)
                 {
@@ -175,6 +131,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
             {
                 selected.Add(bestFeature);
                 remaining.Remove(bestFeature);
+                _featureScores![bestFeature] = bestScore;
             }
             else
             {
@@ -182,23 +139,24 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
             }
         }
 
-        return selected.OrderBy(i => i).ToArray();
+        return selected.OrderBy(x => x).ToArray();
     }
 
-    private int[] BackwardSelection(double[,] X, double[] y, List<(int[] Train, int[] Test)> folds, int nToSelect)
+    private int[] BackwardSelection(Matrix<T> data, Vector<T> target, int p,
+        Func<Matrix<T>, Vector<T>, int[], double> scorer)
     {
-        int p = X.GetLength(1);
-        var remaining = new HashSet<int>(Enumerable.Range(0, p));
+        var remaining = Enumerable.Range(0, p).ToList();
+        int numToRemove = p - Math.Min(_nFeaturesToSelect, p);
 
-        while (remaining.Count > nToSelect)
+        for (int iteration = 0; iteration < numToRemove && remaining.Count > 1; iteration++)
         {
-            int worstFeature = -1;
             double bestScore = double.NegativeInfinity;
+            int worstFeature = -1;
 
             foreach (int candidate in remaining)
             {
                 var testSet = remaining.Where(f => f != candidate).ToArray();
-                double score = EvaluateFeatureSetCV(X, y, folds, testSet);
+                double score = scorer(data, target, testSet);
 
                 if (score > bestScore)
                 {
@@ -209,6 +167,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
 
             if (worstFeature >= 0)
             {
+                _featureScores![worstFeature] = -bestScore; // Lower score = worse feature
                 remaining.Remove(worstFeature);
             }
             else
@@ -217,214 +176,180 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
             }
         }
 
-        return remaining.OrderBy(i => i).ToArray();
+        // Set positive scores for remaining features
+        double finalScore = DefaultScorer(data, target, remaining.ToArray());
+        foreach (int idx in remaining)
+            _featureScores![idx] = finalScore;
+
+        return remaining.OrderBy(x => x).ToArray();
     }
 
-    private double EvaluateFeatureSetCV(double[,] X, double[] y, List<(int[] Train, int[] Test)> folds, int[] features)
+    private double DefaultScorer(Matrix<T> data, Vector<T> target, int[] featureIndices)
     {
-        if (features.Length == 0) return double.NegativeInfinity;
+        // Simple cross-validated R² score using linear regression
+        if (featureIndices.Length == 0)
+            return double.NegativeInfinity;
 
-        var scores = new List<double>();
+        int n = data.Rows;
+        int foldSize = n / _nFolds;
+        double totalScore = 0;
 
-        foreach (var (trainIdx, testIdx) in folds)
+        for (int fold = 0; fold < _nFolds; fold++)
         {
-            double score = EvaluateFold(X, y, trainIdx, testIdx, features);
-            scores.Add(score);
+            int testStart = fold * foldSize;
+            int testEnd = fold == _nFolds - 1 ? n : (fold + 1) * foldSize;
+
+            // Extract training data
+            var trainX = new List<double[]>();
+            var trainY = new List<double>();
+            var testX = new List<double[]>();
+            var testY = new List<double>();
+
+            for (int i = 0; i < n; i++)
+            {
+                var row = new double[featureIndices.Length];
+                for (int j = 0; j < featureIndices.Length; j++)
+                    row[j] = NumOps.ToDouble(data[i, featureIndices[j]]);
+
+                double y = NumOps.ToDouble(target[i]);
+
+                if (i >= testStart && i < testEnd)
+                {
+                    testX.Add(row);
+                    testY.Add(y);
+                }
+                else
+                {
+                    trainX.Add(row);
+                    trainY.Add(y);
+                }
+            }
+
+            // Fit simple linear regression
+            double score = ComputeR2Score(trainX, trainY, testX, testY);
+            totalScore += score;
         }
 
-        return scores.Average();
+        return totalScore / _nFolds;
     }
 
-    private double EvaluateFold(double[,] X, double[] y, int[] trainIdx, int[] testIdx, int[] features)
+    private static double ComputeR2Score(List<double[]> trainX, List<double> trainY,
+        List<double[]> testX, List<double> testY)
     {
-        int nTrain = trainIdx.Length;
-        int nTest = testIdx.Length;
-        int p = features.Length;
+        if (trainX.Count == 0 || testX.Count == 0)
+            return double.NegativeInfinity;
 
-        // Extract training target
-        var yTrain = new double[nTrain];
-        for (int i = 0; i < nTrain; i++)
+        int nFeatures = trainX[0].Length;
+        int nTrain = trainX.Count;
+
+        // Compute means
+        double yMean = trainY.Average();
+        var xMeans = new double[nFeatures];
+        for (int j = 0; j < nFeatures; j++)
         {
-            yTrain[i] = y[trainIdx[i]];
+            for (int i = 0; i < nTrain; i++)
+                xMeans[j] += trainX[i][j];
+            xMeans[j] /= nTrain;
         }
 
-        var yTest = new double[nTest];
-        for (int i = 0; i < nTest; i++)
+        // Simple multivariate linear regression using normal equations
+        // For simplicity, use correlation-weighted average prediction
+        var correlations = new double[nFeatures];
+        var xStds = new double[nFeatures];
+
+        for (int j = 0; j < nFeatures; j++)
         {
-            yTest[i] = y[testIdx[i]];
-        }
-
-        double yMean = yTrain.Average();
-
-        // Simple linear regression for each feature
-        var weights = new double[p];
-        var xMeans = new double[p];
-
-        for (int k = 0; k < p; k++)
-        {
-            int j = features[k];
-            double xSum = 0;
+            double sxy = 0, sxx = 0, syy = 0;
             for (int i = 0; i < nTrain; i++)
             {
-                xSum += X[trainIdx[i], j];
+                double xDiff = trainX[i][j] - xMeans[j];
+                double yDiff = trainY[i] - yMean;
+                sxy += xDiff * yDiff;
+                sxx += xDiff * xDiff;
+                syy += yDiff * yDiff;
             }
-            xMeans[k] = xSum / nTrain;
+            xStds[j] = Math.Sqrt(sxx / nTrain);
+            double yStd = Math.Sqrt(syy / nTrain);
+            correlations[j] = (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        }
 
-            double ssXY = 0, ssXX = 0;
-            for (int i = 0; i < nTrain; i++)
+        // Predict on test set using correlation-weighted features
+        double ssTot = 0, ssRes = 0;
+        double testYMean = testY.Average();
+
+        for (int i = 0; i < testX.Count; i++)
+        {
+            double pred = yMean;
+            double corrSum = 0;
+            for (int j = 0; j < nFeatures; j++)
             {
-                double dx = X[trainIdx[i], j] - xMeans[k];
-                double dy = yTrain[i] - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
+                if (xStds[j] > 1e-10)
+                {
+                    double zScore = (testX[i][j] - xMeans[j]) / xStds[j];
+                    pred += correlations[j] * zScore * Math.Sqrt(trainY.Select(y => (y - yMean) * (y - yMean)).Average());
+                    corrSum += Math.Abs(correlations[j]);
+                }
             }
+            if (corrSum > 0 && nFeatures > 1)
+                pred = yMean + (pred - yMean) / corrSum * Math.Abs(correlations.Max());
 
-            weights[k] = ssXX > 1e-10 ? ssXY / ssXX : 0;
+            double residual = testY[i] - pred;
+            ssRes += residual * residual;
+            ssTot += (testY[i] - testYMean) * (testY[i] - testYMean);
         }
 
-        // Predict on test set
-        var yPred = new double[nTest];
-        for (int i = 0; i < nTest; i++)
-        {
-            yPred[i] = yMean;
-            for (int k = 0; k < p; k++)
-            {
-                int j = features[k];
-                yPred[i] += weights[k] * (X[testIdx[i], j] - xMeans[k]);
-            }
-        }
-
-        // Compute score
-        if (_scoringFunc is not null)
-        {
-            return _scoringFunc(yTest, yPred);
-        }
-
-        return ComputeR2Score(yTest, yPred);
+        return ssTot > 1e-10 ? 1 - ssRes / ssTot : 0;
     }
 
-    private double ComputeR2Score(double[] yTrue, double[] yPred)
-    {
-        double yMean = yTrue.Average();
-        double ssRes = 0, ssTot = 0;
-
-        for (int i = 0; i < yTrue.Length; i++)
-        {
-            ssRes += (yTrue[i] - yPred[i]) * (yTrue[i] - yPred[i]);
-            ssTot += (yTrue[i] - yMean) * (yTrue[i] - yMean);
-        }
-
-        if (ssTot < 1e-10) return 0;
-        return 1 - ssRes / ssTot;
-    }
-
-    private List<(int[] Train, int[] Test)> GenerateCVFolds(int n, int nFolds)
-    {
-        var folds = new List<(int[], int[])>();
-        int foldSize = n / nFolds;
-        var indices = Enumerable.Range(0, n).ToArray();
-
-        for (int i = 0; i < nFolds; i++)
-        {
-            int start = i * foldSize;
-            int end = (i == nFolds - 1) ? n : (i + 1) * foldSize;
-
-            var testIdx = indices.Skip(start).Take(end - start).ToArray();
-            var trainIdx = indices.Where((_, idx) => idx < start || idx >= end).ToArray();
-            folds.Add((trainIdx, testIdx));
-        }
-
-        return folds;
-    }
-
-    /// <summary>
-    /// Fits and transforms the data.
-    /// </summary>
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
-    /// <summary>
-    /// Transforms the data by selecting the chosen features.
-    /// </summary>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
-        {
             throw new InvalidOperationException("SequentialFeatureSelector has not been fitted.");
-        }
 
         int numRows = data.Rows;
         int numCols = _selectedIndices.Length;
         var result = new T[numRows, numCols];
 
         for (int i = 0; i < numRows; i++)
-        {
             for (int j = 0; j < numCols; j++)
-            {
                 result[i, j] = data[i, _selectedIndices[j]];
-            }
-        }
 
         return new Matrix<T>(result);
     }
 
-    /// <summary>
-    /// Inverse transformation is not supported.
-    /// </summary>
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("SequentialFeatureSelector does not support inverse transformation.");
     }
 
-    /// <summary>
-    /// Gets the support mask indicating which features are selected.
-    /// </summary>
     public bool[] GetSupportMask()
     {
-        if (_supportMask is null)
-        {
+        if (_selectedIndices is null)
             throw new InvalidOperationException("SequentialFeatureSelector has not been fitted.");
-        }
-        return (bool[])_supportMask.Clone();
+
+        var mask = new bool[_nInputFeatures];
+        foreach (int idx in _selectedIndices)
+            mask[idx] = true;
+
+        return mask;
     }
 
-    /// <summary>
-    /// Gets the output feature names after transformation.
-    /// </summary>
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        if (_selectedIndices is null)
-        {
-            return Array.Empty<string>();
-        }
+        if (_selectedIndices is null) return [];
 
         if (inputFeatureNames is null)
-        {
             return _selectedIndices.Select(i => $"Feature{i}").ToArray();
-        }
 
         return _selectedIndices
             .Where(i => i < inputFeatureNames.Length)
             .Select(i => inputFeatureNames[i])
             .ToArray();
     }
-}
-
-/// <summary>
-/// Specifies the direction of sequential feature selection.
-/// </summary>
-public enum SequentialDirection
-{
-    /// <summary>
-    /// Forward selection: Start with no features, add the best one at each step.
-    /// </summary>
-    Forward,
-
-    /// <summary>
-    /// Backward selection: Start with all features, remove the worst one at each step.
-    /// </summary>
-    Backward
 }
