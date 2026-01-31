@@ -1,7 +1,8 @@
 using AiDotNet.Helpers;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
-namespace AiDotNet.Preprocessing.FeatureSelection;
+namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
 
 /// <summary>
 /// Selects features based on a false positive rate test.

@@ -1,4 +1,6 @@
-namespace AiDotNet.Preprocessing.FeatureSelection;
+using AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
+
+namespace AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 /// <summary>
 /// Helper class for statistical tests used in feature selection.

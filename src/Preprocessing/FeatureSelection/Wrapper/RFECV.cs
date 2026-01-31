@@ -1,7 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
-namespace AiDotNet.Preprocessing.FeatureSelection;
+namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 
 /// <summary>
 /// Recursive Feature Elimination with Cross-Validation to find optimal feature count.

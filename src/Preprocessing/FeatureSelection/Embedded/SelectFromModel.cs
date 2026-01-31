@@ -1,7 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
-namespace AiDotNet.Preprocessing.FeatureSelection;
+namespace AiDotNet.Preprocessing.FeatureSelection.Embedded;
 
 /// <summary>
 /// Selects features based on importance weights from an external model or scorer.

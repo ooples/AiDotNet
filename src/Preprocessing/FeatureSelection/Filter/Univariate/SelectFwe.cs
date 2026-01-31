@@ -1,29 +1,30 @@
 using AiDotNet.Helpers;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
-namespace AiDotNet.Preprocessing.FeatureSelection;
+namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
 
 /// <summary>
-/// Selects features based on a false discovery rate test.
+/// Selects features based on a family-wise error rate test.
 /// </summary>
 /// <remarks>
 /// <para>
-/// SelectFdr applies the Benjamini-Hochberg procedure to control the expected
-/// proportion of false discoveries (incorrectly selected features) among the
-/// selected features.
+/// SelectFwe applies Bonferroni correction to control the probability of making
+/// even one false positive among all selected features.
 /// </para>
 /// <para>
-/// Unlike SelectFpr which controls false positives among ALL features,
-/// SelectFdr controls false discoveries among SELECTED features only.
+/// This is the most conservative multiple testing correction, dividing the
+/// significance threshold by the number of tests.
 /// </para>
-/// <para><b>For Beginners:</b> FDR correction is more powerful than FPR:
-/// - FPR: "At most 5% of all 1000 features are false positives"
-/// - FDR: "At most 5% of the 50 features I selected are false positives"
-/// - FDR allows more features to be selected while controlling errors
+/// <para><b>For Beginners:</b> FWER is the strictest correction:
+/// - Controls the probability of ANY false positive
+/// - Uses Bonferroni: alpha/number_of_features
+/// - Very conservative: may miss true positives
+/// - Best when false positives are costly
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
-public class SelectFdr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SelectFwe<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly double _alpha;
     private readonly SelectKBestScoreFunc _scoringFunction;
@@ -37,7 +38,7 @@ public class SelectFdr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int _nInputFeatures;
 
     /// <summary>
-    /// Gets the significance level (alpha) for FDR control.
+    /// Gets the family-wise significance level (alpha).
     /// </summary>
     public double Alpha => _alpha;
 
@@ -57,7 +58,7 @@ public class SelectFdr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public double[]? PValues => _pValues;
 
     /// <summary>
-    /// Gets the FDR-adjusted p-values.
+    /// Gets the Bonferroni-adjusted p-values.
     /// </summary>
     public double[]? AdjustedPValues => _adjustedPValues;
 
@@ -72,12 +73,12 @@ public class SelectFdr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public override bool SupportsInverseTransform => false;
 
     /// <summary>
-    /// Creates a new instance of <see cref="SelectFdr{T}"/>.
+    /// Creates a new instance of <see cref="SelectFwe{T}"/>.
     /// </summary>
-    /// <param name="alpha">Target FDR level. Defaults to 0.05.</param>
+    /// <param name="alpha">Family-wise error rate threshold. Defaults to 0.05.</param>
     /// <param name="scoringFunction">The scoring function to use. Defaults to FRegression.</param>
     /// <param name="columnIndices">The column indices to evaluate, or null for all columns.</param>
-    public SelectFdr(
+    public SelectFwe(
         double alpha = 0.05,
         SelectKBestScoreFunc scoringFunction = SelectKBestScoreFunc.FRegression,
         int[]? columnIndices = null)
@@ -98,11 +99,11 @@ public class SelectFdr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
-            "SelectFdr requires target values for fitting. Use Fit(Matrix<T> data, Vector<T> target) instead.");
+            "SelectFwe requires target values for fitting. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
     /// <summary>
-    /// Fits the selector by computing FDR-adjusted p-values.
+    /// Fits the selector by computing Bonferroni-corrected p-values.
     /// </summary>
     /// <param name="data">The feature matrix.</param>
     /// <param name="target">The target values.</param>
@@ -147,8 +148,8 @@ public class SelectFdr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             _pValues[j] = pValue;
         }
 
-        // Apply Benjamini-Hochberg correction
-        _adjustedPValues = StatisticalTestHelper.BenjaminiHochbergCorrection(_pValues);
+        // Apply Bonferroni correction
+        _adjustedPValues = StatisticalTestHelper.BonferroniCorrection(_pValues);
 
         // Select features with adjusted p-value < alpha
         var selectedList = new List<int>();
@@ -198,13 +199,13 @@ public class SelectFdr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>
-    /// Transforms the data by selecting features passing FDR threshold.
+    /// Transforms the data by selecting features passing FWER threshold.
     /// </summary>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
         {
-            throw new InvalidOperationException("SelectFdr has not been fitted.");
+            throw new InvalidOperationException("SelectFwe has not been fitted.");
         }
 
         int numRows = data.Rows;
@@ -227,7 +228,7 @@ public class SelectFdr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
-        throw new NotSupportedException("SelectFdr does not support inverse transformation.");
+        throw new NotSupportedException("SelectFwe does not support inverse transformation.");
     }
 
     /// <summary>
@@ -237,7 +238,7 @@ public class SelectFdr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (_supportMask is null)
         {
-            throw new InvalidOperationException("SelectFdr has not been fitted.");
+            throw new InvalidOperationException("SelectFwe has not been fitted.");
         }
         return (bool[])_supportMask.Clone();
     }

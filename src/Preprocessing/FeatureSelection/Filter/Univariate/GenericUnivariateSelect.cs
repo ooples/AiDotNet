@@ -1,7 +1,8 @@
 using AiDotNet.Helpers;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
-namespace AiDotNet.Preprocessing.FeatureSelection;
+namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
 
 /// <summary>
 /// Generic univariate feature selector with configurable mode.

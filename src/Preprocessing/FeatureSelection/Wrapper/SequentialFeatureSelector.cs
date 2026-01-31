@@ -1,7 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
-namespace AiDotNet.Preprocessing.FeatureSelection;
+namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 
 /// <summary>
 /// Sequential feature selection using forward or backward selection.

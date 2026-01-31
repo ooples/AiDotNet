@@ -1,7 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
-namespace AiDotNet.Preprocessing.FeatureSelection;
+namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation;
 
 /// <summary>
 /// Feature selector that removes highly correlated features to reduce redundancy.
