@@ -23,7 +23,9 @@ using AiDotNet.Helpers;
 using AiDotNet.Inference;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
+using AiDotNet.Interpretability.Explainers;
 using AiDotNet.LanguageModels;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -243,6 +245,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     /// <value>An implementation of IFairnessEvaluator&lt;T&gt; for evaluating fairness metrics, or null if not configured.</value>
     internal IFairnessEvaluator<T>? FairnessEvaluator { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the interpretability options for model explanation methods.
+    /// </summary>
+    /// <value>The configured interpretability options, or null if not configured.</value>
+    internal InterpretabilityOptions? InterpretabilityOptions { get; private set; }
 
     /// <summary>
     /// Gets or sets the tokenizer used for text processing.
@@ -1107,6 +1115,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Ethical AI and fairness
         BiasDetector = options.BiasDetector;
         FairnessEvaluator = options.FairnessEvaluator;
+        InterpretabilityOptions = options.InterpretabilityOptions;
 
         // Tokenization
         Tokenizer = options.Tokenizer;
@@ -2422,6 +2431,302 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         return Model.GetFeatureImportance();
     }
+
+    #region Model Interpretability Methods
+
+    /// <summary>
+    /// Explains a single prediction using SHAP (SHapley Additive exPlanations) values.
+    /// </summary>
+    /// <param name="instance">The input instance to explain.</param>
+    /// <param name="backgroundData">Representative background data for computing expected values.</param>
+    /// <returns>A SHAP explanation showing how each feature contributed to this prediction.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model is not initialized or SHAP is not enabled.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> SHAP values tell you exactly how much each feature contributed
+    /// to this specific prediction compared to an "average" prediction.
+    ///
+    /// Example interpretation:
+    /// - Baseline: $300,000 (average house price)
+    /// - SHAP for Bedrooms: +$50,000 (having 4 bedrooms adds value)
+    /// - SHAP for Location: +$100,000 (good neighborhood)
+    /// - SHAP for Age: -$30,000 (older house reduces value)
+    /// - Prediction: $420,000
+    ///
+    /// The sum of SHAP values plus baseline always equals the prediction.
+    /// </para>
+    /// </remarks>
+    public SHAPExplanation<T> ExplainWithSHAP(Vector<T> instance, Matrix<T> backgroundData)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        if (!options.EnableSHAP)
+            throw new InvalidOperationException("SHAP is not enabled. Configure interpretability with EnableSHAP = true.");
+
+        // Create a prediction function from the model
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+
+        var explainer = new SHAPExplainer<T>(
+            predictFunc,
+            backgroundData,
+            nSamples: options.SHAPSampleCount,
+            featureNames: options.FeatureNames,
+            randomState: options.RandomSeed);
+
+        return explainer.Explain(instance);
+    }
+
+    /// <summary>
+    /// Explains multiple predictions using SHAP values and returns global feature importance.
+    /// </summary>
+    /// <param name="data">The input instances to explain.</param>
+    /// <param name="backgroundData">Representative background data for computing expected values.</param>
+    /// <returns>A global SHAP explanation with aggregated feature importance across all instances.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model is not initialized or SHAP is not enabled.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This aggregates SHAP values across many predictions to show
+    /// which features are most important overall. Use GetFeatureImportance() on the result
+    /// to see a ranked list of features by their average absolute SHAP value.
+    /// </para>
+    /// </remarks>
+    public GlobalSHAPExplanation<T> ExplainGlobalWithSHAP(Matrix<T> data, Matrix<T> backgroundData)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        if (!options.EnableSHAP)
+            throw new InvalidOperationException("SHAP is not enabled. Configure interpretability with EnableSHAP = true.");
+
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+
+        var explainer = new SHAPExplainer<T>(
+            predictFunc,
+            backgroundData,
+            nSamples: options.SHAPSampleCount,
+            featureNames: options.FeatureNames,
+            randomState: options.RandomSeed);
+
+        return explainer.ExplainGlobal(data);
+    }
+
+    /// <summary>
+    /// Explains a single prediction using LIME (Local Interpretable Model-agnostic Explanations).
+    /// </summary>
+    /// <param name="instance">The input instance to explain.</param>
+    /// <returns>A LIME explanation with local feature weights.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model is not initialized or LIME is not enabled.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> LIME explains predictions by fitting a simple linear model
+    /// around the specific instance. It creates many slightly modified versions of your input,
+    /// sees how predictions change, and fits a simple model to understand local behavior.
+    ///
+    /// The coefficients tell you the direction and magnitude of each feature's effect:
+    /// - Positive coefficient: Feature value pushed prediction higher
+    /// - Negative coefficient: Feature value pushed prediction lower
+    /// - LocalR2 tells you how well the simple model approximates the complex one locally
+    /// </para>
+    /// </remarks>
+    public LIMEExplanationResult<T> ExplainWithLIME(Vector<T> instance)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        if (!options.EnableLIME)
+            throw new InvalidOperationException("LIME is not enabled. Configure interpretability with EnableLIME = true.");
+
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+
+        var explainer = new LIMEExplainer<T>(
+            predictFunc,
+            instance.Length,
+            nSamples: options.LIMESampleCount,
+            kernelWidth: options.LIMEKernelWidth ?? 0.75,
+            featureNames: options.FeatureNames,
+            randomState: options.RandomSeed);
+
+        return explainer.Explain(instance);
+    }
+
+    /// <summary>
+    /// Computes permutation feature importance for the model.
+    /// </summary>
+    /// <param name="X">The feature matrix to evaluate on.</param>
+    /// <param name="y">The target values for evaluation.</param>
+    /// <param name="scoreFunction">
+    /// A function that computes a score given (actual, predicted). Higher scores = better.
+    /// If null, uses R² for regression-like outputs.
+    /// </param>
+    /// <returns>Feature importance scores showing which features matter most.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model is not initialized or permutation importance is not enabled.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Permutation importance measures how much the model's score drops
+    /// when each feature is randomly shuffled. If shuffling a feature hurts performance a lot,
+    /// that feature is important.
+    ///
+    /// The ImportanceStds values show how consistent the importance estimates are across
+    /// multiple shuffles. High standard deviation means the importance estimate is uncertain.
+    /// </para>
+    /// </remarks>
+    public FeatureImportanceResult<T> GetPermutationFeatureImportance(Matrix<T> X, Vector<T> y, Func<Vector<T>, Vector<T>, T>? scoreFunction = null)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        if (!options.EnablePermutationImportance)
+            throw new InvalidOperationException("Permutation importance is not enabled. Configure interpretability with EnablePermutationImportance = true.");
+
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+
+        // Default score function: R²
+        scoreFunction ??= ComputeR2Score;
+
+        var calculator = new PermutationFeatureImportance<T>(
+            predictFunc,
+            scoreFunction,
+            nRepeats: options.PermutationRepeatCount,
+            featureNames: options.FeatureNames,
+            randomState: options.RandomSeed);
+
+        return calculator.Calculate(X, y);
+    }
+
+    /// <summary>
+    /// Trains a global surrogate model to approximate the complex model's behavior.
+    /// </summary>
+    /// <param name="X">The feature matrix to train the surrogate on.</param>
+    /// <returns>A surrogate explanation with linear coefficients and fidelity score.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model is not initialized or global surrogate is not enabled.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A global surrogate is a simple linear model that tries to mimic
+    /// your complex model. If the surrogate has high fidelity (R² close to 1), you can use it
+    /// to understand the complex model's overall behavior.
+    ///
+    /// The coefficients show:
+    /// - Which features the complex model relies on most
+    /// - Whether each feature has a positive or negative effect
+    /// - The relative importance of each feature
+    ///
+    /// Low fidelity means the complex model is too nonlinear for a linear surrogate.
+    /// </para>
+    /// </remarks>
+    public SurrogateExplanation<T> GetGlobalSurrogateExplanation(Matrix<T> X)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        if (!options.EnableGlobalSurrogate)
+            throw new InvalidOperationException("Global surrogate is not enabled. Configure interpretability with EnableGlobalSurrogate = true.");
+
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+
+        var explainer = new GlobalSurrogateExplainer<T>(
+            predictFunc,
+            X.Columns,
+            options.FeatureNames);
+
+        return explainer.ExplainGlobal(X);
+    }
+
+    /// <summary>
+    /// Creates a prediction function that takes a Matrix and returns a Vector of predictions.
+    /// </summary>
+    private Func<Matrix<T>, Vector<T>> CreatePredictionFunction()
+    {
+        return (Matrix<T> inputMatrix) =>
+        {
+            var predictions = new T[inputMatrix.Rows];
+            for (int i = 0; i < inputMatrix.Rows; i++)
+            {
+                var row = inputMatrix.GetRow(i);
+                var input = ConvertVectorToInput(row);
+                var output = Model!.Predict(input);
+                predictions[i] = ConvertOutputToScalar(output);
+            }
+            return new Vector<T>(predictions);
+        };
+    }
+
+    /// <summary>
+    /// Converts a Vector to the model's TInput type.
+    /// </summary>
+    private TInput ConvertVectorToInput(Vector<T> vector)
+    {
+        if (typeof(TInput) == typeof(Vector<T>))
+            return (TInput)(object)vector;
+
+        if (typeof(TInput) == typeof(Matrix<T>))
+        {
+            // Create a single-row matrix
+            var matrix = new Matrix<T>(1, vector.Length);
+            for (int j = 0; j < vector.Length; j++)
+                matrix[0, j] = vector[j];
+            return (TInput)(object)matrix;
+        }
+
+        if (typeof(TInput) == typeof(Tensor<T>))
+        {
+            return (TInput)(object)Tensor<T>.FromVector(vector, new[] { 1, vector.Length });
+        }
+
+        throw new NotSupportedException($"Cannot convert Vector<T> to {typeof(TInput).Name} for interpretability methods.");
+    }
+
+    /// <summary>
+    /// Converts the model's TOutput to a scalar value.
+    /// </summary>
+    private T ConvertOutputToScalar(TOutput output)
+    {
+        if (output is T scalar)
+            return scalar;
+
+        if (output is Vector<T> vector && vector.Length > 0)
+            return vector[0];
+
+        if (output is Matrix<T> matrix && matrix.Rows > 0 && matrix.Columns > 0)
+            return matrix[0, 0];
+
+        if (output is Tensor<T> tensor && tensor.Length > 0)
+            return tensor.ToVector()[0];
+
+        throw new NotSupportedException($"Cannot convert {typeof(TOutput).Name} to scalar for interpretability methods.");
+    }
+
+    /// <summary>
+    /// Computes R² score for regression evaluation.
+    /// </summary>
+    private static T ComputeR2Score(Vector<T> actual, Vector<T> predicted)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        if (actual.Length != predicted.Length || actual.Length == 0)
+            return numOps.Zero;
+
+        double meanActual = 0;
+        for (int i = 0; i < actual.Length; i++)
+            meanActual += numOps.ToDouble(actual[i]);
+        meanActual /= actual.Length;
+
+        double ssRes = 0, ssTot = 0;
+        for (int i = 0; i < actual.Length; i++)
+        {
+            double a = numOps.ToDouble(actual[i]);
+            double p = numOps.ToDouble(predicted[i]);
+            ssRes += (a - p) * (a - p);
+            ssTot += (a - meanActual) * (a - meanActual);
+        }
+
+        if (ssTot < 1e-10)
+            return numOps.Zero;
+
+        return numOps.FromDouble(1 - ssRes / ssTot);
+    }
+
+    #endregion
 
     #region Training Infrastructure Public Accessors
 

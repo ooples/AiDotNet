@@ -198,6 +198,21 @@ public class AiModelResultOptions<T, TInput, TOutput>
     /// </remarks>
     public IFairnessEvaluator<T>? FairnessEvaluator { get; set; }
 
+    /// <summary>
+    /// Gets or sets the interpretability options for model explanation methods.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Configures which interpretability methods (SHAP, LIME, Permutation Importance, Global Surrogate)
+    /// are available and their parameters for explaining model predictions.
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how your model explains its predictions.
+    /// When configured, you can ask the model "why did you make this prediction?" and get
+    /// answers like "Age increased the prediction by +5000, Income decreased it by -2000."
+    /// </para>
+    /// </remarks>
+    public InterpretabilityOptions? InterpretabilityOptions { get; set; }
+
     // ============================================================================
     // RAG (Retrieval-Augmented Generation) Properties
     // ============================================================================
