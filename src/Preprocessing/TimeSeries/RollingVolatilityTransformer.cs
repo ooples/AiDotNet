@@ -280,7 +280,7 @@ public class RollingVolatilityTransformer<T> : TimeSeriesTransformerBase<T>
         if (_enabledMeasures.HasFlag(VolatilityMeasures.Momentum))
         {
             double val = ComputeMomentum(prices, windowSize);
-            output[t, outputIdx] = NumOps.FromDouble(val);
+            output[t, outputIdx++] = NumOps.FromDouble(val);
         }
     }
 
@@ -333,7 +333,7 @@ public class RollingVolatilityTransformer<T> : TimeSeriesTransformerBase<T>
         if (_enabledMeasures.HasFlag(VolatilityMeasures.Momentum))
         {
             double val = ComputeMomentum(prices, windowSize);
-            output[t, outputIdx] = NumOps.FromDouble(val);
+            output[t, outputIdx++] = NumOps.FromDouble(val);
         }
     }
 
