@@ -2634,22 +2634,21 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Computes Accumulated Local Effects (ALE) for a specific feature.
+    /// Computes Accumulated Local Effects (ALE) for all features in the dataset.
     /// </summary>
-    /// <param name="featureIndex">The index of the feature to analyze.</param>
     /// <param name="data">The data matrix to use for computing ALE.</param>
-    /// <param name="numIntervals">Number of intervals to divide the feature range into.</param>
-    /// <returns>The ALE result containing effects at each interval.</returns>
+    /// <param name="numIntervals">Number of intervals to divide each feature range into.</param>
+    /// <returns>The ALE result containing effects for all features.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> ALE plots show how a feature affects predictions while properly
+    /// <para><b>For Beginners:</b> ALE plots show how each feature affects predictions while properly
     /// handling correlated features. Unlike PDP, ALE doesn't make unrealistic assumptions about
     /// feature independence.
     ///
     /// Example:
     /// <code>
-    /// var aleResult = result.GetAccumulatedLocalEffects(0, trainingData, 50);
-    /// // aleResult.Effects shows how feature 0 affects predictions at each interval
-    /// // aleResult.IntervalBounds shows the feature value ranges for each interval
+    /// var aleResult = result.GetAccumulatedLocalEffects(trainingData, 20);
+    /// // aleResult.FeatureEffects[0] shows how feature 0 affects predictions
+    /// // Positive values mean the feature increases predictions, negative decreases
     /// </code>
     /// </para>
     /// </remarks>
@@ -2767,7 +2766,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Generates a Grad-CAM heatmap for CNN model predictions.
     /// </summary>
     /// <param name="instance">The input instance (typically image data).</param>
-    /// <param name="targetClass">Optional target class index for the heatmap.</param>
+    /// <param name="inputShape">Shape of the input (e.g., [1, 3, 224, 224] for batch, channels, height, width).</param>
+    /// <param name="featureMapShape">Shape of the feature maps from the last conv layer.</param>
     /// <param name="useGradCAMPlusPlus">Whether to use Grad-CAM++ (better for multiple objects).</param>
     /// <returns>Grad-CAM explanation with heatmap and class activation maps.</returns>
     /// <remarks>
@@ -2777,9 +2777,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// Example:
     /// <code>
-    /// var gradCamResult = result.ExplainWithGradCAM(imageData, targetClass: 5);
+    /// var gradCamResult = result.ExplainWithGradCAM(imageData,
+    ///     inputShape: new[] { 1, 3, 224, 224 },
+    ///     featureMapShape: new[] { 1, 512, 14, 14 });
     /// // gradCamResult.Heatmap shows importance per spatial location
-    /// // gradCamResult.PredictedClass shows what the model predicted
     /// </code>
     /// </para>
     /// </remarks>
@@ -2806,6 +2807,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Visualizes attention patterns for transformer-based models.
     /// </summary>
     /// <param name="instance">The input instance (e.g., token embeddings).</param>
+    /// <param name="numLayers">Number of transformer layers in the model.</param>
+    /// <param name="numHeads">Number of attention heads per layer.</param>
+    /// <param name="sequenceLength">Length of the input sequence.</param>
     /// <param name="tokenLabels">Optional labels for each token/position.</param>
     /// <returns>Attention visualization with rollout and token importance.</returns>
     /// <remarks>
@@ -2815,7 +2819,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// Example:
     /// <code>
-    /// var attentionResult = result.ExplainWithAttentionVisualization(embeddings, tokenLabels);
+    /// var attentionResult = result.ExplainWithAttentionVisualization(
+    ///     embeddings, numLayers: 12, numHeads: 8, sequenceLength: 128,
+    ///     tokenLabels: new[] { "[CLS]", "Hello", "world", "[SEP]" });
     /// // attentionResult.AttentionRollout shows aggregated attention patterns
     /// // attentionResult.TokenImportance shows importance of each position
     /// </code>
