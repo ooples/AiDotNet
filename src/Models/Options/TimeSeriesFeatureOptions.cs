@@ -263,6 +263,19 @@ public class TimeSeriesFeatureOptions
             errors.Add("ParallelThreshold must be at least 1.");
         }
 
+        if (EnableCorrelation)
+        {
+            if (CorrelationWindowSizes is { Length: 0 })
+            {
+                errors.Add("CorrelationWindowSizes must contain at least one value when correlation is enabled.");
+            }
+
+            if (CorrelationWindowSizes?.Any(w => w < 2) == true)
+            {
+                errors.Add("All correlation window sizes must be at least 2.");
+            }
+        }
+
         return errors;
     }
 

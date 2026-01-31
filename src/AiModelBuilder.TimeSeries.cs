@@ -56,7 +56,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///     .ConfigureTimeSeriesFeatures(new TimeSeriesFeatureOptions
     ///     {
     ///         WindowSizes = new[] { 7, 14, 30 },
-    ///         EnabledStatistics = RollingStatistics.Mean | RollingStatistics.StdDev,
+    ///         EnabledStatistics = RollingStatistics.Mean | RollingStatistics.StandardDeviation,
     ///         EnableVolatility = true,
     ///         LagSteps = new[] { 1, 2, 3 }
     ///     });

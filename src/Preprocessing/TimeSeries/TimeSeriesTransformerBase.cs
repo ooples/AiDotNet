@@ -142,14 +142,9 @@ public abstract class TimeSeriesTransformerBase<T> : ITimeSeriesFeatureExtractor
         _inputFeatureNames = Options.InputFeatureNames ?? GenerateDefaultInputNames(_inputFeatureCount);
 
         // Auto-detect window sizes if enabled
-        if (Options.AutoDetectWindowSizes)
-        {
-            _windowSizes = DetectOptimalWindowSizes(data);
-        }
-        else
-        {
-            _windowSizes = Options.WindowSizes;
-        }
+        _windowSizes = Options.AutoDetectWindowSizes
+            ? DetectOptimalWindowSizes(data)
+            : Options.WindowSizes;
 
         // Generate feature names
         _featureNames = GenerateFeatureNames();
@@ -307,15 +302,9 @@ public abstract class TimeSeriesTransformerBase<T> : ITimeSeriesFeatureExtractor
         // Common window sizes based on data length
         int[] candidates = [5, 7, 10, 14, 20, 30, 60, 90, 120, 252, 365];
 
-        foreach (int w in candidates)
-        {
-            if (w >= Options.MinWindowSize && w <= Options.MaxWindowSize && w < n / 2)
-            {
-                windows.Add(w);
-                if (windows.Count >= Options.MaxAutoDetectedWindows)
-                    break;
-            }
-        }
+        windows.AddRange(candidates
+            .Where(w => w >= Options.MinWindowSize && w <= Options.MaxWindowSize && w < n / 2)
+            .Take(Options.MaxAutoDetectedWindows));
 
         // If no candidates fit, use sqrt(n) rule
         if (windows.Count == 0)

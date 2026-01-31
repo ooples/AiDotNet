@@ -120,7 +120,6 @@ public class RollingCorrelationTransformer<T> : TimeSeriesTransformerBase<T>
         int outputFeatures = OutputFeatureCount;
 
         var output = new Tensor<T>(new[] { timeSteps, outputFeatures });
-        int pairsPerWindow = CountCorrelationPairs(inputFeatures);
 
         Parallel.For(0, timeSteps, t =>
         {
@@ -184,15 +183,10 @@ public class RollingCorrelationTransformer<T> : TimeSeriesTransformerBase<T>
     /// </summary>
     private int CountCorrelationPairs(int numFeatures)
     {
-        if (_fullMatrix)
-        {
-            return numFeatures * numFeatures;
-        }
-        else
-        {
-            // Upper triangle without diagonal: n*(n-1)/2
-            return numFeatures * (numFeatures - 1) / 2;
-        }
+        // Full matrix: n*n, Upper triangle without diagonal: n*(n-1)/2
+        return _fullMatrix
+            ? numFeatures * numFeatures
+            : numFeatures * (numFeatures - 1) / 2;
     }
 
     #endregion
@@ -238,14 +232,9 @@ public class RollingCorrelationTransformer<T> : TimeSeriesTransformerBase<T>
         for (int i = 0; i < windowSize; i++)
         {
             int t = startTime + i;
-            if (t < 0)
-            {
-                window[i] = double.NaN;
-            }
-            else
-            {
-                window[i] = NumOps.ToDouble(GetValue(data, t, feature));
-            }
+            window[i] = t < 0
+                ? double.NaN
+                : NumOps.ToDouble(GetValue(data, t, feature));
         }
 
         return window;

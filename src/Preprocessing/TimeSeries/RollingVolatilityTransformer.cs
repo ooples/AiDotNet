@@ -57,7 +57,7 @@ public class RollingVolatilityTransformer<T> : TimeSeriesTransformerBase<T>
     /// <summary>
     /// Cached operation names.
     /// </summary>
-    private string[] _operationNames;
+    private readonly string[] _operationNames;
 
     #endregion
 
@@ -70,10 +70,21 @@ public class RollingVolatilityTransformer<T> : TimeSeriesTransformerBase<T>
     public RollingVolatilityTransformer(TimeSeriesFeatureOptions? options = null)
         : base(options)
     {
-        _enabledMeasures = Options.EnabledVolatilityMeasures;
         _annualizationFactor = Options.AnnualizationFactor;
         _calculateReturns = Options.CalculateReturns;
         _calculateMomentum = Options.CalculateMomentum;
+
+        // Apply flags to mask enabled measures
+        _enabledMeasures = Options.EnabledVolatilityMeasures;
+        if (!_calculateReturns)
+        {
+            _enabledMeasures &= ~(VolatilityMeasures.SimpleReturns | VolatilityMeasures.LogReturns);
+        }
+        if (!_calculateMomentum)
+        {
+            _enabledMeasures &= ~VolatilityMeasures.Momentum;
+        }
+
         _operationNames = BuildOperationNames();
     }
 
@@ -269,7 +280,7 @@ public class RollingVolatilityTransformer<T> : TimeSeriesTransformerBase<T>
         if (_enabledMeasures.HasFlag(VolatilityMeasures.Momentum))
         {
             double val = ComputeMomentum(prices, windowSize);
-            output[t, outputIdx++] = NumOps.FromDouble(val);
+            output[t, outputIdx] = NumOps.FromDouble(val);
         }
     }
 
@@ -322,7 +333,7 @@ public class RollingVolatilityTransformer<T> : TimeSeriesTransformerBase<T>
         if (_enabledMeasures.HasFlag(VolatilityMeasures.Momentum))
         {
             double val = ComputeMomentum(prices, windowSize);
-            output[t, outputIdx++] = NumOps.FromDouble(val);
+            output[t, outputIdx] = NumOps.FromDouble(val);
         }
     }
 
@@ -338,14 +349,9 @@ public class RollingVolatilityTransformer<T> : TimeSeriesTransformerBase<T>
         for (int i = 0; i < windowSize; i++)
         {
             int t = startTime + i;
-            if (t < 0)
-            {
-                window[i] = double.NaN;
-            }
-            else
-            {
-                window[i] = NumOps.ToDouble(GetValue(data, t, feature));
-            }
+            window[i] = t < 0
+                ? double.NaN
+                : NumOps.ToDouble(GetValue(data, t, feature));
         }
 
         return window;
@@ -365,14 +371,9 @@ public class RollingVolatilityTransformer<T> : TimeSeriesTransformerBase<T>
         var returns = new double[prices.Length - 1];
         for (int i = 1; i < prices.Length; i++)
         {
-            if (double.IsNaN(prices[i]) || double.IsNaN(prices[i - 1]) || prices[i - 1] == 0)
-            {
-                returns[i - 1] = double.NaN;
-            }
-            else
-            {
-                returns[i - 1] = (prices[i] - prices[i - 1]) / prices[i - 1];
-            }
+            returns[i - 1] = double.IsNaN(prices[i]) || double.IsNaN(prices[i - 1]) || Math.Abs(prices[i - 1]) < double.Epsilon
+                ? double.NaN
+                : (prices[i] - prices[i - 1]) / prices[i - 1];
         }
 
         return returns;
@@ -388,15 +389,10 @@ public class RollingVolatilityTransformer<T> : TimeSeriesTransformerBase<T>
         var returns = new double[prices.Length - 1];
         for (int i = 1; i < prices.Length; i++)
         {
-            if (double.IsNaN(prices[i]) || double.IsNaN(prices[i - 1]) ||
-                prices[i] <= 0 || prices[i - 1] <= 0)
-            {
-                returns[i - 1] = double.NaN;
-            }
-            else
-            {
-                returns[i - 1] = Math.Log(prices[i] / prices[i - 1]);
-            }
+            returns[i - 1] = double.IsNaN(prices[i]) || double.IsNaN(prices[i - 1]) ||
+                prices[i] <= 0 || prices[i - 1] <= 0
+                    ? double.NaN
+                    : Math.Log(prices[i] / prices[i - 1]);
         }
 
         return returns;

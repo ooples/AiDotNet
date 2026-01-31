@@ -32,7 +32,7 @@ public class RollingStatsTransformer<T> : TimeSeriesTransformerBase<T>
     /// <summary>
     /// Cached operation names for feature naming.
     /// </summary>
-    private string[] _operationNames;
+    private readonly string[] _operationNames;
 
     /// <summary>
     /// The enabled statistics from options.
@@ -233,14 +233,9 @@ public class RollingStatsTransformer<T> : TimeSeriesTransformerBase<T>
         for (int i = 0; i < windowSize; i++)
         {
             int t = startTime + i;
-            if (t < 0)
-            {
-                window[i] = double.NaN; // Edge case: before data starts
-            }
-            else
-            {
-                window[i] = NumOps.ToDouble(GetValue(data, t, feature));
-            }
+            window[i] = t < 0
+                ? double.NaN // Edge case: before data starts
+                : NumOps.ToDouble(GetValue(data, t, feature));
         }
 
         return window;
@@ -480,14 +475,9 @@ public class RollingStatsTransformer<T> : TimeSeriesTransformerBase<T>
         var sorted = values.OrderBy(x => x).ToArray();
         int n = sorted.Length;
 
-        if (n % 2 == 1)
-        {
-            return sorted[n / 2];
-        }
-        else
-        {
-            return (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0;
-        }
+        return n % 2 == 1
+            ? sorted[n / 2]
+            : (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0;
     }
 
     /// <summary>
@@ -539,8 +529,9 @@ public class RollingStatsTransformer<T> : TimeSeriesTransformerBase<T>
         double sumFourth = values.Select(x => Math.Pow((x - mean) / std, 4)).Sum();
 
         // Fisher's excess kurtosis with sample adjustment
-        double k = ((double)n * (n + 1)) / ((n - 1) * (n - 2) * (n - 3)) * sumFourth;
-        double adjustment = 3.0 * (n - 1) * (n - 1) / ((n - 2) * (n - 3));
+        // Cast to double early to avoid integer overflow
+        double k = (double)n * (n + 1) / ((double)(n - 1) * (n - 2) * (n - 3)) * sumFourth;
+        double adjustment = 3.0 * (double)(n - 1) * (n - 1) / ((double)(n - 2) * (n - 3));
 
         return k - adjustment;
     }
