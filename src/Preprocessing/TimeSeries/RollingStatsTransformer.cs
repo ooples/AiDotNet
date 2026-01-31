@@ -96,6 +96,17 @@ public class RollingStatsTransformer<T> : TimeSeriesTransformerBase<T>
             // For each window size
             foreach (int windowSize in WindowSizes)
             {
+                // Honor EdgeHandling for incomplete windows
+                if (Options.EdgeHandling == EdgeHandling.NaN && t < windowSize - 1)
+                {
+                    int statsCount = CountEnabledStats() * inputFeatures;
+                    for (int i = 0; i < statsCount; i++)
+                    {
+                        output[t, outputIdx++] = NumOps.FromDouble(double.NaN);
+                    }
+                    continue;
+                }
+
                 // For each input feature
                 for (int f = 0; f < inputFeatures; f++)
                 {
@@ -128,6 +139,17 @@ public class RollingStatsTransformer<T> : TimeSeriesTransformerBase<T>
 
             foreach (int windowSize in WindowSizes)
             {
+                // Honor EdgeHandling for incomplete windows
+                if (Options.EdgeHandling == EdgeHandling.NaN && t < windowSize - 1)
+                {
+                    int statsCount = CountEnabledStats() * inputFeatures;
+                    for (int i = 0; i < statsCount; i++)
+                    {
+                        output[t, outputIdx++] = NumOps.FromDouble(double.NaN);
+                    }
+                    continue;
+                }
+
                 for (int f = 0; f < inputFeatures; f++)
                 {
                     var windowData = ExtractWindow(data, t, f, windowSize);
