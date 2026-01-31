@@ -722,8 +722,6 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         if (input.Rank < 1)
             throw new ArgumentException("Input tensor cannot be empty.", nameof(input));
 
-        // Store original shape for output restoration
-        var originalShape = input.Shape;
         var normalizedInput = input;
 
         // Normalize input to 2D [batch, lookback_window]
@@ -741,9 +739,10 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         }
         else if (input.Rank == 3)
         {
-            // 3D [batch, sequence, features] with features > 1
-            // For multivariate input, flatten sequence * features into lookback dimension
-            normalizedInput = input.Reshape(input.Shape[0], input.Shape[1] * input.Shape[2]);
+            // N-BEATS in this implementation is univariate only
+            throw new ArgumentException(
+                $"Expected univariate input with feature dimension 1, but got {input.Shape[2]}.",
+                nameof(input));
         }
         else if (input.Rank > 3)
         {
@@ -752,6 +751,15 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
             normalizedInput = input.Reshape(input.Shape[0], flattenedDim);
         }
         // Rank == 2 is already in correct format
+
+        // Validate normalized input dimensions
+        if (normalizedInput.Length == 0 || normalizedInput.Shape[0] == 0)
+            throw new ArgumentException("Input tensor cannot be empty.", nameof(input));
+
+        if (normalizedInput.Shape[1] != _lookbackWindow)
+            throw new ArgumentException(
+                $"Expected lookback window of {_lookbackWindow}, but got {normalizedInput.Shape[1]}.",
+                nameof(input));
 
         // Clear cached outputs from previous forward pass
         _cachedBlockHiddenOutputs.Clear();
