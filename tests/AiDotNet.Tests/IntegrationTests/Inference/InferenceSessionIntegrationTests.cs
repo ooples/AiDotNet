@@ -8,7 +8,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Normalizers;
+using AiDotNet.Preprocessing;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -461,16 +461,10 @@ public class InferenceSessionIntegrationTests
             BestSolution = model
         };
 
-        var normalization = new NormalizationInfo<float, Tensor<float>, Tensor<float>>
-        {
-            Normalizer = new NoNormalizer<float, Tensor<float>, Tensor<float>>(),
-            YParams = new NormalizationParameters<float> { Method = NormalizationMethod.None }
-        };
-
         var options = new AiModelResultOptions<float, Tensor<float>, Tensor<float>>
         {
             OptimizationResult = optimization,
-            NormalizationInfo = normalization,
+            PreprocessingInfo = new PreprocessingInfo<float, Tensor<float>, Tensor<float>>(),
             InferenceOptimizationConfig = config
         };
 

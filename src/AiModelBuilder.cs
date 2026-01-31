@@ -2,13 +2,11 @@
 
 global using AiDotNet.Agents;
 global using AiDotNet.Configuration;
-global using AiDotNet.DataProcessor;
 global using AiDotNet.Deployment.Configuration;
 global using AiDotNet.Diagnostics;
 global using AiDotNet.DistributedTraining;
 global using AiDotNet.Enums;
 global using AiDotNet.Extensions;
-global using AiDotNet.FeatureSelectors;
 global using AiDotNet.FitDetectors;
 global using AiDotNet.FitnessCalculators;
 global using AiDotNet.Helpers;
@@ -21,7 +19,6 @@ global using AiDotNet.MixedPrecision;
 global using AiDotNet.Models;
 global using AiDotNet.Models.Inputs;
 global using AiDotNet.Models.Options;
-global using AiDotNet.Normalizers;
 global using AiDotNet.Optimizers;
 global using AiDotNet.AnomalyDetection;
 global using AiDotNet.ProgramSynthesis.Interfaces;
@@ -138,8 +135,6 @@ namespace AiDotNet;
 /// </remarks>
 public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>
 {
-    private IFeatureSelector<T, TInput>? _featureSelector;
-    private INormalizer<T, TInput, TOutput>? _normalizer;
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
     private IRegularization<T, TInput, TOutput>? _regularization;
@@ -147,7 +142,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IFitDetector<T, TInput, TOutput>? _fitDetector;
     private IFullModel<T, TInput, TOutput>? _model;
     private IOptimizer<T, TInput, TOutput>? _optimizer;
-    private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
     private IDataLoader<T>? _dataLoader;
     private DataPreparationPipeline<T>? _dataPreparationPipeline;
     private IBiasDetector<T>? _biasDetector;
@@ -246,40 +240,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     // Memory management configuration for gradient checkpointing, activation pooling, and model sharding
     private Training.Memory.TrainingMemoryConfig? _memoryConfig;
-
-    /// <summary>
-    /// Configures which features (input variables) should be used in the model.
-    /// </summary>
-    /// <param name="selector">The feature selection strategy to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> Sometimes, not all of your data is useful for making predictions.
-    /// Feature selection helps pick out which parts of your data are most important.
-    /// For example, when predicting house prices, the number of bedrooms might be important,
-    /// but the house's street number probably isn't.
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureFeatureSelector(IFeatureSelector<T, TInput> selector)
-    {
-        _featureSelector = selector;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures how the input data should be normalized (scaled).
-    /// </summary>
-    /// <param name="normalizer">The normalization strategy to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> Normalization makes sure all your data is on a similar scale.
-    /// For example, if you have data about people's ages (0-100) and incomes ($0-$1,000,000),
-    /// normalization might scale both to ranges like 0-1 so the model doesn't think
-    /// income is 10,000 times more important than age just because the numbers are bigger.
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer)
-    {
-        _normalizer = normalizer;
-        return this;
-    }
 
     /// <summary>
     /// Configures a preprocessing pipeline using a builder action.
@@ -968,22 +928,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
-    /// Configures how the data should be preprocessed before training.
-    /// </summary>
-    /// <param name="dataPreprocessor">The data preprocessing strategy to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> Data preprocessing cleans and prepares your raw data before feeding it to the model.
-    /// It's like washing and cutting vegetables before cooking. This might include handling missing values,
-    /// converting text to numbers, or combining related features.
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor)
-    {
-        _dataPreprocessor = dataPreprocessor;
-        return this;
-    }
-
-    /// <summary>
     /// Configures the data loader for providing training data.
     /// </summary>
     /// <param name="dataLoader">The data loader that provides training data.</param>
@@ -1186,7 +1130,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = new NoNormalizer<T, TInput, TOutput>() },
+            PreprocessingInfo = _preprocessingPipeline is not null ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline) : null,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
             ProgramSynthesisModel = _programSynthesisModel,
@@ -1363,7 +1307,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = new NoNormalizer<T, TInput, TOutput>() },
+            PreprocessingInfo = _preprocessingPipeline is not null ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline) : null,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
             ProgramSynthesisModel = _programSynthesisModel,
@@ -1610,8 +1554,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         if (_model == null)
             throw new InvalidOperationException("Model implementation must be specified. Use ConfigureModel() to set a model, ConfigureAutoML() for automatic model selection, or enable agent assistance.");
 
-        // Use defaults for these interfaces if they aren't set
-        var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
+        // Use defaults for the optimizer if not set
         var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(_model);
 
         // LORA ADAPTATION (if configured)
@@ -1738,7 +1681,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         TOutput preparedY = y;
         TInput preprocessedX;
         TOutput preprocessedY;
-        NormalizationInfo<T, TInput, TOutput>? normInfo = null;
         PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo = null;
 
         // Step 1: Apply data preparation (outlier removal, augmentation) - changes row count
@@ -1769,16 +1711,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 _preprocessingPipeline,
                 targetPipeline: null
             );
-
-            // Create normInfo for backward compatibility
-            normInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = normalizer };
         }
         else
         {
             // No preprocessing pipeline configured - pass through
             preprocessedX = preparedX;
             preprocessedY = preparedY;
-            normInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = normalizer };
         }
 
         if (usePartitionedFederatedData)
@@ -2347,7 +2285,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = normInfo,
             PreprocessingInfo = preprocessingInfo,
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
@@ -2804,11 +2741,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             BestSolution = _model
         };
 
-        // Create normalization info with NoNormalizer (RL doesn't use normalization like supervised learning)
-        var normInfo = new NormalizationInfo<T, TInput, TOutput>
-        {
-            Normalizer = new NoNormalizer<T, TInput, TOutput>()
-        };
+        // RL doesn't use preprocessing like supervised learning - set to null
         PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo = null;
 
         // Create deployment configuration from individual configs
@@ -2829,7 +2762,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var rlOptions = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = normInfo,
             PreprocessingInfo = preprocessingInfo,
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,

@@ -115,23 +115,6 @@ public class AiModelResultOptions<T, TInput, TOutput>
     public OptimizationResult<T, TInput, TOutput>? OptimizationResult { get; set; }
 
     /// <summary>
-    /// Gets or sets the normalization information for preprocessing and postprocessing data.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Stores the normalization parameters used during training so that new input data
-    /// can be normalized the same way, and predictions can be denormalized to original scale.
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers how your training data was scaled.
-    /// When you make predictions on new data, it applies the same scaling so the model
-    /// understands the input correctly.
-    /// </para>
-    /// <para><b>Note:</b> This is the legacy normalization system. For new code, prefer using
-    /// <see cref="PreprocessingInfo"/> which provides a more flexible pipeline-based approach.</para>
-    /// </remarks>
-    public NormalizationInfo<T, TInput, TOutput>? NormalizationInfo { get; set; }
-
-    /// <summary>
     /// Gets or sets the preprocessing pipeline information for data transformation.
     /// </summary>
     /// <remarks>

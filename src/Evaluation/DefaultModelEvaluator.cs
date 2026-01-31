@@ -1,6 +1,7 @@
 global using AiDotNet.CrossValidators;
 
 using AiDotNet.Models.Options;
+using AiDotNet.Preprocessing;
 
 namespace AiDotNet.Evaluation;
 
@@ -88,7 +89,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
             TrainingSet = trainingSet,
             ValidationSet = validationSet ?? new DataSetStats<T, TInput, TOutput>(),
             TestSet = testSet ?? new DataSetStats<T, TInput, TOutput>(),
-            ModelStats = TryCalculateModelStats(input.Model, statsForModelCalc.Features, statsForModelCalc.Actual, statsForModelCalc.Predicted, input.NormInfo)
+            ModelStats = TryCalculateModelStats(input.Model, statsForModelCalc.Features, statsForModelCalc.Actual, statsForModelCalc.Predicted, input.PreprocessingInfo)
         };
 
         return evaluationData;
@@ -104,11 +105,11 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         TInput xForStatistics,
         TOutput actual,
         TOutput predicted,
-        NormalizationInfo<T, TInput, TOutput> normInfo)
+        PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo)
     {
         try
         {
-            return CalculateModelStats(model, xForStatistics, actual, predicted, normInfo);
+            return CalculateModelStats(model, xForStatistics, actual, predicted, preprocessingInfo);
         }
         catch (InvalidOperationException)
         {
@@ -555,7 +556,7 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
     /// <param name="xForStatistics">The feature matrix used for computing model statistics.</param>
     /// <param name="actual">The actual targets corresponding to <paramref name="xForStatistics"/>.</param>
     /// <param name="predicted">The predicted targets corresponding to <paramref name="xForStatistics"/>.</param>
-    /// <param name="normInfo">Information about how the data was normalized.</param>
+    /// <param name="preprocessingInfo">Information about how the data was normalized.</param>
     /// <returns>Statistics about the model's structure and characteristics.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> This method analyzes the model itself rather than its predictions.
@@ -571,13 +572,13 @@ public class DefaultModelEvaluator<T, TInput, TOutput> : IModelEvaluator<T, TInp
         TInput xForStatistics,
         TOutput actual,
         TOutput predicted,
-        NormalizationInfo<T, TInput, TOutput> normInfo)
+        PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo)
     {
         var optimizationResult = new OptimizationResult<T, TInput, TOutput> { BestSolution = model };
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = normInfo
+            PreprocessingInfo = preprocessingInfo
         };
         var predictionModelResult = new AiModelResult<T, TInput, TOutput>(options);
 
