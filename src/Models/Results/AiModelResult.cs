@@ -2364,7 +2364,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             DataVersionHash = DataVersionHash,
             HyperparameterTrialId = HyperparameterTrialId,
             Hyperparameters = Hyperparameters,
-            TrainingMetricsHistory = TrainingMetricsHistory
+            TrainingMetricsHistory = TrainingMetricsHistory,
+            // Interpretability - preserve across clones
+            InterpretabilityOptions = InterpretabilityOptions
         };
 
         return new AiModelResult<T, TInput, TOutput>(options);
