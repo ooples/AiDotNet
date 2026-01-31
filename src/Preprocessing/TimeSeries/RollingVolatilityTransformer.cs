@@ -120,6 +120,17 @@ public class RollingVolatilityTransformer<T> : TimeSeriesTransformerBase<T>
 
             foreach (int windowSize in WindowSizes)
             {
+                // Honor EdgeHandling for incomplete windows
+                if (Options.EdgeHandling == EdgeHandling.NaN && t < windowSize - 1)
+                {
+                    int measuresCount = CountEnabledMeasures() * inputFeatures;
+                    for (int i = 0; i < measuresCount; i++)
+                    {
+                        output[t, outputIdx++] = NumOps.FromDouble(double.NaN);
+                    }
+                    continue;
+                }
+
                 for (int f = 0; f < inputFeatures; f++)
                 {
                     ComputeVolatilityFeatures(data, t, f, windowSize, output, ref outputIdx);
@@ -146,6 +157,17 @@ public class RollingVolatilityTransformer<T> : TimeSeriesTransformerBase<T>
 
             foreach (int windowSize in WindowSizes)
             {
+                // Honor EdgeHandling for incomplete windows
+                if (Options.EdgeHandling == EdgeHandling.NaN && t < windowSize - 1)
+                {
+                    int measuresCount = featuresPerWindowFeature * inputFeatures;
+                    for (int i = 0; i < measuresCount; i++)
+                    {
+                        output[t, outputIdx++] = NumOps.FromDouble(double.NaN);
+                    }
+                    continue;
+                }
+
                 for (int f = 0; f < inputFeatures; f++)
                 {
                     int localIdx = outputIdx;
