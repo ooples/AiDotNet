@@ -138,6 +138,13 @@ public abstract class TimeSeriesTransformerBase<T> : ITimeSeriesFeatureExtractor
         // Get input dimensions
         _inputFeatureCount = data.Shape.Length > 1 ? data.Shape[^1] : 1;
 
+        // Validate InputFeatureNames length against detected feature count
+        if (Options.InputFeatureNames is { } names && names.Length != _inputFeatureCount)
+        {
+            throw new ArgumentException(
+                $"InputFeatureNames length ({names.Length}) must match detected feature count ({_inputFeatureCount}).");
+        }
+
         // Set up input feature names
         _inputFeatureNames = Options.InputFeatureNames ?? GenerateDefaultInputNames(_inputFeatureCount);
 
@@ -416,7 +423,9 @@ public abstract class TimeSeriesTransformerBase<T> : ITimeSeriesFeatureExtractor
         }
 
         int timeSteps = GetTimeSteps(data);
-        int maxWindow = _windowSizes.Length > 0 ? _windowSizes.Max() : Options.WindowSizes.Max();
+        int maxWindow = _windowSizes.Length > 0
+            ? _windowSizes.Max()
+            : (Options.WindowSizes.Length > 0 ? Options.WindowSizes.Max() : Options.MinWindowSize);
 
         if (timeSteps < maxWindow)
         {
