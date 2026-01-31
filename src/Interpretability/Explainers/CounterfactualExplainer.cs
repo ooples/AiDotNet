@@ -92,6 +92,18 @@ public class CounterfactualExplainer<T> : ILocalExplainer<T, CounterfactualExpla
 
         if (numFeatures < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(numFeatures));
+        if (maxIterations < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxIterations), "Max iterations must be at least 1.");
+        if (stepSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(stepSize), "Step size must be positive.");
+        if (featureNames != null && featureNames.Length != numFeatures)
+            throw new ArgumentException($"featureNames length ({featureNames.Length}) must match numFeatures ({numFeatures}).", nameof(featureNames));
+        if (featureMins != null && featureMins.Length != numFeatures)
+            throw new ArgumentException($"featureMins length ({featureMins.Length}) must match numFeatures ({numFeatures}).", nameof(featureMins));
+        if (featureMaxs != null && featureMaxs.Length != numFeatures)
+            throw new ArgumentException($"featureMaxs length ({featureMaxs.Length}) must match numFeatures ({numFeatures}).", nameof(featureMaxs));
+        if (featuresMutable != null && featuresMutable.Length != numFeatures)
+            throw new ArgumentException($"featuresMutable length ({featuresMutable.Length}) must match numFeatures ({numFeatures}).", nameof(featuresMutable));
 
         _numFeatures = numFeatures;
         _maxIterations = maxIterations;

@@ -91,6 +91,16 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
         int? randomState = null)
     {
         _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
+
+        if (numFeatures < 1)
+            throw new ArgumentException("Number of features must be at least 1.", nameof(numFeatures));
+        if (smoothGradSamples < 1)
+            throw new ArgumentOutOfRangeException(nameof(smoothGradSamples), "SmoothGrad samples must be at least 1.");
+        if (smoothGradNoise < 0)
+            throw new ArgumentOutOfRangeException(nameof(smoothGradNoise), "SmoothGrad noise must be non-negative.");
+        if (featureNames != null && featureNames.Length != numFeatures)
+            throw new ArgumentException($"featureNames length ({featureNames.Length}) must match numFeatures ({numFeatures}).", nameof(featureNames));
+
         _gradientFunction = gradientFunction;
         _numFeatures = numFeatures;
         _method = method;

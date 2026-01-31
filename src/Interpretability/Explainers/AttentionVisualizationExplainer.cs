@@ -93,6 +93,8 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
             throw new ArgumentException("Number of heads must be at least 1.", nameof(numHeads));
         if (sequenceLength < 1)
             throw new ArgumentException("Sequence length must be at least 1.", nameof(sequenceLength));
+        if (tokenLabels != null && tokenLabels.Length != sequenceLength)
+            throw new ArgumentException($"tokenLabels length ({tokenLabels.Length}) must match sequenceLength ({sequenceLength}).", nameof(tokenLabels));
 
         _numLayers = numLayers;
         _numHeads = numHeads;
@@ -258,6 +260,16 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
     /// </summary>
     private T[,,] ExtractAttentionMatrix(Tensor<T> attnTensor)
     {
+        // Validate tensor shape: expect [batch, heads, seq, seq] or [heads, seq, seq]
+        if (attnTensor.Rank < 3 || attnTensor.Rank > 4)
+            throw new ArgumentException($"Attention tensor must have rank 3 or 4, but got {attnTensor.Rank}.", nameof(attnTensor));
+
+        int expectedElements = _numHeads * _sequenceLength * _sequenceLength;
+        if (attnTensor.Length < expectedElements)
+            throw new ArgumentException(
+                $"Attention tensor has {attnTensor.Length} elements but expected at least {expectedElements} " +
+                $"(numHeads={_numHeads}, sequenceLength={_sequenceLength}).", nameof(attnTensor));
+
         var result = new T[_numHeads, _sequenceLength, _sequenceLength];
         var attnSpan = attnTensor.Data.Span;
 

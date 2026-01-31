@@ -87,6 +87,20 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
 
         if (numFeatures < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(numFeatures));
+        if (precisionThreshold <= 0 || precisionThreshold > 1)
+            throw new ArgumentOutOfRangeException(nameof(precisionThreshold), "Precision threshold must be in (0, 1].");
+        if (maxAnchorSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxAnchorSize), "Max anchor size must be at least 1.");
+        if (beamWidth < 1)
+            throw new ArgumentOutOfRangeException(nameof(beamWidth), "Beam width must be at least 1.");
+        if (nSamples < 1)
+            throw new ArgumentOutOfRangeException(nameof(nSamples), "Number of samples must be at least 1.");
+        if (featureNames != null && featureNames.Length != numFeatures)
+            throw new ArgumentException($"featureNames length ({featureNames.Length}) must match numFeatures ({numFeatures}).", nameof(featureNames));
+        if (featureMins != null && featureMins.Length != numFeatures)
+            throw new ArgumentException($"featureMins length ({featureMins.Length}) must match numFeatures ({numFeatures}).", nameof(featureMins));
+        if (featureMaxs != null && featureMaxs.Length != numFeatures)
+            throw new ArgumentException($"featureMaxs length ({featureMaxs.Length}) must match numFeatures ({numFeatures}).", nameof(featureMaxs));
 
         _numFeatures = numFeatures;
         _precisionThreshold = NumOps.FromDouble(precisionThreshold);
