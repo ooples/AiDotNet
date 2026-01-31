@@ -48,6 +48,12 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
+        if (alphaThreshold <= 0)
+            throw new ArgumentOutOfRangeException(nameof(alphaThreshold), "Alpha threshold must be positive.");
+        if (maxIterations < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxIterations), "Max iterations must be at least 1.");
+        if (tolerance <= 0)
+            throw new ArgumentOutOfRangeException(nameof(tolerance), "Tolerance must be positive.");
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _alphaThreshold = alphaThreshold;

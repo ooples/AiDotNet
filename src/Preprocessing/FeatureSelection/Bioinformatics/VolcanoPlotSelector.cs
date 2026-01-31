@@ -47,6 +47,10 @@ public class VolcanoPlotSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
+        if (minFoldChange <= 0)
+            throw new ArgumentOutOfRangeException(nameof(minFoldChange), "Minimum fold change must be positive.");
+        if (pValueThreshold <= 0 || pValueThreshold > 1)
+            throw new ArgumentOutOfRangeException(nameof(pValueThreshold), "P-value threshold must be in range (0, 1].");
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _minFoldChange = minFoldChange;
@@ -68,13 +72,22 @@ public class VolcanoPlotSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
+        // Identify distinct class labels
+        var labels = target.Select(NumOps.ToDouble).Distinct().OrderBy(x => x).ToArray();
+        if (labels.Length != 2)
+            throw new ArgumentException("VolcanoPlotSelector requires exactly two distinct class labels.");
+
+        double label0 = labels[0];
+        double label1 = labels[1];
+
         // Separate samples by class
         var class0 = new List<int>();
         var class1 = new List<int>();
 
         for (int i = 0; i < n; i++)
         {
-            if (NumOps.ToDouble(target[i]) < 0.5)
+            double y = NumOps.ToDouble(target[i]);
+            if (y == label0)
                 class0.Add(i);
             else
                 class1.Add(i);

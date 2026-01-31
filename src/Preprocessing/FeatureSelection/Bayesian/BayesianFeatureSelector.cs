@@ -47,6 +47,8 @@ public class BayesianFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
         if (priorProbability <= 0 || priorProbability >= 1)
             throw new ArgumentException("Prior probability must be between 0 and 1 exclusive.", nameof(priorProbability));
+        if (threshold < 0 || threshold > 1)
+            throw new ArgumentOutOfRangeException(nameof(threshold), "Threshold must be in range [0, 1].");
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _priorProbability = priorProbability;
@@ -127,10 +129,11 @@ public class BayesianFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             _posteriorProbabilities[j] = posteriorOdds / (1 + posteriorOdds);
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
+        // Select features that exceed threshold, up to nFeaturesToSelect
         _selectedIndices = Enumerable.Range(0, p)
+            .Where(j => _posteriorProbabilities[j] >= _threshold)
             .OrderByDescending(j => _posteriorProbabilities[j])
-            .Take(numToSelect)
+            .Take(_nFeaturesToSelect)
             .OrderBy(x => x)
             .ToArray();
 

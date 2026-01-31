@@ -56,6 +56,8 @@ public class SAM<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Number of permutations must be at least 10.", nameof(nPermutations));
         if (fdrThreshold <= 0 || fdrThreshold >= 1)
             throw new ArgumentException("FDR threshold must be between 0 and 1.", nameof(fdrThreshold));
+        if (s0Percentile < 0 || s0Percentile > 1)
+            throw new ArgumentOutOfRangeException(nameof(s0Percentile), "s0Percentile must be in range [0, 1].");
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _nPermutations = nPermutations;

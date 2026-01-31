@@ -80,6 +80,24 @@ public class ConstraintBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
+        // Validate mandatory feature indices
+        if (_mandatoryFeatures is not null)
+        {
+            var outOfRange = _mandatoryFeatures.Where(idx => idx < 0 || idx >= p).ToArray();
+            if (outOfRange.Length > 0)
+                throw new ArgumentException(
+                    $"Mandatory feature indices out of range [0, {p}): [{string.Join(", ", outOfRange)}]");
+        }
+
+        // Validate forbidden feature indices
+        if (_forbiddenFeatures is not null)
+        {
+            var outOfRange = _forbiddenFeatures.Where(idx => idx < 0 || idx >= p).ToArray();
+            if (outOfRange.Length > 0)
+                throw new ArgumentException(
+                    $"Forbidden feature indices out of range [0, {p}): [{string.Join(", ", outOfRange)}]");
+        }
+
         // Convert to arrays
         var X = new double[n, p];
         var y = new double[n];

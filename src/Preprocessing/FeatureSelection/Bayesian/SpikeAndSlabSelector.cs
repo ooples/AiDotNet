@@ -113,14 +113,27 @@ public class SpikeAndSlabSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     xjy += X[i, j] * y[i];
                 }
 
+                // Guard against division by zero when xjNorm is too small
+                if (xjNorm < 1e-10)
+                {
+                    gamma[j] = _priorInclusionProbability;
+                    continue;
+                }
+
                 // Bayes factor approximation
-                double betaHat = xjNorm > 1e-10 ? xjy / xjNorm : 0;
+                double betaHat = xjy / xjNorm;
                 double logBFSlab = -0.5 * Math.Log(_slabVariance + residualVariance / xjNorm)
                     + 0.5 * betaHat * betaHat * xjNorm / (residualVariance + 1e-10);
                 double logBFSpike = -0.5 * Math.Log(_spikeVariance + residualVariance / xjNorm)
                     + 0.5 * betaHat * betaHat * xjNorm / (residualVariance * _spikeVariance / _slabVariance + 1e-10);
 
                 double logBF = logBFSlab - logBFSpike;
+                if (double.IsNaN(logBF) || double.IsInfinity(logBF))
+                {
+                    gamma[j] = _priorInclusionProbability;
+                    continue;
+                }
+
                 double priorOdds = _priorInclusionProbability / (1 - _priorInclusionProbability);
                 double posteriorOdds = priorOdds * Math.Exp(Math.Min(logBF, 50));
 
