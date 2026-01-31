@@ -10,6 +10,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Postprocessing;
 using AiDotNet.Preprocessing;
+using AiDotNet.Preprocessing.DataPreparation;
 using AiDotNet.ProgramSynthesis.Options;
 using AiDotNet.ProgramSynthesis.Serving;
 using AiDotNet.PromptEngineering.FewShot;
@@ -352,20 +353,38 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor);
 
     /// <summary>
-    /// Configures the outlier removal component for the model.
+    /// Configures the data preparation pipeline for row-changing operations.
     /// </summary>
     /// <remarks>
-    /// An outlier removal component identifies and handles unusual data points that might
-    /// negatively impact the model's performance.
-    /// 
-    /// <b>For Beginners:</b> Outliers are unusual data points that don't follow the general pattern. 
-    /// For example, if you're analyzing house prices and most houses cost $100,000-$500,000, 
-    /// a $10 million mansion would be an outlier. These unusual points can confuse your model 
-    /// and make it perform worse. Outlier removal helps identify and handle these unusual cases.
+    /// <para>
+    /// Data preparation handles operations that change the number of rows in your dataset,
+    /// such as outlier removal (removes rows) or SMOTE augmentation (adds synthetic rows).
+    /// These operations are applied during training only, not during prediction.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Data preparation is the first step before preprocessing. While
+    /// preprocessing (scaling, encoding) keeps all your data rows, data preparation may
+    /// add or remove rows:
+    /// - <b>Outlier removal:</b> Removes unusual data points that could confuse the model
+    /// - <b>SMOTE augmentation:</b> Creates synthetic samples to balance imbalanced classes
+    /// </para>
+    /// <para>
+    /// Example usage:
+    /// <code>
+    /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureDataPreparation(pipeline => pipeline
+    ///         .RemoveOutliers(new IsolationForest&lt;double&gt;())
+    ///         .AddAugmentation(new SmoteAugmenter&lt;double&gt;()))
+    ///     .ConfigurePreprocessing(new StandardScaler&lt;double&gt;())
+    ///     .ConfigureModel(new LogisticRegression&lt;double&gt;())
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
     /// </remarks>
-    /// <param name="outlierRemoval">The outlier removal implementation to use.</param>
+    /// <param name="pipelineBuilder">An action that configures the data preparation pipeline.</param>
     /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval);
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreparation(
+        Action<DataPreparationPipeline<T>> pipelineBuilder);
 
     /// <summary>
     /// Uses a trained model to make predictions on new data.

@@ -9,7 +9,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Normalizers;
 using AiDotNet.Optimizers;
-using AiDotNet.OutlierRemoval;
+using AiDotNet.AnomalyDetection;
 using AiDotNet.Regression;
 using AiDotNet.Regularization;
 using AiDotNet.Tensors.Helpers;
@@ -68,11 +68,11 @@ public class EnhancedRegressionExample
             }
 
             // 3. Configure data preprocessing options
+            // Note: Outlier removal is now handled separately via DataPreparationPipeline
             var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
             var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-            var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
             var dataPreprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-                normalizer, featureSelector, outlierRemoval);
+                normalizer, featureSelector);
 
             // 4. Train multiple types of regression models
             Console.WriteLine("\nTraining multiple regression models...");

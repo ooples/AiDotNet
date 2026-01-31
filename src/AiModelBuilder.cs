@@ -23,7 +23,7 @@ global using AiDotNet.Models.Inputs;
 global using AiDotNet.Models.Options;
 global using AiDotNet.Normalizers;
 global using AiDotNet.Optimizers;
-global using AiDotNet.OutlierRemoval;
+global using AiDotNet.AnomalyDetection;
 global using AiDotNet.ProgramSynthesis.Interfaces;
 global using AiDotNet.ProgramSynthesis.Serving;
 global using AiDotNet.PromptEngineering.Chains;
@@ -45,6 +45,7 @@ using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Postprocessing;
 using AiDotNet.Preprocessing;
+using AiDotNet.Preprocessing.DataPreparation;
 using AiDotNet.Preprocessing.Imputers;
 using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -148,7 +149,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IOptimizer<T, TInput, TOutput>? _optimizer;
     private IDataPreprocessor<T, TInput, TOutput>? _dataPreprocessor;
     private IDataLoader<T>? _dataLoader;
-    private IOutlierRemoval<T, TInput, TOutput>? _outlierRemoval;
+    private DataPreparationPipeline<T>? _dataPreparationPipeline;
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
     private AdversarialRobustnessConfiguration<T, TInput, TOutput>? _adversarialRobustnessConfiguration;
@@ -1017,19 +1018,39 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
-    /// Configures how to detect and handle outliers in the data.
+    /// Configures data preparation operations that change row count (outlier removal, augmentation).
     /// </summary>
-    /// <param name="outlierRemoval">The outlier removal strategy to use.</param>
+    /// <param name="pipelineBuilder">Action to configure the data preparation pipeline.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
-    /// <b>For Beginners:</b> Outliers are unusual data points that are very different from the rest of your data.
-    /// For example, if you're analyzing house prices and most are between $100,000-$500,000,
-    /// a $10,000,000 mansion would be an outlier. These unusual points can sometimes confuse the model,
-    /// so we might want to handle them specially.
+    /// <para>
+    /// <b>For Beginners:</b> Data preparation handles operations that add or remove data points:
+    /// - <b>Outlier removal:</b> Removes unusual data points that might confuse the model
+    /// - <b>Data augmentation (SMOTE):</b> Creates synthetic samples to balance imbalanced classes
+    /// </para>
+    /// <para>
+    /// These operations are only applied during training, not during prediction.
+    /// </para>
+    /// <para>
+    /// <b>Example:</b>
+    /// <code>
+    /// builder.ConfigureDataPreparation(prep => prep
+    ///     .Add(new OutlierRemovalOperation&lt;double&gt;(new IsolationForest&lt;double&gt;()))
+    ///     .Add(new AugmentationOperation&lt;double&gt;(new SmoteAugmenter&lt;double&gt;())));
+    /// </code>
+    /// </para>
     /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureOutlierRemoval(IOutlierRemoval<T, TInput, TOutput> outlierRemoval)
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreparation(
+        Action<DataPreparationPipeline<T>> pipelineBuilder)
     {
-        _outlierRemoval = outlierRemoval;
+        if (pipelineBuilder is null)
+        {
+            throw new ArgumentNullException(nameof(pipelineBuilder));
+        }
+
+        _dataPreparationPipeline = new DataPreparationPipeline<T>();
+        pipelineBuilder(_dataPreparationPipeline);
+        DataPreparationRegistry<T>.Current = _dataPreparationPipeline;
         return this;
     }
 
@@ -1507,25 +1528,42 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             Console.WriteLine("AutoML configured - starting model search...");
             var searchStartedUtc = DateTimeOffset.UtcNow;
 
-            // Set up preprocessing for AutoML search
-            var autoMLNormalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
-            var autoMLFeatureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
-            var autoMLOutlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
-
-            var autoMLDataProcessorOptions = new DataProcessorOptions();
-            if (_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
-                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection)
+            // Step 1: Apply data preparation (outlier removal, augmentation) - changes row count
+            TInput autoMLPreparedX = x;
+            TOutput autoMLPreparedY = y;
+            if (_dataPreparationPipeline != null && _dataPreparationPipeline.Count > 0)
             {
-                autoMLDataProcessorOptions.ShuffleBeforeSplit = false;
+                if (x is Matrix<T> xMatrix && y is Vector<T> yVector)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResample(xMatrix, yVector);
+                    autoMLPreparedX = (TInput)(object)prepX;
+                    autoMLPreparedY = (TOutput)(object)prepY;
+                }
+                else if (x is Tensor<T> xTensor && y is Tensor<T> yTensor)
+                {
+                    var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(xTensor, yTensor);
+                    autoMLPreparedX = (TInput)(object)prepX;
+                    autoMLPreparedY = (TOutput)(object)prepY;
+                }
             }
 
-            var autoMLPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(
-                autoMLNormalizer, autoMLFeatureSelector, autoMLOutlierRemoval, autoMLDataProcessorOptions);
+            // Step 2: Apply preprocessing pipeline (scaling, encoding, etc.) - doesn't change row count
+            TInput autoMLPreprocessedX = autoMLPreparedX;
+            if (_preprocessingPipeline != null)
+            {
+                autoMLPreprocessedX = _preprocessingPipeline.FitTransform(autoMLPreparedX);
+            }
 
-            // Preprocess and split data for AutoML search
-            var (autoMLPreprocessedX, autoMLPreprocessedY, _) = autoMLPreprocessor.PreprocessData(x, y);
-            var (autoMLXTrain, autoMLYTrain, autoMLXVal, autoMLYVal, _, _) = autoMLPreprocessor.SplitData(
-                autoMLPreprocessedX, autoMLPreprocessedY);
+            // Step 3: Split data for AutoML search
+            bool shuffleBeforeSplit = !(_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
+                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection);
+
+            var splitResult = DataSplitter.Split<T, TInput, TOutput>(
+                autoMLPreprocessedX, autoMLPreparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
+            var autoMLXTrain = splitResult.XTrain;
+            var autoMLYTrain = splitResult.yTrain;
+            var autoMLXVal = splitResult.XVal;
+            var autoMLYVal = splitResult.yVal;
 
             // Configure AutoML with model evaluator if available
             if (_modelEvaluator != null)
@@ -1575,9 +1613,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Use defaults for these interfaces if they aren't set
         var normalizer = _normalizer ?? new NoNormalizer<T, TInput, TOutput>();
         var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(_model);
-        var featureSelector = _featureSelector ?? new NoFeatureSelector<T, TInput>();
-        var outlierRemoval = _outlierRemoval ?? new NoOutlierRemoval<T, TInput, TOutput>();
-        var dataPreprocessor = _dataPreprocessor ?? new DefaultDataPreprocessor<T, TInput, TOutput>(normalizer, featureSelector, outlierRemoval);
 
         // LORA ADAPTATION (if configured)
         // Apply LoRA adapters to neural network layers for parameter-efficient fine-tuning
@@ -1696,31 +1731,54 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
         }
 
-        // Preprocess the data
+        // Preprocess the data in two stages:
+        // 1. Data preparation (row-changing operations like outlier removal, augmentation)
+        // 2. Preprocessing pipeline (transforms like scaling, encoding)
+        TInput preparedX = x;
+        TOutput preparedY = y;
         TInput preprocessedX;
         TOutput preprocessedY;
         NormalizationInfo<T, TInput, TOutput>? normInfo = null;
         PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo = null;
 
+        // Step 1: Apply data preparation (outlier removal, augmentation) - changes row count
+        if (_dataPreparationPipeline != null && _dataPreparationPipeline.Count > 0)
+        {
+            if (x is Matrix<T> xMatrix && y is Vector<T> yVector)
+            {
+                var (prepX, prepY) = _dataPreparationPipeline.FitResample(xMatrix, yVector);
+                preparedX = (TInput)(object)prepX;
+                preparedY = (TOutput)(object)prepY;
+            }
+            else if (x is Tensor<T> xTensor && y is Tensor<T> yTensor)
+            {
+                var (prepX, prepY) = _dataPreparationPipeline.FitResampleTensor(xTensor, yTensor);
+                preparedX = (TInput)(object)prepX;
+                preparedY = (TOutput)(object)prepY;
+            }
+        }
+
+        // Step 2: Apply preprocessing pipeline (scaling, encoding, etc.) - doesn't change row count
         if (_preprocessingPipeline is not null)
         {
-            // Use new preprocessing pipeline
-            preprocessedX = _preprocessingPipeline.FitTransform(x);
-            preprocessedY = y; // Target preprocessing handled separately if needed
+            preprocessedX = _preprocessingPipeline.FitTransform(preparedX);
+            preprocessedY = preparedY;
 
             // Create PreprocessingInfo with fitted pipeline
             preprocessingInfo = new PreprocessingInfo<T, TInput, TOutput>(
                 _preprocessingPipeline,
-                targetPipeline: null // Target pipeline can be added later if needed
+                targetPipeline: null
             );
 
-            // Create a legacy normInfo for backward compatibility with NoNormalizer
-            normInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = new NoNormalizer<T, TInput, TOutput>() };
+            // Create normInfo for backward compatibility
+            normInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = normalizer };
         }
         else
         {
-            // Use legacy dataPreprocessor
-            (preprocessedX, preprocessedY, normInfo) = dataPreprocessor.PreprocessData(x, y);
+            // No preprocessing pipeline configured - pass through
+            preprocessedX = preparedX;
+            preprocessedY = preparedY;
+            normInfo = new NormalizationInfo<T, TInput, TOutput> { Normalizer = normalizer };
         }
 
         if (usePartitionedFederatedData)
@@ -1762,7 +1820,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         else
         {
             // Standard supervised learning path: split into train/validation/test.
-            (XTrain, yTrain, XVal, yVal, XTest, yTest) = dataPreprocessor.SplitData(preprocessedX, preprocessedY);
+            (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
+                preprocessedX, preprocessedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: true);
         }
 
         // Perform cross-validation on training data BEFORE final model training (if configured)

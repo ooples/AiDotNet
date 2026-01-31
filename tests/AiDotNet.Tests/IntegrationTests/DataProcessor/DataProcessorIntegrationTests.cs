@@ -4,7 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Normalizers;
 using AiDotNet.FeatureSelectors;
-using AiDotNet.OutlierRemoval;
+using AiDotNet.AnomalyDetection;
 
 namespace AiDotNet.Tests.IntegrationTests.DataProcessor;
 
@@ -69,12 +69,12 @@ public class DataProcessorIntegrationTests
     [Fact]
     public void DefaultDataPreprocessor_CanBeConstructed_WithPassThroughDependencies()
     {
+        // Note: Outlier removal is now handled separately via DataPreparationPipeline
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         Assert.NotNull(preprocessor);
     }
@@ -82,9 +82,9 @@ public class DataProcessorIntegrationTests
     [Fact]
     public void DefaultDataPreprocessor_CanBeConstructed_WithOptions()
     {
+        // Note: Outlier removal is now handled separately via DataPreparationPipeline
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
         var options = new DataProcessorOptions
         {
             TrainingSplitPercentage = 0.6,
@@ -93,7 +93,7 @@ public class DataProcessorIntegrationTests
         };
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval, options);
+            normalizer, featureSelector, options);
 
         Assert.NotNull(preprocessor);
     }
@@ -107,10 +107,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         // Create test data
         var X = new Matrix<double>(new double[,]
@@ -135,10 +134,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         var X = new Matrix<double>(new double[,]
         {
@@ -160,11 +158,10 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
         var options = new DataProcessorOptions { NormalizeBeforeFeatureSelection = true };
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval, options);
+            normalizer, featureSelector, options);
 
         var X = new Matrix<double>(new double[,]
         {
@@ -185,11 +182,10 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
         var options = new DataProcessorOptions { NormalizeBeforeFeatureSelection = false };
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval, options);
+            normalizer, featureSelector, options);
 
         var X = new Matrix<double>(new double[,]
         {
@@ -214,10 +210,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         // Create dataset with 100 samples
         var X = new Matrix<double>(100, 3);
@@ -247,7 +242,6 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
         var options = new DataProcessorOptions
         {
             TrainingSplitPercentage = 0.6,
@@ -256,7 +250,7 @@ public class DataProcessorIntegrationTests
         };
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval, options);
+            normalizer, featureSelector, options);
 
         // Create dataset with 100 samples
         var X = new Matrix<double>(100, 3);
@@ -280,10 +274,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         var X = new Matrix<double>(50, 5); // 5 features
         var y = new Vector<double>(50);
@@ -310,7 +303,6 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
         var options = new DataProcessorOptions
         {
             ShuffleBeforeSplit = false,
@@ -320,7 +312,7 @@ public class DataProcessorIntegrationTests
         };
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval, options);
+            normalizer, featureSelector, options);
 
         var X = new Matrix<double>(20, 1);
         var y = new Vector<double>(20);
@@ -362,12 +354,11 @@ public class DataProcessorIntegrationTests
 
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
         var preprocessor1 = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval, options1);
+            normalizer, featureSelector, options1);
         var preprocessor2 = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval, options2);
+            normalizer, featureSelector, options2);
 
         var X = new Matrix<double>(50, 2);
         var y = new Vector<double>(50);
@@ -406,12 +397,11 @@ public class DataProcessorIntegrationTests
 
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
         var preprocessor1 = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval, options1);
+            normalizer, featureSelector, options1);
         var preprocessor2 = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval, options2);
+            normalizer, featureSelector, options2);
 
         var X = new Matrix<double>(50, 2);
         var y = new Vector<double>(50);
@@ -443,10 +433,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         int totalSamples = 73; // Odd number to test rounding
         var X = new Matrix<double>(totalSamples, 2);
@@ -473,10 +462,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Tensor<double>, Tensor<double>>();
         var featureSelector = new NoFeatureSelector<double, Tensor<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Tensor<double>, Tensor<double>>();
 
         var preprocessor = new DefaultDataPreprocessor<double, Tensor<double>, Tensor<double>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         // Create 2D tensor (100 samples, 3 features)
         var X = new Tensor<double>(new int[] { 100, 3 });
@@ -506,10 +494,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Tensor<double>, Tensor<double>>();
         var featureSelector = new NoFeatureSelector<double, Tensor<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Tensor<double>, Tensor<double>>();
 
         var preprocessor = new DefaultDataPreprocessor<double, Tensor<double>, Tensor<double>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         // Create tensor with 5 features
         var X = new Tensor<double>(new int[] { 50, 5 });
@@ -541,10 +528,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, double[], double>();
         var featureSelector = new NoFeatureSelector<double, double[]>();
-        var outlierRemoval = new NoOutlierRemoval<double, double[], double>();
 
         var preprocessor = new DefaultDataPreprocessor<double, double[], double>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         var X = new double[] { 1.0, 2.0, 3.0 };
         var y = 4.0;
@@ -561,10 +547,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         // Very small dataset (10 samples)
         var X = new Matrix<double>(10, 2);
@@ -588,10 +573,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         var X = new Matrix<double>(0, 3); // 0 rows
         var y = new Vector<double>(0);
@@ -607,10 +591,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         // Single feature
         var X = new Matrix<double>(100, 1);
@@ -638,10 +621,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<double, Matrix<double>, Vector<double>>();
         var featureSelector = new NoFeatureSelector<double, Matrix<double>>();
-        var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
         var preprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         // Create realistic dataset
         var X = new Matrix<double>(100, 4);
@@ -673,10 +655,9 @@ public class DataProcessorIntegrationTests
     {
         var normalizer = new NoNormalizer<float, Matrix<float>, Vector<float>>();
         var featureSelector = new NoFeatureSelector<float, Matrix<float>>();
-        var outlierRemoval = new NoOutlierRemoval<float, Matrix<float>, Vector<float>>();
 
         var preprocessor = new DefaultDataPreprocessor<float, Matrix<float>, Vector<float>>(
-            normalizer, featureSelector, outlierRemoval);
+            normalizer, featureSelector);
 
         var X = new Matrix<float>(50, 2);
         var y = new Vector<float>(50);

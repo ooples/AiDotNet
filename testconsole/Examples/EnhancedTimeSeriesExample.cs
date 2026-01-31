@@ -7,7 +7,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Normalizers;
 using AiDotNet.Optimizers;
-using AiDotNet.OutlierRemoval;
+using AiDotNet.AnomalyDetection;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TimeSeries;
@@ -94,6 +94,7 @@ public class EnhancedTimeSeriesExample
             var outlierRemoval = new NoOutlierRemoval<double, Matrix<double>, Vector<double>>();
 
             // Create data preprocessor
+            // Note: Outlier removal is now handled separately via DataPreparationPipeline
             var dataPreprocessorOptions = new DataProcessorOptions
             {
                 TestingSplitPercentage = 0.2,
@@ -101,7 +102,7 @@ public class EnhancedTimeSeriesExample
                 RandomSeed = 42
             };
             var dataPreprocessor = new DefaultDataPreprocessor<double, Matrix<double>, Vector<double>>(
-                normalizer, featureSelector, outlierRemoval, dataPreprocessorOptions);
+                normalizer, featureSelector, dataPreprocessorOptions);
 
             // 5. Preprocess data - normalize and split into training and test sets
             Console.WriteLine("Normalizing and splitting data...");
