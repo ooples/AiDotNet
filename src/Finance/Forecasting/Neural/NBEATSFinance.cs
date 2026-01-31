@@ -747,6 +747,8 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         else if (input.Rank > 3)
         {
             // Higher dimensional input: flatten all but first dimension
+            if (input.Shape[0] == 0)
+                throw new ArgumentException("Input tensor cannot have zero batch size.", nameof(input));
             int flattenedDim = input.Length / input.Shape[0];
             normalizedInput = input.Reshape(input.Shape[0], flattenedDim);
         }
