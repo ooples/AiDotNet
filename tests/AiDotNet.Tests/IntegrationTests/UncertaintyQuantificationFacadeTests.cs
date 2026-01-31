@@ -646,7 +646,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var eval = evaluator.EvaluateModel(new ModelEvaluationInput<double, Tensor<double>, Tensor<double>>
         {
             Model = result,
-            NormInfo = result.NormalizationInfo,
+            PreprocessingInfo = result.PreprocessingInfo,
             InputData = new OptimizationInputData<double, Tensor<double>, Tensor<double>>
             {
                 XTrain = xTrain,

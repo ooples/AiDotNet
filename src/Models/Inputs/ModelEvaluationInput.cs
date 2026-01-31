@@ -1,3 +1,5 @@
+using AiDotNet.Preprocessing;
+
 namespace AiDotNet.Models.Inputs;
 
 /// <summary>
@@ -8,12 +10,12 @@ namespace AiDotNet.Models.Inputs;
 /// <typeparam name="TOutput">The type of the output data from the model.</typeparam>
 /// <remarks>
 /// <para><b>For Beginners:</b> This class acts as a container for all the information needed to evaluate a model.
-/// It includes the model itself, the data to evaluate it with, and information about how the data is normalized.
+/// It includes the model itself, the data to evaluate it with, and information about how the data is preprocessed.
 /// </para>
 /// <para>
 /// - The Model property holds the actual machine learning model to be evaluated.
 /// - The InputData property contains the data used for evaluation, including inputs and expected outputs.
-/// - The NormInfo property holds information about how the data has been normalized, which is important for
+/// - The PreprocessingInfo property holds information about how the data has been transformed, which is important for
 ///   interpreting the results correctly.
 /// </para>
 /// </remarks>
@@ -33,12 +35,17 @@ public class ModelEvaluationInput<T, TInput, TOutput>
     public OptimizationInputData<T, TInput, TOutput> InputData { get; set; } = new();
 
     /// <summary>
-    /// Gets or sets the normalization information for the input data.
+    /// Gets or sets the preprocessing information for the input data.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// This is crucial for correctly interpreting the model's outputs and calculating accurate metrics.
+    /// </para>
+    /// <para><b>For Beginners:</b> This stores all the data transformations applied during training
+    /// (like scaling, encoding, imputation) so the same transformations can be applied to new data.
+    /// </para>
     /// </remarks>
-    public NormalizationInfo<T, TInput, TOutput> NormInfo { get; set; } = new();
+    public PreprocessingInfo<T, TInput, TOutput>? PreprocessingInfo { get; set; }
 
     /// <summary>
     /// Gets or sets an optional override for the prediction type used when calculating metrics.

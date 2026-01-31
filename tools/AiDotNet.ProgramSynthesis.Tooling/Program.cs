@@ -5,6 +5,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Preprocessing;
 using AiDotNet.ProgramSynthesis.Engines;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Models;
@@ -139,7 +140,7 @@ Notes:
         var options = new AiModelResultOptions<float, Tensor<float>, Tensor<float>>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = new NormalizationInfo<float, Tensor<float>, Tensor<float>>(),
+            PreprocessingInfo = new PreprocessingInfo<float, Tensor<float>, Tensor<float>>(),
             Tokenizer = tokenizer
         };
 

@@ -1,6 +1,7 @@
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
+using AiDotNet.Preprocessing;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Execution;
 using AiDotNet.ProgramSynthesis.Requests;
@@ -29,7 +30,7 @@ public class AiModelResultProgramSynthesisTests
         var options = new AiModelResultOptions<double, Tensor<double>, Tensor<double>>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = new NormalizationInfo<double, Tensor<double>, Tensor<double>>()
+            PreprocessingInfo = new PreprocessingInfo<double, Tensor<double>, Tensor<double>>()
         };
 
         var modelResult = new AiModelResult<double, Tensor<double>, Tensor<double>>(options);
@@ -60,7 +61,7 @@ public class AiModelResultProgramSynthesisTests
         var options = new AiModelResultOptions<double, Tensor<double>, Tensor<double>>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = new NormalizationInfo<double, Tensor<double>, Tensor<double>>()
+            PreprocessingInfo = new PreprocessingInfo<double, Tensor<double>, Tensor<double>>()
         };
 
         var modelResult = new AiModelResult<double, Tensor<double>, Tensor<double>>(options);
@@ -98,7 +99,7 @@ public class AiModelResultProgramSynthesisTests
         var options = new AiModelResultOptions<double, Tensor<double>, Tensor<double>>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = new NormalizationInfo<double, Tensor<double>, Tensor<double>>(),
+            PreprocessingInfo = new PreprocessingInfo<double, Tensor<double>, Tensor<double>>(),
             ProgramSynthesisServingClient = stubClient,
             ProgramSynthesisServingClientOptions = new ProgramSynthesisServingClientOptions
             {
@@ -136,7 +137,7 @@ public class AiModelResultProgramSynthesisTests
         var options = new AiModelResultOptions<double, Tensor<double>, Tensor<double>>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = new NormalizationInfo<double, Tensor<double>, Tensor<double>>(),
+            PreprocessingInfo = new PreprocessingInfo<double, Tensor<double>, Tensor<double>>(),
             ProgramSynthesisServingClient = stubClient,
             ProgramSynthesisServingClientOptions = new ProgramSynthesisServingClientOptions
             {
@@ -170,7 +171,7 @@ public class AiModelResultProgramSynthesisTests
         var options = new AiModelResultOptions<double, Tensor<double>, Tensor<double>>
         {
             OptimizationResult = optimizationResult,
-            NormalizationInfo = new NormalizationInfo<double, Tensor<double>, Tensor<double>>()
+            PreprocessingInfo = new PreprocessingInfo<double, Tensor<double>, Tensor<double>>()
         };
 
         var modelResult = new AiModelResult<double, Tensor<double>, Tensor<double>>(options);

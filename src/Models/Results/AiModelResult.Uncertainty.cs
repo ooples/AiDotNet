@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Preprocessing;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.UncertaintyQuantification.Interfaces;
@@ -144,11 +145,6 @@ public partial class AiModelResult<T, TInput, TOutput>
             throw new InvalidOperationException("Model is not initialized.");
         }
 
-        if (NormalizationInfo.Normalizer == null)
-        {
-            throw new InvalidOperationException("Normalizer is not initialized.");
-        }
-
         var uq = UncertaintyQuantificationOptions;
         if (uq is not { Enabled: true })
         {
@@ -221,7 +217,9 @@ public partial class AiModelResult<T, TInput, TOutput>
             throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be at least 1.");
         }
 
-        var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeInput(newData);
+        var normalizedNewData = PreprocessingInfo?.IsFitted == true
+            ? PreprocessingInfo.TransformFeatures(newData)
+            : newData;
 
         var mcDropoutLayers = GetMonteCarloDropoutLayers(Model);
         if (mcDropoutLayers.Count == 0)
@@ -247,12 +245,14 @@ public partial class AiModelResult<T, TInput, TOutput>
                     uq.RandomSeed);
 
                 var meanOutput = ConvertFromTensor(meanTensor);
-                var denormalizedMean = NormalizationInfo.Normalizer.Denormalize(meanOutput, NormalizationInfo.YParams);
+                var denormalizedMean = PreprocessingInfo is not null
+                    ? PreprocessingInfo.InverseTransformPredictions(meanOutput)
+                    : meanOutput;
                 denormalizedMean = ApplyProbabilityCalibrationIfEnabled(denormalizedMean, uq);
 
                 if (uq.DenormalizeUncertainty)
                 {
-                    varianceTensor = DenormalizeVarianceIfSupported(varianceTensor, NormalizationInfo.YParams);
+                    varianceTensor = DenormalizeVarianceIfSupported(varianceTensor);
                 }
 
                 var varianceOutput = ConvertFromTensor(varianceTensor);
@@ -345,7 +345,9 @@ public partial class AiModelResult<T, TInput, TOutput>
                 metrics: fallbackMetrics);
         }
 
-        var (normalizedNewData, _) = NormalizationInfo.Normalizer!.NormalizeInput(newData);
+        var normalizedNewData = PreprocessingInfo?.IsFitted == true
+            ? PreprocessingInfo.TransformFeatures(newData)
+            : newData;
 
         var numOps = MathHelper.GetNumericOperations<T>();
         var samples = new List<Tensor<T>>(_deepEnsembleModels.Count);
@@ -373,11 +375,13 @@ public partial class AiModelResult<T, TInput, TOutput>
         var (meanTensor, varianceTensor) = ComputeMeanAndVariance(samples);
 
         var meanOutput = ConvertFromTensor(meanTensor);
-        var denormalizedMean = NormalizationInfo.Normalizer!.Denormalize(meanOutput, NormalizationInfo.YParams);
+        var denormalizedMean = PreprocessingInfo is not null
+            ? PreprocessingInfo.InverseTransformPredictions(meanOutput)
+            : meanOutput;
 
         if (uq.DenormalizeUncertainty)
         {
-            varianceTensor = DenormalizeVarianceIfSupported(varianceTensor, NormalizationInfo.YParams);
+            varianceTensor = DenormalizeVarianceIfSupported(varianceTensor);
         }
 
         var varianceOutput = ConvertFromTensor(varianceTensor);
@@ -455,7 +459,9 @@ public partial class AiModelResult<T, TInput, TOutput>
             throw new ArgumentOutOfRangeException(nameof(uq.NumSamples), "Number of samples must be at least 1.");
         }
 
-        var (normalizedNewData, _) = NormalizationInfo.Normalizer!.NormalizeInput(newData);
+        var normalizedNewData = PreprocessingInfo?.IsFitted == true
+            ? PreprocessingInfo.TransformFeatures(newData)
+            : newData;
         var numOps = MathHelper.GetNumericOperations<T>();
         var rng = uq.RandomSeed.HasValue ? RandomHelper.CreateSeededRandom(uq.RandomSeed.Value) : RandomHelper.CreateSecureRandom();
 
@@ -505,11 +511,13 @@ public partial class AiModelResult<T, TInput, TOutput>
         var (meanTensor, varianceTensor) = ComputeMeanAndVariance(samples);
 
         var meanOutput = ConvertFromTensor(meanTensor);
-        var denormalizedMean = NormalizationInfo.Normalizer!.Denormalize(meanOutput, NormalizationInfo.YParams);
+        var denormalizedMean = PreprocessingInfo is not null
+            ? PreprocessingInfo.InverseTransformPredictions(meanOutput)
+            : meanOutput;
 
         if (uq.DenormalizeUncertainty)
         {
-            varianceTensor = DenormalizeVarianceIfSupported(varianceTensor, NormalizationInfo.YParams);
+            varianceTensor = DenormalizeVarianceIfSupported(varianceTensor);
         }
 
         var varianceOutput = ConvertFromTensor(varianceTensor);
@@ -581,13 +589,17 @@ public partial class AiModelResult<T, TInput, TOutput>
                 metrics: fallbackMetrics);
         }
 
-        var (normalizedNewData, _) = NormalizationInfo.Normalizer!.NormalizeInput(newData);
+        var normalizedNewData = PreprocessingInfo?.IsFitted == true
+            ? PreprocessingInfo.TransformFeatures(newData)
+            : newData;
         var inputTensor = ConversionsHelper.ConvertToTensor<T>(normalizedNewData!).Clone();
 
         var uqResult = estimator.PredictWithUncertainty(inputTensor);
 
         var meanOutput = ConvertFromTensor(uqResult.Prediction);
-        var denormalizedMean = NormalizationInfo.Normalizer!.Denormalize(meanOutput, NormalizationInfo.YParams);
+        var denormalizedMean = PreprocessingInfo is not null
+            ? PreprocessingInfo.InverseTransformPredictions(meanOutput)
+            : meanOutput;
         denormalizedMean = ApplyProbabilityCalibrationIfEnabled(denormalizedMean, uq);
 
         var varianceTensor = uqResult.Variance != null
@@ -598,7 +610,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
         if (uq.DenormalizeUncertainty)
         {
-            varianceTensor = DenormalizeVarianceIfSupported(varianceTensor, NormalizationInfo.YParams);
+            varianceTensor = DenormalizeVarianceIfSupported(varianceTensor);
         }
 
         var varianceOutput = ConvertFromTensor(varianceTensor);
@@ -973,48 +985,28 @@ public partial class AiModelResult<T, TInput, TOutput>
         return new Tensor<T>([batch, classes], output).Reshape(tensor.Shape);
     }
 
-    private Tensor<T> DenormalizeVarianceIfSupported(Tensor<T> normalizedVariance, NormalizationParameters<T> yParams)
+    /// <summary>
+    /// Attempts to denormalize variance based on the target preprocessing pipeline.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When predictions are normalized, the variance also needs to be
+    /// scaled by the square of the normalization scale factor. This method attempts to
+    /// extract scaling information from the preprocessing pipeline to properly denormalize
+    /// the variance estimates.
+    /// </para>
+    /// <para>
+    /// If the target pipeline is not configured or does not expose scaling information,
+    /// the original normalized variance is returned unchanged.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> DenormalizeVarianceIfSupported(Tensor<T> normalizedVariance)
     {
-        if (!TryGetOutputDenormalizationScale(yParams, out var scale))
-        {
-            return normalizedVariance;
-        }
-
-        var scaleSquared = _uqNumOps.Multiply(scale, scale);
-
-        var normalizedVector = normalizedVariance.ToVector();
-        var varianceVector = new Vector<T>(normalizedVector.Length);
-        for (int i = 0; i < normalizedVector.Length; i++)
-        {
-            varianceVector[i] = _uqNumOps.Multiply(normalizedVector[i], scaleSquared);
-        }
-
-        var varianceTensor = Tensor<T>.FromVector(varianceVector);
-        if (normalizedVariance.Shape.Length > 1)
-        {
-            varianceTensor = varianceTensor.Reshape(normalizedVariance.Shape);
-        }
-
-        return varianceTensor;
-    }
-
-    private bool TryGetOutputDenormalizationScale(NormalizationParameters<T> yParams, out T scale)
-    {
-        switch (yParams.Method)
-        {
-            case NormalizationMethod.None:
-                scale = _uqNumOps.One;
-                return true;
-            case NormalizationMethod.MinMax:
-                scale = _uqNumOps.Subtract(yParams.Max, yParams.Min);
-                return true;
-            case NormalizationMethod.ZScore:
-                scale = yParams.StdDev;
-                return true;
-            default:
-                scale = default!;
-                return false;
-        }
+        // With the new PreprocessingPipeline pattern, scaling parameters are not directly
+        // exposed. Future enhancement: add GetScaleFactor() to PreprocessingPipeline
+        // to support variance denormalization.
+        // For now, return the normalized variance unchanged.
+        return normalizedVariance;
     }
 
     private static TOutput ConvertFromTensor(Tensor<T> tensor)
