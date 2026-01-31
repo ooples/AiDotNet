@@ -665,6 +665,15 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int seqLengthKV = key.Shape[1];
 
         // 1. Project Input to Q, K, V
+        // Validate that input embedding dimension matches weights
+        int weightsEmbedDim = _queryWeights.Shape[0];
+        if (embeddingDimension != weightsEmbedDim)
+        {
+            throw new ArgumentException(
+                $"Input embedding dimension ({embeddingDimension}) does not match weight dimension ({weightsEmbedDim}). " +
+                $"Query shape: [{string.Join(", ", query.Shape)}], Weights shape: [{string.Join(", ", _queryWeights.Shape)}]");
+        }
+
         var q2D = query.Reshape(batchSize * seqLengthQ, embeddingDimension);
         var k2D = key.Reshape(batchSize * seqLengthKV, embeddingDimension);
         var v2D = value.Reshape(batchSize * seqLengthKV, embeddingDimension);
@@ -674,6 +683,17 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var V_flat = Engine.TensorMatMul(v2D, _valueWeights);
 
         // Reshape and Transpose to [Batch, HeadCount, Seq, HeadDim]
+        int targetQElems = batchSize * seqLengthQ * _headCount * _headDimension;
+        if (Q_flat.Length != targetQElems)
+        {
+            throw new ArgumentException(
+                $"Q_flat reshape mismatch: Q_flat has {Q_flat.Length} elements, " +
+                $"but target shape [{batchSize}, {seqLengthQ}, {_headCount}, {_headDimension}] needs {targetQElems}. " +
+                $"Q_flat shape: [{string.Join(", ", Q_flat.Shape)}], " +
+                $"q2D shape: [{string.Join(", ", q2D.Shape)}], " +
+                $"_queryWeights shape: [{string.Join(", ", _queryWeights.Shape)}]");
+        }
+
         var queries = Q_flat.Reshape(batchSize, seqLengthQ, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
         var keys = K_flat.Reshape(batchSize, seqLengthKV, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
         var values = V_flat.Reshape(batchSize, seqLengthKV, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });

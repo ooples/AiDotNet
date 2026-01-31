@@ -1875,6 +1875,96 @@ public enum ModelType
     /// </remarks>
     VotingClassifier,
 
+    // ==================== Finance Models ====================
+
+    /// <summary>
+    /// PatchTST time series forecasting model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PatchTST splits a time series into small patches and uses
+    /// transformer attention to forecast future values.
+    /// </para>
+    /// </remarks>
+    PatchTST,
+
+    /// <summary>
+    /// Inverted Transformer (iTransformer) for time series forecasting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> iTransformer treats each variable as a token so the model
+    /// learns relationships across features while forecasting.
+    /// </para>
+    /// </remarks>
+    ITransformer,
+
+    /// <summary>
+    /// DeepAR probabilistic forecasting model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepAR predicts future values by learning autoregressive
+    /// patterns and uncertainty from historical data.
+    /// </para>
+    /// </remarks>
+    DeepAR,
+
+    /// <summary>
+    /// N-BEATS neural basis expansion model for forecasting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> N-BEATS breaks a time series into trend and seasonal parts
+    /// to make accurate forecasts.
+    /// </para>
+    /// </remarks>
+    NBEATS,
+
+    /// <summary>
+    /// Temporal Fusion Transformer (TFT) forecasting model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TFT combines attention with gating to forecast multiple
+    /// steps ahead and provide interpretable signals.
+    /// </para>
+    /// </remarks>
+    TFT,
+
+    /// <summary>
+    /// Neural Value at Risk model for financial risk estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> NeuralVaR estimates how much you could lose in a worst-case
+    /// scenario given a confidence level.
+    /// </para>
+    /// </remarks>
+    NeuralVaR,
+
+    /// <summary>
+    /// TabNet model for structured financial risk prediction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TabNet uses attentive feature selection to focus on the
+    /// most important columns in tabular data.
+    /// </para>
+    /// </remarks>
+    TabNet,
+
+    /// <summary>
+    /// TabTransformer model for tabular financial data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> TabTransformer applies transformer attention to columns
+    /// in a table to model feature interactions.
+    /// </para>
+    /// </remarks>
+    TabTransformer,
+
     // ==================== Clustering Models ====================
 
     /// <summary>
