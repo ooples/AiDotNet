@@ -534,7 +534,8 @@ public class RollingStatsTransformer<T> : TimeSeriesTransformerBase<T>
         double sumCubed = values.Select(x => Math.Pow((x - mean) / std, 3)).Sum();
 
         // Fisher's skewness with sample adjustment
-        return (n / ((double)(n - 1) * (n - 2))) * sumCubed;
+        // Cast to double early to avoid integer overflow
+        return (n / ((n - 1.0) * (n - 2.0))) * sumCubed;
     }
 
     /// <summary>
@@ -551,9 +552,9 @@ public class RollingStatsTransformer<T> : TimeSeriesTransformerBase<T>
         double sumFourth = values.Select(x => Math.Pow((x - mean) / std, 4)).Sum();
 
         // Fisher's excess kurtosis with sample adjustment
-        // Cast to double early to avoid integer overflow
-        double k = (double)n * (n + 1) / ((double)(n - 1) * (n - 2) * (n - 3)) * sumFourth;
-        double adjustment = 3.0 * (double)(n - 1) * (n - 1) / ((double)(n - 2) * (n - 3));
+        // Use double literals to avoid integer overflow in multiplications
+        double k = (double)n * (n + 1) / ((n - 1.0) * (n - 2.0) * (n - 3.0)) * sumFourth;
+        double adjustment = 3.0 * (n - 1.0) * (n - 1.0) / ((n - 2.0) * (n - 3.0));
 
         return k - adjustment;
     }
