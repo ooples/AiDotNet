@@ -3130,42 +3130,61 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     private TInput ConvertVectorToInput(Vector<T> vector)
     {
-        if (typeof(TInput) == typeof(Vector<T>))
-            return (TInput)(object)vector;
+        object result;
 
-        if (typeof(TInput) == typeof(Matrix<T>))
+        if (typeof(TInput) == typeof(Vector<T>))
+        {
+            result = vector;
+        }
+        else if (typeof(TInput) == typeof(Matrix<T>))
         {
             // Create a single-row matrix
             var matrix = new Matrix<T>(1, vector.Length);
             for (int j = 0; j < vector.Length; j++)
                 matrix[0, j] = vector[j];
-            return (TInput)(object)matrix;
+            result = matrix;
         }
-
-        if (typeof(TInput) == typeof(Tensor<T>))
+        else if (typeof(TInput) == typeof(Tensor<T>))
         {
-            return (TInput)(object)Tensor<T>.FromVector(vector, new[] { 1, vector.Length });
+            result = Tensor<T>.FromVector(vector, new[] { 1, vector.Length });
+        }
+        else
+        {
+            throw new NotSupportedException($"Cannot convert Vector<T> to {typeof(TInput).Name} for interpretability methods.");
         }
 
-        throw new NotSupportedException($"Cannot convert Vector<T> to {typeof(TInput).Name} for interpretability methods.");
+        return (TInput)result;
     }
 
     /// <summary>
     /// Converts the model's TOutput to a scalar value.
     /// </summary>
+    /// <remarks>
+    /// For multi-output models (Vector/Matrix/Tensor with more than one element),
+    /// only the first element is used. This is intentional for univariate interpretability methods.
+    /// </remarks>
     private T ConvertOutputToScalar(TOutput output)
     {
         if (output is T scalar)
             return scalar;
 
         if (output is Vector<T> vector && vector.Length > 0)
+        {
+            // Note: For multi-output, we use only the first element
             return vector[0];
+        }
 
         if (output is Matrix<T> matrix && matrix.Rows > 0 && matrix.Columns > 0)
+        {
+            // Note: For multi-output, we use only the first element
             return matrix[0, 0];
+        }
 
         if (output is Tensor<T> tensor && tensor.Length > 0)
+        {
+            // Note: For multi-output, we use only the first element
             return tensor.ToVector()[0];
+        }
 
         throw new NotSupportedException($"Cannot convert {typeof(TOutput).Name} to scalar for interpretability methods.");
     }

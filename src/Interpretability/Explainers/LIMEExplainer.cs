@@ -386,7 +386,9 @@ public class LIMEExplainer<T> : ILocalExplainer<T, LIMEExplanationResult<T>>
 
     private double SampleGaussian(Random rand)
     {
-        double u1 = rand.NextDouble();
+        // Guard against u1 == 0 which would cause Log(0) = -Infinity and result in NaN
+        double u1;
+        do { u1 = rand.NextDouble(); } while (u1 == 0);
         double u2 = rand.NextDouble();
         return Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
     }
@@ -404,14 +406,17 @@ public class LIMEExplainer<T> : ILocalExplainer<T, LIMEExplanationResult<T>>
 
     private static TInput ConvertToModelInput<TInput>(Matrix<T> data)
     {
+        object result;
         if (typeof(TInput) == typeof(Matrix<T>))
-            return (TInput)(object)data;
-        if (typeof(TInput) == typeof(Tensor<T>))
-            return (TInput)(object)Tensor<T>.FromRowMatrix(data);
-        if (typeof(TInput) == typeof(Vector<T>) && data.Rows == 1)
-            return (TInput)(object)data.GetRow(0);
+            result = data;
+        else if (typeof(TInput) == typeof(Tensor<T>))
+            result = Tensor<T>.FromRowMatrix(data);
+        else if (typeof(TInput) == typeof(Vector<T>) && data.Rows == 1)
+            result = data.GetRow(0);
+        else
+            throw new NotSupportedException($"Cannot convert Matrix<T> to {typeof(TInput).Name}");
 
-        throw new NotSupportedException($"Cannot convert Matrix<T> to {typeof(TInput).Name}");
+        return (TInput)result;
     }
 
     private static Vector<T> ConvertFromModelOutput<TOutput>(TOutput output)

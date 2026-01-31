@@ -177,13 +177,14 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
 
         // Always include empty and full coalitions
         coalitions.Add(new bool[numFeatures]); // All false
-        weights.Add(double.MaxValue / 2); // High weight for empty coalition
+        // Use large but stable weight for boundary coalitions (1e10 instead of MaxValue/2)
+        weights.Add(1e10); // High weight for empty coalition
 
         var fullCoalition = new bool[numFeatures];
         for (int i = 0; i < numFeatures; i++)
             fullCoalition[i] = true;
         coalitions.Add(fullCoalition);
-        weights.Add(double.MaxValue / 2); // High weight for full coalition
+        weights.Add(1e10); // High weight for full coalition
 
         // Sample random coalitions
         for (int s = 0; s < _nSamples; s++)
@@ -199,10 +200,11 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
 
             // Kernel SHAP weight: M / (k * (M - k) * C(M, k))
             // Simplified: weight inversely proportional to distance from 0 and M
+            // Cast to double early to prevent integer overflow
             double weight = 1.0;
             if (coalitionSize > 0 && coalitionSize < numFeatures)
             {
-                weight = (numFeatures - 1.0) / (coalitionSize * (numFeatures - coalitionSize));
+                weight = (numFeatures - 1.0) / ((double)coalitionSize * (numFeatures - coalitionSize));
             }
 
             coalitions.Add(coalition);
@@ -377,6 +379,11 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
             {
                 x[i] /= augmented[i, i];
             }
+            else
+            {
+                // Near-singular matrix: set to NaN to indicate unreliable result
+                x[i] = double.NaN;
+            }
         }
 
         return x;
@@ -408,14 +415,17 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
 
     private static TInput ConvertToModelInput<TInput>(Matrix<T> data)
     {
+        object result;
         if (typeof(TInput) == typeof(Matrix<T>))
-            return (TInput)(object)data;
-        if (typeof(TInput) == typeof(Tensor<T>))
-            return (TInput)(object)Tensor<T>.FromRowMatrix(data);
-        if (typeof(TInput) == typeof(Vector<T>) && data.Rows == 1)
-            return (TInput)(object)data.GetRow(0);
+            result = data;
+        else if (typeof(TInput) == typeof(Tensor<T>))
+            result = Tensor<T>.FromRowMatrix(data);
+        else if (typeof(TInput) == typeof(Vector<T>) && data.Rows == 1)
+            result = data.GetRow(0);
+        else
+            throw new NotSupportedException($"Cannot convert Matrix<T> to {typeof(TInput).Name}");
 
-        throw new NotSupportedException($"Cannot convert Matrix<T> to {typeof(TInput).Name}");
+        return (TInput)result;
     }
 
     private static Vector<T> ConvertFromModelOutput<TOutput>(TOutput output)

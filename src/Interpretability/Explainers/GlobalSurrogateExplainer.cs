@@ -359,14 +359,17 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
 
     private static TInput ConvertToModelInput<TInput>(Matrix<T> data)
     {
+        object result;
         if (typeof(TInput) == typeof(Matrix<T>))
-            return (TInput)(object)data;
-        if (typeof(TInput) == typeof(Tensor<T>))
-            return (TInput)(object)Tensor<T>.FromRowMatrix(data);
-        if (typeof(TInput) == typeof(Vector<T>) && data.Rows == 1)
-            return (TInput)(object)data.GetRow(0);
+            result = data;
+        else if (typeof(TInput) == typeof(Tensor<T>))
+            result = Tensor<T>.FromRowMatrix(data);
+        else if (typeof(TInput) == typeof(Vector<T>) && data.Rows == 1)
+            result = data.GetRow(0);
+        else
+            throw new NotSupportedException($"Cannot convert Matrix<T> to {typeof(TInput).Name}");
 
-        throw new NotSupportedException($"Cannot convert Matrix<T> to {typeof(TInput).Name}");
+        return (TInput)result;
     }
 
     private static Vector<T> ConvertFromModelOutput<TOutput>(TOutput output)

@@ -121,9 +121,14 @@ public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImport
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// PFI requires target values to compute feature importance. Use <see cref="Calculate(Matrix{T}, Vector{T})"/> instead.
+    /// </remarks>
     public FeatureImportanceResult<T> ExplainGlobal(Matrix<T> data)
     {
-        throw new InvalidOperationException("Use Calculate(data, target) instead - this method requires target values.");
+        throw new NotSupportedException(
+            "PermutationFeatureImportance requires target values. " +
+            "Use Calculate(data, target) instead of ExplainGlobal.");
     }
 
     /// <summary>
@@ -245,14 +250,17 @@ public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImport
 
     private static TInput ConvertToModelInput<TInput>(Matrix<T> data)
     {
+        object result;
         if (typeof(TInput) == typeof(Matrix<T>))
-            return (TInput)(object)data;
-        if (typeof(TInput) == typeof(Tensor<T>))
-            return (TInput)(object)Tensor<T>.FromRowMatrix(data);
-        if (typeof(TInput) == typeof(Vector<T>) && data.Rows == 1)
-            return (TInput)(object)data.GetRow(0);
+            result = data;
+        else if (typeof(TInput) == typeof(Tensor<T>))
+            result = Tensor<T>.FromRowMatrix(data);
+        else if (typeof(TInput) == typeof(Vector<T>) && data.Rows == 1)
+            result = data.GetRow(0);
+        else
+            throw new NotSupportedException($"Cannot convert Matrix<T> to {typeof(TInput).Name}");
 
-        throw new NotSupportedException($"Cannot convert Matrix<T> to {typeof(TInput).Name}");
+        return (TInput)result;
     }
 
     private static Vector<T> ConvertFromModelOutput<TOutput>(TOutput output)
