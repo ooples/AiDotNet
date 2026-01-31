@@ -213,8 +213,13 @@ public class ThompsonSamplingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     /// </summary>
     private double SampleStandardNormal(Random rand)
     {
-        double u1 = rand.NextDouble();
-        double u2 = rand.NextDouble();
+        double u1, u2;
+        do
+        {
+            u1 = rand.NextDouble();
+            u2 = rand.NextDouble();
+        } while (u1 <= double.Epsilon);
+
         return Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
     }
 
@@ -228,6 +233,11 @@ public class ThompsonSamplingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     {
         if (_selectedIndices is null)
             throw new InvalidOperationException("ThompsonSamplingSelector has not been fitted.");
+
+        if (data.Columns < _nInputFeatures)
+            throw new ArgumentException(
+                $"Input data has {data.Columns} columns but selector was fitted on {_nInputFeatures} columns.",
+                nameof(data));
 
         int numRows = data.Rows;
         int numCols = _selectedIndices.Length;

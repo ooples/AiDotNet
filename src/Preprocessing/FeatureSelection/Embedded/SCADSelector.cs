@@ -171,7 +171,7 @@ public class SCADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         double absZ = Math.Abs(z);
 
-        if (absZ <= lambda)
+        if (absZ < 2 * lambda)
         {
             // Soft thresholding region (like Lasso)
             return Math.Sign(z) * Math.Max(0, absZ - lambda);

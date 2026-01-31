@@ -23,7 +23,7 @@ public class CostSensitiveFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _costWeight;
-    private readonly double[]? _featureCosts;
+    private double[]? _featureCosts;
 
     private double[]? _relevanceScores;
     private double[]? _costBenefitScores;
@@ -77,6 +77,7 @@ public class CostSensitiveFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var costs = _featureCosts ?? CreateUniformCosts(p);
         if (costs.Length != p)
             throw new ArgumentException("Feature costs length must match number of features.");
+        _featureCosts = costs;
 
         // Normalize costs to [0, 1]
         var normalizedCosts = NormalizeCosts(costs, p);
@@ -109,16 +110,8 @@ public class CostSensitiveFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (featureCosts.Length != data.Columns)
             throw new ArgumentException("Feature costs must match number of columns.");
 
-        // Create a new instance with the provided costs and fit
-        var temp = new CostSensitiveFS<T>(_nFeaturesToSelect, _costWeight, featureCosts);
-        temp.Fit(data, target);
-
-        // Copy results
-        _relevanceScores = temp._relevanceScores;
-        _costBenefitScores = temp._costBenefitScores;
-        _selectedIndices = temp._selectedIndices;
-
-        IsFitted = true;
+        _featureCosts = featureCosts;
+        Fit(data, target);
     }
 
     private double[] ComputeRelevanceScores(Matrix<T> data, Vector<T> target, int n, int p)

@@ -84,15 +84,21 @@ public class SAM<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             : RandomHelper.CreateSecureRandom();
 
         // Identify two-class labels
+        var labels = target.Select(NumOps.ToDouble).Distinct().ToArray();
+        if (labels.Length != 2)
+            throw new ArgumentException("SAM requires exactly two distinct class labels.");
+
         var class0 = new List<int>();
         var class1 = new List<int>();
-        double threshold = 0.5;
+        double label0 = labels[0];
+        double label1 = labels[1];
 
         for (int i = 0; i < n; i++)
         {
-            if (NumOps.ToDouble(target[i]) < threshold)
+            double y = NumOps.ToDouble(target[i]);
+            if (y == label0)
                 class0.Add(i);
-            else
+            else if (y == label1)
                 class1.Add(i);
         }
 
@@ -128,6 +134,8 @@ public class SAM<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var sortedSE = standardErrors.OrderBy(x => x).ToArray();
         int s0Index = (int)(_s0Percentile * (p - 1));
         double s0 = sortedSE[s0Index];
+        if (s0 <= 0)
+            s0 = 1e-12;
 
         // Calculate d-statistics
         _dStatistics = new double[p];

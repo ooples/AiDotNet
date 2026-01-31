@@ -78,13 +78,14 @@ public class TruncatedSVDSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         for (int k = 0; k < nComp; k++)
         {
             var eigenvector = PowerIteration(deflatedXtX, p, 100);
-            singularValues[k] = Math.Sqrt(ComputeEigenvalue(deflatedXtX, eigenvector, p));
+            var eigenvalue = ComputeEigenvalue(deflatedXtX, eigenvector, p);
+            if (eigenvalue < 0) eigenvalue = 0; // numerical guard
+            singularValues[k] = Math.Sqrt(eigenvalue);
 
             for (int j = 0; j < p; j++)
                 loadings[k, j] = eigenvector[j];
 
             // Deflate
-            double eigenvalue = ComputeEigenvalue(deflatedXtX, eigenvector, p);
             for (int j1 = 0; j1 < p; j1++)
                 for (int j2 = 0; j2 < p; j2++)
                     deflatedXtX[j1, j2] -= eigenvalue * eigenvector[j1] * eigenvector[j2];

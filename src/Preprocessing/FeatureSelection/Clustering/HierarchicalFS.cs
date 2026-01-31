@@ -52,6 +52,9 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
+        if (n < 2)
+            throw new ArgumentException("HierarchicalFS requires at least 2 rows to compute variance/correlation.", nameof(data));
+
         // Convert to arrays
         var X = new double[n, p];
         for (int i = 0; i < n; i++)
@@ -222,6 +225,9 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (_selectedIndices is null)
             throw new InvalidOperationException("HierarchicalFS has not been fitted.");
+
+        if (data.Columns != _nInputFeatures)
+            throw new ArgumentException($"Expected {_nInputFeatures} columns but got {data.Columns}.", nameof(data));
 
         int numRows = data.Rows;
         int numCols = _selectedIndices.Length;

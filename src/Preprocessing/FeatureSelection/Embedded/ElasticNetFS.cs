@@ -115,8 +115,8 @@ public class ElasticNetFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var residual = new double[n];
         Array.Copy(yCentered, residual, n);
 
-        double l1Penalty = _alpha * _l1Ratio;
-        double l2Penalty = _alpha * (1 - _l1Ratio);
+        double l1Penalty = _alpha * _l1Ratio * n;
+        double l2Penalty = _alpha * (1 - _l1Ratio) * n;
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {

@@ -76,6 +76,25 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var groups = _groups ?? Enumerable.Range(0, p).Select(i => new[] { i }).ToArray();
         int nGroups = groups.Length;
 
+        // Validate groups
+        if (nGroups == 0)
+            throw new ArgumentException("At least one group must be defined.");
+
+        var seenIndices = new HashSet<int>();
+        foreach (var group in groups)
+        {
+            if (group.Length == 0)
+                throw new ArgumentException("Groups cannot be empty.");
+
+            foreach (int idx in group)
+            {
+                if (idx < 0 || idx >= p)
+                    throw new ArgumentException($"Group index {idx} is out of bounds [0, {p}).");
+                if (!seenIndices.Add(idx))
+                    throw new ArgumentException($"Feature index {idx} appears in multiple groups.");
+            }
+        }
+
         // Standardize data
         var X = new double[n, p];
         var y = new double[n];

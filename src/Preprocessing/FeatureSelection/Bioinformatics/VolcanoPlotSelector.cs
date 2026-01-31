@@ -187,11 +187,40 @@ public class VolcanoPlotSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (x == 0) return 0;
         if (x == 1) return 1;
 
-        double bt = Math.Exp(a * Math.Log(x) + b * Math.Log(1 - x));
+        // Regularized incomplete beta requires Beta(a,b) normalization
+        double bt = Math.Exp(LogGamma(a + b) - LogGamma(a) - LogGamma(b)
+                             + a * Math.Log(x) + b * Math.Log(1 - x));
         if (x < (a + 1) / (a + b + 2))
             return bt * BetaCF(x, a, b) / a;
         else
             return 1 - bt * BetaCF(1 - x, b, a) / b;
+    }
+
+    private static double LogGamma(double x)
+    {
+        // Lanczos approximation for log(Gamma(x))
+        double[] coefficients =
+        [
+            76.18009172947146,
+            -86.50532032941677,
+            24.01409824083091,
+            -1.231739572450155,
+            0.1208650973866179e-2,
+            -0.5395239384953e-5
+        ];
+
+        double y = x;
+        double tmp = x + 5.5;
+        tmp -= (x + 0.5) * Math.Log(tmp);
+        double ser = 1.000000000190015;
+
+        for (int j = 0; j < 6; j++)
+        {
+            y += 1;
+            ser += coefficients[j] / y;
+        }
+
+        return -tmp + Math.Log(2.5066282746310005 * ser / x);
     }
 
     private double BetaCF(double x, double a, double b)

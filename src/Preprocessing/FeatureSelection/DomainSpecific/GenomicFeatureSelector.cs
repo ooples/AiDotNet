@@ -73,6 +73,8 @@ public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     {
         if (data.Rows != target.Length)
             throw new ArgumentException("Target length must match rows in data.");
+        if (data.Rows == 0 || data.Columns == 0)
+            throw new ArgumentException("Data must contain at least one row and one column.", nameof(data));
 
         _nInputFeatures = data.Columns;
         int n = data.Rows;
@@ -108,7 +110,10 @@ public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         }
 
         var sortedVariances = _variances.OrderBy(v => v).ToArray();
-        double varianceThreshold = sortedVariances[(int)(p * _variancePercentile)];
+        int varianceIndex = (int)(p * _variancePercentile);
+        if (varianceIndex >= p) varianceIndex = p - 1;
+        if (varianceIndex < 0) varianceIndex = 0;
+        double varianceThreshold = sortedVariances[varianceIndex];
 
         var candidates = new List<int>();
         for (int j = 0; j < p; j++)

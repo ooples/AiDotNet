@@ -50,6 +50,10 @@ public class SignificanceAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
+        if (nPermutations < 1)
+            throw new ArgumentException("Number of permutations must be at least 1.", nameof(nPermutations));
+        if (double.IsNaN(fdrThreshold) || fdrThreshold < 0.0 || fdrThreshold > 1.0)
+            throw new ArgumentException("FDR threshold must be between 0 and 1.", nameof(fdrThreshold));
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _nPermutations = nPermutations;
@@ -76,14 +80,21 @@ public class SignificanceAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Separate samples by class
+        // Separate samples by class (binary labels required)
+        var labels = target.Select(NumOps.ToDouble).Distinct().ToArray();
+        if (labels.Length != 2)
+            throw new ArgumentException("SignificanceAnalysis requires exactly two distinct target labels.", nameof(target));
+
+        double label0 = Math.Min(labels[0], labels[1]);
+        double label1 = Math.Max(labels[0], labels[1]);
         var class0Idx = new List<int>();
         var class1Idx = new List<int>();
         for (int i = 0; i < n; i++)
         {
-            if (NumOps.ToDouble(target[i]) < 0.5)
+            double y = NumOps.ToDouble(target[i]);
+            if (Math.Abs(y - label0) < 1e-12)
                 class0Idx.Add(i);
-            else
+            else if (Math.Abs(y - label1) < 1e-12)
                 class1Idx.Add(i);
         }
 
@@ -133,6 +144,8 @@ public class SignificanceAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         double s0 = pooledStds.OrderBy(x => x).Skip(p / 2).First(); // Median
+        if (double.IsNaN(s0) || s0 <= 0)
+            s0 = 1e-12;
 
         // Compute d_i (SAM statistic)
         for (int j = 0; j < p; j++)

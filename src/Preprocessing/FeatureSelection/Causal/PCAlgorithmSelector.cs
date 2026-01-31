@@ -174,8 +174,14 @@ public class PCAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     private bool TestConditionalIndependence(double[,] X, int n, int i, int j, List<int> condSet)
     {
+        int dof = n - condSet.Count - 3;
+        if (dof <= 0)
+            return false; // Insufficient samples; keep the edge
+
         double partialCorr = ComputePartialCorrelation(X, n, i, j, condSet);
-        double z = Math.Sqrt(n - condSet.Count - 3) * 0.5 * Math.Log((1 + partialCorr) / (1 - partialCorr + 1e-10));
+        // Clamp to avoid log(0) or log(negative)
+        double clampedCorr = Math.Max(-0.999999, Math.Min(partialCorr, 0.999999));
+        double z = Math.Sqrt(dof) * 0.5 * Math.Log((1 + clampedCorr) / (1 - clampedCorr));
         double pValue = 2 * (1 - NormalCDF(Math.Abs(z)));
         return pValue > _alpha;
     }
@@ -241,33 +247,99 @@ public class PCAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (predictors.Count == 0)
             return residuals;
 
-        // Simple linear regression
-        foreach (int pred in predictors)
+        // Multivariate OLS: build design matrix with intercept
+        int p = predictors.Count;
+        var Z = new double[n, p + 1]; // +1 for intercept
+        for (int i = 0; i < n; i++)
         {
-            double meanX = 0, meanY = 0;
-            for (int i = 0; i < n; i++)
-            {
-                meanX += X[i, pred];
-                meanY += residuals[i];
-            }
-            meanX /= n;
-            meanY /= n;
+            Z[i, 0] = 1.0; // intercept term
+            for (int j = 0; j < p; j++)
+                Z[i, j + 1] = X[i, predictors[j]];
+        }
 
-            double sxy = 0, sxx = 0;
-            for (int i = 0; i < n; i++)
-            {
-                sxy += (X[i, pred] - meanX) * (residuals[i] - meanY);
-                sxx += (X[i, pred] - meanX) * (X[i, pred] - meanX);
-            }
+        // Solve normal equations (Z'Z)β = Z'y using Gaussian elimination
+        var beta = SolveOLS(Z, residuals, n, p + 1);
 
-            double beta = sxx > 1e-10 ? sxy / sxx : 0;
-            double intercept = meanY - beta * meanX;
-
-            for (int i = 0; i < n; i++)
-                residuals[i] -= beta * X[i, pred] + intercept;
+        for (int i = 0; i < n; i++)
+        {
+            double predicted = beta[0];
+            for (int j = 0; j < p; j++)
+                predicted += beta[j + 1] * X[i, predictors[j]];
+            residuals[i] -= predicted;
         }
 
         return residuals;
+    }
+
+    private double[] SolveOLS(double[,] Z, double[] y, int n, int p)
+    {
+        // Compute Z'Z and Z'y
+        var ZtZ = new double[p, p];
+        var Zty = new double[p];
+
+        for (int i = 0; i < p; i++)
+        {
+            for (int j = 0; j < p; j++)
+            {
+                double sum = 0;
+                for (int k = 0; k < n; k++)
+                    sum += Z[k, i] * Z[k, j];
+                ZtZ[i, j] = sum;
+            }
+            double sumY = 0;
+            for (int k = 0; k < n; k++)
+                sumY += Z[k, i] * y[k];
+            Zty[i] = sumY;
+        }
+
+        // Gaussian elimination with partial pivoting
+        var aug = new double[p, p + 1];
+        for (int i = 0; i < p; i++)
+        {
+            for (int j = 0; j < p; j++)
+                aug[i, j] = ZtZ[i, j];
+            aug[i, p] = Zty[i];
+        }
+
+        // Forward elimination
+        for (int k = 0; k < p; k++)
+        {
+            // Partial pivoting
+            int maxRow = k;
+            for (int i = k + 1; i < p; i++)
+                if (Math.Abs(aug[i, k]) > Math.Abs(aug[maxRow, k]))
+                    maxRow = i;
+
+            for (int j = 0; j <= p; j++)
+            {
+                double temp = aug[k, j];
+                aug[k, j] = aug[maxRow, j];
+                aug[maxRow, j] = temp;
+            }
+
+            if (Math.Abs(aug[k, k]) < 1e-10)
+                continue; // Singular matrix
+
+            for (int i = k + 1; i < p; i++)
+            {
+                double factor = aug[i, k] / aug[k, k];
+                for (int j = k; j <= p; j++)
+                    aug[i, j] -= factor * aug[k, j];
+            }
+        }
+
+        // Back substitution
+        var beta = new double[p];
+        for (int i = p - 1; i >= 0; i--)
+        {
+            beta[i] = aug[i, p];
+            for (int j = i + 1; j < p; j++)
+                beta[i] -= aug[i, j] * beta[j];
+            if (Math.Abs(aug[i, i]) > 1e-10)
+                beta[i] /= aug[i, i];
+        }
+
+        return beta;
     }
 
     private double NormalCDF(double x)
@@ -322,14 +394,17 @@ public class PCAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        if (_selectedIndices is null) return [];
+        if (_selectedIndices is null)
+            throw new InvalidOperationException("PCAlgorithmSelector has not been fitted.");
 
         if (inputFeatureNames is null)
             return _selectedIndices.Select(i => $"Feature{i}").ToArray();
 
-        return _selectedIndices
-            .Where(i => i < inputFeatureNames.Length)
-            .Select(i => inputFeatureNames[i])
-            .ToArray();
+        if (_selectedIndices.Any(i => i >= inputFeatureNames.Length))
+            throw new ArgumentException(
+                "inputFeatureNames array is shorter than the selected feature indices.",
+                nameof(inputFeatureNames));
+
+        return _selectedIndices.Select(i => inputFeatureNames[i]).ToArray();
     }
 }

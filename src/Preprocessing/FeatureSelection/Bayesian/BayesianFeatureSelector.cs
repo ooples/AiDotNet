@@ -119,7 +119,8 @@ public class BayesianFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             double tStatistic = Math.Abs(meanPos - meanNeg) / standardError;
 
             // Convert t-statistic to likelihood ratio approximation
-            double likelihoodRatio = Math.Exp(tStatistic * tStatistic / 2);
+            double logLikelihoodRatio = Math.Min(tStatistic * tStatistic / 2, 50);
+            double likelihoodRatio = Math.Exp(logLikelihoodRatio);
 
             // Compute posterior using Bayes' rule
             double posteriorOdds = (_priorProbability / (1 - _priorProbability)) * likelihoodRatio;

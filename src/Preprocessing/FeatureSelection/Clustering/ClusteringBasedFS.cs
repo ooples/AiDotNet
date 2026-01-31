@@ -43,6 +43,8 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (nClusters < 1)
             throw new ArgumentException("Number of clusters must be at least 1.", nameof(nClusters));
+        if (maxIterations < 1)
+            throw new ArgumentException("Maximum iterations must be at least 1.", nameof(maxIterations));
 
         _nClusters = nClusters;
         _maxIterations = maxIterations;
@@ -82,7 +84,7 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 double diff = X[i, j] - mean;
                 variance += diff * diff;
             }
-            _featureScores[j] = variance / (n - 1);
+            _featureScores[j] = n > 1 ? variance / (n - 1) : 0;
         }
 
         // Select one feature per cluster with highest variance
@@ -256,14 +258,17 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        if (_selectedIndices is null) return [];
+        if (_selectedIndices is null)
+            throw new InvalidOperationException("ClusteringBasedFS has not been fitted.");
 
         if (inputFeatureNames is null)
             return _selectedIndices.Select(i => $"Feature{i}").ToArray();
 
-        return _selectedIndices
-            .Where(i => i < inputFeatureNames.Length)
-            .Select(i => inputFeatureNames[i])
-            .ToArray();
+        if (inputFeatureNames.Length < _nInputFeatures)
+            throw new ArgumentException(
+                $"Expected at least {_nInputFeatures} feature names, but got {inputFeatureNames.Length}.",
+                nameof(inputFeatureNames));
+
+        return _selectedIndices.Select(i => inputFeatureNames[i]).ToArray();
     }
 }

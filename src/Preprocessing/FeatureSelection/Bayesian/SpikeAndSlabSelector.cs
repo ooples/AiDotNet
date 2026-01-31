@@ -51,6 +51,10 @@ public class SpikeAndSlabSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Slab variance must be positive.", nameof(slabVariance));
         if (spikeVariance <= 0)
             throw new ArgumentException("Spike variance must be positive.", nameof(spikeVariance));
+        if (priorInclusionProbability <= 0 || priorInclusionProbability >= 1)
+            throw new ArgumentException("Prior inclusion probability must be between 0 and 1 exclusive.", nameof(priorInclusionProbability));
+        if (nIterations < 1)
+            throw new ArgumentException("Number of iterations must be at least 1.", nameof(nIterations));
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _slabVariance = slabVariance;

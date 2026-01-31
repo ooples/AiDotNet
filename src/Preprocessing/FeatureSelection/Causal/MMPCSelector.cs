@@ -16,35 +16,40 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Causal;
 /// independence tests to identify these relationships. The result is a minimal
 /// set of truly relevant features, removing spurious correlations.
 /// </para>
+/// <para>
+/// <b>Note:</b> The alpha parameter in this implementation is used as a minimum association
+/// threshold (correlation magnitude), not as a p-value significance level as in traditional MMPC.
+/// Features with association below this threshold are considered conditionally independent.
+/// </para>
 /// </remarks>
 public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly double _alpha;
+    private readonly double _minAssociationThreshold;
 
     private double[]? _associationScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double Alpha => _alpha;
+    public double MinAssociationThreshold => _minAssociationThreshold;
     public double[]? AssociationScores => _associationScores;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
     public MMPCSelector(
         int nFeaturesToSelect = 10,
-        double alpha = 0.05,
+        double minAssociationThreshold = 0.05,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
-        if (alpha <= 0 || alpha >= 1)
-            throw new ArgumentException("Alpha must be between 0 and 1.", nameof(alpha));
+        if (minAssociationThreshold <= 0 || minAssociationThreshold >= 1)
+            throw new ArgumentException("Minimum association threshold must be between 0 and 1.", nameof(minAssociationThreshold));
 
         _nFeaturesToSelect = nFeaturesToSelect;
-        _alpha = alpha;
+        _minAssociationThreshold = minAssociationThreshold;
     }
 
     protected override void FitCore(Matrix<T> data)
@@ -122,7 +127,7 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
             }
 
-            if (bestFeature < 0 || bestMinAssoc < _alpha)
+            if (bestFeature < 0 || bestMinAssoc < _minAssociationThreshold)
                 break;
 
             candidates.Add(bestFeature);
@@ -148,7 +153,7 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     colS[i] = X[i, s];
 
                 double condAssoc = ComputePartialAssociation(colJ, y, colS);
-                if (condAssoc >= _alpha)
+                if (condAssoc >= _minAssociationThreshold)
                 {
                     isIndependent = false;
                     break;
@@ -269,14 +274,17 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        if (_selectedIndices is null) return [];
+        if (_selectedIndices is null)
+            throw new InvalidOperationException("MMPCSelector has not been fitted.");
 
         if (inputFeatureNames is null)
             return _selectedIndices.Select(i => $"Feature{i}").ToArray();
 
-        return _selectedIndices
-            .Where(i => i < inputFeatureNames.Length)
-            .Select(i => inputFeatureNames[i])
-            .ToArray();
+        if (inputFeatureNames.Length < _nInputFeatures)
+            throw new ArgumentException(
+                $"Expected at least {_nInputFeatures} feature names, got {inputFeatureNames.Length}.",
+                nameof(inputFeatureNames));
+
+        return _selectedIndices.Select(i => inputFeatureNames[i]).ToArray();
     }
 }

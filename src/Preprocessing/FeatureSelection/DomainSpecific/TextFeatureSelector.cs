@@ -71,6 +71,8 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (data.Rows != target.Length)
             throw new ArgumentException("Target length must match rows in data.");
+        if (data.Rows == 0 || data.Columns == 0)
+            throw new ArgumentException("Data must contain at least one row and one column.", nameof(data));
 
         _nInputFeatures = data.Columns;
         int n = data.Rows;

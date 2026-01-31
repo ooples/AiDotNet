@@ -170,15 +170,19 @@ public class MCPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         double absZ = Math.Abs(z);
 
-        if (absZ <= gamma * lambda)
+        if (absZ <= lambda)
         {
-            // Soft thresholding with MCP adjustment
-            double threshold = lambda * (1 - absZ / (gamma * lambda));
-            return Math.Sign(z) * Math.Max(0, absZ - threshold) * gamma / (gamma - 1);
+            // Region 1: Full shrinkage to zero
+            return 0;
+        }
+        else if (absZ <= gamma * lambda)
+        {
+            // Region 2: Soft thresholding with MCP adjustment
+            return Math.Sign(z) * (absZ - lambda) * gamma / (gamma - 1);
         }
         else
         {
-            // No shrinkage for large coefficients
+            // Region 3: No shrinkage for large coefficients
             return z;
         }
     }

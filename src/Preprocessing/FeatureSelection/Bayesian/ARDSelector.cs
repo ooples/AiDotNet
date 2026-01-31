@@ -148,7 +148,7 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 residualSum += (y[i] - pred) * (y[i] - pred);
             }
             double gammaSum = gamma.Sum();
-            beta = (n - gammaSum) / (residualSum + 1e-10);
+            beta = Math.Max((n - gammaSum) / (residualSum + 1e-10), 1e-10);
 
             // Check convergence
             double maxChange = 0;

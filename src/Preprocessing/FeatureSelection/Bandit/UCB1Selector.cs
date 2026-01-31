@@ -134,8 +134,8 @@ public class UCB1Selector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             totalPulls++;
         }
 
-        // UCB1 selection loop
-        for (int iter = p; iter < _nIterations; iter++)
+        // UCB1 selection loop (run _nIterations additional iterations after initial p pulls)
+        for (int iter = 0; iter < _nIterations; iter++)
         {
             // Compute UCB for each arm
             int bestArm = 0;
@@ -224,14 +224,17 @@ public class UCB1Selector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        if (_selectedIndices is null) return [];
+        if (_selectedIndices is null)
+            throw new InvalidOperationException("UCB1Selector has not been fitted.");
 
         if (inputFeatureNames is null)
             return _selectedIndices.Select(i => $"Feature{i}").ToArray();
 
-        return _selectedIndices
-            .Where(i => i < inputFeatureNames.Length)
-            .Select(i => inputFeatureNames[i])
-            .ToArray();
+        if (_selectedIndices.Any(i => i >= inputFeatureNames.Length))
+            throw new ArgumentException(
+                $"inputFeatureNames length ({inputFeatureNames.Length}) is less than the maximum selected index.",
+                nameof(inputFeatureNames));
+
+        return _selectedIndices.Select(i => inputFeatureNames[i]).ToArray();
     }
 }

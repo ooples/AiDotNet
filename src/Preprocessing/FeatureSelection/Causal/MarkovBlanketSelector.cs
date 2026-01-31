@@ -43,6 +43,8 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (maxFeatures < 1)
             throw new ArgumentException("Max features must be at least 1.", nameof(maxFeatures));
+        if (nBins < 1)
+            throw new ArgumentException("nBins must be at least 1.", nameof(nBins));
 
         _maxFeatures = maxFeatures;
         _threshold = threshold;
@@ -110,7 +112,7 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             _selectedIndices = Enumerable.Range(0, p)
                 .OrderByDescending(j => _relevanceScores[j])
-                .Take(Math.Min(5, p))
+                .Take(Math.Min(Math.Min(5, p), _maxFeatures))
                 .OrderBy(x => x)
                 .ToArray();
         }
@@ -199,9 +201,9 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (conditionSet.Count == 0)
             return ComputeMutualInformation(X, y, feature, n);
 
-        // Simplified: compute MI conditioned on each conditioning variable and average
+        // Compute MI conditioned on each conditioning variable and average
         double totalMI = 0;
-        int count = 0;
+        int condCount = 0;
 
         foreach (int condFeature in conditionSet)
         {
@@ -211,6 +213,10 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 .Where(g => g.Count() > 5)
                 .ToList();
 
+            if (groups.Count == 0)
+                continue;
+
+            double condMI = 0;
             foreach (var group in groups)
             {
                 var indices = group.ToList();
@@ -240,12 +246,14 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                         groupMI += pxy * Math.Log(pxy / (px * py));
                 }
 
-                totalMI += groupMI * ((double)groupN / n);
-                count++;
+                condMI += groupMI * ((double)groupN / n);
             }
+
+            totalMI += condMI;
+            condCount++;
         }
 
-        return count > 0 ? totalMI : ComputeMutualInformation(X, y, feature, n);
+        return condCount > 0 ? totalMI / condCount : ComputeMutualInformation(X, y, feature, n);
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

@@ -53,6 +53,8 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
         if (imageWidth < 1 || imageHeight < 1)
             throw new ArgumentException("Image dimensions must be positive.");
+        if (numChannels < 1)
+            throw new ArgumentException("Number of channels must be at least 1.", nameof(numChannels));
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _imageWidth = imageWidth;
@@ -71,6 +73,8 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (data.Rows != target.Length)
             throw new ArgumentException("Target length must match rows in data.");
+        if (data.Rows == 0 || data.Columns == 0)
+            throw new ArgumentException("Data must contain at least one row and one column.", nameof(data));
 
         _nInputFeatures = data.Columns;
         int n = data.Rows;

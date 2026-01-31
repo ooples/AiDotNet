@@ -46,6 +46,19 @@ public class ConstraintBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
 
+        if (mandatoryFeatures is not null && mandatoryFeatures.Length > nFeaturesToSelect)
+            throw new ArgumentException(
+                $"Mandatory features count ({mandatoryFeatures.Length}) exceeds nFeaturesToSelect ({nFeaturesToSelect}).",
+                nameof(mandatoryFeatures));
+
+        if (mandatoryFeatures is not null && forbiddenFeatures is not null)
+        {
+            var overlap = mandatoryFeatures.Intersect(forbiddenFeatures).ToArray();
+            if (overlap.Length > 0)
+                throw new ArgumentException(
+                    $"Features cannot be both mandatory and forbidden: [{string.Join(", ", overlap)}]");
+        }
+
         _nFeaturesToSelect = nFeaturesToSelect;
         _mandatoryFeatures = mandatoryFeatures;
         _forbiddenFeatures = forbiddenFeatures;
@@ -129,8 +142,10 @@ public class ConstraintBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             var group = _featureGroups?.FirstOrDefault(g => g.Contains(candidate));
             if (group is not null)
             {
-                // Add entire group if not already added and space permits
-                var groupToAdd = group.Where(f => !selected.Contains(f) && !forbidden.Contains(f)).ToList();
+                // Add entire group if not already added and space permits (validate bounds)
+                var groupToAdd = group
+                    .Where(f => f >= 0 && f < p && !selected.Contains(f) && !forbidden.Contains(f))
+                    .ToList();
                 if (selected.Count + groupToAdd.Count <= _nFeaturesToSelect)
                 {
                     foreach (int f in groupToAdd)
@@ -188,14 +203,17 @@ public class ConstraintBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        if (_selectedIndices is null) return [];
+        if (_selectedIndices is null)
+            throw new InvalidOperationException("ConstraintBasedSelector has not been fitted.");
 
         if (inputFeatureNames is null)
             return _selectedIndices.Select(i => $"Feature{i}").ToArray();
 
-        return _selectedIndices
-            .Where(i => i < inputFeatureNames.Length)
-            .Select(i => inputFeatureNames[i])
-            .ToArray();
+        if (_selectedIndices.Any(i => i >= inputFeatureNames.Length))
+            throw new ArgumentException(
+                "Input feature names array is shorter than expected based on selected indices.",
+                nameof(inputFeatureNames));
+
+        return _selectedIndices.Select(i => inputFeatureNames[i]).ToArray();
     }
 }
