@@ -3587,12 +3587,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             return (Tensor<T> input, int layerIndex) =>
             {
                 var attentionWeights = transformerNet.GetAttentionWeights(input);
-                if (layerIndex < attentionWeights.Count)
-                    return attentionWeights[layerIndex];
+                if (layerIndex < 0 || layerIndex >= attentionWeights.Count)
+                    throw new ArgumentOutOfRangeException(nameof(layerIndex),
+                        $"Layer index {layerIndex} must be in range [0, {attentionWeights.Count}).");
 
-                // Return zeros if layer doesn't exist
-                var numOps = MathHelper.GetNumericOperations<T>();
-                return new Tensor<T>(new[] { 1, 1 });
+                return attentionWeights[layerIndex];
             };
         }
 

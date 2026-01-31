@@ -207,6 +207,16 @@ public class AttentionVisualizationExplainer<T> : ILocalExplainer<T, AttentionEx
         int layer = -1,
         int head = -1)
     {
+        if (queryPosition < 0 || queryPosition >= explanation.SequenceLength)
+            throw new ArgumentOutOfRangeException(nameof(queryPosition),
+                $"Query position {queryPosition} must be in range [0, {explanation.SequenceLength}).");
+        if (layer < -1 || layer >= explanation.NumLayers)
+            throw new ArgumentOutOfRangeException(nameof(layer),
+                $"Layer {layer} must be in range [-1, {explanation.NumLayers}).");
+        if (head < -1 || head >= explanation.NumHeads)
+            throw new ArgumentOutOfRangeException(nameof(head),
+                $"Head {head} must be in range [-1, {explanation.NumHeads}).");
+
         var result = new Dictionary<int, T>();
 
         if (layer < 0)
