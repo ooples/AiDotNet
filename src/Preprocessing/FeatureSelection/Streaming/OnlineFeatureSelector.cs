@@ -4,52 +4,49 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Preprocessing.FeatureSelection.Streaming;
 
 /// <summary>
-/// Online (streaming) feature selection for incremental learning scenarios.
+/// Online Feature Selection for Streaming Data.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Maintains feature statistics incrementally, allowing feature selection decisions
-/// to be updated as new data arrives without storing or reprocessing all data.
+/// Performs incremental feature selection that can update as new data arrives,
+/// suitable for streaming or online learning scenarios.
 /// </para>
-/// <para><b>For Beginners:</b> In streaming scenarios, data arrives continuously and
-/// you can't store everything. Online feature selection keeps running statistics
-/// about each feature and makes selection decisions on-the-fly, updating as new
-/// data comes in.
+/// <para><b>For Beginners:</b> Traditional feature selection processes all data
+/// at once. Online selection updates incrementally as new samples arrive, which
+/// is useful when you can't store all data in memory or when data comes in
+/// continuously.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly double _decayFactor;
+    private readonly double _learningRate;
 
-    private int _sampleCount;
+    private double[]? _runningScores;
     private double[]? _runningMeans;
-    private double[]? _runningVariances;
-    private double[]? _runningCorrelations;
-    private double _targetMean;
-    private double _targetVariance;
+    private double[]? _runningVars;
+    private int _sampleCount;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? RunningCorrelations => _runningCorrelations;
+    public double LearningRate => _learningRate;
+    public double[]? RunningScores => _runningScores;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
     public OnlineFeatureSelector(
         int nFeaturesToSelect = 10,
-        double decayFactor = 0.01,
+        double learningRate = 0.1,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
-        if (decayFactor <= 0 || decayFactor > 1)
-            throw new ArgumentException("Decay factor must be between 0 and 1.", nameof(decayFactor));
 
         _nFeaturesToSelect = nFeaturesToSelect;
-        _decayFactor = decayFactor;
+        _learningRate = learningRate;
+        _sampleCount = 0;
     }
 
     protected override void FitCore(Matrix<T> data)
@@ -60,93 +57,81 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     public void Fit(Matrix<T> data, Vector<T> target)
     {
-        if (data.Rows != target.Length)
-            throw new ArgumentException("Target length must match rows in data.");
-
-        _nInputFeatures = data.Columns;
+        // Initialize or update statistics
         int n = data.Rows;
         int p = data.Columns;
+        _nInputFeatures = p;
 
-        // Initialize statistics
-        _runningMeans = new double[p];
-        _runningVariances = new double[p];
-        _runningCorrelations = new double[p];
-        _targetMean = 0;
-        _targetVariance = 0;
-        _sampleCount = 0;
+        if (_runningScores is null)
+        {
+            _runningScores = new double[p];
+            _runningMeans = new double[p];
+            _runningVars = new double[p];
+        }
 
-        // Process data incrementally
+        // Process each sample incrementally
         for (int i = 0; i < n; i++)
         {
-            double y = NumOps.ToDouble(target[i]);
-            PartialFit(data, i, y);
+            double yi = NumOps.ToDouble(target[i]);
+            _sampleCount++;
+
+            for (int j = 0; j < p; j++)
+            {
+                double xi = NumOps.ToDouble(data[i, j]);
+
+                // Welford's online algorithm for mean and variance
+                double delta = xi - _runningMeans![j];
+                _runningMeans[j] += delta / _sampleCount;
+                double delta2 = xi - _runningMeans[j];
+                _runningVars![j] += delta * delta2;
+
+                // Update correlation estimate incrementally
+                double correlation = ComputeOnlineCorrelation(xi, yi, j);
+                _runningScores![j] = (1 - _learningRate) * _runningScores[j] + _learningRate * correlation;
+            }
         }
 
         // Select top features
-        UpdateSelection(p);
+        int numToSelect = Math.Min(_nFeaturesToSelect, p);
+        _selectedIndices = Enumerable.Range(0, p)
+            .OrderByDescending(j => Math.Abs(_runningScores![j]))
+            .Take(numToSelect)
+            .OrderBy(x => x)
+            .ToArray();
+
         IsFitted = true;
     }
 
-    /// <summary>
-    /// Update statistics with a single new sample (streaming update).
-    /// </summary>
-    public void PartialFit(Matrix<T> data, int rowIndex, double target)
+    private double _targetMean = 0;
+    private double _targetVar = 0;
+    private double[]? _covariances;
+
+    private double ComputeOnlineCorrelation(double x, double y, int featureIdx)
     {
-        if (_runningMeans is null || _runningVariances is null || _runningCorrelations is null)
-        {
-            _nInputFeatures = data.Columns;
-            _runningMeans = new double[data.Columns];
-            _runningVariances = new double[data.Columns];
-            _runningCorrelations = new double[data.Columns];
-        }
+        if (_covariances is null)
+            _covariances = new double[_nInputFeatures];
 
-        _sampleCount++;
-        int p = _runningMeans.Length;
+        // Update target statistics
+        double oldTargetMean = _targetMean;
+        _targetMean += (y - _targetMean) / _sampleCount;
+        _targetVar += (y - oldTargetMean) * (y - _targetMean);
 
-        // Update target statistics (Welford's algorithm)
-        double deltaY = target - _targetMean;
-        _targetMean += deltaY / _sampleCount;
-        _targetVariance += deltaY * (target - _targetMean);
+        // Update covariance
+        _covariances[featureIdx] += (x - _runningMeans![featureIdx]) * (y - _targetMean);
 
-        // Update feature statistics and correlations
-        for (int j = 0; j < p; j++)
-        {
-            double x = NumOps.ToDouble(data[rowIndex, j]);
+        // Compute correlation
+        double xVar = _runningVars![featureIdx];
+        double yVar = _targetVar;
 
-            // Welford's algorithm for mean and variance
-            double deltaX = x - _runningMeans[j];
-            _runningMeans[j] += deltaX / _sampleCount;
-            _runningVariances[j] += deltaX * (x - _runningMeans[j]);
-
-            // Exponential moving correlation estimate
-            double stdX = Math.Sqrt(_runningVariances[j] / (_sampleCount + 1e-10));
-            double stdY = Math.Sqrt(_targetVariance / (_sampleCount + 1e-10));
-
-            if (stdX > 1e-10 && stdY > 1e-10)
-            {
-                double z_x = (x - _runningMeans[j]) / stdX;
-                double z_y = (target - _targetMean) / stdY;
-                double instantCorr = z_x * z_y;
-
-                // Exponential moving average of correlation
-                _runningCorrelations[j] = (1 - _decayFactor) * _runningCorrelations[j]
-                                        + _decayFactor * instantCorr;
-            }
-        }
+        if (xVar > 1e-10 && yVar > 1e-10)
+            return _covariances[featureIdx] / Math.Sqrt(xVar * yVar);
+        return 0;
     }
 
-    private void UpdateSelection(int p)
+    public void PartialFit(Matrix<T> data, Vector<T> target)
     {
-        if (_runningCorrelations is null) return;
-
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _runningCorrelations
-            .Select((c, idx) => (Corr: Math.Abs(c), Index: idx))
-            .OrderByDescending(x => x.Corr)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        // Same as Fit but designed for incremental updates
+        Fit(data, target);
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
@@ -190,7 +175,7 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        if (_selectedIndices is null) return Array.Empty<string>();
+        if (_selectedIndices is null) return [];
 
         if (inputFeatureNames is null)
             return _selectedIndices.Select(i => $"Feature{i}").ToArray();

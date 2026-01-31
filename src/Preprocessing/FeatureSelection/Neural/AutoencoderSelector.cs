@@ -1,47 +1,48 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 
 /// <summary>
-/// Autoencoder-based Feature Selection.
+/// Autoencoder based Feature Selection.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Uses a neural autoencoder to learn which features are essential for
-/// reconstructing the data. Features with high contribution to the
-/// bottleneck representation are selected.
+/// Selects features based on their reconstruction importance in a simple autoencoder,
+/// measuring how much each feature contributes to the learned representation.
 /// </para>
-/// <para><b>For Beginners:</b> An autoencoder is like a compression algorithm
-/// that learns to squeeze data through a small "bottleneck" and then expand
-/// it back. Features that are most important for this compression/reconstruction
-/// are the ones we keep - they carry the most essential information.
+/// <para><b>For Beginners:</b> An autoencoder compresses data and reconstructs it.
+/// Features that are harder to reconstruct accurately are often more important
+/// because they carry unique information not captured by other features.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly int _bottleneckSize;
-    private readonly int _nEpochs;
+    private readonly int _hiddenSize;
+    private readonly int _epochs;
     private readonly double _learningRate;
+    private readonly int? _randomState;
 
-    private double[]? _featureImportances;
+    private double[]? _reconstructionImportance;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
-    private double[,]? _encoderWeights;
-    private double[,]? _decoderWeights;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureImportances => _featureImportances;
+    public int HiddenSize => _hiddenSize;
+    public int Epochs => _epochs;
+    public double LearningRate => _learningRate;
+    public double[]? ReconstructionImportance => _reconstructionImportance;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
     public AutoencoderSelector(
         int nFeaturesToSelect = 10,
-        int bottleneckSize = 5,
-        int nEpochs = 100,
+        int hiddenSize = 10,
+        int epochs = 100,
         double learningRate = 0.01,
+        int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -49,9 +50,10 @@ public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
 
         _nFeaturesToSelect = nFeaturesToSelect;
-        _bottleneckSize = bottleneckSize;
-        _nEpochs = nEpochs;
+        _hiddenSize = hiddenSize;
+        _epochs = epochs;
         _learningRate = learningRate;
+        _randomState = randomState;
     }
 
     protected override void FitCore(Matrix<T> data)
@@ -60,105 +62,150 @@ public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        // Convert and normalize data
+        var rand = _randomState.HasValue
+            ? RandomHelper.CreateSeededRandom(_randomState.Value)
+            : RandomHelper.CreateSecureRandom();
+
         var X = new double[n, p];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < p; j++)
+                X[i, j] = NumOps.ToDouble(data[i, j]);
+
+        // Standardize data
         var means = new double[p];
         var stds = new double[p];
-
         for (int j = 0; j < p; j++)
         {
             for (int i = 0; i < n; i++)
-                means[j] += NumOps.ToDouble(data[i, j]);
+                means[j] += X[i, j];
             means[j] /= n;
 
             for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - means[j];
-                stds[j] += diff * diff;
-            }
-            stds[j] = Math.Sqrt(stds[j] / (n - 1)) + 1e-10;
-
-            for (int i = 0; i < n; i++)
-                X[i, j] = (NumOps.ToDouble(data[i, j]) - means[j]) / stds[j];
+                stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
+            stds[j] = Math.Sqrt(stds[j] / n);
+            if (stds[j] < 1e-10) stds[j] = 1;
         }
 
-        int bottleneck = Math.Min(_bottleneckSize, p - 1);
-        var rand = RandomHelper.CreateSecureRandom();
-
-        // Initialize weights
-        _encoderWeights = new double[p, bottleneck];
-        _decoderWeights = new double[bottleneck, p];
-        double scale = Math.Sqrt(2.0 / (p + bottleneck));
-
-        for (int i = 0; i < p; i++)
-            for (int j = 0; j < bottleneck; j++)
-                _encoderWeights[i, j] = (rand.NextDouble() * 2 - 1) * scale;
-
-        for (int i = 0; i < bottleneck; i++)
+        for (int i = 0; i < n; i++)
             for (int j = 0; j < p; j++)
-                _decoderWeights[i, j] = (rand.NextDouble() * 2 - 1) * scale;
+                X[i, j] = (X[i, j] - means[j]) / stds[j];
+
+        int h = Math.Min(_hiddenSize, p);
+
+        // Initialize weights (Xavier initialization)
+        var W1 = new double[p, h];
+        var W2 = new double[h, p];
+        var b1 = new double[h];
+        var b2 = new double[p];
+
+        double scale1 = Math.Sqrt(2.0 / (p + h));
+        double scale2 = Math.Sqrt(2.0 / (h + p));
+
+        for (int j = 0; j < p; j++)
+            for (int k = 0; k < h; k++)
+                W1[j, k] = (rand.NextDouble() - 0.5) * 2 * scale1;
+
+        for (int k = 0; k < h; k++)
+            for (int j = 0; j < p; j++)
+                W2[k, j] = (rand.NextDouble() - 0.5) * 2 * scale2;
 
         // Train autoencoder
-        for (int epoch = 0; epoch < _nEpochs; epoch++)
+        for (int epoch = 0; epoch < _epochs; epoch++)
         {
             for (int i = 0; i < n; i++)
             {
                 // Forward pass
-                var encoded = new double[bottleneck];
-                for (int j = 0; j < bottleneck; j++)
+                var hidden = new double[h];
+                for (int k = 0; k < h; k++)
                 {
-                    for (int k = 0; k < p; k++)
-                        encoded[j] += X[i, k] * _encoderWeights[k, j];
-                    encoded[j] = Math.Tanh(encoded[j]);
+                    hidden[k] = b1[k];
+                    for (int j = 0; j < p; j++)
+                        hidden[k] += X[i, j] * W1[j, k];
+                    hidden[k] = Math.Tanh(hidden[k]); // Activation
                 }
 
-                var decoded = new double[p];
+                var output = new double[p];
                 for (int j = 0; j < p; j++)
                 {
-                    for (int k = 0; k < bottleneck; k++)
-                        decoded[j] += encoded[k] * _decoderWeights[k, j];
+                    output[j] = b2[j];
+                    for (int k = 0; k < h; k++)
+                        output[j] += hidden[k] * W2[k, j];
                 }
 
                 // Backward pass
-                var outputError = new double[p];
+                var dOutput = new double[p];
                 for (int j = 0; j < p; j++)
-                    outputError[j] = decoded[j] - X[i, j];
+                    dOutput[j] = output[j] - X[i, j];
 
-                var hiddenError = new double[bottleneck];
-                for (int j = 0; j < bottleneck; j++)
+                var dHidden = new double[h];
+                for (int k = 0; k < h; k++)
                 {
-                    for (int k = 0; k < p; k++)
-                        hiddenError[j] += outputError[k] * _decoderWeights[j, k];
-                    hiddenError[j] *= (1 - encoded[j] * encoded[j]); // tanh derivative
+                    double sum = 0;
+                    for (int j = 0; j < p; j++)
+                        sum += dOutput[j] * W2[k, j];
+                    dHidden[k] = sum * (1 - hidden[k] * hidden[k]); // tanh derivative
                 }
 
                 // Update weights
-                for (int j = 0; j < bottleneck; j++)
-                    for (int k = 0; k < p; k++)
-                        _decoderWeights[j, k] -= _learningRate * outputError[k] * encoded[j];
+                for (int k = 0; k < h; k++)
+                    for (int j = 0; j < p; j++)
+                        W2[k, j] -= _learningRate * dOutput[j] * hidden[k];
 
                 for (int j = 0; j < p; j++)
-                    for (int k = 0; k < bottleneck; k++)
-                        _encoderWeights[j, k] -= _learningRate * hiddenError[k] * X[i, j];
+                    b2[j] -= _learningRate * dOutput[j];
+
+                for (int j = 0; j < p; j++)
+                    for (int k = 0; k < h; k++)
+                        W1[j, k] -= _learningRate * dHidden[k] * X[i, j];
+
+                for (int k = 0; k < h; k++)
+                    b1[k] -= _learningRate * dHidden[k];
             }
         }
 
-        // Compute feature importance from encoder weights
-        _featureImportances = new double[p];
-        for (int j = 0; j < p; j++)
+        // Compute reconstruction error per feature
+        _reconstructionImportance = new double[p];
+        for (int i = 0; i < n; i++)
         {
-            for (int k = 0; k < bottleneck; k++)
-                _featureImportances[j] += Math.Abs(_encoderWeights[j, k]);
+            var hidden = new double[h];
+            for (int k = 0; k < h; k++)
+            {
+                hidden[k] = b1[k];
+                for (int j = 0; j < p; j++)
+                    hidden[k] += X[i, j] * W1[j, k];
+                hidden[k] = Math.Tanh(hidden[k]);
+            }
+
+            var output = new double[p];
+            for (int j = 0; j < p; j++)
+            {
+                output[j] = b2[j];
+                for (int k = 0; k < h; k++)
+                    output[j] += hidden[k] * W2[k, j];
+            }
+
+            for (int j = 0; j < p; j++)
+                _reconstructionImportance[j] += Math.Abs(X[i, j] - output[j]);
         }
 
+        for (int j = 0; j < p; j++)
+            _reconstructionImportance[j] /= n;
+
+        // Features with higher reconstruction error are potentially more important
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureImportances[j])
+            .OrderByDescending(j => _reconstructionImportance[j])
             .Take(numToSelect)
             .OrderBy(x => x)
             .ToArray();
 
         IsFitted = true;
+    }
+
+    public new Matrix<T> FitTransform(Matrix<T> data)
+    {
+        Fit(data);
+        return Transform(data);
     }
 
     protected override Matrix<T> TransformCore(Matrix<T> data)

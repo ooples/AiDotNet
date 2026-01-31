@@ -4,40 +4,37 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Preprocessing.FeatureSelection.TimeSeries;
 
 /// <summary>
-/// Granger Causality-based feature selection for time series.
+/// Granger Causality-based Feature Selection.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Tests whether past values of a feature help predict future values of
-/// the target beyond what past target values alone can predict.
+/// Uses Granger causality tests to select features that help predict the target
+/// beyond what the target's own history can predict.
 /// </para>
-/// <para><b>For Beginners:</b> Granger causality asks: "Does knowing the
-/// past of feature X help predict Y's future better than just knowing Y's
-/// past?" Features that pass this test are likely truly predictive.
+/// <para><b>For Beginners:</b> Granger causality asks: does knowing a feature's
+/// past values help predict the target better than just knowing the target's own
+/// past? Features that "Granger-cause" the target have genuine predictive value
+/// for forecasting.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _maxLag;
-    private readonly double _significanceLevel;
 
-    private double[]? _fStatistics;
-    private double[]? _pValues;
+    private double[]? _grangerFScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FStatistics => _fStatistics;
-    public double[]? PValues => _pValues;
+    public int MaxLag => _maxLag;
+    public double[]? GrangerFScores => _grangerFScores;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
     public GrangerCausalitySelector(
         int nFeaturesToSelect = 10,
         int maxLag = 5,
-        double significanceLevel = 0.05,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -48,7 +45,6 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _maxLag = maxLag;
-        _significanceLevel = significanceLevel;
     }
 
     protected override void FitCore(Matrix<T> data)
@@ -65,142 +61,91 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
-        int lag = Math.Min(_maxLag, (n - 10) / 3);  // Leave enough samples
 
-        if (lag < 1) lag = 1;
-
-        _fStatistics = new double[p];
-        _pValues = new double[p];
-
-        // Extract target values
+        var X = new double[n, p];
         var y = new double[n];
         for (int i = 0; i < n; i++)
+        {
             y[i] = NumOps.ToDouble(target[i]);
+            for (int j = 0; j < p; j++)
+                X[i, j] = NumOps.ToDouble(data[i, j]);
+        }
 
-        int nValid = n - lag;
-        if (nValid < 5)
-            throw new ArgumentException("Not enough samples for Granger causality test.");
+        _grangerFScores = new double[p];
+        int effectiveN = n - _maxLag;
 
+        // Compute restricted model RSS (autoregressive model on Y only)
+        double rssRestricted = ComputeARModelRSS(y, _maxLag, effectiveN);
+
+        // For each feature, compute unrestricted model RSS
         for (int j = 0; j < p; j++)
         {
-            var x = new double[n];
-            for (int i = 0; i < n; i++)
-                x[i] = NumOps.ToDouble(data[i, j]);
+            double rssUnrestricted = ComputeGrangerModelRSS(X, y, j, _maxLag, effectiveN);
 
-            // Restricted model: y[t] ~ y[t-1], ..., y[t-lag]
-            var restrictedSSR = ComputeAutoRegressiveSSR(y, lag, nValid);
+            // Granger F-statistic
+            int dfRestricted = effectiveN - _maxLag;
+            int dfUnrestricted = effectiveN - 2 * _maxLag;
 
-            // Unrestricted model: y[t] ~ y[t-1], ..., y[t-lag], x[t-1], ..., x[t-lag]
-            var unrestrictedSSR = ComputeVARSSR(y, x, lag, nValid);
-
-            // F-statistic
-            int dfRestricted = nValid - lag;
-            int dfUnrestricted = nValid - 2 * lag;
-
-            if (dfUnrestricted > 0 && unrestrictedSSR > 1e-10)
+            if (dfUnrestricted > 0 && rssUnrestricted > 1e-10)
             {
-                double fStat = ((restrictedSSR - unrestrictedSSR) / lag) /
-                              (unrestrictedSSR / dfUnrestricted);
-                _fStatistics[j] = fStat;
-                _pValues[j] = 1 - FDistributionCDF(fStat, lag, dfUnrestricted);
-            }
-            else
-            {
-                _fStatistics[j] = 0;
-                _pValues[j] = 1;
+                double fStat = ((rssRestricted - rssUnrestricted) / _maxLag) /
+                              (rssUnrestricted / dfUnrestricted);
+                _grangerFScores[j] = Math.Max(0, fStat);
             }
         }
 
-        // Select features with significant Granger causality
-        var significant = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (_pValues[j] < _significanceLevel)
-                significant.Add(j);
-
-        if (significant.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = significant
-                .OrderBy(j => _pValues[j])
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            // Fall back to top by F-statistic
-            _selectedIndices = _fStatistics
-                .Select((f, idx) => (F: f, Index: idx))
-                .OrderByDescending(x => x.F)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+        int numToSelect = Math.Min(_nFeaturesToSelect, p);
+        _selectedIndices = Enumerable.Range(0, p)
+            .OrderByDescending(j => _grangerFScores[j])
+            .Take(numToSelect)
+            .OrderBy(x => x)
+            .ToArray();
 
         IsFitted = true;
     }
 
-    private double ComputeAutoRegressiveSSR(double[] y, int lag, int nValid)
+    private double ComputeARModelRSS(double[] y, int lag, int effectiveN)
     {
-        // Simple AR regression: y[t] = a0 + a1*y[t-1] + ... + alag*y[t-lag]
-        // Using normal equations
+        // Build design matrix for AR model
+        int n = y.Length;
+        var X = new double[effectiveN, lag];
+        var yTarget = new double[effectiveN];
 
-        // Build design matrix
-        var X = new double[nValid, lag + 1];  // +1 for intercept
-        var Y = new double[nValid];
-
-        for (int i = 0; i < nValid; i++)
+        for (int i = 0; i < effectiveN; i++)
         {
-            int t = i + lag;
-            Y[i] = y[t];
-            X[i, 0] = 1;  // Intercept
-            for (int l = 1; l <= lag; l++)
-                X[i, l] = y[t - l];
+            yTarget[i] = y[i + lag];
+            for (int l = 0; l < lag; l++)
+                X[i, l] = y[i + lag - l - 1];
         }
 
-        var predicted = FitAndPredict(X, Y, nValid, lag + 1);
-        double ssr = 0;
-        for (int i = 0; i < nValid; i++)
-            ssr += Math.Pow(Y[i] - predicted[i], 2);
-
-        return ssr;
+        return ComputeRSS(X, yTarget, effectiveN, lag);
     }
 
-    private double ComputeVARSSR(double[] y, double[] x, int lag, int nValid)
+    private double ComputeGrangerModelRSS(double[,] Xall, double[] y, int j, int lag, int effectiveN)
     {
-        // VAR regression: y[t] = a0 + a1*y[t-1] + ... + alag*y[t-lag] + b1*x[t-1] + ... + blag*x[t-lag]
-        int nCols = 2 * lag + 1;  // intercept + lag y's + lag x's
+        // Build design matrix for Granger model (Y lags + X_j lags)
+        int n = y.Length;
+        var X = new double[effectiveN, 2 * lag];
+        var yTarget = new double[effectiveN];
 
-        var X = new double[nValid, nCols];
-        var Y = new double[nValid];
-
-        for (int i = 0; i < nValid; i++)
+        for (int i = 0; i < effectiveN; i++)
         {
-            int t = i + lag;
-            Y[i] = y[t];
-            X[i, 0] = 1;
-            for (int l = 1; l <= lag; l++)
+            yTarget[i] = y[i + lag];
+            for (int l = 0; l < lag; l++)
             {
-                X[i, l] = y[t - l];
-                X[i, lag + l] = x[t - l];
+                X[i, l] = y[i + lag - l - 1];
+                X[i, lag + l] = Xall[i + lag - l - 1, j];
             }
         }
 
-        var predicted = FitAndPredict(X, Y, nValid, nCols);
-        double ssr = 0;
-        for (int i = 0; i < nValid; i++)
-            ssr += Math.Pow(Y[i] - predicted[i], 2);
-
-        return ssr;
+        return ComputeRSS(X, yTarget, effectiveN, 2 * lag);
     }
 
-    private double[] FitAndPredict(double[,] X, double[] Y, int n, int p)
+    private double ComputeRSS(double[,] X, double[] y, int n, int p)
     {
-        // OLS: beta = (X'X)^-1 X'Y
-        // Simplified implementation
-
+        // Solve OLS and compute RSS
         var XtX = new double[p, p];
-        var XtY = new double[p];
+        var Xty = new double[p];
 
         for (int i = 0; i < p; i++)
         {
@@ -210,134 +155,69 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
                     XtX[i, j] += X[k, i] * X[k, j];
             }
             for (int k = 0; k < n; k++)
-                XtY[i] += X[k, i] * Y[k];
+                Xty[i] += X[k, i] * y[k];
         }
 
-        // Regularize
+        // Regularization
         for (int i = 0; i < p; i++)
             XtX[i, i] += 1e-6;
 
-        var beta = SolveLinearSystem(XtX, XtY, p);
+        var beta = SolveSystem(XtX, Xty, p);
 
-        var predicted = new double[n];
+        // Compute RSS
+        double rss = 0;
         for (int i = 0; i < n; i++)
         {
+            double pred = 0;
             for (int j = 0; j < p; j++)
-                predicted[i] += X[i, j] * beta[j];
+                pred += beta[j] * X[i, j];
+            double residual = y[i] - pred;
+            rss += residual * residual;
         }
 
-        return predicted;
+        return rss;
     }
 
-    private double[] SolveLinearSystem(double[,] A, double[] b, int n)
+    private double[] SolveSystem(double[,] A, double[] b, int n)
     {
-        // Gaussian elimination
-        var augmented = new double[n, n + 1];
+        var aug = new double[n, n + 1];
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
-                augmented[i, j] = A[i, j];
-            augmented[i, n] = b[i];
+                aug[i, j] = A[i, j];
+            aug[i, n] = b[i];
         }
 
         for (int col = 0; col < n; col++)
         {
             int maxRow = col;
             for (int row = col + 1; row < n; row++)
-                if (Math.Abs(augmented[row, col]) > Math.Abs(augmented[maxRow, col]))
+                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
                     maxRow = row;
 
             for (int j = 0; j <= n; j++)
-            {
-                double temp = augmented[col, j];
-                augmented[col, j] = augmented[maxRow, j];
-                augmented[maxRow, j] = temp;
-            }
+                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
 
-            if (Math.Abs(augmented[col, col]) < 1e-10)
-                continue;
+            if (Math.Abs(aug[col, col]) < 1e-10) continue;
 
             for (int row = col + 1; row < n; row++)
             {
-                double factor = augmented[row, col] / augmented[col, col];
+                double factor = aug[row, col] / aug[col, col];
                 for (int j = col; j <= n; j++)
-                    augmented[row, j] -= factor * augmented[col, j];
+                    aug[row, j] -= factor * aug[col, j];
             }
         }
 
         var x = new double[n];
         for (int i = n - 1; i >= 0; i--)
         {
-            x[i] = augmented[i, n];
+            x[i] = aug[i, n];
             for (int j = i + 1; j < n; j++)
-                x[i] -= augmented[i, j] * x[j];
-            if (Math.Abs(augmented[i, i]) > 1e-10)
-                x[i] /= augmented[i, i];
+                x[i] -= aug[i, j] * x[j];
+            x[i] /= (Math.Abs(aug[i, i]) > 1e-10 ? aug[i, i] : 1);
         }
 
         return x;
-    }
-
-    private double FDistributionCDF(double x, int d1, int d2)
-    {
-        // Approximation using incomplete beta function relationship
-        if (x <= 0) return 0;
-        double a = d1 / 2.0;
-        double b = d2 / 2.0;
-        double z = d1 * x / (d1 * x + d2);
-        return IncompleteBeta(z, a, b);
-    }
-
-    private double IncompleteBeta(double x, double a, double b)
-    {
-        // Continued fraction approximation
-        if (x < 0 || x > 1) return 0;
-        if (x == 0) return 0;
-        if (x == 1) return 1;
-
-        // Use continued fraction
-        double bt = Math.Exp(a * Math.Log(x) + b * Math.Log(1 - x));
-        if (x < (a + 1) / (a + b + 2))
-            return bt * BetaCF(x, a, b) / a;
-        else
-            return 1 - bt * BetaCF(1 - x, b, a) / b;
-    }
-
-    private double BetaCF(double x, double a, double b)
-    {
-        double qab = a + b;
-        double qap = a + 1;
-        double qam = a - 1;
-        double c = 1;
-        double d = 1 - qab * x / qap;
-        if (Math.Abs(d) < 1e-30) d = 1e-30;
-        d = 1 / d;
-        double h = d;
-
-        for (int m = 1; m <= 100; m++)
-        {
-            int m2 = 2 * m;
-            double aa = m * (b - m) * x / ((qam + m2) * (a + m2));
-            d = 1 + aa * d;
-            if (Math.Abs(d) < 1e-30) d = 1e-30;
-            c = 1 + aa / c;
-            if (Math.Abs(c) < 1e-30) c = 1e-30;
-            d = 1 / d;
-            h *= d * c;
-
-            aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
-            d = 1 + aa * d;
-            if (Math.Abs(d) < 1e-30) d = 1e-30;
-            c = 1 + aa / c;
-            if (Math.Abs(c) < 1e-30) c = 1e-30;
-            d = 1 / d;
-            double del = d * c;
-            h *= del;
-
-            if (Math.Abs(del - 1) < 1e-7) break;
-        }
-
-        return h;
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
@@ -381,7 +261,7 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        if (_selectedIndices is null) return Array.Empty<string>();
+        if (_selectedIndices is null) return [];
 
         if (inputFeatureNames is null)
             return _selectedIndices.Select(i => $"Feature{i}").ToArray();

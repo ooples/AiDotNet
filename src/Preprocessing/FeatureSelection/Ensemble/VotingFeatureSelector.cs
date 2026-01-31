@@ -4,55 +4,44 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Preprocessing.FeatureSelection.Ensemble;
 
 /// <summary>
-/// Voting-based Ensemble Feature Selection.
+/// Voting-based Feature Selection.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Voting Feature Selection combines multiple feature selection methods and selects
-/// features based on how many methods agree on their importance. Features selected
-/// by more methods are considered more reliable.
+/// Combines multiple feature selection methods using voting. Each method casts
+/// votes for its top features, and features with the most votes are selected.
 /// </para>
-/// <para><b>For Beginners:</b> Different feature selection methods might disagree on
-/// which features are important. Voting combines their opinions - if many methods
-/// agree that a feature is useful, it's probably genuinely important. It's like
-/// getting a second, third, and fourth opinion.
+/// <para><b>For Beginners:</b> Instead of trusting just one method to pick
+/// features, this approach asks multiple methods to vote. Features that are
+/// chosen by many different methods are more likely to be truly important,
+/// giving you more confident selections.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class VotingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly int _nPerMethod;
-    private readonly double _minVoteRatio;
+    private readonly int _votesPerMethod;
 
     private int[]? _voteCounts;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public int NPerMethod => _nPerMethod;
-    public double MinVoteRatio => _minVoteRatio;
     public int[]? VoteCounts => _voteCounts;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
     public VotingFeatureSelector(
         int nFeaturesToSelect = 10,
-        int nPerMethod = 20,
-        double minVoteRatio = 0.5,
+        int votesPerMethod = 20,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
-        if (nPerMethod < nFeaturesToSelect)
-            throw new ArgumentException("Features per method must be at least nFeaturesToSelect.", nameof(nPerMethod));
-        if (minVoteRatio < 0 || minVoteRatio > 1)
-            throw new ArgumentException("Minimum vote ratio must be between 0 and 1.", nameof(minVoteRatio));
 
         _nFeaturesToSelect = nFeaturesToSelect;
-        _nPerMethod = nPerMethod;
-        _minVoteRatio = minVoteRatio;
+        _votesPerMethod = votesPerMethod;
     }
 
     protected override void FitCore(Matrix<T> data)
@@ -70,184 +59,219 @@ public class VotingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        _voteCounts = new int[p];
-
-        // Method 1: Correlation-based
-        var correlationScores = ComputeCorrelation(data, target, n, p);
-        AddVotes(correlationScores, p);
-
-        // Method 2: Fisher score
-        var fisherScores = ComputeFisherScore(data, target, n, p);
-        AddVotes(fisherScores, p);
-
-        // Method 3: Variance-based
-        var varianceScores = ComputeVariance(data, n, p);
-        AddVotes(varianceScores, p);
-
-        // Method 4: Chi-square-like (for binary)
-        var chiSquareScores = ComputeChiSquareApprox(data, target, n, p);
-        AddVotes(chiSquareScores, p);
-
-        // Select features with sufficient votes
-        int nMethods = 4;
-        int minVotes = (int)Math.Ceiling(_minVoteRatio * nMethods);
-
-        var candidates = Enumerable.Range(0, p)
-            .Where(j => _voteCounts[j] >= minVotes)
-            .OrderByDescending(j => _voteCounts[j])
-            .ToList();
-
-        // If not enough candidates meet threshold, take top by votes
-        if (candidates.Count < _nFeaturesToSelect)
+        var X = new double[n, p];
+        var y = new double[n];
+        for (int i = 0; i < n; i++)
         {
-            candidates = Enumerable.Range(0, p)
-                .OrderByDescending(j => _voteCounts[j])
-                .ToList();
+            y[i] = NumOps.ToDouble(target[i]);
+            for (int j = 0; j < p; j++)
+                X[i, j] = NumOps.ToDouble(data[i, j]);
         }
 
-        _selectedIndices = candidates
-            .Take(_nFeaturesToSelect)
+        _voteCounts = new int[p];
+        int votesPerMethod = Math.Min(_votesPerMethod, p);
+
+        // Method 1: Correlation
+        var corrScores = ComputeCorrelation(X, y, n, p);
+        foreach (int j in TopK(corrScores, votesPerMethod))
+            _voteCounts[j]++;
+
+        // Method 2: Variance
+        var varScores = ComputeVariance(X, n, p);
+        foreach (int j in TopK(varScores, votesPerMethod))
+            _voteCounts[j]++;
+
+        // Method 3: Fisher score
+        var fisherScores = ComputeFisherScore(X, y, n, p);
+        foreach (int j in TopK(fisherScores, votesPerMethod))
+            _voteCounts[j]++;
+
+        // Method 4: Chi-squared approximation
+        var chiScores = ComputeChiSquared(X, y, n, p);
+        foreach (int j in TopK(chiScores, votesPerMethod))
+            _voteCounts[j]++;
+
+        // Method 5: Gini importance
+        var giniScores = ComputeGiniImportance(X, y, n, p);
+        foreach (int j in TopK(giniScores, votesPerMethod))
+            _voteCounts[j]++;
+
+        int numToSelect = Math.Min(_nFeaturesToSelect, p);
+        _selectedIndices = Enumerable.Range(0, p)
+            .OrderByDescending(j => _voteCounts[j])
+            .ThenByDescending(j => corrScores[j]) // Tiebreaker
+            .Take(numToSelect)
             .OrderBy(x => x)
             .ToArray();
 
         IsFitted = true;
     }
 
-    private void AddVotes(double[] scores, int p)
+    private int[] TopK(double[] scores, int k)
     {
-        var topIndices = Enumerable.Range(0, p)
+        return Enumerable.Range(0, scores.Length)
             .OrderByDescending(j => scores[j])
-            .Take(_nPerMethod)
-            .ToHashSet();
-
-        foreach (int j in topIndices)
-            _voteCounts![j]++;
+            .Take(k)
+            .ToArray();
     }
 
-    private double[] ComputeCorrelation(Matrix<T> data, Vector<T> target, int n, int p)
+    private double[] ComputeCorrelation(double[,] X, double[] y, int n, int p)
     {
         var scores = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
+        double yMean = y.Average();
 
         for (int j = 0; j < p; j++)
         {
             double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
+            for (int i = 0; i < n; i++) xMean += X[i, j];
             xMean /= n;
 
             double sxy = 0, sxx = 0, syy = 0;
             for (int i = 0; i < n; i++)
             {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
+                double xd = X[i, j] - xMean;
+                double yd = y[i] - yMean;
+                sxy += xd * yd;
+                sxx += xd * xd;
+                syy += yd * yd;
             }
-
             scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
         }
-
         return scores;
     }
 
-    private double[] ComputeFisherScore(Matrix<T> data, Vector<T> target, int n, int p)
+    private double[] ComputeVariance(double[,] X, int n, int p)
     {
         var scores = new double[p];
-
-        var class0 = new List<int>();
-        var class1 = new List<int>();
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.ToDouble(target[i]) < 0.5)
-                class0.Add(i);
-            else
-                class1.Add(i);
-        }
-
-        if (class0.Count < 2 || class1.Count < 2)
-            return scores;
-
-        for (int j = 0; j < p; j++)
-        {
-            double mean0 = class0.Sum(i => NumOps.ToDouble(data[i, j])) / class0.Count;
-            double mean1 = class1.Sum(i => NumOps.ToDouble(data[i, j])) / class1.Count;
-
-            double var0 = class0.Sum(i => Math.Pow(NumOps.ToDouble(data[i, j]) - mean0, 2)) / class0.Count;
-            double var1 = class1.Sum(i => Math.Pow(NumOps.ToDouble(data[i, j]) - mean1, 2)) / class1.Count;
-
-            double denom = var0 + var1;
-            scores[j] = denom > 1e-10 ? Math.Pow(mean0 - mean1, 2) / denom : 0;
-        }
-
-        return scores;
-    }
-
-    private double[] ComputeVariance(Matrix<T> data, int n, int p)
-    {
-        var scores = new double[p];
-
         for (int j = 0; j < p; j++)
         {
             double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
+            for (int i = 0; i < n; i++) mean += X[i, j];
             mean /= n;
-
-            double variance = 0;
             for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            scores[j] = variance / n;
+                scores[j] += (X[i, j] - mean) * (X[i, j] - mean);
+            scores[j] /= (n - 1);
         }
-
         return scores;
     }
 
-    private double[] ComputeChiSquareApprox(Matrix<T> data, Vector<T> target, int n, int p)
+    private double[] ComputeFisherScore(double[,] X, double[] y, int n, int p)
     {
         var scores = new double[p];
+        var classes = y.Distinct().ToList();
+        int k = classes.Count;
 
         for (int j = 0; j < p; j++)
         {
-            // Use median split for continuous features
-            var values = new double[n];
-            for (int i = 0; i < n; i++)
-                values[i] = NumOps.ToDouble(data[i, j]);
+            double overallMean = 0;
+            for (int i = 0; i < n; i++) overallMean += X[i, j];
+            overallMean /= n;
 
-            Array.Sort(values);
-            double median = values[n / 2];
-
-            // Create 2x2 contingency table
-            int a = 0, b = 0, c = 0, d = 0;
-            for (int i = 0; i < n; i++)
+            double betweenVar = 0, withinVar = 0;
+            foreach (var c in classes)
             {
-                bool high = NumOps.ToDouble(data[i, j]) > median;
-                bool positive = NumOps.ToDouble(target[i]) >= 0.5;
+                var indices = Enumerable.Range(0, n).Where(i => Math.Abs(y[i] - c) < 1e-10).ToList();
+                if (indices.Count == 0) continue;
 
-                if (high && positive) a++;
-                else if (high && !positive) b++;
-                else if (!high && positive) c++;
-                else d++;
+                double classMean = indices.Sum(i => X[i, j]) / indices.Count;
+                betweenVar += indices.Count * (classMean - overallMean) * (classMean - overallMean);
+
+                foreach (int i in indices)
+                    withinVar += (X[i, j] - classMean) * (X[i, j] - classMean);
             }
 
-            // Chi-square statistic
-            double total = a + b + c + d;
-            double expected = (a + b) * (a + c) / total;
-            if (expected > 0)
+            scores[j] = withinVar > 1e-10 ? betweenVar / withinVar : 0;
+        }
+        return scores;
+    }
+
+    private double[] ComputeChiSquared(double[,] X, double[] y, int n, int p)
+    {
+        var scores = new double[p];
+        int nBins = Math.Min(10, (int)Math.Sqrt(n) + 1);
+        var classes = y.Distinct().ToList();
+
+        for (int j = 0; j < p; j++)
+        {
+            double xMin = double.MaxValue, xMax = double.MinValue;
+            for (int i = 0; i < n; i++)
             {
-                scores[j] = Math.Pow(a - expected, 2) / expected;
+                xMin = Math.Min(xMin, X[i, j]);
+                xMax = Math.Max(xMax, X[i, j]);
+            }
+            double binWidth = (xMax - xMin) / nBins + 1e-10;
+
+            var observed = new int[nBins, classes.Count];
+            var rowSums = new int[nBins];
+            var colSums = new int[classes.Count];
+
+            for (int i = 0; i < n; i++)
+            {
+                int bin = Math.Min((int)((X[i, j] - xMin) / binWidth), nBins - 1);
+                int classIdx = classes.IndexOf(y[i]);
+                observed[bin, classIdx]++;
+                rowSums[bin]++;
+                colSums[classIdx]++;
+            }
+
+            double chi2 = 0;
+            for (int b = 0; b < nBins; b++)
+            {
+                for (int c = 0; c < classes.Count; c++)
+                {
+                    double expected = (double)rowSums[b] * colSums[c] / n;
+                    if (expected > 0)
+                        chi2 += (observed[b, c] - expected) * (observed[b, c] - expected) / expected;
+                }
+            }
+            scores[j] = chi2;
+        }
+        return scores;
+    }
+
+    private double[] ComputeGiniImportance(double[,] X, double[] y, int n, int p)
+    {
+        var scores = new double[p];
+        var classes = y.Distinct().ToList();
+
+        double giniParent = ComputeGini(y, classes, n);
+
+        for (int j = 0; j < p; j++)
+        {
+            double threshold = 0;
+            for (int i = 0; i < n; i++) threshold += X[i, j];
+            threshold /= n;
+
+            var leftY = new List<double>();
+            var rightY = new List<double>();
+            for (int i = 0; i < n; i++)
+            {
+                if (X[i, j] <= threshold)
+                    leftY.Add(y[i]);
+                else
+                    rightY.Add(y[i]);
+            }
+
+            if (leftY.Count > 0 && rightY.Count > 0)
+            {
+                double giniLeft = ComputeGini(leftY.ToArray(), classes, leftY.Count);
+                double giniRight = ComputeGini(rightY.ToArray(), classes, rightY.Count);
+                double weightedGini = (double)leftY.Count / n * giniLeft + (double)rightY.Count / n * giniRight;
+                scores[j] = giniParent - weightedGini;
             }
         }
-
         return scores;
+    }
+
+    private double ComputeGini(double[] y, List<double> classes, int n)
+    {
+        double gini = 1.0;
+        foreach (var c in classes)
+        {
+            double p = (double)y.Count(yi => Math.Abs(yi - c) < 1e-10) / n;
+            gini -= p * p;
+        }
+        return gini;
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

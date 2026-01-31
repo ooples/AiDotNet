@@ -4,31 +4,30 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Preprocessing.FeatureSelection.Kernel;
 
 /// <summary>
-/// Kernel Fisher Discriminant Feature Selection.
+/// Kernel Fisher Discriminant-based Feature Selection.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Extends Fisher's discriminant analysis to kernel space, finding features
-/// that maximize class separability in a non-linear projected space.
+/// Applies the Fisher criterion in kernel space to find features that maximize
+/// class separation using non-linear transformations.
 /// </para>
-/// <para><b>For Beginners:</b> Fisher's method tries to find directions that
-/// best separate different classes. Kernel Fisher does this but in a
-/// transformed space where non-linear patterns become linear. Features
-/// that help with this non-linear class separation are selected.
+/// <para><b>For Beginners:</b> Fisher's criterion tries to maximize the distance
+/// between class means while minimizing the spread within each class. Doing this
+/// in kernel space allows us to find non-linear boundaries between classes,
+/// selecting features that help separate classes in complex ways.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class KernelFisherSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _gamma;
-    private readonly double _regularization;
 
     private double[]? _fisherScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
+    public double Gamma => _gamma;
     public double[]? FisherScores => _fisherScores;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
@@ -36,7 +35,6 @@ public class KernelFisherSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public KernelFisherSelector(
         int nFeaturesToSelect = 10,
         double gamma = 1.0,
-        double regularization = 0.01,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -45,7 +43,6 @@ public class KernelFisherSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _gamma = gamma;
-        _regularization = regularization;
     }
 
     protected override void FitCore(Matrix<T> data)
@@ -63,7 +60,6 @@ public class KernelFisherSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        // Convert to arrays
         var X = new double[n, p];
         var y = new int[n];
         for (int i = 0; i < n; i++)
@@ -73,85 +69,74 @@ public class KernelFisherSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 X[i, j] = NumOps.ToDouble(data[i, j]);
         }
 
-        // Get class indices
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        var classIndices = new Dictionary<int, List<int>>();
-        foreach (int c in classes)
-            classIndices[c] = new List<int>();
-        for (int i = 0; i < n; i++)
-            classIndices[y[i]].Add(i);
+        var classes = y.Distinct().ToList();
 
         _fisherScores = new double[p];
 
-        // Compute kernel Fisher score for each feature
+        // For each feature, compute kernel Fisher score
         for (int j = 0; j < p; j++)
         {
-            // Extract single feature column
-            var xj = new double[n];
+            // Use only this feature for kernel computation
+            var featureVals = new double[n];
             for (int i = 0; i < n; i++)
-                xj[i] = X[i, j];
+                featureVals[i] = X[i, j];
 
-            // Compute 1D kernel matrices
-            var K = new double[n, n];
-            for (int i1 = 0; i1 < n; i1++)
+            // Compute kernel values and class-conditional means
+            double overallMean = 0;
+            var classMeans = new Dictionary<int, double>();
+            var classKernelSums = new Dictionary<int, double>();
+            var classCounts = new Dictionary<int, int>();
+
+            foreach (var c in classes)
             {
-                for (int i2 = i1; i2 < n; i2++)
-                {
-                    double diff = xj[i1] - xj[i2];
-                    double k = Math.Exp(-_gamma * diff * diff);
-                    K[i1, i2] = k;
-                    K[i2, i1] = k;
-                }
+                classMeans[c] = 0;
+                classKernelSums[c] = 0;
+                classCounts[c] = 0;
             }
 
-            // Compute between-class scatter in kernel space
-            double betweenScatter = 0;
-            double totalMean = 0;
+            // Compute pairwise kernel values
             for (int i = 0; i < n; i++)
+            {
+                double kernelSum = 0;
                 for (int i2 = 0; i2 < n; i2++)
-                    totalMean += K[i, i2];
-            totalMean /= (n * n);
-
-            foreach (int c in classes)
-            {
-                var indices = classIndices[c];
-                int nc = indices.Count;
-                if (nc == 0) continue;
-
-                double classMean = 0;
-                foreach (int i1 in indices)
-                    foreach (int i2 in indices)
-                        classMean += K[i1, i2];
-                classMean /= (nc * nc);
-
-                betweenScatter += nc * (classMean - totalMean) * (classMean - totalMean);
-            }
-
-            // Compute within-class scatter in kernel space
-            double withinScatter = 0;
-            foreach (int c in classes)
-            {
-                var indices = classIndices[c];
-                int nc = indices.Count;
-                if (nc < 2) continue;
-
-                double classMean = 0;
-                foreach (int i1 in indices)
-                    foreach (int i2 in indices)
-                        classMean += K[i1, i2];
-                classMean /= (nc * nc);
-
-                foreach (int i in indices)
                 {
-                    double sampleMean = 0;
-                    foreach (int i2 in indices)
-                        sampleMean += K[i, i2];
-                    sampleMean /= nc;
-                    withinScatter += (sampleMean - classMean) * (sampleMean - classMean);
+                    double diff = featureVals[i] - featureVals[i2];
+                    double k = Math.Exp(-_gamma * diff * diff);
+                    kernelSum += k;
                 }
+                classMeans[y[i]] += kernelSum;
+                classCounts[y[i]]++;
+                overallMean += kernelSum;
             }
 
-            _fisherScores[j] = betweenScatter / (withinScatter + _regularization);
+            overallMean /= n;
+            foreach (var c in classes)
+                if (classCounts[c] > 0)
+                    classMeans[c] /= classCounts[c];
+
+            // Between-class scatter (in kernel space)
+            double betweenScatter = 0;
+            foreach (var c in classes)
+            {
+                double diff = classMeans[c] - overallMean;
+                betweenScatter += classCounts[c] * diff * diff;
+            }
+
+            // Within-class scatter (in kernel space)
+            double withinScatter = 0;
+            for (int i = 0; i < n; i++)
+            {
+                double kernelSum = 0;
+                for (int i2 = 0; i2 < n; i2++)
+                {
+                    double diff = featureVals[i] - featureVals[i2];
+                    kernelSum += Math.Exp(-_gamma * diff * diff);
+                }
+                double deviation = kernelSum - classMeans[y[i]];
+                withinScatter += deviation * deviation;
+            }
+
+            _fisherScores[j] = withinScatter > 1e-10 ? betweenScatter / withinScatter : 0;
         }
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

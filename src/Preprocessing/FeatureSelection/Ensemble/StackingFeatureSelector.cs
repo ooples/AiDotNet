@@ -4,53 +4,41 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Preprocessing.FeatureSelection.Ensemble;
 
 /// <summary>
-/// Stacking-based Ensemble Feature Selection.
+/// Stacking-based Feature Selection.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Stacking Feature Selection uses multiple base selectors and combines their
-/// rankings using a meta-level aggregation. Each base selector contributes a
-/// score, and features are selected based on the aggregated meta-score.
+/// Uses a stacking ensemble approach where multiple base feature scorers are
+/// combined using a meta-learner to produce final feature rankings.
 /// </para>
-/// <para><b>For Beginners:</b> Like stacking in machine learning, this method
-/// uses the outputs of several feature selection methods as inputs to make a
-/// final decision. It's more sophisticated than simple voting because it learns
-/// how to weight each method's opinion.
+/// <para><b>For Beginners:</b> Stacking combines multiple ways of measuring
+/// feature importance (like correlation, variance, and mutual information).
+/// A second layer then learns how to best combine these measures, giving you
+/// more reliable feature selection than any single method alone.
 /// </para>
 /// </remarks>
-/// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class StackingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly string _aggregation;
 
-    private double[][]? _baseScores;
-    private double[]? _metaScores;
+    private double[]? _stackedScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public string Aggregation => _aggregation;
-    public double[][]? BaseScores => _baseScores;
-    public double[]? MetaScores => _metaScores;
+    public double[]? StackedScores => _stackedScores;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
     public StackingFeatureSelector(
         int nFeaturesToSelect = 10,
-        string aggregation = "mean",
         int[]? columnIndices = null)
         : base(columnIndices)
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
 
-        var validAggregations = new[] { "mean", "median", "max", "harmonic" };
-        if (!validAggregations.Contains(aggregation.ToLower()))
-            throw new ArgumentException("Aggregation must be 'mean', 'median', 'max', or 'harmonic'.", nameof(aggregation));
-
         _nFeaturesToSelect = nFeaturesToSelect;
-        _aggregation = aggregation.ToLower();
     }
 
     protected override void FitCore(Matrix<T> data)
@@ -68,21 +56,44 @@ public class StackingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        // Compute scores from multiple base methods
-        _baseScores = new double[5][];
-        _baseScores[0] = NormalizeScores(ComputeCorrelation(data, target, n, p));
-        _baseScores[1] = NormalizeScores(ComputeFisherScore(data, target, n, p));
-        _baseScores[2] = NormalizeScores(ComputeVariance(data, n, p));
-        _baseScores[3] = NormalizeScores(ComputeReliefF(data, target, n, p));
-        _baseScores[4] = NormalizeScores(ComputeMutualInfo(data, target, n, p));
+        var X = new double[n, p];
+        var y = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            y[i] = NumOps.ToDouble(target[i]);
+            for (int j = 0; j < p; j++)
+                X[i, j] = NumOps.ToDouble(data[i, j]);
+        }
 
-        // Aggregate scores using meta-level function
-        _metaScores = AggregateScores(_baseScores, p);
+        // Base scorers: correlation, variance, mutual information approximation
+        var correlationScores = ComputeCorrelationScores(X, y, n, p);
+        var varianceScores = ComputeVarianceScores(X, n, p);
+        var miScores = ComputeMIScores(X, y, n, p);
 
-        // Select top features
+        // Normalize scores to [0, 1]
+        NormalizeScores(correlationScores);
+        NormalizeScores(varianceScores);
+        NormalizeScores(miScores);
+
+        // Meta-learner: weighted combination (learn weights from data)
+        // Use correlation between base scores and target variance explained
+        double wCorr = ComputeMetaWeight(X, y, correlationScores, n, p);
+        double wVar = ComputeMetaWeight(X, y, varianceScores, n, p);
+        double wMI = ComputeMetaWeight(X, y, miScores, n, p);
+
+        double totalWeight = wCorr + wVar + wMI + 1e-10;
+        wCorr /= totalWeight;
+        wVar /= totalWeight;
+        wMI /= totalWeight;
+
+        // Combine scores
+        _stackedScores = new double[p];
+        for (int j = 0; j < p; j++)
+            _stackedScores[j] = wCorr * correlationScores[j] + wVar * varianceScores[j] + wMI * miScores[j];
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _metaScores[j])
+            .OrderByDescending(j => _stackedScores[j])
             .Take(numToSelect)
             .OrderBy(x => x)
             .ToArray();
@@ -90,77 +101,25 @@ public class StackingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         IsFitted = true;
     }
 
-    private double[] NormalizeScores(double[] scores)
-    {
-        double min = scores.Min();
-        double max = scores.Max();
-        double range = max - min;
-
-        if (range < 1e-10)
-            return scores.Select(_ => 0.5).ToArray();
-
-        return scores.Select(s => (s - min) / range).ToArray();
-    }
-
-    private double[] AggregateScores(double[][] baseScores, int p)
-    {
-        var meta = new double[p];
-        int nMethods = baseScores.Length;
-
-        for (int j = 0; j < p; j++)
-        {
-            var featureScores = new double[nMethods];
-            for (int m = 0; m < nMethods; m++)
-                featureScores[m] = baseScores[m][j];
-
-            switch (_aggregation)
-            {
-                case "mean":
-                    meta[j] = featureScores.Average();
-                    break;
-                case "median":
-                    Array.Sort(featureScores);
-                    meta[j] = featureScores[nMethods / 2];
-                    break;
-                case "max":
-                    meta[j] = featureScores.Max();
-                    break;
-                case "harmonic":
-                    double sum = 0;
-                    foreach (double s in featureScores)
-                        sum += 1.0 / (s + 1e-10);
-                    meta[j] = nMethods / sum;
-                    break;
-            }
-        }
-
-        return meta;
-    }
-
-    private double[] ComputeCorrelation(Matrix<T> data, Vector<T> target, int n, int p)
+    private double[] ComputeCorrelationScores(double[,] X, double[] y, int n, int p)
     {
         var scores = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
+        double yMean = y.Average();
 
         for (int j = 0; j < p; j++)
         {
             double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
+            for (int i = 0; i < n; i++) xMean += X[i, j];
             xMean /= n;
 
             double sxy = 0, sxx = 0, syy = 0;
             for (int i = 0; i < n; i++)
             {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
+                double xd = X[i, j] - xMean;
+                double yd = y[i] - yMean;
+                sxy += xd * yd;
+                sxx += xd * xd;
+                syy += yd * yd;
             }
 
             scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
@@ -169,170 +128,113 @@ public class StackingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return scores;
     }
 
-    private double[] ComputeFisherScore(Matrix<T> data, Vector<T> target, int n, int p)
-    {
-        var scores = new double[p];
-
-        var class0 = new List<int>();
-        var class1 = new List<int>();
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.ToDouble(target[i]) < 0.5)
-                class0.Add(i);
-            else
-                class1.Add(i);
-        }
-
-        if (class0.Count < 2 || class1.Count < 2)
-            return scores;
-
-        for (int j = 0; j < p; j++)
-        {
-            double mean0 = class0.Sum(i => NumOps.ToDouble(data[i, j])) / class0.Count;
-            double mean1 = class1.Sum(i => NumOps.ToDouble(data[i, j])) / class1.Count;
-
-            double var0 = class0.Sum(i => Math.Pow(NumOps.ToDouble(data[i, j]) - mean0, 2)) / class0.Count;
-            double var1 = class1.Sum(i => Math.Pow(NumOps.ToDouble(data[i, j]) - mean1, 2)) / class1.Count;
-
-            double denom = var0 + var1;
-            scores[j] = denom > 1e-10 ? Math.Pow(mean0 - mean1, 2) / denom : 0;
-        }
-
-        return scores;
-    }
-
-    private double[] ComputeVariance(Matrix<T> data, int n, int p)
+    private double[] ComputeVarianceScores(double[,] X, int n, int p)
     {
         var scores = new double[p];
 
         for (int j = 0; j < p; j++)
         {
             double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
+            for (int i = 0; i < n; i++) mean += X[i, j];
             mean /= n;
 
             double variance = 0;
             for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            scores[j] = variance / n;
+                variance += (X[i, j] - mean) * (X[i, j] - mean);
+            scores[j] = variance / (n - 1);
         }
 
         return scores;
     }
 
-    private double[] ComputeReliefF(Matrix<T> data, Vector<T> target, int n, int p)
+    private double[] ComputeMIScores(double[,] X, double[] y, int n, int p)
     {
         var scores = new double[p];
-        int nSamples = Math.Min(100, n);
+        int nBins = (int)Math.Sqrt(n) + 1;
 
-        for (int s = 0; s < nSamples; s++)
-        {
-            int idx = s * n / nSamples;
-            double targetVal = NumOps.ToDouble(target[idx]);
-
-            // Find nearest hit and miss
-            double nearestHitDist = double.MaxValue;
-            double nearestMissDist = double.MaxValue;
-            int nearestHit = -1, nearestMiss = -1;
-
-            for (int i = 0; i < n; i++)
-            {
-                if (i == idx) continue;
-
-                double dist = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    double diff = NumOps.ToDouble(data[idx, j]) - NumOps.ToDouble(data[i, j]);
-                    dist += diff * diff;
-                }
-
-                bool sameClass = Math.Abs(NumOps.ToDouble(target[i]) - targetVal) < 0.5;
-
-                if (sameClass && dist < nearestHitDist)
-                {
-                    nearestHitDist = dist;
-                    nearestHit = i;
-                }
-                else if (!sameClass && dist < nearestMissDist)
-                {
-                    nearestMissDist = dist;
-                    nearestMiss = i;
-                }
-            }
-
-            if (nearestHit >= 0 && nearestMiss >= 0)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    double hitDiff = Math.Abs(NumOps.ToDouble(data[idx, j]) - NumOps.ToDouble(data[nearestHit, j]));
-                    double missDiff = Math.Abs(NumOps.ToDouble(data[idx, j]) - NumOps.ToDouble(data[nearestMiss, j]));
-                    scores[j] += missDiff - hitDiff;
-                }
-            }
-        }
-
-        for (int j = 0; j < p; j++)
-            scores[j] /= nSamples;
-
-        return scores;
-    }
-
-    private double[] ComputeMutualInfo(Matrix<T> data, Vector<T> target, int n, int p)
-    {
-        var scores = new double[p];
-        int nBins = 10;
+        double yMin = y.Min(), yMax = y.Max();
+        double yBinWidth = (yMax - yMin) / nBins + 1e-10;
 
         for (int j = 0; j < p; j++)
         {
-            // Discretize feature
-            double minVal = double.MaxValue, maxVal = double.MinValue;
+            double xMin = double.MaxValue, xMax = double.MinValue;
             for (int i = 0; i < n; i++)
             {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < minVal) minVal = val;
-                if (val > maxVal) maxVal = val;
+                xMin = Math.Min(xMin, X[i, j]);
+                xMax = Math.Max(xMax, X[i, j]);
             }
+            double xBinWidth = (xMax - xMin) / nBins + 1e-10;
 
-            double range = maxVal - minVal;
-            var jointCounts = new int[nBins, 2];
-            var featureCounts = new int[nBins];
-            var targetCounts = new int[2];
+            var jointCounts = new int[nBins, nBins];
+            var xCounts = new int[nBins];
+            var yCounts = new int[nBins];
 
             for (int i = 0; i < n; i++)
             {
-                int fBin = range > 1e-10
-                    ? Math.Min(nBins - 1, (int)((NumOps.ToDouble(data[i, j]) - minVal) / range * (nBins - 1)))
-                    : 0;
-                int tBin = NumOps.ToDouble(target[i]) >= 0.5 ? 1 : 0;
-
-                jointCounts[fBin, tBin]++;
-                featureCounts[fBin]++;
-                targetCounts[tBin]++;
+                int xBin = Math.Min((int)((X[i, j] - xMin) / xBinWidth), nBins - 1);
+                int yBin = Math.Min((int)((y[i] - yMin) / yBinWidth), nBins - 1);
+                jointCounts[xBin, yBin]++;
+                xCounts[xBin]++;
+                yCounts[yBin]++;
             }
 
             double mi = 0;
-            for (int f = 0; f < nBins; f++)
+            for (int xb = 0; xb < nBins; xb++)
             {
-                for (int t = 0; t < 2; t++)
+                for (int yb = 0; yb < nBins; yb++)
                 {
-                    if (jointCounts[f, t] > 0 && featureCounts[f] > 0 && targetCounts[t] > 0)
+                    if (jointCounts[xb, yb] > 0 && xCounts[xb] > 0 && yCounts[yb] > 0)
                     {
-                        double pJoint = (double)jointCounts[f, t] / n;
-                        double pFeature = (double)featureCounts[f] / n;
-                        double pTarget = (double)targetCounts[t] / n;
-                        mi += pJoint * Math.Log(pJoint / (pFeature * pTarget) + 1e-10);
+                        double pxy = (double)jointCounts[xb, yb] / n;
+                        double px = (double)xCounts[xb] / n;
+                        double py = (double)yCounts[yb] / n;
+                        mi += pxy * Math.Log(pxy / (px * py) + 1e-10) / Math.Log(2);
                     }
                 }
             }
-
-            scores[j] = mi;
+            scores[j] = Math.Max(0, mi);
         }
 
         return scores;
+    }
+
+    private void NormalizeScores(double[] scores)
+    {
+        double minVal = scores.Min();
+        double maxVal = scores.Max();
+        double range = maxVal - minVal + 1e-10;
+        for (int j = 0; j < scores.Length; j++)
+            scores[j] = (scores[j] - minVal) / range;
+    }
+
+    private double ComputeMetaWeight(double[,] X, double[] y, double[] scores, int n, int p)
+    {
+        // Weight based on how well the top-scored features explain target variance
+        var topFeatures = Enumerable.Range(0, p)
+            .OrderByDescending(j => scores[j])
+            .Take(Math.Min(5, p))
+            .ToList();
+
+        double yMean = y.Average();
+        double ssTot = y.Sum(yi => (yi - yMean) * (yi - yMean));
+
+        // Simple weighted average prediction
+        double ssRes = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double pred = 0;
+            double weightSum = 0;
+            foreach (int j in topFeatures)
+            {
+                pred += scores[j] * X[i, j];
+                weightSum += scores[j];
+            }
+            if (weightSum > 1e-10) pred /= weightSum;
+            double err = y[i] - pred;
+            ssRes += err * err;
+        }
+
+        return ssTot > 1e-10 ? Math.Max(0, 1 - ssRes / ssTot) : 0;
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
