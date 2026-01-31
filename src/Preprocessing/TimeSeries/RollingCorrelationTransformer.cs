@@ -93,6 +93,17 @@ public class RollingCorrelationTransformer<T> : TimeSeriesTransformerBase<T>
 
             foreach (int windowSize in _correlationWindowSizes)
             {
+                // Honor EdgeHandling for incomplete windows
+                if (Options.EdgeHandling == EdgeHandling.NaN && t < windowSize - 1)
+                {
+                    int pairs = CountCorrelationPairs(inputFeatures);
+                    for (int i = 0; i < pairs; i++)
+                    {
+                        output[t, outputIdx++] = NumOps.FromDouble(double.NaN);
+                    }
+                    continue;
+                }
+
                 // Compute correlation matrix for this window
                 var corrMatrix = ComputeCorrelationMatrix(data, t, windowSize, inputFeatures);
 
@@ -127,6 +138,17 @@ public class RollingCorrelationTransformer<T> : TimeSeriesTransformerBase<T>
 
             foreach (int windowSize in _correlationWindowSizes)
             {
+                // Honor EdgeHandling for incomplete windows
+                if (Options.EdgeHandling == EdgeHandling.NaN && t < windowSize - 1)
+                {
+                    int pairs = CountCorrelationPairs(inputFeatures);
+                    for (int i = 0; i < pairs; i++)
+                    {
+                        output[t, outputIdx++] = NumOps.FromDouble(double.NaN);
+                    }
+                    continue;
+                }
+
                 var corrMatrix = ComputeCorrelationMatrix(data, t, windowSize, inputFeatures);
 
                 for (int i = 0; i < inputFeatures; i++)
