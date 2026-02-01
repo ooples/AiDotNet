@@ -81,31 +81,69 @@ public class RollingCorrelationTransformer<T> : TimeSeriesTransformerBase<T>
     /// <inheritdoc />
     protected override Tensor<T> TransformCore(Tensor<T> data)
     {
-        int timeSteps = GetTimeSteps(data);
+        int inputTimeSteps = GetTimeSteps(data);
         int inputFeatures = InputFeatureCount;
         int outputFeatures = OutputFeatureCount;
 
-        var output = new Tensor<T>(new[] { timeSteps, outputFeatures });
+        // Determine output dimensions based on edge handling
+        int outputTimeSteps = GetOutputTimeSteps(inputTimeSteps);
+        int startIndex = GetOutputStartIndex();
 
-        for (int t = 0; t < timeSteps; t++)
+        // Handle Truncate mode with empty output
+        if (outputTimeSteps <= 0)
         {
+            return new Tensor<T>(new[] { 0, outputFeatures });
+        }
+
+        var output = new Tensor<T>(new[] { outputTimeSteps, outputFeatures });
+
+        // Track first valid index for forward fill
+        int firstValidIndex = -1;
+        int maxWindow = _correlationWindowSizes.Length > 0 ? _correlationWindowSizes.Max() : GetMaxWindowSize();
+
+        for (int outT = 0; outT < outputTimeSteps; outT++)
+        {
+            int t = outT + startIndex; // Map to input time step
             int outputIdx = 0;
 
             foreach (int windowSize in _correlationWindowSizes)
             {
-                // Honor EdgeHandling for incomplete windows
-                if (Options.EdgeHandling == EdgeHandling.NaN && t < windowSize - 1)
+                bool isEdge = IsEdgeRegion(t, windowSize);
+
+                // Handle edge cases based on EdgeHandling mode
+                if (isEdge)
                 {
-                    int pairs = CountCorrelationPairs(inputFeatures);
-                    for (int i = 0; i < pairs; i++)
+                    switch (Options.EdgeHandling)
                     {
-                        output[t, outputIdx++] = NumOps.FromDouble(double.NaN);
+                        case EdgeHandling.NaN:
+                            int pairs = CountCorrelationPairs(inputFeatures);
+                            for (int i = 0; i < pairs; i++)
+                            {
+                                output[outT, outputIdx++] = GetNaN();
+                            }
+                            continue;
+
+                        case EdgeHandling.Partial:
+                        case EdgeHandling.ForwardFill:
+                            // Use partial window
+                            break;
+
+                        case EdgeHandling.Truncate:
+                            break;
                     }
-                    continue;
                 }
 
-                // Compute correlation matrix for this window
-                var corrMatrix = ComputeCorrelationMatrix(data, t, windowSize, inputFeatures);
+                // Track first valid index for forward fill
+                if (firstValidIndex < 0 && !IsEdgeRegion(t, maxWindow))
+                {
+                    firstValidIndex = outT;
+                }
+
+                // Compute correlation matrix for this window (may be partial)
+                int effectiveWindow = ShouldComputePartialWindows() && isEdge
+                    ? GetEffectiveWindowSize(t, windowSize)
+                    : windowSize;
+                var corrMatrix = ComputeCorrelationMatrix(data, t, effectiveWindow, inputFeatures);
 
                 // Output correlations
                 for (int i = 0; i < inputFeatures; i++)
@@ -114,10 +152,16 @@ public class RollingCorrelationTransformer<T> : TimeSeriesTransformerBase<T>
                     for (int j = jStart; j < inputFeatures; j++)
                     {
                         if (i == j && !_fullMatrix) continue; // Skip diagonal for upper triangle
-                        output[t, outputIdx++] = NumOps.FromDouble(corrMatrix[i, j]);
+                        output[outT, outputIdx++] = NumOps.FromDouble(corrMatrix[i, j]);
                     }
                 }
             }
+        }
+
+        // Apply forward fill if needed
+        if (Options.EdgeHandling == EdgeHandling.ForwardFill && firstValidIndex > 0)
+        {
+            ApplyForwardFill(output, firstValidIndex);
         }
 
         return output;
@@ -126,30 +170,73 @@ public class RollingCorrelationTransformer<T> : TimeSeriesTransformerBase<T>
     /// <inheritdoc />
     protected override Tensor<T> TransformParallel(Tensor<T> data)
     {
-        int timeSteps = GetTimeSteps(data);
+        int inputTimeSteps = GetTimeSteps(data);
         int inputFeatures = InputFeatureCount;
         int outputFeatures = OutputFeatureCount;
 
-        var output = new Tensor<T>(new[] { timeSteps, outputFeatures });
+        // Determine output dimensions based on edge handling
+        int outputTimeSteps = GetOutputTimeSteps(inputTimeSteps);
+        int startIndex = GetOutputStartIndex();
+        int maxWindow = _correlationWindowSizes.Length > 0 ? _correlationWindowSizes.Max() : GetMaxWindowSize();
 
-        Parallel.For(0, timeSteps, t =>
+        // Handle Truncate mode with empty output
+        if (outputTimeSteps <= 0)
         {
+            return new Tensor<T>(new[] { 0, outputFeatures });
+        }
+
+        var output = new Tensor<T>(new[] { outputTimeSteps, outputFeatures });
+
+        // Track first valid index for forward fill (thread-safe)
+        int firstValidIndex = -1;
+        object lockObj = new object();
+
+        Parallel.For(0, outputTimeSteps, outT =>
+        {
+            int t = outT + startIndex; // Map to input time step
             int outputIdx = 0;
 
             foreach (int windowSize in _correlationWindowSizes)
             {
-                // Honor EdgeHandling for incomplete windows
-                if (Options.EdgeHandling == EdgeHandling.NaN && t < windowSize - 1)
+                bool isEdge = IsEdgeRegion(t, windowSize);
+
+                // Handle edge cases based on EdgeHandling mode
+                if (isEdge)
                 {
-                    int pairs = CountCorrelationPairs(inputFeatures);
-                    for (int i = 0; i < pairs; i++)
+                    switch (Options.EdgeHandling)
                     {
-                        output[t, outputIdx++] = NumOps.FromDouble(double.NaN);
+                        case EdgeHandling.NaN:
+                            int pairs = CountCorrelationPairs(inputFeatures);
+                            for (int i = 0; i < pairs; i++)
+                            {
+                                output[outT, outputIdx++] = GetNaN();
+                            }
+                            continue;
+
+                        case EdgeHandling.Partial:
+                        case EdgeHandling.ForwardFill:
+                            // Use partial window
+                            break;
+
+                        case EdgeHandling.Truncate:
+                            break;
                     }
-                    continue;
                 }
 
-                var corrMatrix = ComputeCorrelationMatrix(data, t, windowSize, inputFeatures);
+                // Track first valid index for forward fill (thread-safe)
+                if (!IsEdgeRegion(t, maxWindow))
+                {
+                    lock (lockObj)
+                    {
+                        if (firstValidIndex < 0 || outT < firstValidIndex)
+                            firstValidIndex = outT;
+                    }
+                }
+
+                int effectiveWindow = ShouldComputePartialWindows() && isEdge
+                    ? GetEffectiveWindowSize(t, windowSize)
+                    : windowSize;
+                var corrMatrix = ComputeCorrelationMatrix(data, t, effectiveWindow, inputFeatures);
 
                 for (int i = 0; i < inputFeatures; i++)
                 {
@@ -157,11 +244,17 @@ public class RollingCorrelationTransformer<T> : TimeSeriesTransformerBase<T>
                     for (int j = jStart; j < inputFeatures; j++)
                     {
                         if (i == j && !_fullMatrix) continue;
-                        output[t, outputIdx++] = NumOps.FromDouble(corrMatrix[i, j]);
+                        output[outT, outputIdx++] = NumOps.FromDouble(corrMatrix[i, j]);
                     }
                 }
             }
         });
+
+        // Apply forward fill if needed (sequential post-processing)
+        if (Options.EdgeHandling == EdgeHandling.ForwardFill && firstValidIndex > 0)
+        {
+            ApplyForwardFill(output, firstValidIndex);
+        }
 
         return output;
     }
@@ -209,6 +302,48 @@ public class RollingCorrelationTransformer<T> : TimeSeriesTransformerBase<T>
         return _fullMatrix
             ? numFeatures * numFeatures
             : numFeatures * (numFeatures - 1) / 2;
+    }
+
+    #endregion
+
+    #region Incremental Computation
+
+    /// <summary>
+    /// Gets whether this transformer supports incremental transformation.
+    /// Rolling correlation requires multivariate data synchronization which is complex for incremental.
+    /// </summary>
+    public override bool SupportsIncrementalTransform => false;
+
+    #endregion
+
+    #region Serialization
+
+    /// <summary>
+    /// Exports transformer-specific parameters for serialization.
+    /// </summary>
+    protected override Dictionary<string, object> ExportParameters()
+    {
+        return new Dictionary<string, object>
+        {
+            ["CorrelationWindowSizes"] = _correlationWindowSizes,
+            ["FullMatrix"] = _fullMatrix
+        };
+    }
+
+    /// <summary>
+    /// Imports transformer-specific parameters for validation.
+    /// </summary>
+    protected override void ImportParameters(Dictionary<string, object> parameters)
+    {
+        if (parameters.TryGetValue("FullMatrix", out var fullMatrixObj))
+        {
+            bool savedFullMatrix = Convert.ToBoolean(fullMatrixObj);
+            if (savedFullMatrix != _fullMatrix)
+            {
+                throw new ArgumentException(
+                    $"Saved FullMatrix ({savedFullMatrix}) does not match current configuration ({_fullMatrix}).");
+            }
+        }
     }
 
     #endregion

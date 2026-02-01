@@ -65,6 +65,11 @@ public abstract class TimeSeriesTransformerBase<T> : ITimeSeriesFeatureExtractor
     /// </summary>
     private int _outputFeatureCount;
 
+    /// <summary>
+    /// The incremental state for streaming processing.
+    /// </summary>
+    private IncrementalState<T>? _incrementalState;
+
     #endregion
 
     #region IDataTransformer Implementation
@@ -272,21 +277,352 @@ public abstract class TimeSeriesTransformerBase<T> : ITimeSeriesFeatureExtractor
     /// <summary>
     /// Detects optimal window sizes using spectral analysis (FFT).
     /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method uses the Fast Fourier Transform (FFT) to convert
+    /// the time series from the time domain to the frequency domain. Peaks in the frequency
+    /// spectrum indicate periodic patterns in the data.
+    ///
+    /// For example, if stock prices tend to cycle every 20 days, the FFT will show a peak
+    /// at the frequency 1/20 = 0.05 cycles per day. We convert this back to a period of 20 days.
+    /// </para>
+    /// </remarks>
     protected virtual int[] DetectUsingSpectralAnalysis(Tensor<T> data)
     {
-        // Simplified implementation - in a full implementation, would use FFT
-        // to find dominant frequencies and convert to periods
-        return DetectUsingHeuristics(data);
+        int timeSteps = GetTimeSteps(data);
+        int features = _inputFeatureCount > 0 ? _inputFeatureCount : 1;
+
+        // Need at least some data points for FFT
+        if (timeSteps < 8)
+        {
+            return DetectUsingHeuristics(data);
+        }
+
+        // Pad to power of 2 for efficient FFT
+        int fftSize = NextPowerOfTwo(timeSteps);
+
+        // Aggregate power spectrum across all features
+        var avgPowerSpectrum = new double[fftSize / 2];
+
+        for (int f = 0; f < features; f++)
+        {
+            // Extract time series for this feature
+            var series = new double[fftSize];
+            for (int t = 0; t < timeSteps; t++)
+            {
+                series[t] = NumOps.ToDouble(GetValue(data, t, f));
+            }
+
+            // Remove mean (detrend)
+            double mean = series.Take(timeSteps).Average();
+            for (int t = 0; t < timeSteps; t++)
+            {
+                series[t] -= mean;
+            }
+
+            // Zero-pad the rest
+            for (int t = timeSteps; t < fftSize; t++)
+            {
+                series[t] = 0;
+            }
+
+            // Apply Hann window to reduce spectral leakage
+            ApplyHannWindow(series, timeSteps);
+
+            // Compute FFT
+            var (real, imag) = ComputeFFT(series);
+
+            // Compute power spectrum and accumulate
+            for (int i = 1; i < fftSize / 2; i++)  // Skip DC component
+            {
+                double power = real[i] * real[i] + imag[i] * imag[i];
+                avgPowerSpectrum[i] += power / features;
+            }
+        }
+
+        // Find peaks in the power spectrum
+        var peaks = FindSpectralPeaks(avgPowerSpectrum, fftSize, timeSteps);
+
+        // Convert frequency indices to periods (window sizes)
+        var windowSizes = peaks
+            .Where(p => p.Period >= Options.MinWindowSize && p.Period <= Options.MaxWindowSize)
+            .OrderByDescending(p => p.Power)
+            .Take(Options.MaxAutoDetectedWindows)
+            .Select(p => p.Period)
+            .Distinct()
+            .OrderBy(p => p)
+            .ToArray();
+
+        if (windowSizes.Length == 0)
+        {
+            return DetectUsingHeuristics(data);
+        }
+
+        return windowSizes;
+    }
+
+    /// <summary>
+    /// Applies a Hann window to reduce spectral leakage.
+    /// </summary>
+    private static void ApplyHannWindow(double[] data, int length)
+    {
+        for (int i = 0; i < length; i++)
+        {
+            double window = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (length - 1)));
+            data[i] *= window;
+        }
+    }
+
+    /// <summary>
+    /// Computes the FFT using the Cooley-Tukey radix-2 algorithm.
+    /// </summary>
+    private static (double[] real, double[] imag) ComputeFFT(double[] input)
+    {
+        int n = input.Length;
+        var real = new double[n];
+        var imag = new double[n];
+
+        // Copy input to real part
+        Array.Copy(input, real, n);
+
+        // Bit-reversal permutation
+        int j = 0;
+        for (int i = 0; i < n - 1; i++)
+        {
+            if (i < j)
+            {
+                (real[i], real[j]) = (real[j], real[i]);
+                (imag[i], imag[j]) = (imag[j], imag[i]);
+            }
+            int k = n / 2;
+            while (k <= j)
+            {
+                j -= k;
+                k /= 2;
+            }
+            j += k;
+        }
+
+        // Cooley-Tukey iterative FFT
+        for (int len = 2; len <= n; len *= 2)
+        {
+            double angle = -2 * Math.PI / len;
+            double wReal = Math.Cos(angle);
+            double wImag = Math.Sin(angle);
+
+            for (int i = 0; i < n; i += len)
+            {
+                double curReal = 1;
+                double curImag = 0;
+
+                for (int jj = 0; jj < len / 2; jj++)
+                {
+                    int idx1 = i + jj;
+                    int idx2 = i + jj + len / 2;
+
+                    double tReal = curReal * real[idx2] - curImag * imag[idx2];
+                    double tImag = curReal * imag[idx2] + curImag * real[idx2];
+
+                    real[idx2] = real[idx1] - tReal;
+                    imag[idx2] = imag[idx1] - tImag;
+                    real[idx1] += tReal;
+                    imag[idx1] += tImag;
+
+                    double newReal = curReal * wReal - curImag * wImag;
+                    curImag = curReal * wImag + curImag * wReal;
+                    curReal = newReal;
+                }
+            }
+        }
+
+        return (real, imag);
+    }
+
+    /// <summary>
+    /// Finds peaks in the power spectrum.
+    /// </summary>
+    private List<(int Period, double Power)> FindSpectralPeaks(double[] powerSpectrum, int fftSize, int originalLength)
+    {
+        var peaks = new List<(int Period, double Power)>();
+
+        // Calculate mean and std of power for significance threshold
+        double meanPower = powerSpectrum.Skip(1).Average();
+        double stdPower = Math.Sqrt(powerSpectrum.Skip(1).Select(p => (p - meanPower) * (p - meanPower)).Average());
+        double threshold = meanPower + 2 * stdPower;  // 2 sigma above mean
+
+        // Find local maxima above threshold
+        for (int i = 2; i < powerSpectrum.Length - 1; i++)
+        {
+            if (powerSpectrum[i] > threshold &&
+                powerSpectrum[i] > powerSpectrum[i - 1] &&
+                powerSpectrum[i] > powerSpectrum[i + 1])
+            {
+                // Convert frequency index to period
+                // Frequency = i / fftSize, Period = fftSize / i
+                int period = (int)Math.Round((double)originalLength / i);
+
+                if (period >= 2 && period < originalLength / 2)
+                {
+                    peaks.Add((period, powerSpectrum[i]));
+                }
+            }
+        }
+
+        return peaks;
+    }
+
+    /// <summary>
+    /// Returns the next power of 2 greater than or equal to n.
+    /// </summary>
+    private static int NextPowerOfTwo(int n)
+    {
+        int power = 1;
+        while (power < n)
+            power *= 2;
+        return power;
     }
 
     /// <summary>
     /// Detects optimal window sizes using grid search with cross-validation.
     /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method tries many different window sizes and evaluates
+    /// which ones work best using time series cross-validation. It's slower but more accurate
+    /// because it actually tests how well different windows capture predictive patterns.
+    ///
+    /// The evaluation metric is the variance explained by the rolling features - higher variance
+    /// explained means the window size captures more useful information.
+    /// </para>
+    /// </remarks>
     protected virtual int[] DetectUsingGridSearch(Tensor<T> data)
     {
-        // Simplified implementation - in a full implementation, would try
-        // different window sizes and evaluate using cross-validation
-        return DetectUsingHeuristics(data);
+        int timeSteps = GetTimeSteps(data);
+        int features = _inputFeatureCount > 0 ? _inputFeatureCount : 1;
+
+        // Generate candidate window sizes to test
+        var candidateSizes = GenerateCandidateWindowSizes(timeSteps);
+
+        if (candidateSizes.Length == 0)
+        {
+            return DetectUsingHeuristics(data);
+        }
+
+        // Evaluate each candidate using variance explained
+        var scores = new List<(int WindowSize, double Score)>();
+
+        foreach (int windowSize in candidateSizes)
+        {
+            double score = EvaluateWindowSize(data, windowSize, timeSteps, features);
+            scores.Add((windowSize, score));
+        }
+
+        // Select top-scoring window sizes
+        var selectedWindows = scores
+            .OrderByDescending(s => s.Score)
+            .Take(Options.MaxAutoDetectedWindows)
+            .Select(s => s.WindowSize)
+            .OrderBy(w => w)
+            .ToArray();
+
+        if (selectedWindows.Length == 0)
+        {
+            return DetectUsingHeuristics(data);
+        }
+
+        return selectedWindows;
+    }
+
+    /// <summary>
+    /// Generates candidate window sizes for grid search.
+    /// </summary>
+    private int[] GenerateCandidateWindowSizes(int dataLength)
+    {
+        var candidates = new List<int>();
+
+        // Add common window sizes that fit within constraints
+        int[] common = [2, 3, 5, 7, 10, 14, 20, 21, 30, 60, 90, 120, 180, 252, 365];
+        foreach (int size in common)
+        {
+            if (size >= Options.MinWindowSize &&
+                size <= Options.MaxWindowSize &&
+                size < dataLength / 2)
+            {
+                candidates.Add(size);
+            }
+        }
+
+        // Add log-spaced sizes for coverage
+        double logMin = Math.Log(Options.MinWindowSize);
+        double logMax = Math.Log(Math.Min(Options.MaxWindowSize, dataLength / 2));
+        int numSteps = 10;
+
+        for (int i = 0; i < numSteps; i++)
+        {
+            double logSize = logMin + (logMax - logMin) * i / (numSteps - 1);
+            int size = (int)Math.Round(Math.Exp(logSize));
+            if (size >= Options.MinWindowSize && size <= Options.MaxWindowSize && size < dataLength / 2)
+            {
+                candidates.Add(size);
+            }
+        }
+
+        return candidates.Distinct().OrderBy(x => x).ToArray();
+    }
+
+    /// <summary>
+    /// Evaluates how well a window size captures patterns in the data.
+    /// </summary>
+    private double EvaluateWindowSize(Tensor<T> data, int windowSize, int timeSteps, int features)
+    {
+        // Use rolling mean to capture patterns
+        // Score = (1 - MSE / Variance) = variance explained
+        double totalScore = 0;
+        int validFeatures = 0;
+
+        for (int f = 0; f < features; f++)
+        {
+            // Extract time series
+            var series = new double[timeSteps];
+            for (int t = 0; t < timeSteps; t++)
+            {
+                series[t] = NumOps.ToDouble(GetValue(data, t, f));
+            }
+
+            // Compute rolling mean
+            var rollingMean = new double[timeSteps];
+            for (int t = windowSize - 1; t < timeSteps; t++)
+            {
+                double sum = 0;
+                for (int k = 0; k < windowSize; k++)
+                {
+                    sum += series[t - k];
+                }
+                rollingMean[t] = sum / windowSize;
+            }
+
+            // Compute variance of original series
+            double mean = series.Skip(windowSize - 1).Average();
+            double variance = series.Skip(windowSize - 1).Select(x => (x - mean) * (x - mean)).Average();
+
+            if (variance < 1e-10) continue;
+
+            // Compute MSE between rolling mean and actual
+            double mse = 0;
+            int count = 0;
+            for (int t = windowSize - 1; t < timeSteps; t++)
+            {
+                double diff = series[t] - rollingMean[t];
+                mse += diff * diff;
+                count++;
+            }
+            mse /= count;
+
+            // Variance explained (higher is better)
+            double r2 = 1 - mse / variance;
+            totalScore += Math.Max(0, r2);
+            validFeatures++;
+        }
+
+        return validFeatures > 0 ? totalScore / validFeatures : 0;
     }
 
     /// <summary>
@@ -640,6 +976,421 @@ public abstract class TimeSeriesTransformerBase<T> : ITimeSeriesFeatureExtractor
     protected string GetSeparator()
     {
         return Options.FeatureNameSeparator;
+    }
+
+    /// <summary>
+    /// Gets the maximum window size from configured windows.
+    /// </summary>
+    protected int GetMaxWindowSize()
+    {
+        return _windowSizes.Length > 0 ? _windowSizes.Max() : Options.MinWindowSize;
+    }
+
+    /// <summary>
+    /// Determines if a time step is in the edge region (incomplete window).
+    /// </summary>
+    /// <param name="timeStep">The current time step.</param>
+    /// <param name="windowSize">The window size being used.</param>
+    /// <returns>True if in edge region, false otherwise.</returns>
+    protected bool IsEdgeRegion(int timeStep, int windowSize)
+    {
+        return timeStep < windowSize - 1;
+    }
+
+    /// <summary>
+    /// Gets the effective window size for partial edge handling.
+    /// </summary>
+    /// <param name="timeStep">The current time step.</param>
+    /// <param name="windowSize">The requested window size.</param>
+    /// <returns>The actual number of data points available.</returns>
+    protected int GetEffectiveWindowSize(int timeStep, int windowSize)
+    {
+        return Options.EdgeHandling == EdgeHandling.Partial
+            ? Math.Min(windowSize, timeStep + 1)
+            : windowSize;
+    }
+
+    /// <summary>
+    /// Determines the output row count based on edge handling mode.
+    /// </summary>
+    /// <param name="inputTimeSteps">The number of input time steps.</param>
+    /// <returns>The number of output time steps.</returns>
+    protected int GetOutputTimeSteps(int inputTimeSteps)
+    {
+        if (Options.EdgeHandling == EdgeHandling.Truncate)
+        {
+            int maxWindow = GetMaxWindowSize();
+            return Math.Max(0, inputTimeSteps - maxWindow + 1);
+        }
+        return inputTimeSteps;
+    }
+
+    /// <summary>
+    /// Gets the starting time step index for output (used with Truncate mode).
+    /// </summary>
+    /// <returns>The starting index in the input data.</returns>
+    protected int GetOutputStartIndex()
+    {
+        if (Options.EdgeHandling == EdgeHandling.Truncate)
+        {
+            return GetMaxWindowSize() - 1;
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Applies forward fill to output tensor for edge values.
+    /// </summary>
+    /// <param name="output">The output tensor to modify.</param>
+    /// <param name="firstValidIndex">The first index with valid (non-edge) data.</param>
+    protected void ApplyForwardFill(Tensor<T> output, int firstValidIndex)
+    {
+        if (Options.EdgeHandling != EdgeHandling.ForwardFill || firstValidIndex <= 0)
+            return;
+
+        int features = output.Shape[1];
+
+        // Copy the first valid row to all preceding rows
+        for (int t = 0; t < firstValidIndex; t++)
+        {
+            for (int f = 0; f < features; f++)
+            {
+                output[t, f] = output[firstValidIndex, f];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks if the current edge handling mode should compute partial windows.
+    /// </summary>
+    protected bool ShouldComputePartialWindows()
+    {
+        return Options.EdgeHandling == EdgeHandling.Partial ||
+               Options.EdgeHandling == EdgeHandling.ForwardFill;
+    }
+
+    #endregion
+
+    #region Incremental/Streaming Support
+
+    /// <inheritdoc />
+    public virtual bool SupportsIncrementalTransform => true;
+
+    /// <inheritdoc />
+    public virtual void InitializeIncremental(Tensor<T> historicalData)
+    {
+        EnsureFitted();
+
+        int timeSteps = GetTimeSteps(historicalData);
+        int maxWindow = GetMaxWindowSize();
+
+        if (timeSteps < maxWindow)
+        {
+            throw new ArgumentException(
+                $"Historical data length ({timeSteps}) must be at least the maximum window size ({maxWindow}).");
+        }
+
+        // Initialize the rolling buffer
+        int bufferSize = maxWindow;
+        var buffer = new T[_inputFeatureCount][];
+
+        for (int f = 0; f < _inputFeatureCount; f++)
+        {
+            buffer[f] = new T[bufferSize];
+
+            // Fill buffer with the last 'bufferSize' values
+            int startIdx = timeSteps - bufferSize;
+            for (int i = 0; i < bufferSize; i++)
+            {
+                buffer[f][i] = GetValue(historicalData, startIdx + i, f);
+            }
+        }
+
+        _incrementalState = new IncrementalState<T>
+        {
+            RollingBuffer = buffer,
+            BufferPosition = 0,
+            PointsProcessed = timeSteps,
+            BufferFilled = true,
+            ExtendedState = InitializeExtendedState(historicalData)
+        };
+    }
+
+    /// <inheritdoc />
+    public virtual T[] TransformIncremental(T[] newDataPoint)
+    {
+        if (!SupportsIncrementalTransform)
+        {
+            throw new NotSupportedException(
+                $"{GetType().Name} does not support incremental transformation.");
+        }
+
+        if (_incrementalState == null)
+        {
+            throw new InvalidOperationException(
+                "Incremental state not initialized. Call InitializeIncremental() first.");
+        }
+
+        if (newDataPoint.Length != _inputFeatureCount)
+        {
+            throw new ArgumentException(
+                $"Data point has {newDataPoint.Length} features but transformer was fitted with {_inputFeatureCount} features.");
+        }
+
+        // Update rolling buffer
+        int maxWindow = GetMaxWindowSize();
+        int pos = _incrementalState.BufferPosition;
+
+        for (int f = 0; f < _inputFeatureCount; f++)
+        {
+            _incrementalState.RollingBuffer[f][pos] = newDataPoint[f];
+        }
+
+        // Compute features using the rolling buffer
+        var features = ComputeIncrementalFeatures(_incrementalState, newDataPoint);
+
+        // Update state
+        _incrementalState.BufferPosition = (pos + 1) % maxWindow;
+        _incrementalState.PointsProcessed++;
+        if (!_incrementalState.BufferFilled && _incrementalState.PointsProcessed >= maxWindow)
+        {
+            _incrementalState.BufferFilled = true;
+        }
+
+        return features;
+    }
+
+    /// <inheritdoc />
+    public virtual IncrementalState<T>? GetIncrementalState()
+    {
+        return _incrementalState;
+    }
+
+    /// <inheritdoc />
+    public virtual void SetIncrementalState(IncrementalState<T> state)
+    {
+        if (state == null)
+        {
+            throw new ArgumentNullException(nameof(state));
+        }
+
+        if (state.RollingBuffer.Length != _inputFeatureCount)
+        {
+            throw new ArgumentException(
+                $"State has {state.RollingBuffer.Length} features but transformer was fitted with {_inputFeatureCount} features.");
+        }
+
+        _incrementalState = state;
+    }
+
+    /// <summary>
+    /// Initializes any extended state needed for incremental processing.
+    /// Override this in derived classes to add transformer-specific state.
+    /// </summary>
+    /// <param name="historicalData">The initial historical data.</param>
+    /// <returns>Dictionary of extended state values.</returns>
+    protected virtual Dictionary<string, object> InitializeExtendedState(Tensor<T> historicalData)
+    {
+        return [];
+    }
+
+    /// <summary>
+    /// Computes features for a single data point using the incremental state.
+    /// Override this in derived classes for transformer-specific incremental computation.
+    /// </summary>
+    /// <param name="state">The current incremental state.</param>
+    /// <param name="newDataPoint">The new data point.</param>
+    /// <returns>Array of computed feature values.</returns>
+    protected virtual T[] ComputeIncrementalFeatures(IncrementalState<T> state, T[] newDataPoint)
+    {
+        // Default implementation: extract window and compute features
+        var features = new T[_outputFeatureCount];
+        int featureIdx = 0;
+
+        foreach (int windowSize in WindowSizes)
+        {
+            for (int f = 0; f < _inputFeatureCount; f++)
+            {
+                var window = ExtractIncrementalWindow(state, f, windowSize);
+                int numOpsForFeature = GetOperationNames().Length;
+
+                var computed = ComputeFeaturesForWindow(window, newDataPoint[f]);
+                foreach (var value in computed)
+                {
+                    if (featureIdx < features.Length)
+                    {
+                        features[featureIdx++] = value;
+                    }
+                }
+            }
+        }
+
+        return features;
+    }
+
+    /// <summary>
+    /// Extracts a window of data from the incremental buffer.
+    /// </summary>
+    /// <param name="state">The incremental state.</param>
+    /// <param name="featureIndex">The feature (column) index.</param>
+    /// <param name="windowSize">The window size to extract.</param>
+    /// <returns>Array of values in the window (most recent last).</returns>
+    protected double[] ExtractIncrementalWindow(IncrementalState<T> state, int featureIndex, int windowSize)
+    {
+        var buffer = state.RollingBuffer[featureIndex];
+        int bufferLen = buffer.Length;
+        int pos = state.BufferPosition;
+        var window = new double[windowSize];
+
+        for (int i = 0; i < windowSize; i++)
+        {
+            // Calculate position in circular buffer
+            // pos = position where current value was just written
+            // Window should be [oldest, ..., newest] where newest is at pos
+            // oldest is at pos - windowSize + 1
+            int bufferIdx = (pos - windowSize + 1 + i + bufferLen) % bufferLen;
+            window[i] = NumOps.ToDouble(buffer[bufferIdx]);
+        }
+
+        return window;
+    }
+
+    /// <summary>
+    /// Computes features for a window of data. Override in derived classes.
+    /// </summary>
+    /// <param name="window">The window of data values.</param>
+    /// <param name="currentValue">The current (most recent) value.</param>
+    /// <returns>Array of computed feature values.</returns>
+    protected virtual T[] ComputeFeaturesForWindow(double[] window, T currentValue)
+    {
+        // Default implementation - derived classes should override
+        return [NumOps.FromDouble(window.Average())];
+    }
+
+    #endregion
+
+    #region Serialization
+
+    /// <summary>
+    /// Exports the transformer's state for serialization.
+    /// </summary>
+    /// <returns>A serializable state object containing all transformer state.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method captures everything needed to recreate the transformer
+    /// in its current state. You can serialize this object to JSON, binary, or any format you prefer.
+    ///
+    /// Example:
+    /// <code>
+    /// var state = transformer.ExportState();
+    /// var json = JsonSerializer.Serialize(state);
+    /// File.WriteAllText("transformer.json", json);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public virtual TransformerState<T> ExportState()
+    {
+        return new TransformerState<T>
+        {
+            TransformerType = GetType().FullName ?? GetType().Name,
+            Version = 1,
+            IsFitted = IsFitted,
+            WindowSizes = _windowSizes,
+            FeatureNames = _featureNames,
+            InputFeatureNames = _inputFeatureNames,
+            InputFeatureCount = _inputFeatureCount,
+            OutputFeatureCount = _outputFeatureCount,
+            IncrementalState = _incrementalState,
+            Parameters = ExportParameters(),
+            Options = ExportOptions()
+        };
+    }
+
+    /// <summary>
+    /// Imports a previously exported state to restore the transformer.
+    /// </summary>
+    /// <param name="state">The state to import.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method restores a transformer from a saved state.
+    /// The transformer must be of the same type and version.
+    ///
+    /// Example:
+    /// <code>
+    /// var json = File.ReadAllText("transformer.json");
+    /// var state = JsonSerializer.Deserialize&lt;TransformerState&lt;double&gt;&gt;(json);
+    /// transformer.ImportState(state);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public virtual void ImportState(TransformerState<T> state)
+    {
+        if (state == null)
+        {
+            throw new ArgumentNullException(nameof(state));
+        }
+
+        string expectedType = GetType().FullName ?? GetType().Name;
+        if (state.TransformerType != expectedType)
+        {
+            throw new ArgumentException(
+                $"State is for transformer type '{state.TransformerType}' but this is '{expectedType}'.");
+        }
+
+        _windowSizes = state.WindowSizes;
+        _featureNames = state.FeatureNames;
+        _inputFeatureNames = state.InputFeatureNames;
+        _inputFeatureCount = state.InputFeatureCount;
+        _outputFeatureCount = state.OutputFeatureCount;
+        _incrementalState = state.IncrementalState;
+        IsFitted = state.IsFitted;
+
+        ImportParameters(state.Parameters);
+        ImportOptions(state.Options);
+    }
+
+    /// <summary>
+    /// Exports transformer-specific parameters. Override in derived classes.
+    /// </summary>
+    /// <returns>Dictionary of parameter names and values.</returns>
+    protected virtual Dictionary<string, object> ExportParameters()
+    {
+        return [];
+    }
+
+    /// <summary>
+    /// Imports transformer-specific parameters. Override in derived classes.
+    /// </summary>
+    /// <param name="parameters">The parameters to import.</param>
+    protected virtual void ImportParameters(Dictionary<string, object> parameters)
+    {
+        // Default implementation does nothing - derived classes can override
+    }
+
+    /// <summary>
+    /// Exports the options used to configure this transformer.
+    /// </summary>
+    /// <returns>Dictionary of option names and values.</returns>
+    protected virtual Dictionary<string, object> ExportOptions()
+    {
+        return new Dictionary<string, object>
+        {
+            ["WindowSizes"] = Options.WindowSizes,
+            ["AutoDetectWindowSizes"] = Options.AutoDetectWindowSizes,
+            ["AutoDetectionMethod"] = Options.AutoDetectionMethod.ToString(),
+            ["EdgeHandling"] = Options.EdgeHandling.ToString(),
+            ["UseParallelProcessing"] = Options.UseParallelProcessing,
+            ["ParallelThreshold"] = Options.ParallelThreshold,
+            ["FeatureNameSeparator"] = Options.FeatureNameSeparator
+        };
+    }
+
+    /// <summary>
+    /// Imports options from a dictionary. Override in derived classes for custom options.
+    /// </summary>
+    /// <param name="options">The options to import.</param>
+    protected virtual void ImportOptions(Dictionary<string, object> options)
+    {
+        // Options are typically set during construction and shouldn't change after fitting
+        // This method is available for derived classes to customize behavior if needed
     }
 
     #endregion

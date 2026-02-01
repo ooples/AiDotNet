@@ -164,6 +164,109 @@ public class LagLeadTransformer<T> : TimeSeriesTransformerBase<T>
 
     #endregion
 
+    #region Incremental Computation
+
+    /// <summary>
+    /// Computes lag/lead features incrementally from the circular buffer.
+    /// </summary>
+    protected override T[] ComputeIncrementalFeatures(IncrementalState<T> state, T[] newDataPoint)
+    {
+        var features = new T[OutputFeatureCount];
+        int featureIdx = 0;
+        int maxWindow = GetMaxWindowSize();
+
+        // Create lag features
+        foreach (int lag in _lagSteps)
+        {
+            for (int f = 0; f < InputFeatureCount; f++)
+            {
+                // state.BufferPosition is where the current value was just written
+                // For lag=1, we want the value at BufferPosition - 1 (previous position)
+                // For lag=k, we want the value at BufferPosition - k
+                int bufferLen = state.RollingBuffer[f].Length;
+                int currentPos = state.BufferPosition;
+                int lagPos = (currentPos - lag + bufferLen) % bufferLen;
+
+                // Check if we have enough history for this lag
+                if (state.PointsProcessed >= lag && lag <= maxWindow)
+                {
+                    features[featureIdx++] = state.RollingBuffer[f][lagPos];
+                }
+                else
+                {
+                    features[featureIdx++] = GetNaN();
+                }
+            }
+        }
+
+        // Lead features don't make sense for incremental (we don't have future data)
+        foreach (int _ in _leadSteps)
+        {
+            for (int f = 0; f < InputFeatureCount; f++)
+            {
+                features[featureIdx++] = GetNaN();
+            }
+        }
+
+        return features;
+    }
+
+    #endregion
+
+    #region Serialization
+
+    /// <summary>
+    /// Exports transformer-specific parameters for serialization.
+    /// </summary>
+    protected override Dictionary<string, object> ExportParameters()
+    {
+        return new Dictionary<string, object>
+        {
+            ["LagSteps"] = _lagSteps,
+            ["LeadSteps"] = _leadSteps
+        };
+    }
+
+    /// <summary>
+    /// Imports transformer-specific parameters for validation.
+    /// </summary>
+    protected override void ImportParameters(Dictionary<string, object> parameters)
+    {
+        if (parameters.TryGetValue("LagSteps", out var lagObj))
+        {
+            var savedLags = lagObj switch
+            {
+                int[] arr => arr,
+                IEnumerable<object> enumerable => enumerable.Select(x => Convert.ToInt32(x)).ToArray(),
+                _ => []
+            };
+
+            if (!savedLags.SequenceEqual(_lagSteps))
+            {
+                throw new ArgumentException(
+                    "Saved LagSteps do not match current configuration.");
+            }
+        }
+
+        if (parameters.TryGetValue("LeadSteps", out var leadObj))
+        {
+            var savedLeads = leadObj switch
+            {
+                int[] arr => arr,
+                IEnumerable<object> enumerable => enumerable.Select(x => Convert.ToInt32(x)).ToArray(),
+                _ => []
+            };
+
+            if (!savedLeads.SequenceEqual(_leadSteps))
+            {
+                throw new ArgumentException(
+                    "Saved LeadSteps do not match current configuration.");
+            }
+        }
+    }
+
+    #endregion
+
     #region Feature Naming
 
     /// <inheritdoc />

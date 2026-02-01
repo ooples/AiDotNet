@@ -146,4 +146,181 @@ public interface ITimeSeriesFeatureExtractor<T> : IDataTransformer<T, Tensor<T>,
     /// <param name="data">The data to validate.</param>
     /// <returns>List of validation error messages, empty if valid.</returns>
     List<string> GetValidationErrors(Tensor<T> data);
+
+    #region Incremental/Streaming Support
+
+    /// <summary>
+    /// Gets whether this transformer supports incremental (streaming) transformation.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Incremental transformation allows you to process new data points
+    /// one at a time, without having to re-process all historical data. This is useful for:
+    /// - Real-time applications where new data arrives continuously
+    /// - Large datasets that don't fit in memory
+    /// - Production systems that need low-latency updates
+    /// </para>
+    /// </remarks>
+    bool SupportsIncrementalTransform { get; }
+
+    /// <summary>
+    /// Initializes the incremental state from historical data.
+    /// </summary>
+    /// <param name="historicalData">Initial historical data to seed the rolling window.</param>
+    /// <remarks>
+    /// <para>
+    /// Call this method once with enough historical data to fill the largest window,
+    /// then use <see cref="TransformIncremental"/> for each new data point.
+    /// </para>
+    /// <para><b>For Beginners:</b> Before processing data incrementally, we need some history.
+    /// For example, if using a 30-day rolling average, we need at least 30 days of data
+    /// to start. This method provides that initial history.
+    /// </para>
+    /// </remarks>
+    void InitializeIncremental(Tensor<T> historicalData);
+
+    /// <summary>
+    /// Transforms a single new data point incrementally, maintaining internal state.
+    /// </summary>
+    /// <param name="newDataPoint">The new data point (single row with same number of features as fitted data).</param>
+    /// <returns>The computed features for this data point.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method updates internal rolling window state and computes features for a single
+    /// new observation. It's more efficient than re-processing all data when new points arrive.
+    /// </para>
+    /// <para><b>For Beginners:</b> When a new data point arrives (like today's stock price),
+    /// this method:
+    /// 1. Adds it to the rolling window
+    /// 2. Computes all the rolling features (mean, std, etc.)
+    /// 3. Returns those features
+    /// 4. Keeps track of history for the next point
+    ///
+    /// This is much faster than re-processing all historical data each time.
+    /// </para>
+    /// </remarks>
+    T[] TransformIncremental(T[] newDataPoint);
+
+    /// <summary>
+    /// Gets the current state of the incremental buffer for inspection or serialization.
+    /// </summary>
+    /// <returns>The current rolling window state, or null if not initialized.</returns>
+    IncrementalState<T>? GetIncrementalState();
+
+    /// <summary>
+    /// Restores the incremental state from a previously saved state.
+    /// </summary>
+    /// <param name="state">The state to restore.</param>
+    /// <remarks>
+    /// <para>
+    /// This allows saving and restoring the transformer's state between sessions,
+    /// useful for production deployments where the service may restart.
+    /// </para>
+    /// </remarks>
+    void SetIncrementalState(IncrementalState<T> state);
+
+    #endregion
+}
+
+/// <summary>
+/// Represents the internal state of a time series transformer for incremental processing.
+/// </summary>
+/// <typeparam name="T">The numeric type for data.</typeparam>
+[Serializable]
+public class IncrementalState<T>
+{
+    /// <summary>
+    /// The rolling buffer of recent values for each input feature.
+    /// </summary>
+    public T[][] RollingBuffer { get; set; } = [];
+
+    /// <summary>
+    /// The current position (index) in the circular buffer.
+    /// </summary>
+    public int BufferPosition { get; set; }
+
+    /// <summary>
+    /// The number of data points that have been processed.
+    /// </summary>
+    public long PointsProcessed { get; set; }
+
+    /// <summary>
+    /// Whether the buffer has been fully filled at least once.
+    /// </summary>
+    public bool BufferFilled { get; set; }
+
+    /// <summary>
+    /// Additional state information specific to the transformer type.
+    /// </summary>
+    public Dictionary<string, object> ExtendedState { get; set; } = [];
+}
+
+/// <summary>
+/// Represents the serializable state of a fitted time series transformer.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This class allows you to save a fitted transformer to a file
+/// and reload it later without needing to re-fit. This is useful for:
+/// - Production deployments where you train once and deploy the fitted model
+/// - Sharing trained transformers between team members
+/// - Versioning and reproducibility of your feature engineering pipeline
+/// </para>
+/// </remarks>
+/// <typeparam name="T">The numeric type for data.</typeparam>
+[Serializable]
+public class TransformerState<T>
+{
+    /// <summary>
+    /// The type name of the transformer.
+    /// </summary>
+    public string TransformerType { get; set; } = "";
+
+    /// <summary>
+    /// The version of the serialization format.
+    /// </summary>
+    public int Version { get; set; } = 1;
+
+    /// <summary>
+    /// Whether the transformer has been fitted.
+    /// </summary>
+    public bool IsFitted { get; set; }
+
+    /// <summary>
+    /// The window sizes used by the transformer.
+    /// </summary>
+    public int[] WindowSizes { get; set; } = [];
+
+    /// <summary>
+    /// The generated feature names.
+    /// </summary>
+    public string[] FeatureNames { get; set; } = [];
+
+    /// <summary>
+    /// The input feature names.
+    /// </summary>
+    public string[] InputFeatureNames { get; set; } = [];
+
+    /// <summary>
+    /// The number of input features.
+    /// </summary>
+    public int InputFeatureCount { get; set; }
+
+    /// <summary>
+    /// The number of output features.
+    /// </summary>
+    public int OutputFeatureCount { get; set; }
+
+    /// <summary>
+    /// The incremental state, if initialized.
+    /// </summary>
+    public IncrementalState<T>? IncrementalState { get; set; }
+
+    /// <summary>
+    /// Transformer-specific parameters and learned values.
+    /// </summary>
+    public Dictionary<string, object> Parameters { get; set; } = [];
+
+    /// <summary>
+    /// The serialized options used to configure the transformer.
+    /// </summary>
+    public Dictionary<string, object> Options { get; set; } = [];
 }
