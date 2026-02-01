@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -26,7 +27,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// and fits a "straight line" (linear model) to explain it.
 /// </para>
 /// </remarks>
-public class LIMEExplainer<T> : ILocalExplainer<T, LIMEExplanationResult<T>>
+public class LIMEExplainer<T> : ILocalExplainer<T, LIMEExplanationResult<T>>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -36,6 +37,7 @@ public class LIMEExplainer<T> : ILocalExplainer<T, LIMEExplanationResult<T>>
     private readonly int? _randomState;
     private readonly string[]? _featureNames;
     private readonly double[]? _featureStdDevs;
+    private GPUExplainerHelper<T>? _gpuHelper;
 
     /// <inheritdoc/>
     public string MethodName => "LIME";
@@ -50,6 +52,26 @@ public class LIMEExplainer<T> : ILocalExplainer<T, LIMEExplanationResult<T>>
     /// Gets the number of features being explained.
     /// </summary>
     public int NumFeatures { get; }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When GPU acceleration is enabled, LIME computes predictions
+    /// for all perturbed samples in parallel, significantly speeding up explanation generation.
+    /// </para>
+    /// </remarks>
+    public bool IsGPUAccelerated => _gpuHelper?.IsGPUEnabled ?? false;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Call this method to enable GPU acceleration for sample processing.
+    /// </para>
+    /// </remarks>
+    public void SetGPUHelper(GPUExplainerHelper<T>? helper)
+    {
+        _gpuHelper = helper;
+    }
 
     /// <summary>
     /// Initializes a new LIME explainer.

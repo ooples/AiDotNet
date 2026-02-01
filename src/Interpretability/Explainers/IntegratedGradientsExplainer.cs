@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Interpretability.Explainers;
@@ -36,7 +37,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// - Integrated Gradients shows which pixels contributed most to the "cat" prediction
 /// </para>
 /// </remarks>
-public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGradientsExplanation<T>>
+public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGradientsExplanation<T>>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -46,6 +47,7 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
     private readonly int _numSteps;
     private readonly Vector<T>? _baseline;
     private readonly string[]? _featureNames;
+    private GPUExplainerHelper<T>? _gpuHelper;
 
     /// <inheritdoc/>
     public string MethodName => "IntegratedGradients";
@@ -55,6 +57,31 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
 
     /// <inheritdoc/>
     public bool SupportsGlobalExplanations => false;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When GPU acceleration is enabled, Integrated Gradients computes
+    /// all path gradients in parallel, significantly speeding up the attribution computation.
+    /// </para>
+    /// </remarks>
+    public bool IsGPUAccelerated => _gpuHelper?.IsGPUEnabled ?? false;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Call this method to enable GPU acceleration for path integration.
+    /// Example:
+    /// <code>
+    /// var helper = GPUExplainerHelper&lt;double&gt;.CreateWithAutoDetect();
+    /// explainer.SetGPUHelper(helper);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void SetGPUHelper(GPUExplainerHelper<T>? helper)
+    {
+        _gpuHelper = helper;
+    }
 
     /// <summary>
     /// Initializes a new Integrated Gradients explainer.
@@ -102,6 +129,74 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
     }
 
     /// <summary>
+    /// Initializes a new Integrated Gradients explainer from a neural network model.
+    /// </summary>
+    /// <param name="neuralNetwork">The neural network model with backpropagation support.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="numSteps">Number of steps for integration (default: 50).</param>
+    /// <param name="baseline">Baseline input (default: zeros).</param>
+    /// <param name="featureNames">Optional names for features.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the preferred constructor when you have a neural network model.
+    /// It automatically uses the network's built-in backpropagation to compute exact gradients,
+    /// which is much faster and more accurate than numerical approximation.
+    ///
+    /// The neural network's ForwardWithMemory and Backpropagate methods are used to efficiently
+    /// compute input gradients. This is the same technique used during training but applied
+    /// for interpretation.
+    ///
+    /// Benefits over numerical gradients:
+    /// - <b>Speed</b>: O(1) forward/backward passes vs O(n) for numerical gradients
+    /// - <b>Accuracy</b>: Exact gradients vs approximations with numerical precision issues
+    /// - <b>Stability</b>: No issues with choosing epsilon values
+    /// </para>
+    /// </remarks>
+    public IntegratedGradientsExplainer(
+        INeuralNetwork<T> neuralNetwork,
+        int numFeatures,
+        int numSteps = 50,
+        Vector<T>? baseline = null,
+        string[]? featureNames = null)
+    {
+        if (neuralNetwork == null)
+            throw new ArgumentNullException(nameof(neuralNetwork));
+        if (numFeatures < 1)
+            throw new ArgumentException("Number of features must be at least 1.", nameof(numFeatures));
+        if (numSteps < 2)
+            throw new ArgumentException("Number of steps must be at least 2.", nameof(numSteps));
+
+        // Create gradient helper that uses backpropagation
+        var gradientHelper = new InputGradientHelper<T>(neuralNetwork);
+
+        // Create predict function wrapper
+        _predictFunction = input =>
+        {
+            var tensor = new Tensor<T>(new[] { 1, input.Length });
+            for (int i = 0; i < input.Length; i++)
+            {
+                tensor[0, i] = input[i];
+            }
+            var output = neuralNetwork.Predict(tensor);
+            var result = new T[output.Length];
+            var outputArray = output.ToArray();
+            for (int i = 0; i < output.Length; i++)
+            {
+                result[i] = outputArray[i];
+            }
+            return new Vector<T>(result);
+        };
+
+        // Use backpropagation-based gradient function
+        _gradientFunction = gradientHelper.CreateGradientFunction();
+
+        _numFeatures = numFeatures;
+        _numSteps = numSteps;
+        _baseline = baseline;
+        _featureNames = featureNames;
+    }
+
+    /// <summary>
     /// Computes Integrated Gradients attributions for an input.
     /// </summary>
     /// <param name="instance">The input instance to explain.</param>
@@ -117,6 +212,13 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
     /// <param name="instance">The input instance to explain.</param>
     /// <param name="outputIndex">The index of the output to explain (for multi-class models).</param>
     /// <returns>Integrated Gradients explanation with feature attributions.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> With GPU acceleration enabled, this method computes all path
+    /// gradients in parallel rather than sequentially, providing significant speedup for
+    /// large models and high numSteps values.
+    /// </para>
+    /// </remarks>
     public IntegratedGradientsExplanation<T> Explain(Vector<T> instance, int outputIndex)
     {
         if (instance.Length != _numFeatures)
@@ -133,56 +235,73 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
         double baselinePredVal = outputIndex < baselinePred.Length ? NumOps.ToDouble(baselinePred[outputIndex]) : 0;
         double predDiff = inputPredVal - baselinePredVal;
 
-        // Compute integrated gradients using Riemann sum approximation
-        var attributions = new T[_numFeatures];
-        var scaledInputs = new Vector<T>[_numSteps + 1];
+        Vector<T> attributionsVector;
 
-        // Create interpolated inputs along the path
-        for (int step = 0; step <= _numSteps; step++)
+        // Use GPU-accelerated path integration if available
+        if (_gpuHelper != null && _gpuHelper.IsGPUEnabled && _gradientFunction != null)
         {
-            double alpha = (double)step / _numSteps;
-            var scaled = new T[_numFeatures];
+            attributionsVector = _gpuHelper.ComputeIntegratedGradientsParallel(
+                _gradientFunction, instance, baseline, _numSteps, outputIndex);
+        }
+        else
+        {
+            // Standard sequential computation
+            var attributions = new T[_numFeatures];
+            var scaledInputs = new Vector<T>[_numSteps + 1];
 
+            // Create interpolated inputs along the path
+            for (int step = 0; step <= _numSteps; step++)
+            {
+                double alpha = (double)step / _numSteps;
+                var scaled = new T[_numFeatures];
+
+                for (int j = 0; j < _numFeatures; j++)
+                {
+                    double baseVal = NumOps.ToDouble(baseline[j]);
+                    double inputVal = NumOps.ToDouble(instance[j]);
+                    scaled[j] = NumOps.FromDouble(baseVal + alpha * (inputVal - baseVal));
+                }
+                scaledInputs[step] = new Vector<T>(scaled);
+            }
+
+            // Compute gradients at each step and integrate
+            for (int step = 0; step < _numSteps; step++)
+            {
+                var gradient = ComputeGradient(scaledInputs[step], outputIndex);
+
+                // Add to running sum (trapezoidal rule)
+                double weight = (step == 0 || step == _numSteps - 1) ? 0.5 : 1.0;
+
+                for (int j = 0; j < _numFeatures; j++)
+                {
+                    double gradVal = NumOps.ToDouble(gradient[j]);
+                    attributions[j] = NumOps.FromDouble(
+                        NumOps.ToDouble(attributions[j]) + weight * gradVal / _numSteps);
+                }
+            }
+
+            // Multiply by (input - baseline)
             for (int j = 0; j < _numFeatures; j++)
             {
-                double baseVal = NumOps.ToDouble(baseline[j]);
                 double inputVal = NumOps.ToDouble(instance[j]);
-                scaled[j] = NumOps.FromDouble(baseVal + alpha * (inputVal - baseVal));
+                double baseVal = NumOps.ToDouble(baseline[j]);
+                attributions[j] = NumOps.FromDouble(NumOps.ToDouble(attributions[j]) * (inputVal - baseVal));
             }
-            scaledInputs[step] = new Vector<T>(scaled);
-        }
 
-        // Compute gradients at each step and integrate
-        for (int step = 0; step < _numSteps; step++)
-        {
-            var gradient = ComputeGradient(scaledInputs[step], outputIndex);
-
-            // Add to running sum (trapezoidal rule)
-            double weight = (step == 0 || step == _numSteps - 1) ? 0.5 : 1.0;
-
-            for (int j = 0; j < _numFeatures; j++)
-            {
-                double gradVal = NumOps.ToDouble(gradient[j]);
-                attributions[j] = NumOps.FromDouble(
-                    NumOps.ToDouble(attributions[j]) + weight * gradVal / _numSteps);
-            }
-        }
-
-        // Multiply by (input - baseline)
-        for (int j = 0; j < _numFeatures; j++)
-        {
-            double inputVal = NumOps.ToDouble(instance[j]);
-            double baseVal = NumOps.ToDouble(baseline[j]);
-            attributions[j] = NumOps.FromDouble(NumOps.ToDouble(attributions[j]) * (inputVal - baseVal));
+            attributionsVector = new Vector<T>(attributions);
         }
 
         // Compute convergence delta (how close attributions sum to prediction difference)
-        double attrSum = attributions.Sum(a => NumOps.ToDouble(a));
+        double attrSum = 0;
+        for (int j = 0; j < attributionsVector.Length; j++)
+        {
+            attrSum += NumOps.ToDouble(attributionsVector[j]);
+        }
         double convergenceDelta = Math.Abs(attrSum - predDiff);
 
         return new IntegratedGradientsExplanation<T>
         {
-            Attributions = new Vector<T>(attributions),
+            Attributions = attributionsVector,
             Baseline = baseline,
             Input = instance,
             BaselinePrediction = NumOps.FromDouble(baselinePredVal),
@@ -195,13 +314,35 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When GPU acceleration is enabled, batch explanations are computed
+    /// in parallel across multiple instances, further improving performance.
+    /// </para>
+    /// </remarks>
     public IntegratedGradientsExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         var explanations = new IntegratedGradientsExplanation<T>[instances.Rows];
-        for (int i = 0; i < instances.Rows; i++)
+
+        if (_gpuHelper != null && _gpuHelper.IsGPUEnabled && instances.Rows > 1)
         {
-            explanations[i] = Explain(instances.GetRow(i));
+            // Use parallel processing for batch explanations
+            Parallel.For(0, instances.Rows, new ParallelOptions
+            {
+                MaxDegreeOfParallelism = _gpuHelper.MaxParallelism
+            }, i =>
+            {
+                explanations[i] = Explain(instances.GetRow(i));
+            });
         }
+        else
+        {
+            for (int i = 0; i < instances.Rows; i++)
+            {
+                explanations[i] = Explain(instances.GetRow(i));
+            }
+        }
+
         return explanations;
     }
 

@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -36,7 +37,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// - You don't have access to model internals (for DeepSHAP)
 /// </para>
 /// </remarks>
-public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanation<T>>
+public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanation<T>>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -49,6 +50,7 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
     private readonly string[]? _featureNames;
     private readonly bool _addNoise;
     private readonly double _noiseStdDev;
+    private GPUExplainerHelper<T>? _gpuHelper;
 
     /// <inheritdoc/>
     public string MethodName => "GradientSHAP";
@@ -58,6 +60,26 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
 
     /// <inheritdoc/>
     public bool SupportsGlobalExplanations => false;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When GPU acceleration is enabled, GradientSHAP computes
+    /// all baseline samples and their gradients in parallel, providing significant speedup.
+    /// </para>
+    /// </remarks>
+    public bool IsGPUAccelerated => _gpuHelper?.IsGPUEnabled ?? false;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Call this method to enable GPU acceleration for gradient computation.
+    /// </para>
+    /// </remarks>
+    public void SetGPUHelper(GPUExplainerHelper<T>? helper)
+    {
+        _gpuHelper = helper;
+    }
 
     /// <summary>
     /// Initializes a new GradientSHAP explainer.

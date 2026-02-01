@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -23,7 +24,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// by randomly swapping each ingredient and seeing how much the dish changes.
 /// </para>
 /// </remarks>
-public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImportanceResult<T>>
+public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImportanceResult<T>>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -32,6 +33,7 @@ public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImport
     private readonly int _nRepeats;
     private readonly int? _randomState;
     private readonly string[]? _featureNames;
+    private GPUExplainerHelper<T>? _gpuHelper;
 
     /// <inheritdoc/>
     public string MethodName => "PermutationFeatureImportance";
@@ -41,6 +43,26 @@ public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImport
 
     /// <inheritdoc/>
     public bool SupportsGlobalExplanations => true;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When GPU acceleration is enabled, permutations and predictions
+    /// are computed in parallel, significantly speeding up importance computation.
+    /// </para>
+    /// </remarks>
+    public bool IsGPUAccelerated => _gpuHelper?.IsGPUEnabled ?? false;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Call this method to enable GPU acceleration for permutation processing.
+    /// </para>
+    /// </remarks>
+    public void SetGPUHelper(GPUExplainerHelper<T>? helper)
+    {
+        _gpuHelper = helper;
+    }
 
     /// <summary>
     /// Initializes a new Permutation Feature Importance calculator.

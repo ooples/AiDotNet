@@ -24,7 +24,6 @@ using AiDotNet.Inference;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Interpretability.Explainers;
-using AiDotNet.Interpretability.Interfaces;
 using AiDotNet.LanguageModels;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
@@ -3249,14 +3248,62 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     private Func<Vector<T>, Vector<T>>? TryCreateGradientFunction()
     {
-        // Check if the model supports gradient computation for interpretability
-        if (Model is IInterpretableNeuralNetwork<T, TInput, TOutput> interpretableNet)
+        // Check if the model supports gradient computation via the existing IInputGradientComputable interface
+        // This interface is already implemented by NeuralNetworkBase<T>
+        if (Model is IInputGradientComputable<T> gradientComputable)
         {
             return (Vector<T> input) =>
             {
-                var tensor = Tensor<T>.FromVector(input, new[] { 1, input.Length });
-                var gradTensor = interpretableNet.ComputeGradient(tensor);
-                return gradTensor.ToVector();
+                // For saliency/attribution, we compute gradient of max output with respect to input
+                // First get the prediction to determine output size
+                var modelInput = ConvertVectorToInput(input);
+                var output = Model!.Predict(modelInput);
+
+                // Create output gradient: gradient of loss is 1 at predicted class
+                Vector<T> outputGradient;
+                var numOps = MathHelper.GetNumericOperations<T>();
+
+                if (output is Vector<T> outputVec)
+                {
+                    // For multi-output: use gradient that's 1 for max output, 0 elsewhere
+                    var gradArray = new T[outputVec.Length];
+                    int maxIdx = 0;
+                    T maxVal = outputVec[0];
+                    for (int i = 1; i < outputVec.Length; i++)
+                    {
+                        if (numOps.GreaterThan(outputVec[i], maxVal))
+                        {
+                            maxVal = outputVec[i];
+                            maxIdx = i;
+                        }
+                    }
+                    gradArray[maxIdx] = numOps.One;
+                    outputGradient = new Vector<T>(gradArray);
+                }
+                else if (output is Tensor<T> outputTensor)
+                {
+                    var outVec = outputTensor.ToVector();
+                    var gradArray = new T[outVec.Length];
+                    int maxIdx = 0;
+                    T maxVal = outVec[0];
+                    for (int i = 1; i < outVec.Length; i++)
+                    {
+                        if (numOps.GreaterThan(outVec[i], maxVal))
+                        {
+                            maxVal = outVec[i];
+                            maxIdx = i;
+                        }
+                    }
+                    gradArray[maxIdx] = numOps.One;
+                    outputGradient = new Vector<T>(gradArray);
+                }
+                else
+                {
+                    // Single output: gradient is just 1
+                    outputGradient = new Vector<T>(new[] { numOps.One });
+                }
+
+                return gradientComputable.ComputeInputGradient(input, outputGradient);
             };
         }
 
@@ -3311,16 +3358,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     private Func<Tensor<T>, int, (Tensor<T> featureMaps, Tensor<T> gradients)>? TryCreateFeatureGradientFunction()
     {
-        // Check if model is a CNN that can provide feature map gradients for Grad-CAM
-        if (Model is IConvolutionalNetwork<T, TInput, TOutput> cnnNet)
-        {
-            return (Tensor<T> input, int targetClass) =>
-            {
-                return cnnNet.GetFeatureMapsAndGradients(input, targetClass);
-            };
-        }
-
-        // Return null to use occlusion-based fallback
+        // Currently no CNN models implement specialized feature gradient extraction
+        // Return null to use occlusion-based fallback in the explainer
+        // Future: Could implement feature extraction using existing infrastructure
+        // by accessing intermediate layer outputs via INeuralNetworkModel.GetNamedLayerActivations
         return null;
     }
 
@@ -3334,15 +3375,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     private Func<Tensor<T>, List<Tensor<T>>> TryCreateAttentionExtractor()
     {
+        // Currently no transformer models expose attention weights through a specialized interface
+        // Return empty list - the explainer will use fallback behavior
+        // Future: Could implement attention extraction for models that expose attention layers
         return (Tensor<T> input) =>
         {
-            // Check if model is a transformer that can provide attention weights
-            if (Model is ITransformerNetwork<T, TInput, TOutput> transformerNet)
-            {
-                return transformerNet.GetAttentionWeights(input);
-            }
-
-            // Return empty list if model doesn't support attention extraction
             return new List<Tensor<T>>();
         };
     }
@@ -3359,20 +3396,45 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     {
         return (Vector<T> input) =>
         {
-            // Check if model supports activation extraction for DeepLIFT
-            if (Model is IInterpretableNeuralNetwork<T, TInput, TOutput> interpretableNet)
+            // Check if model supports activation extraction via INeuralNetworkModel interface
+            // This interface is implemented by NeuralNetworkBase<T>
+            if (Model is INeuralNetworkModel<T> neuralModel)
             {
                 var tensor = Tensor<T>.FromVector(input, new[] { 1, input.Length });
-                var (output, activations) = interpretableNet.ForwardWithActivations(tensor);
-                var scalar = output.ToVector()[0];
-                var layerActivs = activations.Select(a => a.ToVector()).ToArray();
+                var activations = neuralModel.GetNamedLayerActivations(tensor);
+
+                // Get the output from the last layer
+                var numOps = MathHelper.GetNumericOperations<T>();
+                T scalar = numOps.Zero;
+                Vector<T>[] layerActivs;
+
+                if (activations.Count > 0)
+                {
+                    var sortedActivations = activations.OrderBy(kvp => kvp.Key).ToList();
+                    layerActivs = sortedActivations.Select(kvp => kvp.Value.ToVector()).ToArray();
+
+                    // Last activation is the output
+                    var lastActivation = sortedActivations[sortedActivations.Count - 1].Value;
+                    var outputVec = lastActivation.ToVector();
+                    if (outputVec.Length > 0)
+                        scalar = outputVec[0];
+                }
+                else
+                {
+                    // Fallback: use prediction
+                    var modelInput = ConvertVectorToInput(input);
+                    var modelOutput = Model!.Predict(modelInput);
+                    scalar = ConvertOutputToScalar(modelOutput);
+                    layerActivs = new[] { input };
+                }
+
                 return (scalar, layerActivs);
             }
 
             // Fallback: just return output with input as only "activation"
-            var modelInput = ConvertVectorToInput(input);
-            var modelOutput = Model!.Predict(modelInput);
-            var outputScalar = ConvertOutputToScalar(modelOutput);
+            var fallbackInput = ConvertVectorToInput(input);
+            var fallbackOutput = Model!.Predict(fallbackInput);
+            var outputScalar = ConvertOutputToScalar(fallbackOutput);
             return (outputScalar, new[] { input });
         };
     }
@@ -3389,13 +3451,80 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     {
         return (Vector<T> input) =>
         {
-            // Check if model supports detailed network information extraction for LRP
-            if (Model is IInterpretableNeuralNetwork<T, TInput, TOutput> interpretableNet)
+            var numOps = MathHelper.GetNumericOperations<T>();
+
+            // Check if model supports detailed network information extraction
+            // Use INeuralNetworkModel for activations and access layers through NeuralNetworkBase
+            if (Model is INeuralNetworkModel<T> neuralModel)
             {
                 var tensor = Tensor<T>.FromVector(input, new[] { 1, input.Length });
-                var (output, activations, weights) = interpretableNet.ForwardWithNetworkInfo(tensor);
-                var scalar = output.ToVector()[0];
-                var layerActivs = activations.Select(a => a.ToVector()).ToArray();
+                var namedActivations = neuralModel.GetNamedLayerActivations(tensor);
+
+                // Get sorted activations
+                var sortedActivations = namedActivations.OrderBy(kvp => kvp.Key).ToList();
+                var layerActivs = sortedActivations.Select(kvp => kvp.Value.ToVector()).ToArray();
+
+                // Get output scalar from last activation
+                T scalar = numOps.Zero;
+                if (sortedActivations.Count > 0)
+                {
+                    var lastVec = sortedActivations[sortedActivations.Count - 1].Value.ToVector();
+                    if (lastVec.Length > 0)
+                        scalar = lastVec[0];
+                }
+
+                // Extract weights from layers if possible (using NeuralNetworkBase's Layers property)
+                Matrix<T>[] weights;
+                if (Model is NeuralNetworks.NeuralNetworkBase<T> nnBase)
+                {
+                    var layerWeights = new List<Matrix<T>>();
+                    foreach (var layer in nnBase.Layers)
+                    {
+                        // Try to get weights from the layer using GetWeights()
+                        var weightTensor = layer.GetWeights();
+                        if (weightTensor is not null)
+                        {
+                            var weightData = weightTensor.ToVector().ToArray();
+
+                            // Create matrix from weight data (assume 2D)
+                            if (weightTensor.Shape.Length >= 2)
+                            {
+                                int rows = weightTensor.Shape[0];
+                                int cols = weightTensor.Shape.Length > 1 ? weightTensor.Shape[1] : 1;
+                                var matrix = new Matrix<T>(rows, cols);
+                                int idx = 0;
+                                for (int r = 0; r < rows && idx < weightData.Length; r++)
+                                {
+                                    for (int c = 0; c < cols && idx < weightData.Length; c++)
+                                    {
+                                        matrix[r, c] = weightData[idx++];
+                                    }
+                                }
+                                layerWeights.Add(matrix);
+                            }
+                            else
+                            {
+                                // 1D weights - treat as single row matrix
+                                var matrix = new Matrix<T>(1, weightData.Length);
+                                for (int c = 0; c < weightData.Length; c++)
+                                    matrix[0, c] = weightData[c];
+                                layerWeights.Add(matrix);
+                            }
+                        }
+                        else
+                        {
+                            // No weights - use identity
+                            layerWeights.Add(Matrix<T>.CreateIdentity(1));
+                        }
+                    }
+                    weights = layerWeights.ToArray();
+                }
+                else
+                {
+                    // Fallback: identity matrices for each activation
+                    weights = layerActivs.Select(a => Matrix<T>.CreateIdentity(a.Length)).ToArray();
+                }
+
                 return (scalar, layerActivs, weights);
             }
 
@@ -3529,13 +3658,33 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     private Func<Vector<T>, int, Vector<T>>? TryCreateIndexedGradientFunction()
     {
-        if (Model is IInterpretableNeuralNetwork<T, TInput, TOutput> interpretableNet)
+        // Use the existing IInputGradientComputable interface implemented by NeuralNetworkBase<T>
+        if (Model is IInputGradientComputable<T> gradientComputable)
         {
             return (Vector<T> input, int outputIndex) =>
             {
-                var tensor = Tensor<T>.FromVector(input, new[] { 1, input.Length });
-                var gradTensor = interpretableNet.ComputeGradient(tensor);
-                return gradTensor.ToVector();
+                // Get output size from a forward pass
+                var modelInput = ConvertVectorToInput(input);
+                var output = Model!.Predict(modelInput);
+                var numOps = MathHelper.GetNumericOperations<T>();
+
+                // Create output gradient that's 1 at the specified index, 0 elsewhere
+                int outputSize;
+                if (output is Vector<T> outputVec)
+                    outputSize = outputVec.Length;
+                else if (output is Tensor<T> outputTensor)
+                    outputSize = outputTensor.ToVector().Length;
+                else
+                    outputSize = 1;
+
+                var gradArray = new T[outputSize];
+                if (outputIndex >= 0 && outputIndex < outputSize)
+                    gradArray[outputIndex] = numOps.One;
+                else if (outputSize > 0)
+                    gradArray[0] = numOps.One; // Fallback to first output
+
+                var outputGradient = new Vector<T>(gradArray);
+                return gradientComputable.ComputeInputGradient(input, outputGradient);
             };
         }
 
@@ -3548,15 +3697,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     private Func<Tensor<T>, int, Tensor<T>>? TryCreateFeatureMapFunction()
     {
-        if (Model is IConvolutionalNetwork<T, TInput, TOutput> cnnNet)
-        {
-            return (Tensor<T> input, int targetClass) =>
-            {
-                var (featureMaps, _) = cnnNet.GetFeatureMapsAndGradients(input, targetClass);
-                return featureMaps;
-            };
-        }
-
+        // Currently no specialized interface for feature map extraction
+        // Return null to use fallback in the explainer
         return null;
     }
 
@@ -3565,15 +3707,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     private Func<Tensor<T>, int, int, Tensor<T>>? TryCreateTensorGradientFunction()
     {
-        if (Model is IConvolutionalNetwork<T, TInput, TOutput> cnnNet)
-        {
-            return (Tensor<T> input, int targetClass, int layerIndex) =>
-            {
-                var (_, gradients) = cnnNet.GetFeatureMapsAndGradients(input, targetClass);
-                return gradients;
-            };
-        }
-
+        // Currently no specialized interface for tensor gradient extraction
+        // Return null to use fallback in the explainer
         return null;
     }
 
@@ -3582,19 +3717,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     private Func<Tensor<T>, int, Tensor<T>>? TryCreateAttentionWeightsFunction()
     {
-        if (Model is ITransformerNetwork<T, TInput, TOutput> transformerNet)
-        {
-            return (Tensor<T> input, int layerIndex) =>
-            {
-                var attentionWeights = transformerNet.GetAttentionWeights(input);
-                if (layerIndex < 0 || layerIndex >= attentionWeights.Count)
-                    throw new ArgumentOutOfRangeException(nameof(layerIndex),
-                        $"Layer index {layerIndex} must be in range [0, {attentionWeights.Count}).");
-
-                return attentionWeights[layerIndex];
-            };
-        }
-
+        // Currently no specialized interface for attention weight extraction
+        // Return null to use fallback in the explainer
         return null;
     }
 
@@ -3603,15 +3727,22 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     private Func<Vector<T>, Vector<T>>? TryCreateActivationsFunction()
     {
-        if (Model is IInterpretableNeuralNetwork<T, TInput, TOutput> interpretableNet)
+        // Use the INeuralNetworkModel interface which is implemented by NeuralNetworkBase<T>
+        if (Model is INeuralNetworkModel<T> neuralModel)
         {
             return (Vector<T> input) =>
             {
                 var tensor = Tensor<T>.FromVector(input, new[] { 1, input.Length });
-                var (_, activations) = interpretableNet.ForwardWithActivations(tensor);
-                // Return concatenated activations
-                if (activations.Length > 0)
-                    return activations[activations.Length - 1].ToVector();
+                var namedActivations = neuralModel.GetNamedLayerActivations(tensor);
+
+                // Return the last layer's activation
+                if (namedActivations.Count > 0)
+                {
+                    var sortedActivations = namedActivations.OrderBy(kvp => kvp.Key).ToList();
+                    var lastActivation = sortedActivations[sortedActivations.Count - 1].Value;
+                    return lastActivation.ToVector();
+                }
+
                 return input;
             };
         }
@@ -3634,13 +3765,17 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     private Func<Vector<T>, Vector<T>[]>? TryCreateLayerActivationsFunction()
     {
-        if (Model is IInterpretableNeuralNetwork<T, TInput, TOutput> interpretableNet)
+        // Use the INeuralNetworkModel interface which is implemented by NeuralNetworkBase<T>
+        if (Model is INeuralNetworkModel<T> neuralModel)
         {
             return (Vector<T> input) =>
             {
                 var tensor = Tensor<T>.FromVector(input, new[] { 1, input.Length });
-                var (_, activations) = interpretableNet.ForwardWithActivations(tensor);
-                return activations.Select(a => a.ToVector()).ToArray();
+                var namedActivations = neuralModel.GetNamedLayerActivations(tensor);
+
+                // Return activations sorted by layer name (which includes layer index)
+                var sortedActivations = namedActivations.OrderBy(kvp => kvp.Key).ToList();
+                return sortedActivations.Select(kvp => kvp.Value.ToVector()).ToArray();
             };
         }
 
@@ -3652,20 +3787,48 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     private Func<int, Matrix<T>>? TryCreateLayerWeightsFunction()
     {
-        if (Model is IInterpretableNeuralNetwork<T, TInput, TOutput> interpretableNet)
+        // Access layers directly through NeuralNetworkBase<T>
+        if (Model is NeuralNetworks.NeuralNetworkBase<T> nnBase)
         {
             return (int layerIndex) =>
             {
-                // Get weights by doing a forward pass and extracting weights
-                var numOps = MathHelper.GetNumericOperations<T>();
-                var dummyInput = new Vector<T>(1);
-                var tensor = Tensor<T>.FromVector(dummyInput, new[] { 1, 1 });
-                var (_, _, weights) = interpretableNet.ForwardWithNetworkInfo(tensor);
+                if (layerIndex < 0 || layerIndex >= nnBase.Layers.Count)
+                    return Matrix<T>.CreateIdentity(1);
 
-                if (layerIndex < weights.Length)
-                    return weights[layerIndex];
+                var layer = nnBase.Layers[layerIndex];
+                var weightTensor = layer.GetWeights();
 
-                // Return identity if layer doesn't exist
+                if (weightTensor is not null)
+                {
+                    var weightData = weightTensor.ToVector().ToArray();
+
+                    // Create matrix from weight data (assume 2D)
+                    if (weightTensor.Shape.Length >= 2)
+                    {
+                        int rows = weightTensor.Shape[0];
+                        int cols = weightTensor.Shape.Length > 1 ? weightTensor.Shape[1] : 1;
+                        var matrix = new Matrix<T>(rows, cols);
+                        int idx = 0;
+                        for (int r = 0; r < rows && idx < weightData.Length; r++)
+                        {
+                            for (int c = 0; c < cols && idx < weightData.Length; c++)
+                            {
+                                matrix[r, c] = weightData[idx++];
+                            }
+                        }
+                        return matrix;
+                    }
+                    else
+                    {
+                        // 1D weights - treat as single row matrix
+                        var matrix = new Matrix<T>(1, weightData.Length);
+                        for (int c = 0; c < weightData.Length; c++)
+                            matrix[0, c] = weightData[c];
+                        return matrix;
+                    }
+                }
+
+                // Return identity if layer doesn't have weights
                 return Matrix<T>.CreateIdentity(1);
             };
         }

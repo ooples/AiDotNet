@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -26,7 +27,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// This implementation uses Kernel SHAP, which works with ANY model by treating it as a black box.
 /// </para>
 /// </remarks>
-public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalExplainer<T, GlobalSHAPExplanation<T>>
+public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalExplainer<T, GlobalSHAPExplanation<T>>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -36,6 +37,7 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
     private readonly int? _randomState;
     private readonly T _baselineValue;
     private readonly string[]? _featureNames;
+    private GPUExplainerHelper<T>? _gpuHelper;
 
     /// <inheritdoc/>
     public string MethodName => "KernelSHAP";
@@ -55,6 +57,31 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
     /// Gets the number of features being explained.
     /// </summary>
     public int NumFeatures => _backgroundData.Columns;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When GPU acceleration is enabled, SHAP computation can be
+    /// significantly faster because coalition predictions are processed in parallel on the GPU.
+    /// </para>
+    /// </remarks>
+    public bool IsGPUAccelerated => _gpuHelper?.IsGPUEnabled ?? false;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Call this method to enable GPU acceleration.
+    /// Example:
+    /// <code>
+    /// var helper = GPUExplainerHelper&lt;double&gt;.CreateWithAutoDetect();
+    /// explainer.SetGPUHelper(helper);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void SetGPUHelper(GPUExplainerHelper<T>? helper)
+    {
+        _gpuHelper = helper;
+    }
 
     /// <summary>
     /// Initializes a new SHAP explainer with a prediction function and background data.
@@ -142,14 +169,37 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> When GPU acceleration is enabled, batch explanations are computed
+    /// in parallel, making it much faster to explain many instances at once.
+    /// </para>
+    /// </remarks>
     public SHAPExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         var explanations = new SHAPExplanation<T>[instances.Rows];
-        for (int i = 0; i < instances.Rows; i++)
+
+        if (_gpuHelper != null && _gpuHelper.IsGPUEnabled && instances.Rows > 1)
         {
-            var instance = instances.GetRow(i);
-            explanations[i] = Explain(instance);
+            // Use parallel processing for batch explanations
+            Parallel.For(0, instances.Rows, new ParallelOptions
+            {
+                MaxDegreeOfParallelism = _gpuHelper.MaxParallelism
+            }, i =>
+            {
+                var instance = instances.GetRow(i);
+                explanations[i] = Explain(instance);
+            });
         }
+        else
+        {
+            for (int i = 0; i < instances.Rows; i++)
+            {
+                var instance = instances.GetRow(i);
+                explanations[i] = Explain(instance);
+            }
+        }
+
         return explanations;
     }
 
@@ -163,6 +213,16 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
     /// <summary>
     /// Computes SHAP values using the Kernel SHAP algorithm.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Kernel SHAP works by:
+    /// 1. Sampling many "coalitions" (subsets of features)
+    /// 2. For each coalition, computing the expected prediction when only those features are known
+    /// 3. Using weighted linear regression to find the marginal contribution of each feature
+    ///
+    /// With GPU acceleration, step 2 is parallelized across all coalitions simultaneously.
+    /// </para>
+    /// </remarks>
     private Vector<T> ComputeKernelSHAP(Vector<T> instance)
     {
         int numFeatures = instance.Length;
@@ -173,7 +233,6 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
         // Generate coalition samples
         var coalitions = new List<bool[]>();
         var weights = new List<double>();
-        var predictions = new List<T>();
 
         // Always include empty and full coalitions
         coalitions.Add(new bool[numFeatures]); // All false
@@ -198,30 +257,55 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
                 if (coalition[j]) coalitionSize++;
             }
 
-            // Kernel SHAP weight: M / (k * (M - k) * C(M, k))
-            // Simplified: weight inversely proportional to distance from 0 and M
-            // Cast to double early to prevent integer overflow
-            double weight = 1.0;
-            if (coalitionSize > 0 && coalitionSize < numFeatures)
-            {
-                weight = (numFeatures - 1.0) / ((double)coalitionSize * (numFeatures - coalitionSize));
-            }
+            // True Shapley kernel weight: (M - 1) / (C(M, k) * k * (M - k))
+            // where C(M, k) is the binomial coefficient "M choose k"
+            // This ensures proper weighting per Lundberg & Lee 2017
+            double weight = ComputeShapleyKernelWeight(numFeatures, coalitionSize);
 
             coalitions.Add(coalition);
             weights.Add(weight);
         }
 
         // Compute predictions for each coalition
-        foreach (var coalition in coalitions)
+        // Use GPU helper if available for parallel processing
+        Vector<T> predictionsVector;
+        if (_gpuHelper != null && _gpuHelper.IsGPUEnabled)
         {
-            var maskedPrediction = ComputeCoalitionPrediction(instance, coalition);
-            predictions.Add(maskedPrediction);
+            predictionsVector = _gpuHelper.ComputeCoalitionPredictions(
+                _predictFunction, instance, coalitions, _backgroundData);
+        }
+        else
+        {
+            var predictions = new List<T>();
+            foreach (var coalition in coalitions)
+            {
+                var maskedPrediction = ComputeCoalitionPrediction(instance, coalition);
+                predictions.Add(maskedPrediction);
+            }
+            predictionsVector = new Vector<T>([.. predictions]);
         }
 
         // Solve weighted least squares to get SHAP values
-        var shapValues = SolveWeightedLeastSquares(coalitions, predictions, weights, numFeatures);
+        var shapValues = SolveWeightedLeastSquaresFromVector(coalitions, predictionsVector, weights, numFeatures);
 
         return shapValues;
+    }
+
+    /// <summary>
+    /// Solves weighted least squares from a predictions vector.
+    /// </summary>
+    private Vector<T> SolveWeightedLeastSquaresFromVector(
+        List<bool[]> coalitions,
+        Vector<T> predictions,
+        List<double> weights,
+        int numFeatures)
+    {
+        var predictionsList = new List<T>(predictions.Length);
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            predictionsList.Add(predictions[i]);
+        }
+        return SolveWeightedLeastSquares(coalitions, predictionsList, weights, numFeatures);
     }
 
     /// <summary>
@@ -411,6 +495,101 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
             sum = NumOps.Add(sum, values[i]);
         }
         return NumOps.Divide(sum, NumOps.FromDouble(values.Length));
+    }
+
+    /// <summary>
+    /// Computes the exact Shapley kernel weight for a coalition of size k.
+    /// </summary>
+    /// <param name="numFeatures">Total number of features (M).</param>
+    /// <param name="coalitionSize">Size of the coalition (k).</param>
+    /// <returns>The Shapley kernel weight.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Shapley kernel weight ensures that the weighted
+    /// linear regression correctly computes SHAP values. The formula is:
+    ///
+    /// π(k) = (M - 1) / (C(M, k) * k * (M - k))
+    ///
+    /// where C(M, k) is the binomial coefficient "M choose k".
+    ///
+    /// This weight is higher for coalitions near size 0 or M (which provide more
+    /// information about individual feature contributions) and lower for coalitions
+    /// near size M/2 (which are less informative).
+    ///
+    /// <b>Reference:</b> Lundberg & Lee, "A Unified Approach to Interpreting Model Predictions" (2017)
+    /// </para>
+    /// </remarks>
+    private static double ComputeShapleyKernelWeight(int numFeatures, int coalitionSize)
+    {
+        // Edge cases: empty and full coalitions get very high weight
+        // because they define the base value and full prediction
+        if (coalitionSize == 0 || coalitionSize == numFeatures)
+        {
+            return double.MaxValue / 2;
+        }
+
+        // Compute binomial coefficient C(M, k) using log to avoid overflow
+        double logBinom = LogBinomial(numFeatures, coalitionSize);
+
+        // Shapley kernel weight: (M - 1) / (C(M, k) * k * (M - k))
+        // Using logs: log(weight) = log(M-1) - logBinom - log(k) - log(M-k)
+        double logWeight = Math.Log(numFeatures - 1)
+                         - logBinom
+                         - Math.Log(coalitionSize)
+                         - Math.Log(numFeatures - coalitionSize);
+
+        return Math.Exp(logWeight);
+    }
+
+    /// <summary>
+    /// Computes the natural logarithm of the binomial coefficient C(n, k).
+    /// </summary>
+    /// <param name="n">Total number of items.</param>
+    /// <param name="k">Number of items to choose.</param>
+    /// <returns>log(C(n, k))</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> We use logarithms to compute the binomial coefficient
+    /// because directly computing C(n, k) = n! / (k! * (n-k)!) can overflow
+    /// for large n. Using logs: log(C(n,k)) = log(n!) - log(k!) - log((n-k)!)
+    ///
+    /// We use the log-gamma function since log(n!) = log(Gamma(n+1)).
+    /// </para>
+    /// </remarks>
+    private static double LogBinomial(int n, int k)
+    {
+        if (k < 0 || k > n)
+            return double.NegativeInfinity;
+
+        if (k == 0 || k == n)
+            return 0.0;
+
+        // log(C(n,k)) = log(n!) - log(k!) - log((n-k)!)
+        // Using Stirling approximation for log-gamma where needed
+        return LogFactorial(n) - LogFactorial(k) - LogFactorial(n - k);
+    }
+
+    /// <summary>
+    /// Computes log(n!) using a simple approach for reasonable n values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> For typical feature counts in ML (up to a few hundred),
+    /// we can compute log(n!) = sum(log(i)) for i=1 to n directly.
+    /// </para>
+    /// </remarks>
+    private static double LogFactorial(int n)
+    {
+        if (n <= 1)
+            return 0.0;
+
+        // For small n, compute directly
+        double result = 0.0;
+        for (int i = 2; i <= n; i++)
+        {
+            result += Math.Log(i);
+        }
+        return result;
     }
 
     private static TInput ConvertToModelInput<TInput>(Matrix<T> data)
