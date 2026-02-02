@@ -42,6 +42,8 @@ public class BootstrapTest<T> : IStatisticalTest<T>
     /// <param name="randomSeed">Optional random seed for reproducibility.</param>
     public BootstrapTest(int numBootstraps = 10000, int? randomSeed = null)
     {
+        if (numBootstraps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numBootstraps), "Number of bootstraps must be positive.");
         _numBootstraps = numBootstraps;
         _randomSeed = randomSeed;
     }
@@ -78,30 +80,28 @@ public class BootstrapTest<T> : IStatisticalTest<T>
         // Compute observed difference
         double observedDiff = ComputeMeanDifference(scores1, scores2);
 
-        // Compute differences under null hypothesis (permutation approach)
-        var pooled = new double[n * 2];
+        // For paired data, compute pairwise differences
+        var differences = new double[n];
         for (int i = 0; i < n; i++)
         {
-            pooled[i] = NumOps.ToDouble(scores1[i]);
-            pooled[n + i] = NumOps.ToDouble(scores2[i]);
+            differences[i] = NumOps.ToDouble(scores1[i]) - NumOps.ToDouble(scores2[i]);
         }
 
+        // Paired permutation test: under null, signs of differences are random
+        // We randomly flip signs to generate null distribution
         int moreExtreme = 0;
         for (int b = 0; b < _numBootstraps; b++)
         {
-            // Permute labels
-            var perm = Enumerable.Range(0, n * 2).OrderBy(_ => random.Next()).ToArray();
-            double mean1 = 0, mean2 = 0;
+            double permMeanDiff = 0;
             for (int i = 0; i < n; i++)
             {
-                mean1 += pooled[perm[i]];
-                mean2 += pooled[perm[n + i]];
+                // Randomly flip the sign of each difference (with 50% probability)
+                double sign = random.Next(2) == 0 ? 1.0 : -1.0;
+                permMeanDiff += sign * differences[i];
             }
-            mean1 /= n;
-            mean2 /= n;
-            double permDiff = mean1 - mean2;
+            permMeanDiff /= n;
 
-            if (Math.Abs(permDiff) >= Math.Abs(observedDiff))
+            if (Math.Abs(permMeanDiff) >= Math.Abs(observedDiff))
                 moreExtreme++;
         }
 
@@ -132,7 +132,14 @@ public class BootstrapTest<T> : IStatisticalTest<T>
     /// </summary>
     public (double Lower, double Upper) ComputeCI(T[] scores1, T[] scores2, double confidenceLevel = 0.95)
     {
+        if (scores1.Length != scores2.Length)
+            throw new ArgumentException("Score arrays must have the same length.");
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must be between 0 and 1 (exclusive).");
+
         int n = scores1.Length;
+        if (n == 0) return (0, 0);
+
         var random = _randomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_randomSeed.Value)
             : new Random();

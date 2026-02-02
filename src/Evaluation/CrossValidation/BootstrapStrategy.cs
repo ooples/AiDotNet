@@ -60,8 +60,14 @@ public class BootstrapStrategy<T> : ICrossValidationStrategy<T>
 
         var random = _randomSeed.HasValue ? RandomHelper.CreateSeededRandom(_randomSeed.Value) : new Random();
 
-        for (int b = 0; b < _numBootstraps; b++)
+        int yielded = 0;
+        int attempts = 0;
+        int maxAttempts = _numBootstraps * 10; // Limit attempts to avoid infinite loop
+
+        while (yielded < _numBootstraps && attempts < maxAttempts)
         {
+            attempts++;
+
             // Sample with replacement for training
             var trainIndices = new int[dataSize];
             var selectedSet = new HashSet<int>();
@@ -81,10 +87,11 @@ public class BootstrapStrategy<T> : ICrossValidationStrategy<T>
                     oobIndices.Add(i);
             }
 
-            // Skip if no OOB samples (rare but possible)
+            // Skip if no OOB samples (rare but possible with small datasets)
             if (oobIndices.Count == 0) continue;
 
             yield return (trainIndices, oobIndices.ToArray());
+            yielded++;
         }
     }
 }

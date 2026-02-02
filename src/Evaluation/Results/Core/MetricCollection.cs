@@ -81,6 +81,11 @@ public class MetricCollection<T> : IEnumerable<MetricWithCI<T>>
             throw new ArgumentException("Metric must have a name.", nameof(metric));
         }
 
+        if (_metrics.ContainsKey(metric.Name))
+        {
+            throw new ArgumentException($"A metric with name '{metric.Name}' already exists in the collection. Use AddOrUpdate() to replace existing metrics.", nameof(metric));
+        }
+
         _metrics[metric.Name] = metric;
 
         // Update category index
@@ -100,11 +105,39 @@ public class MetricCollection<T> : IEnumerable<MetricWithCI<T>>
     /// <summary>
     /// Adds multiple metrics to the collection.
     /// </summary>
+    /// <exception cref="ArgumentException">Thrown if any metric with the same name already exists.</exception>
     public void AddRange(IEnumerable<MetricWithCI<T>> metrics)
     {
         foreach (var metric in metrics)
         {
             Add(metric);
+        }
+    }
+
+    /// <summary>
+    /// Adds or updates a metric in the collection.
+    /// </summary>
+    /// <param name="metric">The metric to add or update.</param>
+    public void AddOrUpdate(MetricWithCI<T> metric)
+    {
+        if (string.IsNullOrEmpty(metric.Name))
+        {
+            throw new ArgumentException("Metric must have a name.", nameof(metric));
+        }
+
+        _metrics[metric.Name] = metric;
+
+        // Update category index
+        var category = metric.Category ?? "Uncategorized";
+        if (!_categoryIndex.TryGetValue(category, out var categoryList))
+        {
+            categoryList = new List<string>();
+            _categoryIndex[category] = categoryList;
+        }
+
+        if (!categoryList.Contains(metric.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            categoryList.Add(metric.Name);
         }
     }
 

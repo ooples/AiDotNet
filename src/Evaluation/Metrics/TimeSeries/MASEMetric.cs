@@ -38,6 +38,8 @@ public class MASEMetric<T> : ITimeSeriesMetric<T>
         if (predictions.Length == 0) return NumOps.Zero;
 
         int period = seasonalPeriod ?? 1;
+        if (period < 1)
+            throw new ArgumentException("Seasonal period must be at least 1.", nameof(seasonalPeriod));
         int n = predictions.Length;
 
         // Calculate MAE of predictions

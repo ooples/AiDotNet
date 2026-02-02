@@ -50,6 +50,25 @@ public class PairedTTest<T> : IPairedTest<T>
         double sumSqDiff = differences.Sum(d => (d - meanDiff) * (d - meanDiff));
         double stdDiff = Math.Sqrt(sumSqDiff / (n - 1));
 
+        // Handle zero-variance case (all differences are identical)
+        if (stdDiff < 1e-12)
+        {
+            // If mean difference is also zero, samples are identical (not significant)
+            // If mean difference is non-zero but variance is zero, it's highly significant
+            double pValueZeroVar = Math.Abs(meanDiff) < 1e-12 ? 1.0 : 0.0;
+            return new StatisticalTestResult<T>
+            {
+                TestName = Name,
+                Statistic = NumOps.Zero,
+                PValue = NumOps.FromDouble(pValueZeroVar),
+                IsSignificant = pValueZeroVar < alpha,
+                Alpha = alpha,
+                DegreesOfFreedom = n - 1,
+                EffectSize = NumOps.Zero,
+                Description = "All paired differences are identical; t-statistic undefined."
+            };
+        }
+
         // Calculate t-statistic
         double standardError = stdDiff / Math.Sqrt(n);
         double tStat = meanDiff / standardError;

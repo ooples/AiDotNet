@@ -70,7 +70,7 @@ public interface IClassificationMetric<T> : IMetric<T>
     MetricWithCI<T> ComputeWithCI(
         ReadOnlySpan<T> predictions,
         ReadOnlySpan<T> actuals,
-        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.BCaBootstrap,
+        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95,
         int bootstrapSamples = 1000,
         int? randomSeed = null);
@@ -97,7 +97,7 @@ public interface IProbabilisticClassificationMetric<T> : IMetric<T>
         ReadOnlySpan<T> probabilities,
         ReadOnlySpan<T> actuals,
         int numClasses = 2,
-        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.BCaBootstrap,
+        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95,
         int bootstrapSamples = 1000,
         int? randomSeed = null);
@@ -123,7 +123,7 @@ public interface IRegressionMetric<T> : IMetric<T>
     MetricWithCI<T> ComputeWithCI(
         ReadOnlySpan<T> predictions,
         ReadOnlySpan<T> actuals,
-        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.BCaBootstrap,
+        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95,
         int bootstrapSamples = 1000,
         int? randomSeed = null);

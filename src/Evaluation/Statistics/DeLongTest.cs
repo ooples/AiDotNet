@@ -183,7 +183,7 @@ public class DeLongTest<T> : IStatisticalTest<T>
 
     private double Covariance(double[] x, double[] y)
     {
-        if (x.Length != y.Length || x.Length == 0) return 0;
+        if (x.Length != y.Length || x.Length < 2) return 0;
         double meanX = x.Average();
         double meanY = y.Average();
         double sum = 0;

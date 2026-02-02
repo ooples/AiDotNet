@@ -54,6 +54,7 @@ public class LearningCurveEngine<T>
     /// <param name="trainSizes">Training sizes as fractions (0-1) or absolute counts.</param>
     /// <param name="cvFolds">Number of cross-validation folds per training size.</param>
     /// <param name="isClassification">Whether this is classification.</param>
+    /// <param name="higherIsBetter">Whether higher metric values are better. Default true for accuracy-like metrics, false for error metrics like RMSE.</param>
     /// <returns>Learning curve results.</returns>
     public LearningCurveResult<T> Generate<TModel>(
         T[,] features,
@@ -63,7 +64,8 @@ public class LearningCurveEngine<T>
         string metricName = "Accuracy",
         double[]? trainSizes = null,
         int cvFolds = 5,
-        bool isClassification = true)
+        bool isClassification = true,
+        bool higherIsBetter = true)
     {
         int totalSamples = features.GetLength(0);
         int numFeatures = features.GetLength(1);
@@ -144,11 +146,11 @@ public class LearningCurveEngine<T>
             result.ValidationScoreStds.Add(StandardDeviation(valScores));
         }
 
-        result.Diagnosis = DiagnoseLearningCurve(result);
+        result.Diagnosis = DiagnoseLearningCurve(result, higherIsBetter);
         return result;
     }
 
-    private BiasVarianceDiagnosis DiagnoseLearningCurve(LearningCurveResult<T> curve)
+    private BiasVarianceDiagnosis DiagnoseLearningCurve(LearningCurveResult<T> curve, bool higherIsBetter)
     {
         if (curve.TrainScoreMeans.Count < 2)
             return BiasVarianceDiagnosis.Unknown;
@@ -157,22 +159,44 @@ public class LearningCurveEngine<T>
         double finalValScore = curve.ValidationScoreMeans.Last();
         double gap = Math.Abs(finalTrainScore - finalValScore);
 
-        // Heuristics for diagnosis
-        bool highTrainScore = finalTrainScore > 0.9;
-        bool lowValScore = finalValScore < 0.7;
+        // Heuristics for diagnosis - adjusted based on metric direction
+        // For higher-is-better metrics (accuracy): good train score > 0.9, bad val score < 0.7
+        // For lower-is-better metrics (error): good train score < 0.1, bad val score > 0.3
+        bool goodTrainScore;
+        bool badValScore;
+        bool valImproving;
+
+        if (higherIsBetter)
+        {
+            goodTrainScore = finalTrainScore > 0.9;
+            badValScore = finalValScore < 0.7;
+            valImproving = curve.ValidationScoreMeans.Last() > curve.ValidationScoreMeans[^2];
+        }
+        else
+        {
+            // For error metrics, lower is better
+            goodTrainScore = finalTrainScore < 0.1;
+            badValScore = finalValScore > 0.3;
+            valImproving = curve.ValidationScoreMeans.Last() < curve.ValidationScoreMeans[^2];
+        }
+
         bool largeGap = gap > 0.15;
         bool converging = Math.Abs(curve.ValidationScoreMeans.Last() - curve.ValidationScoreMeans[^2]) < 0.02;
 
-        if (highTrainScore && lowValScore && largeGap)
+        // High variance: training score is good but validation score is bad with large gap
+        if (goodTrainScore && badValScore && largeGap)
             return BiasVarianceDiagnosis.HighVariance;
 
-        if (!highTrainScore && !largeGap)
+        // High bias: training score is bad (can't even fit training data)
+        if (!goodTrainScore && !largeGap)
             return BiasVarianceDiagnosis.HighBias;
 
-        if (!converging && finalValScore > 0.6)
+        // Needs more data: validation score is still improving
+        if (!converging && valImproving)
             return BiasVarianceDiagnosis.NeedsMoreData;
 
-        if (highTrainScore && !largeGap)
+        // Good fit: good training score with small gap to validation
+        if (goodTrainScore && !largeGap)
             return BiasVarianceDiagnosis.GoodFit;
 
         return BiasVarianceDiagnosis.Unknown;

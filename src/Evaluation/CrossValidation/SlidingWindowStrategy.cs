@@ -45,13 +45,17 @@ public class SlidingWindowStrategy<T> : ICrossValidationStrategy<T>
     public SlidingWindowStrategy(int windowSize, int testSize, int? step = null)
     {
         if (windowSize < 1)
-            throw new ArgumentException("Window size must be at least 1.");
+            throw new ArgumentException("Window size must be at least 1.", nameof(windowSize));
         if (testSize < 1)
-            throw new ArgumentException("Test size must be at least 1.");
+            throw new ArgumentException("Test size must be at least 1.", nameof(testSize));
+
+        var resolvedStep = step ?? testSize;
+        if (resolvedStep < 1)
+            throw new ArgumentException("Step must be at least 1.", nameof(step));
 
         _windowSize = windowSize;
         _testSize = testSize;
-        _step = step ?? testSize;
+        _step = resolvedStep;
     }
 
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)

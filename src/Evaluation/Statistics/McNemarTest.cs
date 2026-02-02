@@ -118,7 +118,7 @@ public class McNemarTest<T> : ITwoSampleTest<T>
         {
             pValue += BinomialProbability(n, i, 0.5);
         }
-        return 2 * pValue; // Two-tailed
+        return Math.Min(1.0, 2 * pValue); // Two-tailed, capped at 1.0
     }
 
     private static double BinomialProbability(int n, int k, double p)

@@ -62,11 +62,27 @@ public class StratifiedKFoldStrategy<T> : ICrossValidationStrategy<T>
 
         var random = _randomSeed.HasValue ? RandomHelper.CreateSeededRandom(_randomSeed.Value) : new Random();
 
-        // Group indices by class
-        var classSamples = new Dictionary<int, List<int>>();
+        // Group indices by class using tolerance-based equality for floating-point labels
+        // This avoids merging distinct classes that happen to round to the same integer
+        var classSamples = new Dictionary<double, List<int>>();
+        const double tolerance = 1e-10;
+
         for (int i = 0; i < dataSize; i++)
         {
-            int classLabel = (int)Math.Round(NumOps.ToDouble(labelsArray[i]));
+            double labelValue = NumOps.ToDouble(labelsArray[i]);
+
+            // Find existing key within tolerance, or use the label value as a new key
+            double? existingKey = null;
+            foreach (var key in classSamples.Keys)
+            {
+                if (Math.Abs(key - labelValue) < tolerance)
+                {
+                    existingKey = key;
+                    break;
+                }
+            }
+
+            double classLabel = existingKey ?? labelValue;
             if (!classSamples.ContainsKey(classLabel))
                 classSamples[classLabel] = new List<int>();
             classSamples[classLabel].Add(i);

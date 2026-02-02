@@ -45,16 +45,32 @@ public class SpearmanCorrelationMetric<T> : IRegressionMetric<T>
         var predRanks = ComputeRanks(predictions);
         var actualRanks = ComputeRanks(actuals);
 
-        // Compute Spearman correlation using Pearson on ranks
-        double sumD2 = 0;
+        // Compute Spearman correlation using Pearson correlation on ranks
+        // This correctly handles ties (the d² formula assumes no ties)
+        double meanPred = 0, meanActual = 0;
         for (int i = 0; i < n; i++)
         {
-            double d = predRanks[i] - actualRanks[i];
-            sumD2 += d * d;
+            meanPred += predRanks[i];
+            meanActual += actualRanks[i];
+        }
+        meanPred /= n;
+        meanActual /= n;
+
+        double cov = 0, varPred = 0, varActual = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double dp = predRanks[i] - meanPred;
+            double da = actualRanks[i] - meanActual;
+            cov += dp * da;
+            varPred += dp * dp;
+            varActual += da * da;
         }
 
-        // Formula: ρ = 1 - 6Σd²/(n(n²-1))
-        double rho = 1 - (6 * sumD2) / (n * ((double)n * n - 1));
+        // Guard against zero variance (constant ranks)
+        if (varPred < 1e-12 || varActual < 1e-12)
+            return NumOps.Zero;
+
+        double rho = cov / Math.Sqrt(varPred * varActual);
 
         return NumOps.FromDouble(rho);
     }
@@ -92,9 +108,14 @@ public class SpearmanCorrelationMetric<T> : IRegressionMetric<T>
     }
 
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
-        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.BCaBootstrap,
+        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)
     {
+        if (bootstrapSamples < 2)
+            throw new ArgumentOutOfRangeException(nameof(bootstrapSamples), "Bootstrap samples must be at least 2.");
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must be between 0 and 1 (exclusive).");
+
         var value = Compute(predictions, actuals);
         var (lower, upper) = BootstrapCI(predictions, actuals, bootstrapSamples, confidenceLevel, randomSeed);
         return new MetricWithCI<T>(value, lower, upper, confidenceLevel, ciMethod, Name, Direction);

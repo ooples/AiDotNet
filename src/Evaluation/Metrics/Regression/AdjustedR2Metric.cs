@@ -68,7 +68,9 @@ public class AdjustedR2Metric<T> : IRegressionMetric<T>
             ssTot += diffTot * diffTot;
         }
 
-        if (Math.Abs(ssTot) < 1e-10) return NumOps.One;
+        // If actuals are constant (zero variance), R² is only 1 if predictions are also perfect
+        if (Math.Abs(ssTot) < 1e-10)
+            return Math.Abs(ssRes) < 1e-10 ? NumOps.One : NumOps.Zero;
         double r2 = 1 - ssRes / ssTot;
 
         // Adjusted R² = 1 - (1 - R²) * (n - 1) / (n - p - 1)
@@ -77,9 +79,14 @@ public class AdjustedR2Metric<T> : IRegressionMetric<T>
     }
 
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
-        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.BCaBootstrap,
+        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)
     {
+        if (bootstrapSamples < 2)
+            throw new ArgumentOutOfRangeException(nameof(bootstrapSamples), "Bootstrap samples must be at least 2.");
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must be between 0 and 1 (exclusive).");
+
         var value = Compute(predictions, actuals);
         var (lower, upper) = BootstrapCI(predictions, actuals, bootstrapSamples, confidenceLevel, randomSeed);
         return new MetricWithCI<T>(value, lower, upper, confidenceLevel, ciMethod, Name, Direction);

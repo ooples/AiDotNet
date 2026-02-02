@@ -53,6 +53,7 @@ public class ValidationCurveEngine<T>
     /// <param name="metricName">Primary metric to track.</param>
     /// <param name="cvFolds">Number of cross-validation folds per parameter value.</param>
     /// <param name="isClassification">Whether this is classification.</param>
+    /// <param name="higherIsBetter">Whether higher metric values are better. Default true for accuracy-like metrics.</param>
     /// <returns>Validation curve results.</returns>
     public ValidationCurveResult<T> Generate<TModel>(
         T[,] features,
@@ -63,8 +64,14 @@ public class ValidationCurveEngine<T>
         double[] parameterValues,
         string metricName = "Accuracy",
         int cvFolds = 5,
-        bool isClassification = true)
+        bool isClassification = true,
+        bool higherIsBetter = true)
     {
+        if (parameterValues == null || parameterValues.Length == 0)
+            throw new ArgumentException("Parameter values cannot be null or empty.", nameof(parameterValues));
+        if (cvFolds < 2)
+            throw new ArgumentException("CV folds must be at least 2.", nameof(cvFolds));
+
         int totalSamples = features.GetLength(0);
         int numFeatures = features.GetLength(1);
 
@@ -138,21 +145,25 @@ public class ValidationCurveEngine<T>
             result.ValidationScoreStds.Add(StandardDeviation(valScores));
         }
 
-        result.OptimalParameterValue = FindOptimalParameter(result);
+        result.OptimalParameterValue = FindOptimalParameter(result, higherIsBetter);
         return result;
     }
 
-    private double FindOptimalParameter(ValidationCurveResult<T> curve)
+    private double FindOptimalParameter(ValidationCurveResult<T> curve, bool higherIsBetter)
     {
         if (curve.ParameterValues.Count == 0) return 0;
 
-        // Find parameter with highest validation score
+        // Find parameter with best validation score (respecting metric direction)
         int bestIdx = 0;
         double bestScore = curve.ValidationScoreMeans[0];
 
         for (int i = 1; i < curve.ValidationScoreMeans.Count; i++)
         {
-            if (curve.ValidationScoreMeans[i] > bestScore)
+            bool isBetter = higherIsBetter
+                ? curve.ValidationScoreMeans[i] > bestScore
+                : curve.ValidationScoreMeans[i] < bestScore;
+
+            if (isBetter)
             {
                 bestScore = curve.ValidationScoreMeans[i];
                 bestIdx = i;

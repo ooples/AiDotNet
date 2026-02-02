@@ -121,10 +121,12 @@ public class CrossValidationEngine<T>
         foreach (var (trainIndices, valIndices) in strategy.Split(numSamples))
         {
             // For time series, indices refer to starting positions of windows
-            var trainSeries = new T[trainIndices.Max() + lookback + horizon];
+            // Only include data up to (but not including) the first validation window to prevent leakage
+            int trainEnd = valIndices.Length > 0 ? valIndices.Min() + lookback : trainIndices.Max() + lookback;
+            var trainSeries = new T[trainEnd];
             Array.Copy(series, trainSeries, Math.Min(series.Length, trainSeries.Length));
 
-            // Train model
+            // Train model (only on data before validation period)
             var model = trainFunc(trainSeries);
 
             // Generate predictions for validation indices
@@ -138,8 +140,11 @@ public class CrossValidationEngine<T>
                 Array.Copy(series, startIdx, window, 0, lookback);
 
                 var pred = predictFunc(model, window);
-                predictions[i] = pred[0]; // First prediction in horizon
-                actuals[i] = series[startIdx + lookback]; // Actual value at horizon
+                // Use horizon-1 to get the prediction at the specified horizon (0-indexed)
+                int predIdx = Math.Min(horizon - 1, pred.Length - 1);
+                predictions[i] = pred[predIdx];
+                // Actual value at the specified horizon step
+                actuals[i] = series[startIdx + lookback + horizon - 1];
             }
 
             // Compute time series metrics
@@ -323,20 +328,44 @@ public class CrossValidationResult<T>
     /// <summary>
     /// Gets the mean value for a specific metric.
     /// </summary>
+    /// <exception cref="KeyNotFoundException">Thrown when the metric is not found.</exception>
     public T GetMeanMetric(string metricName)
     {
         var metric = AggregatedMetrics[metricName];
-        return metric != null ? metric.Value : default!;
+        if (metric == null)
+            throw new KeyNotFoundException($"Metric '{metricName}' not found in cross-validation results.");
+        return metric.Value;
+    }
+
+    /// <summary>
+    /// Tries to get the mean value for a specific metric.
+    /// </summary>
+    /// <param name="metricName">The metric name.</param>
+    /// <param name="value">The mean value if found.</param>
+    /// <returns>True if the metric was found.</returns>
+    public bool TryGetMeanMetric(string metricName, out T? value)
+    {
+        var metric = AggregatedMetrics[metricName];
+        if (metric != null)
+        {
+            value = metric.Value;
+            return true;
+        }
+        value = default;
+        return false;
     }
 
     /// <summary>
     /// Gets the standard deviation for a specific metric across folds.
     /// </summary>
+    /// <exception cref="KeyNotFoundException">Thrown when the metric is not found.</exception>
     public T GetStdMetric(string metricName)
     {
         var metric = AggregatedMetrics[metricName];
-        if (metric == null || metric.StandardDeviation == null)
-            return default!;
+        if (metric == null)
+            throw new KeyNotFoundException($"Metric '{metricName}' not found in cross-validation results.");
+        if (metric.StandardDeviation == null)
+            throw new InvalidOperationException($"Metric '{metricName}' does not have standard deviation computed.");
         return metric.StandardDeviation;
     }
 }

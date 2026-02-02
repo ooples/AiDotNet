@@ -38,11 +38,12 @@ public class EvaluationOptions<T>
     public double? ConfidenceLevel { get; set; }
 
     /// <summary>
-    /// Method for computing confidence intervals. Default: BCaBootstrap.
+    /// Method for computing confidence intervals. Default: PercentileBootstrap.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> BCa bootstrap is recommended for most cases as it
-    /// corrects for bias and skewness in your data.</para>
+    /// <para><b>For Beginners:</b> Percentile bootstrap is the default method.
+    /// BCa (bias-corrected and accelerated) can be used for more accurate intervals
+    /// but requires additional computation.</para>
     /// </remarks>
     public ConfidenceIntervalMethod? ConfidenceIntervalMethod { get; set; }
 

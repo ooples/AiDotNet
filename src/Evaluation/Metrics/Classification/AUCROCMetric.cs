@@ -40,6 +40,8 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
 
     public T Compute(ReadOnlySpan<T> probabilities, ReadOnlySpan<T> actuals, int numClasses = 2)
     {
+        if (numClasses < 2)
+            throw new ArgumentException("Number of classes must be at least 2.", nameof(numClasses));
         if (probabilities.Length == 0 || actuals.Length == 0) return NumOps.FromDouble(0.5);
 
         if (numClasses == 2)
@@ -51,6 +53,14 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
         else
         {
             // Multi-class: One-vs-Rest macro average
+            // Validate probability array shape: should be n * numClasses where n = actuals.Length
+            int expectedProbsLength = actuals.Length * numClasses;
+            if (probabilities.Length != expectedProbsLength)
+                throw new ArgumentException(
+                    $"For {numClasses}-class problem, probabilities length ({probabilities.Length}) must equal " +
+                    $"actuals.Length * numClasses ({actuals.Length} * {numClasses} = {expectedProbsLength}).",
+                    nameof(probabilities));
+
             return ComputeMultiClassAUC(probabilities, actuals, numClasses);
         }
     }
@@ -134,9 +144,14 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
     }
 
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> probabilities, ReadOnlySpan<T> actuals,
-        int numClasses = 2, ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.BCaBootstrap,
+        int numClasses = 2, ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)
     {
+        if (bootstrapSamples < 2)
+            throw new ArgumentOutOfRangeException(nameof(bootstrapSamples), "Bootstrap samples must be at least 2.");
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must be between 0 and 1 (exclusive).");
+
         var value = Compute(probabilities, actuals, numClasses);
         var (lower, upper) = BootstrapCI(probabilities, actuals, numClasses, bootstrapSamples, confidenceLevel, randomSeed);
         return new MetricWithCI<T>(value, lower, upper, confidenceLevel, ciMethod, Name, Direction);

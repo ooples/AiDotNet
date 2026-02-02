@@ -39,6 +39,8 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
 
     public FBetaScoreMetric(double beta = 1.0, T? positiveLabel = default, AveragingMethod averaging = AveragingMethod.Binary)
     {
+        if (double.IsNaN(beta) || double.IsInfinity(beta) || beta <= 0)
+            throw new ArgumentOutOfRangeException(nameof(beta), "Beta must be a finite positive value.");
         _beta = beta;
         _positiveLabel = positiveLabel ?? NumOps.One;
         _averaging = averaging;
@@ -53,7 +55,7 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
         if (_averaging == AveragingMethod.Binary || _averaging == AveragingMethod.None)
             return ComputeBinary(predictions, actuals, _positiveLabel);
 
-        var classes = GetClasses(actuals);
+        var classes = GetClasses(predictions, actuals);
         if (_averaging == AveragingMethod.Micro)
             return ComputeMicro(predictions, actuals, classes);
 
@@ -109,10 +111,11 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
         return NumOps.FromDouble((1 + b2) * prec * rec / (b2 * prec + rec));
     }
 
-    private static HashSet<double> GetClasses(ReadOnlySpan<T> vals)
+    private static HashSet<double> GetClasses(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         var c = new HashSet<double>();
-        for (int i = 0; i < vals.Length; i++) c.Add(NumOps.ToDouble(vals[i]));
+        for (int i = 0; i < predictions.Length; i++) c.Add(NumOps.ToDouble(predictions[i]));
+        for (int i = 0; i < actuals.Length; i++) c.Add(NumOps.ToDouble(actuals[i]));
         return c;
     }
 
@@ -124,9 +127,14 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
     }
 
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
-        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.BCaBootstrap,
+        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)
     {
+        if (bootstrapSamples < 2)
+            throw new ArgumentOutOfRangeException(nameof(bootstrapSamples), "Bootstrap samples must be at least 2.");
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must be between 0 and 1 (exclusive).");
+
         var value = Compute(predictions, actuals);
         var (lower, upper) = BootstrapCI(predictions, actuals, bootstrapSamples, confidenceLevel, randomSeed);
         return new MetricWithCI<T>(value, lower, upper, confidenceLevel, ciMethod, Name, Direction);

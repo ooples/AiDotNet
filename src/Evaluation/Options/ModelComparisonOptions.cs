@@ -44,7 +44,7 @@ public class ModelComparisonOptions
     /// <summary>
     /// Multiple testing correction method. Default: BonferroniHolm.
     /// </summary>
-    public MultipleTesti­ngCorrectionMethod? CorrectionMethod { get; set; }
+    public MultipleTestingCorrectionMethod? CorrectionMethod { get; set; }
 
     /// <summary>
     /// Statistical test for pairwise comparison. Default: auto-select based on data.
@@ -152,7 +152,7 @@ public class ModelComparisonOptions
 /// <summary>
 /// Methods for correcting p-values when performing multiple comparisons.
 /// </summary>
-public enum MultipleTesti­ngCorrectionMethod
+public enum MultipleTestingCorrectionMethod
 {
     /// <summary>No correction applied.</summary>
     None = 0,

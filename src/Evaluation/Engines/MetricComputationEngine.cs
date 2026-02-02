@@ -159,7 +159,7 @@ public class MetricComputationEngine<T>
         bool computeCI = _options.ComputeConfidenceIntervals ?? true;
         double confLevel = _options.ConfidenceLevel ?? 0.95;
         int bootstrapSamples = _options.BootstrapSamples ?? 1000;
-        var ciMethod = _options.ConfidenceIntervalMethod ?? ConfidenceIntervalMethod.BCaBootstrap;
+        var ciMethod = _options.ConfidenceIntervalMethod ?? ConfidenceIntervalMethod.PercentileBootstrap;
 
         // Compute label-based metrics
         foreach (var kvp in _classificationMetrics)
@@ -232,7 +232,7 @@ public class MetricComputationEngine<T>
         bool computeCI = _options.ComputeConfidenceIntervals ?? true;
         double confLevel = _options.ConfidenceLevel ?? 0.95;
         int bootstrapSamples = _options.BootstrapSamples ?? 1000;
-        var ciMethod = _options.ConfidenceIntervalMethod ?? ConfidenceIntervalMethod.BCaBootstrap;
+        var ciMethod = _options.ConfidenceIntervalMethod ?? ConfidenceIntervalMethod.PercentileBootstrap;
 
         foreach (var kvp in _regressionMetrics)
         {
@@ -276,7 +276,7 @@ public class MetricComputationEngine<T>
         bool computeCI = _options.ComputeConfidenceIntervals ?? true;
         double confLevel = _options.ConfidenceLevel ?? 0.95;
         int bootstrapSamples = _options.BootstrapSamples ?? 1000;
-        var ciMethod = _options.ConfidenceIntervalMethod ?? ConfidenceIntervalMethod.BCaBootstrap;
+        var ciMethod = _options.ConfidenceIntervalMethod ?? ConfidenceIntervalMethod.PercentileBootstrap;
 
         if (_classificationMetrics.TryGetValue(metricName, out var classMetric))
         {

@@ -48,14 +48,14 @@ public class NemenyiPostHocTest<T>
         int k = samples.Length; // Number of algorithms
         int n = samples[0].Length; // Number of datasets
 
-        if (k < 2 || k > 11)
-            throw new ArgumentException("Nemenyi test supports 2-11 algorithms.");
+        if (k < 2 || k > 10)
+            throw new ArgumentException("Nemenyi test supports 2-10 algorithms (critical values not available for k > 10).");
 
         // Get alpha index
         int alphaIndex = alpha <= 0.01 ? 2 : (alpha <= 0.05 ? 1 : 0);
 
-        // Get q value
-        double q = QValues[Math.Min(k - 2, 8), alphaIndex];
+        // Get q value (k-2 gives index 0 for k=2, index 8 for k=10)
+        double q = QValues[k - 2, alphaIndex];
 
         // Calculate critical difference
         double cd = q * Math.Sqrt(k * (k + 1) / (6.0 * n));

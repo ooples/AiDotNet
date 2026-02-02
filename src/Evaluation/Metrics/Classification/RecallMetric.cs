@@ -90,8 +90,8 @@ public class RecallMetric<T> : IClassificationMetric<T>
             return ComputeBinaryRecall(predictions, actuals, _positiveLabel);
         }
 
-        // Get unique classes
-        var classes = GetUniqueClasses(actuals);
+        // Get unique classes from both predictions and actuals
+        var classes = GetUniqueClasses(predictions, actuals);
 
         if (_averaging == AveragingMethod.Micro)
         {
@@ -166,12 +166,16 @@ public class RecallMetric<T> : IClassificationMetric<T>
         return totalActualPositives > 0 ? NumOps.FromDouble((double)totalTruePositives / totalActualPositives) : NumOps.Zero;
     }
 
-    private static HashSet<double> GetUniqueClasses(ReadOnlySpan<T> values)
+    private static HashSet<double> GetUniqueClasses(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         var classes = new HashSet<double>();
-        for (int i = 0; i < values.Length; i++)
+        for (int i = 0; i < predictions.Length; i++)
         {
-            classes.Add(NumOps.ToDouble(values[i]));
+            classes.Add(NumOps.ToDouble(predictions[i]));
+        }
+        for (int i = 0; i < actuals.Length; i++)
+        {
+            classes.Add(NumOps.ToDouble(actuals[i]));
         }
         return classes;
     }
@@ -193,11 +197,16 @@ public class RecallMetric<T> : IClassificationMetric<T>
     public MetricWithCI<T> ComputeWithCI(
         ReadOnlySpan<T> predictions,
         ReadOnlySpan<T> actuals,
-        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.BCaBootstrap,
+        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95,
         int bootstrapSamples = 1000,
         int? randomSeed = null)
     {
+        if (bootstrapSamples < 2)
+            throw new ArgumentOutOfRangeException(nameof(bootstrapSamples), "Bootstrap samples must be at least 2.");
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must be between 0 and 1 (exclusive).");
+
         var value = Compute(predictions, actuals);
         var (lower, upper) = ComputeBootstrapCI(predictions, actuals, bootstrapSamples, confidenceLevel, randomSeed);
 

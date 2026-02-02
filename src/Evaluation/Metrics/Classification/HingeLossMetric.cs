@@ -17,6 +17,9 @@ namespace AiDotNet.Evaluation.Metrics.Classification;
 /// <item>Loss increases when predictions are wrong or uncertain</item>
 /// </list>
 /// Used in SVM training and for evaluating margin-based classifiers.</para>
+/// <para><b>Important:</b> Predictions should be raw decision function values (continuous,
+/// typically unbounded) from SVM, not class labels. Actuals should be class labels (0/1 or -1/+1).
+/// If predictions are already binary class labels, use 0-1 loss instead.</para>
 /// </remarks>
 public class HingeLossMetric<T> : IClassificationMetric<T>
 {
@@ -40,14 +43,24 @@ public class HingeLossMetric<T> : IClassificationMetric<T>
         double totalLoss = 0;
         for (int i = 0; i < predictions.Length; i++)
         {
-            // Convert to {-1, +1} representation
+            // Predictions should be raw decision function values (continuous scores)
+            // Actuals are class labels (0/1 or -1/+1)
             double pred = NumOps.ToDouble(predictions[i]);
             double actual = NumOps.ToDouble(actuals[i]);
 
             // If actual is 0/1 encoded, convert to -1/+1
             double y = actual <= 0.5 ? -1.0 : 1.0;
-            // Predictions should ideally be in range [-1, 1] or decision function output
-            double yHat = pred <= 0.5 ? -1.0 : 1.0;
+
+            // Use raw prediction score directly - this is the proper hinge loss
+            // The prediction should be a decision function output (e.g., signed distance from hyperplane)
+            // If predictions are already in [-1, 1], they work directly
+            // If predictions are in [0, 1] probability space, convert to [-1, 1]
+            double yHat = pred;
+            if (pred >= 0.0 && pred <= 1.0)
+            {
+                // Likely probability output - convert to signed margin space
+                yHat = 2.0 * pred - 1.0;
+            }
 
             // Hinge loss: max(0, 1 - y * yHat)
             totalLoss += Math.Max(0.0, 1.0 - y * yHat);
@@ -57,9 +70,14 @@ public class HingeLossMetric<T> : IClassificationMetric<T>
     }
 
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
-        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.BCaBootstrap,
+        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)
     {
+        if (bootstrapSamples < 2)
+            throw new ArgumentOutOfRangeException(nameof(bootstrapSamples), "Bootstrap samples must be at least 2.");
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must be between 0 and 1 (exclusive).");
+
         var value = Compute(predictions, actuals);
         var (lower, upper) = BootstrapCI(predictions, actuals, bootstrapSamples, confidenceLevel, randomSeed);
         return new MetricWithCI<T>(value, lower, upper, confidenceLevel, ciMethod, Name, Direction);

@@ -42,6 +42,8 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         int k = groups.Length;
         if (k < 2)
             throw new ArgumentException("Need at least 2 groups for Kruskal-Wallis test.");
+        if (groups.Any(g => g.Length == 0))
+            throw new ArgumentException("Each group must contain at least one observation.", nameof(groups));
 
         var groupSizes = groups.Select(g => g.Length).ToArray();
         int N = groupSizes.Sum();

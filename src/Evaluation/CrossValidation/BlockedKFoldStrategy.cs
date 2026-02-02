@@ -57,6 +57,11 @@ public class BlockedKFoldStrategy<T> : ICrossValidationStrategy<T>
 
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
+        if (dataSize <= 0)
+            throw new ArgumentException("Data size must be positive.", nameof(dataSize));
+        if (dataSize < _nFolds)
+            throw new ArgumentException($"Cannot have {_nFolds} folds with only {dataSize} samples.", nameof(dataSize));
+
         var indices = Enumerable.Range(0, dataSize).ToArray();
 
         if (_shuffle)

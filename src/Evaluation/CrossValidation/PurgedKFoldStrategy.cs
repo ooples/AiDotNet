@@ -53,8 +53,14 @@ public class PurgedKFoldStrategy<T> : ICrossValidationStrategy<T>
 
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
+        if (dataSize <= 0)
+            throw new ArgumentException("Data size must be positive.", nameof(dataSize));
         if (dataSize < _k)
             throw new ArgumentException($"Cannot have {_k} folds with only {dataSize} samples.", nameof(dataSize));
+
+        // Validate timeIndices length if provided
+        if (_timeIndices != null && _timeIndices.Length != dataSize)
+            throw new ArgumentException($"Time indices length ({_timeIndices.Length}) must match data size ({dataSize}).", nameof(dataSize));
 
         // Get time-ordered indices
         int[] timeOrder;
@@ -97,8 +103,9 @@ public class PurgedKFoldStrategy<T> : ICrossValidationStrategy<T>
             for (int i = purgeEnd; i < dataSize; i++)
                 trainIndices.Add(timeOrder[i]);
 
-            if (trainIndices.Count > 0)
-                yield return (trainIndices.ToArray(), testIndices);
+            // Always yield the fold - if training set is empty, caller should handle appropriately
+            // rather than silently skipping folds (which could mislead about total folds)
+            yield return (trainIndices.ToArray(), testIndices);
 
             startIdx = endIdx;
         }

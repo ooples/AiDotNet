@@ -50,6 +50,7 @@ public class RobustnessEngine<T>
     /// <param name="model">The trained model to test.</param>
     /// <param name="metricName">Primary metric to track.</param>
     /// <param name="isClassification">Whether this is classification.</param>
+    /// <param name="higherIsBetter">Whether higher metric values are better. Default true for accuracy-like metrics.</param>
     /// <returns>Robustness analysis results.</returns>
     public RobustnessResult<T> Analyze<TModel>(
         T[,] features,
@@ -57,8 +58,15 @@ public class RobustnessEngine<T>
         Func<TModel, T[,], T[]> predictFunc,
         TModel model,
         string metricName = "Accuracy",
-        bool isClassification = true)
+        bool isClassification = true,
+        bool higherIsBetter = true)
     {
+        if (features == null)
+            throw new ArgumentNullException(nameof(features));
+        if (targets == null)
+            throw new ArgumentNullException(nameof(targets));
+        if (features.GetLength(0) != targets.Length)
+            throw new ArgumentException("Features and targets must have same number of samples.");
         int n = features.GetLength(0);
         int numFeatures = features.GetLength(1);
 
@@ -94,7 +102,10 @@ public class RobustnessEngine<T>
             double score = noisyMetric != null ? NumOps.ToDouble(noisyMetric.Value) : 0;
 
             result.NoiseRobustness[noiseLevel] = score;
-            result.NoiseDegradation[noiseLevel] = result.BaselineScore - score;
+            // Degradation calculation respects metric direction
+            result.NoiseDegradation[noiseLevel] = higherIsBetter
+                ? result.BaselineScore - score  // Higher is better: degradation when score decreases
+                : score - result.BaselineScore; // Lower is better: degradation when score increases
         }
 
         // Test feature dropout (missing data)
@@ -114,7 +125,7 @@ public class RobustnessEngine<T>
 
         // Per-feature importance via permutation
         result.FeatureImportance = ComputePermutationImportance(
-            features, targets, predictFunc, model, metricName, isClassification, result.BaselineScore, random);
+            features, targets, predictFunc, model, metricName, isClassification, result.BaselineScore, random, higherIsBetter);
 
         // Compute overall robustness score
         result.OverallRobustnessScore = ComputeOverallRobustness(result);
@@ -189,7 +200,8 @@ public class RobustnessEngine<T>
         string metricName,
         bool isClassification,
         double baselineScore,
-        Random random)
+        Random random,
+        bool higherIsBetter)
     {
         int numFeatures = features.GetLength(1);
         int n = features.GetLength(0);
@@ -213,7 +225,10 @@ public class RobustnessEngine<T>
             var permutedMetric = permutedMetrics[metricName];
             double score = permutedMetric != null ? NumOps.ToDouble(permutedMetric.Value) : 0;
 
-            importance[featureIdx] = baselineScore - score;
+            // Importance = how much the metric degrades when this feature is shuffled
+            // For higher-is-better metrics: importance = baseline - permuted (positive = important)
+            // For lower-is-better metrics: importance = permuted - baseline (positive = important)
+            importance[featureIdx] = higherIsBetter ? baselineScore - score : score - baselineScore;
         }
 
         return importance;

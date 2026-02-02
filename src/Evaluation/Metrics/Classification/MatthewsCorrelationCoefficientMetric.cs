@@ -91,11 +91,12 @@ public class MatthewsCorrelationCoefficientMetric<T> : IClassificationMetric<T>
             return NumOps.Zero;
         }
 
-        // Get unique classes
+        // Get unique classes from both predictions and actuals
         var classes = new HashSet<double>();
         for (int i = 0; i < actuals.Length; i++)
         {
             classes.Add(NumOps.ToDouble(actuals[i]));
+            classes.Add(NumOps.ToDouble(predictions[i]));
         }
 
         if (classes.Count == 2)
@@ -145,20 +146,22 @@ public class MatthewsCorrelationCoefficientMetric<T> : IClassificationMetric<T>
 
     private T ComputeMultiClassMCC(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals, HashSet<double> classes)
     {
-        // Build confusion matrix
+        // Build confusion matrix with class index lookup for efficiency
         var classList = classes.ToList();
         int k = classList.Count;
+        var classIndex = new Dictionary<double, int>(k);
+        for (int i = 0; i < k; i++)
+        {
+            classIndex[classList[i]] = i;
+        }
+
         var confusionMatrix = new int[k, k];
 
         for (int i = 0; i < predictions.Length; i++)
         {
-            int predIdx = classList.IndexOf(NumOps.ToDouble(predictions[i]));
-            int actualIdx = classList.IndexOf(NumOps.ToDouble(actuals[i]));
-
-            if (predIdx >= 0 && actualIdx >= 0)
-            {
-                confusionMatrix[actualIdx, predIdx]++;
-            }
+            int predIdx = classIndex[NumOps.ToDouble(predictions[i])];
+            int actualIdx = classIndex[NumOps.ToDouble(actuals[i])];
+            confusionMatrix[actualIdx, predIdx]++;
         }
 
         // Compute multi-class MCC using Gorodkin's formula
@@ -211,11 +214,16 @@ public class MatthewsCorrelationCoefficientMetric<T> : IClassificationMetric<T>
     public MetricWithCI<T> ComputeWithCI(
         ReadOnlySpan<T> predictions,
         ReadOnlySpan<T> actuals,
-        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.BCaBootstrap,
+        ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95,
         int bootstrapSamples = 1000,
         int? randomSeed = null)
     {
+        if (bootstrapSamples < 2)
+            throw new ArgumentOutOfRangeException(nameof(bootstrapSamples), "Bootstrap samples must be at least 2.");
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must be between 0 and 1 (exclusive).");
+
         var value = Compute(predictions, actuals);
         var (lower, upper) = ComputeBootstrapCI(predictions, actuals, bootstrapSamples, confidenceLevel, randomSeed);
 
