@@ -90,6 +90,12 @@ public class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplanation<T>>
             throw new ArgumentException("Prototypes must have at least one example.", nameof(prototypes));
         if (numNeighbors < 1)
             throw new ArgumentException("Number of neighbors must be at least 1.", nameof(numNeighbors));
+        if (prototypeLabels != null && prototypeLabels.Length != prototypes.Rows)
+            throw new ArgumentException($"prototypeLabels length ({prototypeLabels.Length}) must match prototypes.Rows ({prototypes.Rows}).", nameof(prototypeLabels));
+        if (featureNames != null && featureNames.Length != prototypes.Columns)
+            throw new ArgumentException($"featureNames length ({featureNames.Length}) must match prototypes.Columns ({prototypes.Columns}).", nameof(featureNames));
+        if (prototypeNames != null && prototypeNames.Length != prototypes.Rows)
+            throw new ArgumentException($"prototypeNames length ({prototypeNames.Length}) must match prototypes.Rows ({prototypes.Rows}).", nameof(prototypeNames));
 
         _prototypeLabels = prototypeLabels;
         _numNeighbors = numNeighbors;
@@ -105,6 +111,9 @@ public class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplanation<T>>
     /// <returns>Prototype-based explanation.</returns>
     public PrototypeExplanation<T> Explain(Vector<T> instance)
     {
+        if (instance.Length != _prototypes.Columns)
+            throw new ArgumentException($"Instance has {instance.Length} features but expected {_prototypes.Columns}.", nameof(instance));
+
         int numPrototypes = _prototypes.Rows;
         int numFeatures = instance.Length;
 

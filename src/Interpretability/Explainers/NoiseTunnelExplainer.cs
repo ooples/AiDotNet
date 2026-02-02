@@ -316,14 +316,24 @@ public class NoiseTunnelExplainer<T, TExplanation>
             }
             mean /= n;
 
-            // Compute variance
+            // Compute variance with Bessel's correction
             double variance = 0;
             foreach (var attr in attributions)
             {
                 double diff = NumOps.ToDouble(attr[i]) - mean;
                 variance += diff * diff;
             }
-            variance /= (n - 1); // Bessel's correction
+
+            // Apply Bessel's correction only when n > 1 to avoid division by zero
+            if (n > 1)
+            {
+                variance /= (n - 1);
+            }
+            else
+            {
+                // With only one sample, variance is undefined; use 0 as a fallback
+                variance = 0;
+            }
 
             result[i] = NumOps.FromDouble(Math.Sqrt(variance));
         }

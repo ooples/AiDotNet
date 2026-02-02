@@ -77,6 +77,8 @@ public class PartialDependenceExplainer<T> : IGlobalExplainer<T, PartialDependen
             throw new ArgumentException("Background data must have at least one row.", nameof(backgroundData));
         if (gridResolution < 2)
             throw new ArgumentException("Grid resolution must be at least 2.", nameof(gridResolution));
+        if (featureNames != null && featureNames.Length != backgroundData.Columns)
+            throw new ArgumentException($"featureNames length ({featureNames.Length}) must match backgroundData.Columns ({backgroundData.Columns}).", nameof(featureNames));
 
         _gridResolution = gridResolution;
         _computeIce = computeIce;
@@ -190,6 +192,10 @@ public class PartialDependenceExplainer<T> : IGlobalExplainer<T, PartialDependen
 
             // Get predictions
             var predictions = _predictFunction(modifiedData);
+
+            // Validate prediction vector length matches number of samples
+            if (predictions.Length != n)
+                throw new InvalidOperationException($"Prediction function returned {predictions.Length} values but expected {n} (one per sample).");
 
             // Store ICE values and compute mean
             double sum = 0;

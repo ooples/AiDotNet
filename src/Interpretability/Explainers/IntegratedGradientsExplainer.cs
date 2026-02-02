@@ -121,6 +121,10 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
             throw new ArgumentException("Number of features must be at least 1.", nameof(numFeatures));
         if (numSteps < 2)
             throw new ArgumentException("Number of steps must be at least 2.", nameof(numSteps));
+        if (baseline != null && baseline.Length != numFeatures)
+            throw new ArgumentException($"Baseline has {baseline.Length} features but expected {numFeatures}.", nameof(baseline));
+        if (featureNames != null && featureNames.Length != numFeatures)
+            throw new ArgumentException($"Feature names length ({featureNames.Length}) does not match feature count ({numFeatures}).", nameof(featureNames));
 
         _numFeatures = numFeatures;
         _numSteps = numSteps;

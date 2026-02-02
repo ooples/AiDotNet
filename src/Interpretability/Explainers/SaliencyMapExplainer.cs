@@ -18,7 +18,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// 1. <b>Vanilla Gradient</b>: The raw gradient of output w.r.t. input
 /// 2. <b>Gradient × Input</b>: Gradient multiplied by input (more interpretable)
 /// 3. <b>SmoothGrad</b>: Average gradient over noisy versions (reduces noise)
-/// 4. <b>Guided Backpropagation</b>: Only propagates positive gradients
+/// 4. <b>SmoothGrad²</b>: Squared gradients for sharper feature focus
 ///
 /// How to interpret:
 /// - High absolute saliency = changing this feature would change the output a lot
@@ -128,6 +128,9 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
     /// <returns>Saliency map explanation.</returns>
     public SaliencyMapExplanation<T> Explain(Vector<T> instance, int outputIndex)
     {
+        if (instance.Length != _numFeatures)
+            throw new ArgumentException($"Instance has {instance.Length} features but expected {_numFeatures}.", nameof(instance));
+
         int numFeatures = instance.Length;
 
         // Get prediction and determine target output

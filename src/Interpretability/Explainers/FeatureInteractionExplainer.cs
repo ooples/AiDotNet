@@ -129,7 +129,10 @@ public class FeatureInteractionExplainer<T> : IGlobalExplainer<T, FeatureInterac
         var (grid2, pd2) = _pdCache[feature2Index];
         var pd2D = _pd2DCache[(minIdx, maxIdx)];
 
-        // If feature indices are reversed from canonical order, swap pd1/pd2 to match 2D PD indexing
+        // The 2D PD cache uses canonical ordering (minIdx, maxIdx), where the first dimension
+        // corresponds to the smaller feature index. If feature1Index > feature2Index, we need
+        // to swap pd1 and pd2 so that pd1[i] aligns with the first dimension of pd2D[i, j]
+        // and pd2[j] aligns with the second dimension.
         if (feature1Index > feature2Index)
         {
             (pd1, pd2) = (pd2, pd1);

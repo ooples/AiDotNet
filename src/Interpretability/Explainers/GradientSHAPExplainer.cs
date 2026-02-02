@@ -157,6 +157,8 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
     {
         if (outputIndex < 0)
             throw new ArgumentOutOfRangeException(nameof(outputIndex), "Output index cannot be negative.");
+        if (instance.Length != _backgroundData.Columns)
+            throw new ArgumentException($"Instance length ({instance.Length}) must match background data columns ({_backgroundData.Columns}).", nameof(instance));
 
         int numFeatures = instance.Length;
         int numBackground = _backgroundData.Rows;

@@ -102,6 +102,9 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
     /// <returns>Contrastive explanation comparing fact to most likely alternative.</returns>
     public ContrastiveExplanation<T> Explain(Vector<T> instance)
     {
+        if (instance.Length != _numFeatures)
+            throw new ArgumentException($"Instance has {instance.Length} features but expected {_numFeatures}.", nameof(instance));
+
         // Get prediction
         var instanceMatrix = CreateSingleRowMatrix(instance);
         var predictions = _predictFunction(instanceMatrix);
@@ -145,11 +148,23 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
     /// <returns>Contrastive explanation.</returns>
     public ContrastiveExplanation<T> Explain(Vector<T> instance, int factClass, int foilClass)
     {
+        if (instance.Length != _numFeatures)
+            throw new ArgumentException($"Instance has {instance.Length} features but expected {_numFeatures}.", nameof(instance));
+
         var instanceMatrix = CreateSingleRowMatrix(instance);
         var predictions = _predictFunction(instanceMatrix);
 
-        double factScore = factClass < predictions.Length ? NumOps.ToDouble(predictions[factClass]) : 0;
-        double foilScore = foilClass < predictions.Length ? NumOps.ToDouble(predictions[foilClass]) : 0;
+        if (predictions.Length < 2)
+            throw new InvalidOperationException("Contrastive explanations require at least 2 classes.");
+        if (factClass < 0 || factClass >= predictions.Length)
+            throw new ArgumentOutOfRangeException(nameof(factClass), $"factClass ({factClass}) must be between 0 and {predictions.Length - 1}.");
+        if (foilClass < 0 || foilClass >= predictions.Length)
+            throw new ArgumentOutOfRangeException(nameof(foilClass), $"foilClass ({foilClass}) must be between 0 and {predictions.Length - 1}.");
+        if (factClass == foilClass)
+            throw new ArgumentException("factClass and foilClass must be different.", nameof(foilClass));
+
+        double factScore = NumOps.ToDouble(predictions[factClass]);
+        double foilScore = NumOps.ToDouble(predictions[foilClass]);
 
         // Find pertinent positives (features that support the fact)
         var pertinentPositives = FindPertinentPositives(instance, factClass, foilClass);

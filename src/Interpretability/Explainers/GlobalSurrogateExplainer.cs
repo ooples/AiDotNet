@@ -333,8 +333,11 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
             }
             else
             {
-                // Near-singular matrix: set to NaN to indicate unreliable result
-                x[i] = double.NaN;
+                // Near-singular matrix: throw exception to prevent silent failures
+                throw new InvalidOperationException(
+                    $"Near-singular matrix detected at index {i}. " +
+                    "The surrogate model coefficients cannot be reliably computed. " +
+                    "This may indicate multicollinearity in the features or insufficient data variation.");
             }
         }
 
