@@ -21,6 +21,7 @@ public class InterpretabilityIntegrationTests
     {
         var values = (InterpretationMethod[])Enum.GetValues(typeof(InterpretationMethod));
 
+        // Original methods
         Assert.Contains(InterpretationMethod.SHAP, values);
         Assert.Contains(InterpretationMethod.LIME, values);
         Assert.Contains(InterpretationMethod.PartialDependence, values);
@@ -28,13 +29,30 @@ public class InterpretabilityIntegrationTests
         Assert.Contains(InterpretationMethod.Anchor, values);
         Assert.Contains(InterpretationMethod.FeatureImportance, values);
         Assert.Contains(InterpretationMethod.FeatureInteraction, values);
+        Assert.Contains(InterpretationMethod.IntegratedGradients, values);
+        Assert.Contains(InterpretationMethod.DeepLIFT, values);
+        Assert.Contains(InterpretationMethod.GradCAM, values);
+        Assert.Contains(InterpretationMethod.TreeSHAP, values);
+
+        // New methods added
+        Assert.Contains(InterpretationMethod.DeepSHAP, values);
+        Assert.Contains(InterpretationMethod.GradientSHAP, values);
+        Assert.Contains(InterpretationMethod.TCAV, values);
+        Assert.Contains(InterpretationMethod.InfluenceFunctions, values);
+        Assert.Contains(InterpretationMethod.Occlusion, values);
+        Assert.Contains(InterpretationMethod.FeatureAblation, values);
+        Assert.Contains(InterpretationMethod.DiCE, values);
+        Assert.Contains(InterpretationMethod.GuidedBackprop, values);
+        Assert.Contains(InterpretationMethod.LayerGradCAM, values);
+        Assert.Contains(InterpretationMethod.GuidedGradCAM, values);
+        Assert.Contains(InterpretationMethod.NoiseTunnel, values);
     }
 
     [Fact]
     public void InterpretationMethod_HasExpectedCount()
     {
         var values = (InterpretationMethod[])Enum.GetValues(typeof(InterpretationMethod));
-        Assert.Equal(7, values.Length);
+        Assert.Equal(22, values.Length);
     }
 
     [Theory]
@@ -45,6 +63,21 @@ public class InterpretabilityIntegrationTests
     [InlineData(InterpretationMethod.Anchor)]
     [InlineData(InterpretationMethod.FeatureImportance)]
     [InlineData(InterpretationMethod.FeatureInteraction)]
+    [InlineData(InterpretationMethod.IntegratedGradients)]
+    [InlineData(InterpretationMethod.DeepLIFT)]
+    [InlineData(InterpretationMethod.GradCAM)]
+    [InlineData(InterpretationMethod.TreeSHAP)]
+    [InlineData(InterpretationMethod.DeepSHAP)]
+    [InlineData(InterpretationMethod.GradientSHAP)]
+    [InlineData(InterpretationMethod.TCAV)]
+    [InlineData(InterpretationMethod.InfluenceFunctions)]
+    [InlineData(InterpretationMethod.Occlusion)]
+    [InlineData(InterpretationMethod.FeatureAblation)]
+    [InlineData(InterpretationMethod.DiCE)]
+    [InlineData(InterpretationMethod.GuidedBackprop)]
+    [InlineData(InterpretationMethod.LayerGradCAM)]
+    [InlineData(InterpretationMethod.GuidedGradCAM)]
+    [InlineData(InterpretationMethod.NoiseTunnel)]
     public void InterpretationMethod_IsDefined(InterpretationMethod method)
     {
         Assert.True(Enum.IsDefined(typeof(InterpretationMethod), method));
@@ -58,6 +91,21 @@ public class InterpretabilityIntegrationTests
     [InlineData(InterpretationMethod.Anchor, "Anchor")]
     [InlineData(InterpretationMethod.FeatureImportance, "FeatureImportance")]
     [InlineData(InterpretationMethod.FeatureInteraction, "FeatureInteraction")]
+    [InlineData(InterpretationMethod.IntegratedGradients, "IntegratedGradients")]
+    [InlineData(InterpretationMethod.DeepLIFT, "DeepLIFT")]
+    [InlineData(InterpretationMethod.GradCAM, "GradCAM")]
+    [InlineData(InterpretationMethod.TreeSHAP, "TreeSHAP")]
+    [InlineData(InterpretationMethod.DeepSHAP, "DeepSHAP")]
+    [InlineData(InterpretationMethod.GradientSHAP, "GradientSHAP")]
+    [InlineData(InterpretationMethod.TCAV, "TCAV")]
+    [InlineData(InterpretationMethod.InfluenceFunctions, "InfluenceFunctions")]
+    [InlineData(InterpretationMethod.Occlusion, "Occlusion")]
+    [InlineData(InterpretationMethod.FeatureAblation, "FeatureAblation")]
+    [InlineData(InterpretationMethod.DiCE, "DiCE")]
+    [InlineData(InterpretationMethod.GuidedBackprop, "GuidedBackprop")]
+    [InlineData(InterpretationMethod.LayerGradCAM, "LayerGradCAM")]
+    [InlineData(InterpretationMethod.GuidedGradCAM, "GuidedGradCAM")]
+    [InlineData(InterpretationMethod.NoiseTunnel, "NoiseTunnel")]
     public void InterpretationMethod_ToString_ReturnsExpectedString(InterpretationMethod method, string expected)
     {
         Assert.Equal(expected, method.ToString());
@@ -70,11 +118,19 @@ public class InterpretabilityIntegrationTests
         {
             InterpretationMethod.SHAP,
             InterpretationMethod.LIME,
-            InterpretationMethod.FeatureImportance
+            InterpretationMethod.FeatureImportance,
+            InterpretationMethod.IntegratedGradients,
+            InterpretationMethod.DeepLIFT,
+            InterpretationMethod.GradCAM,
+            InterpretationMethod.TreeSHAP
         };
 
         Assert.True(enabledMethods.Contains(InterpretationMethod.SHAP));
         Assert.True(enabledMethods.Contains(InterpretationMethod.LIME));
+        Assert.True(enabledMethods.Contains(InterpretationMethod.IntegratedGradients));
+        Assert.True(enabledMethods.Contains(InterpretationMethod.DeepLIFT));
+        Assert.True(enabledMethods.Contains(InterpretationMethod.GradCAM));
+        Assert.True(enabledMethods.Contains(InterpretationMethod.TreeSHAP));
         Assert.False(enabledMethods.Contains(InterpretationMethod.Anchor));
     }
 
@@ -1261,7 +1317,7 @@ public class InterpretabilityIntegrationTests
     }
 
     [Fact]
-    public async Task InterpretableModelHelper_ValidateFairnessAsync_ReturnsZeroMetrics()
+    public async Task InterpretableModelHelper_ValidateFairnessAsync_ReturnsExpectedDefaults()
     {
         var fairnessMetrics = new List<FairnessMetric>
         {
@@ -1269,13 +1325,16 @@ public class InterpretabilityIntegrationTests
             FairnessMetric.EqualOpportunity
         };
 
+#pragma warning disable CS0618 // Using obsolete method for legacy compatibility testing
         var result = await InterpretableModelHelper.ValidateFairnessAsync<double>(fairnessMetrics);
+#pragma warning restore CS0618
 
         Assert.Equal(0.0, result.DemographicParity);
         Assert.Equal(0.0, result.EqualOpportunity);
         Assert.Equal(0.0, result.EqualizedOdds);
         Assert.Equal(0.0, result.PredictiveParity);
-        Assert.Equal(0.0, result.DisparateImpact);
+        // DisparateImpact defaults to 1.0 (perfect fairness ratio) rather than 0.0
+        Assert.Equal(1.0, result.DisparateImpact);
         Assert.Equal(0.0, result.StatisticalParityDifference);
     }
 

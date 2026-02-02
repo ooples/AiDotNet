@@ -146,6 +146,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private DataPreparationPipeline<T>? _dataPreparationPipeline;
     private IBiasDetector<T>? _biasDetector;
     private IFairnessEvaluator<T>? _fairnessEvaluator;
+    private InterpretabilityOptions? _interpretabilityOptions;
     private AdversarialRobustnessConfiguration<T, TInput, TOutput>? _adversarialRobustnessConfiguration;
     private FineTuningConfiguration<T, TInput, TOutput>? _fineTuningConfiguration;
     private ILoRAConfiguration<T>? _loraConfiguration;
@@ -1142,6 +1143,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             DeploymentConfiguration = deploymentConfig,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
+            InterpretabilityOptions = _interpretabilityOptions,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -1319,6 +1321,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             DeploymentConfiguration = deploymentConfig,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
+            InterpretabilityOptions = _interpretabilityOptions,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -2289,6 +2292,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
+            InterpretabilityOptions = _interpretabilityOptions,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -2449,6 +2453,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             LoRAConfiguration = _loraConfiguration,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
+            InterpretabilityOptions = _interpretabilityOptions,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -2766,6 +2771,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
+            InterpretabilityOptions = _interpretabilityOptions,
             RagRetriever = _ragRetriever,
             RagReranker = _ragReranker,
             RagGenerator = _ragGenerator,
@@ -2939,6 +2945,50 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator)
     {
         _fairnessEvaluator = evaluator;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures model interpretability and explainability features.
+    /// </summary>
+    /// <param name="options">The interpretability configuration options. When null, uses default settings.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This configures model-agnostic explanation methods that help understand how the model makes predictions:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><term>SHAP</term><description>Kernel SHAP for local and global feature attribution using Shapley values</description></item>
+    /// <item><term>LIME</term><description>Local Interpretable Model-agnostic Explanations for individual predictions</description></item>
+    /// <item><term>Permutation Importance</term><description>Global feature importance by measuring score drop when features are shuffled</description></item>
+    /// <item><term>Global Surrogate</term><description>Train a simple model to approximate the complex model's behavior</description></item>
+    /// </list>
+    /// <para><b>For Beginners:</b> These methods help you understand why your model makes certain predictions.
+    ///
+    /// After training, you can ask questions like:
+    /// - "Why did the model predict this person would default on their loan?"
+    /// - "Which features are most important for the model overall?"
+    /// - "Can I explain the model's behavior with simple rules?"
+    ///
+    /// Example:
+    /// <code>
+    /// builder.ConfigureInterpretability(new InterpretabilityOptions
+    /// {
+    ///     EnableSHAP = true,
+    ///     EnablePermutationImportance = true,
+    ///     FeatureNames = new[] { "Age", "Income", "CreditScore" }
+    /// });
+    ///
+    /// // After training
+    /// var result = builder.Build();
+    /// var shapExplanation = result.ExplainWithSHAP(inputInstance, backgroundData);
+    /// Console.WriteLine($"Age contributed: {shapExplanation.ShapValues[0]}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureInterpretability(InterpretabilityOptions? options = null)
+    {
+        _interpretabilityOptions = options ?? new InterpretabilityOptions();
         return this;
     }
 

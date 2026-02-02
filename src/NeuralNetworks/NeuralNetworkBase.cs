@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
+using AiDotNet.Interpretability.Explainers;
 using AiDotNet.MixedPrecision;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
@@ -3165,6 +3166,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     #region IInterpretableModel Implementation
 
+    // Suppress CS0618 (obsolete) warnings for legacy interface implementations that call deprecated helper overloads.
+    // The interface methods maintain backwards compatibility while the helper exposes new overloads with required background data.
+#pragma warning disable CS0618
+
     /// <summary>
     /// Set of interpretation methods that are enabled for this neural network model.
     /// Controls which interpretability features (SHAP, LIME, etc.) are available.
@@ -3258,17 +3263,41 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <summary>
     /// Gets feature interaction effects between two features.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Feature interactions occur when the effect of one feature depends on the value
+    /// of another feature. For example, in a house price model, the effect of "number of bathrooms" might
+    /// depend on "house size" - adding a bathroom to a large house has a different effect than adding one
+    /// to a small house.
+    /// </para>
+    /// <para>
+    /// This method computes the H-statistic, which measures interaction strength from 0 (no interaction)
+    /// to 1 (complete dependence).
+    /// </para>
+    /// </remarks>
     public virtual async Task<T> GetFeatureInteractionAsync(int feature1Index, int feature2Index)
     {
-        return await InterpretableModelHelper.GetFeatureInteractionAsync<T>(_enabledMethods, feature1Index, feature2Index);
+        return await InterpretableModelHelper.GetFeatureInteractionAsync(this, _enabledMethods, feature1Index, feature2Index);
     }
 
     /// <summary>
     /// Validates fairness metrics for the given inputs.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Fairness metrics help identify if your model treats different groups of people
+    /// fairly. For example, if you have a loan approval model, you want to ensure it doesn't discriminate
+    /// based on gender, race, or other sensitive attributes.
+    /// </para>
+    /// <para>
+    /// Key metrics computed include:
+    /// - Demographic Parity: Are positive predictions equally distributed across groups?
+    /// - Disparate Impact: Ratio of positive prediction rates between groups (should be close to 1)
+    /// </para>
+    /// </remarks>
     public virtual async Task<FairnessMetrics<T>> ValidateFairnessAsync(Tensor<T> inputs, int sensitiveFeatureIndex)
     {
-        return await InterpretableModelHelper.ValidateFairnessAsync<T>(_fairnessMetrics);
+        return await InterpretableModelHelper.ValidateFairnessAsync(this, inputs, sensitiveFeatureIndex, _fairnessMetrics);
     }
 
     /// <summary>
@@ -3277,6 +3306,81 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     public virtual async Task<AnchorExplanation<T>> GetAnchorExplanationAsync(Tensor<T> input, T threshold)
     {
         return await InterpretableModelHelper.GetAnchorExplanationAsync(this, _enabledMethods, input, threshold);
+    }
+
+    /// <summary>
+    /// Gets Integrated Gradients attributions for a neural network prediction.
+    /// </summary>
+    /// <param name="input">The input tensor to explain.</param>
+    /// <param name="baseline">The baseline input (defaults to zeros if null).</param>
+    /// <param name="numSteps">Number of integration steps (default: 50).</param>
+    /// <returns>Integrated Gradients explanation with feature attributions.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Integrated Gradients is a theoretically-grounded method
+    /// that satisfies completeness (attributions sum to prediction - baseline_prediction)
+    /// and sensitivity (important features get non-zero attributions).
+    /// </para>
+    /// </remarks>
+    public virtual async Task<IntegratedGradientsExplanation<T>> GetIntegratedGradientsAsync(
+        Tensor<T> input,
+        Tensor<T>? baseline = null,
+        int numSteps = 50)
+    {
+        // Use backprop-based version for efficient gradient computation
+        return await InterpretableModelHelper.GetIntegratedGradientsWithBackpropAsync(this, _enabledMethods, input, baseline, numSteps);
+    }
+
+    /// <summary>
+    /// Gets DeepLIFT attributions for a neural network prediction.
+    /// </summary>
+    /// <param name="input">The input tensor to explain.</param>
+    /// <param name="baseline">The baseline input (defaults to zeros if null).</param>
+    /// <param name="useRevealCancel">Use RevealCancel rule instead of Rescale.</param>
+    /// <returns>DeepLIFT explanation with feature attributions.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepLIFT compares activations to a reference baseline.
+    /// It's faster than Integrated Gradients and handles non-linearities better.
+    /// </para>
+    /// </remarks>
+    public virtual async Task<DeepLIFTExplanation<T>> GetDeepLIFTAsync(
+        Tensor<T> input,
+        Tensor<T>? baseline = null,
+        bool useRevealCancel = false)
+    {
+        var rule = useRevealCancel ? DeepLIFTRule.RevealCancel : DeepLIFTRule.Rescale;
+        // Use backprop-based version for efficient gradient computation
+        return await InterpretableModelHelper.GetDeepLIFTWithBackpropAsync(this, _enabledMethods, input, baseline, rule);
+    }
+
+    /// <summary>
+    /// Gets GradCAM visual explanation for a CNN prediction.
+    /// </summary>
+    /// <param name="input">The input image tensor.</param>
+    /// <param name="targetClass">Target class to explain (-1 for predicted class).</param>
+    /// <returns>GradCAM explanation with heatmap.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GradCAM creates visual heatmaps showing which parts
+    /// of an image were most important for the CNN's prediction.
+    /// </para>
+    /// </remarks>
+    public virtual async Task<GradCAMExplanation<T>> GetGradCAMAsync(
+        Tensor<T> input,
+        int targetClass = -1)
+    {
+        // Get input shape from the tensor
+        int[] inputShape = input.Shape;
+
+        // For GradCAM we need feature map shape, which depends on the network architecture
+        // Default to a reasonable size; users can override with the helper method directly
+        int[] featureMapShape = inputShape.Length >= 3
+            ? new[] { inputShape[0], inputShape[1] / 4, inputShape[2] / 4, 64 }
+            : new[] { 7, 7, 64 };
+
+        return await InterpretableModelHelper.GetGradCAMAsync(
+            this, _enabledMethods, input, inputShape, featureMapShape, targetClass);
     }
 
     /// <summary>
@@ -3311,6 +3415,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _fairnessMetrics.Clear();
         _fairnessMetrics.AddRange(fairnessMetrics);
     }
+
+#pragma warning restore CS0618
 
     #endregion
 
