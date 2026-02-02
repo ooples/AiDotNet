@@ -1010,12 +1010,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
             throw new ArgumentNullException(nameof(parameters));
         }
 
-        if (parameters.Length != Coefficients.Length)
-        {
-            throw new ArgumentException($"Parameters length ({parameters.Length}) must match coefficients length ({Coefficients.Length}).", nameof(parameters));
-        }
-
         // Create a new model with the provided parameters
+        // Allow different sizes to support genetic algorithm optimization which may resize models
         return new VectorModel<T>(parameters);
     }
 
