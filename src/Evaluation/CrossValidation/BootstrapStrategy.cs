@@ -58,7 +58,7 @@ public class BootstrapStrategy<T> : ICrossValidationStrategy<T>
         if (dataSize < 2)
             throw new ArgumentException("Need at least 2 samples for bootstrap.", nameof(dataSize));
 
-        var random = _randomSeed.HasValue ? RandomHelper.CreateSeededRandom(_randomSeed.Value) : new Random();
+        var random = _randomSeed.HasValue ? RandomHelper.CreateSeededRandom(_randomSeed.Value) : RandomHelper.CreateSecureRandom();
 
         int yielded = 0;
         int attempts = 0;

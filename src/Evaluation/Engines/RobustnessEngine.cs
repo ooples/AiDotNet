@@ -87,7 +87,7 @@ public class RobustnessEngine<T>
 
         var random = _options?.RandomSeed.HasValue == true
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         // Test with different noise levels
         double[] noiseLevels = _options?.NoiseLevels ?? new[] { 0.01, 0.05, 0.1, 0.2, 0.5 };

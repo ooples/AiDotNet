@@ -58,7 +58,7 @@ public class GiniCoefficientMetric<T> : IProbabilisticClassificationMetric<T>
     {
         int n = prob.Length;
         if (n == 0) return (NumOps.FromDouble(-1), NumOps.One);
-        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         var values = new double[samples];
         var probArr = prob.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)

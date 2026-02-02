@@ -68,7 +68,7 @@ public class BlockedKFoldStrategy<T> : ICrossValidationStrategy<T>
         {
             var random = _randomSeed.HasValue
                 ? RandomHelper.CreateSeededRandom(_randomSeed.Value)
-                : new Random();
+                : RandomHelper.CreateSecureRandom();
             indices = indices.OrderBy(_ => random.Next()).ToArray();
         }
 

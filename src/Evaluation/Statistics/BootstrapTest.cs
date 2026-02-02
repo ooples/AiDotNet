@@ -75,7 +75,7 @@ public class BootstrapTest<T> : IStatisticalTest<T>
 
         var random = _randomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_randomSeed.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         // Compute observed difference
         double observedDiff = ComputeMeanDifference(scores1, scores2);
@@ -142,7 +142,7 @@ public class BootstrapTest<T> : IStatisticalTest<T>
 
         var random = _randomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_randomSeed.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         var diffs = new double[_numBootstraps];
         for (int b = 0; b < _numBootstraps; b++)

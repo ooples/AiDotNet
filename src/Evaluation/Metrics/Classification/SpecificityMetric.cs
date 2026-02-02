@@ -82,7 +82,7 @@ public class SpecificityMetric<T> : IClassificationMetric<T>
     {
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.One);
-        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         var values = new double[samples];
         var predArr = pred.ToArray();
         var actArr = actual.ToArray();

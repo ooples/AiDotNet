@@ -104,7 +104,7 @@ public class BrierScoreMetric<T> : IProbabilisticClassificationMetric<T>
     {
         int n = actuals.Length;
         if (n == 0) return (NumOps.Zero, NumOps.One);
-        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : new Random();
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         var values = new double[samples];
         var probArr = probs.ToArray();
         var actArr = actuals.ToArray();

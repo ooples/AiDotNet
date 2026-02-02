@@ -58,7 +58,7 @@ public class ShuffleSplitStrategy<T> : ICrossValidationStrategy<T>
         if (trainCount < 1)
             throw new ArgumentException("Train size would be less than 1.", nameof(dataSize));
 
-        var random = _randomSeed.HasValue ? RandomHelper.CreateSeededRandom(_randomSeed.Value) : new Random();
+        var random = _randomSeed.HasValue ? RandomHelper.CreateSeededRandom(_randomSeed.Value) : RandomHelper.CreateSecureRandom();
 
         for (int split = 0; split < _numSplits; split++)
         {

@@ -252,7 +252,7 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
 
         var random = randomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(randomSeed.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         var bootstrapValues = new double[bootstrapSamples];
         var predArray = predictions.ToArray();

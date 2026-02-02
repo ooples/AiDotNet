@@ -60,7 +60,7 @@ public class MonteCarloStrategy<T> : ICrossValidationStrategy<T>
 
         var random = _randomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_randomSeed.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         int validationSize = Math.Max(1, (int)(dataSize * _testSize));
         var allIndices = Enumerable.Range(0, dataSize).ToArray();

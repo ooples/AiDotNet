@@ -62,7 +62,7 @@ public class KFoldStrategy<T> : ICrossValidationStrategy<T>
         // Shuffle if requested
         if (_shuffle)
         {
-            var random = _randomSeed.HasValue ? RandomHelper.CreateSeededRandom(_randomSeed.Value) : new Random();
+            var random = _randomSeed.HasValue ? RandomHelper.CreateSeededRandom(_randomSeed.Value) : RandomHelper.CreateSecureRandom();
             for (int i = dataSize - 1; i > 0; i--)
             {
                 int j = random.Next(i + 1);

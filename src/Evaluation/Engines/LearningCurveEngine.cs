@@ -82,7 +82,7 @@ public class LearningCurveEngine<T>
 
         var random = _options?.RandomSeed.HasValue == true
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         foreach (var sizeSpec in trainSizes)
         {

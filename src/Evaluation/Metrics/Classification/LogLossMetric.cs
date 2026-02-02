@@ -189,7 +189,7 @@ public class LogLossMetric<T> : IProbabilisticClassificationMetric<T>
 
         var random = randomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(randomSeed.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         var bootstrapValues = new double[bootstrapSamples];
         var probArray = probabilities.ToArray();

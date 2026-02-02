@@ -62,7 +62,7 @@ public class RepeatedKFoldStrategy<T> : ICrossValidationStrategy<T>
         if (dataSize < _k)
             throw new ArgumentException($"Cannot have {_k} folds with only {dataSize} samples.", nameof(dataSize));
 
-        var baseRandom = _randomSeed.HasValue ? RandomHelper.CreateSeededRandom(_randomSeed.Value) : new Random();
+        var baseRandom = _randomSeed.HasValue ? RandomHelper.CreateSeededRandom(_randomSeed.Value) : RandomHelper.CreateSecureRandom();
 
         for (int rep = 0; rep < _repetitions; rep++)
         {

@@ -71,7 +71,7 @@ public class StratifiedGroupKFoldStrategy<T> : ICrossValidationStrategy<T>
     {
         var random = _randomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_randomSeed.Value)
-            : new Random();
+            : RandomHelper.CreateSecureRandom();
 
         // Get unique groups and their class distributions
         var uniqueGroups = _groups!.Distinct().ToList();

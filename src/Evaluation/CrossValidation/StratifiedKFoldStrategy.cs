@@ -60,7 +60,7 @@ public class StratifiedKFoldStrategy<T> : ICrossValidationStrategy<T>
         if (dataSize < _k)
             throw new ArgumentException($"Cannot have {_k} folds with only {dataSize} samples.", nameof(dataSize));
 
-        var random = _randomSeed.HasValue ? RandomHelper.CreateSeededRandom(_randomSeed.Value) : new Random();
+        var random = _randomSeed.HasValue ? RandomHelper.CreateSeededRandom(_randomSeed.Value) : RandomHelper.CreateSecureRandom();
 
         // Group indices by class using tolerance-based equality for floating-point labels
         // This avoids merging distinct classes that happen to round to the same integer
