@@ -248,7 +248,10 @@ public class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplanation<T>>
     /// </summary>
     private double ComputeDistance(Vector<T> a, Vector<T> b)
     {
-        int n = Math.Min(a.Length, b.Length);
+        if (a.Length != b.Length)
+            throw new ArgumentException($"Vector dimensions must match for distance computation. Got {a.Length} and {b.Length}.");
+
+        int n = a.Length;
 
         switch (_distanceMetric)
         {
@@ -338,17 +341,17 @@ public class PrototypeMatch<T>
     /// <summary>
     /// Gets or sets the distance from the input to this prototype.
     /// </summary>
-    public T Distance { get; set; } = default!;
+    public T Distance { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets or sets the similarity (1 / (1 + distance)).
     /// </summary>
-    public T Similarity { get; set; } = default!;
+    public T Similarity { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets or sets the label of the prototype.
     /// </summary>
-    public T Label { get; set; } = default!;
+    public T Label { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets or sets the feature values of the prototype.
@@ -377,7 +380,7 @@ public class PrototypeExplanation<T>
     /// <summary>
     /// Gets or sets the prediction value.
     /// </summary>
-    public T Prediction { get; set; } = default!;
+    public T Prediction { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets or sets the predicted class.

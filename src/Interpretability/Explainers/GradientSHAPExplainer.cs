@@ -124,6 +124,10 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
             throw new ArgumentException("Number of samples must be at least 1.", nameof(numSamples));
         if (numSteps < 1)
             throw new ArgumentException("Number of steps must be at least 1.", nameof(numSteps));
+        if (addNoise && noiseStdDev <= 0)
+            throw new ArgumentException("Noise standard deviation must be positive when addNoise is enabled.", nameof(noiseStdDev));
+        if (featureNames != null && featureNames.Length != backgroundData.Columns)
+            throw new ArgumentException($"Feature names length ({featureNames.Length}) must match background data columns ({backgroundData.Columns}).", nameof(featureNames));
 
         _numSamples = numSamples;
         _numSteps = numSteps;
@@ -151,6 +155,9 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
     /// <returns>GradientSHAP explanation with feature attributions.</returns>
     public GradientSHAPExplanation<T> Explain(Vector<T> instance, int outputIndex)
     {
+        if (outputIndex < 0)
+            throw new ArgumentOutOfRangeException(nameof(outputIndex), "Output index cannot be negative.");
+
         int numFeatures = instance.Length;
         int numBackground = _backgroundData.Rows;
 
@@ -165,7 +172,9 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
 
         // Get prediction for input
         var inputPred = _predictFunction(instance);
-        double inputVal = outputIndex < inputPred.Length ? NumOps.ToDouble(inputPred[outputIndex]) : 0;
+        if (outputIndex >= inputPred.Length)
+            throw new ArgumentOutOfRangeException(nameof(outputIndex), $"Output index {outputIndex} is out of bounds for prediction with {inputPred.Length} outputs.");
+        double inputVal = NumOps.ToDouble(inputPred[outputIndex]);
 
         // Sample baselines and compute attributions
         for (int s = 0; s < _numSamples; s++)
@@ -176,7 +185,7 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
 
             // Get baseline prediction
             var baselinePred = _predictFunction(baseline);
-            double baselineVal = outputIndex < baselinePred.Length ? NumOps.ToDouble(baselinePred[outputIndex]) : 0;
+            double baselineVal = NumOps.ToDouble(baselinePred[outputIndex]);
 
             // Compute Integrated Gradients from this baseline
             var sampleAttr = ComputeIntegratedGradients(instance, baseline, outputIndex, rand);
@@ -217,7 +226,7 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
         {
             var bg = _backgroundData.GetRow(i);
             var pred = _predictFunction(bg);
-            expectedValue += outputIndex < pred.Length ? NumOps.ToDouble(pred[outputIndex]) : 0;
+            expectedValue += NumOps.ToDouble(pred[outputIndex]);
         }
         expectedValue /= Math.Min(100, numBackground);
 
@@ -343,8 +352,8 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
             var predPlus = _predictFunction(new Vector<T>(inputPlus));
             var predMinus = _predictFunction(new Vector<T>(inputMinus));
 
-            double valPlus = outputIndex < predPlus.Length ? NumOps.ToDouble(predPlus[outputIndex]) : 0;
-            double valMinus = outputIndex < predMinus.Length ? NumOps.ToDouble(predMinus[outputIndex]) : 0;
+            double valPlus = NumOps.ToDouble(predPlus[outputIndex]);
+            double valMinus = NumOps.ToDouble(predMinus[outputIndex]);
 
             gradient[j] = NumOps.FromDouble((valPlus - valMinus) / (2 * epsilon));
         }
@@ -392,12 +401,12 @@ public class GradientSHAPExplanation<T>
     /// <summary>
     /// Gets or sets the expected value (average prediction over background data).
     /// </summary>
-    public T ExpectedValue { get; set; } = default!;
+    public T ExpectedValue { get; set; } = NumOps.Zero;
 
     /// <summary>
     /// Gets or sets the prediction for the input.
     /// </summary>
-    public T InputPrediction { get; set; } = default!;
+    public T InputPrediction { get; set; } = NumOps.Zero;
 
     /// <summary>
     /// Gets or sets the feature names.

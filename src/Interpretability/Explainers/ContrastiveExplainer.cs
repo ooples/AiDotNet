@@ -106,6 +106,10 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
         var instanceMatrix = CreateSingleRowMatrix(instance);
         var predictions = _predictFunction(instanceMatrix);
 
+        // Contrastive explanations require at least 2 classes to compare
+        if (predictions.Length < 2)
+            throw new InvalidOperationException($"Contrastive explanations require at least 2 classes, but the model produces {predictions.Length} outputs. Use a different explainer for single-output models.");
+
         // Find fact (predicted class) and foil (next most likely class)
         int factClass = 0;
         int foilClass = 1;

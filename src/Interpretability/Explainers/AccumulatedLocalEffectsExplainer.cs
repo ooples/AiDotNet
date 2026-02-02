@@ -128,10 +128,21 @@ public class AccumulatedLocalEffectsExplainer<T> : IGlobalExplainer<T, ALEResult
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Note: This method computes ALE using the data provided in the constructor, not the passed data parameter.
+    /// The data parameter is used only to determine the number of features to analyze.
+    /// To compute ALE on different data, create a new explainer instance with that data.
+    /// </remarks>
     public ALEResult<T> ExplainGlobal(Matrix<T> data)
     {
-        // Compute ALE for all features
-        var allFeatureIndices = Enumerable.Range(0, data.Columns).ToArray();
+        if (data.Columns != _data.Columns)
+            throw new ArgumentException(
+                $"Data has {data.Columns} features but explainer was initialized with {_data.Columns} features. " +
+                "ALE computation uses the data provided in the constructor.",
+                nameof(data));
+
+        // Compute ALE for all features using the constructor-provided data
+        var allFeatureIndices = Enumerable.Range(0, _data.Columns).ToArray();
         return ComputeForFeatures(allFeatureIndices);
     }
 

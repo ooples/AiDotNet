@@ -150,6 +150,8 @@ public class CounterfactualExplainer<T> : ILocalExplainer<T, CounterfactualExpla
     {
         if (instance.Length != _numFeatures)
             throw new ArgumentException($"Instance has {instance.Length} features but expected {_numFeatures}.");
+        if (targetPrediction.Length == 0)
+            throw new ArgumentException("Target prediction vector cannot be empty.", nameof(targetPrediction));
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)

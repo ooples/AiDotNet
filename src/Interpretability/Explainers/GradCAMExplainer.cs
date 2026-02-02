@@ -154,11 +154,15 @@ public class GradCAMExplainer<T> : ILocalExplainer<T, GradCAMExplanation<T>>
         var upsampledHeatmap = UpsampleHeatmap(heatmap, targetHeight, targetWidth);
 
         // Get class scores
-        var classScores = new T[numClasses];
         var predSpan = predictions.Data.Span;
+        if (numClasses > predSpan.Length)
+            throw new InvalidOperationException(
+                $"Prediction tensor has {predSpan.Length} elements but expected {numClasses} class scores based on tensor shape.");
+
+        var classScores = new T[numClasses];
         for (int i = 0; i < numClasses; i++)
         {
-            classScores[i] = i < predSpan.Length ? predSpan[i] : NumOps.Zero;
+            classScores[i] = predSpan[i];
         }
 
         return new GradCAMExplanation<T>

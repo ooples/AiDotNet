@@ -231,8 +231,13 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
     }
 
     /// <summary>
-    /// Computes SmoothGrad (average gradient over noisy inputs).
+    /// Computes SmoothGrad (average gradient over noisy inputs, then multiplied by input).
     /// </summary>
+    /// <remarks>
+    /// This implementation returns SmoothGrad × Input for consistency with the GradientTimesInput method,
+    /// as pure gradient values are often less interpretable. The averaging reduces noise while the
+    /// multiplication by input provides attribution-style values.
+    /// </remarks>
     private T[] ComputeSmoothGrad(Vector<T> input, int outputIndex)
     {
         var rand = _randomState.HasValue
@@ -270,7 +275,7 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
             }
         }
 
-        // Average and multiply by input
+        // Average and multiply by input (SmoothGrad × Input for interpretability)
         var result = new T[n];
         for (int i = 0; i < n; i++)
         {
@@ -365,8 +370,11 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
             var predPlus = _predictFunction(new Vector<T>(inputPlus));
             var predMinus = _predictFunction(new Vector<T>(inputMinus));
 
-            double valPlus = outputIndex < predPlus.Length ? NumOps.ToDouble(predPlus[outputIndex]) : 0;
-            double valMinus = outputIndex < predMinus.Length ? NumOps.ToDouble(predMinus[outputIndex]) : 0;
+            if (outputIndex >= predPlus.Length)
+                throw new ArgumentOutOfRangeException(nameof(outputIndex), $"Output index {outputIndex} is out of bounds for prediction with {predPlus.Length} outputs.");
+
+            double valPlus = NumOps.ToDouble(predPlus[outputIndex]);
+            double valMinus = NumOps.ToDouble(predMinus[outputIndex]);
 
             gradient[i] = NumOps.FromDouble((valPlus - valMinus) / (2 * epsilon));
         }

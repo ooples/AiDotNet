@@ -231,8 +231,11 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
         var inputPred = _predictFunction(instance);
         var baselinePred = _predictFunction(baseline);
 
-        double inputPredVal = outputIndex < inputPred.Length ? NumOps.ToDouble(inputPred[outputIndex]) : 0;
-        double baselinePredVal = outputIndex < baselinePred.Length ? NumOps.ToDouble(baselinePred[outputIndex]) : 0;
+        if (outputIndex < 0 || outputIndex >= inputPred.Length)
+            throw new ArgumentOutOfRangeException(nameof(outputIndex), $"Output index {outputIndex} is out of bounds for prediction with {inputPred.Length} outputs.");
+
+        double inputPredVal = NumOps.ToDouble(inputPred[outputIndex]);
+        double baselinePredVal = NumOps.ToDouble(baselinePred[outputIndex]);
         double predDiff = inputPredVal - baselinePredVal;
 
         Vector<T> attributionsVector;
@@ -264,13 +267,14 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
                 scaledInputs[step] = new Vector<T>(scaled);
             }
 
-            // Compute gradients at each step and integrate
-            for (int step = 0; step < _numSteps; step++)
+            // Compute gradients at each step and integrate using trapezoidal rule
+            // We need to include both endpoints (step 0 and step _numSteps)
+            for (int step = 0; step <= _numSteps; step++)
             {
                 var gradient = ComputeGradient(scaledInputs[step], outputIndex);
 
-                // Add to running sum (trapezoidal rule)
-                double weight = (step == 0 || step == _numSteps - 1) ? 0.5 : 1.0;
+                // Add to running sum (trapezoidal rule: endpoints get half weight)
+                double weight = (step == 0 || step == _numSteps) ? 0.5 : 1.0;
 
                 for (int j = 0; j < _numFeatures; j++)
                 {
@@ -386,8 +390,8 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
             var predPlus = _predictFunction(new Vector<T>(inputPlus));
             var predMinus = _predictFunction(new Vector<T>(inputMinus));
 
-            double plusVal = outputIndex < predPlus.Length ? NumOps.ToDouble(predPlus[outputIndex]) : 0;
-            double minusVal = outputIndex < predMinus.Length ? NumOps.ToDouble(predMinus[outputIndex]) : 0;
+            double plusVal = NumOps.ToDouble(predPlus[outputIndex]);
+            double minusVal = NumOps.ToDouble(predMinus[outputIndex]);
 
             gradient[j] = NumOps.FromDouble((plusVal - minusVal) / (2 * epsilon));
         }
@@ -422,18 +426,18 @@ public class IntegratedGradientsExplanation<T>
     /// <summary>
     /// Gets or sets the prediction at the baseline.
     /// </summary>
-    public T BaselinePrediction { get; set; } = default!;
+    public T BaselinePrediction { get; set; } = NumOps.Zero;
 
     /// <summary>
     /// Gets or sets the prediction at the input.
     /// </summary>
-    public T InputPrediction { get; set; } = default!;
+    public T InputPrediction { get; set; } = NumOps.Zero;
 
     /// <summary>
     /// Gets or sets the convergence delta (difference between sum of attributions and prediction difference).
     /// A small delta indicates good approximation.
     /// </summary>
-    public T ConvergenceDelta { get; set; } = default!;
+    public T ConvergenceDelta { get; set; } = NumOps.Zero;
 
     /// <summary>
     /// Gets or sets the feature names.

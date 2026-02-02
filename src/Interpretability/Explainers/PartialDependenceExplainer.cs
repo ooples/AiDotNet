@@ -128,10 +128,21 @@ public class PartialDependenceExplainer<T> : IGlobalExplainer<T, PartialDependen
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Note: This method computes PDP using the background data provided in the constructor, not the passed data parameter.
+    /// The data parameter is used only to determine the number of features to analyze.
+    /// To compute PDP on different data, create a new explainer instance with that data.
+    /// </remarks>
     public PartialDependenceResult<T> ExplainGlobal(Matrix<T> data)
     {
-        // Compute PDP for all features
-        var allFeatureIndices = Enumerable.Range(0, data.Columns).ToArray();
+        if (data.Columns != _backgroundData.Columns)
+            throw new ArgumentException(
+                $"Data has {data.Columns} features but explainer was initialized with {_backgroundData.Columns} features. " +
+                "PDP computation uses the background data provided in the constructor.",
+                nameof(data));
+
+        // Compute PDP for all features using the constructor-provided background data
+        var allFeatureIndices = Enumerable.Range(0, _backgroundData.Columns).ToArray();
         return ComputeForFeatures(allFeatureIndices);
     }
 
