@@ -86,6 +86,14 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
 
         if (numFeatures < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(numFeatures));
+        if (featureNames != null && featureNames.Length != numFeatures)
+            throw new ArgumentException($"featureNames length ({featureNames.Length}) must match numFeatures ({numFeatures}).", nameof(featureNames));
+        if (featureMins != null && featureMins.Length != numFeatures)
+            throw new ArgumentException($"featureMins length ({featureMins.Length}) must match numFeatures ({numFeatures}).", nameof(featureMins));
+        if (featureMaxs != null && featureMaxs.Length != numFeatures)
+            throw new ArgumentException($"featureMaxs length ({featureMaxs.Length}) must match numFeatures ({numFeatures}).", nameof(featureMaxs));
+        if (perturbationStep <= 0)
+            throw new ArgumentOutOfRangeException(nameof(perturbationStep), "perturbationStep must be positive.");
 
         _numFeatures = numFeatures;
         _featureNames = featureNames;
@@ -265,6 +273,10 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
             double originalVal = NumOps.ToDouble(instance[f]);
             double minVal = _featureMins != null ? NumOps.ToDouble(_featureMins[f]) : originalVal - Math.Abs(originalVal) - 1;
             double maxVal = _featureMaxs != null ? NumOps.ToDouble(_featureMaxs[f]) : originalVal + Math.Abs(originalVal) + 1;
+
+            // Skip if min > max (invalid range)
+            if (minVal > maxVal)
+                continue;
 
             // Search for value that would flip to foil
             double? flipValue = null;

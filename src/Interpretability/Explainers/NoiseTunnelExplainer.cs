@@ -463,7 +463,11 @@ public static class NoiseTunnelFactory
                 Baseline = original.Baseline,
                 Input = original.Input,
                 BaselinePrediction = original.BaselinePrediction,
-                InputPrediction = original.InputPrediction
+                InputPrediction = original.InputPrediction,
+                ConvergenceDelta = original.ConvergenceDelta,
+                FeatureNames = original.FeatureNames,
+                OutputIndex = original.OutputIndex,
+                NumSteps = original.NumSteps
             },
             noiseTunnelType,
             numSamples,

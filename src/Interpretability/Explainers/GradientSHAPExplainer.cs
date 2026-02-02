@@ -155,6 +155,8 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
     /// <returns>GradientSHAP explanation with feature attributions.</returns>
     public GradientSHAPExplanation<T> Explain(Vector<T> instance, int outputIndex)
     {
+        if (instance == null)
+            throw new ArgumentNullException(nameof(instance));
         if (outputIndex < 0)
             throw new ArgumentOutOfRangeException(nameof(outputIndex), "Output index cannot be negative.");
         if (instance.Length != _backgroundData.Columns)
@@ -224,13 +226,16 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
 
         // Compute expected value (average prediction over background)
         double expectedValue = 0;
-        for (int i = 0; i < Math.Min(100, numBackground); i++)
+        int bgSampleCount = Math.Min(100, numBackground);
+        for (int i = 0; i < bgSampleCount; i++)
         {
             var bg = _backgroundData.GetRow(i);
             var pred = _predictFunction(bg);
+            if (outputIndex >= pred.Length)
+                throw new InvalidOperationException($"Background prediction {i} has {pred.Length} outputs but outputIndex is {outputIndex}.");
             expectedValue += NumOps.ToDouble(pred[outputIndex]);
         }
-        expectedValue /= Math.Min(100, numBackground);
+        expectedValue /= bgSampleCount;
 
         // Convert to Vector<T>
         var attrVector = new T[numFeatures];
@@ -256,6 +261,9 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
     /// <inheritdoc/>
     public GradientSHAPExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
+        if (instances == null)
+            throw new ArgumentNullException(nameof(instances));
+
         var explanations = new GradientSHAPExplanation<T>[instances.Rows];
         for (int i = 0; i < instances.Rows; i++)
         {

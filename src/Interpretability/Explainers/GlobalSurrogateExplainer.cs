@@ -102,6 +102,9 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
         int numFeatures,
         string[]? featureNames = null)
     {
+        if (blackBoxModel == null)
+            throw new ArgumentNullException(nameof(blackBoxModel));
+
         Func<Matrix<T>, Vector<T>> predictFunc = data =>
         {
             var input = ConvertToModelInput<TInput>(data);
@@ -184,6 +187,10 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
     {
         var surrogatePreds = PredictSurrogate(X);
         var blackBoxPreds = _blackBoxPredictFunction(X);
+
+        if (blackBoxPreds.Length != surrogatePreds.Length)
+            throw new InvalidOperationException($"Black box returned {blackBoxPreds.Length} predictions but expected {surrogatePreds.Length}.");
+
         var fidelity = ComputeR2(blackBoxPreds, surrogatePreds);
 
         return (surrogatePreds, blackBoxPreds, fidelity);
