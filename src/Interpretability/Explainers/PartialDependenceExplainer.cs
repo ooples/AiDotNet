@@ -137,6 +137,9 @@ public class PartialDependenceExplainer<T> : IGlobalExplainer<T, PartialDependen
     /// </remarks>
     public PartialDependenceResult<T> ExplainGlobal(Matrix<T> data)
     {
+        if (data == null)
+            throw new ArgumentNullException(nameof(data));
+
         if (data.Columns != _backgroundData.Columns)
             throw new ArgumentException(
                 $"Data has {data.Columns} features but explainer was initialized with {_backgroundData.Columns} features. " +

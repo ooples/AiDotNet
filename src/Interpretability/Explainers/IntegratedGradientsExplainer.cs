@@ -277,6 +277,10 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
             {
                 var gradient = ComputeGradient(scaledInputs[step], outputIndex);
 
+                // Validate gradient length matches expected number of features
+                if (gradient.Length != _numFeatures)
+                    throw new InvalidOperationException($"Gradient function returned {gradient.Length} values but expected {_numFeatures}.");
+
                 // Add to running sum (trapezoidal rule: endpoints get half weight)
                 double weight = (step == 0 || step == _numSteps) ? 0.5 : 1.0;
 
