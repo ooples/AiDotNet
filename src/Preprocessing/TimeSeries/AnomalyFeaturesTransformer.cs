@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.Preprocessing.TimeSeries;
@@ -81,7 +82,7 @@ public class AnomalyFeaturesTransformer<T> : TimeSeriesTransformerBase<T>
         _iqrMultiplier = Options.IqrMultiplier;
         _cusumK = Options.CusumK;
         _cusumH = Options.CusumH;
-        _random = new Random(42); // Fixed seed for reproducibility
+        _random = RandomHelper.CreateSeededRandom(42); // Fixed seed for reproducibility
 
         _operationNames = BuildOperationNames();
     }
