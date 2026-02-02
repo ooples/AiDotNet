@@ -30,7 +30,7 @@ public class RollingStatsTransformer<T> : TimeSeriesTransformerBase<T>
     #region Fields
 
     /// <summary>
-    /// Cached operation names for feature naming.
+    /// Cached operation names for feature naming (readonly for thread safety).
     /// </summary>
     private readonly string[] _operationNames;
 
@@ -867,8 +867,8 @@ public class RollingStatsTransformer<T> : TimeSeriesTransformerBase<T>
         double sumFourth = values.Select(x => Math.Pow((x - mean) / std, 4)).Sum();
 
         // Fisher's excess kurtosis with sample adjustment
-        // Use double literals to avoid integer overflow in multiplications
-        double k = (double)n * (n + 1) / ((n - 1.0) * (n - 2.0) * (n - 3.0)) * sumFourth;
+        // Use double literals throughout to avoid integer overflow in multiplications
+        double k = (double)n * (n + 1.0) / ((n - 1.0) * (n - 2.0) * (n - 3.0)) * sumFourth;
         double adjustment = 3.0 * (n - 1.0) * (n - 1.0) / ((n - 2.0) * (n - 3.0));
 
         return k - adjustment;
@@ -888,13 +888,10 @@ public class RollingStatsTransformer<T> : TimeSeriesTransformerBase<T>
         int lower = (int)Math.Floor(rank);
         int upper = (int)Math.Ceiling(rank);
 
-        if (lower == upper)
-        {
-            return sorted[lower];
-        }
-
         double weight = rank - lower;
-        return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+        return lower == upper
+            ? sorted[lower]
+            : sorted[lower] * (1 - weight) + sorted[upper] * weight;
     }
 
     /// <summary>

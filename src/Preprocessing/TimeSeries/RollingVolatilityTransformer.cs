@@ -651,7 +651,8 @@ public class RollingVolatilityTransformer<T> : TimeSeriesTransformerBase<T>
         var returns = new double[prices.Length - 1];
         for (int i = 1; i < prices.Length; i++)
         {
-            returns[i - 1] = double.IsNaN(prices[i]) || double.IsNaN(prices[i - 1]) || Math.Abs(prices[i - 1]) < double.Epsilon
+            // Use a reasonable tolerance (1e-10) instead of double.Epsilon for near-zero price check
+            returns[i - 1] = double.IsNaN(prices[i]) || double.IsNaN(prices[i - 1]) || Math.Abs(prices[i - 1]) < 1e-10
                 ? double.NaN
                 : (prices[i] - prices[i - 1]) / prices[i - 1];
         }

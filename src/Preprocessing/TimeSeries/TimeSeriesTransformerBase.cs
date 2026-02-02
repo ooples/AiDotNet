@@ -540,15 +540,10 @@ public abstract class TimeSeriesTransformerBase<T> : ITimeSeriesFeatureExtractor
 
         // Add common window sizes that fit within constraints
         int[] common = [2, 3, 5, 7, 10, 14, 20, 21, 30, 60, 90, 120, 180, 252, 365];
-        foreach (int size in common)
-        {
-            if (size >= Options.MinWindowSize &&
-                size <= Options.MaxWindowSize &&
-                size < dataLength / 2)
-            {
-                candidates.Add(size);
-            }
-        }
+        candidates.AddRange(common.Where(size =>
+            size >= Options.MinWindowSize &&
+            size <= Options.MaxWindowSize &&
+            size < dataLength / 2));
 
         // Add log-spaced sizes for coverage
         double logMin = Math.Log(Options.MinWindowSize);
