@@ -58,10 +58,10 @@
 
 	<ItemGroup>
 	  <PackageReference Include="Azure.Search.Documents" Version="11.7.0" />
-	  <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.2.2" />
-	  <PackageReference Include="Google.Protobuf" Version="3.33.2" />
+	  <PackageReference Include="Elastic.Clients.Elasticsearch" Version="9.2.3" />
+	  <PackageReference Include="Google.Protobuf" Version="3.33.5" />
 	  <PackageReference Include="Microsoft.CSharp" Version="4.7.0" />
-	  <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.22" />
+	  <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.23" />
 	  <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.23.2" />
 	  <PackageReference Include="Microsoft.Research.SEALNet" Version="4.1.1" />
 	  <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
@@ -131,11 +131,11 @@
 	-->
 	<ItemGroup>
 	  <!-- CPU acceleration via OpenBLAS -->
-	  <PackageReference Include="AiDotNet.Native.OpenBLAS" Version="0.4.0" />
+	  <PackageReference Include="AiDotNet.Native.OpenBLAS" Version="0.5.0" />
 	  <!-- GPU acceleration via CLBlast (OpenCL-based) -->
-	  <PackageReference Include="AiDotNet.Native.CLBlast" Version="0.4.0" />
+	  <PackageReference Include="AiDotNet.Native.CLBlast" Version="0.5.0" />
 	  <!-- CPU acceleration via Intel OneDNN -->
-	  <PackageReference Include="AiDotNet.Native.OneDNN" Version="0.4.0" />
+	  <PackageReference Include="AiDotNet.Native.OneDNN" Version="0.5.0" />
 	</ItemGroup>
 
 	<!-- Global usings for AiDotNet.Tensors namespaces -->
