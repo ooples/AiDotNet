@@ -97,6 +97,13 @@ public class RollingRegressionTransformer<T> : TimeSeriesTransformerBase<T>
     /// <inheritdoc />
     protected override void FitCore(Tensor<T> data)
     {
+        // Guard against 1D inputs
+        if (data.Rank < 2)
+        {
+            throw new ArgumentException(
+                $"RollingRegressionTransformer requires at least 2D input data, but got {data.Rank}D tensor.");
+        }
+
         // Validate benchmark index
         if (_benchmarkIndex < 0 || _benchmarkIndex >= data.Shape[1])
         {

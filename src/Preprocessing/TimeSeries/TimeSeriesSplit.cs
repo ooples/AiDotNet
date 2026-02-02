@@ -331,15 +331,12 @@ public static class TimeSeriesValidation
             int testStart = testEnd - testSize;
             int trainEnd = testStart;
 
-            var trainIndices = Enumerable.Range(0, trainEnd).ToArray();
             var testIndices = Enumerable.Range(testStart, testSize).ToArray();
 
-            // Apply embargo to subsequent splits' training data
-            if (embargoSize > 0 && i < nSplits - 1)
-            {
-                int embargoEnd = testEnd + embargoSize;
-                trainIndices = trainIndices.Where(idx => idx < testStart || idx >= embargoEnd).ToArray();
-            }
+            // Apply embargo by excluding indices immediately before the test set
+            // This prevents data leakage from features with look-ahead (e.g., rolling windows)
+            int effectiveTrainEnd = embargoSize > 0 ? Math.Max(0, trainEnd - embargoSize) : trainEnd;
+            var trainIndices = Enumerable.Range(0, effectiveTrainEnd).ToArray();
 
             yield return (trainIndices, testIndices);
         }
@@ -372,7 +369,16 @@ public static class TimeSeriesValidation
         int testSize,
         int? step = null)
     {
+        if (nSamples < 1)
+            throw new ArgumentOutOfRangeException(nameof(nSamples), "Number of samples must be at least 1.");
+        if (trainSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(trainSize), "Training size must be at least 1.");
+        if (testSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(testSize), "Test size must be at least 1.");
+
         int actualStep = step ?? testSize;
+        if (actualStep < 1)
+            throw new ArgumentOutOfRangeException(nameof(step), "Step must be at least 1.");
 
         int start = 0;
         while (start + trainSize + testSize <= nSamples)
