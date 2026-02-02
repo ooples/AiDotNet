@@ -124,10 +124,15 @@ public class VolcanoPlotSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             var0 /= (n0 - 1);
             var1 /= (n1 - 1);
 
-            // Log2 fold change
+            // Log2 fold change - use absolute values to handle negative means
             double eps = 1e-10;
-            double ratio = (mean1 + eps) / (mean0 + eps);
+            double absMean0 = Math.Abs(mean0) + eps;
+            double absMean1 = Math.Abs(mean1) + eps;
+            double ratio = absMean1 / absMean0;
             _log2FoldChanges[j] = Math.Log(ratio) / Math.Log(2);
+            // Preserve sign based on direction of change
+            if ((mean1 - mean0) < 0)
+                _log2FoldChanges[j] = -Math.Abs(_log2FoldChanges[j]);
 
             // Welch's t-test
             double se = Math.Sqrt(var0 / n0 + var1 / n1 + eps);

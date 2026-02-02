@@ -42,8 +42,15 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
 
+        var validLinkages = new[] { "single", "complete", "average" };
+        var normalizedLinkage = linkage.ToLowerInvariant();
+        if (!validLinkages.Contains(normalizedLinkage))
+            throw new ArgumentException(
+                $"Unknown linkage method '{linkage}'. Valid options are: {string.Join(", ", validLinkages)}.",
+                nameof(linkage));
+
         _nFeaturesToSelect = nFeaturesToSelect;
-        _linkage = linkage.ToLowerInvariant();
+        _linkage = normalizedLinkage;
     }
 
     protected override void FitCore(Matrix<T> data)

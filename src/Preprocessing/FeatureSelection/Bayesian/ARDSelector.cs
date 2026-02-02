@@ -71,6 +71,14 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (data.Rows != target.Length)
             throw new ArgumentException("Target length must match rows in data.");
+        if (data.Rows == 0)
+            throw new ArgumentException("Data must have at least one row.", nameof(data));
+        if (data.Columns == 0)
+            throw new ArgumentException("Data must have at least one column.", nameof(data));
+        if (_nFeaturesToSelect > data.Columns)
+            throw new ArgumentException(
+                $"Number of features to select ({_nFeaturesToSelect}) cannot exceed number of columns ({data.Columns}).",
+                nameof(data));
 
         _nInputFeatures = data.Columns;
         int n = data.Rows;
@@ -199,6 +207,9 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (_selectedIndices is null)
             throw new InvalidOperationException("ARDSelector has not been fitted.");
+        if (data.Columns != _nInputFeatures)
+            throw new ArgumentException(
+                $"Expected {_nInputFeatures} columns but got {data.Columns}.", nameof(data));
 
         int numRows = data.Rows;
         int numCols = _selectedIndices.Length;
@@ -230,14 +241,17 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        if (_selectedIndices is null) return [];
+        if (_selectedIndices is null)
+            throw new InvalidOperationException("ARDSelector has not been fitted.");
 
         if (inputFeatureNames is null)
             return _selectedIndices.Select(i => $"Feature{i}").ToArray();
 
-        return _selectedIndices
-            .Where(i => i < inputFeatureNames.Length)
-            .Select(i => inputFeatureNames[i])
-            .ToArray();
+        if (inputFeatureNames.Length < _nInputFeatures)
+            throw new ArgumentException(
+                $"Expected at least {_nInputFeatures} feature names, but got {inputFeatureNames.Length}.",
+                nameof(inputFeatureNames));
+
+        return _selectedIndices.Select(i => inputFeatureNames[i]).ToArray();
     }
 }

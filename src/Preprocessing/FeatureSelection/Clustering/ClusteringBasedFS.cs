@@ -52,6 +52,11 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     protected override void FitCore(Matrix<T> data)
     {
+        if (data.Rows == 0)
+            throw new ArgumentException("Data must have at least one row.", nameof(data));
+        if (data.Rows < 2)
+            throw new ArgumentException("ClusteringBasedFS requires at least 2 rows to compute variance/correlation.", nameof(data));
+
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;

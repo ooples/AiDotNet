@@ -169,6 +169,9 @@ public class SpikeAndSlabSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         if (_selectedIndices is null)
             throw new InvalidOperationException("SpikeAndSlabSelector has not been fitted.");
+        if (data.Columns != _nInputFeatures)
+            throw new ArgumentException(
+                $"Expected {_nInputFeatures} columns but got {data.Columns}.", nameof(data));
 
         int numRows = data.Rows;
         int numCols = _selectedIndices.Length;
