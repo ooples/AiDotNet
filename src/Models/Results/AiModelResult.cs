@@ -23,7 +23,9 @@ using AiDotNet.Helpers;
 using AiDotNet.Inference;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
+using AiDotNet.Interpretability.Explainers;
 using AiDotNet.LanguageModels;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -243,6 +245,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     /// <value>An implementation of IFairnessEvaluator&lt;T&gt; for evaluating fairness metrics, or null if not configured.</value>
     internal IFairnessEvaluator<T>? FairnessEvaluator { get; private set; }
+
+    /// <summary>
+    /// Gets or sets the interpretability options for model explanation methods.
+    /// </summary>
+    /// <value>The configured interpretability options, or null if not configured.</value>
+    internal InterpretabilityOptions? InterpretabilityOptions { get; private set; }
 
     /// <summary>
     /// Gets or sets the tokenizer used for text processing.
@@ -1107,6 +1115,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Ethical AI and fairness
         BiasDetector = options.BiasDetector;
         FairnessEvaluator = options.FairnessEvaluator;
+        InterpretabilityOptions = options.InterpretabilityOptions;
 
         // Tokenization
         Tokenizer = options.Tokenizer;
@@ -2354,7 +2363,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             DataVersionHash = DataVersionHash,
             HyperparameterTrialId = HyperparameterTrialId,
             Hyperparameters = Hyperparameters,
-            TrainingMetricsHistory = TrainingMetricsHistory
+            TrainingMetricsHistory = TrainingMetricsHistory,
+            // Interpretability - preserve across clones
+            InterpretabilityOptions = InterpretabilityOptions
         };
 
         return new AiModelResult<T, TInput, TOutput>(options);
@@ -2422,6 +2433,1410 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         return Model.GetFeatureImportance();
     }
+
+    #region Model Interpretability Methods
+
+    /// <summary>
+    /// Explains a single prediction using SHAP (SHapley Additive exPlanations) values.
+    /// </summary>
+    /// <param name="instance">The input instance to explain.</param>
+    /// <param name="backgroundData">Representative background data for computing expected values.</param>
+    /// <returns>A SHAP explanation showing how each feature contributed to this prediction.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model is not initialized or SHAP is not enabled.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> SHAP values tell you exactly how much each feature contributed
+    /// to this specific prediction compared to an "average" prediction.
+    ///
+    /// Example interpretation:
+    /// - Baseline: $300,000 (average house price)
+    /// - SHAP for Bedrooms: +$50,000 (having 4 bedrooms adds value)
+    /// - SHAP for Location: +$100,000 (good neighborhood)
+    /// - SHAP for Age: -$30,000 (older house reduces value)
+    /// - Prediction: $420,000
+    ///
+    /// The sum of SHAP values plus baseline always equals the prediction.
+    /// </para>
+    /// </remarks>
+    public SHAPExplanation<T> ExplainWithSHAP(Vector<T> instance, Matrix<T> backgroundData)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        if (!options.EnableSHAP)
+            throw new InvalidOperationException("SHAP is not enabled. Configure interpretability with EnableSHAP = true.");
+
+        // Create a prediction function from the model
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+
+        var explainer = new SHAPExplainer<T>(
+            predictFunc,
+            backgroundData,
+            nSamples: options.SHAPSampleCount,
+            featureNames: options.FeatureNames,
+            randomState: options.RandomSeed);
+
+        return explainer.Explain(instance);
+    }
+
+    /// <summary>
+    /// Explains multiple predictions using SHAP values and returns global feature importance.
+    /// </summary>
+    /// <param name="data">The input instances to explain.</param>
+    /// <param name="backgroundData">Representative background data for computing expected values.</param>
+    /// <returns>A global SHAP explanation with aggregated feature importance across all instances.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model is not initialized or SHAP is not enabled.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This aggregates SHAP values across many predictions to show
+    /// which features are most important overall. Use GetFeatureImportance() on the result
+    /// to see a ranked list of features by their average absolute SHAP value.
+    /// </para>
+    /// </remarks>
+    public GlobalSHAPExplanation<T> ExplainGlobalWithSHAP(Matrix<T> data, Matrix<T> backgroundData)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        if (!options.EnableSHAP)
+            throw new InvalidOperationException("SHAP is not enabled. Configure interpretability with EnableSHAP = true.");
+
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+
+        var explainer = new SHAPExplainer<T>(
+            predictFunc,
+            backgroundData,
+            nSamples: options.SHAPSampleCount,
+            featureNames: options.FeatureNames,
+            randomState: options.RandomSeed);
+
+        return explainer.ExplainGlobal(data);
+    }
+
+    /// <summary>
+    /// Explains a single prediction using LIME (Local Interpretable Model-agnostic Explanations).
+    /// </summary>
+    /// <param name="instance">The input instance to explain.</param>
+    /// <returns>A LIME explanation with local feature weights.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model is not initialized or LIME is not enabled.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> LIME explains predictions by fitting a simple linear model
+    /// around the specific instance. It creates many slightly modified versions of your input,
+    /// sees how predictions change, and fits a simple model to understand local behavior.
+    ///
+    /// The coefficients tell you the direction and magnitude of each feature's effect:
+    /// - Positive coefficient: Feature value pushed prediction higher
+    /// - Negative coefficient: Feature value pushed prediction lower
+    /// - LocalR2 tells you how well the simple model approximates the complex one locally
+    /// </para>
+    /// </remarks>
+    public LIMEExplanationResult<T> ExplainWithLIME(Vector<T> instance)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        if (!options.EnableLIME)
+            throw new InvalidOperationException("LIME is not enabled. Configure interpretability with EnableLIME = true.");
+
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+
+        var explainer = new LIMEExplainer<T>(
+            predictFunc,
+            instance.Length,
+            nSamples: options.LIMESampleCount,
+            kernelWidth: options.LIMEKernelWidth ?? 0.75,
+            featureNames: options.FeatureNames,
+            randomState: options.RandomSeed);
+
+        return explainer.Explain(instance);
+    }
+
+    /// <summary>
+    /// Computes permutation feature importance for the model.
+    /// </summary>
+    /// <param name="X">The feature matrix to evaluate on.</param>
+    /// <param name="y">The target values for evaluation.</param>
+    /// <param name="scoreFunction">
+    /// A function that computes a score given (actual, predicted). Higher scores = better.
+    /// If null, uses R² for regression-like outputs.
+    /// </param>
+    /// <returns>Feature importance scores showing which features matter most.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model is not initialized or permutation importance is not enabled.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Permutation importance measures how much the model's score drops
+    /// when each feature is randomly shuffled. If shuffling a feature hurts performance a lot,
+    /// that feature is important.
+    ///
+    /// The ImportanceStds values show how consistent the importance estimates are across
+    /// multiple shuffles. High standard deviation means the importance estimate is uncertain.
+    /// </para>
+    /// </remarks>
+    public FeatureImportanceResult<T> GetPermutationFeatureImportance(Matrix<T> X, Vector<T> y, Func<Vector<T>, Vector<T>, T>? scoreFunction = null)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        if (!options.EnablePermutationImportance)
+            throw new InvalidOperationException("Permutation importance is not enabled. Configure interpretability with EnablePermutationImportance = true.");
+
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+
+        // Default score function: R²
+        scoreFunction ??= ComputeR2Score;
+
+        var calculator = new PermutationFeatureImportance<T>(
+            predictFunc,
+            scoreFunction,
+            nRepeats: options.PermutationRepeatCount,
+            featureNames: options.FeatureNames,
+            randomState: options.RandomSeed);
+
+        return calculator.Calculate(X, y);
+    }
+
+    /// <summary>
+    /// Trains a global surrogate model to approximate the complex model's behavior.
+    /// </summary>
+    /// <param name="X">The feature matrix to train the surrogate on.</param>
+    /// <returns>A surrogate explanation with linear coefficients and fidelity score.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model is not initialized or global surrogate is not enabled.</exception>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A global surrogate is a simple linear model that tries to mimic
+    /// your complex model. If the surrogate has high fidelity (R² close to 1), you can use it
+    /// to understand the complex model's overall behavior.
+    ///
+    /// The coefficients show:
+    /// - Which features the complex model relies on most
+    /// - Whether each feature has a positive or negative effect
+    /// - The relative importance of each feature
+    ///
+    /// Low fidelity means the complex model is too nonlinear for a linear surrogate.
+    /// </para>
+    /// </remarks>
+    public SurrogateExplanation<T> GetGlobalSurrogateExplanation(Matrix<T> X)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        if (!options.EnableGlobalSurrogate)
+            throw new InvalidOperationException("Global surrogate is not enabled. Configure interpretability with EnableGlobalSurrogate = true.");
+
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+
+        var explainer = new GlobalSurrogateExplainer<T>(
+            predictFunc,
+            X.Columns,
+            options.FeatureNames);
+
+        return explainer.ExplainGlobal(X);
+    }
+
+    /// <summary>
+    /// Computes Accumulated Local Effects (ALE) for all features in the dataset.
+    /// </summary>
+    /// <param name="data">The data matrix to use for computing ALE.</param>
+    /// <param name="numIntervals">Number of intervals to divide each feature range into.</param>
+    /// <returns>The ALE result containing effects for all features.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ALE plots show how each feature affects predictions while properly
+    /// handling correlated features. Unlike PDP, ALE doesn't make unrealistic assumptions about
+    /// feature independence.
+    ///
+    /// Example:
+    /// <code>
+    /// var aleResult = result.GetAccumulatedLocalEffects(trainingData, 20);
+    /// // aleResult.FeatureEffects[0] shows how feature 0 affects predictions
+    /// // Positive values mean the feature increases predictions, negative decreases
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ALEResult<T> GetAccumulatedLocalEffects(Matrix<T> data, int numIntervals = 20)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+        var explainer = new AccumulatedLocalEffectsExplainer<T>(predictFunc, data, numIntervals, options.FeatureNames);
+        return explainer.ExplainGlobal(data);
+    }
+
+    /// <summary>
+    /// Computes Accumulated Local Effects for a specific feature.
+    /// </summary>
+    /// <param name="data">The data matrix to use for computing ALE.</param>
+    /// <param name="featureIndex">Index of the feature to analyze.</param>
+    /// <param name="numIntervals">Number of intervals to divide the feature range into.</param>
+    /// <returns>The ALE result for the specific feature.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This computes ALE for a single feature, showing how
+    /// changing that feature affects predictions while accounting for correlations.
+    ///
+    /// Example:
+    /// <code>
+    /// var aleResult = result.GetFeatureALE(trainingData, 0, 20);
+    /// // aleResult.FeatureEffects[0] shows how feature 0 affects predictions
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ALEResult<T> GetFeatureALE(Matrix<T> data, int featureIndex, int numIntervals = 20)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+        var explainer = new AccumulatedLocalEffectsExplainer<T>(predictFunc, data, numIntervals, options.FeatureNames);
+        return explainer.ExplainGlobal(data);
+    }
+
+    /// <summary>
+    /// Detects and quantifies feature interactions using Friedman's H-statistic.
+    /// </summary>
+    /// <param name="data">The data matrix to analyze.</param>
+    /// <param name="numSamples">Number of samples to use (for performance).</param>
+    /// <returns>Feature interaction results including pairwise H-statistics.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> H-statistic measures how much two features interact in the model.
+    /// - H = 0 means no interaction (features contribute independently)
+    /// - H = 1 means pure interaction (combined effect differs completely from individual effects)
+    ///
+    /// Example:
+    /// <code>
+    /// var interactions = result.GetFeatureInteractions(trainingData, 500);
+    /// var topPairs = interactions.GetTopInteractions(5);
+    /// // Shows the 5 most interacting feature pairs
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public FeatureInteractionResult<T> GetFeatureInteractions(Matrix<T> data, int gridSize = 20)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        var explainer = new FeatureInteractionExplainer<T>(predictFunc, data, gridSize, options.FeatureNames);
+        return explainer.ExplainGlobal(data);
+    }
+
+    /// <summary>
+    /// Explains a prediction using Integrated Gradients attribution.
+    /// </summary>
+    /// <param name="instance">The input instance to explain.</param>
+    /// <param name="baseline">Optional baseline (default is zero vector).</param>
+    /// <param name="numSteps">Number of interpolation steps (higher = more accurate).</param>
+    /// <returns>Attribution scores for each feature.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Integrated Gradients computes how much each feature contributed to
+    /// the prediction by integrating gradients along a path from a baseline to the input.
+    /// It satisfies the completeness axiom: attributions sum to the difference between
+    /// the prediction and the baseline prediction.
+    ///
+    /// Example:
+    /// <code>
+    /// var igResult = result.ExplainWithIntegratedGradients(instance, baseline: null, numSteps: 50);
+    /// // igResult.Attributions[i] shows feature i's contribution
+    /// // igResult.ConvergenceDelta should be close to 0 if converged
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IntegratedGradientsExplanation<T> ExplainWithIntegratedGradients(Vector<T> instance, Vector<T>? baseline = null, int numSteps = 50)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        Func<Vector<T>, Vector<T>> vectorPredictFunc = CreateVectorPredictionFunction();
+        Func<Vector<T>, int, Vector<T>>? gradientFunc = TryCreateIndexedGradientFunction();
+
+        var explainer = new IntegratedGradientsExplainer<T>(
+            vectorPredictFunc,
+            gradientFunc,
+            instance.Length,
+            numSteps,
+            baseline,
+            options.FeatureNames);
+        return explainer.Explain(instance);
+    }
+
+    /// <summary>
+    /// Generates a Grad-CAM heatmap for CNN model predictions.
+    /// </summary>
+    /// <param name="instance">The input instance (typically image data).</param>
+    /// <param name="inputShape">Shape of the input (e.g., [1, 3, 224, 224] for batch, channels, height, width).</param>
+    /// <param name="featureMapShape">Shape of the feature maps from the last conv layer.</param>
+    /// <param name="useGradCAMPlusPlus">Whether to use Grad-CAM++ (better for multiple objects).</param>
+    /// <returns>Grad-CAM explanation with heatmap and class activation maps.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Grad-CAM creates visual explanations showing which parts of an
+    /// image the CNN model focused on when making its prediction. Brighter areas in the heatmap
+    /// indicate regions more important for the prediction.
+    ///
+    /// Example:
+    /// <code>
+    /// var gradCamResult = result.ExplainWithGradCAM(imageData,
+    ///     inputShape: new[] { 1, 3, 224, 224 },
+    ///     featureMapShape: new[] { 1, 512, 14, 14 });
+    /// // gradCamResult.Heatmap shows importance per spatial location
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public GradCAMExplanation<T> ExplainWithGradCAM(Vector<T> instance, int[] inputShape, int[] featureMapShape, bool useGradCAMPlusPlus = false)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        Func<Tensor<T>, Tensor<T>> tensorPredictFunc = CreateTensorPredictionFunction();
+        Func<Tensor<T>, int, Tensor<T>>? featureMapFunc = TryCreateFeatureMapFunction();
+        Func<Tensor<T>, int, int, Tensor<T>>? gradientFunc = TryCreateTensorGradientFunction();
+
+        var explainer = new GradCAMExplainer<T>(
+            tensorPredictFunc,
+            featureMapFunc,
+            gradientFunc,
+            inputShape,
+            featureMapShape,
+            useGradCAMPlusPlus);
+        return explainer.Explain(instance);
+    }
+
+    /// <summary>
+    /// Visualizes attention patterns for transformer-based models.
+    /// </summary>
+    /// <param name="instance">The input instance (e.g., token embeddings).</param>
+    /// <param name="numLayers">Number of transformer layers in the model.</param>
+    /// <param name="numHeads">Number of attention heads per layer.</param>
+    /// <param name="sequenceLength">Length of the input sequence.</param>
+    /// <param name="tokenLabels">Optional labels for each token/position.</param>
+    /// <returns>Attention visualization with rollout and token importance.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Attention visualization shows how transformer models attend to
+    /// different parts of the input when making predictions. Attention rollout aggregates attention
+    /// across all layers to show overall importance.
+    ///
+    /// Example:
+    /// <code>
+    /// var attentionResult = result.ExplainWithAttentionVisualization(
+    ///     embeddings, numLayers: 12, numHeads: 8, sequenceLength: 128,
+    ///     tokenLabels: new[] { "[CLS]", "Hello", "world", "[SEP]" });
+    /// // attentionResult.AttentionRollout shows aggregated attention patterns
+    /// // attentionResult.TokenImportance shows importance of each position
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public AttentionExplanation<T> ExplainWithAttentionVisualization(Vector<T> instance, int numLayers, int numHeads, int sequenceLength, string[]? tokenLabels = null)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        Func<Tensor<T>, Tensor<T>> tensorPredictFunc = CreateTensorPredictionFunction();
+        Func<Tensor<T>, int, Tensor<T>>? attentionFunc = TryCreateAttentionWeightsFunction();
+
+        var explainer = new AttentionVisualizationExplainer<T>(
+            tensorPredictFunc,
+            attentionFunc,
+            numLayers,
+            numHeads,
+            sequenceLength,
+            tokenLabels);
+        return explainer.Explain(instance);
+    }
+
+    /// <summary>
+    /// Explains a prediction using DeepLIFT attribution.
+    /// </summary>
+    /// <param name="instance">The input instance to explain.</param>
+    /// <param name="reference">Reference input (baseline) for comparison.</param>
+    /// <param name="rule">The propagation rule to use (Rescale or RevealCancel).</param>
+    /// <returns>DeepLIFT attributions showing feature contributions.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> DeepLIFT explains predictions by comparing neuron activations
+    /// to a reference input. It propagates the difference in output back through the network
+    /// to assign importance to each input feature.
+    ///
+    /// - Rescale rule: Distributes importance proportionally to activation differences
+    /// - RevealCancel rule: Separates positive and negative contributions
+    ///
+    /// Example:
+    /// <code>
+    /// var deepLiftResult = result.ExplainWithDeepLIFT(instance, referenceInput);
+    /// // deepLiftResult.Attributions[i] shows feature i's contribution
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public DeepLIFTExplanation<T> ExplainWithDeepLIFT(Vector<T> instance, Vector<T>? baseline = null, DeepLIFTRule rule = DeepLIFTRule.Rescale)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        Func<Vector<T>, Vector<T>> vectorPredictFunc = CreateVectorPredictionFunction();
+        Func<Vector<T>, Vector<T>>? getActivations = TryCreateActivationsFunction();
+        Func<Vector<T>, Vector<T>, Vector<T>>? computeMultipliers = TryCreateMultipliersFunction();
+
+        var explainer = new DeepLIFTExplainer<T>(
+            vectorPredictFunc,
+            getActivations,
+            computeMultipliers,
+            instance.Length,
+            baseline,
+            options.FeatureNames,
+            rule);
+        return explainer.Explain(instance);
+    }
+
+    /// <summary>
+    /// Explains a prediction using GradientSHAP (combines Integrated Gradients with SHAP).
+    /// </summary>
+    /// <param name="instance">The input instance to explain.</param>
+    /// <param name="backgroundData">Background dataset for sampling baselines.</param>
+    /// <param name="numSamples">Number of baseline samples to use.</param>
+    /// <returns>GradientSHAP attributions with variance estimates.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> GradientSHAP combines the efficiency of gradient-based methods
+    /// with SHAP's game-theoretic foundation. It samples random baselines from background data
+    /// and averages Integrated Gradients over these baselines.
+    ///
+    /// The variance estimates help you understand how stable the attributions are across
+    /// different baseline choices.
+    ///
+    /// Example:
+    /// <code>
+    /// var gradShapResult = result.ExplainWithGradientSHAP(instance, trainingData, numSamples: 200);
+    /// // gradShapResult.ShapValues[i] is feature i's SHAP value
+    /// // gradShapResult.Variance[i] shows attribution uncertainty
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public GradientSHAPExplanation<T> ExplainWithGradientSHAP(Vector<T> instance, Matrix<T> backgroundData, int numSamples = 200, int numSteps = 50)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        Func<Vector<T>, Vector<T>> vectorPredictFunc = CreateVectorPredictionFunction();
+        Func<Vector<T>, int, Vector<T>>? gradientFunc = TryCreateIndexedGradientFunction();
+
+        var explainer = new GradientSHAPExplainer<T>(
+            vectorPredictFunc,
+            gradientFunc,
+            backgroundData,
+            numSamples,
+            numSteps,
+            true, // addNoise
+            0.09, // noiseStdDev
+            options.FeatureNames);
+        return explainer.Explain(instance);
+    }
+
+    /// <summary>
+    /// Explains a prediction using Layer-wise Relevance Propagation (LRP).
+    /// </summary>
+    /// <param name="instance">The input instance to explain.</param>
+    /// <param name="rule">The LRP propagation rule to use.</param>
+    /// <returns>LRP explanation with relevance scores per feature.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> LRP explains neural network predictions by backpropagating
+    /// "relevance" from the output through each layer to the input. The relevance is conserved
+    /// at each layer, ensuring attributions sum to the output.
+    ///
+    /// Different rules handle different layer types:
+    /// - Basic: Simple proportional distribution
+    /// - Epsilon: Adds stability for near-zero activations
+    /// - Gamma: Emphasizes positive contributions
+    /// - AlphaBeta: Separates positive and negative evidence
+    ///
+    /// Example:
+    /// <code>
+    /// var lrpResult = result.ExplainWithLRP(instance, LRPRule.Epsilon);
+    /// // lrpResult.InputRelevance[i] shows feature i's relevance
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public LRPExplanation<T> ExplainWithLRP(Vector<T> instance, LRPRule rule = LRPRule.Epsilon, double epsilon = 1e-4)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        Func<Vector<T>, Vector<T>> vectorPredictFunc = CreateVectorPredictionFunction();
+        Func<Vector<T>, Vector<T>[]>? getLayerActivations = TryCreateLayerActivationsFunction();
+        Func<int, Matrix<T>>? getLayerWeights = TryCreateLayerWeightsFunction();
+
+        var explainer = new LayerwiseRelevancePropagationExplainer<T>(
+            vectorPredictFunc,
+            getLayerActivations,
+            getLayerWeights,
+            instance.Length,
+            null, // layerSizes - will be inferred
+            options.FeatureNames,
+            rule,
+            epsilon);
+        return explainer.Explain(instance);
+    }
+
+    /// <summary>
+    /// Generates a saliency map showing input gradients.
+    /// </summary>
+    /// <param name="instance">The input instance to explain.</param>
+    /// <param name="method">The saliency method to use.</param>
+    /// <param name="numSamples">Number of samples for SmoothGrad methods.</param>
+    /// <returns>Saliency map showing feature importance via gradients.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Saliency maps show which input features the model is most
+    /// sensitive to. Areas with high gradient magnitude are features that, if changed slightly,
+    /// would most affect the prediction.
+    ///
+    /// - VanillaGradient: Raw gradients (can be noisy)
+    /// - GradientTimesInput: Gradients weighted by input values
+    /// - SmoothGrad: Averages gradients with noise for smoother results
+    /// - SmoothGradSquared: Like SmoothGrad but squares gradients first
+    ///
+    /// Example:
+    /// <code>
+    /// var saliency = result.GetSaliencyMap(instance, SaliencyMethod.SmoothGrad);
+    /// // saliency.Saliency[i] shows feature i's sensitivity
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public SaliencyMapExplanation<T> GetSaliencyMap(Vector<T> instance, SaliencyMethod method = SaliencyMethod.SmoothGrad, int smoothGradSamples = 50, double smoothGradNoise = 0.1)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        Func<Vector<T>, Vector<T>> vectorPredictFunc = CreateVectorPredictionFunction();
+        Func<Vector<T>, int, Vector<T>>? gradientFunc = TryCreateIndexedGradientFunction();
+
+        var explainer = new SaliencyMapExplainer<T>(
+            vectorPredictFunc,
+            gradientFunc,
+            instance.Length,
+            method,
+            smoothGradSamples,
+            smoothGradNoise,
+            options.FeatureNames);
+        return explainer.Explain(instance);
+    }
+
+    /// <summary>
+    /// Explains a prediction using similar examples from a prototype set.
+    /// </summary>
+    /// <param name="instance">The input instance to explain.</param>
+    /// <param name="prototypes">The set of prototype examples.</param>
+    /// <param name="prototypeLabels">Optional labels for each prototype.</param>
+    /// <param name="numPrototypes">Number of similar prototypes to return.</param>
+    /// <param name="metric">Distance metric to use.</param>
+    /// <returns>Prototype explanation with similar and contrasting examples.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Prototype explanations work by saying "this prediction is like
+    /// these examples from the training set." This is intuitive because humans naturally explain
+    /// by comparison.
+    ///
+    /// The explanation includes:
+    /// - Similar prototypes: Examples close to the input with the same prediction
+    /// - Contrast prototypes: Examples with different predictions
+    /// - Distinguishing features: What makes this input different from contrasts
+    ///
+    /// Example:
+    /// <code>
+    /// var protoResult = result.ExplainWithPrototypes(instance, trainingData, labels, 5);
+    /// // protoResult.SimilarPrototypes shows similar examples
+    /// // protoResult.DistinguishingFeatures shows key differences
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public PrototypeExplanation<T> ExplainWithPrototypes(Vector<T> instance, Matrix<T> prototypes, Vector<T>? prototypeLabels = null, int numNeighbors = 5, AiDotNet.Interpretability.Explainers.DistanceMetric metric = AiDotNet.Interpretability.Explainers.DistanceMetric.Euclidean)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+
+        var explainer = new PrototypeExplainer<T>(
+            predictFunc,
+            prototypes,
+            prototypeLabels,
+            numNeighbors,
+            metric,
+            options.FeatureNames);
+        return explainer.Explain(instance);
+    }
+
+    /// <summary>
+    /// Generates a contrastive explanation answering "Why X and not Y?"
+    /// </summary>
+    /// <param name="instance">The input instance to explain.</param>
+    /// <param name="factClass">The actual predicted class (the "fact").</param>
+    /// <param name="foilClass">The alternative class to contrast against (the "foil").</param>
+    /// <returns>Contrastive explanation with pertinent positives and negatives.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Contrastive explanations answer questions like "Why did you
+    /// predict cat instead of dog?" This is how humans naturally explain decisions.
+    ///
+    /// The explanation includes:
+    /// - Pertinent Positives: Features that support the fact (why it IS a cat)
+    /// - Pertinent Negatives: Features that, if changed, would flip to the foil (why it's NOT a dog)
+    /// - Feature contributions: How each feature affects the fact vs foil decision
+    ///
+    /// Example:
+    /// <code>
+    /// var contrast = result.GetContrastiveExplanation(instance, factClass: 3, foilClass: 7);
+    /// // contrast.PertinentPositives: features supporting class 3
+    /// // contrast.PertinentNegatives: features that would flip to class 7
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public ContrastiveExplanation<T> GetContrastiveExplanation(Vector<T> instance, int factClass, int foilClass)
+    {
+        if (Model is null)
+            throw new InvalidOperationException("Model is not initialized.");
+
+        var options = InterpretabilityOptions ?? new InterpretabilityOptions();
+        Func<Matrix<T>, Vector<T>> predictFunc = CreatePredictionFunction();
+
+        var explainer = new ContrastiveExplainer<T>(
+            predictFunc,
+            instance.Length,
+            options.FeatureNames);
+        return explainer.Explain(instance, factClass, foilClass);
+    }
+
+    /// <summary>
+    /// Creates a prediction function that takes a Matrix and returns a Vector of predictions.
+    /// </summary>
+    private Func<Matrix<T>, Vector<T>> CreatePredictionFunction()
+    {
+        return (Matrix<T> inputMatrix) =>
+        {
+            var predictions = new T[inputMatrix.Rows];
+            for (int i = 0; i < inputMatrix.Rows; i++)
+            {
+                var row = inputMatrix.GetRow(i);
+                var input = ConvertVectorToInput(row);
+                var output = Model!.Predict(input);
+                predictions[i] = ConvertOutputToScalar(output);
+            }
+            return new Vector<T>(predictions);
+        };
+    }
+
+    /// <summary>
+    /// Converts a Vector to the model's TInput type.
+    /// </summary>
+    private TInput ConvertVectorToInput(Vector<T> vector)
+    {
+        object result;
+
+        if (typeof(TInput) == typeof(Vector<T>))
+        {
+            result = vector;
+        }
+        else if (typeof(TInput) == typeof(Matrix<T>))
+        {
+            // Create a single-row matrix
+            var matrix = new Matrix<T>(1, vector.Length);
+            for (int j = 0; j < vector.Length; j++)
+                matrix[0, j] = vector[j];
+            result = matrix;
+        }
+        else if (typeof(TInput) == typeof(Tensor<T>))
+        {
+            result = Tensor<T>.FromVector(vector, new[] { 1, vector.Length });
+        }
+        else
+        {
+            throw new NotSupportedException($"Cannot convert Vector<T> to {typeof(TInput).Name} for interpretability methods.");
+        }
+
+        return (TInput)result;
+    }
+
+    /// <summary>
+    /// Converts the model's TOutput to a scalar value.
+    /// </summary>
+    /// <remarks>
+    /// For multi-output models (Vector/Matrix/Tensor with more than one element),
+    /// only the first element is used. This is intentional for univariate interpretability methods.
+    /// </remarks>
+    private T ConvertOutputToScalar(TOutput output)
+    {
+        if (output is T scalar)
+            return scalar;
+
+        if (output is Vector<T> vector && vector.Length > 0)
+        {
+            // Note: For multi-output, we use only the first element
+            return vector[0];
+        }
+
+        if (output is Matrix<T> matrix && matrix.Rows > 0 && matrix.Columns > 0)
+        {
+            // Note: For multi-output, we use only the first element
+            return matrix[0, 0];
+        }
+
+        if (output is Tensor<T> tensor && tensor.Length > 0)
+        {
+            // Note: For multi-output, we use only the first element
+            return tensor.ToVector()[0];
+        }
+
+        throw new NotSupportedException($"Cannot convert {typeof(TOutput).Name} to scalar for interpretability methods.");
+    }
+
+    /// <summary>
+    /// Computes R² score for regression evaluation.
+    /// </summary>
+    private static T ComputeR2Score(Vector<T> actual, Vector<T> predicted)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        if (actual.Length != predicted.Length || actual.Length == 0)
+            return numOps.Zero;
+
+        double meanActual = 0;
+        for (int i = 0; i < actual.Length; i++)
+            meanActual += numOps.ToDouble(actual[i]);
+        meanActual /= actual.Length;
+
+        double ssRes = 0, ssTot = 0;
+        for (int i = 0; i < actual.Length; i++)
+        {
+            double a = numOps.ToDouble(actual[i]);
+            double p = numOps.ToDouble(predicted[i]);
+            ssRes += (a - p) * (a - p);
+            ssTot += (a - meanActual) * (a - meanActual);
+        }
+
+        if (ssTot < 1e-10)
+            return numOps.Zero;
+
+        return numOps.FromDouble(1 - ssRes / ssTot);
+    }
+
+    /// <summary>
+    /// Creates a scalar prediction function that takes a Vector and returns a scalar value.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This helper converts the model's predict method into a simple
+    /// function that gradient-based explainers can use. The function takes feature values
+    /// as input and returns a single prediction value.</para>
+    /// </remarks>
+    private Func<Vector<T>, T> CreateScalarPredictionFunction()
+    {
+        return (Vector<T> input) =>
+        {
+            var modelInput = ConvertVectorToInput(input);
+            var output = Model!.Predict(modelInput);
+            return ConvertOutputToScalar(output);
+        };
+    }
+
+    /// <summary>
+    /// Attempts to create a gradient function from the model if it supports gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Gradients tell us how the output changes with respect to
+    /// small changes in each input feature. If the model doesn't support analytical gradients,
+    /// this returns null and the explainer will fall back to numerical approximation.</para>
+    /// </remarks>
+    private Func<Vector<T>, Vector<T>>? TryCreateGradientFunction()
+    {
+        // Check if the model supports gradient computation via the existing IInputGradientComputable interface
+        // This interface is already implemented by NeuralNetworkBase<T>
+        if (Model is IInputGradientComputable<T> gradientComputable)
+        {
+            return (Vector<T> input) =>
+            {
+                // For saliency/attribution, we compute gradient of max output with respect to input
+                // First get the prediction to determine output size
+                var modelInput = ConvertVectorToInput(input);
+                var output = Model!.Predict(modelInput);
+
+                // Create output gradient: gradient of loss is 1 at predicted class
+                Vector<T> outputGradient;
+                var numOps = MathHelper.GetNumericOperations<T>();
+
+                if (output is Vector<T> outputVec)
+                {
+                    // For multi-output: use gradient that's 1 for max output, 0 elsewhere
+                    var gradArray = new T[outputVec.Length];
+                    int maxIdx = 0;
+                    T maxVal = outputVec[0];
+                    for (int i = 1; i < outputVec.Length; i++)
+                    {
+                        if (numOps.GreaterThan(outputVec[i], maxVal))
+                        {
+                            maxVal = outputVec[i];
+                            maxIdx = i;
+                        }
+                    }
+                    gradArray[maxIdx] = numOps.One;
+                    outputGradient = new Vector<T>(gradArray);
+                }
+                else if (output is Tensor<T> outputTensor)
+                {
+                    var outVec = outputTensor.ToVector();
+                    var gradArray = new T[outVec.Length];
+                    int maxIdx = 0;
+                    T maxVal = outVec[0];
+                    for (int i = 1; i < outVec.Length; i++)
+                    {
+                        if (numOps.GreaterThan(outVec[i], maxVal))
+                        {
+                            maxVal = outVec[i];
+                            maxIdx = i;
+                        }
+                    }
+                    gradArray[maxIdx] = numOps.One;
+                    outputGradient = new Vector<T>(gradArray);
+                }
+                else
+                {
+                    // Single output: gradient is just 1
+                    outputGradient = new Vector<T>(new[] { numOps.One });
+                }
+
+                return gradientComputable.ComputeInputGradient(input, outputGradient);
+            };
+        }
+
+        // For other model types, return null to use numerical approximation
+        return null;
+    }
+
+    /// <summary>
+    /// Creates a prediction function for tensor input/output (used by CNN explainers).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> CNNs work with tensors (multi-dimensional arrays) rather than
+    /// simple vectors. This creates a function that can handle tensor data for Grad-CAM and
+    /// similar visual explanation methods.</para>
+    /// </remarks>
+    private Func<Tensor<T>, Tensor<T>> CreateTensorPredictionFunction()
+    {
+        return (Tensor<T> input) =>
+        {
+            if (typeof(TInput) == typeof(Tensor<T>))
+            {
+                var output = Model!.Predict((TInput)(object)input);
+                if (output is Tensor<T> tensorOut)
+                    return tensorOut;
+                if (output is Vector<T> vecOut)
+                    return Tensor<T>.FromVector(vecOut, new[] { 1, vecOut.Length });
+                throw new InvalidOperationException("Model output cannot be converted to Tensor.");
+            }
+
+            // Convert tensor to appropriate input type
+            var vector = input.ToVector();
+            var modelInput = ConvertVectorToInput(vector);
+            var modelOutput = Model!.Predict(modelInput);
+
+            if (modelOutput is Tensor<T> outTensor)
+                return outTensor;
+            if (modelOutput is Vector<T> outVec)
+                return Tensor<T>.FromVector(outVec, new[] { 1, outVec.Length });
+
+            var scalar = ConvertOutputToScalar(modelOutput);
+            return Tensor<T>.FromVector(new Vector<T>(new[] { scalar }), new[] { 1, 1 });
+        };
+    }
+
+    /// <summary>
+    /// Attempts to create a function that extracts feature maps and their gradients from a CNN.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Grad-CAM needs access to intermediate feature maps in a CNN
+    /// and their gradients. If the model doesn't expose these, this returns null and the
+    /// explainer will fall back to occlusion-based methods.</para>
+    /// </remarks>
+    private Func<Tensor<T>, int, (Tensor<T> featureMaps, Tensor<T> gradients)>? TryCreateFeatureGradientFunction()
+    {
+        // Currently no CNN models implement specialized feature gradient extraction
+        // Return null to use occlusion-based fallback in the explainer
+        // Future: Could implement feature extraction using existing infrastructure
+        // by accessing intermediate layer outputs via INeuralNetworkModel.GetNamedLayerActivations
+        return null;
+    }
+
+    /// <summary>
+    /// Creates a function that extracts attention matrices from transformer layers.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Transformer models use attention to determine which parts
+    /// of the input to focus on. This function extracts those attention patterns for
+    /// visualization. If the model isn't a transformer, it returns empty attention.</para>
+    /// </remarks>
+    private Func<Tensor<T>, List<Tensor<T>>> TryCreateAttentionExtractor()
+    {
+        // Currently no transformer models expose attention weights through a specialized interface
+        // Return empty list - the explainer will use fallback behavior
+        // Future: Could implement attention extraction for models that expose attention layers
+        return (Tensor<T> input) =>
+        {
+            return new List<Tensor<T>>();
+        };
+    }
+
+    /// <summary>
+    /// Creates a function that returns both output and layer activations for DeepLIFT.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> DeepLIFT needs to see what happens at each layer of the
+    /// network, not just the final output. This function captures those intermediate values
+    /// called "activations" so we can trace how the network processed the input.</para>
+    /// </remarks>
+    private Func<Vector<T>, (T output, Vector<T>[] layerActivations)> CreateActivationFunction()
+    {
+        return (Vector<T> input) =>
+        {
+            // Check if model supports activation extraction via INeuralNetworkModel interface
+            // This interface is implemented by NeuralNetworkBase<T>
+            if (Model is INeuralNetworkModel<T> neuralModel)
+            {
+                var tensor = Tensor<T>.FromVector(input, new[] { 1, input.Length });
+                var activations = neuralModel.GetNamedLayerActivations(tensor);
+
+                // Get the output from the last layer
+                var numOps = MathHelper.GetNumericOperations<T>();
+                T scalar = numOps.Zero;
+                Vector<T>[] layerActivs;
+
+                if (activations.Count > 0)
+                {
+                    var sortedActivations = activations.OrderBy(kvp => kvp.Key).ToList();
+                    layerActivs = sortedActivations.Select(kvp => kvp.Value.ToVector()).ToArray();
+
+                    // Last activation is the output
+                    var lastActivation = sortedActivations[sortedActivations.Count - 1].Value;
+                    var outputVec = lastActivation.ToVector();
+                    if (outputVec.Length > 0)
+                        scalar = outputVec[0];
+                }
+                else
+                {
+                    // Fallback: use prediction
+                    var modelInput = ConvertVectorToInput(input);
+                    var modelOutput = Model!.Predict(modelInput);
+                    scalar = ConvertOutputToScalar(modelOutput);
+                    layerActivs = new[] { input };
+                }
+
+                return (scalar, layerActivs);
+            }
+
+            // Fallback: just return output with input as only "activation"
+            var fallbackInput = ConvertVectorToInput(input);
+            var fallbackOutput = Model!.Predict(fallbackInput);
+            var outputScalar = ConvertOutputToScalar(fallbackOutput);
+            return (outputScalar, new[] { input });
+        };
+    }
+
+    /// <summary>
+    /// Creates a function that returns output, activations, and weights for LRP.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> LRP (Layer-wise Relevance Propagation) needs detailed
+    /// information about the network: what values flow through each layer (activations)
+    /// and how layers are connected (weights). This enables tracing importance backwards.</para>
+    /// </remarks>
+    private Func<Vector<T>, (T output, Vector<T>[] activations, Matrix<T>[] weights)> CreateNetworkInfoFunction()
+    {
+        return (Vector<T> input) =>
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+
+            // Check if model supports detailed network information extraction
+            // Use INeuralNetworkModel for activations and access layers through NeuralNetworkBase
+            if (Model is INeuralNetworkModel<T> neuralModel)
+            {
+                var tensor = Tensor<T>.FromVector(input, new[] { 1, input.Length });
+                var namedActivations = neuralModel.GetNamedLayerActivations(tensor);
+
+                // Get sorted activations
+                var sortedActivations = namedActivations.OrderBy(kvp => kvp.Key).ToList();
+                var layerActivs = sortedActivations.Select(kvp => kvp.Value.ToVector()).ToArray();
+
+                // Get output scalar from last activation
+                T scalar = numOps.Zero;
+                if (sortedActivations.Count > 0)
+                {
+                    var lastVec = sortedActivations[sortedActivations.Count - 1].Value.ToVector();
+                    if (lastVec.Length > 0)
+                        scalar = lastVec[0];
+                }
+
+                // Extract weights from layers if possible (using NeuralNetworkBase's Layers property)
+                Matrix<T>[] weights;
+                if (Model is NeuralNetworks.NeuralNetworkBase<T> nnBase)
+                {
+                    var layerWeights = new List<Matrix<T>>();
+                    foreach (var layer in nnBase.Layers)
+                    {
+                        // Try to get weights from the layer using GetWeights()
+                        var weightTensor = layer.GetWeights();
+                        if (weightTensor is not null)
+                        {
+                            var weightData = weightTensor.ToVector().ToArray();
+
+                            // Create matrix from weight data (assume 2D)
+                            if (weightTensor.Shape.Length >= 2)
+                            {
+                                int rows = weightTensor.Shape[0];
+                                int cols = weightTensor.Shape.Length > 1 ? weightTensor.Shape[1] : 1;
+                                var matrix = new Matrix<T>(rows, cols);
+                                int idx = 0;
+                                for (int r = 0; r < rows && idx < weightData.Length; r++)
+                                {
+                                    for (int c = 0; c < cols && idx < weightData.Length; c++)
+                                    {
+                                        matrix[r, c] = weightData[idx++];
+                                    }
+                                }
+                                layerWeights.Add(matrix);
+                            }
+                            else
+                            {
+                                // 1D weights - treat as single row matrix
+                                var matrix = new Matrix<T>(1, weightData.Length);
+                                for (int c = 0; c < weightData.Length; c++)
+                                    matrix[0, c] = weightData[c];
+                                layerWeights.Add(matrix);
+                            }
+                        }
+                        else
+                        {
+                            // No weights - use identity
+                            layerWeights.Add(Matrix<T>.CreateIdentity(1));
+                        }
+                    }
+                    weights = layerWeights.ToArray();
+                }
+                else
+                {
+                    // Fallback: identity matrices for each activation
+                    weights = layerActivs.Select(a => Matrix<T>.CreateIdentity(a.Length)).ToArray();
+                }
+
+                return (scalar, layerActivs, weights);
+            }
+
+            // Fallback: return minimal info
+            var modelInput = ConvertVectorToInput(input);
+            var modelOutput = Model!.Predict(modelInput);
+            var outputScalar = ConvertOutputToScalar(modelOutput);
+
+            // Return input as activation and identity as weight
+            var identity = Matrix<T>.CreateIdentity(input.Length);
+            return (outputScalar, new[] { input }, new[] { identity });
+        };
+    }
+
+    /// <summary>
+    /// Creates a function that returns the predicted class index.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> For classification models, we often need to know which
+    /// class was predicted (as an index like 0, 1, 2...) rather than the raw prediction
+    /// values. This function finds the class with the highest probability.</para>
+    /// </remarks>
+    private Func<Vector<T>, int> CreateClassificationFunction()
+    {
+        return (Vector<T> input) =>
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var modelInput = ConvertVectorToInput(input);
+            var output = Model!.Predict(modelInput);
+
+            // If output is a vector, return index of max
+            if (output is Vector<T> probs)
+            {
+                int maxIdx = 0;
+                T maxVal = probs[0];
+                for (int i = 1; i < probs.Length; i++)
+                {
+                    if (numOps.GreaterThan(probs[i], maxVal))
+                    {
+                        maxVal = probs[i];
+                        maxIdx = i;
+                    }
+                }
+                return maxIdx;
+            }
+
+            if (output is Tensor<T> tensor)
+            {
+                var vec = tensor.ToVector();
+                int maxIdx = 0;
+                T maxVal = vec[0];
+                for (int i = 1; i < vec.Length; i++)
+                {
+                    if (numOps.GreaterThan(vec[i], maxVal))
+                    {
+                        maxVal = vec[i];
+                        maxIdx = i;
+                    }
+                }
+                return maxIdx;
+            }
+
+            // Binary classification: return 0 or 1 based on threshold
+            var scalar = ConvertOutputToScalar(output);
+            return numOps.GreaterThan(scalar, numOps.FromDouble(0.5)) ? 1 : 0;
+        };
+    }
+
+    /// <summary>
+    /// Creates a function that returns class probabilities.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> For classification, we often need the full probability
+    /// distribution across all classes, not just the final prediction. This enables
+    /// contrastive explanations ("why class A and not class B?").</para>
+    /// </remarks>
+    private Func<Vector<T>, Vector<T>> CreateClassProbabilityFunction()
+    {
+        return (Vector<T> input) =>
+        {
+            var modelInput = ConvertVectorToInput(input);
+            var output = Model!.Predict(modelInput);
+
+            if (output is Vector<T> probs)
+                return probs;
+
+            if (output is Tensor<T> tensor)
+                return tensor.ToVector();
+
+            // Single output: treat as binary with [1-p, p]
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var scalar = ConvertOutputToScalar(output);
+            return new Vector<T>(new[] { numOps.Subtract(numOps.One, scalar), scalar });
+        };
+    }
+
+    /// <summary>
+    /// Creates a vector prediction function (Vector in, Vector out).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Many explainers need a function that takes feature values
+    /// and returns a vector of predictions (e.g., class probabilities). This wraps the model
+    /// to provide that interface.</para>
+    /// </remarks>
+    private Func<Vector<T>, Vector<T>> CreateVectorPredictionFunction()
+    {
+        return (Vector<T> input) =>
+        {
+            var modelInput = ConvertVectorToInput(input);
+            var output = Model!.Predict(modelInput);
+
+            if (output is Vector<T> vec)
+                return vec;
+
+            if (output is Tensor<T> tensor)
+                return tensor.ToVector();
+
+            // Scalar output: return as single-element vector
+            var scalar = ConvertOutputToScalar(output);
+            return new Vector<T>(new[] { scalar });
+        };
+    }
+
+    /// <summary>
+    /// Creates a gradient function that takes a vector and output index, returns gradients.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Some explainers need gradients with respect to a specific
+    /// output (e.g., a specific class probability). This function computes gradients for
+    /// the specified output index.</para>
+    /// </remarks>
+    private Func<Vector<T>, int, Vector<T>>? TryCreateIndexedGradientFunction()
+    {
+        // Use the existing IInputGradientComputable interface implemented by NeuralNetworkBase<T>
+        if (Model is IInputGradientComputable<T> gradientComputable)
+        {
+            return (Vector<T> input, int outputIndex) =>
+            {
+                // Get output size from a forward pass
+                var modelInput = ConvertVectorToInput(input);
+                var output = Model!.Predict(modelInput);
+                var numOps = MathHelper.GetNumericOperations<T>();
+
+                // Create output gradient that's 1 at the specified index, 0 elsewhere
+                int outputSize;
+                if (output is Vector<T> outputVec)
+                    outputSize = outputVec.Length;
+                else if (output is Tensor<T> outputTensor)
+                    outputSize = outputTensor.ToVector().Length;
+                else
+                    outputSize = 1;
+
+                var gradArray = new T[outputSize];
+                if (outputIndex >= 0 && outputIndex < outputSize)
+                    gradArray[outputIndex] = numOps.One;
+                else if (outputSize > 0)
+                    gradArray[0] = numOps.One; // Fallback to first output
+
+                var outputGradient = new Vector<T>(gradArray);
+                return gradientComputable.ComputeInputGradient(input, outputGradient);
+            };
+        }
+
+        // Return null to use numerical approximation
+        return null;
+    }
+
+    /// <summary>
+    /// Creates a function to get feature maps at a specific layer for a given class.
+    /// </summary>
+    private Func<Tensor<T>, int, Tensor<T>>? TryCreateFeatureMapFunction()
+    {
+        // Currently no specialized interface for feature map extraction
+        // Return null to use fallback in the explainer
+        return null;
+    }
+
+    /// <summary>
+    /// Creates a function to get gradients for tensor input at specific output and layer.
+    /// </summary>
+    private Func<Tensor<T>, int, int, Tensor<T>>? TryCreateTensorGradientFunction()
+    {
+        // Currently no specialized interface for tensor gradient extraction
+        // Return null to use fallback in the explainer
+        return null;
+    }
+
+    /// <summary>
+    /// Creates a function to get attention weights at a specific layer.
+    /// </summary>
+    private Func<Tensor<T>, int, Tensor<T>>? TryCreateAttentionWeightsFunction()
+    {
+        // Currently no specialized interface for attention weight extraction
+        // Return null to use fallback in the explainer
+        return null;
+    }
+
+    /// <summary>
+    /// Creates a function to get layer activations for DeepLIFT.
+    /// </summary>
+    private Func<Vector<T>, Vector<T>>? TryCreateActivationsFunction()
+    {
+        // Use the INeuralNetworkModel interface which is implemented by NeuralNetworkBase<T>
+        if (Model is INeuralNetworkModel<T> neuralModel)
+        {
+            return (Vector<T> input) =>
+            {
+                var tensor = Tensor<T>.FromVector(input, new[] { 1, input.Length });
+                var namedActivations = neuralModel.GetNamedLayerActivations(tensor);
+
+                // Return the last layer's activation
+                if (namedActivations.Count > 0)
+                {
+                    var sortedActivations = namedActivations.OrderBy(kvp => kvp.Key).ToList();
+                    var lastActivation = sortedActivations[sortedActivations.Count - 1].Value;
+                    return lastActivation.ToVector();
+                }
+
+                return input;
+            };
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Creates a function to compute DeepLIFT multipliers.
+    /// </summary>
+    private Func<Vector<T>, Vector<T>, Vector<T>>? TryCreateMultipliersFunction()
+    {
+        // Multiplier computation is typically handled within DeepLIFT itself
+        // Return null to use the explainer's default implementation
+        return null;
+    }
+
+    /// <summary>
+    /// Creates a function to get all layer activations for LRP.
+    /// </summary>
+    private Func<Vector<T>, Vector<T>[]>? TryCreateLayerActivationsFunction()
+    {
+        // Use the INeuralNetworkModel interface which is implemented by NeuralNetworkBase<T>
+        if (Model is INeuralNetworkModel<T> neuralModel)
+        {
+            return (Vector<T> input) =>
+            {
+                var tensor = Tensor<T>.FromVector(input, new[] { 1, input.Length });
+                var namedActivations = neuralModel.GetNamedLayerActivations(tensor);
+
+                // Return activations sorted by layer name (which includes layer index)
+                var sortedActivations = namedActivations.OrderBy(kvp => kvp.Key).ToList();
+                return sortedActivations.Select(kvp => kvp.Value.ToVector()).ToArray();
+            };
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Creates a function to get layer weights for LRP.
+    /// </summary>
+    private Func<int, Matrix<T>>? TryCreateLayerWeightsFunction()
+    {
+        // Access layers directly through NeuralNetworkBase<T>
+        if (Model is NeuralNetworks.NeuralNetworkBase<T> nnBase)
+        {
+            return (int layerIndex) =>
+            {
+                if (layerIndex < 0 || layerIndex >= nnBase.Layers.Count)
+                    return Matrix<T>.CreateIdentity(1);
+
+                var layer = nnBase.Layers[layerIndex];
+                var weightTensor = layer.GetWeights();
+
+                if (weightTensor is not null)
+                {
+                    var weightData = weightTensor.ToVector().ToArray();
+
+                    // Create matrix from weight data (assume 2D)
+                    if (weightTensor.Shape.Length >= 2)
+                    {
+                        int rows = weightTensor.Shape[0];
+                        int cols = weightTensor.Shape.Length > 1 ? weightTensor.Shape[1] : 1;
+                        var matrix = new Matrix<T>(rows, cols);
+                        int idx = 0;
+                        for (int r = 0; r < rows && idx < weightData.Length; r++)
+                        {
+                            for (int c = 0; c < cols && idx < weightData.Length; c++)
+                            {
+                                matrix[r, c] = weightData[idx++];
+                            }
+                        }
+                        return matrix;
+                    }
+                    else
+                    {
+                        // 1D weights - treat as single row matrix
+                        var matrix = new Matrix<T>(1, weightData.Length);
+                        for (int c = 0; c < weightData.Length; c++)
+                            matrix[0, c] = weightData[c];
+                        return matrix;
+                    }
+                }
+
+                // Return identity if layer doesn't have weights
+                return Matrix<T>.CreateIdentity(1);
+            };
+        }
+
+        return null;
+    }
+
+    #endregion
 
     #region Training Infrastructure Public Accessors
 

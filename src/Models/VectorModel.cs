@@ -7,6 +7,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
+using AiDotNet.Interpretability.Explainers;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Models;
@@ -1186,6 +1187,10 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
 
     #region IInterpretableModel Implementation
 
+    // Suppress CS0618 (obsolete) warnings for legacy interface implementations that call deprecated helper overloads.
+    // The interface methods maintain backwards compatibility while the helper exposes new overloads with required background data.
+#pragma warning disable CS0618
+
     protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
     protected Vector<int>? _sensitiveFeatures;
     protected readonly List<FairnessMetric> _fairnessMetrics = new();
@@ -1426,7 +1431,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// </summary>
     public virtual async Task<T> GetFeatureInteractionAsync(int feature1Index, int feature2Index)
     {
-        return await InterpretableModelHelper.GetFeatureInteractionAsync<T>(_enabledMethods, feature1Index, feature2Index);
+        return await InterpretableModelHelper.GetFeatureInteractionAsync<T>(this, _enabledMethods, feature1Index, feature2Index);
     }
 
     /// <summary>
@@ -1434,7 +1439,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// </summary>
     public virtual async Task<FairnessMetrics<T>> ValidateFairnessAsync(Matrix<T> inputs, int sensitiveFeatureIndex)
     {
-        return await InterpretableModelHelper.ValidateFairnessAsync<T>(_fairnessMetrics);
+        return await InterpretableModelHelper.ValidateFairnessAsync<T>(this, ConversionsHelper.ConvertToTensor<T>(inputs), sensitiveFeatureIndex, _fairnessMetrics);
     }
 
     /// <summary>
@@ -1492,7 +1497,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// </summary>
     public virtual Task<FairnessMetrics<T>> ValidateFairnessAsync(Tensor<T> inputs, int sensitiveFeatureIndex)
     {
-        return InterpretableModelHelper.ValidateFairnessAsync<T>(_fairnessMetrics);
+        return InterpretableModelHelper.ValidateFairnessAsync<T>(this, inputs, sensitiveFeatureIndex, _fairnessMetrics);
     }
 
     /// <summary>
@@ -1539,6 +1544,75 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         _fairnessMetrics.Clear();
         _fairnessMetrics.AddRange(fairnessMetrics);
     }
+
+    /// <summary>
+    /// Gets Integrated Gradients attributions for a prediction.
+    /// </summary>
+    /// <param name="input">The input tensor to explain.</param>
+    /// <param name="baseline">The baseline input (defaults to zeros if null).</param>
+    /// <param name="numSteps">Number of integration steps (default: 50).</param>
+    /// <returns>Integrated Gradients explanation with feature attributions.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Integrated Gradients is primarily designed for neural networks.
+    /// For linear models like VectorModel, it provides similar results to SHAP but with
+    /// a different theoretical foundation.
+    /// </para>
+    /// </remarks>
+    public virtual Task<IntegratedGradientsExplanation<T>> GetIntegratedGradientsAsync(
+        Tensor<T> input,
+        Tensor<T>? baseline = null,
+        int numSteps = 50)
+    {
+        return InterpretableModelHelper.GetIntegratedGradientsAsync(this, _enabledMethods, input, baseline, numSteps);
+    }
+
+    /// <summary>
+    /// Gets DeepLIFT attributions for a prediction.
+    /// </summary>
+    /// <param name="input">The input tensor to explain.</param>
+    /// <param name="baseline">The baseline input (defaults to zeros if null).</param>
+    /// <param name="useRevealCancel">Use RevealCancel rule instead of Rescale.</param>
+    /// <returns>DeepLIFT explanation with feature attributions.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepLIFT is primarily designed for neural networks.
+    /// For linear models, the Rescale rule gives results similar to coefficient-based attribution.
+    /// </para>
+    /// </remarks>
+    public virtual Task<DeepLIFTExplanation<T>> GetDeepLIFTAsync(
+        Tensor<T> input,
+        Tensor<T>? baseline = null,
+        bool useRevealCancel = false)
+    {
+        var rule = useRevealCancel ? DeepLIFTRule.RevealCancel : DeepLIFTRule.Rescale;
+        return InterpretableModelHelper.GetDeepLIFTAsync(this, _enabledMethods, input, baseline, rule);
+    }
+
+    /// <summary>
+    /// Gets GradCAM visual explanation for a prediction.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="targetClass">Target class to explain (-1 for predicted class).</param>
+    /// <returns>GradCAM explanation with heatmap.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GradCAM is designed for CNNs and image data.
+    /// For VectorModel, this method provides a basic implementation but is not
+    /// the recommended explanation method. Use SHAP or LIME instead.
+    /// </para>
+    /// </remarks>
+    public virtual Task<GradCAMExplanation<T>> GetGradCAMAsync(
+        Tensor<T> input,
+        int targetClass = -1)
+    {
+        int[] inputShape = input.Shape;
+        int[] featureMapShape = new[] { inputShape[0], 1, 1, 1 };
+        return InterpretableModelHelper.GetGradCAMAsync(
+            this, _enabledMethods, input, inputShape, featureMapShape, targetClass);
+    }
+
+#pragma warning restore CS0618
 
     #endregion
 
