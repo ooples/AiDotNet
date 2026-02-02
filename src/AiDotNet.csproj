@@ -133,7 +133,7 @@
 	  <!-- CPU acceleration via OpenBLAS -->
 	  <PackageReference Include="AiDotNet.Native.OpenBLAS" Version="0.4.0" />
 	  <!-- GPU acceleration via CLBlast (OpenCL-based) -->
-	  <PackageReference Include="AiDotNet.Native.CLBlast" Version="0.4.0" />
+	  <PackageReference Include="AiDotNet.Native.CLBlast" Version="0.5.0" />
 	  <!-- CPU acceleration via Intel OneDNN -->
 	  <PackageReference Include="AiDotNet.Native.OneDNN" Version="0.4.0" />
 	</ItemGroup>
