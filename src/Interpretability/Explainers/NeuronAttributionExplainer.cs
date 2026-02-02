@@ -163,19 +163,34 @@ public class NeuronAttributionExplainer<T> : IGPUAcceleratedExplainer<T>
     private Vector<T> ComputeIntegratedGradientsAttribution(Vector<T> instance, int targetClass, Vector<T> activations)
     {
         var attributions = new T[_layerSize];
-        var baseline = new Vector<T>(_layerSize);
+        var baseline = new Vector<T>(instance.Length); // Baseline input (zeros)
+        var baselineActivations = new Vector<T>(_layerSize);
 
         for (int neuronIdx = 0; neuronIdx < _layerSize; neuronIdx++)
         {
             double integralSum = 0;
 
+            // Compute gradients at interpolated points between baseline and input
+            // IG = (activation - baseline_activation) × ∫₀¹ ∂F/∂a(baseline + α(input - baseline)) dα
             for (int step = 0; step < _integrationSteps; step++)
             {
-                var gradient = _neuronGradientFunction(instance, targetClass, neuronIdx);
+                // Interpolation factor α ∈ [0, 1]
+                double alpha = (step + 0.5) / _integrationSteps;
+
+                // Create interpolated input: x' + α(x - x')
+                var interpolated = new T[instance.Length];
+                for (int i = 0; i < instance.Length; i++)
+                {
+                    double baseVal = NumOps.ToDouble(baseline[i]);
+                    double inputVal = NumOps.ToDouble(instance[i]);
+                    interpolated[i] = NumOps.FromDouble(baseVal + alpha * (inputVal - baseVal));
+                }
+
+                var gradient = _neuronGradientFunction(new Vector<T>(interpolated), targetClass, neuronIdx);
                 integralSum += NumOps.ToDouble(gradient);
             }
 
-            double activationDiff = NumOps.ToDouble(activations[neuronIdx]) - NumOps.ToDouble(baseline[neuronIdx]);
+            double activationDiff = NumOps.ToDouble(activations[neuronIdx]) - NumOps.ToDouble(baselineActivations[neuronIdx]);
             attributions[neuronIdx] = NumOps.FromDouble(activationDiff * integralSum / _integrationSteps);
         }
 

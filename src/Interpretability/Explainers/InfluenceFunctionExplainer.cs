@@ -424,10 +424,19 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// <summary>
     /// Computes numerical gradients using finite differences.
     /// </summary>
+    /// <remarks>
+    /// <para><b>WARNING:</b> This fallback computes INPUT gradients (∂L/∂x) instead of the
+    /// mathematically required PARAMETER gradients (∂L/∂θ). Influence functions fundamentally
+    /// require gradients with respect to model parameters. This fallback produces approximate
+    /// results that may not accurately reflect training point influence.</para>
+    /// <para>For correct influence function computation, the model must implement
+    /// <see cref="IInterpretableModel{T}"/> with proper parameter gradient support.</para>
+    /// </remarks>
     private Vector<T> ComputeNumericalGradients(Vector<T> input, Vector<T> target)
     {
-        // This is a simplified version - we compute input gradients instead of parameter gradients
-        // For true parameter gradients, the model needs to expose its parameters
+        // WARNING: This computes input gradients instead of parameter gradients.
+        // Influence functions require ∂L/∂θ, but we're computing ∂L/∂x as a proxy.
+        // Results are approximate and may be mathematically incorrect.
         double epsilon = 1e-5;
         var gradients = new T[input.Length];
 
