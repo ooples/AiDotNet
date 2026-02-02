@@ -702,7 +702,11 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     /// <summary>
     /// Performs the forward pass through the N-BEATS network.
     /// </summary>
-    /// <param name="input">Input tensor of shape [batch, lookback_window].</param>
+    /// <param name="input">Input tensor. Supports multiple ranks:
+    /// - 1D: [lookback_window] - treated as batch size 1
+    /// - 2D: [batch, lookback_window] - standard format
+    /// - 3D: [batch, lookback_window, 1] - univariate time series (last dim squeezed)
+    /// </param>
     /// <returns>Output tensor of shape [batch, forecast_horizon].</returns>
     /// <remarks>
     /// <para>
@@ -715,15 +719,57 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> Forward(Tensor<T> input)
     {
-        if (input.Rank < 2)
-            throw new ArgumentException("Input must have shape [batch, lookback_window].", nameof(input));
+        if (input.Rank < 1)
+            throw new ArgumentException("Input tensor cannot be empty.", nameof(input));
+
+        var normalizedInput = input;
+
+        // Normalize input to 2D [batch, lookback_window]
+        // N-BEATS is designed for univariate time series, so we need to handle different input ranks
+        if (input.Rank == 1)
+        {
+            // 1D [lookback_window] -> [1, lookback_window]
+            normalizedInput = input.Reshape(1, input.Shape[0]);
+        }
+        else if (input.Rank == 3 && input.Shape[2] == 1)
+        {
+            // 3D [batch, lookback_window, 1] -> [batch, lookback_window]
+            // This is common for univariate time series data
+            normalizedInput = input.Reshape(input.Shape[0], input.Shape[1]);
+        }
+        else if (input.Rank == 3)
+        {
+            // N-BEATS in this implementation is univariate only
+            throw new ArgumentException(
+                $"Expected univariate input with feature dimension 1, but got {input.Shape[2]}.",
+                nameof(input));
+        }
+        else if (input.Rank > 3)
+        {
+            // Higher dimensional input: flatten all but first dimension
+            if (input.Shape[0] == 0)
+                throw new ArgumentException("Input tensor cannot have zero batch size.", nameof(input));
+            int flattenedDim = input.Length / input.Shape[0];
+            normalizedInput = input.Reshape(input.Shape[0], flattenedDim);
+        }
+        // Rank == 2 is already in correct format
+
+        // Validate normalized input dimensions
+        if (normalizedInput.Length == 0 || normalizedInput.Shape[0] == 0)
+            throw new ArgumentException("Input tensor cannot be empty.", nameof(input));
+
+        if (normalizedInput.Shape[1] != _lookbackWindow)
+            throw new ArgumentException(
+                $"Expected lookback window of {_lookbackWindow}, but got {normalizedInput.Shape[1]}.",
+                nameof(input));
 
         // Clear cached outputs from previous forward pass
         _cachedBlockHiddenOutputs.Clear();
 
-        // Initialize residual as input
-        var residual = input;
-        var totalForecast = new Tensor<T>(new[] { input.Shape[0], _forecastHorizon });
+        // Initialize residual as normalized 2D input
+        var residual = normalizedInput;
+        int batchSize = normalizedInput.Shape[0];
+        var totalForecast = new Tensor<T>(new[] { batchSize, _forecastHorizon });
 
         // Process each block
         foreach (var blockLayers in _blocks)
