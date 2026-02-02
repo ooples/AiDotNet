@@ -707,7 +707,7 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
     /// - 2D: [batch, lookback_window] - standard format
     /// - 3D: [batch, lookback_window, 1] - univariate time series (last dim squeezed)
     /// </param>
-    /// <returns>Output tensor of shape [batch, forecast_horizon] (or original shape with forecast_horizon as last dim).</returns>
+    /// <returns>Output tensor of shape [batch, forecast_horizon].</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The N-BEATS forward pass is unique:
