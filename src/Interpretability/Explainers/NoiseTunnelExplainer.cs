@@ -51,6 +51,7 @@ public class NoiseTunnelExplainer<T, TExplanation>
     private readonly Func<TExplanation, Vector<T>> _attributionExtractor;
     private readonly Func<Vector<T>, TExplanation, TExplanation> _attributionReplacer;
     private readonly Random _random;
+    private readonly object _randomLock = new();
 
     /// <summary>Gets the name of this method.</summary>
     public string MethodName => $"NoiseTunnel({_baseExplainer.MethodName}, {_noiseTunnelType})";
@@ -111,6 +112,9 @@ public class NoiseTunnelExplainer<T, TExplanation>
     /// </remarks>
     public TExplanation Explain(Vector<T> input)
     {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
         var allAttributions = new List<Vector<T>>(_numSamples);
 
         // Collect attributions from noisy samples
@@ -137,6 +141,9 @@ public class NoiseTunnelExplainer<T, TExplanation>
     /// <returns>Array of smoothed explanations.</returns>
     public TExplanation[] ExplainBatch(Matrix<T> inputs)
     {
+        if (inputs == null)
+            throw new ArgumentNullException(nameof(inputs));
+
         var results = new TExplanation[inputs.Rows];
         for (int i = 0; i < inputs.Rows; i++)
         {
@@ -182,9 +189,12 @@ public class NoiseTunnelExplainer<T, TExplanation>
     private double GenerateGaussian()
     {
         // Box-Muller transform
-        double u1 = 1.0 - _random.NextDouble();
-        double u2 = _random.NextDouble();
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        lock (_randomLock)
+        {
+            double u1 = 1.0 - _random.NextDouble();
+            double u2 = _random.NextDouble();
+            return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        }
     }
 
     /// <summary>
@@ -219,7 +229,7 @@ public class NoiseTunnelExplainer<T, TExplanation>
                 break;
 
             case NoiseTunnelType.VarGrad:
-                result = ComputeVariance(attributions);
+                result = ComputeStandardDeviation(attributions);
                 break;
 
             default:
@@ -290,17 +300,17 @@ public class NoiseTunnelExplainer<T, TExplanation>
     }
 
     /// <summary>
-    /// Computes element-wise variance of attributions.
+    /// Computes element-wise standard deviation of attributions.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> VarGrad - computes variance instead of mean.
-    /// High variance at a feature means the model's sensitivity to that
+    /// <b>For Beginners:</b> VarGrad - computes standard deviation (sqrt of variance).
+    /// High standard deviation at a feature means the model's sensitivity to that
     /// feature changes a lot with small input perturbations. This can
     /// indicate features at decision boundaries.
     /// </para>
     /// </remarks>
-    private T[] ComputeVariance(List<Vector<T>> attributions)
+    private T[] ComputeStandardDeviation(List<Vector<T>> attributions)
     {
         int length = attributions[0].Length;
         var result = new T[length];
