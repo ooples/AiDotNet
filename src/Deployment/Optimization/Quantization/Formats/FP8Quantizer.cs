@@ -188,7 +188,9 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     private double ToFP8(double value)
     {
         if (double.IsNaN(value))
-            return 0; // FP8 E4M3 doesn't have NaN, use 0
+            // Note: IEEE FP8 E4M3 can represent NaN, but for ML quantization we map NaN to 0
+            // to avoid propagating invalid values through the model (safer for inference)
+            return 0;
 
         return _format == FP8Format.E4M3 ? ToE4M3(value) : ToE5M2(value);
     }
