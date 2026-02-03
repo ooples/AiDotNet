@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MixedPrecision;
 using Xunit;
@@ -811,6 +812,262 @@ public class MixedPrecisionIntegrationTests
 
         // Assert
         Assert.False(hasOverflow);
+    }
+
+    #endregion
+
+    #region FP8 Type Tests
+
+    [Fact]
+    public void Float8E4M3_Conversion_RoundTripsCorrectly()
+    {
+        // Arrange - Use smaller values where E4M3 has better precision
+        var testValues = new[] { 0f, 1f, -1f, 0.5f, 2.5f, 8f, -4f };
+
+        foreach (var value in testValues)
+        {
+            // Act
+            var e4m3 = Float8E4M3.FromFloat(value);
+            var roundTrip = e4m3.ToFloat();
+
+            // Assert - E4M3 has limited precision (3 mantissa bits), allow some tolerance
+            // Relative error can be up to ~12.5% for E4M3
+            var tolerance = Math.Max(1.0f, Math.Abs(value) * 0.15f);
+            Assert.True(Math.Abs(value - roundTrip) <= tolerance,
+                $"Value {value} became {roundTrip}, exceeding tolerance {tolerance}");
+        }
+    }
+
+    [Fact]
+    public void Float8E4M3_Clamps_ValuesOutOfRange()
+    {
+        // Arrange
+        const float maxE4M3 = 448f;
+
+        // Act
+        var tooLarge = Float8E4M3.FromFloat(1000f);
+        var tooLargeBack = tooLarge.ToFloat();
+
+        // Assert - Should be clamped to max
+        Assert.True(tooLargeBack <= maxE4M3);
+    }
+
+    [Fact]
+    public void Float8E4M3_HandlesZero()
+    {
+        // Act
+        var zero = Float8E4M3.FromFloat(0f);
+        var negZero = Float8E4M3.FromFloat(-0f);
+
+        // Assert
+        Assert.True(zero.IsZero);
+        Assert.Equal(0f, zero.ToFloat());
+    }
+
+    [Fact]
+    public void Float8E4M3_HandlesNaN()
+    {
+        // Act
+        var nan = Float8E4M3.FromFloat(float.NaN);
+
+        // Assert
+        Assert.True(nan.IsNaN);
+        Assert.True(float.IsNaN(nan.ToFloat()));
+    }
+
+    [Fact]
+    public void Float8E5M2_Conversion_RoundTripsCorrectly()
+    {
+        // Arrange
+        var testValues = new[] { 0f, 1f, -1f, 0.5f, 10f, 1000f, -500f };
+
+        foreach (var value in testValues)
+        {
+            // Act
+            var e5m2 = Float8E5M2.FromFloat(value);
+            var roundTrip = e5m2.ToFloat();
+
+            // Assert - E5M2 has even less precision, allow more tolerance
+            Assert.True(Math.Abs(value - roundTrip) < Math.Max(1.0, Math.Abs(value) * 0.5));
+        }
+    }
+
+    [Fact]
+    public void Float8E5M2_HasLargerRange_ThanE4M3()
+    {
+        // Arrange
+        const float largeValue = 50000f;
+
+        // Act
+        var e4m3 = Float8E4M3.FromFloat(largeValue);
+        var e5m2 = Float8E5M2.FromFloat(largeValue);
+
+        // Assert - E4M3 should clamp, E5M2 should represent (or be close)
+        Assert.True(e4m3.ToFloat() < largeValue); // E4M3 max is 448
+        Assert.True(Math.Abs(e5m2.ToFloat() - largeValue) < 10000); // E5M2 can represent up to 57344
+    }
+
+    [Fact]
+    public void Float8E5M2_HandlesInfinity()
+    {
+        // Act
+        var posInf = Float8E5M2.FromFloat(float.PositiveInfinity);
+        var negInf = Float8E5M2.FromFloat(float.NegativeInfinity);
+
+        // Assert
+        Assert.True(posInf.IsInfinity);
+        Assert.True(negInf.IsInfinity);
+        Assert.True(float.IsPositiveInfinity(posInf.ToFloat()));
+        Assert.True(float.IsNegativeInfinity(negInf.ToFloat()));
+    }
+
+    [Fact]
+    public void Float8Extensions_BulkConversion_Works()
+    {
+        // Arrange
+        var values = new[] { 1f, 2f, 3f, 4f, 5f };
+
+        // Act
+        var e4m3Array = values.ToE4M3();
+        var backToFloat = e4m3Array.ToFloatArray();
+
+        // Assert
+        Assert.Equal(values.Length, e4m3Array.Length);
+        Assert.Equal(values.Length, backToFloat.Length);
+        for (int i = 0; i < values.Length; i++)
+        {
+            Assert.Equal(values[i], backToFloat[i], precision: 0);
+        }
+    }
+
+    [Fact]
+    public void Float8_E4M3ToE5M2Conversion_Works()
+    {
+        // Arrange
+        var e4m3 = Float8E4M3.FromFloat(10f);
+
+        // Act
+        var e5m2 = e4m3.ToE5M2();
+        var backToE4M3 = e5m2.ToE4M3();
+
+        // Assert - Should preserve value through conversion
+        Assert.Equal(e4m3.ToFloat(), backToE4M3.ToFloat(), precision: 0);
+    }
+
+    #endregion
+
+    #region Layer Precision Policy Tests
+
+    [Fact]
+    public void LayerPrecisionPolicy_DefaultPrecision_AppliedCorrectly()
+    {
+        // Arrange
+        var policy = new LayerPrecisionPolicy(MixedPrecisionType.FP16);
+
+        // Act
+        var precision = policy.GetPrecision("SomeRandomLayer");
+
+        // Assert
+        Assert.Equal(MixedPrecisionType.FP16, precision);
+    }
+
+    [Fact]
+    public void LayerPrecisionPolicy_ExactMatch_TakesPrecedence()
+    {
+        // Arrange
+        var policy = new LayerPrecisionPolicy(MixedPrecisionType.FP16)
+            .SetPrecision("layer1", MixedPrecisionType.None);
+
+        // Act
+        var precision = policy.GetPrecision("layer1");
+
+        // Assert
+        Assert.Equal(MixedPrecisionType.None, precision);
+    }
+
+    [Fact]
+    public void LayerPrecisionPolicy_PatternMatch_Works()
+    {
+        // Arrange
+        var policy = new LayerPrecisionPolicy(MixedPrecisionType.FP8_Hybrid)
+            .KeepInFP32("Norm");
+
+        // Act & Assert
+        Assert.Equal(MixedPrecisionType.None, policy.GetPrecision("LayerNorm"));
+        Assert.Equal(MixedPrecisionType.None, policy.GetPrecision("BatchNorm"));
+        Assert.Equal(MixedPrecisionType.None, policy.GetPrecision("RMSNorm"));
+        Assert.Equal(MixedPrecisionType.FP8_Hybrid, policy.GetPrecision("Linear"));
+    }
+
+    [Fact]
+    public void LayerPrecisionPolicy_ForFP8_ExcludesNormalization()
+    {
+        // Arrange
+        var policy = LayerPrecisionPolicy.ForFP8();
+
+        // Act & Assert
+        Assert.True(policy.ShouldSkipMixedPrecision("LayerNorm"));
+        Assert.True(policy.ShouldSkipMixedPrecision("BatchNorm1d"));
+        Assert.True(policy.ShouldUseHigherPrecision("Softmax"));
+        Assert.False(policy.ShouldSkipMixedPrecision("Linear"));
+    }
+
+    [Fact]
+    public void LayerPrecisionPolicy_ForFP8Transformers_ConfiguredCorrectly()
+    {
+        // Arrange
+        var policy = LayerPrecisionPolicy.ForFP8Transformers();
+
+        // Act & Assert
+        Assert.True(policy.ShouldSkipMixedPrecision("LayerNorm"));
+        Assert.True(policy.ShouldUseHigherPrecision("self_attn"));
+        Assert.True(policy.ShouldUseHigherPrecision("Embedding"));
+        Assert.False(policy.ShouldSkipMixedPrecision("mlp.fc1")); // MLP stays in FP8
+    }
+
+    #endregion
+
+    #region MixedPrecisionConfig Factory Tests
+
+    [Fact]
+    public void MixedPrecisionConfig_ForFP8_HasCorrectSettings()
+    {
+        // Act
+        var config = MixedPrecisionConfig.ForFP8();
+
+        // Assert
+        Assert.Equal(MixedPrecisionType.FP8_Hybrid, config.PrecisionType);
+        Assert.Equal(MixedPrecisionType.FP8_E4M3, config.FP8ForwardFormat);
+        Assert.Equal(MixedPrecisionType.FP8_E5M2, config.FP8BackwardFormat);
+        Assert.True(config.FP8PerTensorScaling);
+        Assert.True(config.EnableDynamicScaling);
+        Assert.Contains("LayerNorm", config.FP8ExcludedLayers);
+    }
+
+    [Fact]
+    public void MixedPrecisionConfig_ForBF16_HasCorrectSettings()
+    {
+        // Act
+        var config = MixedPrecisionConfig.ForBF16();
+
+        // Assert
+        Assert.Equal(MixedPrecisionType.BF16, config.PrecisionType);
+        Assert.False(config.EnableDynamicScaling); // BF16 doesn't need loss scaling
+        Assert.Equal(1.0, config.InitialLossScale);
+    }
+
+    [Fact]
+    public void MixedPrecisionConfig_Conservative_HasSaferSettings()
+    {
+        // Act
+        var config = MixedPrecisionConfig.Conservative();
+
+        // Assert
+        Assert.Equal(4096.0, config.InitialLossScale); // Lower than default
+        Assert.Equal(4000, config.ScaleGrowthInterval); // More conservative
+        Assert.Equal(0.25, config.ScaleBackoffFactor); // More aggressive backoff
+        Assert.True(config.Fp32BatchNorm);
+        Assert.True(config.Fp32GradientAccumulation);
     }
 
     #endregion
