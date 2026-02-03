@@ -477,7 +477,7 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     /// the provided parameters among its chain classifiers.
     /// </para>
     /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Matrix<T>> WithParameters(Vector<T> parameters)
     {
         var newClassifier = new ClassifierChainClassifier<T>(
             _classifierFactory, _specifiedOrder, _useRandomOrder, null, Options, Regularization);
@@ -532,17 +532,27 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     /// concatenates them into a single vector.
     /// </para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public override Vector<T> ComputeGradients(Matrix<T> input, Matrix<T> target, ILossFunction<T>? lossFunction = null)
     {
-        if (_chainClassifiers is null || _chainClassifiers.Length == 0)
+        if (_chainClassifiers is null || _chainClassifiers.Length == 0 || _chainOrder is null)
         {
             return new Vector<T>(0);
         }
 
         var allGradients = new List<T>();
-        foreach (var classifier in _chainClassifiers)
+        for (int chainIdx = 0; chainIdx < _chainClassifiers.Length; chainIdx++)
         {
-            var gradients = classifier.ComputeGradients(input, target, lossFunction);
+            var classifier = _chainClassifiers[chainIdx];
+            var labelIdx = _chainOrder[chainIdx];
+
+            // Extract binary labels for this label
+            var binaryTarget = new Vector<T>(target.Rows);
+            for (int i = 0; i < target.Rows; i++)
+            {
+                binaryTarget[i] = target[i, labelIdx];
+            }
+
+            var gradients = classifier.ComputeGradients(input, binaryTarget, lossFunction);
             for (int i = 0; i < gradients.Length; i++)
             {
                 allGradients.Add(gradients[i]);
@@ -593,7 +603,7 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     /// <b>For Beginners:</b> This is used internally for operations like cloning or serialization.
     /// </para>
     /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()
     {
         return new ClassifierChainClassifier<T>(_classifierFactory, _specifiedOrder, _useRandomOrder, null, Options, Regularization);
     }
@@ -608,7 +618,7 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     /// including all its chain classifiers and the chain order.
     /// </para>
     /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    public override IFullModel<T, Matrix<T>, Matrix<T>> Clone()
     {
         var clone = new ClassifierChainClassifier<T>(
             _classifierFactory, _specifiedOrder, _useRandomOrder, _random.Next(), Options, Regularization);

@@ -389,7 +389,7 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     /// the underlying classifier's parameters.
     /// </para>
     /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Matrix<T>> WithParameters(Vector<T> parameters)
     {
         var newClassifier = new LabelPowerset<T>(_classifierFactory, Options, Regularization);
         newClassifier.NumLabels = NumLabels;
@@ -427,14 +427,29 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     /// <b>For Beginners:</b> This computes gradients for the underlying multi-class classifier.
     /// </para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public override Vector<T> ComputeGradients(Matrix<T> input, Matrix<T> target, ILossFunction<T>? lossFunction = null)
     {
-        if (_classifier is null)
+        if (_classifier is null || _labelsToClass is null)
         {
             return new Vector<T>(0);
         }
 
-        return _classifier.ComputeGradients(input, target, lossFunction);
+        // Convert multi-label target to class index vector
+        var classTargets = new Vector<T>(target.Rows);
+        for (int i = 0; i < target.Rows; i++)
+        {
+            var labels = new bool[target.Columns];
+            for (int j = 0; j < target.Columns; j++)
+            {
+                labels[j] = NumOps.ToDouble(target[i, j]) > 0.5;
+            }
+
+            var key = string.Join(",", labels.Select(l => l ? "1" : "0"));
+            int classIdx = _labelsToClass.TryGetValue(key, out var idx) ? idx : 0;
+            classTargets[i] = NumOps.FromDouble(classIdx);
+        }
+
+        return _classifier.ComputeGradients(input, classTargets, lossFunction);
     }
 
     /// <summary>
@@ -461,7 +476,7 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     /// <b>For Beginners:</b> This is used internally for operations like cloning or serialization.
     /// </para>
     /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()
     {
         return new LabelPowerset<T>(_classifierFactory, Options, Regularization);
     }
@@ -476,7 +491,7 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     /// including its label mappings and underlying classifier.
     /// </para>
     /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    public override IFullModel<T, Matrix<T>, Matrix<T>> Clone()
     {
         var clone = new LabelPowerset<T>(_classifierFactory, Options, Regularization);
         clone.NumLabels = NumLabels;

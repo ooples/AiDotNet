@@ -2546,7 +2546,79 @@ public enum ModelType
     /// Good for online regression with streaming data.
     /// </para>
     /// </remarks>
-    OnlinePassiveAggressiveRegressor
+    OnlinePassiveAggressiveRegressor,
+
+    /// <summary>
+    /// A classifier for time series data using specialized feature extraction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Time Series Classifiers are designed to classify sequences of data
+    /// points ordered in time. Examples include classifying ECG recordings, sensor data, or
+    /// activity recognition from accelerometer data.
+    /// </para>
+    /// </remarks>
+    TimeSeriesClassifier,
+
+    /// <summary>
+    /// An online (incremental) learning model that can learn from streaming data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Online Learning models can update their knowledge one sample at a time.
+    /// This is useful when data arrives continuously (like social media feeds or sensor streams)
+    /// or when the dataset is too large to fit in memory. Examples include Hoeffding Tree and
+    /// Online Naive Bayes.
+    /// </para>
+    /// </remarks>
+    OnlineLearning,
+
+    /// <summary>
+    /// A classifier that assigns multiple labels to each sample.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Multi-label classifiers handle cases where each sample can have
+    /// multiple tags or categories. For example, a movie might be both "Action" and "Comedy".
+    /// Examples include ML-kNN and RAkEL.
+    /// </para>
+    /// </remarks>
+    MultiLabelClassifier,
+
+    /// <summary>
+    /// A survival analysis model for time-to-event prediction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Survival models predict when an event will occur, handling cases
+    /// where some events haven't happened yet (censoring). Used in medical studies, churn
+    /// prediction, and reliability engineering.
+    /// </para>
+    /// </remarks>
+    SurvivalModel,
+
+    /// <summary>
+    /// A causal inference model for estimating treatment effects.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Causal models estimate what would happen if we apply a treatment
+    /// or intervention. Unlike prediction, they answer "what if" questions about cause and effect.
+    /// </para>
+    /// </remarks>
+    CausalModel,
+
+    /// <summary>
+    /// An ordinal classifier for ordered categories.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Ordinal classifiers handle categories with a natural order like
+    /// ratings (1-5 stars) or education levels. They consider that predicting nearby categories
+    /// is better than predicting distant ones.
+    /// </para>
+    /// </remarks>
+    OrdinalClassifier
 }
 
 

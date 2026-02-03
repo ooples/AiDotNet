@@ -262,7 +262,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
     /// the provided parameters among its label classifiers.
     /// </para>
     /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Matrix<T>> WithParameters(Vector<T> parameters)
     {
         var newClassifier = new BinaryRelevance<T>(_classifierFactory, Options, Regularization);
         newClassifier.NumLabels = NumLabels;
@@ -307,7 +307,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
     /// Computes gradients for gradient-based optimization.
     /// </summary>
     /// <param name="input">The input features.</param>
-    /// <param name="target">The target labels (expected to be multi-label format).</param>
+    /// <param name="target">The target label matrix.</param>
     /// <param name="lossFunction">The loss function (optional).</param>
     /// <returns>A concatenated gradient vector from all label classifiers.</returns>
     /// <remarks>
@@ -316,7 +316,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
     /// and concatenates them into a single vector.
     /// </para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public override Vector<T> ComputeGradients(Matrix<T> input, Matrix<T> target, ILossFunction<T>? lossFunction = null)
     {
         if (_labelClassifiers is null || _labelClassifiers.Length == 0)
         {
@@ -324,9 +324,18 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
         }
 
         var allGradients = new List<T>();
-        foreach (var classifier in _labelClassifiers)
+        for (int labelIndex = 0; labelIndex < NumLabels && labelIndex < _labelClassifiers.Length; labelIndex++)
         {
-            var gradients = classifier.ComputeGradients(input, target, lossFunction);
+            var classifier = _labelClassifiers[labelIndex];
+
+            // Extract binary labels for this label column
+            var binaryTarget = new Vector<T>(target.Rows);
+            for (int i = 0; i < target.Rows; i++)
+            {
+                binaryTarget[i] = target[i, labelIndex];
+            }
+
+            var gradients = classifier.ComputeGradients(input, binaryTarget, lossFunction);
             for (int i = 0; i < gradients.Length; i++)
             {
                 allGradients.Add(gradients[i]);
@@ -377,7 +386,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
     /// <b>For Beginners:</b> This is used internally for operations like cloning or serialization.
     /// </para>
     /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+    protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()
     {
         return new BinaryRelevance<T>(_classifierFactory, Options, Regularization);
     }
@@ -392,7 +401,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
     /// including all its internal label classifiers.
     /// </para>
     /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    public override IFullModel<T, Matrix<T>, Matrix<T>> Clone()
     {
         var clone = new BinaryRelevance<T>(_classifierFactory, Options, Regularization);
         clone.NumLabels = NumLabels;
