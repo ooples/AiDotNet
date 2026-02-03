@@ -228,6 +228,17 @@ public class DeepGaussianProcess<T> : IGaussianProcess<T>
     /// </remarks>
     public void Fit(Matrix<T> X, Vector<T> y)
     {
+        if (X == null) throw new ArgumentNullException(nameof(X));
+        if (y == null) throw new ArgumentNullException(nameof(y));
+        if (X.Rows != y.Length)
+        {
+            throw new ArgumentException($"Number of rows in X ({X.Rows}) must match length of y ({y.Length}).", nameof(y));
+        }
+        if (X.Rows == 0)
+        {
+            throw new ArgumentException("Training data cannot be empty.", nameof(X));
+        }
+
         _X = X;
         _y = y;
 
@@ -298,6 +309,16 @@ public class DeepGaussianProcess<T> : IGaussianProcess<T>
     /// <inheritdoc/>
     public (T mean, T variance) Predict(Vector<T> x)
     {
+        if (_X.IsEmpty || _y.IsEmpty)
+        {
+            throw new InvalidOperationException("Model must be trained before prediction. Call Fit() first.");
+        }
+        if (_numSamples < 1)
+        {
+            throw new InvalidOperationException("Number of samples must be at least 1 for prediction.");
+        }
+        if (x == null) throw new ArgumentNullException(nameof(x));
+
         var random = RandomHelper.CreateSecureRandom();
 
         // Create input matrix from single vector
