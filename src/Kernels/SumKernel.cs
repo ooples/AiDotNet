@@ -70,6 +70,13 @@ public class SumKernel<T> : IKernelFunction<T>
         if (kernels is null || kernels.Length == 0)
             throw new ArgumentException("At least one kernel must be provided.", nameof(kernels));
 
+        // Validate no null entries
+        for (int i = 0; i < kernels.Length; i++)
+        {
+            if (kernels[i] is null)
+                throw new ArgumentNullException(nameof(kernels), $"Kernel at index {i} cannot be null.");
+        }
+
         _kernels = kernels;
         _numOps = MathHelper.GetNumericOperations<T>();
     }

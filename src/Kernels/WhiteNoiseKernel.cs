@@ -79,6 +79,8 @@ public class WhiteNoiseKernel<T> : IKernelFunction<T>
     {
         if (noiseVariance < 0)
             throw new ArgumentException("Noise variance must be non-negative.", nameof(noiseVariance));
+        if (tolerance < 0)
+            throw new ArgumentException("Tolerance must be non-negative.", nameof(tolerance));
 
         _noiseVariance = noiseVariance;
         _tolerance = tolerance;
