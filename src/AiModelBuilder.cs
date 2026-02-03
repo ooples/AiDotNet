@@ -2353,15 +2353,21 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             try
             {
-                // Use training data as calibration data if not streaming
+                // Use preprocessed training data as calibration data for consistent quantization
+                // This ensures calibration sees the same data distribution as during training
                 IEnumerable<TInput>? calibrationData = null;
-                if (x is TInput[] xArray)
+                if (XTrain is TInput[] xTrainArray)
                 {
-                    calibrationData = xArray.Take(Math.Min(128, xArray.Length));
+                    calibrationData = xTrainArray.Take(Math.Min(128, xTrainArray.Length));
                 }
-                else if (x is IEnumerable<TInput> xEnumerable)
+                else if (XTrain is IEnumerable<TInput> xTrainEnumerable)
                 {
-                    calibrationData = xEnumerable.Take(128);
+                    calibrationData = xTrainEnumerable.Take(128);
+                }
+                else if (XTrain != null)
+                {
+                    // Wrap single item as calibration data if not enumerable
+                    calibrationData = new[] { XTrain };
                 }
 
                 var (quantizedModel, quantizationInfoResult) = ApplyQuantizationIfConfigured(
@@ -7200,7 +7206,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         // Get model parameters for size calculation
         var parameters = model.GetParameters();
-        long originalSizeBytes = parameters.Length * sizeof(double); // Assume 64-bit per parameter
+        // Estimate parameter size based on type: 8 bytes for double, 4 for float/int, 2 for half
+        int bytesPerParameter = typeof(T) == typeof(float) ? 4
+            : typeof(T) == typeof(double) ? 8
+            : typeof(T) == typeof(Half) ? 2
+            : 8; // Default to 8 bytes for unknown types
+        long originalSizeBytes = parameters.Length * bytesPerParameter;
 
         // Calibrate if calibration data is provided and strategy requires it
         if (calibrationData != null && internalConfig.CalibrationMethod != CalibrationMethod.None)
