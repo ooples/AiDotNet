@@ -1929,6 +1929,20 @@ public enum ModelType
     /// </remarks>
     VotingClassifier,
 
+    /// <summary>
+    /// Ordinal regression classifier for predicting ordered categorical outcomes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Ordinal Regression is used when your categories have a natural order but the distances
+    /// between them aren't necessarily equal. Examples include star ratings (1-5 stars), education levels
+    /// (high school, bachelor's, master's, PhD), or pain levels (none, mild, moderate, severe).
+    /// Unlike regular classification that ignores the order, ordinal regression uses this ordering information
+    /// to make better predictions and meaningful errors (predicting 3 when the answer is 4 is better than predicting 1).
+    /// </para>
+    /// </remarks>
+    OrdinalRegression,
+
     // ==================== Semi-Supervised Learning ====================
 
     /// <summary>
