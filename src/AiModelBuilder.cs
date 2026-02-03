@@ -7211,7 +7211,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             : typeof(T) == typeof(double) ? 8
             : typeof(T) == typeof(Half) ? 2
             : 8; // Default to 8 bytes for unknown types
-        long originalSizeBytes = parameters.Length * bytesPerParameter;
+        // Cast to long first to prevent int overflow for large models
+        long originalSizeBytes = (long)parameters.Length * bytesPerParameter;
 
         // Calibrate if calibration data is provided and strategy requires it
         if (calibrationData != null && internalConfig.CalibrationMethod != CalibrationMethod.None)
@@ -7259,7 +7260,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         // Calculate actual quantized size based on bit width
         // For sub-byte quantization (4-bit), we need to account for packing
-        long quantizedSizeBytes = (quantizedParameters.Length * internalConfig.EffectiveBitWidth + 7) / 8;
+        long quantizedSizeBytes = ((long)quantizedParameters.Length * internalConfig.EffectiveBitWidth + 7) / 8;
 
         // Build QuantizationInfo
         var info = new QuantizationInfo

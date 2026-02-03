@@ -315,7 +315,8 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     /// </summary>
     public static byte E4M3ToByte(double value)
     {
-        if (value == 0) return 0;
+        // Use epsilon comparison for floating-point zero check
+        if (Math.Abs(value) < double.Epsilon) return 0;
 
         bool sign = value < 0;
         double absValue = Math.Abs(value);
@@ -384,7 +385,8 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     /// </summary>
     public static byte E5M2ToByte(double value)
     {
-        if (value == 0) return 0;
+        // Use epsilon comparison for floating-point zero check
+        if (Math.Abs(value) < double.Epsilon) return 0;
         if (double.IsNaN(value)) return 0x7F; // NaN pattern
         if (double.IsPositiveInfinity(value)) return 0x7C;
         if (double.IsNegativeInfinity(value)) return 0xFC;

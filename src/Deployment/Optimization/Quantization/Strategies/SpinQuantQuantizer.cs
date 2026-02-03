@@ -267,8 +267,9 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
         {
             for (int j = 0; j < size; j++)
             {
-                // Finite difference approximation of gradient
-                double eps = 1e-5;
+                // Finite difference approximation of gradient with adaptive epsilon
+                // Scale epsilon with rotation value magnitude for numerical stability
+                double eps = Math.Max(1e-5, Math.Abs(currentRotation[i, j]) * 1e-6);
 
                 // Perturb rotation
                 var perturbedRotation = (double[,])currentRotation.Clone();

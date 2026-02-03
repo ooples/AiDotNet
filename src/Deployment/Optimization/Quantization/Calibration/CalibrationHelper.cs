@@ -108,13 +108,21 @@ public class CalibrationHelper<T, TInput, TOutput>
         IEnumerable<TInput> samples,
         ActivationStatistics<T> stats)
     {
+        int totalSamples = 0;
+        int failedSamples = 0;
+
         foreach (var sample in samples)
         {
+            totalSamples++;
             try
             {
                 // Convert sample to Tensor<T> if needed
                 Tensor<T>? inputTensor = ConvertToTensor(sample);
-                if (inputTensor == null) continue;
+                if (inputTensor == null)
+                {
+                    failedSamples++;
+                    continue;
+                }
 
                 // Get activations from all layers
                 var layerActivations = model.GetNamedLayerActivations(inputTensor);
@@ -134,9 +142,18 @@ public class CalibrationHelper<T, TInput, TOutput>
             }
             catch (Exception)
             {
-                // Skip samples that fail - continue with remaining
+                // Track failed samples - continue with remaining
+                failedSamples++;
                 continue;
             }
+        }
+
+        // Warn if more than 50% of samples failed - indicates potential issues with data or model
+        if (totalSamples > 0 && failedSamples > totalSamples / 2)
+        {
+            stats.CalibrationWarnings.Add(
+                $"High calibration failure rate: {failedSamples}/{totalSamples} samples failed ({100.0 * failedSamples / totalSamples:F1}%). " +
+                "This may indicate incompatible data format or model issues.");
         }
     }
 
@@ -148,38 +165,58 @@ public class CalibrationHelper<T, TInput, TOutput>
         IEnumerable<Tensor<T>> samples,
         ActivationStatistics<T> stats)
     {
-        // Set to inference mode for calibration
+        int totalSamples = 0;
+        int failedSamples = 0;
+
+        // Set to inference mode for calibration, but restore afterwards
         model.SetTrainingMode(false);
-
-        foreach (var inputTensor in samples)
+        try
         {
-            try
+            foreach (var inputTensor in samples)
             {
-                // Run forward pass with memory to capture intermediate activations
-                var output = model.ForwardWithMemory(inputTensor);
-
-                // Store output activation stats
-                if (!stats.LayerStats.TryGetValue("output", out var outputStats))
+                totalSamples++;
+                try
                 {
-                    outputStats = new LayerActivationStats<T> { LayerName = "output" };
-                    stats.LayerStats["output"] = outputStats;
-                }
-                outputStats.Update(output);
+                    // Run forward pass with memory to capture intermediate activations
+                    var output = model.ForwardWithMemory(inputTensor);
 
-                // Store input activation stats
-                if (!stats.LayerStats.TryGetValue("input", out var inputStats))
+                    // Store output activation stats
+                    if (!stats.LayerStats.TryGetValue("output", out var outputStats))
+                    {
+                        outputStats = new LayerActivationStats<T> { LayerName = "output" };
+                        stats.LayerStats["output"] = outputStats;
+                    }
+                    outputStats.Update(output);
+
+                    // Store input activation stats
+                    if (!stats.LayerStats.TryGetValue("input", out var inputStats))
+                    {
+                        inputStats = new LayerActivationStats<T> { LayerName = "input" };
+                        stats.LayerStats["input"] = inputStats;
+                    }
+                    inputStats.Update(inputTensor);
+
+                    stats.SampleCount++;
+                }
+                catch (Exception)
                 {
-                    inputStats = new LayerActivationStats<T> { LayerName = "input" };
-                    stats.LayerStats["input"] = inputStats;
+                    failedSamples++;
+                    continue;
                 }
-                inputStats.Update(inputTensor);
+            }
+        }
+        finally
+        {
+            // Restore training mode
+            model.SetTrainingMode(true);
+        }
 
-                stats.SampleCount++;
-            }
-            catch (Exception)
-            {
-                continue;
-            }
+        // Warn if more than 50% of samples failed
+        if (totalSamples > 0 && failedSamples > totalSamples / 2)
+        {
+            stats.CalibrationWarnings.Add(
+                $"High calibration failure rate: {failedSamples}/{totalSamples} samples failed ({100.0 * failedSamples / totalSamples:F1}%). " +
+                "This may indicate incompatible data format or model issues.");
         }
     }
 
@@ -191,8 +228,12 @@ public class CalibrationHelper<T, TInput, TOutput>
         IEnumerable<TInput> samples,
         ActivationStatistics<T> stats)
     {
+        int totalSamples = 0;
+        int failedSamples = 0;
+
         foreach (var sample in samples)
         {
+            totalSamples++;
             try
             {
                 // Run prediction
@@ -228,8 +269,17 @@ public class CalibrationHelper<T, TInput, TOutput>
             }
             catch (Exception)
             {
+                failedSamples++;
                 continue;
             }
+        }
+
+        // Warn if more than 50% of samples failed
+        if (totalSamples > 0 && failedSamples > totalSamples / 2)
+        {
+            stats.CalibrationWarnings.Add(
+                $"High calibration failure rate: {failedSamples}/{totalSamples} samples failed ({100.0 * failedSamples / totalSamples:F1}%). " +
+                "This may indicate incompatible data format or model issues.");
         }
     }
 

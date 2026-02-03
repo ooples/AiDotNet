@@ -54,6 +54,11 @@ public class ActivationStatistics<T>
     /// or estimated from parameter magnitudes (false).
     /// </summary>
     public bool IsFromRealForwardPasses { get; set; }
+
+    /// <summary>
+    /// Warnings generated during calibration (e.g., high failure rate).
+    /// </summary>
+    public List<string> CalibrationWarnings { get; } = new();
 }
 
 /// <summary>

@@ -42,26 +42,29 @@ public class NF4Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     private readonly Dictionary<string, double> _scaleFactors = new();
     private readonly int _blockSize;
 
-    // NF4 codebook: 16 values optimal for N(0,1) distribution
-    // These are the quantiles of N(0,1) such that each interval covers equal probability
+    // NF4 codebook: 16 values used in QLoRA for N(0,1)-distributed weights.
+    // These are empirically optimized representative values for equal-probability bins of N(0,1),
+    // not exact analytical quantiles. The interval comments below show approximate quantile ranges
+    // for each bin. See Dettmers et al., "QLoRA: Efficient Finetuning of Quantized LLMs" (2023),
+    // Appendix / NF4 codebook definition, for the original table of values.
     private static readonly double[] NF4Codebook = new double[]
     {
-        -1.0,         // -∞ to -1.18
-        -0.6961928,   // -1.18 to -0.86
-        -0.5250730,   // -0.86 to -0.61
-        -0.3949460,   // -0.61 to -0.39
-        -0.2844714,   // -0.39 to -0.20
-        -0.1828020,   // -0.20 to -0.02
-        -0.0911346,   // -0.02 to 0.08
-        0.0,          // 0.08 to 0.18
-        0.0796089,    // 0.18 to 0.29
-        0.1609563,    // 0.29 to 0.40
-        0.2461107,    // 0.40 to 0.53
-        0.3379640,    // 0.53 to 0.67
-        0.4407326,    // 0.67 to 0.84
-        0.5626170,    // 0.84 to 1.07
-        0.7229568,    // 1.07 to 1.41
-        1.0           // 1.41 to +∞
+        -1.0,         // approx. -∞ to -1.18
+        -0.6961928,   // approx. -1.18 to -0.86
+        -0.5250730,   // approx. -0.86 to -0.61
+        -0.3949460,   // approx. -0.61 to -0.39
+        -0.2844714,   // approx. -0.39 to -0.20
+        -0.1828020,   // approx. -0.20 to -0.02
+        -0.0911346,   // approx. -0.02 to 0.08
+        0.0,          // approx. 0.08 to 0.18
+        0.0796089,    // approx. 0.18 to 0.29
+        0.1609563,    // approx. 0.29 to 0.40
+        0.2461107,    // approx. 0.40 to 0.53
+        0.3379640,    // approx. 0.53 to 0.67
+        0.4407326,    // approx. 0.67 to 0.84
+        0.5626170,    // approx. 0.84 to 1.07
+        0.7229568,    // approx. 1.07 to 1.41
+        1.0           // approx. 1.41 to +∞
     };
 
     /// <inheritdoc/>
