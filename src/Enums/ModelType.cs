@@ -2430,7 +2430,43 @@ public enum ModelType
     /// characteristics, identifying who benefits most from treatment.
     /// </para>
     /// </remarks>
-    CausalForest
+    CausalForest,
+
+    // ===== Online Learning Models =====
+
+    /// <summary>
+    /// Online SGD Classifier for incremental binary classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This classifier learns from streaming data one example at a time.
+    /// It uses stochastic gradient descent to update a logistic regression model incrementally,
+    /// making it suitable for large-scale or real-time learning scenarios.
+    /// </para>
+    /// </remarks>
+    OnlineSGDClassifier,
+
+    /// <summary>
+    /// Online SGD Regressor for incremental regression.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Similar to OnlineSGDClassifier but for continuous targets.
+    /// Uses SGD to incrementally fit a linear regression model to streaming data.
+    /// </para>
+    /// </remarks>
+    OnlineSGDRegressor,
+
+    /// <summary>
+    /// Online Passive-Aggressive classifier for margin-based online learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PA algorithms aggressively update when mistakes are made but stay
+    /// passive when predictions are correct. Good for noisy data and concept drift scenarios.
+    /// </para>
+    /// </remarks>
+    OnlinePassiveAggressiveClassifier
 }
 
 
