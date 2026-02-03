@@ -407,8 +407,8 @@ public class BetaLikelihood<T>
     /// </summary>
     private static double Digamma(double x)
     {
-        // Asymptotic expansion for large x
-        if (x > 6)
+        // Asymptotic expansion for large x (use >= to avoid infinite recursion at boundary)
+        if (x >= 6)
         {
             double result = Math.Log(x) - 1.0 / (2 * x);
             double x2 = x * x;
@@ -423,14 +423,19 @@ public class BetaLikelihood<T>
             return Digamma(x + 1) - 1.0 / x;
         }
 
-        // Series for moderate x
+        // Iterative approach for moderate x (1 <= x < 6)
         double sum = 0;
         while (x < 6)
         {
             sum -= 1.0 / x;
             x += 1;
         }
-        return sum + Digamma(x);
+        // Now x >= 6, use asymptotic expansion directly
+        double result2 = Math.Log(x) - 1.0 / (2 * x);
+        double x2_2 = x * x;
+        result2 -= 1.0 / (12 * x2_2);
+        result2 += 1.0 / (120 * x2_2 * x2_2);
+        return sum + result2;
     }
 
     /// <summary>
@@ -438,8 +443,8 @@ public class BetaLikelihood<T>
     /// </summary>
     private static double Trigamma(double x)
     {
-        // Asymptotic expansion
-        if (x > 6)
+        // Asymptotic expansion (use >= to avoid infinite recursion at boundary)
+        if (x >= 6)
         {
             double result = 1.0 / x + 1.0 / (2 * x * x);
             double x3 = x * x * x;
@@ -453,13 +458,18 @@ public class BetaLikelihood<T>
             return Trigamma(x + 1) + 1.0 / (x * x);
         }
 
+        // Iterative approach for moderate x (1 <= x < 6)
         double sum = 0;
         while (x < 6)
         {
             sum += 1.0 / (x * x);
             x += 1;
         }
-        return sum + Trigamma(x);
+        // Now x >= 6, use asymptotic expansion directly
+        double result2 = 1.0 / x + 1.0 / (2 * x * x);
+        double x3_2 = x * x * x;
+        result2 += 1.0 / (6 * x3_2);
+        return sum + result2;
     }
 
     /// <summary>
