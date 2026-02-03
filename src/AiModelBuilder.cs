@@ -1109,6 +1109,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     private AiModelResult<T, TInput, TOutput> BuildProgramSynthesisInferenceOnlyResult()
     {
+        // Preprocessing requires fitted statistics - for inference-only builds, the pipeline must be pre-fitted
+        if (_preprocessingPipeline is not null && !_preprocessingPipeline.IsFitted)
+        {
+            throw new InvalidOperationException(
+                "Inference-only builds require a pre-fitted preprocessing pipeline. " +
+                "Either fit the pipeline on training data first, preprocess data externally, or omit ConfigurePreprocessing().");
+        }
+
         // Ensure inference-only builds still honor configured GPU acceleration.
         ApplyGpuConfiguration();
 
@@ -1131,7 +1139,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            PreprocessingInfo = _preprocessingPipeline is not null ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline) : null,
+            PreprocessingInfo = _preprocessingPipeline is not null && _preprocessingPipeline.IsFitted
+                ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline)
+                : null,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
             ProgramSynthesisModel = _programSynthesisModel,
@@ -1227,6 +1237,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Training metrics
         T totalLoss = numOps.Zero;
         int totalBatches = 0;
+        bool pipelineFitted = _preprocessingPipeline?.IsFitted ?? true;
 
         // Train for the specified number of epochs
         for (int epoch = 0; epoch < epochs; epoch++)
@@ -1237,20 +1248,40 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // Iterate through all batches in the streaming loader
             await foreach (var (inputs, outputs) in streamingLoader.GetBatchesAsync(shuffle: true))
             {
+                // Fit preprocessing pipeline on first batch if not already fitted
+                if (_preprocessingPipeline is not null && !pipelineFitted && inputs.Length > 0)
+                {
+                    _preprocessingPipeline.Fit(inputs[0]);
+                    pipelineFitted = true;
+                }
+
                 // Process each sample in the batch
                 for (int i = 0; i < inputs.Length; i++)
                 {
                     var input = inputs[i];
                     var target = outputs[i];
 
+                    // Apply preprocessing to input features if configured
+                    TInput processedInput = input;
+                    if (_preprocessingPipeline is not null && pipelineFitted)
+                    {
+                        // Transform features - pipeline returns TOutput but for feature preprocessing
+                        // without a final transformer, TInput == TOutput (same type returned)
+                        var transformed = _preprocessingPipeline.Transform(input);
+                        if (transformed is TInput typedTransformed)
+                        {
+                            processedInput = typedTransformed;
+                        }
+                    }
+
                     // Compute gradients without updating parameters
-                    var gradients = _model.ComputeGradients(input, target, lossFunction);
+                    var gradients = _model.ComputeGradients(processedInput, target, lossFunction);
 
                     // Apply gradients with current learning rate
                     _model.ApplyGradients(gradients, learningRate);
 
                     // Accumulate loss for monitoring (optional - compute prediction loss)
-                    var prediction = _model.Predict(input);
+                    var prediction = _model.Predict(processedInput);
                     var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
                     var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(target);
                     var loss = lossFunction.CalculateLoss(predictionVector, targetVector);
@@ -1309,7 +1340,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
-            PreprocessingInfo = _preprocessingPipeline is not null ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline) : null,
+            PreprocessingInfo = _preprocessingPipeline is not null && pipelineFitted
+                ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline)
+                : null,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
             ProgramSynthesisModel = _programSynthesisModel,

@@ -1376,7 +1376,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                     normalizedPredictions = Model.Predict(normalizedNewData);
                 }
 
-                return PreprocessingInfo is not null
+                return PreprocessingInfo?.IsTargetFitted == true
                     ? PreprocessingInfo.InverseTransformPredictions(normalizedPredictions)
                     : normalizedPredictions;
             }
@@ -1402,7 +1402,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             normalizedPredictions = Model.Predict(normalizedNewData);
         }
 
-        var denormalized = PreprocessingInfo is not null
+        var denormalized = PreprocessingInfo?.IsTargetFitted == true
             ? PreprocessingInfo.InverseTransformPredictions(normalizedPredictions)
             : normalizedPredictions;
 
@@ -1713,7 +1713,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                     var optimizedOutput = optimized.Predict(inputTensor);
                     if (optimizedOutput is TOutput output)
                     {
-                        return _result.PreprocessingInfo is not null
+                        return _result.PreprocessingInfo?.IsTargetFitted == true
                             ? _result.PreprocessingInfo.InverseTransformPredictions(output)
                             : output;
                     }
@@ -1722,7 +1722,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
             // Fallback: normal predict path (no JIT inside a session to keep behavior consistent).
             var normalizedPredictions = _result.Model.Predict(normalizedNewData);
-            return _result.PreprocessingInfo is not null
+            return _result.PreprocessingInfo?.IsTargetFitted == true
                 ? _result.PreprocessingInfo.InverseTransformPredictions(normalizedPredictions)
                 : normalizedPredictions;
         }
