@@ -1875,6 +1875,46 @@ public enum ModelType
     /// </remarks>
     VotingClassifier,
 
+    // ==================== Semi-Supervised Learning ====================
+
+    /// <summary>
+    /// Self-Training classifier that iteratively labels unlabeled data with high confidence predictions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Self-Training is like a student who learns from a small set of labeled examples,
+    /// then uses what they learned to make guesses about unlabeled examples. When they're confident about
+    /// a guess, they treat it as a real example and continue learning. This is useful when labeling data
+    /// is expensive but you have lots of unlabeled data.
+    /// </para>
+    /// </remarks>
+    SelfTrainingClassifier,
+
+    /// <summary>
+    /// Label Propagation classifier that spreads labels through a similarity graph.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Label Propagation builds a graph where similar data points are connected.
+    /// Labels from the few labeled examples then spread through the graph to nearby unlabeled points,
+    /// like colors spreading through connected water droplets. Points that are similar to labeled
+    /// examples get the same labels.
+    /// </para>
+    /// </remarks>
+    LabelPropagation,
+
+    /// <summary>
+    /// Label Spreading classifier similar to Label Propagation but with normalization for stability.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Label Spreading is like Label Propagation but more careful. It normalizes
+    /// the connections in the graph so that labels spread more evenly and the process is more stable.
+    /// This helps when your data has clusters of different sizes or densities.
+    /// </para>
+    /// </remarks>
+    LabelSpreading,
+
     // ==================== Finance Models ====================
 
     /// <summary>
