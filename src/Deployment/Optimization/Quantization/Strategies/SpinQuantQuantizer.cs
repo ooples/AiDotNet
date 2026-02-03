@@ -129,7 +129,38 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
             throw new ArgumentException("Calibration data cannot be empty", nameof(calibrationData));
         }
 
-        // Collect statistics from calibration data for scale factor computation
+        // Run calibration samples through model to gather activation statistics
+        // SpinQuant uses these to inform the rotation matrix learning
+        double activationScale = 1.0;
+        int sampleCount = 0;
+        foreach (var sample in dataList.Take(Math.Min(100, dataList.Count)))
+        {
+            try
+            {
+                var output = model.Predict(sample);
+                // Collect output magnitude for activation-aware scaling
+                if (output is Vector<T> vec)
+                {
+                    for (int i = 0; i < vec.Length; i++)
+                    {
+                        activationScale = Math.Max(activationScale, Math.Abs(Convert.ToDouble(vec[i])));
+                    }
+                }
+                sampleCount++;
+            }
+            catch (Exception)
+            {
+                // Continue with other samples if one fails
+            }
+        }
+
+        // Store activation scale for use in quantization
+        if (sampleCount > 0)
+        {
+            _scaleFactors["activation"] = activationScale;
+        }
+
+        // Compute scale factors from model parameters
         var parameters = model.GetParameters();
         ComputeScaleFactors(parameters);
 

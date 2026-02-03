@@ -132,7 +132,7 @@ public class CalibrationHelper<T, TInput, TOutput>
 
                 stats.SampleCount++;
             }
-            catch
+            catch (Exception)
             {
                 // Skip samples that fail - continue with remaining
                 continue;
@@ -176,7 +176,7 @@ public class CalibrationHelper<T, TInput, TOutput>
 
                 stats.SampleCount++;
             }
-            catch
+            catch (Exception)
             {
                 continue;
             }
@@ -226,7 +226,7 @@ public class CalibrationHelper<T, TInput, TOutput>
 
                 stats.SampleCount++;
             }
-            catch
+            catch (Exception)
             {
                 continue;
             }
@@ -282,13 +282,6 @@ public class CalibrationHelper<T, TInput, TOutput>
         // If we have layer stats, use them to inform global statistics
         if (stats.LayerStats.Count > 0 && stats.IsFromRealForwardPasses)
         {
-            // Compute average max abs across all layers
-            double avgMaxAbs = stats.LayerStats.Values
-                .Select(s => s.MaxAbsValue)
-                .Where(v => v > 0)
-                .DefaultIfEmpty(1.0)
-                .Average();
-
             // Use layer stats to weight parameter importance
             // Parameters associated with high-activation layers are more important
             double totalLayerActivation = stats.LayerStats.Values
@@ -376,7 +369,7 @@ public class CalibrationHelper<T, TInput, TOutput>
         {
             return model != null;
         }
-        catch
+        catch (Exception)
         {
             return false;
         }
@@ -420,7 +413,7 @@ public class CalibrationHelper<T, TInput, TOutput>
                 }
             }
         }
-        catch
+        catch (Exception)
         {
             // Conversion not possible
         }

@@ -171,7 +171,7 @@ public class QuantizationInfo
     /// <summary>
     /// Gets any warnings or notes generated during quantization.
     /// </summary>
-    public IReadOnlyList<string> Warnings { get; init; } = [];
+    public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 
     /// <summary>
     /// Creates a default QuantizationInfo indicating no quantization was applied.

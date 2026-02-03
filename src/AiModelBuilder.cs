@@ -1918,7 +1918,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                         runId: experimentRunId,
                         modelId: null); // Model ID will be set after registry
                 }
-                catch
+                catch (Exception)
                 {
                     // Data version control linkage is optional - don't fail training
                 }
@@ -2328,7 +2328,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             hyperparameters["model_type"] = model.GetType().Name;
             hyperparameters["optimizer_type"] = finalOptimizer.GetType().Name;
         }
-        catch
+        catch (Exception)
         {
             // Ignore errors collecting hyperparameters - they are optional
         }
@@ -5749,7 +5749,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     property.SetValue(options, convertedValue);
                 }
             }
-            catch
+            catch (Exception)
             {
                 // Skip hyperparameters that cannot be converted - this is non-fatal
                 // as the optimizer will use its default value
@@ -5887,7 +5887,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             return Convert.ChangeType(value, targetType);
         }
-        catch
+        catch (Exception)
         {
             return null;
         }
@@ -6086,7 +6086,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             {
                 AiDotNetEngine.AutoDetectAndConfigureGpu();
             }
-            catch
+            catch (Exception)
             {
                 // Silently fall back to CPU if GPU detection fails
                 // This ensures the library works out of the box on any hardware

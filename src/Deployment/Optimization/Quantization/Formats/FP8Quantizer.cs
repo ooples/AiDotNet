@@ -150,7 +150,6 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
         double scale = _scaleFactors.TryGetValue("global", out var s) ? s : 1.0;
 
         double fp8Max = _format == FP8Format.E4M3 ? E4M3_MAX_VALUE : E5M2_MAX_VALUE;
-        double fp8MinSubnormal = _format == FP8Format.E4M3 ? E4M3_MIN_SUBNORMAL : E5M2_MIN_SUBNORMAL;
 
         // If not calibrated, compute scale now
         if (!_isCalibrated)
@@ -191,14 +190,7 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
         if (double.IsNaN(value))
             return 0; // FP8 E4M3 doesn't have NaN, use 0
 
-        if (_format == FP8Format.E4M3)
-        {
-            return ToE4M3(value);
-        }
-        else
-        {
-            return ToE5M2(value);
-        }
+        return _format == FP8Format.E4M3 ? ToE4M3(value) : ToE5M2(value);
     }
 
     /// <summary>

@@ -183,16 +183,26 @@ public class MXFP4Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
             int start = b * _blockSize;
             int end = Math.Min(start + _blockSize, n);
 
-            // Compute shared scale for this block
-            double maxAbs = 0;
-            for (int i = start; i < end; i++)
+            // Use calibrated scale if available, otherwise compute
+            double scale;
+            string blockKey = $"block_{b}";
+            if (_scaleFactors.TryGetValue(blockKey, out var calibratedScale))
             {
-                maxAbs = Math.Max(maxAbs, Math.Abs(Convert.ToDouble(parameters[i])));
+                scale = calibratedScale;
             }
+            else
+            {
+                // Compute shared scale for this block
+                double maxAbs = 0;
+                for (int i = start; i < end; i++)
+                {
+                    maxAbs = Math.Max(maxAbs, Math.Abs(Convert.ToDouble(parameters[i])));
+                }
 
-            double maxMXFP4 = 6.0;
-            double scale = maxAbs > 0 ? maxAbs / maxMXFP4 : 1.0;
-            _scaleFactors[$"block_{b}"] = scale;
+                double maxMXFP4 = 6.0;
+                scale = maxAbs > 0 ? maxAbs / maxMXFP4 : 1.0;
+                _scaleFactors[blockKey] = scale;
+            }
 
             // Quantize each value in the block
             for (int i = start; i < end; i++)

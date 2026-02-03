@@ -359,14 +359,9 @@ public class GPTQQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
             for (int i = 0; i < size; i++)
             {
                 int idx = start + i;
-                if (idx < info.Diagonal.Length)
-                {
-                    diag[i] = info.Diagonal[idx];
-                }
-                else
-                {
-                    diag[i] = _config.GPTQDampingFactor;
-                }
+                diag[i] = idx < info.Diagonal.Length
+                    ? info.Diagonal[idx]
+                    : _config.GPTQDampingFactor;
             }
         }
         else

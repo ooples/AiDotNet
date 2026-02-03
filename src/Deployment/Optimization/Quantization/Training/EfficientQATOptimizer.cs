@@ -34,7 +34,7 @@ public class EfficientQATOptimizer<T>
     private readonly QATTrainingHook<T> _qatHook;
     private readonly Dictionary<string, BlockQuantizationState> _blockStates = new();
     private int _currentEpoch;
-    private int _totalEpochs;
+    private readonly int _totalEpochs;
     private double _currentBitWidth;
 
     /// <summary>
@@ -167,7 +167,7 @@ public class EfficientQATOptimizer<T>
 
                     // Scale gradient by block scale for proper learning
                     // This helps the optimizer account for quantization effects
-                    result[i] = NumOps.FromDouble(grad);
+                    result[i] = NumOps.FromDouble(grad * scale);
                 }
             }
         }

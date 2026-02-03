@@ -219,10 +219,14 @@ public class QATTrainingHook<T>
             qMin = 0;
             qMax = (1 << bitWidth) - 1;
             scale = (maxVal - minVal) / qMax;
+            scale = Math.Max(scale, _config.MinScaleFactor);
             zeroPoint = (int)Math.Round(-minVal / scale);
         }
 
-        scale = Math.Max(scale, _config.MinScaleFactor);
+        if (_config.UseSymmetricQuantization)
+        {
+            scale = Math.Max(scale, _config.MinScaleFactor);
+        }
 
         return new QuantizationState
         {
