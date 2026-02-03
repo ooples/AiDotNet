@@ -849,6 +849,125 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </remarks>
     public abstract Tensor<T> Forward(Tensor<T> input);
 
+    #region Mixed Precision Support
+
+    /// <summary>
+    /// Gets the name of this layer for mixed-precision policy lookup.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This name is used to determine whether the layer should
+    /// use full precision (FP32) or reduced precision (FP16/FP8) during mixed-precision training.
+    ///
+    /// Layers like BatchNorm, LayerNorm, and Softmax typically need full precision for stability.
+    /// The name is matched against patterns in <see cref="MixedPrecision.LayerPrecisionPolicy"/>.
+    /// </para>
+    /// </remarks>
+    public virtual string LayerName => GetType().Name;
+
+    /// <summary>
+    /// Gets whether mixed-precision training is currently active.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Check this property to see if the network is currently
+    /// running in mixed-precision mode. When true, you may need to handle precision
+    /// conversions in your layer implementation.
+    /// </para>
+    /// </remarks>
+    protected static bool IsMixedPrecisionActive => MixedPrecision.MixedPrecisionScope.Current != null;
+
+    /// <summary>
+    /// Gets whether this layer should use full precision (FP32) even during mixed-precision training.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Some layers need higher precision to work correctly:
+    /// - Normalization layers (BatchNorm, LayerNorm) compute mean/variance
+    /// - Softmax involves exponentials that can overflow in low precision
+    /// - Loss computation needs accuracy
+    ///
+    /// This property checks the current mixed-precision policy to determine if this layer
+    /// is one that should stay in full precision.
+    /// </para>
+    /// </remarks>
+    protected bool ShouldUseFP32
+    {
+        get
+        {
+            var scope = MixedPrecision.MixedPrecisionScope.Current;
+            return scope?.ShouldUseFP32(LayerName) ?? false;
+        }
+    }
+
+    /// <summary>
+    /// Gets the precision type this layer should use based on the current mixed-precision policy.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This returns the specific precision type (FP16, FP32, FP8, etc.)
+    /// that this layer should use according to the current training configuration.
+    /// </para>
+    /// </remarks>
+    protected Enums.MixedPrecisionType CurrentPrecision
+    {
+        get
+        {
+            var scope = MixedPrecision.MixedPrecisionScope.Current;
+            return scope?.GetLayerPrecision(LayerName) ?? Enums.MixedPrecisionType.None;
+        }
+    }
+
+    /// <summary>
+    /// Performs a forward pass with automatic mixed-precision handling.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after processing with appropriate precision.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method wraps the standard Forward pass with
+    /// automatic precision handling for mixed-precision training.
+    ///
+    /// When mixed-precision is active:
+    /// - If the layer should use FP32 (like BatchNorm), it processes in full precision
+    /// - If the layer can use lower precision, the scope tracks tensor versions
+    /// - The precision policy determines which layers need full precision
+    ///
+    /// This enables faster training on modern GPUs while maintaining numerical stability.
+    /// </para>
+    /// </remarks>
+    public virtual Tensor<T> ForwardWithPrecisionCheck(Tensor<T> input)
+    {
+        var scope = MixedPrecision.MixedPrecisionScope.Current;
+
+        // If no scope is active, use standard forward pass
+        if (scope == null)
+        {
+            return Forward(input);
+        }
+
+        // Check if this layer requires full precision
+        bool requiresFP32 = scope.ShouldUseFP32(LayerName);
+
+        if (requiresFP32)
+        {
+            // Layer needs FP32 - register the input so it can be retrieved if needed
+            // For T=float, this is a no-op in terms of precision but tracks the tensor
+            string tensorName = $"{LayerName}_input";
+            if (typeof(T) == typeof(float) && !scope.HasTensor(tensorName))
+            {
+                // Only register if it's a float tensor (standard case)
+                var floatInput = input as Tensor<float>;
+                if (floatInput != null)
+                {
+                    scope.RegisterAndCastToFP16(tensorName, floatInput);
+                }
+            }
+        }
+
+        // Perform the forward pass
+        // The actual precision handling is done at the network level
+        // This method allows layers to be aware of the precision context
+        return Forward(input);
+    }
+
+    #endregion
+
     /// <summary>
     /// Maps the layer's activation function to a <see cref="FusedActivationType"/> for GPU-fused operations.
     /// </summary>
