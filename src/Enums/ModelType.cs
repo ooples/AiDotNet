@@ -2352,7 +2352,35 @@ public enum ModelType
     /// improves the decision boundary after oversampling.
     /// </para>
     /// </remarks>
-    SMOTETomek
+    SMOTETomek,
+
+    // ==================== Survival Analysis ====================
+
+    /// <summary>
+    /// Kaplan-Meier estimator for non-parametric survival analysis.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Kaplan-Meier creates a survival curve showing the probability
+    /// of surviving beyond each time point. It handles censored data (subjects who haven't
+    /// had the event yet) naturally. It's the simplest survival method but doesn't use
+    /// patient features - everyone gets the same survival curve.
+    /// </para>
+    /// </remarks>
+    KaplanMeierEstimator,
+
+    /// <summary>
+    /// Cox Proportional Hazards model for survival analysis with covariates.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Cox model is the most widely used survival model. It tells you
+    /// how patient features (age, treatment, etc.) affect survival risk. Each feature gets
+    /// a "hazard ratio" - a value greater than 1 means higher risk, less than 1 means
+    /// lower risk. Unlike Kaplan-Meier, it personalizes survival predictions.
+    /// </para>
+    /// </remarks>
+    CoxProportionalHazards
 }
 
 
