@@ -200,7 +200,8 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     /// </summary>
     private double ToE4M3(double value)
     {
-        if (value == 0) return 0;
+        // Use epsilon comparison for floating-point zero check
+        if (Math.Abs(value) < double.Epsilon) return 0;
 
         bool negative = value < 0;
         double absValue = Math.Abs(value);
@@ -239,7 +240,8 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     /// </summary>
     private double ToE5M2(double value)
     {
-        if (value == 0) return 0;
+        // Use epsilon comparison for floating-point zero check
+        if (Math.Abs(value) < double.Epsilon) return 0;
 
         bool negative = value < 0;
         double absValue = Math.Abs(value);

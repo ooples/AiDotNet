@@ -7223,12 +7223,22 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Warning: Calibration failed: {ex.Message}. Proceeding with default quantization.");
+                // Log detailed error info to help diagnose calibration issues
+                Console.WriteLine($"Warning: Calibration failed ({ex.GetType().Name}): {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"  Inner exception: {ex.InnerException.Message}");
+                }
+                Console.WriteLine("Proceeding with default quantization behavior.");
             }
         }
 
-        // QAT SIMULATION: If QAT is enabled, apply fake quantization to condition parameters
-        // This simulates the effect of training with quantization awareness
+        // QAT SIMULATION (Post-Training): If QAT is enabled, apply fake quantization once
+        // to condition parameters. NOTE: This is a simplified post-training simulation, not true QAT.
+        // Real QAT integrates fake quantization into the training loop across multiple epochs,
+        // allowing the model to learn under quantization constraints. This simulation provides
+        // some benefit by conditioning parameters but won't achieve the full accuracy of true QAT.
+        // For full QAT, use the training API with quantization hooks enabled during training.
         if (internalConfig.UseQuantizationAwareTraining)
         {
             try
