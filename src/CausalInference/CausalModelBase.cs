@@ -96,10 +96,79 @@ public abstract class CausalModelBase<T> : ICausalModel<T>
         }
     }
 
-    #region ICausalModel Implementation
+    #region ICausalModel Interface Implementation
 
     /// <summary>
-    /// Estimates the Average Treatment Effect (ATE) from the data.
+    /// Fits the causal model to observational data.
+    /// </summary>
+    /// <param name="features">Feature matrix [n_samples, n_features].</param>
+    /// <param name="treatment">Binary treatment indicator (1 = treated, 0 = control).</param>
+    /// <param name="outcome">Observed outcomes.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method trains the causal model on your data.
+    /// It learns how treatment affects outcomes while accounting for confounding variables.</para>
+    /// </remarks>
+    public abstract void Fit(Matrix<T> features, Vector<T> treatment, Vector<T> outcome);
+
+    /// <summary>
+    /// Estimates the Conditional Average Treatment Effect (CATE) for subjects.
+    /// </summary>
+    /// <param name="features">Feature matrix for subjects.</param>
+    /// <returns>Estimated treatment effect for each subject.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> CATE tells you how much treatment would help each individual.
+    /// A positive value means treatment is beneficial for that person.</para>
+    /// </remarks>
+    public abstract Vector<T> EstimateTreatmentEffect(Matrix<T> features);
+
+    /// <summary>
+    /// Estimates the Average Treatment Effect (ATE) across the population.
+    /// </summary>
+    /// <param name="features">Feature matrix for the population.</param>
+    /// <returns>The average treatment effect.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ATE is the average effect of treatment across all subjects.
+    /// It's computed as the mean of individual treatment effects.</para>
+    /// </remarks>
+    public virtual T EstimateAverageTreatmentEffect(Matrix<T> features)
+    {
+        var effects = EstimateTreatmentEffect(features);
+        T sum = NumOps.Zero;
+        for (int i = 0; i < effects.Length; i++)
+        {
+            sum = NumOps.Add(sum, effects[i]);
+        }
+        return NumOps.Divide(sum, NumOps.FromDouble(effects.Length));
+    }
+
+    /// <summary>
+    /// Predicts the outcome under treatment.
+    /// </summary>
+    /// <param name="features">Feature matrix for subjects.</param>
+    /// <returns>Predicted outcomes if treated.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This predicts what outcome each person would have
+    /// if they received the treatment (counterfactual prediction).</para>
+    /// </remarks>
+    public abstract Vector<T> PredictTreated(Matrix<T> features);
+
+    /// <summary>
+    /// Predicts the outcome under control.
+    /// </summary>
+    /// <param name="features">Feature matrix for subjects.</param>
+    /// <returns>Predicted outcomes if not treated.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This predicts what outcome each person would have
+    /// if they did NOT receive the treatment (counterfactual prediction).</para>
+    /// </remarks>
+    public abstract Vector<T> PredictControl(Matrix<T> features);
+
+    #endregion
+
+    #region Additional Causal Methods
+
+    /// <summary>
+    /// Estimates the Average Treatment Effect (ATE) from the data with standard error.
     /// </summary>
     public abstract (T estimate, T standardError) EstimateATE(
         Matrix<T> x, Vector<int> treatment, Vector<T> outcome);

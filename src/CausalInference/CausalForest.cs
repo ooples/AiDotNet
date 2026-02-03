@@ -88,6 +88,21 @@ public class CausalForest<T> : CausalModelBase<T>
     private Vector<T>? _propensityCoefficients;
 
     /// <summary>
+    /// Cached treatment vector from fitting.
+    /// </summary>
+    private Vector<int>? _cachedTreatment;
+
+    /// <summary>
+    /// Cached outcome vector from fitting.
+    /// </summary>
+    private Vector<T>? _cachedOutcome;
+
+    /// <summary>
+    /// Cached feature matrix from fitting.
+    /// </summary>
+    private Matrix<T>? _cachedFeatures;
+
+    /// <summary>
     /// Gets the model type.
     /// </summary>
     public override ModelType GetModelType() => ModelType.CausalForest;
@@ -156,6 +171,11 @@ public class CausalForest<T> : CausalModelBase<T>
         NumFeatures = x.Columns;
         int n = x.Rows;
 
+        // Cache data for predictions
+        _cachedFeatures = x;
+        _cachedTreatment = treatment;
+        _cachedOutcome = outcome;
+
         // Fit propensity model for overlap adjustment
         _propensityCoefficients = FitLogisticRegression(x, treatment);
 
@@ -192,6 +212,133 @@ public class CausalForest<T> : CausalModelBase<T>
         }
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the causal model using the ICausalModel interface signature.
+    /// </summary>
+    /// <param name="features">The feature matrix (covariates).</param>
+    /// <param name="treatment">Treatment indicators as generic type (0 or 1).</param>
+    /// <param name="outcome">The outcome variable.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method converts the generic treatment vector to integer format
+    /// and then fits the causal forest. Causal forests are particularly good at finding
+    /// heterogeneous treatment effects - where treatment helps some people more than others.
+    /// </para>
+    /// </remarks>
+    public override void Fit(Matrix<T> features, Vector<T> treatment, Vector<T> outcome)
+    {
+        // Convert treatment vector to int
+        var treatmentInt = new Vector<int>(treatment.Length);
+        for (int i = 0; i < treatment.Length; i++)
+        {
+            treatmentInt[i] = (int)Math.Round(NumOps.ToDouble(treatment[i]));
+        }
+
+        // Call the original fit method
+        Fit(features, treatmentInt, outcome);
+    }
+
+    /// <summary>
+    /// Estimates treatment effects for individuals using the causal forest.
+    /// </summary>
+    /// <param name="features">The feature matrix for which to estimate effects.</param>
+    /// <returns>A vector of estimated treatment effects (CATE for each individual).</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Causal forests excel at estimating Conditional Average Treatment
+    /// Effects (CATE) - how much the treatment would change the outcome for each person.
+    /// Unlike simpler methods that give everyone the same effect estimate, causal forests
+    /// provide personalized effect estimates based on each person's features.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> EstimateTreatmentEffect(Matrix<T> features)
+    {
+        return PredictTreatmentEffect(features);
+    }
+
+    /// <summary>
+    /// Predicts outcomes under treatment for the given features.
+    /// </summary>
+    /// <param name="features">The feature matrix.</param>
+    /// <returns>Predicted outcomes if treated.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This estimates what the outcome would be if each individual received treatment.
+    /// It uses the control outcome prediction plus the estimated treatment effect:
+    /// Y(1) = Y(0) + CATE
+    /// </para>
+    /// </remarks>
+    public override Vector<T> PredictTreated(Matrix<T> features)
+    {
+        EnsureFitted();
+
+        var controlPredictions = PredictControl(features);
+        var treatmentEffects = EstimateTreatmentEffect(features);
+        var treatedPredictions = new Vector<T>(features.Rows);
+
+        for (int i = 0; i < features.Rows; i++)
+        {
+            treatedPredictions[i] = NumOps.Add(controlPredictions[i], treatmentEffects[i]);
+        }
+
+        return treatedPredictions;
+    }
+
+    /// <summary>
+    /// Predicts outcomes under control for the given features.
+    /// </summary>
+    /// <param name="features">The feature matrix.</param>
+    /// <returns>Predicted outcomes if not treated.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This estimates what the outcome would be if each individual did NOT receive treatment.
+    /// We use k-nearest neighbors weighted by propensity scores to estimate control outcomes
+    /// from the training data control group.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> PredictControl(Matrix<T> features)
+    {
+        EnsureFitted();
+
+        if (_cachedFeatures is null || _cachedTreatment is null || _cachedOutcome is null)
+        {
+            throw new InvalidOperationException("Model must be fitted with outcome data for control predictions.");
+        }
+
+        var propensityScores = EstimatePropensityScores(features);
+        var cachedPropensityScores = EstimatePropensityScores(_cachedFeatures);
+        var predictions = new Vector<T>(features.Rows);
+
+        for (int i = 0; i < features.Rows; i++)
+        {
+            double queryScore = NumOps.ToDouble(propensityScores[i]);
+
+            // Find control individuals with similar propensity scores
+            double sumOutcome = 0;
+            double sumWeight = 0;
+
+            for (int j = 0; j < _cachedTreatment.Length; j++)
+            {
+                if (_cachedTreatment[j] == 0)
+                {
+                    double refScore = NumOps.ToDouble(cachedPropensityScores[j]);
+                    double distance = Math.Abs(queryScore - refScore);
+
+                    // Kernel weighting
+                    double weight = Math.Exp(-distance * distance / 0.1);
+                    sumOutcome += weight * NumOps.ToDouble(_cachedOutcome[j]);
+                    sumWeight += weight;
+                }
+            }
+
+            predictions[i] = sumWeight > 0
+                ? NumOps.FromDouble(sumOutcome / sumWeight)
+                : NumOps.Zero;
+        }
+
+        return predictions;
     }
 
     /// <summary>

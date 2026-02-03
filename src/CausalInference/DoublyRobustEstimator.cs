@@ -167,6 +167,98 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
     }
 
     /// <summary>
+    /// Fits the causal model using the ICausalModel interface signature.
+    /// </summary>
+    /// <param name="features">The feature matrix (covariates).</param>
+    /// <param name="treatment">Treatment indicators as generic type (0 or 1).</param>
+    /// <param name="outcome">The outcome variable.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method converts the generic treatment vector to integer format
+    /// and fits both the propensity score model and outcome regression models. The doubly robust
+    /// estimator combines these to provide consistent estimates even if one model is misspecified.
+    /// </para>
+    /// </remarks>
+    public override void Fit(Matrix<T> features, Vector<T> treatment, Vector<T> outcome)
+    {
+        // Convert treatment vector to int
+        var treatmentInt = new Vector<int>(treatment.Length);
+        for (int i = 0; i < treatment.Length; i++)
+        {
+            treatmentInt[i] = (int)Math.Round(NumOps.ToDouble(treatment[i]));
+        }
+
+        // Call the original fit method
+        Fit(features, treatmentInt, outcome);
+    }
+
+    /// <summary>
+    /// Estimates treatment effects for individuals using the doubly robust estimator.
+    /// </summary>
+    /// <param name="features">The feature matrix for which to estimate effects.</param>
+    /// <returns>A vector of estimated treatment effects.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The doubly robust estimator provides treatment effect estimates
+    /// by combining outcome model predictions (what we expect to happen) with propensity score
+    /// weighting (who is likely to be treated). This gives you robust estimates even if one
+    /// of the models is somewhat wrong.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> EstimateTreatmentEffect(Matrix<T> features)
+    {
+        return PredictTreatmentEffect(features);
+    }
+
+    /// <summary>
+    /// Predicts outcomes under treatment for the given features.
+    /// </summary>
+    /// <param name="features">The feature matrix.</param>
+    /// <returns>Predicted outcomes if treated.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This predicts what each individual's outcome would be if they
+    /// received treatment. The doubly robust estimator has separate outcome models for
+    /// treated and control groups, so this uses the treated outcome model μ₁(X).
+    /// </para>
+    /// </remarks>
+    public override Vector<T> PredictTreated(Matrix<T> features)
+    {
+        EnsureFitted();
+
+        if (_outcomeCoefficients1 is null)
+        {
+            throw new InvalidOperationException("Outcome models not fitted.");
+        }
+
+        return PredictOutcome(features, _outcomeCoefficients1);
+    }
+
+    /// <summary>
+    /// Predicts outcomes under control for the given features.
+    /// </summary>
+    /// <param name="features">The feature matrix.</param>
+    /// <returns>Predicted outcomes if not treated.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This predicts what each individual's outcome would be if they
+    /// did NOT receive treatment. The doubly robust estimator has separate outcome models for
+    /// treated and control groups, so this uses the control outcome model μ₀(X).
+    /// </para>
+    /// </remarks>
+    public override Vector<T> PredictControl(Matrix<T> features)
+    {
+        EnsureFitted();
+
+        if (_outcomeCoefficients0 is null)
+        {
+            throw new InvalidOperationException("Outcome models not fitted.");
+        }
+
+        return PredictOutcome(features, _outcomeCoefficients0);
+    }
+
+    /// <summary>
     /// Fits separate linear regression models for treated and control groups.
     /// </summary>
     private (Vector<T> coef1, Vector<T> coef0) FitOutcomeModels(

@@ -52,6 +52,16 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>
     protected Vector<T>? BaselineSurvivalFunction;
 
     /// <summary>
+    /// Gets the unique event times from the training data.
+    /// </summary>
+    public Vector<T>? EventTimes => TrainedEventTimes;
+
+    /// <summary>
+    /// Gets the baseline survival function values at event times.
+    /// </summary>
+    public Vector<T>? BaselineSurvival => BaselineSurvivalFunction;
+
+    /// <summary>
     /// Indicates whether the model has been fitted.
     /// </summary>
     protected bool IsFitted;
@@ -103,6 +113,183 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>
         _defaultLossFunction = new MeanSquaredErrorLoss<T>();
     }
 
+    #region ISurvivalModel Interface Implementation
+
+    /// <summary>
+    /// Fits the survival model to time-to-event data (interface method).
+    /// </summary>
+    /// <param name="times">Observed times (event or censoring times).</param>
+    /// <param name="events">Event indicators (1 = event occurred, 0 = censored).</param>
+    /// <param name="features">Optional feature matrix for regression models.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method trains the survival model on your data.
+    /// Times are how long each subject was observed. Events indicates whether the actual
+    /// event occurred (1) or if we lost track of the subject (censored, 0).</para>
+    /// </remarks>
+    public virtual void Fit(Vector<T> times, Vector<T> events, Matrix<T>? features = null)
+    {
+        // Convert Vector<T> events to Vector<int>
+        var eventInts = new Vector<int>(events.Length);
+        for (int i = 0; i < events.Length; i++)
+        {
+            eventInts[i] = NumOps.ToDouble(events[i]) > 0.5 ? 1 : 0;
+        }
+
+        // Create dummy features if not provided
+        if (features is null)
+        {
+            features = new Matrix<T>(times.Length, 1);
+            for (int i = 0; i < times.Length; i++)
+            {
+                features[i, 0] = NumOps.One;
+            }
+        }
+
+        FitSurvival(features, times, eventInts);
+    }
+
+    /// <summary>
+    /// Predicts survival probability at specified times (interface method).
+    /// </summary>
+    /// <param name="times">Times at which to predict survival.</param>
+    /// <param name="features">Features for new subjects (for regression models).</param>
+    /// <returns>Survival probabilities S(t) for each time point.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> S(t) is the probability of surviving beyond time t.
+    /// It starts at 1.0 (everyone starts alive) and decreases over time.</para>
+    /// </remarks>
+    public virtual Matrix<T> PredictSurvival(Vector<T> times, Matrix<T>? features = null)
+    {
+        EnsureFitted();
+
+        // Create dummy features if not provided
+        if (features is null)
+        {
+            features = new Matrix<T>(1, NumFeatures > 0 ? NumFeatures : 1);
+            for (int j = 0; j < features.Columns; j++)
+            {
+                features[0, j] = NumOps.Zero;
+            }
+        }
+
+        return PredictSurvivalProbability(features, times);
+    }
+
+    /// <summary>
+    /// Predicts cumulative hazard at specified times (interface method).
+    /// </summary>
+    /// <param name="times">Times at which to predict cumulative hazard.</param>
+    /// <param name="features">Features for new subjects (for regression models).</param>
+    /// <returns>Cumulative hazard H(t) for each time point.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> H(t) represents the accumulated risk up to time t.
+    /// It's related to survival by S(t) = exp(-H(t)).</para>
+    /// </remarks>
+    public virtual Matrix<T> PredictCumulativeHazard(Vector<T> times, Matrix<T>? features = null)
+    {
+        // H(t) = -ln(S(t))
+        var survival = PredictSurvival(times, features);
+        var cumHazard = new Matrix<T>(survival.Rows, survival.Columns);
+
+        for (int i = 0; i < survival.Rows; i++)
+        {
+            for (int j = 0; j < survival.Columns; j++)
+            {
+                double s = Math.Max(1e-10, NumOps.ToDouble(survival[i, j]));
+                cumHazard[i, j] = NumOps.FromDouble(-Math.Log(s));
+            }
+        }
+
+        return cumHazard;
+    }
+
+    /// <summary>
+    /// Predicts risk scores for subjects (interface method).
+    /// </summary>
+    /// <param name="features">Feature matrix for subjects.</param>
+    /// <returns>Risk scores for each subject (higher = higher risk).</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Risk scores indicate relative hazard compared to baseline.
+    /// A score of 2.0 means twice the baseline hazard.</para>
+    /// </remarks>
+    public virtual Vector<T> PredictRisk(Matrix<T> features)
+    {
+        EnsureFitted();
+        return PredictHazardRatio(features);
+    }
+
+    /// <summary>
+    /// Gets the estimated median survival time (interface method).
+    /// </summary>
+    /// <param name="features">Features for subjects (for regression models).</param>
+    /// <returns>Median survival times.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Median survival time is the time at which 50% of subjects
+    /// are expected to have experienced the event.</para>
+    /// </remarks>
+    public virtual Vector<T> PredictMedianSurvivalTime(Matrix<T>? features = null)
+    {
+        EnsureFitted();
+
+        if (TrainedEventTimes is null || TrainedEventTimes.Length == 0)
+        {
+            throw new InvalidOperationException("Model has no event times stored.");
+        }
+
+        // Create dummy features if not provided
+        if (features is null)
+        {
+            features = new Matrix<T>(1, NumFeatures > 0 ? NumFeatures : 1);
+            for (int j = 0; j < features.Columns; j++)
+            {
+                features[0, j] = NumOps.Zero;
+            }
+        }
+
+        var survivalProbs = PredictSurvivalProbability(features, TrainedEventTimes);
+        var medianTimes = new Vector<T>(features.Rows);
+        T half = NumOps.FromDouble(0.5);
+
+        for (int i = 0; i < features.Rows; i++)
+        {
+            T medianTime = NumOps.MaxValue;
+            for (int t = 0; t < TrainedEventTimes.Length - 1; t++)
+            {
+                T prob = survivalProbs[i, t];
+                T nextProb = survivalProbs[i, t + 1];
+
+                if (NumOps.Compare(prob, half) >= 0 && NumOps.Compare(nextProb, half) < 0)
+                {
+                    T time1 = TrainedEventTimes[t];
+                    T time2 = TrainedEventTimes[t + 1];
+                    T probDiff = NumOps.Subtract(prob, nextProb);
+
+                    if (NumOps.Compare(probDiff, NumOps.Zero) > 0)
+                    {
+                        T fraction = NumOps.Divide(
+                            NumOps.Subtract(prob, half),
+                            probDiff);
+                        medianTime = NumOps.Add(time1,
+                            NumOps.Multiply(fraction, NumOps.Subtract(time2, time1)));
+                    }
+                    else
+                    {
+                        medianTime = time1;
+                    }
+                    break;
+                }
+            }
+
+            medianTimes[i] = medianTime;
+        }
+
+        return medianTimes;
+    }
+
+    #endregion
+
+    #region Survival-Specific Methods
+
     /// <summary>
     /// Fits the survival model to time-to-event data.
     /// </summary>
@@ -143,58 +330,6 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>
     /// Standard prediction - returns hazard ratios or survival at median time.
     /// </summary>
     public abstract Vector<T> Predict(Matrix<T> input);
-
-    /// <summary>
-    /// Predicts median survival time for each subject.
-    /// </summary>
-    public virtual Vector<T> PredictMedianSurvivalTime(Matrix<T> x)
-    {
-        EnsureFitted();
-
-        if (TrainedEventTimes is null || TrainedEventTimes.Length == 0)
-        {
-            throw new InvalidOperationException("Model has no event times stored.");
-        }
-
-        var survivalProbs = PredictSurvivalProbability(x, TrainedEventTimes);
-        var medianTimes = new Vector<T>(x.Rows);
-        T half = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            T medianTime = NumOps.MaxValue;
-            for (int t = 0; t < TrainedEventTimes.Length - 1; t++)
-            {
-                T prob = survivalProbs[i, t];
-                T nextProb = survivalProbs[i, t + 1];
-
-                if (NumOps.Compare(prob, half) >= 0 && NumOps.Compare(nextProb, half) < 0)
-                {
-                    T time1 = TrainedEventTimes[t];
-                    T time2 = TrainedEventTimes[t + 1];
-                    T probDiff = NumOps.Subtract(prob, nextProb);
-
-                    if (NumOps.Compare(probDiff, NumOps.Zero) > 0)
-                    {
-                        T fraction = NumOps.Divide(
-                            NumOps.Subtract(prob, half),
-                            probDiff);
-                        medianTime = NumOps.Add(time1,
-                            NumOps.Multiply(fraction, NumOps.Subtract(time2, time1)));
-                    }
-                    else
-                    {
-                        medianTime = time1;
-                    }
-                    break;
-                }
-            }
-
-            medianTimes[i] = medianTime;
-        }
-
-        return medianTimes;
-    }
 
     /// <summary>
     /// Calculates the concordance index (C-index) for model evaluation.
@@ -259,6 +394,8 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>
 
         FitSurvival(x, y, events);
     }
+
+    #endregion
 
     #region Validation
 

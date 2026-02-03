@@ -73,6 +73,21 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     private readonly bool _stabilizedWeights;
 
     /// <summary>
+    /// Cached treatment vector from fitting.
+    /// </summary>
+    private Vector<int>? _cachedTreatment;
+
+    /// <summary>
+    /// Cached outcome vector from fitting.
+    /// </summary>
+    private Vector<T>? _cachedOutcome;
+
+    /// <summary>
+    /// Cached feature matrix from fitting.
+    /// </summary>
+    private Matrix<T>? _cachedFeatures;
+
+    /// <summary>
     /// Gets the model type.
     /// </summary>
     public override ModelType GetModelType() => ModelType.InverseProbabilityWeighting;
@@ -121,10 +136,187 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
         ValidateFitData(x, treatment);
         NumFeatures = x.Columns;
 
+        // Cache data for predictions
+        _cachedFeatures = x;
+        _cachedTreatment = treatment;
+
         // Fit logistic regression for propensity scores
         _propensityCoefficients = FitLogisticRegression(x, treatment);
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// Fits the causal model using the ICausalModel interface signature.
+    /// </summary>
+    /// <param name="features">The feature matrix (covariates).</param>
+    /// <param name="treatment">Treatment indicators as generic type (0 or 1).</param>
+    /// <param name="outcome">The outcome variable.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method converts the generic treatment vector to integer format
+    /// and fits the propensity score model. IPW uses propensity scores to weight observations,
+    /// giving more weight to "surprising" treatment assignments.
+    /// </para>
+    /// </remarks>
+    public override void Fit(Matrix<T> features, Vector<T> treatment, Vector<T> outcome)
+    {
+        // Convert treatment vector to int
+        var treatmentInt = new Vector<int>(treatment.Length);
+        for (int i = 0; i < treatment.Length; i++)
+        {
+            treatmentInt[i] = (int)Math.Round(NumOps.ToDouble(treatment[i]));
+        }
+
+        // Cache outcome for predictions
+        _cachedOutcome = outcome;
+
+        // Call the original fit method
+        Fit(features, treatmentInt);
+    }
+
+    /// <summary>
+    /// Estimates treatment effects for individuals using IPW.
+    /// </summary>
+    /// <param name="features">The feature matrix for which to estimate effects.</param>
+    /// <returns>A vector of estimated treatment effects.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> IPW doesn't directly model individual treatment effects - it's designed
+    /// for average effects. This returns the estimated ATE for all individuals. For personalized
+    /// treatment effect estimates, consider using CausalForest instead.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> EstimateTreatmentEffect(Matrix<T> features)
+    {
+        EnsureFitted();
+
+        // IPW doesn't model heterogeneous effects
+        // Return the estimated ATE for all individuals
+        T ate = NumOps.Zero;
+        if (_cachedFeatures is not null && _cachedTreatment is not null && _cachedOutcome is not null)
+        {
+            var (estimate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
+            ate = estimate;
+        }
+
+        var effects = new Vector<T>(features.Rows);
+        for (int i = 0; i < features.Rows; i++)
+        {
+            effects[i] = ate;
+        }
+
+        return effects;
+    }
+
+    /// <summary>
+    /// Predicts outcomes under treatment for the given features.
+    /// </summary>
+    /// <param name="features">The feature matrix.</param>
+    /// <returns>Predicted outcomes if treated.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This estimates what the outcome would be if each individual received treatment.
+    /// For IPW, we use weighted averages of outcomes from treated individuals in the training data
+    /// with similar propensity scores.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> PredictTreated(Matrix<T> features)
+    {
+        EnsureFitted();
+
+        if (_cachedFeatures is null || _cachedTreatment is null || _cachedOutcome is null)
+        {
+            throw new InvalidOperationException("Model must be fitted with outcome data for treated predictions.");
+        }
+
+        var propensityScores = EstimatePropensityScores(features);
+        var cachedPropensityScores = EstimatePropensityScores(_cachedFeatures);
+        var predictions = new Vector<T>(features.Rows);
+
+        for (int i = 0; i < features.Rows; i++)
+        {
+            double queryScore = NumOps.ToDouble(propensityScores[i]);
+
+            // Find treated individuals with similar propensity scores
+            double sumOutcome = 0;
+            double sumWeight = 0;
+
+            for (int j = 0; j < _cachedTreatment.Length; j++)
+            {
+                if (_cachedTreatment[j] == 1)
+                {
+                    double refScore = NumOps.ToDouble(cachedPropensityScores[j]);
+                    double distance = Math.Abs(queryScore - refScore);
+
+                    // Kernel weighting
+                    double weight = Math.Exp(-distance * distance / 0.1);
+                    sumOutcome += weight * NumOps.ToDouble(_cachedOutcome[j]);
+                    sumWeight += weight;
+                }
+            }
+
+            predictions[i] = sumWeight > 0
+                ? NumOps.FromDouble(sumOutcome / sumWeight)
+                : NumOps.Zero;
+        }
+
+        return predictions;
+    }
+
+    /// <summary>
+    /// Predicts outcomes under control for the given features.
+    /// </summary>
+    /// <param name="features">The feature matrix.</param>
+    /// <returns>Predicted outcomes if not treated.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This estimates what the outcome would be if each individual did NOT receive treatment.
+    /// For IPW, we use weighted averages of outcomes from control individuals in the training data
+    /// with similar propensity scores.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> PredictControl(Matrix<T> features)
+    {
+        EnsureFitted();
+
+        if (_cachedFeatures is null || _cachedTreatment is null || _cachedOutcome is null)
+        {
+            throw new InvalidOperationException("Model must be fitted with outcome data for control predictions.");
+        }
+
+        var propensityScores = EstimatePropensityScores(features);
+        var cachedPropensityScores = EstimatePropensityScores(_cachedFeatures);
+        var predictions = new Vector<T>(features.Rows);
+
+        for (int i = 0; i < features.Rows; i++)
+        {
+            double queryScore = NumOps.ToDouble(propensityScores[i]);
+
+            // Find control individuals with similar propensity scores
+            double sumOutcome = 0;
+            double sumWeight = 0;
+
+            for (int j = 0; j < _cachedTreatment.Length; j++)
+            {
+                if (_cachedTreatment[j] == 0)
+                {
+                    double refScore = NumOps.ToDouble(cachedPropensityScores[j]);
+                    double distance = Math.Abs(queryScore - refScore);
+
+                    // Kernel weighting
+                    double weight = Math.Exp(-distance * distance / 0.1);
+                    sumOutcome += weight * NumOps.ToDouble(_cachedOutcome[j]);
+                    sumWeight += weight;
+                }
+            }
+
+            predictions[i] = sumWeight > 0
+                ? NumOps.FromDouble(sumOutcome / sumWeight)
+                : NumOps.Zero;
+        }
+
+        return predictions;
     }
 
     private void ValidateFitData(Matrix<T> x, Vector<int> treatment)
