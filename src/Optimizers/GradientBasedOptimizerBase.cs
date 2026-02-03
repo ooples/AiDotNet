@@ -598,8 +598,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             // which would corrupt the cache for future calls with the same key.
             var clonedGradient = new Vector<T>(cachedGradient.Parameters.ToArray());
 
-            // Apply mixed-precision scaling to cached gradient (scaling may have changed since caching)
-            clonedGradient = ApplyMixedPrecisionScaling(clonedGradient);
+            // Note: Cached gradients are already scaled for mixed-precision (scaling applied before caching).
+            // Do NOT scale again here to avoid double-scaling.
 
             _lastComputedGradients = clonedGradient;
             return clonedGradient;

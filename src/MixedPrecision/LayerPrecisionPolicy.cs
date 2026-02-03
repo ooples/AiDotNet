@@ -319,10 +319,8 @@ public static class LayerPrecisionPolicyExtensions
         // Get excluded patterns from the policy based on the config's precision type
         var excludedPatterns = policy.GetExcludedPatterns(config.PrecisionType);
 
-        if (excludedPatterns.Count > 0)
-        {
-            config.FP8ExcludedLayers = new List<string>(excludedPatterns);
-        }
+        // Always set the exclusions (even if empty) to clear any prior configuration
+        config.FP8ExcludedLayers = new List<string>(excludedPatterns);
 
         return config;
     }
