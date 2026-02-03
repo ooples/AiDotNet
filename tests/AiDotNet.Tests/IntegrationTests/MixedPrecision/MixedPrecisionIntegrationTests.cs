@@ -833,8 +833,12 @@ public class MixedPrecisionIntegrationTests
             var roundTrip = e4m3.ToFloat();
 
             // Assert - E4M3 has limited precision (3 mantissa bits), allow some tolerance
-            // Relative error can be up to ~12.5% for E4M3
-            var tolerance = Math.Max(1.0f, Math.Abs(value) * 0.15f);
+            // Relative error can be up to ~12.5% for E4M3, but need minimum absolute tolerance
+            // for very small values near the format's minimum (~0.002)
+            // Use 15% relative tolerance with minimum absolute tolerance of 0.01
+            var relativeTolerance = Math.Abs(value) * 0.15f;
+            var absoluteTolerance = 0.01f; // Slightly above E4M3 min positive (~0.002)
+            var tolerance = Math.Max(absoluteTolerance, relativeTolerance);
             Assert.True(Math.Abs(value - roundTrip) <= tolerance,
                 $"Value {value} became {roundTrip}, exceeding tolerance {tolerance}");
         }

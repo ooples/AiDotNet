@@ -142,7 +142,7 @@ public class MixedPrecisionTrainingLoop<T>
 
         // Wrap forward pass in MixedPrecisionScope for automatic precision management
         // Layers can check MixedPrecisionScope.Current to determine their precision
-        using (var scope = new MixedPrecisionScope(_context, _policy))
+        using (new MixedPrecisionScope(_context, _policy))
         {
             // Step 1: Cast master weights to FP16 working weights
             // This prepares the context for layers that need to access working weights
@@ -150,8 +150,8 @@ public class MixedPrecisionTrainingLoop<T>
 
             // Step 2: Forward pass within the scope
             // Layers can check MixedPrecisionScope.Current to access:
-            // - scope.ShouldUseFP32(layerName) to check if they need full precision
-            // - scope.GetFP32Tensor(name) to get FP32 versions of registered tensors
+            // - MixedPrecisionScope.Current.ShouldUseFP32(layerName) to check if they need full precision
+            // - MixedPrecisionScope.Current.GetFP32Tensor(name) to get FP32 versions of registered tensors
             output = _network.ForwardWithMemory(input);
         }
         // Scope is disposed here, MixedPrecisionScope.Current becomes null

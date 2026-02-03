@@ -54,6 +54,12 @@ public class MixedPrecisionScope : IDisposable
     public static MixedPrecisionScope? Current => _current;
 
     /// <summary>
+    /// Sets the current scope (used by constructor and Dispose).
+    /// This static method manages the thread-static ambient context.
+    /// </summary>
+    private static void SetCurrentScope(MixedPrecisionScope? scope) => _current = scope;
+
+    /// <summary>
     /// The previous scope (for nested scope support).
     /// </summary>
     private readonly MixedPrecisionScope? _previous;
@@ -118,8 +124,8 @@ public class MixedPrecisionScope : IDisposable
         _disposed = false;
 
         // Save previous scope and set this as current
-        _previous = _current;
-        _current = this;
+        _previous = Current;
+        SetCurrentScope(this);
     }
 
     /// <summary>
@@ -314,7 +320,7 @@ public class MixedPrecisionScope : IDisposable
         _fp16Tensors.Clear();
 
         // Restore previous scope
-        _current = _previous;
+        SetCurrentScope(_previous);
 
         GC.SuppressFinalize(this);
     }

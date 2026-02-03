@@ -13,7 +13,7 @@ internal static class BitConverterHelper
     public static int SingleToInt32Bits(float value)
     {
 #if NETCOREAPP2_1_OR_GREATER || NETSTANDARD2_1_OR_GREATER || NET5_0_OR_GREATER
-        return BitConverterHelper.SingleToInt32Bits(value);
+        return BitConverter.SingleToInt32Bits(value);
 #else
         // For older frameworks, use unsafe code or union struct
         var union = new SingleInt32Union { Single = value };
@@ -27,7 +27,7 @@ internal static class BitConverterHelper
     public static float Int32BitsToSingle(int value)
     {
 #if NETCOREAPP2_1_OR_GREATER || NETSTANDARD2_1_OR_GREATER || NET5_0_OR_GREATER
-        return BitConverterHelper.Int32BitsToSingle(value);
+        return BitConverter.Int32BitsToSingle(value);
 #else
         var union = new SingleInt32Union { Int32 = value };
         return union.Single;
@@ -143,9 +143,13 @@ public readonly struct Float8E4M3 : IEquatable<Float8E4M3>, IComparable<Float8E4
         if (float.IsNaN(value))
             return NaN;
 
-        // Handle zero
-        if (value == 0f)
-            return Zero;
+        // Handle zero (including negative zero)
+        // Check bits to distinguish +0 from -0 since (0f == -0f) is true
+        int valueBits = BitConverterHelper.SingleToInt32Bits(value);
+        if ((valueBits & 0x7FFFFFFF) == 0) // Exponent and mantissa are zero
+        {
+            return valueBits < 0 ? new Float8E4M3(0x80) : Zero;
+        }
 
         int sign = value < 0 ? 1 : 0;
         value = Math.Abs(value);
@@ -205,10 +209,20 @@ public readonly struct Float8E4M3 : IEquatable<Float8E4M3>, IComparable<Float8E4
         int exponent = (_value >> MantissaBits) & 0xF;
         int mantissa = _value & MantissaMask;
 
+        // Handle subnormal numbers (exponent == 0 but mantissa != 0)
+        if (exponent == 0)
+        {
+            // Subnormal: value = 0.mantissa * 2^(1-bias) = mantissa/8 * 2^(-6)
+            // Compute directly to avoid denormalized FP32 issues
+            float value = mantissa * (1.0f / 8.0f) * (1.0f / 64.0f); // mantissa/8 * 2^-6
+            return sign == 1 ? -value : value;
+        }
+
+        // Normal number: value = 1.mantissa * 2^(exponent-bias)
         // Convert exponent
         int fp32Exponent = exponent - ExponentBias + 127;
 
-        // Convert mantissa
+        // Convert mantissa (scale from 3 bits to 23 bits)
         int fp32Mantissa = mantissa << 20;
 
         int fp32Bits = (sign << 31) | (fp32Exponent << 23) | fp32Mantissa;
@@ -222,7 +236,7 @@ public readonly struct Float8E4M3 : IEquatable<Float8E4M3>, IComparable<Float8E4
     public override bool Equals(object? obj) => obj is Float8E4M3 other && Equals(other);
 
     /// <inheritdoc />
-    public override int GetHashCode() => _value.GetHashCode();
+    public override int GetHashCode() => _value;
 
     /// <inheritdoc />
     public int CompareTo(Float8E4M3 other) => ToFloat().CompareTo(other.ToFloat());
@@ -376,9 +390,13 @@ public readonly struct Float8E5M2 : IEquatable<Float8E5M2>, IComparable<Float8E5
         if (float.IsNegativeInfinity(value))
             return NegativeInfinity;
 
-        // Handle zero
-        if (value == 0f)
-            return Zero;
+        // Handle zero (including negative zero)
+        // Check bits to distinguish +0 from -0 since (0f == -0f) is true
+        int valueBits = BitConverterHelper.SingleToInt32Bits(value);
+        if ((valueBits & 0x7FFFFFFF) == 0) // Exponent and mantissa are zero
+        {
+            return valueBits < 0 ? new Float8E5M2(0x80) : Zero;
+        }
 
         int sign = value < 0 ? 1 : 0;
         value = Math.Abs(value);
@@ -441,10 +459,20 @@ public readonly struct Float8E5M2 : IEquatable<Float8E5M2>, IComparable<Float8E5
         int exponent = (_value >> MantissaBits) & 0x1F;
         int mantissa = _value & MantissaMask;
 
+        // Handle subnormal numbers (exponent == 0 but mantissa != 0)
+        if (exponent == 0)
+        {
+            // Subnormal: value = 0.mantissa * 2^(1-bias) = mantissa/4 * 2^(-14)
+            // Compute directly to avoid denormalized FP32 issues
+            float value = mantissa * (1.0f / 4.0f) * (1.0f / 16384.0f); // mantissa/4 * 2^-14
+            return sign == 1 ? -value : value;
+        }
+
+        // Normal number: value = 1.mantissa * 2^(exponent-bias)
         // Convert exponent
         int fp32Exponent = exponent - ExponentBias + 127;
 
-        // Convert mantissa
+        // Convert mantissa (scale from 2 bits to 23 bits)
         int fp32Mantissa = mantissa << 21;
 
         int fp32Bits = (sign << 31) | (fp32Exponent << 23) | fp32Mantissa;
@@ -458,7 +486,7 @@ public readonly struct Float8E5M2 : IEquatable<Float8E5M2>, IComparable<Float8E5
     public override bool Equals(object? obj) => obj is Float8E5M2 other && Equals(other);
 
     /// <inheritdoc />
-    public override int GetHashCode() => _value.GetHashCode();
+    public override int GetHashCode() => _value;
 
     /// <inheritdoc />
     public int CompareTo(Float8E5M2 other) => ToFloat().CompareTo(other.ToFloat());

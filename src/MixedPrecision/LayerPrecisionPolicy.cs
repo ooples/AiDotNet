@@ -240,6 +240,61 @@ public class LayerPrecisionPolicy
 
     #endregion
 
+    /// <summary>
+    /// Gets all layer patterns that should be excluded from a given precision level.
+    /// </summary>
+    /// <param name="minimumPrecision">The minimum precision level. Patterns requiring higher precision will be returned.</param>
+    /// <returns>List of layer patterns that need higher precision.</returns>
+    public IReadOnlyList<string> GetExcludedPatterns(MixedPrecisionType minimumPrecision)
+    {
+        var excluded = new List<string>();
+
+        // Add patterns that need higher precision than the minimum
+        foreach (var (pattern, precision) in _patterns)
+        {
+            // None = FP32 (highest), then FP16, then BF16, then FP8 variants (lowest)
+            // If a pattern requires higher precision, it should be excluded
+            if (ShouldExcludeForPrecision(precision, minimumPrecision))
+            {
+                excluded.Add(pattern);
+            }
+        }
+
+        // Add exact matches that need higher precision
+        foreach (var (layerName, precision) in _exactMatches)
+        {
+            if (ShouldExcludeForPrecision(precision, minimumPrecision))
+            {
+                excluded.Add(layerName);
+            }
+        }
+
+        return excluded;
+    }
+
+    /// <summary>
+    /// Determines if a layer's required precision should exclude it from a target precision.
+    /// </summary>
+    private static bool ShouldExcludeForPrecision(MixedPrecisionType requiredPrecision, MixedPrecisionType targetPrecision)
+    {
+        // FP32 (None) is highest precision, followed by FP16/BF16, then FP8 variants
+        // Exclude if required precision is higher than target
+        if (requiredPrecision == MixedPrecisionType.None)
+        {
+            // FP32 required - exclude from anything lower
+            return targetPrecision != MixedPrecisionType.None;
+        }
+
+        if (requiredPrecision == MixedPrecisionType.FP16 || requiredPrecision == MixedPrecisionType.BF16)
+        {
+            // FP16/BF16 required - exclude from FP8 variants
+            return targetPrecision >= MixedPrecisionType.FP8_E4M3;
+        }
+
+        // FP8 or lower - no need to exclude
+        return false;
+    }
+
     /// <inheritdoc />
     public override string ToString()
     {
@@ -261,19 +316,12 @@ public static class LayerPrecisionPolicyExtensions
     /// <returns>The modified config.</returns>
     public static MixedPrecisionConfig WithLayerPolicy(this MixedPrecisionConfig config, LayerPrecisionPolicy policy)
     {
-        // Update FP8ExcludedLayers based on policy
-        // This is a simplified integration - the full integration would involve
-        // storing the policy reference in the config
+        // Get excluded patterns from the policy based on the config's precision type
+        var excludedPatterns = policy.GetExcludedPatterns(config.PrecisionType);
 
-        // For now, we add patterns that should stay in higher precision
-        if (config.PrecisionType >= MixedPrecisionType.FP8_E4M3)
+        if (excludedPatterns.Count > 0)
         {
-            config.FP8ExcludedLayers = new List<string>
-            {
-                "LayerNorm", "BatchNorm", "RMSNorm", "GroupNorm", // Normalizations
-                "Softmax", "Attention",                            // Attention
-                "Embedding", "LMHead", "Output"                    // I/O layers
-            };
+            config.FP8ExcludedLayers = new List<string>(excludedPatterns);
         }
 
         return config;

@@ -597,6 +597,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             // If we return the cached vector directly, callers could modify it (e.g., during AllReduce operations),
             // which would corrupt the cache for future calls with the same key.
             var clonedGradient = new Vector<T>(cachedGradient.Parameters.ToArray());
+
+            // Apply mixed-precision scaling to cached gradient (scaling may have changed since caching)
+            clonedGradient = ApplyMixedPrecisionScaling(clonedGradient);
+
             _lastComputedGradients = clonedGradient;
             return clonedGradient;
         }
@@ -670,17 +674,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return gradient;
         }
 
-        // Scale each gradient element by the loss scale factor
+        // Scale gradient by the loss scale factor using efficient vector multiplication
         double scale = _mixedPrecisionContext.LossScaler.Scale;
-        var scaledGradient = new T[gradient.Length];
-
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            double val = Convert.ToDouble(gradient[i]);
-            scaledGradient[i] = NumOps.FromDouble(val * scale);
-        }
-
-        return new Vector<T>(scaledGradient);
+        return gradient.Multiply(NumOps.FromDouble(scale));
     }
 
     /// <summary>
