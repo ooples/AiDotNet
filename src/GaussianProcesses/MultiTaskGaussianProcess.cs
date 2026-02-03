@@ -51,7 +51,7 @@ public class MultiTaskGaussianProcess<T>
     /// <summary>
     /// The number of tasks (output dimensions).
     /// </summary>
-    private int _numTasks;
+    private readonly int _numTasks;
 
     /// <summary>
     /// The task correlation matrix (B matrix in ICM/LMC models).
@@ -255,9 +255,10 @@ public class MultiTaskGaussianProcess<T>
             var chol = new CholeskyDecomposition<T>(_taskCovariance);
             _taskCovCholesky = chol.L;
         }
-        catch
+        catch (Exception ex)
         {
             // Fall back to identity if not positive definite
+            System.Diagnostics.Debug.WriteLine($"Task covariance Cholesky failed: {ex.Message}. Using identity.");
             _taskCovariance = CreateIdentityMatrix(_numTasks);
             _taskCovCholesky = CreateIdentityMatrix(_numTasks);
         }
@@ -372,6 +373,11 @@ public class MultiTaskGaussianProcess<T>
     /// </remarks>
     public (Vector<T> means, Vector<T> variances) Predict(Vector<T> x)
     {
+        if (_X.IsEmpty || _alpha.IsEmpty)
+        {
+            throw new InvalidOperationException("Model must be trained before prediction. Call Fit() first.");
+        }
+
         int n = _X.Rows;
 
         // Compute kernel vector between test point and training points
@@ -458,7 +464,7 @@ public class MultiTaskGaussianProcess<T>
     /// <param name="kernel">The new kernel function.</param>
     public void UpdateKernel(IKernelFunction<T> kernel)
     {
-        _kernel = kernel;
+        _kernel = kernel ?? throw new ArgumentNullException(nameof(kernel));
         if (!_X.IsEmpty && !_Y.IsEmpty)
         {
             BuildCombinedKernel();

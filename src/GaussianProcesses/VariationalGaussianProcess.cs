@@ -511,9 +511,10 @@ public class VariationalGaussianProcess<T> : IGaussianProcess<T>
             var choleskyS = new CholeskyDecomposition<T>(S);
             _variationalCovCholesky = choleskyS.L;
         }
-        catch
+        catch (Exception ex)
         {
             // Keep current covariance if decomposition fails
+            System.Diagnostics.Debug.WriteLine($"Covariance Cholesky failed: {ex.Message}. Keeping current covariance.");
         }
     }
 
@@ -618,7 +619,11 @@ public class VariationalGaussianProcess<T> : IGaussianProcess<T>
                     double m = _numOps.ToDouble(_variationalMean[i]);
                     double y = _numOps.ToDouble(_y[i]);
                     // log p(y|f) = y*log(σ(f)) + (1-y)*log(1-σ(f)) = y*f - log(1+exp(f))
-                    expLogLik += y * m - Math.Log(1 + Math.Exp(m));
+                    // Use numerically stable form: log(1+exp(m)) = m + log(1+exp(-m)) for m > 0
+                    double logSigmoid = m > 0
+                        ? -Math.Log(1 + Math.Exp(-m))
+                        : m - Math.Log(1 + Math.Exp(m));
+                    expLogLik += y * m + logSigmoid - m; // Simplifies to: y*m - log(1+exp(m))
                 }
                 break;
 
@@ -635,7 +640,7 @@ public class VariationalGaussianProcess<T> : IGaussianProcess<T>
         }
 
         // KL divergence (approximate)
-        var S = _variationalCovCholesky.Multiply(_variationalCovCholesky.Transpose());
+        // Note: S = L_S * L_S^T is computed implicitly in trace term below
         var KInvM = MatrixSolutionHelper.SolveLinearSystem(_K, _variationalMean, _decompositionType);
 
         double quadForm = 0.0;
