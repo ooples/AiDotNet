@@ -103,8 +103,11 @@ public class MXFP4Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     {
         if (model == null) throw new ArgumentNullException(nameof(model));
 
+        // Use config's group size if specified and different from constructor value
+        int effectiveBlockSize = config.GroupSize > 0 ? config.GroupSize : _blockSize;
+
         var parameters = model.GetParameters();
-        var quantizedParams = QuantizeWithMXFP4(parameters);
+        var quantizedParams = QuantizeWithMXFP4(parameters, effectiveBlockSize);
 
         return model.WithParameters(quantizedParams);
     }
@@ -172,16 +175,19 @@ public class MXFP4Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     /// <summary>
     /// Quantizes parameters using MXFP4 format with microscaling.
     /// </summary>
-    private Vector<T> QuantizeWithMXFP4(Vector<T> parameters)
+    /// <param name="parameters">The parameters to quantize</param>
+    /// <param name="blockSize">Block size for microscaling (defaults to constructor value if 0)</param>
+    private Vector<T> QuantizeWithMXFP4(Vector<T> parameters, int blockSize = 0)
     {
+        int effectiveBlockSize = blockSize > 0 ? blockSize : _blockSize;
         int n = parameters.Length;
         var result = new T[n];
-        int numBlocks = (n + _blockSize - 1) / _blockSize;
+        int numBlocks = (n + effectiveBlockSize - 1) / effectiveBlockSize;
 
         for (int b = 0; b < numBlocks; b++)
         {
-            int start = b * _blockSize;
-            int end = Math.Min(start + _blockSize, n);
+            int start = b * effectiveBlockSize;
+            int end = Math.Min(start + effectiveBlockSize, n);
 
             // Use calibrated scale if available, otherwise compute
             double scale;

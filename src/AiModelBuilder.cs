@@ -7199,7 +7199,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             {
                 QuantizationMode.Int8 => new Deployment.Optimization.Quantization.Int8Quantizer<T, TInput, TOutput>(),
                 QuantizationMode.Float16 => new Deployment.Optimization.Quantization.Float16Quantizer<T, TInput, TOutput>(),
-                _ => new Deployment.Optimization.Quantization.Int8Quantizer<T, TInput, TOutput>()
+                QuantizationMode.Float32 => throw new NotSupportedException("Float32 mode represents no quantization. Use QuantizationMode.None instead."),
+                QuantizationMode.Mixed => throw new NotSupportedException("Mixed precision requires a specific strategy like GPTQ or AWQ."),
+                _ => throw new NotSupportedException($"Quantization mode {internalConfig.Mode} is not supported with {internalConfig.Strategy} strategy. " +
+                    "Use a specific strategy like GPTQ or AWQ for advanced quantization, or use Int8/Float16 mode.")
             },
             _ => new Deployment.Optimization.Quantization.Int8Quantizer<T, TInput, TOutput>()
         };
