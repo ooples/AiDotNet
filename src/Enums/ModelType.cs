@@ -1915,6 +1915,32 @@ public enum ModelType
     /// </remarks>
     LabelSpreading,
 
+    // ==================== Multi-Label Classification ====================
+
+    /// <summary>
+    /// Binary Relevance classifier that trains one binary classifier per label independently.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Binary Relevance is the simplest multi-label approach. It trains a separate
+    /// binary classifier for each label (e.g., "is this a comedy?" "is this an action movie?"). Each classifier
+    /// makes an independent yes/no decision. Simple but ignores label correlations.
+    /// </para>
+    /// </remarks>
+    BinaryRelevanceClassifier,
+
+    /// <summary>
+    /// Label Powerset classifier that treats each unique label combination as a separate class.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Label Powerset converts multi-label into multi-class by treating each unique
+    /// combination of labels as its own class. For example, "action+comedy" becomes one class, "drama+romance"
+    /// becomes another. Captures label correlations perfectly but may have many classes with few examples.
+    /// </para>
+    /// </remarks>
+    LabelPowersetClassifier,
+
     // ==================== Finance Models ====================
 
     /// <summary>
