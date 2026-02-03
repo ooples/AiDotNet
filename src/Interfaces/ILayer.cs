@@ -68,6 +68,42 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     Tensor<T> Forward(Tensor<T> input);
 
     /// <summary>
+    /// Processes input data through the layer with automatic mixed-precision handling.
+    /// </summary>
+    /// <param name="input">The input tensor to be processed.</param>
+    /// <returns>The output tensor after processing with appropriate precision.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> This method wraps the standard Forward pass with automatic
+    /// precision handling for mixed-precision training.
+    ///
+    /// When mixed-precision is active:
+    /// - Layers check if they need full precision (FP32) based on their type
+    /// - Normalization layers (BatchNorm, LayerNorm) typically stay in FP32
+    /// - Other layers may use reduced precision (FP16) for faster computation
+    ///
+    /// This enables faster training on modern GPUs while maintaining numerical stability.
+    ///
+    /// <b>Note:</b> This is a new interface member added for mixed-precision support.
+    /// Implementers should call <see cref="Forward"/> by default if no special precision
+    /// handling is needed.
+    /// </remarks>
+    Tensor<T> ForwardWithPrecisionCheck(Tensor<T> input);
+
+    /// <summary>
+    /// Gets the name of this layer for mixed-precision policy lookup.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> This name is used to determine whether the layer should
+    /// use full precision (FP32) or reduced precision (FP16/FP8) during mixed-precision training.
+    ///
+    /// <b>Note:</b> This is a new interface member added for mixed-precision support.
+    /// Implementers should return a unique name that can be matched against patterns
+    /// in the precision policy. A good default is <c>GetType().Name + "_" + instanceId</c>
+    /// to distinguish multiple instances of the same layer type.
+    /// </remarks>
+    string LayerName { get; }
+
+    /// <summary>
     /// Performs a GPU-resident forward pass, keeping the result on the GPU.
     /// </summary>
     /// <param name="inputs">GPU-resident input tensor(s). Most layers use only the first input,

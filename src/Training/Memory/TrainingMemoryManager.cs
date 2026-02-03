@@ -181,7 +181,8 @@ public class TrainingMemoryManager<T> : IDisposable
     {
         if (!Config.UseGradientCheckpointing || !ShouldCheckpoint(layerIndex))
         {
-            return layer.Forward(input);
+            // Use precision-aware forward pass for mixed-precision support
+            return layer.ForwardWithPrecisionCheck(input);
         }
 
         // Save checkpoint: store input and layer reference
@@ -192,8 +193,8 @@ public class TrainingMemoryManager<T> : IDisposable
             LayerIndex = layerIndex
         };
 
-        // Run forward pass
-        return layer.Forward(input);
+        // Run forward pass with precision awareness
+        return layer.ForwardWithPrecisionCheck(input);
     }
 
     /// <summary>
@@ -232,8 +233,8 @@ public class TrainingMemoryManager<T> : IDisposable
         // If this is a checkpointed layer, we need to recompute forward first
         if (_checkpoints.TryGetValue(layerIndex, out var checkpoint))
         {
-            // Recompute forward pass from checkpoint
-            _ = layer.Forward(checkpoint.Input);
+            // Recompute forward pass from checkpoint with precision awareness
+            _ = layer.ForwardWithPrecisionCheck(checkpoint.Input);
         }
 
         // Now run backward pass

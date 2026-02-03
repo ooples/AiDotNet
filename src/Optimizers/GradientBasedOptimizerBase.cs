@@ -305,6 +305,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// Correct implementation: applies gradients to originalParameters (not model.GetParameters()),
     /// ensuring single-step behavior even if model contains post-update parameters.
     /// </para>
+    /// <para><b>Mixed-Precision Support:</b> When mixed-precision is enabled via
+    /// <see cref="EnableMixedPrecision"/>, this method automatically routes through
+    /// <see cref="ApplyGradientsWithMixedPrecision"/> for gradient unscaling and overflow detection.
+    /// </para>
     /// </remarks>
     public virtual IFullModel<T, TInput, TOutput> ApplyGradients(Vector<T> originalParameters, Vector<T> gradients, IFullModel<T, TInput, TOutput> model)
     {
@@ -322,6 +326,31 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 nameof(gradients));
         }
 
+        // Route through mixed-precision handler when enabled
+        // ApplyGradientsWithMixedPrecision will call ApplyGradientsCore internally
+        if (_mixedPrecisionContext != null)
+        {
+            return ApplyGradientsWithMixedPrecision(originalParameters, gradients, model);
+        }
+
+        // Standard path without mixed precision
+        return ApplyGradientsCore(originalParameters, gradients, model);
+    }
+
+    /// <summary>
+    /// Core implementation of gradient application without mixed-precision handling.
+    /// </summary>
+    /// <param name="originalParameters">The original parameters before the update.</param>
+    /// <param name="gradients">The gradients to apply.</param>
+    /// <param name="model">The model to update.</param>
+    /// <returns>The updated model with new parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the core method that actually applies gradients to parameters.
+    /// It's called by both the standard <see cref="ApplyGradients"/> method and the mixed-precision
+    /// variant <see cref="ApplyGradientsWithMixedPrecision"/>.</para>
+    /// </remarks>
+    protected virtual IFullModel<T, TInput, TOutput> ApplyGradientsCore(Vector<T> originalParameters, Vector<T> gradients, IFullModel<T, TInput, TOutput> model)
+    {
         // CRITICAL: Apply gradients to originalParameters (explicitly passed in),
         // NOT to model.GetParameters(). This prevents double-stepping.
         //
@@ -488,7 +517,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // If mixed-precision is not enabled, use standard application
         if (_mixedPrecisionContext == null)
         {
-            return ApplyGradients(originalParameters, gradients, model);
+            return ApplyGradientsCore(originalParameters, gradients, model);
         }
 
         // Cast to float (required for mixed-precision context)
@@ -496,16 +525,18 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             ?? throw new InvalidOperationException("Gradients must be Vector<float> for mixed-precision training.");
 
         // Unscale gradients and check for overflow
+        // The gradients are assumed to be scaled (multiplied by loss scale during backward pass)
         bool isValid = _mixedPrecisionContext.LossScaler.UnscaleGradientsAndCheck(gradientsFloat);
 
         if (!isValid)
         {
-            // Overflow detected - return model unchanged
+            // Overflow detected - skip this update and return model unchanged
+            // The LossScaler has already reduced the scale factor for the next iteration
             return model;
         }
 
         // Apply gradients normally (now unscaled)
-        return ApplyGradients(originalParameters, gradients, model);
+        return ApplyGradientsCore(originalParameters, gradients, model);
     }
 
     /// <summary>
@@ -566,6 +597,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             // If we return the cached vector directly, callers could modify it (e.g., during AllReduce operations),
             // which would corrupt the cache for future calls with the same key.
             var clonedGradient = new Vector<T>(cachedGradient.Parameters.ToArray());
+
+            // Note: Cached gradients are already scaled for mixed-precision (scaling applied before caching).
+            // Do NOT scale again here to avoid double-scaling.
+
             _lastComputedGradients = clonedGradient;
             return clonedGradient;
         }
@@ -608,6 +643,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // Apply gradient clipping if enabled
         gradient = ApplyGradientClipping(gradient);
 
+        // Scale gradients for mixed-precision training
+        // The gradients will be unscaled in ApplyGradientsWithMixedPrecision before the optimizer step
+        gradient = ApplyMixedPrecisionScaling(gradient);
+
         var gradientModel = new GradientModel<T>(gradient);
         GradientCache.CacheGradient(cacheKey, gradientModel);
 
@@ -615,6 +654,29 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _lastComputedGradients = gradient;
 
         return gradient;
+    }
+
+    /// <summary>
+    /// Scales gradients for mixed-precision training if enabled.
+    /// </summary>
+    /// <param name="gradient">The gradient to scale.</param>
+    /// <returns>The scaled gradient if mixed-precision is enabled, otherwise the original gradient.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> In mixed-precision training, gradients can become very small
+    /// when computed in FP16. Loss scaling multiplies gradients by a large factor to prevent
+    /// them from underflowing to zero. The gradients are later unscaled before the optimizer step.
+    /// </para>
+    /// </remarks>
+    protected virtual Vector<T> ApplyMixedPrecisionScaling(Vector<T> gradient)
+    {
+        if (_mixedPrecisionContext == null)
+        {
+            return gradient;
+        }
+
+        // Scale gradient by the loss scale factor using efficient vector multiplication
+        double scale = _mixedPrecisionContext.LossScaler.Scale;
+        return gradient.Multiply(NumOps.FromDouble(scale));
     }
 
     /// <summary>
