@@ -2534,7 +2534,19 @@ public enum ModelType
     /// passive when predictions are correct. Good for noisy data and concept drift scenarios.
     /// </para>
     /// </remarks>
-    OnlinePassiveAggressiveClassifier
+    OnlinePassiveAggressiveClassifier,
+
+    /// <summary>
+    /// Online Passive-Aggressive regressor for incremental regression with aggressive updates on errors.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Like the PA classifier but for predicting continuous values.
+    /// Updates aggressively when the prediction error exceeds a threshold (epsilon-insensitive).
+    /// Good for online regression with streaming data.
+    /// </para>
+    /// </remarks>
+    OnlinePassiveAggressiveRegressor
 }
 
 
