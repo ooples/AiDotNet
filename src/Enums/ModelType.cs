@@ -2618,7 +2618,78 @@ public enum ModelType
     /// is better than predicting distant ones.
     /// </para>
     /// </remarks>
-    OrdinalClassifier
+    OrdinalClassifier,
+
+    /// <summary>
+    /// Ordinal logistic regression (proportional odds model).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A standard approach for ordinal data that models cumulative
+    /// probabilities. It assumes the effect of each feature is the same regardless of
+    /// which threshold is being considered (proportional odds assumption).
+    /// </para>
+    /// </remarks>
+    OrdinalLogisticRegression,
+
+    /// <summary>
+    /// Ordinal ridge regression with regularization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Like ordinal logistic regression but with L2 regularization
+    /// that prevents overfitting by penalizing large coefficients. Useful when you have
+    /// many features relative to samples.
+    /// </para>
+    /// </remarks>
+    OrdinalRidgeRegression,
+
+    /// <summary>
+    /// Histogram-based gradient boosting classifier.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A fast gradient boosting implementation that uses histograms
+    /// to bin continuous features. Much faster than traditional gradient boosting on large
+    /// datasets while maintaining similar accuracy.
+    /// </para>
+    /// </remarks>
+    HistGradientBoostingClassifier,
+
+    /// <summary>
+    /// Balanced random forest for imbalanced classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A random forest variant that handles class imbalance by
+    /// sampling each bootstrap sample to have equal numbers of each class. Better than
+    /// standard random forests when one class is rare.
+    /// </para>
+    /// </remarks>
+    BalancedRandomForestClassifier,
+
+    /// <summary>
+    /// Easy ensemble classifier for imbalanced data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> An ensemble method that trains multiple classifiers on different
+    /// balanced subsets created by undersampling the majority class. Effectively utilizes
+    /// all majority class samples across the ensemble.
+    /// </para>
+    /// </remarks>
+    EasyEnsembleClassifier,
+
+    /// <summary>
+    /// Balanced Bagging Classifier for imbalanced datasets.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Bagging with undersampling. Creates diverse classifiers by training
+    /// each on a balanced bootstrap sample, combining their predictions via majority voting.
+    /// </para>
+    /// </remarks>
+    BalancedBaggingClassifier
 }
 
 
