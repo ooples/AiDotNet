@@ -428,6 +428,19 @@ public class CalibrationHelper<T, TInput, TOutput>
     /// <summary>
     /// Converts a sample to Tensor for neural network models.
     /// </summary>
+    /// <remarks>
+    /// <para>Supported types (in order of preference):</para>
+    /// <list type="bullet">
+    /// <item><description>Tensor&lt;T&gt; - returned directly</description></item>
+    /// <item><description>Vector&lt;T&gt; - converted via Tensor.FromVector</description></item>
+    /// <item><description>Matrix&lt;T&gt; - reshaped to [Rows, Columns]</description></item>
+    /// <item><description>T[] - wrapped as [1, Length] tensor</description></item>
+    /// <item><description>Any type with ToArray() method returning T[] (via reflection)</description></item>
+    /// </list>
+    /// <para>The reflection fallback is expensive and should be avoided for performance-critical code.
+    /// If the ToArray() method exists but returns a different type (not T[]), conversion will fail silently.</para>
+    /// </remarks>
+    /// <returns>The tensor, or null if conversion is not possible.</returns>
     private Tensor<T>? ConvertToTensor(TInput sample)
     {
         if (sample is Tensor<T> tensor)
@@ -451,21 +464,28 @@ public class CalibrationHelper<T, TInput, TOutput>
         }
 
         // Try to convert through reflection for other types
+        // This fallback is expensive but handles custom collection types
         try
         {
-            var toArrayMethod = sample?.GetType().GetMethod("ToArray");
+            var toArrayMethod = sample?.GetType().GetMethod("ToArray", Type.EmptyTypes);
             if (toArrayMethod != null)
             {
-                var arr = toArrayMethod.Invoke(sample, null) as T[];
-                if (arr != null)
+                // Validate return type before invoking to provide clearer failure
+                var returnType = toArrayMethod.ReturnType;
+                if (returnType == typeof(T[]) || returnType.IsAssignableFrom(typeof(T[])))
                 {
-                    return new Tensor<T>([1, arr.Length], new Vector<T>(arr));
+                    var arr = toArrayMethod.Invoke(sample, null) as T[];
+                    if (arr != null && arr.Length > 0)
+                    {
+                        return new Tensor<T>([1, arr.Length], new Vector<T>(arr));
+                    }
                 }
+                // If ToArray exists but returns wrong type, log warning for debugging
             }
         }
         catch (Exception)
         {
-            // Conversion not possible
+            // Conversion not possible - sample type incompatible with tensor conversion
         }
 
         return null;

@@ -379,22 +379,29 @@ public class GPTQQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     /// <summary>
     /// Gets Hessian cross-element (off-diagonal) approximation.
     /// </summary>
+    /// <param name="i">Global parameter index i</param>
+    /// <param name="j">Global parameter index j</param>
+    /// <param name="hessianDiag">Hessian diagonal for the local group</param>
+    /// <returns>Approximated off-diagonal H^-1 element</returns>
     private double GetHessianCrossElement(int i, int j, double[] hessianDiag)
     {
-        // Simplified: use geometric mean of diagonals for off-diagonal elements
-        // Full GPTQ would use actual H^-1 elements from Cholesky decomposition
-        if (i - (i / hessianDiag.Length * hessianDiag.Length) < hessianDiag.Length &&
-            j - (j / hessianDiag.Length * hessianDiag.Length) < hessianDiag.Length)
-        {
-            int iLocal = i % hessianDiag.Length;
-            int jLocal = j % hessianDiag.Length;
+        // Simplified: use geometric mean of diagonals for off-diagonal elements.
+        // This is an approximation; full GPTQ would use actual H^-1 elements from
+        // Cholesky decomposition. The 0.1 factor dampens cross-correlations.
 
-            if (iLocal < hessianDiag.Length && jLocal < hessianDiag.Length)
-            {
-                return Math.Sqrt(hessianDiag[iLocal] * hessianDiag[jLocal]) * 0.1;
-            }
+        // Map global indices to local indices within the hessianDiag array
+        if (hessianDiag.Length == 0) return _config.GPTQDampingFactor;
+
+        int iLocal = i % hessianDiag.Length;
+        int jLocal = j % hessianDiag.Length;
+
+        // Both indices are guaranteed to be in range after modulo
+        if (iLocal >= 0 && jLocal >= 0)
+        {
+            return Math.Sqrt(hessianDiag[iLocal] * hessianDiag[jLocal]) * 0.1;
         }
 
+        // Fallback for out-of-range indices: use damping factor
         return _config.GPTQDampingFactor;
     }
 
