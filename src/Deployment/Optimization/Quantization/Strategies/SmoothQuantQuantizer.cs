@@ -386,10 +386,14 @@ public class SmoothQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TO
             double actMax = Math.Max(activationMax[i], 1e-6);
             double wMax = Math.Max(weightMax[i], 1e-6);
 
-            // s = act^alpha / weight^(1-alpha)
-            double s = Math.Pow(actMax, alpha) / Math.Pow(wMax, 1.0 - alpha);
+            // Use log-space computation for numerical stability when values are very small
+            // s = exp(alpha * log(actMax) - (1-alpha) * log(wMax))
+            double logAct = Math.Log(actMax);
+            double logW = Math.Log(wMax);
+            double logS = alpha * logAct - (1.0 - alpha) * logW;
+            double s = Math.Exp(logS);
 
-            // Clamp to reasonable range
+            // Clamp to reasonable range to avoid extreme scales
             s = MathHelper.Clamp(s, 0.01, 100.0);
 
             scales[i] = s;

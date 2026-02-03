@@ -371,8 +371,10 @@ public class AWQQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
         double bestScale = 0;
         double bestError = double.MaxValue;
 
-        // Grid search over scaling factors
-        double[] scaleOptions = { 0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0 };
+        // Grid search over scaling factors (configurable via AWQScaleSearchOptions)
+        double[] scaleOptions = config.AWQScaleSearchOptions.Length > 0
+            ? config.AWQScaleSearchOptions
+            : [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0];
 
         foreach (double s in scaleOptions)
         {

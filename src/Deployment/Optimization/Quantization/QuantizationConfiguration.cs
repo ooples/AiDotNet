@@ -260,6 +260,16 @@ public class QuantizationConfiguration
     public double AWQProtectionPercentage { get; set; } = 1.0;
 
     /// <summary>
+    /// Gets or sets the scale search options for AWQ grid search optimization.
+    /// Default: [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0]
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> AWQ searches for optimal scaling factors. More values = better
+    /// accuracy but slower. Reduce for faster calibration or increase for better accuracy.</para>
+    /// </remarks>
+    public double[] AWQScaleSearchOptions { get; set; } = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0];
+
+    /// <summary>
     /// Gets or sets custom quantization parameters per layer.
     /// </summary>
     public Dictionary<string, LayerQuantizationParams> CustomLayerParams { get; set; } = new();
