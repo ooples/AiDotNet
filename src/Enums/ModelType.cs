@@ -591,6 +591,47 @@ public enum ModelType
     PoissonRegression,
 
     /// <summary>
+    /// A generalized linear model for positive continuous data with right-skewed distributions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Gamma Regression is used when you need to predict positive continuous values
+    /// that tend to be skewed to the right (like income, claim amounts, or time durations). Unlike linear
+    /// regression, it naturally handles data where larger values have more variability, and it ensures
+    /// predictions are always positive. Common applications include insurance claims, hospital lengths
+    /// of stay, and any data where zeros are impossible and large values are more variable.
+    /// </para>
+    /// </remarks>
+    GammaRegression,
+
+    /// <summary>
+    /// A generalized linear model for positive continuous data with inverse Gaussian distribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Inverse Gaussian Regression models positive continuous data where the variance
+    /// increases faster than in Gamma regression. It's useful for modeling time-to-event data, degradation
+    /// processes, and reliability analysis. The inverse Gaussian distribution naturally captures the
+    /// physics of many real-world processes involving first passage times.
+    /// </para>
+    /// </remarks>
+    InverseGaussianRegression,
+
+    /// <summary>
+    /// A flexible generalized linear model that encompasses several distributions as special cases.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Tweedie Regression is like a Swiss Army knife of regression models - it can
+    /// behave like Poisson, Gamma, or inverse Gaussian regression depending on a "power" parameter. It's
+    /// especially useful for data with many zeros and positive continuous values (like insurance claims
+    /// where many customers have no claims but some have large claims). By tuning the power parameter,
+    /// you can find the distribution that best fits your data.
+    /// </para>
+    /// </remarks>
+    TweedieRegression,
+
+    /// <summary>
     /// A model for predicting categorical outcomes with more than two possible values.
     /// </summary>
     /// <remarks>
