@@ -1,5 +1,7 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.SurvivalAnalysis;
 
@@ -62,6 +64,28 @@ public class KaplanMeierEstimator<T> : SurvivalModelBase<T>
     /// Gets the model type.
     /// </summary>
     public override ModelType GetModelType() => ModelType.KaplanMeierEstimator;
+
+    /// <summary>
+    /// Gets whether JIT compilation is supported.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Kaplan-Meier supports JIT compilation by embedding the survival
+    /// curve as a computation graph. The step function is represented using piecewise
+    /// evaluation with comparisons and weighted sums, which can be compiled to fast
+    /// native code for accelerated inference.
+    ///
+    /// The computation graph embeds:
+    /// 1. Event times as constants
+    /// 2. Survival probabilities as constants
+    /// 3. Comparison operations to find which time bin the input falls into
+    /// 4. Weighted sum to select the correct survival probability
+    ///
+    /// This approach allows the JIT compiler to optimize the lookup operations
+    /// for batch evaluation of survival probabilities.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Initializes a new instance of the KaplanMeierEstimator class.
@@ -322,6 +346,149 @@ public class KaplanMeierEstimator<T> : SurvivalModelBase<T>
     /// </summary>
     /// <returns>Vector of survival probabilities.</returns>
     public Vector<T>? GetSurvivalProbabilities() => _survivalProbabilities;
+
+    #region JIT Compilation Support
+
+    /// <summary>
+    /// Exports the computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the survival probability prediction.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The Kaplan-Meier survival curve is a step function that can be
+    /// JIT compiled using a piecewise evaluation approach. The computation graph:
+    ///
+    /// 1. Event times t₁, t₂, ..., tₙ (constants)
+    /// 2. Survival probabilities S₁, S₂, ..., Sₙ (constants)
+    /// 3. For input time t, computes indicators: Iᵢ = sigmoid(steepness × (t - tᵢ))
+    /// 4. Combines: S(t) = S₁×(1-I₁) + S₂×(I₁-I₂) + ... + Sₙ×Iₙ₋₁
+    ///
+    /// The steep sigmoid approximates the step function while remaining differentiable.
+    /// For exact evaluation (non-differentiable), use the standard Predict method.
+    ///
+    /// This approach enables:
+    /// - Batch evaluation of survival probabilities
+    /// - JIT optimization of the lookup operations
+    /// - GPU acceleration for large datasets
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (!IsFitted || TrainedEventTimes is null || _survivalProbabilities is null)
+        {
+            throw new InvalidOperationException(
+                "Model must be fitted before exporting computation graph.");
+        }
+
+        if (inputNodes is null)
+        {
+            throw new ArgumentNullException(nameof(inputNodes));
+        }
+
+        int numEventTimes = TrainedEventTimes.Length;
+
+        // Create input placeholder for query time: [batchSize, 1]
+        var inputTensor = new Tensor<T>(new int[] { 1, 1 });
+        var inputNode = TensorOperations<T>.Variable(inputTensor, "query_time");
+        inputNodes.Add(inputNode);
+
+        // Create constant tensor for event times: [numEventTimes, 1]
+        var eventTimesTensor = new Tensor<T>(new int[] { numEventTimes, 1 });
+        for (int i = 0; i < numEventTimes; i++)
+        {
+            eventTimesTensor[i, 0] = TrainedEventTimes[i];
+        }
+        var eventTimesNode = TensorOperations<T>.Constant(eventTimesTensor, "event_times");
+        inputNodes.Add(eventTimesNode);
+
+        // Create constant tensor for survival probabilities: [numEventTimes, 1]
+        var survivalTensor = new Tensor<T>(new int[] { numEventTimes, 1 });
+        for (int i = 0; i < numEventTimes; i++)
+        {
+            survivalTensor[i, 0] = _survivalProbabilities[i];
+        }
+        var survivalNode = TensorOperations<T>.Constant(survivalTensor, "survival_probs");
+        inputNodes.Add(survivalNode);
+
+        // For JIT compilation of step function lookup:
+        // We use a differentiable approximation with steep sigmoid:
+        // indicator_i = sigmoid(steepness × (time - event_time_i))
+        //
+        // The survival at time t is the survival at the last event time <= t.
+        // This is computed as: S(t) = Σ weight_i × survival_i
+        // where weight_i represents the probability that time falls in interval [t_i, t_{i+1})
+        //
+        // For exact step function: weight_i = I(t >= t_i) × I(t < t_{i+1})
+        // For differentiable: weight_i = sigmoid(steepness × (t - t_i)) × (1 - sigmoid(steepness × (t - t_{i+1})))
+
+        // Steepness constant for sigmoid approximation (higher = closer to step function)
+        double steepness = 100.0;
+        var steepnessTensor = new Tensor<T>(new int[] { 1, 1 });
+        steepnessTensor[0, 0] = NumOps.FromDouble(steepness);
+        var steepnessNode = TensorOperations<T>.Constant(steepnessTensor, "steepness");
+        inputNodes.Add(steepnessNode);
+
+        // Compute indicators for each event time: sigmoid(steepness × (time - event_time_i))
+        // This represents I(time >= event_time_i) in a differentiable way
+        //
+        // For Kaplan-Meier step function:
+        // S(t) = S_k where k = max{i : event_time_i <= t}
+        //
+        // This can be computed as:
+        // S(t) = S_0 × (1 - I_0) + S_1 × (I_0 - I_1) + S_2 × (I_1 - I_2) + ... + S_n × I_{n-1}
+        //      = S_0 - S_0×I_0 + S_1×I_0 - S_1×I_1 + S_2×I_1 - ... + S_n×I_{n-1}
+        //      = S_0 + Σ (S_{i+1} - S_i) × I_i
+
+        // Initial survival before any event is 1.0
+        var oneTensor = new Tensor<T>(new int[] { 1, 1 });
+        oneTensor[0, 0] = NumOps.One;
+        var oneNode = TensorOperations<T>.Constant(oneTensor, "one");
+
+        // Start with survival = 1.0 (before any events)
+        var outputNode = oneNode;
+
+        // Build the step function as sum of weighted differences
+        // For each event time i: add (S_i - S_{i-1}) × sigmoid(steepness × (t - t_i))
+        for (int i = 0; i < numEventTimes; i++)
+        {
+            // Extract event time i
+            var eventTimeSingleTensor = new Tensor<T>(new int[] { 1, 1 });
+            eventTimeSingleTensor[0, 0] = TrainedEventTimes[i];
+            var eventTimeNode = TensorOperations<T>.Constant(eventTimeSingleTensor, $"event_time_{i}");
+
+            // Compute (time - event_time_i)
+            var diffNode = TensorOperations<T>.Subtract(inputNode, eventTimeNode);
+
+            // Multiply by steepness
+            var scaledDiffNode = TensorOperations<T>.ElementwiseMultiply(diffNode, steepnessNode);
+
+            // Apply sigmoid: indicator_i = sigmoid(steepness × (time - event_time_i))
+            var indicatorNode = TensorOperations<T>.Sigmoid(scaledDiffNode);
+
+            // Compute survival difference: delta_i = S_i - S_{i-1}
+            // For i=0, S_{-1} = 1.0
+            double prevSurvival = i == 0 ? 1.0 : NumOps.ToDouble(_survivalProbabilities[i - 1]);
+            double currSurvival = NumOps.ToDouble(_survivalProbabilities[i]);
+            double survivalDiff = currSurvival - prevSurvival;
+
+            // Create delta tensor
+            var deltaTensor = new Tensor<T>(new int[] { 1, 1 });
+            deltaTensor[0, 0] = NumOps.FromDouble(survivalDiff);
+            var deltaNode = TensorOperations<T>.Constant(deltaTensor, $"survival_diff_{i}");
+
+            // Compute contribution: delta_i × indicator_i
+            var contributionNode = TensorOperations<T>.ElementwiseMultiply(deltaNode, indicatorNode);
+
+            // Add to running sum: output = output + contribution
+            outputNode = TensorOperations<T>.Add(outputNode, contributionNode);
+        }
+
+        outputNode.Name = "survival_probability";
+        return outputNode;
+    }
+
+    #endregion
 
     #region IFullModel Implementation
 

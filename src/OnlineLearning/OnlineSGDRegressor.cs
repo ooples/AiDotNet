@@ -2,49 +2,42 @@ using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.OnlineLearning;
 
 /// <summary>
-/// Online Stochastic Gradient Descent classifier for incremental learning.
+/// Online Stochastic Gradient Descent regressor for incremental learning.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// Online SGD Classifier implements logistic regression with SGD updates, allowing
+/// Online SGD Regressor implements linear regression with SGD updates, allowing
 /// the model to learn incrementally from streaming data.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> This classifier learns to separate two classes using a linear
-/// decision boundary, updating itself one example at a time.
+/// <b>For Beginners:</b> This regressor predicts continuous values using a linear model,
+/// updating itself one example at a time.
 ///
 /// How it works:
-/// 1. Compute prediction: P(y=1) = sigmoid(w·x + b)
-/// 2. Compare with true label: error = prediction - truth
+/// 1. Compute prediction: ŷ = w·x + b
+/// 2. Compare with true value: error = prediction - truth
 /// 3. Update weights: w = w - learning_rate × error × x
 ///
-/// The model "nudges" itself toward correct predictions with each example.
-/// Over many examples, it converges to a good decision boundary.
+/// Over many examples, the model converges to the best linear fit.
 ///
-/// Advantages:
-/// - Handles streaming data naturally
-/// - Memory-efficient (doesn't store data)
-/// - Can adapt to changing patterns
-///
-/// Supports:
-/// - L1 regularization (sparse weights)
-/// - L2 regularization (smooth weights)
-/// - Elastic Net (combination)
+/// Supports multiple loss functions:
+/// - Squared error (default): Sensitive to outliers
+/// - Huber loss: Robust to outliers
+/// - Epsilon-insensitive: SVR-like, ignores errors smaller than epsilon
 ///
 /// Usage:
 /// <code>
-/// var classifier = new OnlineSGDClassifier&lt;double&gt;(learningRate: 0.01, l2Penalty: 0.001);
+/// var regressor = new OnlineSGDRegressor&lt;double&gt;(learningRate: 0.01, loss: SGDLossType.Huber);
 /// foreach (var (x, y) in dataStream)
 /// {
-///     classifier.PartialFit(x, y);
-///     double prob = classifier.PredictProbability(x);
+///     regressor.PartialFit(x, y);
+///     double prediction = regressor.PredictSingle(x);
 /// }
 /// </code>
 ///
@@ -52,7 +45,7 @@ namespace AiDotNet.OnlineLearning;
 /// - Bottou, L. (2010). "Large-Scale Machine Learning with Stochastic Gradient Descent"
 /// </para>
 /// </remarks>
-public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
+public class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
 {
     /// <summary>
     /// The weight vector (coefficients).
@@ -80,68 +73,70 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
     private readonly bool _fitIntercept;
 
     /// <summary>
+    /// The loss function type.
+    /// </summary>
+    private readonly SGDLossType _lossType;
+
+    /// <summary>
+    /// Epsilon for epsilon-insensitive and Huber loss.
+    /// </summary>
+    private readonly double _epsilon;
+
+    /// <summary>
     /// Gets the model type.
     /// </summary>
-    public override ModelType GetModelType() => ModelType.OnlineSGDClassifier;
+    public override ModelType GetModelType() => ModelType.OnlineSGDRegressor;
 
     /// <summary>
     /// Gets whether JIT compilation is supported.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This classifier supports JIT compilation since the prediction
-    /// is just a matrix-vector product followed by sigmoid: sigmoid(w·x + b).
-    /// </para>
-    /// </remarks>
     public override bool SupportsJitCompilation => true;
 
     /// <summary>
-    /// Initializes a new instance of the OnlineSGDClassifier class.
+    /// Initializes a new instance of the OnlineSGDRegressor class.
     /// </summary>
     /// <param name="learningRate">Initial learning rate. Default is 0.01.</param>
     /// <param name="learningRateSchedule">Learning rate schedule. Default is InverseScaling.</param>
     /// <param name="l1Penalty">L1 (lasso) regularization strength. Default is 0.</param>
     /// <param name="l2Penalty">L2 (ridge) regularization strength. Default is 0.0001.</param>
     /// <param name="fitIntercept">Whether to fit an intercept (bias) term. Default is true.</param>
+    /// <param name="loss">Loss function type. Default is SquaredError.</param>
+    /// <param name="epsilon">Epsilon for Huber and epsilon-insensitive loss. Default is 0.1.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Parameters control how the model learns:
+    /// <b>For Beginners:</b> Parameters:
     ///
-    /// - learningRate: How big each update step is
-    /// - learningRateSchedule: How learning rate changes over time
-    /// - l1Penalty: Encourages sparse weights (feature selection)
-    /// - l2Penalty: Prevents weights from getting too large (regularization)
-    /// - fitIntercept: Whether to learn a bias term
+    /// Loss functions:
+    /// - SquaredError: (prediction - y)², standard MSE, sensitive to outliers
+    /// - Huber: Squared for small errors, linear for large errors (robust)
+    /// - EpsilonInsensitive: Ignores errors smaller than epsilon (SVR-like)
     ///
-    /// Regularization prevents overfitting - the model won't rely too heavily on any single feature.
+    /// Epsilon:
+    /// - For Huber: transition point between squared and linear
+    /// - For EpsilonInsensitive: tolerance band around prediction
     /// </para>
     /// </remarks>
-    public OnlineSGDClassifier(
+    public OnlineSGDRegressor(
         double learningRate = 0.01,
         LearningRateSchedule learningRateSchedule = LearningRateSchedule.InverseScaling,
         double l1Penalty = 0.0,
         double l2Penalty = 0.0001,
-        bool fitIntercept = true)
+        bool fitIntercept = true,
+        SGDLossType loss = SGDLossType.SquaredError,
+        double epsilon = 0.1)
         : base(learningRate, learningRateSchedule)
     {
         _l1Penalty = l1Penalty;
         _l2Penalty = l2Penalty;
         _fitIntercept = fitIntercept;
+        _lossType = loss;
+        _epsilon = epsilon;
         _bias = NumOps.Zero;
     }
 
     /// <summary>
     /// Updates the model with a single training example.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> For each example:
-    /// 1. Make a prediction using current weights
-    /// 2. Calculate the error (prediction - actual)
-    /// 3. Update each weight proportionally to error × feature value
-    /// 4. Apply regularization to prevent overfitting
-    /// </para>
-    /// </remarks>
     public override void PartialFit(Vector<T> x, T y)
     {
         EnsureInitialized(x);
@@ -157,17 +152,11 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
         }
 
         // Compute prediction
-        double prediction = ComputeProbability(x);
-        double yDouble = NumOps.ToDouble(y);
+        double prediction = ComputePrediction(x);
+        double target = NumOps.ToDouble(y);
 
-        // Ensure y is 0 or 1
-        if (yDouble != 0.0 && yDouble != 1.0)
-        {
-            yDouble = yDouble > 0.5 ? 1.0 : 0.0;
-        }
-
-        // Compute error (gradient of log loss)
-        double error = prediction - yDouble;
+        // Compute gradient based on loss type
+        double gradientMultiplier = ComputeLossGradient(prediction, target);
 
         // Get current learning rate
         double lr = NumOps.ToDouble(GetLearningRate());
@@ -178,16 +167,16 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
             double xi = NumOps.ToDouble(x[i]);
             double wi = NumOps.ToDouble(_weights[i]);
 
-            // Gradient of log loss: error × x
-            double gradient = error * xi;
+            // Gradient of loss
+            double gradient = gradientMultiplier * xi;
 
-            // Add L2 regularization gradient: l2 × w
+            // Add L2 regularization gradient
             gradient += _l2Penalty * wi;
 
             // Update weight
             wi -= lr * gradient;
 
-            // Apply L1 regularization (proximal gradient / soft thresholding)
+            // Apply L1 regularization (soft thresholding)
             if (_l1Penalty > 0)
             {
                 double threshold = lr * _l1Penalty;
@@ -201,11 +190,59 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
         if (_fitIntercept)
         {
             double b = NumOps.ToDouble(_bias);
-            b -= lr * error;
+            b -= lr * gradientMultiplier;
             _bias = NumOps.FromDouble(b);
         }
 
         SampleCount++;
+    }
+
+    /// <summary>
+    /// Computes the gradient of the loss function.
+    /// </summary>
+    private double ComputeLossGradient(double prediction, double target)
+    {
+        double residual = prediction - target;
+
+        return _lossType switch
+        {
+            SGDLossType.SquaredError => 2.0 * residual,
+            SGDLossType.Huber => ComputeHuberGradient(residual),
+            SGDLossType.EpsilonInsensitive => ComputeEpsilonInsensitiveGradient(residual),
+            _ => 2.0 * residual
+        };
+    }
+
+    /// <summary>
+    /// Huber loss gradient: linear for large errors, quadratic for small.
+    /// </summary>
+    private double ComputeHuberGradient(double residual)
+    {
+        double absRes = Math.Abs(residual);
+        if (absRes <= _epsilon)
+        {
+            return 2.0 * residual;
+        }
+        else
+        {
+            return 2.0 * _epsilon * Math.Sign(residual);
+        }
+    }
+
+    /// <summary>
+    /// Epsilon-insensitive loss gradient: zero for small errors.
+    /// </summary>
+    private double ComputeEpsilonInsensitiveGradient(double residual)
+    {
+        double absRes = Math.Abs(residual);
+        if (absRes <= _epsilon)
+        {
+            return 0.0;
+        }
+        else
+        {
+            return Math.Sign(residual);
+        }
     }
 
     /// <summary>
@@ -221,80 +258,24 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
     }
 
     /// <summary>
-    /// Computes the probability of class 1.
+    /// Computes the prediction for a sample.
     /// </summary>
-    private double ComputeProbability(Vector<T> x)
+    private double ComputePrediction(Vector<T> x)
     {
         double linearPred = NumOps.ToDouble(_bias);
         for (int i = 0; i < NumFeatures; i++)
         {
             linearPred += NumOps.ToDouble(_weights![i]) * NumOps.ToDouble(x[i]);
         }
-        return Sigmoid(linearPred);
-    }
-
-    /// <summary>
-    /// Sigmoid function.
-    /// </summary>
-    private static double Sigmoid(double x)
-    {
-        if (x >= 0)
-        {
-            return 1.0 / (1.0 + Math.Exp(-x));
-        }
-        else
-        {
-            double exp = Math.Exp(x);
-            return exp / (1.0 + exp);
-        }
+        return linearPred;
     }
 
     /// <summary>
     /// Predicts the target value for a single sample.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns 0 or 1 based on whether the probability exceeds 0.5.
-    /// </para>
-    /// </remarks>
     public override T PredictSingle(Vector<T> x)
     {
-        double prob = ComputeProbability(x);
-        return NumOps.FromDouble(prob >= 0.5 ? 1.0 : 0.0);
-    }
-
-    /// <summary>
-    /// Predicts the probability of class 1.
-    /// </summary>
-    /// <param name="x">The feature vector.</param>
-    /// <returns>Probability between 0 and 1.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns a continuous probability, not just 0/1.
-    /// Useful for ranking, calibration, or when you need confidence levels.
-    /// </para>
-    /// </remarks>
-    public T PredictProbability(Vector<T> x)
-    {
-        return NumOps.FromDouble(ComputeProbability(x));
-    }
-
-    /// <summary>
-    /// Predicts probabilities for all samples.
-    /// </summary>
-    public Vector<T> PredictProbabilities(Matrix<T> x)
-    {
-        var probs = new Vector<T>(x.Rows);
-        for (int i = 0; i < x.Rows; i++)
-        {
-            var xi = new Vector<T>(x.Columns);
-            for (int j = 0; j < x.Columns; j++)
-            {
-                xi[j] = x[i, j];
-            }
-            probs[i] = PredictProbability(xi);
-        }
-        return probs;
+        return NumOps.FromDouble(ComputePrediction(x));
     }
 
     /// <summary>
@@ -351,8 +332,9 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
     /// </summary>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        var newModel = new OnlineSGDClassifier<T>(
-            InitialLearningRate, LearningRateScheduleType, _l1Penalty, _l2Penalty, _fitIntercept);
+        var newModel = new OnlineSGDRegressor<T>(
+            InitialLearningRate, LearningRateScheduleType, _l1Penalty, _l2Penalty,
+            _fitIntercept, _lossType, _epsilon);
         newModel.SetParameters(parameters);
         return newModel;
     }
@@ -362,8 +344,9 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
     /// </summary>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
-        return new OnlineSGDClassifier<T>(
-            InitialLearningRate, LearningRateScheduleType, _l1Penalty, _l2Penalty, _fitIntercept);
+        return new OnlineSGDRegressor<T>(
+            InitialLearningRate, LearningRateScheduleType, _l1Penalty, _l2Penalty,
+            _fitIntercept, _lossType, _epsilon);
     }
 
     /// <summary>
@@ -393,19 +376,18 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
     /// Exports the computation graph for JIT compilation.
     /// </summary>
     /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the probability prediction.</returns>
+    /// <returns>The output computation node representing the prediction.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Online SGD Classifier's prediction is sigmoid(w·x + b), which
-    /// can be JIT compiled for faster inference. The computation graph is:
+    /// <b>For Beginners:</b> Online SGD Regressor's prediction is a linear function: y = w·x + b.
+    /// This can be JIT compiled for faster batch inference. The computation graph is:
     /// 1. Input X (features)
     /// 2. Weights W (constants after training)
     /// 3. Bias b (constant)
     /// 4. Matrix multiplication: X @ W
     /// 5. Add bias: result + b
-    /// 6. Sigmoid: sigmoid(result)
     ///
-    /// This enables batch prediction with optimized SIMD operations.
+    /// This enables optimized SIMD operations for batch prediction.
     /// </para>
     /// </remarks>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
@@ -444,12 +426,9 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
         // Matrix multiplication: linearPred = X @ W, shape [batchSize, 1]
         var linearPredNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
 
-        // Add bias: linearPred + bias
-        var withBiasNode = TensorOperations<T>.Add(linearPredNode, biasNode);
-
-        // Sigmoid: probability = sigmoid(linearPred + bias)
-        var outputNode = TensorOperations<T>.Sigmoid(withBiasNode);
-        outputNode.Name = "probability";
+        // Add bias: prediction = linearPred + bias
+        var outputNode = TensorOperations<T>.Add(linearPredNode, biasNode);
+        outputNode.Name = "prediction";
 
         return outputNode;
     }
@@ -467,23 +446,58 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
     public T GetBias() => _bias;
 
     /// <summary>
-    /// Computes the score used for decision (before sigmoid).
+    /// Gets the R-squared score on the provided data.
     /// </summary>
-    /// <param name="x">Feature vector.</param>
-    /// <returns>Linear combination of features with weights.</returns>
-    public T DecisionFunction(Vector<T> x)
+    public T Score(Matrix<T> x, Vector<T> y)
     {
-        if (_weights is null)
+        if (x.Rows != y.Length)
         {
-            return NumOps.Zero;
+            throw new ArgumentException("X and y must have the same number of samples.");
         }
 
-        double score = NumOps.ToDouble(_bias);
-        for (int i = 0; i < Math.Min(x.Length, _weights.Length); i++)
+        // Compute predictions
+        var predictions = Predict(x);
+
+        // Compute mean of y
+        double meanY = 0;
+        for (int i = 0; i < y.Length; i++)
         {
-            score += NumOps.ToDouble(_weights[i]) * NumOps.ToDouble(x[i]);
+            meanY += NumOps.ToDouble(y[i]);
+        }
+        meanY /= y.Length;
+
+        // Compute SS_res and SS_tot
+        double ssRes = 0, ssTot = 0;
+        for (int i = 0; i < y.Length; i++)
+        {
+            double yi = NumOps.ToDouble(y[i]);
+            double pi = NumOps.ToDouble(predictions[i]);
+            ssRes += (yi - pi) * (yi - pi);
+            ssTot += (yi - meanY) * (yi - meanY);
         }
 
-        return NumOps.FromDouble(score);
+        double r2 = ssTot > 0 ? 1.0 - ssRes / ssTot : 0;
+        return NumOps.FromDouble(Math.Max(0, r2)); // Clamp to non-negative
     }
+}
+
+/// <summary>
+/// Loss function types for SGD regression.
+/// </summary>
+public enum SGDLossType
+{
+    /// <summary>
+    /// Squared error loss: (y - ŷ)². Standard MSE, sensitive to outliers.
+    /// </summary>
+    SquaredError,
+
+    /// <summary>
+    /// Huber loss: Squared for small errors, linear for large errors. Robust to outliers.
+    /// </summary>
+    Huber,
+
+    /// <summary>
+    /// Epsilon-insensitive loss: Zero for errors smaller than epsilon. SVR-like behavior.
+    /// </summary>
+    EpsilonInsensitive
 }
