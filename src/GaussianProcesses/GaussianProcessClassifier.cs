@@ -623,9 +623,10 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
                 logDetB += 2.0 * Math.Log(Math.Abs(_numOps.ToDouble(choleskyB.L[i, i])));
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // If Cholesky fails, use a fallback estimate
+            // If Cholesky fails, use a fallback estimate (matrix may not be positive definite)
+            System.Diagnostics.Debug.WriteLine($"Cholesky decomposition failed in log marginal likelihood: {ex.Message}");
             logDetB = 0.0;
         }
 
@@ -642,6 +643,11 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// <inheritdoc/>
     public (int predictedClass, T probability, T variance) Predict(Vector<T> x)
     {
+        if (_X.IsEmpty || _f.IsEmpty)
+        {
+            throw new InvalidOperationException("Model must be trained before prediction. Call Fit() first.");
+        }
+
         // Calculate kernel vector between test point and training points
         var kStar = CalculateKernelVector(_X, x);
 

@@ -287,9 +287,10 @@ public class VariationalGaussianProcess<T> : IGaussianProcess<T>
             var choleskyS = new CholeskyDecomposition<T>(S);
             _variationalCovCholesky = choleskyS.L;
         }
-        catch
+        catch (Exception ex)
         {
-            // If Cholesky fails, use scaled identity
+            // If Cholesky fails, use scaled identity (matrix may not be positive definite)
+            System.Diagnostics.Debug.WriteLine($"Cholesky decomposition failed: {ex.Message}. Using scaled identity.");
             _variationalCovCholesky = CreateScaledIdentityMatrix(n, 0.1);
         }
     }
@@ -519,6 +520,11 @@ public class VariationalGaussianProcess<T> : IGaussianProcess<T>
     /// <inheritdoc/>
     public (T mean, T variance) Predict(Vector<T> x)
     {
+        if (_X.IsEmpty || _variationalMean.IsEmpty)
+        {
+            throw new InvalidOperationException("Model must be trained before prediction. Call Fit() first.");
+        }
+
         // Compute kernel vector between test point and training points
         var kStar = CalculateKernelVector(_X, x);
 
@@ -652,8 +658,28 @@ public class VariationalGaussianProcess<T> : IGaussianProcess<T>
             logDetS += 2.0 * Math.Log(Math.Abs(_numOps.ToDouble(_variationalCovCholesky[i, i])));
         }
 
-        // Trace term (approximate)
-        double trace = n; // Simplified: assume S ≈ K for trace
+        // Trace term: tr(K^(-1) * S)
+        // Compute using S = L_S * L_S^T, so tr(K^(-1) * S) = ||L_K^(-1) * L_S||_F^2
+        // For efficiency, we approximate using diagonal dominance when K is well-conditioned
+        double trace = 0.0;
+        try
+        {
+            // Solve L_K * Y = L_S for Y, then trace = ||Y||_F^2
+            for (int j = 0; j < _variationalCovCholesky.Columns; j++)
+            {
+                var colS = _variationalCovCholesky.GetColumn(j);
+                var solved = MatrixSolutionHelper.SolveLinearSystem(_LK, colS, _decompositionType);
+                for (int i = 0; i < solved.Length; i++)
+                {
+                    trace += _numOps.ToDouble(_numOps.Multiply(solved[i], solved[i]));
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Fallback: use identity approximation (S ≈ K means trace ≈ n)
+            trace = n;
+        }
 
         double kl = 0.5 * (trace + quadForm - n + logDetK - logDetS);
         double elbo = expLogLik - kl;

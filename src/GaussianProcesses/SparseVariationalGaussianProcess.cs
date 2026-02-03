@@ -475,9 +475,11 @@ public class SparseVariationalGaussianProcess<T> : IGaussianProcess<T>
             var choleskyS = new CholeskyDecomposition<T>(S);
             _variationalCovCholesky = choleskyS.L;
         }
-        catch
+        catch (Exception ex)
         {
             // If decomposition fails, keep identity covariance
+            // This can happen when S is not positive definite due to numerical issues
+            System.Diagnostics.Debug.WriteLine($"Variational covariance update failed: {ex.Message}. Using identity covariance.");
         }
     }
 
@@ -518,6 +520,11 @@ public class SparseVariationalGaussianProcess<T> : IGaussianProcess<T>
     /// <inheritdoc/>
     public (T mean, T variance) Predict(Vector<T> x)
     {
+        if (_inducingPoints.IsEmpty || _variationalMean.IsEmpty)
+        {
+            throw new InvalidOperationException("Model must be trained before prediction. Call Fit() first.");
+        }
+
         // Compute kernel vector between test point and inducing points
         var kStar = CalculateKernelVector(_inducingPoints, x);
 
@@ -525,8 +532,7 @@ public class SparseVariationalGaussianProcess<T> : IGaussianProcess<T>
         var KuuInvKStar = MatrixSolutionHelper.SolveLinearSystem(_Kuu, kStar, _decompositionType);
 
         // Predictive mean: k*^T * Kuu^(-1) * m
-        T mean = kStar.DotProduct(KuuInvKStar);
-        mean = _numOps.Zero;
+        T mean = _numOps.Zero;
         for (int i = 0; i < _variationalMean.Length; i++)
         {
             mean = _numOps.Add(mean, _numOps.Multiply(KuuInvKStar[i], _variationalMean[i]));
