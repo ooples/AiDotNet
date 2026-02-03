@@ -133,6 +133,19 @@ public enum ModelType
     GradientBoosting,
 
     /// <summary>
+    /// A histogram-based gradient boosting model that uses binned features for fast training.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Histogram Gradient Boosting is a faster version of gradient boosting
+    /// that groups similar feature values into "bins" (like putting numbers into buckets).
+    /// This makes training much faster, especially for large datasets, while often achieving
+    /// similar accuracy. It's similar to popular libraries like LightGBM and XGBoost.
+    /// </para>
+    /// </remarks>
+    HistGradientBoosting,
+
+    /// <summary>
     /// A boosting algorithm specifically designed for regression problems.
     /// </summary>
     /// <remarks>
