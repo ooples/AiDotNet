@@ -236,7 +236,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 if (isSigned)
                 {
                     quantizedVal = MathHelper.Clamp(quantizedVal, -127, 127);
-                    quantized[i] = (byte)(quantizedVal + 128); // Map [-127, 127] to [1, 255], 0 maps to 128
+                    quantized[i] = (byte)(quantizedVal + 128); // Map [-127, 127] to [1, 255], with 128 representing 0 (0 is unused in the stored range)
                 }
                 else
                 {
@@ -458,13 +458,16 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         var v = Dequantize(_vQuantized!, _vScales!, isSigned: false);
 
         // Compute Adam update using full precision
-        T beta1 = NumOps.FromDouble(_options.Beta1);
-        T beta2 = NumOps.FromDouble(_options.Beta2);
-        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
-        T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
+        // Use adaptive betas (consistent with UpdateSolution when UseAdaptiveBetas is enabled)
+        T beta1 = _currentBeta1;
+        T beta2 = _currentBeta2;
+        T oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        T oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
-        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
-        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
+        double beta1Double = Convert.ToDouble(beta1);
+        double beta2Double = Convert.ToDouble(beta2);
+        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(beta1Double, _t));
+        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(beta2Double, _t));
 
         // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
         var mScaled = (Vector<T>)Engine.Multiply(m, beta1);
@@ -599,13 +602,14 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         if (_mScales != null) scalesMemory += _mScales.Length * 8;
         if (_vScales != null) scalesMemory += _vScales.Length * 8;
 
+        // Type size for T (float = 4 bytes, double = 8 bytes)
+        int bytesPerElement = typeof(T) == typeof(float) ? 4 : 8;
+
         // Full precision state memory (if used)
         long fullPrecisionMemory = 0;
         if (_mFullPrecision != null)
         {
-            // Assuming T is float (4 bytes) or double (8 bytes)
-            int typeSize = typeof(T) == typeof(float) ? 4 : 8;
-            fullPrecisionMemory += _mFullPrecision.Length * typeSize;
+            fullPrecisionMemory += _mFullPrecision.Length * bytesPerElement;
         }
 
         stats["QuantizedStateBytes"] = quantizedStateMemory;
@@ -614,8 +618,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         stats["TotalBytes"] = quantizedStateMemory + scalesMemory + fullPrecisionMemory;
 
         // Calculate savings compared to standard Adam
-        int typeSize2 = typeof(T) == typeof(float) ? 4 : 8;
-        long standardAdamMemory = _parameterLength * 2 * typeSize2; // m and v at full precision
+        long standardAdamMemory = _parameterLength * 2 * bytesPerElement; // m and v at full precision
         stats["StandardAdamBytes"] = standardAdamMemory;
         stats["MemorySavingsBytes"] = standardAdamMemory - stats["TotalBytes"];
 
@@ -665,6 +668,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
 
             // Serialize quantized second moment
+            writer.Write(_vQuantized != null);
             if (_vQuantized != null)
             {
                 writer.Write(_vQuantized.Length);
@@ -725,12 +729,16 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
 
             // Deserialize second moment
-            int vLength = reader.ReadInt32();
-            _vQuantized = reader.ReadBytes(vLength);
-            _vScales = new double[_numBlocks];
-            for (int i = 0; i < _numBlocks; i++)
+            bool hasVQuantized = reader.ReadBoolean();
+            if (hasVQuantized)
             {
-                _vScales[i] = reader.ReadDouble();
+                int vLength = reader.ReadInt32();
+                _vQuantized = reader.ReadBytes(vLength);
+                _vScales = new double[_numBlocks];
+                for (int i = 0; i < _numBlocks; i++)
+                {
+                    _vScales[i] = reader.ReadDouble();
+                }
             }
 
             InitializeAdaptiveParameters();

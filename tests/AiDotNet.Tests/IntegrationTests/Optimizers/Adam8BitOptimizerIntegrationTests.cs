@@ -252,7 +252,10 @@ public class Adam8BitOptimizerIntegrationTests
             var stats = optimizer.GetMemoryUsage();
 
             // Quantized state should be approximately paramCount * 2 bytes (for m and v)
-            Assert.True(stats["QuantizedStateBytes"] <= 1024 * 2 + 100,
+            // The +100 buffer accounts for block alignment padding when paramCount doesn't
+            // divide evenly by blockSize (worst case: ~blockSize bytes per moment state)
+            const int alignmentBuffer = 100;
+            Assert.True(stats["QuantizedStateBytes"] <= 1024 * 2 + alignmentBuffer,
                 $"Quantized state for blockSize={blockSize} should be around 2KB");
 
             // Standard Adam would use 1024 * 2 * 8 = 16384 bytes for double
