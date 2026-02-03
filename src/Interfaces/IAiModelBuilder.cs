@@ -40,42 +40,6 @@ namespace AiDotNet.Interfaces;
 public interface IAiModelBuilder<T, TInput, TOutput>
 {
     /// <summary>
-    /// Configures the feature selector component for the model.
-    /// </summary>
-    /// <remarks>
-    /// A feature selector helps identify which input variables (features) are most important
-    /// for making predictions.
-    /// 
-    /// <b>For Beginners:</b> Imagine you're trying to predict house prices. You have many possible 
-    /// factors: size, location, age, number of rooms, etc. A feature selector helps figure out 
-    /// which of these factors actually matter for making good predictions. This can improve 
-    /// your model's accuracy and make it run faster by focusing only on what's important.
-    /// </remarks>
-    /// <param name="selector">The feature selector implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureFeatureSelector(IFeatureSelector<T, TInput> selector);
-
-    /// <summary>
-    /// Configures the data normalizer component for the model.
-    /// </summary>
-    /// <remarks>
-    /// A normalizer transforms data to a standard scale, which helps many machine learning
-    /// algorithms perform better.
-    ///
-    /// <b>For Beginners:</b> Different features in your data might use different scales. For example,
-    /// a person's age (0-100) and income (thousands or millions) are on very different scales.
-    /// Normalization converts all features to a similar scale (like 0-1), which prevents features
-    /// with larger numbers from dominating the learning process just because they have bigger values.
-    ///
-    /// <b>Note:</b> This method is maintained for backward compatibility. For new code, prefer
-    /// <see cref="ConfigurePreprocessing(IDataTransformer{T, TInput, TInput})"/> which supports
-    /// the full range of preprocessing transformers (scalers, encoders, imputers, etc.).
-    /// </remarks>
-    /// <param name="normalizer">The normalizer implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureNormalizer(INormalizer<T, TInput, TOutput> normalizer);
-
-    /// <summary>
     /// Configures the data preprocessing pipeline for the model using a single transformer.
     /// </summary>
     /// <remarks>
@@ -332,25 +296,6 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         IFederatedServerOptimizer<T>? serverOptimizer = null,
         IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
         IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null);
-
-    /// <summary>
-    /// Configures the data preprocessing component for the model.
-    /// </summary>
-    /// <remarks>
-    /// A data preprocessor cleans and transforms raw data before it's used for training.
-    /// 
-    /// <b>For Beginners:</b> Data preprocessing is like preparing ingredients before cooking. 
-    /// It involves:
-    /// - Cleaning data (removing or fixing errors)
-    /// - Transforming data (converting text to numbers, etc.)
-    /// - Organizing data (putting it in the right format)
-    /// 
-    /// Good preprocessing can dramatically improve your model's performance by ensuring 
-    /// it learns from high-quality data.
-    /// </remarks>
-    /// <param name="dataPreprocessor">The data preprocessor implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreprocessor(IDataPreprocessor<T, TInput, TOutput> dataPreprocessor);
 
     /// <summary>
     /// Configures the data preparation pipeline for row-changing operations.
