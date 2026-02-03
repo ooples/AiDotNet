@@ -2230,7 +2230,129 @@ public enum ModelType
     /// Examples: FastDVDNet, VRT
     /// </para>
     /// </remarks>
-    VideoDenoising
+    VideoDenoising,
+
+    // ==================== Imbalanced Learning ====================
+
+    /// <summary>
+    /// SMOTE (Synthetic Minority Over-sampling Technique) for handling imbalanced data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SMOTE creates synthetic minority class samples by interpolating
+    /// between existing minority samples. This helps balance datasets where one class is
+    /// much smaller than others, improving classifier performance on minority classes.
+    /// </para>
+    /// </remarks>
+    SMOTE,
+
+    /// <summary>
+    /// ADASYN (Adaptive Synthetic Sampling) for handling imbalanced data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ADASYN is like SMOTE but smarter - it creates more synthetic samples
+    /// in regions where minority samples are harder to learn (surrounded by majority samples).
+    /// This focuses oversampling effort where it's most needed.
+    /// </para>
+    /// </remarks>
+    ADASYN,
+
+    /// <summary>
+    /// Borderline-SMOTE for focused oversampling near decision boundaries.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Borderline-SMOTE only creates synthetic samples from minority samples
+    /// that are near the decision boundary (borderline cases). This is where the classifier
+    /// needs the most help distinguishing between classes.
+    /// </para>
+    /// </remarks>
+    BorderlineSMOTE,
+
+    /// <summary>
+    /// Random Oversampling that duplicates minority samples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Random Oversampling simply duplicates existing minority samples
+    /// until classes are balanced. It's the simplest approach but can lead to overfitting
+    /// since it creates exact copies rather than new synthetic samples.
+    /// </para>
+    /// </remarks>
+    RandomOverSampler,
+
+    /// <summary>
+    /// Random Undersampling that removes majority samples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Random Undersampling randomly removes majority class samples
+    /// until classes are balanced. It's fast but loses potentially useful information.
+    /// Good for very large datasets where data loss is acceptable.
+    /// </para>
+    /// </remarks>
+    RandomUnderSampler,
+
+    /// <summary>
+    /// Tomek Links undersampling for cleaning decision boundaries.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Tomek Links removes majority samples that form "Tomek links"
+    /// with minority samples - pairs where each is the other's nearest neighbor. This cleans
+    /// up ambiguous boundary regions without removing too many samples.
+    /// </para>
+    /// </remarks>
+    TomekLinksUndersampler,
+
+    /// <summary>
+    /// Edited Nearest Neighbors (ENN) undersampling for removing noisy samples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ENN removes majority samples that would be misclassified by
+    /// their k nearest neighbors. This removes noisy and borderline samples, creating
+    /// a cleaner decision boundary.
+    /// </para>
+    /// </remarks>
+    EditedNearestNeighborsUndersampler,
+
+    /// <summary>
+    /// NearMiss undersampling that keeps majority samples near minority samples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> NearMiss intelligently selects which majority samples to keep
+    /// based on their distance to minority samples. It keeps the most informative samples
+    /// near the decision boundary rather than removing randomly.
+    /// </para>
+    /// </remarks>
+    NearMissUndersampler,
+
+    /// <summary>
+    /// SMOTE + ENN combination (SMOTEENN) for balanced and clean data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SMOTEENN first applies SMOTE to oversample, then applies ENN
+    /// to clean up noisy samples from both classes. This combination often produces better
+    /// results than either method alone - balanced AND clean data.
+    /// </para>
+    /// </remarks>
+    SMOTEENN,
+
+    /// <summary>
+    /// SMOTE + Tomek Links combination (SMOTETomek) for balanced and clean data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SMOTETomek first applies SMOTE to oversample, then removes
+    /// Tomek links to clean the boundary. Less aggressive than SMOTEENN but still
+    /// improves the decision boundary after oversampling.
+    /// </para>
+    /// </remarks>
+    SMOTETomek
 }
 
 
