@@ -2689,7 +2689,208 @@ public enum ModelType
     /// each on a balanced bootstrap sample, combining their predictions via majority voting.
     /// </para>
     /// </remarks>
-    BalancedBaggingClassifier
+    BalancedBaggingClassifier,
+
+    // ==================== Additional Survival Analysis ====================
+
+    /// <summary>
+    /// Nelson-Aalen estimator for non-parametric cumulative hazard estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Nelson-Aalen estimates the cumulative hazard function (accumulated
+    /// risk over time) rather than survival directly. It's useful for understanding how risk
+    /// accumulates and is related to Kaplan-Meier by S(t) = exp(-H(t)).
+    /// </para>
+    /// </remarks>
+    NelsonAalenEstimator,
+
+    /// <summary>
+    /// Weibull Accelerated Failure Time model for survival analysis.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Weibull AFT assumes survival times follow a Weibull distribution.
+    /// Unlike Cox models that focus on hazard ratios, AFT models directly model how covariates
+    /// accelerate or decelerate time to event. Useful when you want to interpret effects as
+    /// "this treatment increases survival time by X%".
+    /// </para>
+    /// </remarks>
+    WeibullAFT,
+
+    /// <summary>
+    /// Log-Normal Accelerated Failure Time model for survival analysis.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Log-Normal AFT assumes the log of survival times follows a normal
+    /// distribution. Good when survival times have a bell-curve shape after log-transformation.
+    /// Provides interpretable coefficients showing how covariates affect survival time.
+    /// </para>
+    /// </remarks>
+    LogNormalAFT,
+
+    /// <summary>
+    /// Random Survival Forest for survival analysis using ensemble of survival trees.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Random Survival Forest extends Random Forest to survival data.
+    /// It builds many survival trees using log-rank statistics to find splits and aggregates
+    /// their survival predictions. Handles non-linear relationships and interactions naturally.
+    /// </para>
+    /// </remarks>
+    RandomSurvivalForest,
+
+    // ==================== Causal Inference Meta-Learners ====================
+
+    /// <summary>
+    /// S-Learner (Single-model learner) for treatment effect estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> S-Learner trains a single model with treatment as just another feature.
+    /// To estimate treatment effects, it predicts outcomes with treatment=1 and treatment=0,
+    /// taking the difference. Simple but may underestimate heterogeneous treatment effects.
+    /// </para>
+    /// </remarks>
+    SLearner,
+
+    /// <summary>
+    /// T-Learner (Two-model learner) for treatment effect estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> T-Learner trains separate models for treated and control groups.
+    /// Treatment effect = prediction from treatment model - prediction from control model.
+    /// Better at capturing heterogeneous effects but may have issues when groups overlap poorly.
+    /// </para>
+    /// </remarks>
+    TLearner,
+
+    /// <summary>
+    /// X-Learner (Cross-learner) for treatment effect estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> X-Learner is a sophisticated approach that uses both treatment
+    /// models and imputed treatment effects in a cross-fitting procedure. It handles imbalanced
+    /// treatment groups better than T-Learner by leveraging information from both groups.
+    /// </para>
+    /// </remarks>
+    XLearner,
+
+    // ==================== Online Learning & Drift Detection ====================
+
+    /// <summary>
+    /// Hoeffding Tree classifier for incremental decision tree learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Hoeffding Tree is a decision tree that learns from streaming data.
+    /// It uses the Hoeffding bound to determine with high confidence when a split decision
+    /// is optimal, requiring only a small number of samples rather than the full dataset.
+    /// </para>
+    /// </remarks>
+    HoeffdingTreeClassifier,
+
+    /// <summary>
+    /// Adaptive Random Forest for online learning with concept drift handling.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ARF extends Random Forest to handle streaming data and concept drift.
+    /// Each tree uses Hoeffding bounds for splitting and has a drift detector. When drift is
+    /// detected, trees are replaced with new ones trained on recent data.
+    /// </para>
+    /// </remarks>
+    AdaptiveRandomForestClassifier,
+
+    /// <summary>
+    /// Online Naive Bayes for incremental probabilistic classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Online Naive Bayes updates its probability estimates incrementally
+    /// as each new sample arrives. It's fast, memory-efficient, and naturally handles concept
+    /// drift as newer samples gradually update the statistics.
+    /// </para>
+    /// </remarks>
+    OnlineNaiveBayes,
+
+    /// <summary>
+    /// ADWIN (ADaptive WINdowing) drift detector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> ADWIN maintains a variable-size window of recent data and detects
+    /// when the statistical properties change significantly. It automatically shrinks the window
+    /// when drift is detected, keeping only relevant recent data.
+    /// </para>
+    /// </remarks>
+    ADWIN,
+
+    /// <summary>
+    /// DDM (Drift Detection Method) for concept drift detection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DDM monitors the error rate of a classifier. When the error rate
+    /// increases significantly beyond a warning threshold, it signals drift. Simple and effective
+    /// for detecting gradual or sudden drift in classification accuracy.
+    /// </para>
+    /// </remarks>
+    DDM,
+
+    /// <summary>
+    /// EDDM (Early Drift Detection Method) for early drift detection.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> EDDM improves on DDM by monitoring the distance between errors
+    /// rather than just the error rate. This makes it more sensitive to gradual drift and
+    /// can detect drift earlier than DDM in many cases.
+    /// </para>
+    /// </remarks>
+    EDDM,
+
+    /// <summary>
+    /// Page-Hinkley test for change point detection in streams.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Page-Hinkley monitors for changes in the mean of a data stream.
+    /// It accumulates deviations from the expected mean and signals drift when this sum
+    /// exceeds a threshold. Good for detecting gradual or sudden mean shifts.
+    /// </para>
+    /// </remarks>
+    PageHinkley,
+
+    // ==================== Multi-Label Classification ====================
+
+    /// <summary>
+    /// RAkEL (Random k-Labelsets) for multi-label classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> RAkEL trains multiple Label Powerset classifiers on random subsets
+    /// of k labels. It combines their predictions through voting, capturing label correlations
+    /// while avoiding the exponential label combinations of full Label Powerset.
+    /// </para>
+    /// </remarks>
+    RAkEL,
+
+    /// <summary>
+    /// SVM-SMOTE for generating synthetic samples using SVM boundaries.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SVM-SMOTE uses support vectors from an SVM to identify borderline
+    /// samples, then generates synthetic samples interpolating between these difficult cases.
+    /// This focuses synthetic data generation on the decision boundary where it matters most.
+    /// </para>
+    /// </remarks>
+    SvmSMOTE
 }
 
 
