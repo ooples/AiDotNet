@@ -140,10 +140,15 @@ public class CalibrationHelper<T, TInput, TOutput>
 
                 stats.SampleCount++;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Track failed samples - continue with remaining
                 failedSamples++;
+                // Log first few failure reasons for debugging
+                if (failedSamples <= 3)
+                {
+                    stats.CalibrationWarnings.Add($"Sample {totalSamples} failed: {ex.Message}");
+                }
                 continue;
             }
         }
@@ -198,9 +203,14 @@ public class CalibrationHelper<T, TInput, TOutput>
 
                     stats.SampleCount++;
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     failedSamples++;
+                    // Log first few failure reasons for debugging
+                    if (failedSamples <= 3)
+                    {
+                        stats.CalibrationWarnings.Add($"Forward pass sample {totalSamples} failed: {ex.Message}");
+                    }
                     continue;
                 }
             }
@@ -267,9 +277,14 @@ public class CalibrationHelper<T, TInput, TOutput>
 
                 stats.SampleCount++;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 failedSamples++;
+                // Log first few failure reasons for debugging
+                if (failedSamples <= 3)
+                {
+                    stats.CalibrationWarnings.Add($"Prediction sample {totalSamples} failed: {ex.Message}");
+                }
                 continue;
             }
         }
@@ -412,15 +427,16 @@ public class CalibrationHelper<T, TInput, TOutput>
     /// <summary>
     /// Checks if the model supports running predictions.
     /// </summary>
-    private bool CanRunPredictions(IFullModel<T, TInput, TOutput> model)
+    private static bool CanRunPredictions(IFullModel<T, TInput, TOutput> model)
     {
         // Check if model has been trained and can make predictions
         try
         {
             return model != null;
         }
-        catch (Exception)
+        catch (InvalidOperationException)
         {
+            // Model not trained or not ready for predictions
             return false;
         }
     }
@@ -483,9 +499,13 @@ public class CalibrationHelper<T, TInput, TOutput>
                 // If ToArray exists but returns wrong type, log warning for debugging
             }
         }
-        catch (Exception)
+        catch (System.Reflection.TargetInvocationException)
         {
-            // Conversion not possible - sample type incompatible with tensor conversion
+            // ToArray method threw an exception - sample type incompatible
+        }
+        catch (InvalidCastException)
+        {
+            // Array conversion failed - type mismatch
         }
 
         return null;

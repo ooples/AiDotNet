@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Helpers;
+using AiDotNet.Deployment.Optimization.Quantization.Calibration;
 
 namespace AiDotNet.Deployment.Optimization.Quantization.Formats;
 
@@ -106,14 +107,31 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
             throw new ArgumentException("Calibration data cannot be empty", nameof(calibrationData));
         }
 
-        // Collect parameter statistics for optimal scaling
+        // Collect activation statistics using calibration data for optimal scaling
+        var calibrationHelper = new CalibrationHelper<T, TInput, TOutput>(_config);
+        var activationStats = calibrationHelper.CollectActivationStatistics(model, dataList);
+
+        // Collect parameter statistics
         var parameters = model.GetParameters();
-        double maxAbs = 0;
+        double paramMaxAbs = 0;
 
         for (int i = 0; i < parameters.Length; i++)
         {
-            maxAbs = Math.Max(maxAbs, Math.Abs(Convert.ToDouble(parameters[i])));
+            paramMaxAbs = Math.Max(paramMaxAbs, Math.Abs(Convert.ToDouble(parameters[i])));
         }
+
+        // Also consider activation max values for scaling
+        double activationMaxAbs = 0;
+        if (activationStats.GlobalMaxAbsActivations != null)
+        {
+            foreach (var val in activationStats.GlobalMaxAbsActivations)
+            {
+                activationMaxAbs = Math.Max(activationMaxAbs, val);
+            }
+        }
+
+        // Use the maximum of parameter and activation ranges
+        double maxAbs = Math.Max(paramMaxAbs, activationMaxAbs);
 
         // Compute optimal scale to fit values within FP8 range
         double fp8Max = _format == FP8Format.E4M3 ? E4M3_MAX_VALUE : E5M2_MAX_VALUE;

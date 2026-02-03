@@ -67,6 +67,8 @@ public class ActivationStatistics<T>
 /// <typeparam name="T">The numeric type for calculations</typeparam>
 public class LayerActivationStats<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Layer name or identifier.
     /// </summary>
@@ -118,7 +120,7 @@ public class LayerActivationStats<T>
 
         for (int i = 0; i < n; i++)
         {
-            double val = Convert.ToDouble(dataSpan[i]);
+            double val = NumOps.ToDouble(dataSpan[i]);
             double absVal = Math.Abs(val);
 
             MinValue = Math.Min(MinValue, val);
@@ -156,7 +158,7 @@ public class LayerActivationStats<T>
         for (int i = 0; i < dataSpan.Length; i++)
         {
             int channel = i % numChannels;
-            double absVal = Math.Abs(Convert.ToDouble(dataSpan[i]));
+            double absVal = Math.Abs(NumOps.ToDouble(dataSpan[i]));
             PerChannelMaxAbs[channel] = Math.Max(PerChannelMaxAbs[channel], absVal);
         }
     }

@@ -316,9 +316,13 @@ public class EfficientQATOptimizer<T>
             else
             {
                 blockScales[b] = (maxVal - minVal) / ((1 << effectiveBitWidth) - 1);
-                blockZeroPoints[b] = (int)Math.Round(-minVal / blockScales[b]);
+                // Clamp scale BEFORE computing zero-point to prevent divide by zero
+                blockScales[b] = Math.Max(blockScales[b], _config.MinScaleFactor);
+                // Clamp zero-point to valid asymmetric range [0, qMax]
+                blockZeroPoints[b] = (int)MathHelper.Clamp(Math.Round(-minVal / blockScales[b]), 0, qMax);
             }
 
+            // Ensure minimum scale factor (redundant for asymmetric but ensures consistency)
             blockScales[b] = Math.Max(blockScales[b], _config.MinScaleFactor);
         }
 

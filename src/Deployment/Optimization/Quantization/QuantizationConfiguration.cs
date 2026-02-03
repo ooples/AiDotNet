@@ -129,9 +129,28 @@ public class QuantizationConfiguration
     public bool UseSymmetricQuantization { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets whether to use per-channel quantization (default: false).
+    /// Gets or sets whether to use per-channel quantization.
     /// </summary>
-    public bool UsePerChannelQuantization { get; set; } = false;
+    /// <remarks>
+    /// <para><b>Note:</b> This property is kept for backward compatibility.
+    /// Setting this to true will automatically set <see cref="Granularity"/> to PerChannel.
+    /// For new code, prefer setting <see cref="Granularity"/> directly.</para>
+    /// </remarks>
+    public bool UsePerChannelQuantization
+    {
+        get => Granularity == QuantizationGranularity.PerChannel;
+        set
+        {
+            if (value)
+            {
+                Granularity = QuantizationGranularity.PerChannel;
+            }
+            else if (Granularity == QuantizationGranularity.PerChannel)
+            {
+                Granularity = QuantizationGranularity.PerTensor;
+            }
+        }
+    }
 
     /// <summary>
     /// Gets or sets the calibration method.
@@ -255,7 +274,9 @@ public class QuantizationConfiguration
     /// <remarks>
     /// <para><b>For Beginners:</b> AWQ identifies the most important weights and protects them.
     /// Higher values = more protection = better accuracy but less compression benefit.</para>
+    /// <para><b>Scale:</b> Uses 0-100 scale (percentage). Value of 1.0 means 1%, not 100%.</para>
     /// <para><b>Default:</b> 1.0 (protect top 1% of important weights)</para>
+    /// <para><b>Typical range:</b> 0.5 to 5.0 (i.e., 0.5% to 5% of weights)</para>
     /// </remarks>
     public double AWQProtectionPercentage { get; set; } = 1.0;
 

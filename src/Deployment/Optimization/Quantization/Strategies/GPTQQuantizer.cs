@@ -205,7 +205,7 @@ public class GPTQQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
             _scaleFactors[$"group_{g}"] = scale;
             _zeroPoints[$"group_{g}"] = zeroPoint;
 
-            // Get Hessian diagonal for this group (approximation)
+            // Get Hessian diagonal for this group (approximation for cross-element computation)
             double[] hessianDiag = GetHessianDiagonal(groupStart, actualGroupSize);
 
             // Process columns in order with error compensation
@@ -230,7 +230,11 @@ public class GPTQQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
                 // Update remaining weights in this group to compensate
                 if (Math.Abs(error) > 1e-10)
                 {
-                    double hDiag = hessianDiag[i - groupStart];
+                    // When ActOrder is enabled, idx may differ from i, so use idx for Hessian lookup
+                    double hDiag = config.GPTQActOrder
+                        ? GetHessianDiagonalValue(idx)
+                        : hessianDiag[i - groupStart];
+
                     if (hDiag > config.GPTQDampingFactor)
                     {
                         for (int j = i + 1; j < groupEnd; j++)
@@ -374,6 +378,23 @@ public class GPTQQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
         }
 
         return diag;
+    }
+
+    /// <summary>
+    /// Gets the Hessian diagonal value for a single global index.
+    /// Used when ActOrder is enabled and indices are reordered.
+    /// </summary>
+    /// <param name="globalIndex">Global parameter index</param>
+    /// <returns>Hessian diagonal value at the given index</returns>
+    private double GetHessianDiagonalValue(int globalIndex)
+    {
+        if (_hessianCache.TryGetValue("global", out var info) && info.Diagonal != null)
+        {
+            return globalIndex < info.Diagonal.Length
+                ? info.Diagonal[globalIndex]
+                : _config.GPTQDampingFactor;
+        }
+        return 1.0 + _config.GPTQDampingFactor;
     }
 
     /// <summary>

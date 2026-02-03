@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Helpers;
+using AiDotNet.Deployment.Optimization.Quantization.Calibration;
 
 namespace AiDotNet.Deployment.Optimization.Quantization.Formats;
 
@@ -120,9 +121,16 @@ public class NF4Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
             throw new ArgumentException("Calibration data cannot be empty", nameof(calibrationData));
         }
 
+        // Collect activation statistics using calibration data
+        var calibrationHelper = new CalibrationHelper<T, TInput, TOutput>(_config);
+        var activationStats = calibrationHelper.CollectActivationStatistics(model, dataList);
+
         // Pre-compute block scales
         var parameters = model.GetParameters();
         int numBlocks = (parameters.Length + _blockSize - 1) / _blockSize;
+
+        // Get activation magnitudes if available
+        double[]? activationMagnitudes = activationStats.GlobalMaxAbsActivations;
 
         for (int b = 0; b < numBlocks; b++)
         {
@@ -132,7 +140,12 @@ public class NF4Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
             double maxAbs = 0;
             for (int i = start; i < end; i++)
             {
-                maxAbs = Math.Max(maxAbs, Math.Abs(Convert.ToDouble(parameters[i])));
+                // Consider both parameter values and activation magnitudes for scaling
+                double paramAbs = Math.Abs(Convert.ToDouble(parameters[i]));
+                double actAbs = (activationMagnitudes != null && i < activationMagnitudes.Length)
+                    ? activationMagnitudes[i]
+                    : 0;
+                maxAbs = Math.Max(maxAbs, Math.Max(paramAbs, actAbs));
             }
 
             _scaleFactors[$"block_{b}"] = maxAbs > 0 ? maxAbs : 1.0;
@@ -168,15 +181,24 @@ public class NF4Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
             int start = b * _blockSize;
             int end = Math.Min(start + _blockSize, n);
 
-            // Compute block scale (absmax)
-            double maxAbs = 0;
-            for (int i = start; i < end; i++)
+            // Use calibrated scale if available, otherwise compute
+            double scale;
+            string blockKey = $"block_{b}";
+            if (IsCalibrated && _scaleFactors.TryGetValue(blockKey, out var calibratedScale))
             {
-                maxAbs = Math.Max(maxAbs, Math.Abs(Convert.ToDouble(parameters[i])));
+                scale = calibratedScale;
             }
-
-            double scale = maxAbs > 0 ? maxAbs : 1.0;
-            _scaleFactors[$"block_{b}"] = scale;
+            else
+            {
+                // Compute block scale (absmax)
+                double maxAbs = 0;
+                for (int i = start; i < end; i++)
+                {
+                    maxAbs = Math.Max(maxAbs, Math.Abs(Convert.ToDouble(parameters[i])));
+                }
+                scale = maxAbs > 0 ? maxAbs : 1.0;
+                _scaleFactors[blockKey] = scale;
+            }
 
             // Quantize each value in the block
             for (int i = start; i < end; i++)

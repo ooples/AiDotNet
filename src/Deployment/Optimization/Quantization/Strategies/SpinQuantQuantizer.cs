@@ -44,11 +44,17 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
     private readonly Dictionary<string, double> _scaleFactors = new();
     private readonly Dictionary<string, int> _zeroPoints = new();
     private readonly Dictionary<string, double[,]> _rotationMatrices = new();
+    private readonly List<string> _calibrationWarnings = new();
 
     /// <summary>
     /// Gets whether the quantizer has been calibrated.
     /// </summary>
     public bool IsCalibrated { get; private set; }
+
+    /// <summary>
+    /// Gets any warnings generated during calibration.
+    /// </summary>
+    public IReadOnlyList<string> CalibrationWarnings => _calibrationWarnings;
 
     // SpinQuant hyperparameters
     private readonly int _numIterations;
@@ -104,17 +110,18 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
         var rotation = LearnRotationMatrix(parameters);
         _rotationMatrices["global"] = rotation;
 
-        // Apply rotation to weights
+        // Apply rotation to weights: W' = R * W
         var rotatedParams = ApplyRotation(parameters, rotation);
 
         // Quantize the rotated weights
         var quantizedRotated = QuantizeSymmetric(rotatedParams, config);
 
-        // Store scale for dequantization
-        // Note: In inference, we'd need to apply R^T to recover the original space
-        // For this implementation, we store the quantized rotated weights directly
+        // Apply inverse rotation to recover original space: W_final = R^T * Q(W')
+        // For orthogonal rotation matrices, R^-1 = R^T (transpose)
+        var rotationTranspose = TransposeMatrix(rotation);
+        var quantizedOriginalSpace = ApplyRotation(quantizedRotated, rotationTranspose);
 
-        return model.WithParameters(quantizedRotated);
+        return model.WithParameters(quantizedOriginalSpace);
     }
 
     /// <inheritdoc/>
@@ -148,9 +155,10 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
                 }
                 sampleCount++;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Continue with other samples if one fails
+                // Track calibration failures for diagnostics
+                _calibrationWarnings.Add($"Calibration sample failed: {ex.Message}");
             }
         }
 
@@ -207,20 +215,25 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
             // Compute gradient of quantization error with respect to Cayley parameter
             var gradient = ComputeRotationGradient(weights, rotation, rotationSize);
 
-            // Update Cayley parameter
+            // Update Cayley parameter - only update upper triangular (i < j)
+            // then enforce skew-symmetry after all updates to avoid overwriting
             for (int i = 0; i < rotationSize; i++)
             {
-                for (int j = 0; j < rotationSize; j++)
+                for (int j = i + 1; j < rotationSize; j++)
                 {
+                    // Only update upper triangular elements
                     cayleyParam[i, j] -= _learningRate * gradient[i, j];
-
-                    // Enforce skew-symmetry: A[i,j] = -A[j,i]
-                    if (i < j)
-                    {
-                        cayleyParam[j, i] = -cayleyParam[i, j];
-                    }
                 }
+            }
+
+            // Enforce skew-symmetry after all updates: A[j,i] = -A[i,j]
+            for (int i = 0; i < rotationSize; i++)
+            {
                 cayleyParam[i, i] = 0; // Diagonal must be zero
+                for (int j = i + 1; j < rotationSize; j++)
+                {
+                    cayleyParam[j, i] = -cayleyParam[i, j];
+                }
             }
 
             // Convert Cayley parameter to rotation matrix: R = (I + A)^-1 * (I - A)
@@ -261,7 +274,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
 
         // Compute quantization error gradient
         // The gradient points in the direction that reduces quantization error
-        double qMax = (1 << (_config.EffectiveBitWidth - 1)) - 1;
+        double qMax = (1L << (_config.EffectiveBitWidth - 1)) - 1;
 
         for (int i = 0; i < size; i++)
         {
@@ -419,7 +432,8 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
             double pivot = augmented[col, col];
             if (Math.Abs(pivot) < 1e-10)
             {
-                // Matrix is singular, return identity
+                // Matrix is singular - add warning and return identity as fallback
+                _calibrationWarnings.Add($"Warning: Singular matrix detected at column {col} during Cayley transform, falling back to identity rotation.");
                 var identity = new double[n, n];
                 for (int i = 0; i < n; i++) identity[i, i] = 1.0;
                 return identity;
@@ -455,6 +469,27 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
         }
 
         return inverse;
+    }
+
+    /// <summary>
+    /// Computes the transpose of a matrix.
+    /// For orthogonal rotation matrices, transpose equals inverse.
+    /// </summary>
+    private static double[,] TransposeMatrix(double[,] matrix)
+    {
+        int rows = matrix.GetLength(0);
+        int cols = matrix.GetLength(1);
+        var transpose = new double[cols, rows];
+
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                transpose[j, i] = matrix[i, j];
+            }
+        }
+
+        return transpose;
     }
 
     /// <summary>
@@ -497,7 +532,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
             maxAbs = Math.Max(maxAbs, Math.Abs(Convert.ToDouble(parameters[i])));
         }
 
-        double qMax = (1 << (_config.EffectiveBitWidth - 1)) - 1;
+        double qMax = (1L << (_config.EffectiveBitWidth - 1)) - 1;
         _scaleFactors["global"] = maxAbs > 0 ? maxAbs / qMax : 1.0;
     }
 
@@ -509,7 +544,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
         int n = parameters.Length;
         var result = new T[n];
 
-        double qMax = (1 << (config.EffectiveBitWidth - 1)) - 1;
+        double qMax = (1L << (config.EffectiveBitWidth - 1)) - 1;
         double qMin = -qMax;
 
         // Compute scale from rotated parameters

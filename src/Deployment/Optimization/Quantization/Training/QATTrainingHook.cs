@@ -114,8 +114,8 @@ public class QATTrainingHook<T>
         string activationKey = $"{layerName}_activation";
         if (!_layerStates.TryGetValue(activationKey, out var state))
         {
-            state = InitializeLayerState(activations, activationKey);
-            state.BitWidth = _config.ActivationBitWidth;
+            // Use ActivationBitWidth for activations, not EffectiveBitWidth
+            state = InitializeLayerState(activations, activationKey, _config.ActivationBitWidth);
             _layerStates[activationKey] = state;
         }
 
@@ -187,9 +187,12 @@ public class QATTrainingHook<T>
     /// <summary>
     /// Initializes quantization state for a layer.
     /// </summary>
-    private QuantizationState InitializeLayerState(Vector<T> weights, string layerName)
+    /// <param name="weights">Weight or activation values to analyze</param>
+    /// <param name="layerName">Layer name for identification</param>
+    /// <param name="bitWidthOverride">Optional bit width override (for activations using ActivationBitWidth)</param>
+    private QuantizationState InitializeLayerState(Vector<T> weights, string layerName, int? bitWidthOverride = null)
     {
-        int bitWidth = _config.EffectiveBitWidth;
+        int bitWidth = bitWidthOverride ?? _config.EffectiveBitWidth;
 
         // Compute initial scale from weights
         double minVal = double.MaxValue;

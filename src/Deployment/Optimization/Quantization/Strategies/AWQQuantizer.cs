@@ -316,12 +316,25 @@ public class AWQQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     /// </summary>
     private double[] GetActivationScales(int n)
     {
-        if (_activationScales.TryGetValue("global", out var scales) && scales.Length >= n)
+        if (_activationScales.TryGetValue("global", out var scales))
         {
-            return scales;
+            if (scales.Length >= n)
+            {
+                return scales;
+            }
+
+            // Use partial calibration data - don't discard what we have
+            // Fill remaining elements with uniform importance (1.0)
+            var extendedScales = new double[n];
+            Array.Copy(scales, extendedScales, scales.Length);
+            for (int i = scales.Length; i < n; i++)
+            {
+                extendedScales[i] = 1.0;
+            }
+            return extendedScales;
         }
 
-        // Default: uniform importance
+        // No calibration data: uniform importance
         var defaultScales = new double[n];
         for (int i = 0; i < n; i++)
         {

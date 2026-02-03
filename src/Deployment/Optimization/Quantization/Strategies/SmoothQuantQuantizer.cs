@@ -240,7 +240,8 @@ public class SmoothQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TO
             {
                 scale = (max - min) / ((1 << bitWidth) - 1);
                 scale = Math.Max(scale, config.MinScaleFactor);
-                zeroPoint = (int)Math.Round(-min / scale);
+                // Clamp zero-point to valid asymmetric range [0, qMax]
+                zeroPoint = (int)MathHelper.Clamp(Math.Round(-min / scale), 0, qMax);
             }
 
             _scaleFactors["global"] = scale;
@@ -289,7 +290,8 @@ public class SmoothQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TO
                 {
                     scale = (max - min) / ((1 << bitWidth) - 1);
                     scale = Math.Max(scale, config.MinScaleFactor);
-                    zeroPoint = (int)Math.Round(-min / scale);
+                    // Clamp zero-point to valid asymmetric range [0, qMax]
+                    zeroPoint = (int)MathHelper.Clamp(Math.Round(-min / scale), 0, qMax);
                 }
 
                 _scaleFactors[$"channel_{c}"] = scale;
@@ -348,7 +350,8 @@ public class SmoothQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TO
             {
                 scale = (max - min) / ((1 << bitWidth) - 1);
                 scale = Math.Max(scale, config.MinScaleFactor);
-                zeroPoint = (int)Math.Round(-min / scale);
+                // Clamp zero-point to valid asymmetric range [0, qMax]
+                zeroPoint = (int)MathHelper.Clamp(Math.Round(-min / scale), 0, qMax);
             }
 
             _scaleFactors[$"group_{g}"] = scale;
