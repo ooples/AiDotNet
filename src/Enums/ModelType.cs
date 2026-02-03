@@ -2380,7 +2380,57 @@ public enum ModelType
     /// lower risk. Unlike Kaplan-Meier, it personalizes survival predictions.
     /// </para>
     /// </remarks>
-    CoxProportionalHazards
+    CoxProportionalHazards,
+
+    // ===== Causal Inference Models =====
+
+    /// <summary>
+    /// Propensity Score Matching for causal effect estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> PSM estimates treatment effects by matching treated individuals
+    /// to control individuals with similar propensity scores. Think of it as finding "twins"
+    /// who were equally likely to receive treatment, then comparing their outcomes.
+    /// </para>
+    /// </remarks>
+    PropensityScoreMatching,
+
+    /// <summary>
+    /// Inverse Probability Weighting for causal effect estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> IPW weights each observation by the inverse of its probability
+    /// of being in its actual treatment group. This creates a "pseudo-population" where
+    /// treatment is independent of covariates, like a randomized experiment.
+    /// </para>
+    /// </remarks>
+    InverseProbabilityWeighting,
+
+    /// <summary>
+    /// Doubly Robust estimator combining outcome modeling and propensity scores.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The doubly robust estimator combines two approaches: modeling
+    /// the outcome and modeling the propensity score. It's "doubly robust" because it gives
+    /// correct results if EITHER model is correct, providing protection against misspecification.
+    /// </para>
+    /// </remarks>
+    DoublyRobustEstimator,
+
+    /// <summary>
+    /// Causal Forest for heterogeneous treatment effect estimation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Causal Forest is like Random Forest but for treatment effects.
+    /// It estimates how treatment effects vary across individuals based on their
+    /// characteristics, identifying who benefits most from treatment.
+    /// </para>
+    /// </remarks>
+    CausalForest
 }
 
 
