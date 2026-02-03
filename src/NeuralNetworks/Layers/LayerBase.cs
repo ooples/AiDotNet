@@ -34,6 +34,16 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public abstract class LayerBase<T> : ILayer<T>, IDisposable
 {
     /// <summary>
+    /// Counter for generating unique instance IDs across all layer instances.
+    /// </summary>
+    private static int _instanceCounter;
+
+    /// <summary>
+    /// The unique instance ID for this layer, used to distinguish multiple instances of the same layer type.
+    /// </summary>
+    private readonly int _instanceId;
+
+    /// <summary>
     /// Gets the global execution engine for vector operations.
     /// </summary>
     protected IEngine Engine => AiDotNetEngine.Current;
@@ -440,6 +450,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </remarks>
     protected LayerBase(int[] inputShape, int[] outputShape)
     {
+        _instanceId = Interlocked.Increment(ref _instanceCounter);
         InputShape = inputShape;
         InputShapes = [inputShape];
         OutputShape = outputShape;
@@ -524,6 +535,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </remarks>
     protected LayerBase(int[][] inputShapes, int[] outputShape)
     {
+        _instanceId = Interlocked.Increment(ref _instanceCounter);
         InputShapes = inputShapes;
         // For multi-input layers, use the first input shape as the primary input shape
         // This ensures GetInputShape() always returns a valid (non-empty) shape
@@ -862,7 +874,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// The name is matched against patterns in <see cref="MixedPrecision.LayerPrecisionPolicy"/>.
     /// </para>
     /// </remarks>
-    public virtual string LayerName => GetType().Name;
+    public virtual string LayerName => $"{GetType().Name}_{_instanceId}";
 
     /// <summary>
     /// Gets whether mixed-precision training is currently active.

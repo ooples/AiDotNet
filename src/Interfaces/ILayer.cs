@@ -82,6 +82,10 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     /// - Other layers may use reduced precision (FP16) for faster computation
     ///
     /// This enables faster training on modern GPUs while maintaining numerical stability.
+    ///
+    /// <b>Note:</b> This is a new interface member added for mixed-precision support.
+    /// Implementers should call <see cref="Forward"/> by default if no special precision
+    /// handling is needed.
     /// </remarks>
     Tensor<T> ForwardWithPrecisionCheck(Tensor<T> input);
 
@@ -91,6 +95,11 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     /// <remarks>
     /// <b>For Beginners:</b> This name is used to determine whether the layer should
     /// use full precision (FP32) or reduced precision (FP16/FP8) during mixed-precision training.
+    ///
+    /// <b>Note:</b> This is a new interface member added for mixed-precision support.
+    /// Implementers should return a unique name that can be matched against patterns
+    /// in the precision policy. A good default is <c>GetType().Name + "_" + instanceId</c>
+    /// to distinguish multiple instances of the same layer type.
     /// </remarks>
     string LayerName { get; }
 
