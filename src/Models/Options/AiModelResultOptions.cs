@@ -564,6 +564,20 @@ public class AiModelResultOptions<T, TInput, TOutput>
     /// </remarks>
     public DeploymentConfiguration? DeploymentConfiguration { get; set; }
 
+    /// <summary>
+    /// Gets or sets information about model quantization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Contains quantization details such as strategy (GPTQ, AWQ, SmoothQuant), bit width,
+    /// compression ratio, and per-layer quantization statistics.
+    /// </para>
+    /// <para><b>For Beginners:</b> Quantization makes your model smaller and faster by using
+    /// fewer bits per weight. This property tells you what quantization was applied.
+    /// </para>
+    /// </remarks>
+    public QuantizationInfo? QuantizationInfo { get; set; }
+
     // ============================================================================
     // Inference Optimization Properties
     // ============================================================================

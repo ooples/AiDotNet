@@ -4,14 +4,110 @@ using AiDotNet.Enums;
 namespace AiDotNet.Deployment.Optimization.Quantization;
 
 /// <summary>
-/// Configuration for model quantization.
+/// Configuration for model quantization - comprehensive settings for PTQ and QAT.
 /// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> Quantization compresses your model by using smaller numbers.
+/// This configuration lets you control exactly how that compression happens.</para>
+///
+/// <para><b>Quick Start Examples:</b></para>
+/// <code>
+/// // Simple INT8 quantization (4x compression)
+/// config.Mode = QuantizationMode.Int8;
+/// config.Strategy = QuantizationStrategy.MinMax;
+///
+/// // High-quality 4-bit with GPTQ (8x compression)
+/// config.Mode = QuantizationMode.Int8;
+/// config.TargetBitWidth = 4;
+/// config.Strategy = QuantizationStrategy.GPTQ;
+/// config.Granularity = QuantizationGranularity.PerGroup;
+/// config.GroupSize = 128;
+///
+/// // Quantization-Aware Training for best accuracy
+/// config.UseQuantizationAwareTraining = true;
+/// config.QATMethod = QATMethod.EfficientQAT;
+/// </code>
+///
+/// <para><b>Research References:</b></para>
+/// <list type="bullet">
+/// <item><description>GPTQ: Frantar et al., 2023 - Second-order Hessian-based quantization</description></item>
+/// <item><description>AWQ: Lin et al., 2024 - Activation-aware weight quantization</description></item>
+/// <item><description>SmoothQuant: Xiao et al., 2023 - Outlier smoothing for W8A8</description></item>
+/// <item><description>EfficientQAT: ACL 2025 - Memory-efficient QAT for LLMs</description></item>
+/// </list>
+/// </remarks>
 public class QuantizationConfiguration
 {
     /// <summary>
-    /// Gets or sets the quantization mode.
+    /// Gets or sets the quantization mode (Int8, Float16, etc.).
     /// </summary>
     public QuantizationMode Mode { get; set; } = QuantizationMode.Int8;
+
+    /// <summary>
+    /// Gets or sets the quantization strategy (algorithm) to use.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Different algorithms for compression:</para>
+    /// <list type="bullet">
+    /// <item><description><b>MinMax:</b> Simple and fast, good baseline</description></item>
+    /// <item><description><b>GPTQ:</b> Best for 3-4 bit, uses Hessian information</description></item>
+    /// <item><description><b>AWQ:</b> Best for very large models (70B+)</description></item>
+    /// <item><description><b>SmoothQuant:</b> Best when quantizing both weights AND activations</description></item>
+    /// </list>
+    /// </remarks>
+    public QuantizationStrategy Strategy { get; set; } = QuantizationStrategy.Dynamic;
+
+    /// <summary>
+    /// Gets or sets the quantization granularity (where to apply scaling factors).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Finer granularity = better accuracy but more overhead:</para>
+    /// <list type="bullet">
+    /// <item><description><b>PerTensor:</b> One scale for entire layer (fast, less accurate)</description></item>
+    /// <item><description><b>PerChannel:</b> One scale per output channel (balanced)</description></item>
+    /// <item><description><b>PerGroup:</b> One scale per N elements (most accurate, used by GPTQ/AWQ)</description></item>
+    /// </list>
+    /// </remarks>
+    public QuantizationGranularity Granularity { get; set; } = QuantizationGranularity.PerChannel;
+
+    /// <summary>
+    /// Gets or sets the group size for per-group quantization.
+    /// Only used when Granularity is PerGroup or PerBlock.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Smaller groups = more accuracy but more storage overhead.</para>
+    /// <para><b>Typical values:</b> 32, 64, 128 (default), 256</para>
+    /// <para><b>Storage overhead:</b> Group size 128 adds ~0.125 bits per weight</para>
+    /// </remarks>
+    public int GroupSize { get; set; } = 128;
+
+    /// <summary>
+    /// Gets or sets the target bit width for weight quantization.
+    /// If null, uses the default bit width for the Mode.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Override the default bit width. For example, use INT8 mode
+    /// but target 4-bit weights for more aggressive compression.</para>
+    /// <para><b>Common values:</b> 2, 3, 4, 8, 16</para>
+    /// </remarks>
+    public int? TargetBitWidth { get; set; }
+
+    /// <summary>
+    /// Gets the effective bit width (target or default based on mode).
+    /// </summary>
+    public int EffectiveBitWidth => TargetBitWidth ?? DefaultBitWidth;
+
+    /// <summary>
+    /// Gets the default bit width for the current quantization mode.
+    /// </summary>
+    private int DefaultBitWidth => Mode switch
+    {
+        QuantizationMode.Int8 => 8,
+        QuantizationMode.Float16 => 16,
+        QuantizationMode.Float32 => 32,
+        QuantizationMode.Dynamic => 8,
+        _ => 32
+    };
 
     /// <summary>
     /// Gets the bit width for the current quantization mode.
@@ -24,14 +120,8 @@ public class QuantizationConfiguration
     /// - Dynamic: 8 bits (dynamic range quantization)
     /// </para>
     /// </remarks>
-    public int BitWidth => Mode switch
-    {
-        QuantizationMode.Int8 => 8,
-        QuantizationMode.Float16 => 16,
-        QuantizationMode.Float32 => 32,
-        QuantizationMode.Dynamic => 8,
-        _ => 32
-    };
+    [Obsolete("Use EffectiveBitWidth instead for accurate bit width including TargetBitWidth override")]
+    public int BitWidth => DefaultBitWidth;
 
     /// <summary>
     /// Gets or sets whether to use symmetric quantization (default: true).
@@ -76,12 +166,98 @@ public class QuantizationConfiguration
     /// <summary>
     /// Gets or sets whether to use quantization-aware training (QAT).
     /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> QAT simulates quantization DURING training so the model
+    /// learns to be robust to low precision. Results in better accuracy than PTQ.</para>
+    /// <para><b>Trade-off:</b> Requires retraining but achieves 95-99% of original accuracy vs 85-95% for PTQ</para>
+    /// </remarks>
     public bool UseQuantizationAwareTraining { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the QAT method to use when UseQuantizationAwareTraining is true.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Different QAT algorithms with different trade-offs:</para>
+    /// <list type="bullet">
+    /// <item><description><b>Standard:</b> Basic QAT with Straight-Through Estimator</description></item>
+    /// <item><description><b>EfficientQAT:</b> Memory-efficient, good for large models</description></item>
+    /// <item><description><b>ZeroQAT:</b> Extreme memory efficiency, fits on 8GB GPU</description></item>
+    /// <item><description><b>ParetoQ:</b> Best accuracy across all bit widths</description></item>
+    /// </list>
+    /// </remarks>
+    public QATMethod QATMethod { get; set; } = QATMethod.Standard;
+
+    /// <summary>
+    /// Gets or sets the number of QAT warmup epochs before enabling fake quantization.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Train normally for a few epochs first, then enable quantization
+    /// simulation. This helps the model converge before adding the quantization constraint.</para>
+    /// </remarks>
+    public int QATWarmupEpochs { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the percentile to use for histogram-based calibration.
     /// </summary>
     public double HistogramPercentile { get; set; } = 99.99;
+
+    /// <summary>
+    /// Gets or sets the bit width for activation quantization (if QuantizeActivations is true).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Activations (intermediate values) can use different precision
+    /// than weights. Common configurations:</para>
+    /// <list type="bullet">
+    /// <item><description>W8A8: 8-bit weights, 8-bit activations (balanced)</description></item>
+    /// <item><description>W4A16: 4-bit weights, 16-bit activations (more compression)</description></item>
+    /// <item><description>W4A8: 4-bit weights, 8-bit activations (aggressive)</description></item>
+    /// </list>
+    /// </remarks>
+    public int ActivationBitWidth { get; set; } = 8;
+
+    /// <summary>
+    /// Gets or sets the smoothing factor alpha for SmoothQuant strategy.
+    /// Controls the balance of quantization difficulty between activations and weights.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Only used with SmoothQuant strategy.</para>
+    /// <para>Alpha = 0.5 means equal difficulty split between activations and weights.</para>
+    /// <para>Alpha closer to 1.0 puts more difficulty on weights (better for weight-only quantization).</para>
+    /// <para><b>Default:</b> 0.5 (balanced)</para>
+    /// </remarks>
+    public double SmoothQuantAlpha { get; set; } = 0.5;
+
+    /// <summary>
+    /// Gets or sets the damping factor for GPTQ Hessian computation.
+    /// Prevents numerical instability when inverting the Hessian matrix.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Only used with GPTQ strategy. Higher values make the algorithm
+    /// more stable but potentially less accurate.</para>
+    /// <para><b>Default:</b> 0.01 (standard value from GPTQ paper)</para>
+    /// </remarks>
+    public double GPTQDampingFactor { get; set; } = 0.01;
+
+    /// <summary>
+    /// Gets or sets whether to use ActOrder optimization in GPTQ.
+    /// Processes columns in order of decreasing activation magnitude.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Improves GPTQ accuracy by processing important weights first.
+    /// Slightly slower but better results.</para>
+    /// </remarks>
+    public bool GPTQActOrder { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the protection percentage for AWQ strategy.
+    /// Percentage of weights to protect from aggressive quantization based on activation importance.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> AWQ identifies the most important weights and protects them.
+    /// Higher values = more protection = better accuracy but less compression benefit.</para>
+    /// <para><b>Default:</b> 1.0 (protect top 1% of important weights)</para>
+    /// </remarks>
+    public double AWQProtectionPercentage { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets custom quantization parameters per layer.
@@ -127,6 +303,137 @@ public class QuantizationConfiguration
             CalibrationMethod = CalibrationMethod.None,
             UseSymmetricQuantization = true,
             QuantizeActivations = false
+        };
+    }
+
+    /// <summary>
+    /// Creates a configuration for GPTQ 4-bit quantization.
+    /// Best for achieving high accuracy at 4-bit precision.
+    /// </summary>
+    /// <param name="groupSize">Group size for per-group quantization (default: 128)</param>
+    /// <param name="actOrder">Whether to use activation order optimization (default: true)</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> GPTQ is the gold standard for 4-bit quantization.
+    /// It uses advanced math (Hessian matrix) to minimize accuracy loss.</para>
+    /// <para><b>Typical results:</b> Within 1-2% of full precision accuracy at 4-bit</para>
+    /// </remarks>
+    public static QuantizationConfiguration ForGPTQ(int groupSize = 128, bool actOrder = true)
+    {
+        return new QuantizationConfiguration
+        {
+            Mode = QuantizationMode.Int8,
+            TargetBitWidth = 4,
+            Strategy = QuantizationStrategy.GPTQ,
+            Granularity = QuantizationGranularity.PerGroup,
+            GroupSize = groupSize,
+            CalibrationMethod = CalibrationMethod.MinMax,
+            UseSymmetricQuantization = true,
+            QuantizeActivations = false,
+            GPTQActOrder = actOrder
+        };
+    }
+
+    /// <summary>
+    /// Creates a configuration for AWQ 4-bit quantization.
+    /// Best for very large models (70B+ parameters).
+    /// </summary>
+    /// <param name="groupSize">Group size for per-group quantization (default: 128)</param>
+    /// <param name="protectionPercentage">Percentage of weights to protect (default: 1.0)</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> AWQ is particularly good for very large models where some
+    /// weights are disproportionately important. It identifies and protects these weights.</para>
+    /// </remarks>
+    public static QuantizationConfiguration ForAWQ(int groupSize = 128, double protectionPercentage = 1.0)
+    {
+        return new QuantizationConfiguration
+        {
+            Mode = QuantizationMode.Int8,
+            TargetBitWidth = 4,
+            Strategy = QuantizationStrategy.AWQ,
+            Granularity = QuantizationGranularity.PerGroup,
+            GroupSize = groupSize,
+            CalibrationMethod = CalibrationMethod.MinMax,
+            UseSymmetricQuantization = true,
+            QuantizeActivations = false,
+            AWQProtectionPercentage = protectionPercentage
+        };
+    }
+
+    /// <summary>
+    /// Creates a configuration for SmoothQuant W8A8 quantization.
+    /// Enables quantization of both weights and activations to 8-bit.
+    /// </summary>
+    /// <param name="alpha">Smoothing factor (0.0-1.0), balances difficulty between activations and weights</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> SmoothQuant makes it possible to quantize both weights AND
+    /// activations (W8A8), which gives better speedup than weight-only quantization.</para>
+    /// <para><b>Alpha guidance:</b> 0.5 is balanced, higher values favor weight quantization</para>
+    /// </remarks>
+    public static QuantizationConfiguration ForSmoothQuant(double alpha = 0.5)
+    {
+        return new QuantizationConfiguration
+        {
+            Mode = QuantizationMode.Int8,
+            Strategy = QuantizationStrategy.SmoothQuant,
+            Granularity = QuantizationGranularity.PerChannel,
+            CalibrationMethod = CalibrationMethod.MinMax,
+            UseSymmetricQuantization = true,
+            QuantizeActivations = true,
+            ActivationBitWidth = 8,
+            SmoothQuantAlpha = alpha
+        };
+    }
+
+    /// <summary>
+    /// Creates a configuration for Quantization-Aware Training (QAT).
+    /// Use when you can retrain the model and need maximum accuracy.
+    /// </summary>
+    /// <param name="targetBitWidth">Target bit width after training (default: 8)</param>
+    /// <param name="method">QAT method to use (default: EfficientQAT)</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> QAT trains the model with quantization simulation, resulting
+    /// in better accuracy than post-training quantization (PTQ). Requires retraining but worth it
+    /// for production deployments.</para>
+    /// <para><b>Typical improvement:</b> 5-15% better accuracy than PTQ at same bit width</para>
+    /// </remarks>
+    public static QuantizationConfiguration ForQAT(int targetBitWidth = 8, QATMethod method = QATMethod.EfficientQAT)
+    {
+        return new QuantizationConfiguration
+        {
+            Mode = QuantizationMode.Int8,
+            TargetBitWidth = targetBitWidth,
+            Strategy = QuantizationStrategy.MinMax,
+            Granularity = QuantizationGranularity.PerChannel,
+            UseQuantizationAwareTraining = true,
+            QATMethod = method,
+            QATWarmupEpochs = 1,
+            UseSymmetricQuantization = true,
+            QuantizeActivations = true
+        };
+    }
+
+    /// <summary>
+    /// Creates a configuration optimized for 4-bit QLoRA fine-tuning.
+    /// Combines NF4 quantization with LoRA adapters.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> QLoRA lets you fine-tune large models on consumer GPUs by
+    /// keeping the base model in 4-bit and only training small adapter matrices.</para>
+    /// <para><b>Memory savings:</b> Fine-tune a 65B model on a single 48GB GPU</para>
+    /// </remarks>
+    public static QuantizationConfiguration ForQLoRA()
+    {
+        return new QuantizationConfiguration
+        {
+            Mode = QuantizationMode.Int8,
+            TargetBitWidth = 4,
+            Strategy = QuantizationStrategy.Dynamic,
+            Granularity = QuantizationGranularity.PerGroup,
+            GroupSize = 64,
+            UseSymmetricQuantization = false,
+            QuantizeActivations = false,
+            UseQuantizationAwareTraining = true,
+            QATMethod = QATMethod.QABLoRA
         };
     }
 }

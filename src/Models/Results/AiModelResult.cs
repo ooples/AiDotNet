@@ -520,6 +520,26 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal DeploymentConfiguration? DeploymentConfiguration { get; private set; }
 
     /// <summary>
+    /// Gets information about model quantization, including strategy, bit width, and compression statistics.
+    /// </summary>
+    /// <value>A QuantizationInfo object containing quantization details, or null if quantization was not applied.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Quantization compresses the model by using fewer bits per weight.
+    ///
+    /// This property tells you:
+    /// - Whether the model was quantized (IsQuantized)
+    /// - What strategy was used (GPTQ, AWQ, SmoothQuant, etc.)
+    /// - How much compression was achieved (CompressionRatio)
+    /// - The bit width used (e.g., 4-bit, 8-bit)
+    ///
+    /// A model quantized to 4-bit can be 4x smaller than the original 32-bit model
+    /// while maintaining most of its accuracy.
+    /// </para>
+    /// </remarks>
+    [JsonProperty]
+    public QuantizationInfo? QuantizationInfo { get; internal set; }
+
+    /// <summary>
     /// Gets the JIT-compiled prediction function for accelerated inference.
     /// </summary>
     /// <value>A compiled function for fast predictions, or null if JIT compilation was not enabled or not supported.</value>
@@ -1158,6 +1178,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         DeploymentConfiguration = options.DeploymentConfiguration;
         JitCompiledFunction = options.JitCompiledFunction;
         InferenceOptimizationConfig = options.InferenceOptimizationConfig;
+        QuantizationInfo = options.QuantizationInfo;
 
         // Safety & Robustness (enabled by default; opt-out via options)
         var safetyConfig = options.SafetyFilterConfiguration;
