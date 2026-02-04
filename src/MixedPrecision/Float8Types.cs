@@ -422,7 +422,7 @@ public readonly struct Float8E5M2 : IEquatable<Float8E5M2>, IComparable<Float8E5
 
         // Clamp to E5M2 range
         const float maxVal = 57344f;
-        const float minVal = 0.0000610352f; // 2^-14
+        const float minVal = 0.0000152588f; // 2^-16 (smallest subnormal)
 
         if (value > maxVal)
             return sign == 1 ? NegativeInfinity : PositiveInfinity;
@@ -436,8 +436,17 @@ public readonly struct Float8E5M2 : IEquatable<Float8E5M2>, IComparable<Float8E5
 
         // Convert exponent (clamp to E5M2 range)
         int e5m2Exponent = floatExponent + ExponentBias;
-        if (e5m2Exponent < 0)
-            e5m2Exponent = 0;
+        if (e5m2Exponent <= 0)
+        {
+            // Subnormal range: value = mantissa * 2^-16
+            // For E5M2, subnormal encoding has exponent=0 and denormalized mantissa (0-3)
+            int subMantissa = (int)(value * 65536f + 0.5f); // Round to nearest, 65536 = 2^16
+            if (subMantissa <= 0)
+                return sign == 1 ? new Float8E5M2(0x80) : Zero;
+            if (subMantissa > 3) subMantissa = 3;
+            byte sub = (byte)((sign << SignBit) | subMantissa);
+            return new Float8E5M2(sub);
+        }
         else if (e5m2Exponent > 30)
             e5m2Exponent = 30;
 
