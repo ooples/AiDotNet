@@ -132,10 +132,17 @@ public class SmoteTomekAugmenter<T> : TabularAugmenterBase<T>
     private (T Minority, T Majority, int MinCount, int MajCount) IdentifyClasses(
         Dictionary<int, int> classCounts, List<T> classLabels)
     {
-        T minority = default!;
-        T majority = default!;
-        int minCount = int.MaxValue;
-        int maxCount = int.MinValue;
+        if (classCounts.Count == 0)
+        {
+            throw new InvalidOperationException("Cannot identify classes from empty class counts.");
+        }
+
+        // Use first entry as initial values to avoid default!
+        var firstEntry = classCounts.First();
+        T minority = classLabels[firstEntry.Key];
+        T majority = classLabels[firstEntry.Key];
+        int minCount = firstEntry.Value;
+        int maxCount = firstEntry.Value;
 
         foreach (var kvp in classCounts)
         {

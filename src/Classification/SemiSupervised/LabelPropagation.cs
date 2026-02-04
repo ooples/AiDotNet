@@ -127,15 +127,8 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
         _kernel = kernel ?? CreateDefaultKernel();
         _maxIterations = maxIterations;
 
-        // Use provided tolerance if it's not the default zero value, otherwise use 1e-3
-        if (tolerance is null || NumOps.Compare(tolerance, NumOps.Zero) == 0)
-        {
-            _tolerance = NumOps.FromDouble(1e-3);
-        }
-        else
-        {
-            _tolerance = tolerance;
-        }
+        // Accept provided tolerance as-is - zero is valid (means run until maxIterations)
+        _tolerance = tolerance;
 
         _random = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
@@ -797,6 +790,19 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
                 for (int j = 0; j < _labelDistributions.Columns; j++)
                 {
                     clone._labelDistributions[i, j] = _labelDistributions[i, j];
+                }
+            }
+        }
+
+        // Copy affinity matrix for consistent state
+        if (_affinityMatrix is not null)
+        {
+            clone._affinityMatrix = new Matrix<T>(_affinityMatrix.Rows, _affinityMatrix.Columns);
+            for (int i = 0; i < _affinityMatrix.Rows; i++)
+            {
+                for (int j = 0; j < _affinityMatrix.Columns; j++)
+                {
+                    clone._affinityMatrix[i, j] = _affinityMatrix[i, j];
                 }
             }
         }
