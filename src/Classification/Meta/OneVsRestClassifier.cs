@@ -31,6 +31,15 @@ namespace AiDotNet.Classification.Meta;
 /// - Class imbalance (one class vs all others)
 /// - Classifiers don't see inter-class relationships
 /// </para>
+/// <para>
+/// <b>Multi-label usage:</b>
+/// This classifier also supports multi-label classification via
+/// <see cref="TrainMultiLabel(Matrix{T}, Matrix{T})"/>, along with the
+/// <see cref="NumLabels"/> and <see cref="LabelNames"/> properties.
+/// When using this class in a multi-label setting, prefer
+/// <see cref="TrainMultiLabel(Matrix{T}, Matrix{T})"/> over
+/// <see cref="Train(Matrix{T}, Vector{T})"/>.
+/// </para>
 /// </remarks>
 public class OneVsRestClassifier<T> : MetaClassifierBase<T>
 {
