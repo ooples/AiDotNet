@@ -20,6 +20,7 @@ using AiDotNet.Diagnostics;
 using AiDotNet.Enums;
 using AiDotNet.ExperimentTracking;
 using AiDotNet.Helpers;
+using AiDotNet.Preprocessing;
 using AiDotNet.Inference;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -171,37 +172,26 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal OptimizationResult<T, TInput, TOutput> OptimizationResult { get; private set; } = new();
 
     /// <summary>
-    /// Gets or sets the normalization information used to preprocess input data and postprocess predictions.
+    /// Gets or sets the preprocessing information for data transformation.
     /// </summary>
-    /// <value>A NormalizationInfo&lt;T&gt; object containing normalization parameters and the normalizer.</value>
     /// <remarks>
     /// <para>
-    /// This property contains information about how input data should be normalized before being fed into the model, and 
-    /// how the model's outputs should be denormalized to obtain the final predictions. Normalization is a preprocessing 
-    /// step that scales the input features to a standard range, which can improve the performance and stability of many 
-    /// machine learning algorithms. The NormalizationInfo object includes the normalizer object that performs the actual 
-    /// normalization and denormalization operations, as well as parameters that describe how the target variable (Y) was 
-    /// normalized during training.
+    /// This property stores the fitted preprocessing pipeline used during training so that new input data
+    /// can be transformed the same way. It replaces the legacy NormalizationInfo pattern with a more
+    /// flexible, composable pipeline approach supporting scalers, encoders, imputers, and feature generators.
     /// </para>
-    /// <para><b>For Beginners:</b> This contains information about how to scale data before and after prediction.
-    /// 
-    /// The normalization info:
-    /// - Stores how input features should be scaled before making predictions
-    /// - Stores how to convert predictions back to their original scale
-    /// - Contains the actual normalizer object that performs these operations
-    /// 
-    /// Normalization is important because:
-    /// - Many models perform better with normalized input data
-    /// - The model was trained on normalized data, so new data must be normalized the same way
-    /// - Predictions need to be converted back to the original scale to be meaningful
-    /// 
-    /// For example, if your input features were originally in different units (like dollars, years, and percentages),
-    /// normalization might scale them all to a range of 0-1 for the model, and then the predictions
-    /// need to be scaled back to the original units.
+    /// <para><b>For Beginners:</b> This remembers all the data transformations applied during training:
+    /// - Scaling (StandardScaler, MinMaxScaler, etc.)
+    /// - Encoding (OneHotEncoder, LabelEncoder, etc.)
+    /// - Missing value handling (SimpleImputer, KNNImputer, etc.)
+    /// - Feature generation (PolynomialFeatures, SplineTransformer, etc.)
+    ///
+    /// When you make predictions on new data, it applies the same transformations so the model
+    /// understands the input correctly.
     /// </para>
     /// </remarks>
     [JsonProperty]
-    internal NormalizationInfo<T, TInput, TOutput> NormalizationInfo { get; private set; } = new();
+    internal PreprocessingInfo<T, TInput, TOutput>? PreprocessingInfo { get; private set; }
 
     /// <summary>
     /// Gets or sets the metadata associated with the model.
@@ -1086,26 +1076,21 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             MetaLearner = options.MetaLearner;
             MetaTrainingResult = options.MetaTrainingResult;
 
-            // Create default OptimizationResult and NormalizationInfo for consistency
+            // Create default OptimizationResult for consistency
             OptimizationResult = options.OptimizationResult ?? new OptimizationResult<T, TInput, TOutput>();
-            NormalizationInfo = options.NormalizationInfo ?? new NormalizationInfo<T, TInput, TOutput>();
+            PreprocessingInfo = options.PreprocessingInfo;
         }
         else
         {
-            // Standard path: OptimizationResult and NormalizationInfo are required
+            // Standard path: OptimizationResult is required, PreprocessingInfo is optional
             if (options.OptimizationResult is null)
             {
                 throw new ArgumentNullException(nameof(options), "OptimizationResult cannot be null");
             }
 
-            if (options.NormalizationInfo is null)
-            {
-                throw new ArgumentNullException(nameof(options), "NormalizationInfo cannot be null");
-            }
-
             Model = options.OptimizationResult.BestSolution;
             OptimizationResult = options.OptimizationResult;
-            NormalizationInfo = options.NormalizationInfo;
+            PreprocessingInfo = options.PreprocessingInfo;
             MetaLearner = options.MetaLearner;
             MetaTrainingResult = options.MetaTrainingResult;
         }
@@ -1340,11 +1325,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Model is not initialized.");
         }
 
-        if (NormalizationInfo.Normalizer == null)
-        {
-            throw new InvalidOperationException("Normalizer is not initialized.");
-        }
-
         var dataForPrediction = newData;
         if (SafetyFilter != null && newData is Vector<T> vectorInput && typeof(TInput) == typeof(Vector<T>))
         {
@@ -1369,7 +1349,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             dataForPrediction = Unsafe.As<Matrix<T>, TInput>(ref sanitizedMatrix);
         }
 
-        var (normalizedNewData, _) = NormalizationInfo.Normalizer.NormalizeInput(dataForPrediction);
+        // Transform input using preprocessing pipeline if configured
+        var normalizedNewData = PreprocessingInfo?.IsFitted == true
+            ? PreprocessingInfo.TransformFeatures(dataForPrediction)
+            : dataForPrediction;
 
         // Use JIT-compiled function if available for 5-10x faster predictions
         TOutput normalizedPredictions;
@@ -1393,7 +1376,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                     normalizedPredictions = Model.Predict(normalizedNewData);
                 }
 
-                return NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
+                return PreprocessingInfo?.IsTargetFitted == true
+                    ? PreprocessingInfo.InverseTransformPredictions(normalizedPredictions)
+                    : normalizedPredictions;
             }
         }
 
@@ -1417,7 +1402,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             normalizedPredictions = Model.Predict(normalizedNewData);
         }
 
-        var denormalized = NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, NormalizationInfo.YParams);
+        var denormalized = PreprocessingInfo?.IsTargetFitted == true
+            ? PreprocessingInfo.InverseTransformPredictions(normalizedPredictions)
+            : normalizedPredictions;
 
         if (SafetyFilter != null && denormalized is Vector<T> vectorOutput && typeof(TOutput) == typeof(Vector<T>))
         {
@@ -1711,12 +1698,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 throw new InvalidOperationException("Model is not initialized.");
             }
 
-            if (_result.NormalizationInfo.Normalizer == null)
-            {
-                throw new InvalidOperationException("Normalizer is not initialized.");
-            }
-
-            var (normalizedNewData, _) = _result.NormalizationInfo.Normalizer.NormalizeInput(newData);
+            var normalizedNewData = _result.PreprocessingInfo?.IsFitted == true
+                ? _result.PreprocessingInfo.TransformFeatures(newData)
+                : newData;
 
             // Session inference: use configured inference optimizations, including stateful ones, if applicable.
             if (_config != null &&
@@ -1729,14 +1713,18 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                     var optimizedOutput = optimized.Predict(inputTensor);
                     if (optimizedOutput is TOutput output)
                     {
-                        return _result.NormalizationInfo.Normalizer.Denormalize(output, _result.NormalizationInfo.YParams);
+                        return _result.PreprocessingInfo?.IsTargetFitted == true
+                            ? _result.PreprocessingInfo.InverseTransformPredictions(output)
+                            : output;
                     }
                 }
             }
 
             // Fallback: normal predict path (no JIT inside a session to keep behavior consistent).
             var normalizedPredictions = _result.Model.Predict(normalizedNewData);
-            return _result.NormalizationInfo.Normalizer.Denormalize(normalizedPredictions, _result.NormalizationInfo.YParams);
+            return _result.PreprocessingInfo?.IsTargetFitted == true
+                ? _result.PreprocessingInfo.InverseTransformPredictions(normalizedPredictions)
+                : normalizedPredictions;
         }
 
         /// <summary>
@@ -1965,14 +1953,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Model is not initialized.");
         }
 
-        if (NormalizationInfo.Normalizer == null)
-        {
-            throw new InvalidOperationException("Normalizer is not initialized.");
-        }
-
         // Normalize input and target to maintain API consistency with Predict
-        var (normalizedInput, _) = NormalizationInfo.Normalizer.NormalizeInput(input);
-        var (normalizedTarget, _) = NormalizationInfo.Normalizer.NormalizeOutput(target);
+        var normalizedInput = PreprocessingInfo?.IsFitted == true
+            ? PreprocessingInfo.TransformFeatures(input)
+            : input;
+        var normalizedTarget = PreprocessingInfo?.IsTargetFitted == true
+            ? PreprocessingInfo.TargetPipeline!.Transform(target)
+            : target;
 
         // Compute gradients on normalized data (gradients are wrt parameters, no denormalization needed)
         return Model.ComputeGradients(normalizedInput, normalizedTarget, lossFunction);
@@ -2319,7 +2306,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = updatedOptimizationResult,
-            NormalizationInfo = NormalizationInfo,
+            PreprocessingInfo = PreprocessingInfo,
             BiasDetector = BiasDetector,
             FairnessEvaluator = FairnessEvaluator,
             RagRetriever = RagRetriever,
@@ -4145,14 +4132,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // This ensures metadata consistency across the deep copy
         clonedOptimizationResult.BestSolution = clonedModel;
 
-        var clonedNormalizationInfo = NormalizationInfo.DeepCopy();
-
         // Preserve all configuration properties to ensure deployment behavior, model adaptation,
         // training history, and Graph RAG configuration are maintained across deep copy
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = clonedOptimizationResult,
-            NormalizationInfo = clonedNormalizationInfo,
+            PreprocessingInfo = PreprocessingInfo,
             BiasDetector = BiasDetector,
             FairnessEvaluator = FairnessEvaluator,
             RagRetriever = RagRetriever,
@@ -4343,7 +4328,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             if (deserializedObject != null)
             {
                 OptimizationResult = deserializedObject.OptimizationResult;
-                NormalizationInfo = deserializedObject.NormalizationInfo;
+                PreprocessingInfo = deserializedObject.PreprocessingInfo;
                 ModelMetaData = deserializedObject.ModelMetaData;
                 BiasDetector = deserializedObject.BiasDetector;
                 FairnessEvaluator = deserializedObject.FairnessEvaluator;

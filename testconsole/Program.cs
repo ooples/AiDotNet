@@ -1,4 +1,3 @@
-﻿using AiDotNet.Examples;
 using AiDotNet.Prototypes;
 using AiDotNetTestConsole.Examples;
 
@@ -23,16 +22,13 @@ class Program
             Console.WriteLine("1. Neural Network Example (Classification and Regression)");
             Console.WriteLine("2. Multiple Regression Example (House Price Prediction)");
             Console.WriteLine("3. Time Series Example (Stock Price Forecasting)");
-            Console.WriteLine("4. Enhanced Regression Example (Real Estate Analysis)");
-            Console.WriteLine("5. Enhanced Neural Network Example (Customer Churn Prediction)");
-            Console.WriteLine("6. Enhanced Time Series Example (Energy Demand Forecasting)");
-            Console.WriteLine("7. Phase A GPU Acceleration Integration Tests");
-            Console.WriteLine("8. DeconvolutionalLayer Test");
-            // Note: GPU tuning tests (9-11) have been removed as they require internal Tensors types
+            Console.WriteLine("4. Phase A GPU Acceleration Integration Tests");
+            Console.WriteLine("5. DeconvolutionalLayer Test");
+            // Note: GPU tuning tests have been removed as they require internal Tensors types
             // that are not exposed in the NuGet package. These are developer-only tools.
             Console.WriteLine("0. Exit");
             Console.WriteLine();
-            Console.Write("Select an example to run (0-8): ");
+            Console.Write("Select an example to run (0-5): ");
 
             int.TryParse(Console.ReadLine(), out choice);
         }
@@ -63,27 +59,15 @@ class Program
                     await tsExample.RunExample();
                     break;
                 case 4:
-                    var enhancedRegExample = new EnhancedRegressionExample();
-                    await enhancedRegExample.RunExample();
-                    break;
-                case 5:
-                    var enhancedNNExample = new EnhancedNeuralNetworkExample();
-                    enhancedNNExample.RunExample();
-                    break;
-                case 6:
-                    var enhancedTSExample = new EnhancedTimeSeriesExample();
-                    await enhancedTSExample.RunExample();
-                    break;
-                case 7:
                     Console.WriteLine("Running Phase A GPU Acceleration Integration Tests...");
                     Console.WriteLine();
                     PrototypeIntegrationTests.RunAll();
                     break;
-                case 8:
+                case 5:
                     DeconvTest.Run();
                     break;
                 default:
-                    Console.WriteLine("Invalid choice. Please select a number between 0 and 8.");
+                    Console.WriteLine("Invalid choice. Please select a number between 0 and 5.");
                     break;
             }
         }
