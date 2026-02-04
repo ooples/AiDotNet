@@ -156,25 +156,11 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
         _kernel = kernel ?? CreateDefaultKernel();
         _maxIterations = maxIterations;
 
-        // Use provided tolerance if it's not null or zero, otherwise use 1e-3
-        if (tolerance is null || NumOps.Compare(tolerance, NumOps.Zero) == 0)
-        {
-            _tolerance = NumOps.FromDouble(1e-3);
-        }
-        else
-        {
-            _tolerance = tolerance;
-        }
+        // Accept provided tolerance as-is - zero is valid (means run until maxIterations)
+        _tolerance = tolerance;
 
-        // Use provided alpha if it's not null or zero, otherwise use 0.2
-        if (alpha is null || NumOps.Compare(alpha, NumOps.Zero) == 0)
-        {
-            _alpha = NumOps.FromDouble(0.2);
-        }
-        else
-        {
-            _alpha = alpha;
-        }
+        // Accept provided alpha as-is - zero is valid (means keep original labels, no spreading)
+        _alpha = alpha;
 
         _random = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
