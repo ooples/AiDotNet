@@ -318,7 +318,13 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
         }
         else if (exp == 15)
         {
-            // E4M3 doesn't have inf/nan, max value instead
+            // E4M3 supports NaN but not Infinity per NVIDIA spec
+            // NaN is encoded when exp=15 and mantissa=7 (0x7F or 0xFF)
+            if (mantissa == 7)
+            {
+                return double.NaN;
+            }
+            // Other exp=15 patterns represent max value
             value = E4M3_MAX_VALUE;
         }
         else
@@ -335,6 +341,12 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     /// </summary>
     public static byte E4M3ToByte(double value)
     {
+        // Handle NaN - per NVIDIA spec, NaN is exp=15, mantissa=7
+        if (double.IsNaN(value))
+        {
+            return 0x7F; // NaN (positive encoding, sign doesn't matter for NaN)
+        }
+
         // Use epsilon comparison for floating-point zero check
         if (Math.Abs(value) < double.Epsilon) return 0;
 
@@ -343,7 +355,9 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
 
         if (absValue >= E4M3_MAX_VALUE)
         {
-            return (byte)(sign ? 0xFF : 0x7F); // Max value
+            // Max value uses exp=15, mantissa=6 (0x7E/0xFE)
+            // Note: 0x7F/0xFF are reserved for NaN (exp=15, mantissa=7)
+            return (byte)(sign ? 0xFE : 0x7E);
         }
 
         if (absValue < E4M3_MIN_SUBNORMAL)
