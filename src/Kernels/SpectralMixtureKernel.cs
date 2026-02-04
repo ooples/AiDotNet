@@ -217,18 +217,20 @@ public class SpectralMixtureKernel<T> : IKernelFunction<T>
 
         double result = 0.0;
 
-        // For each dimension
-        for (int d = 0; d < x1.Length; d++)
+        // Spectral Mixture kernel: k(x,x') = Σ_q w_q * Π_d [exp(-2π²τ_d²σ_q²) * cos(2πτ_d*μ_q)]
+        // Sum over mixture components, product over dimensions (separable kernel)
+        for (int q = 0; q < _numComponents; q++)
         {
-            double tau = _numOps.ToDouble(x1[d]) - _numOps.ToDouble(x2[d]);
-            double tau2 = tau * tau;
+            double weight = _weights[q];
+            double mu = _frequencies[q];
+            double sigma = _bandwidths[q];
 
-            // Sum over mixture components
-            for (int q = 0; q < _numComponents; q++)
+            // Product over dimensions for this component
+            double componentKernel = 1.0;
+            for (int d = 0; d < x1.Length; d++)
             {
-                double weight = _weights[q];
-                double mu = _frequencies[q];
-                double sigma = _bandwidths[q];
+                double tau = _numOps.ToDouble(x1[d]) - _numOps.ToDouble(x2[d]);
+                double tau2 = tau * tau;
 
                 // Envelope: exp(-2π²τ²σ²)
                 double envelope = Math.Exp(-2.0 * Math.PI * Math.PI * tau2 * sigma * sigma);
@@ -236,8 +238,10 @@ public class SpectralMixtureKernel<T> : IKernelFunction<T>
                 // Oscillation: cos(2πτμ)
                 double oscillation = Math.Cos(2.0 * Math.PI * tau * mu);
 
-                result += weight * envelope * oscillation;
+                componentKernel *= envelope * oscillation;
             }
+
+            result += weight * componentKernel;
         }
 
         return _numOps.FromDouble(result);

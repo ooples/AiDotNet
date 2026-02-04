@@ -210,8 +210,27 @@ public class ProductStructureKernel<T> : IKernelFunction<T>
         if (groupKernelMatrices.Length != NumGroups)
             throw new ArgumentException($"Expected {NumGroups} kernel matrices.");
 
+        // Validate kernel matrices are square
+        for (int g = 0; g < groupKernelMatrices.Length; g++)
+        {
+            var K = groupKernelMatrices[g];
+            if (K.Rows != K.Columns)
+                throw new ArgumentException($"Kernel matrix for group {g} must be square. Got {K.Rows}x{K.Columns}.");
+        }
+
         int[] sizes = groupKernelMatrices.Select(K => K.Rows).ToArray();
-        int total = sizes.Aggregate(1, (a, b) => a * b);
+
+        // Check for overflow in total size computation
+        long totalLong = 1;
+        foreach (int sz in sizes)
+        {
+            totalLong *= sz;
+            if (totalLong > int.MaxValue)
+                throw new OverflowException(
+                    $"Total Kronecker product size exceeds int.MaxValue ({int.MaxValue}). " +
+                    $"Consider using smaller group sizes.");
+        }
+        int total = (int)totalLong;
 
         if (v.Length != total)
             throw new ArgumentException($"Vector length must be {total}.");
@@ -313,9 +332,15 @@ public class ProductStructureKernel<T> : IKernelFunction<T>
 
                 logDet += otherProduct * logDetG;
             }
-            catch
+            catch (InvalidOperationException)
             {
-                return double.NegativeInfinity; // Not positive definite
+                // Cholesky failed - matrix is not positive definite
+                return double.NegativeInfinity;
+            }
+            catch (ArithmeticException)
+            {
+                // Numerical issues (e.g., NaN/Inf values)
+                return double.NegativeInfinity;
             }
         }
 
