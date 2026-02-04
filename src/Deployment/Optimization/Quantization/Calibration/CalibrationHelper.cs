@@ -34,6 +34,15 @@ public class CalibrationHelper<T, TInput, TOutput>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>
+    /// Maximum acceptable failure rate during calibration before warnings are triggered.
+    /// </summary>
+    /// <remarks>
+    /// If more than this fraction of calibration samples fail processing, a warning is
+    /// added to indicate potential issues with data format or model compatibility.
+    /// </remarks>
+    private const double MaxAcceptableFailureRate = 0.5;
+
     private readonly QuantizationConfiguration _config;
 
     /// <summary>
@@ -154,7 +163,7 @@ public class CalibrationHelper<T, TInput, TOutput>
         }
 
         // Warn if more than 50% of samples failed - indicates potential issues with data or model
-        if (totalSamples > 0 && failedSamples > totalSamples / 2)
+        if (totalSamples > 0 && (double)failedSamples / totalSamples > MaxAcceptableFailureRate)
         {
             stats.CalibrationWarnings.Add(
                 $"High calibration failure rate: {failedSamples}/{totalSamples} samples failed ({100.0 * failedSamples / totalSamples:F1}%). " +
@@ -222,7 +231,7 @@ public class CalibrationHelper<T, TInput, TOutput>
         }
 
         // Warn if more than 50% of samples failed
-        if (totalSamples > 0 && failedSamples > totalSamples / 2)
+        if (totalSamples > 0 && (double)failedSamples / totalSamples > MaxAcceptableFailureRate)
         {
             stats.CalibrationWarnings.Add(
                 $"High calibration failure rate: {failedSamples}/{totalSamples} samples failed ({100.0 * failedSamples / totalSamples:F1}%). " +
@@ -290,7 +299,7 @@ public class CalibrationHelper<T, TInput, TOutput>
         }
 
         // Warn if more than 50% of samples failed
-        if (totalSamples > 0 && failedSamples > totalSamples / 2)
+        if (totalSamples > 0 && (double)failedSamples / totalSamples > MaxAcceptableFailureRate)
         {
             stats.CalibrationWarnings.Add(
                 $"High calibration failure rate: {failedSamples}/{totalSamples} samples failed ({100.0 * failedSamples / totalSamples:F1}%). " +
