@@ -581,15 +581,29 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// <summary>
     /// Predicts treatment effects for new individuals.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> IPW doesn't model heterogeneous effects - it estimates
+    /// a constant average treatment effect (ATE). This returns the ATE for all individuals.
+    /// For personalized treatment effects, consider CausalForest.
+    /// </para>
+    /// </remarks>
     public override Vector<T> PredictTreatmentEffect(Matrix<T> x)
     {
         EnsureFitted();
 
-        // IPW doesn't model heterogeneous effects
+        // IPW doesn't model heterogeneous effects - return constant ATE
+        T ate = NumOps.Zero;
+        if (_cachedFeatures is not null && _cachedTreatment is not null && _cachedOutcome is not null)
+        {
+            var (estimate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
+            ate = estimate;
+        }
+
         var effects = new Vector<T>(x.Rows);
         for (int i = 0; i < x.Rows; i++)
         {
-            effects[i] = NumOps.Zero;
+            effects[i] = ate;
         }
 
         return effects;

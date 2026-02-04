@@ -132,7 +132,13 @@ public abstract class CausalModelBase<T> : ICausalModel<T>
     /// </remarks>
     public virtual T EstimateAverageTreatmentEffect(Matrix<T> features)
     {
+        if (features.Rows == 0)
+            throw new ArgumentException("Feature matrix cannot be empty (0 rows).", nameof(features));
+
         var effects = EstimateTreatmentEffect(features);
+        if (effects.Length == 0)
+            throw new InvalidOperationException("Treatment effect estimation returned empty results.");
+
         T sum = NumOps.Zero;
         for (int i = 0; i < effects.Length; i++)
         {
