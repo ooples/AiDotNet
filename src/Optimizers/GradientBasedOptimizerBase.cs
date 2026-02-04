@@ -328,6 +328,11 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         // Route through mixed-precision handler when enabled
         // ApplyGradientsWithMixedPrecision will call ApplyGradientsCore internally
+        //
+        // IMPORTANT: If gradients have already been unscaled (e.g., by MixedPrecisionTrainingLoop),
+        // ensure the optimizer does NOT have a mixed-precision context set to avoid double-unscaling.
+        // MixedPrecisionTrainingLoop handles unscaling internally and should use an optimizer
+        // without mixed-precision enabled to avoid this issue.
         if (_mixedPrecisionContext != null)
         {
             return ApplyGradientsWithMixedPrecision(originalParameters, gradients, model);
@@ -653,9 +658,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         // Scale gradients for mixed-precision training AFTER caching
         // The gradients will be unscaled in ApplyGradientsWithMixedPrecision before the optimizer step
+        //
+        // NOTE: The returned gradient (and _lastComputedGradients) is SCALED. The cache stores
+        // UNSCALED gradients. This ensures that cached gradients are scaled with the CURRENT
+        // loss scale on retrieval, even if the scale has changed since the gradient was computed.
         gradient = ApplyMixedPrecisionScaling(gradient);
 
         // Store for external access (enables gradient clipping, true DDP, debugging, etc.)
+        // This contains the SCALED gradient (same as what's returned)
         _lastComputedGradients = gradient;
 
         return gradient;

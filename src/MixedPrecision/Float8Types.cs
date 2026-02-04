@@ -189,6 +189,14 @@ public readonly struct Float8E4M3 : IEquatable<Float8E4M3>, IComparable<Float8E4
             }
         }
 
+        // Ensure exponent does not overflow its 4-bit range after rounding.
+        // E4M3 does not support infinities, so saturate to the maximum finite value.
+        if (e4m3Exponent > 15)
+        {
+            e4m3Exponent = 15;
+            e4m3Mantissa = 7;
+        }
+
         byte result = (byte)((sign << SignBit) | (e4m3Exponent << MantissaBits) | e4m3Mantissa);
         return new Float8E4M3(result);
     }
@@ -434,6 +442,13 @@ public readonly struct Float8E5M2 : IEquatable<Float8E5M2>, IComparable<Float8E5
                 e5m2Mantissa = 0;
                 e5m2Exponent++;
             }
+        }
+
+        // If rounding causes the exponent to overflow past the maximum finite value,
+        // treat this as overflow to infinity rather than encoding an invalid finite value.
+        if (e5m2Exponent > 30)
+        {
+            return sign == 1 ? NegativeInfinity : PositiveInfinity;
         }
 
         byte result = (byte)((sign << SignBit) | (e5m2Exponent << MantissaBits) | e5m2Mantissa);
