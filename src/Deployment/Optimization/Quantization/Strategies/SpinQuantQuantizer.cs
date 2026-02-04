@@ -41,9 +41,9 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly QuantizationConfiguration _config;
-    private readonly Dictionary<string, double> _scaleFactors = new();
+    private readonly Dictionary<string, T> _scaleFactors = new();
     private readonly Dictionary<string, int> _zeroPoints = new();
-    private readonly Dictionary<string, double[,]> _rotationMatrices = new();
+    private readonly Dictionary<string, Matrix<T>> _rotationMatrices = new();
     private readonly List<string> _calibrationWarnings = new();
 
     /// <summary>
@@ -58,7 +58,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
 
     // SpinQuant hyperparameters
     private readonly int _numIterations;
-    private readonly double _learningRate;
+    private readonly T _learningRate;
     private readonly int _blockSize;
 
     /// <inheritdoc/>
@@ -95,7 +95,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
         }
 
         _numIterations = Math.Max(1, numIterations);
-        _learningRate = Math.Max(0.001, learningRate);
+        _learningRate = NumOps.FromDouble(Math.Max(0.001, learningRate));
         _blockSize = Math.Max(0, blockSize);
     }
 
@@ -106,8 +106,8 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
 
         var parameters = model.GetParameters();
 
-        // Learn optimal rotation matrix
-        var rotation = LearnRotationMatrix(parameters);
+        // Learn optimal rotation matrix using the provided config
+        var rotation = LearnRotationMatrix(parameters, config);
         _rotationMatrices["global"] = rotation;
 
         // Apply rotation to weights: W' = R * W
@@ -118,7 +118,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
 
         // Apply inverse rotation to recover original space: W_final = R^T * Q(W')
         // For orthogonal rotation matrices, R^-1 = R^T (transpose)
-        var rotationTranspose = TransposeMatrix(rotation);
+        var rotationTranspose = rotation.Transpose();
         var quantizedOriginalSpace = ApplyRotation(quantizedRotated, rotationTranspose);
 
         return model.WithParameters(quantizedOriginalSpace);
@@ -138,7 +138,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
 
         // Run calibration samples through model to gather activation statistics
         // SpinQuant uses these to inform the rotation matrix learning
-        double activationScale = 1.0;
+        T activationScale = NumOps.One;
         int sampleCount = 0;
         foreach (var sample in dataList.Take(Math.Min(100, dataList.Count)))
         {
@@ -150,7 +150,11 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
                 {
                     for (int i = 0; i < vec.Length; i++)
                     {
-                        activationScale = Math.Max(activationScale, Math.Abs(Convert.ToDouble(vec[i])));
+                        T absVal = NumOps.Abs(vec[i]);
+                        if (NumOps.Compare(absVal, activationScale) > 0)
+                        {
+                            activationScale = absVal;
+                        }
                     }
                 }
                 sampleCount++;
@@ -170,7 +174,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
 
         // Compute scale factors from model parameters
         var parameters = model.GetParameters();
-        ComputeScaleFactors(parameters);
+        ComputeScaleFactors(parameters, _config);
 
         IsCalibrated = true;
     }
@@ -178,8 +182,11 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
     /// <inheritdoc/>
     public double GetScaleFactor(string layerName)
     {
-        return _scaleFactors.TryGetValue(layerName, out var scale) ? scale :
-               _scaleFactors.TryGetValue("global", out var globalScale) ? globalScale : 1.0;
+        if (_scaleFactors.TryGetValue(layerName, out var scale))
+            return NumOps.ToDouble(scale);
+        if (_scaleFactors.TryGetValue("global", out var globalScale))
+            return NumOps.ToDouble(globalScale);
+        return 1.0;
     }
 
     /// <inheritdoc/>
@@ -192,7 +199,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
     /// Learns optimal rotation matrix to minimize quantization error.
     /// Uses Cayley parameterization for gradient-based optimization on orthogonal matrices.
     /// </summary>
-    private double[,] LearnRotationMatrix(Vector<T> weights)
+    private Matrix<T> LearnRotationMatrix(Vector<T> weights, QuantizationConfiguration config)
     {
         int n = weights.Length;
 
@@ -200,33 +207,29 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
         int rotationSize = _blockSize > 0 ? Math.Min(_blockSize, n) : Math.Min(n, 256);
 
         // Initialize as identity matrix
-        var rotation = new double[rotationSize, rotationSize];
-        for (int i = 0; i < rotationSize; i++)
-        {
-            rotation[i, i] = 1.0;
-        }
+        var rotation = Matrix<T>.CreateIdentity(rotationSize);
 
         // Initialize Cayley parameter (skew-symmetric matrix)
-        var cayleyParam = new double[rotationSize, rotationSize];
+        var cayleyParam = new Matrix<T>(rotationSize, rotationSize);
 
         // Optimization loop
         for (int iter = 0; iter < _numIterations; iter++)
         {
             // Compute gradient of quantization error with respect to Cayley parameter
-            var gradient = ComputeRotationGradient(weights, rotation, rotationSize);
+            var gradient = ComputeRotationGradient(weights, rotation, rotationSize, config);
 
             // Update Cayley parameter - only update upper triangular (i < j)
             // then enforce skew-symmetry after all updates to avoid overwriting
-            const double gradientThreshold = 1e-10;
+            T gradientThreshold = NumOps.FromDouble(1e-10);
             for (int i = 0; i < rotationSize; i++)
             {
                 for (int j = i + 1; j < rotationSize; j++)
                 {
                     // Skip negligible gradients to reduce floating point operations
-                    double grad = gradient[i, j];
-                    if (Math.Abs(grad) >= gradientThreshold)
+                    T grad = gradient[i, j];
+                    if (NumOps.Compare(NumOps.Abs(grad), gradientThreshold) >= 0)
                     {
-                        cayleyParam[i, j] -= _learningRate * grad;
+                        cayleyParam[i, j] = NumOps.Subtract(cayleyParam[i, j], NumOps.Multiply(_learningRate, grad));
                     }
                 }
             }
@@ -234,10 +237,10 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
             // Enforce skew-symmetry after all updates: A[j,i] = -A[i,j]
             for (int i = 0; i < rotationSize; i++)
             {
-                cayleyParam[i, i] = 0; // Diagonal must be zero
+                cayleyParam[i, i] = NumOps.Zero; // Diagonal must be zero
                 for (int j = i + 1; j < rotationSize; j++)
                 {
-                    cayleyParam[j, i] = -cayleyParam[i, j];
+                    cayleyParam[j, i] = NumOps.Negate(cayleyParam[i, j]);
                 }
             }
 
@@ -251,35 +254,35 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
     /// <summary>
     /// Computes gradient of quantization error with respect to rotation parameters.
     /// </summary>
-    private double[,] ComputeRotationGradient(Vector<T> weights, double[,] currentRotation, int size)
+    private Matrix<T> ComputeRotationGradient(Vector<T> weights, Matrix<T> currentRotation, int size, QuantizationConfiguration config)
     {
-        var gradient = new double[size, size];
+        var gradient = new Matrix<T>(size, size);
 
         // Extract a block of weights for rotation
         int blockCount = Math.Min(size, weights.Length);
-        var weightBlock = new double[blockCount];
+        var weightBlock = new Vector<T>(blockCount);
         for (int i = 0; i < blockCount; i++)
         {
-            weightBlock[i] = Convert.ToDouble(weights[i]);
+            weightBlock[i] = weights[i];
         }
 
         // Compute rotated weights
-        var rotatedBlock = new double[blockCount];
+        var rotatedBlock = new Vector<T>(blockCount);
         for (int i = 0; i < blockCount; i++)
         {
-            double sum = 0;
+            T sum = NumOps.Zero;
             for (int j = 0; j < blockCount; j++)
             {
                 int ri = Math.Min(i, size - 1);
                 int rj = Math.Min(j, size - 1);
-                sum += currentRotation[ri, rj] * weightBlock[j];
+                sum = NumOps.Add(sum, NumOps.Multiply(currentRotation[ri, rj], weightBlock[j]));
             }
             rotatedBlock[i] = sum;
         }
 
         // Compute quantization error gradient
         // The gradient points in the direction that reduces quantization error
-        double qMax = (1L << (_config.EffectiveBitWidth - 1)) - 1;
+        T qMax = NumOps.FromDouble((1L << (config.EffectiveBitWidth - 1)) - 1);
 
         for (int i = 0; i < size; i++)
         {
@@ -287,19 +290,21 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
             {
                 // Finite difference approximation of gradient with adaptive epsilon
                 // Scale epsilon with rotation value magnitude for numerical stability
-                double eps = Math.Max(1e-5, Math.Abs(currentRotation[i, j]) * 1e-6);
+                T absRotation = NumOps.Abs(currentRotation[i, j]);
+                T eps = NumOps.FromDouble(Math.Max(1e-5, NumOps.ToDouble(absRotation) * 1e-6));
 
-                // Perturb rotation
-                var perturbedRotation = (double[,])currentRotation.Clone();
-                perturbedRotation[i, j] += eps;
+                // Perturb rotation - clone the matrix
+                var perturbedRotation = currentRotation.Clone();
+                perturbedRotation[i, j] = NumOps.Add(perturbedRotation[i, j], eps);
 
                 // Compute error with perturbation
-                double errorPlus = ComputeQuantizationError(weightBlock, perturbedRotation, qMax);
+                T errorPlus = ComputeQuantizationError(weightBlock, perturbedRotation, qMax);
 
-                perturbedRotation[i, j] -= 2 * eps;
-                double errorMinus = ComputeQuantizationError(weightBlock, perturbedRotation, qMax);
+                perturbedRotation[i, j] = NumOps.Subtract(currentRotation[i, j], eps);
+                T errorMinus = ComputeQuantizationError(weightBlock, perturbedRotation, qMax);
 
-                gradient[i, j] = (errorPlus - errorMinus) / (2 * eps);
+                T two = NumOps.FromDouble(2.0);
+                gradient[i, j] = NumOps.Divide(NumOps.Subtract(errorPlus, errorMinus), NumOps.Multiply(two, eps));
             }
         }
 
@@ -309,45 +314,58 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
     /// <summary>
     /// Computes quantization error for a weight block with given rotation.
     /// </summary>
-    private double ComputeQuantizationError(double[] weights, double[,] rotation, double qMax)
+    private T ComputeQuantizationError(Vector<T> weights, Matrix<T> rotation, T qMax)
     {
         int n = weights.Length;
-        int size = rotation.GetLength(0);
-        double totalError = 0;
+        int size = rotation.Rows;
+        T totalError = NumOps.Zero;
 
         // Compute max abs for scale
-        double maxAbs = 0;
+        T maxAbs = NumOps.Zero;
         for (int i = 0; i < n; i++)
         {
-            double rotated = 0;
+            T rotated = NumOps.Zero;
             for (int j = 0; j < n; j++)
             {
                 int ri = Math.Min(i, size - 1);
                 int rj = Math.Min(j, size - 1);
-                rotated += rotation[ri, rj] * weights[j];
+                rotated = NumOps.Add(rotated, NumOps.Multiply(rotation[ri, rj], weights[j]));
             }
-            maxAbs = Math.Max(maxAbs, Math.Abs(rotated));
+            T absRotated = NumOps.Abs(rotated);
+            if (NumOps.Compare(absRotated, maxAbs) > 0)
+            {
+                maxAbs = absRotated;
+            }
         }
 
-        double scale = maxAbs > 0 ? maxAbs / qMax : 1.0;
+        T scale = NumOps.Compare(maxAbs, NumOps.Zero) > 0
+            ? NumOps.Divide(maxAbs, qMax)
+            : NumOps.One;
 
         // Compute quantization error
         for (int i = 0; i < n; i++)
         {
-            double rotated = 0;
+            T rotated = NumOps.Zero;
             for (int j = 0; j < n; j++)
             {
                 int ri = Math.Min(i, size - 1);
                 int rj = Math.Min(j, size - 1);
-                rotated += rotation[ri, rj] * weights[j];
+                rotated = NumOps.Add(rotated, NumOps.Multiply(rotation[ri, rj], weights[j]));
             }
 
-            double quantized = Math.Round(rotated / scale);
-            quantized = MathHelper.Clamp(quantized, -qMax, qMax);
-            double dequantized = quantized * scale;
+            T quantized = NumOps.Round(NumOps.Divide(rotated, scale));
+            T negQMax = NumOps.Negate(qMax);
 
-            double error = rotated - dequantized;
-            totalError += error * error;
+            // Clamp to quantization range
+            if (NumOps.Compare(quantized, negQMax) < 0)
+                quantized = negQMax;
+            else if (NumOps.Compare(quantized, qMax) > 0)
+                quantized = qMax;
+
+            T dequantized = NumOps.Multiply(quantized, scale);
+
+            T error = NumOps.Subtract(rotated, dequantized);
+            totalError = NumOps.Add(totalError, NumOps.Multiply(error, error));
         }
 
         return totalError;
@@ -357,21 +375,21 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
     /// Converts Cayley parameter (skew-symmetric matrix) to rotation matrix.
     /// R = (I + A)^-1 * (I - A) where A is skew-symmetric
     /// </summary>
-    private double[,] CayleyToRotation(double[,] cayleyParam)
+    private Matrix<T> CayleyToRotation(Matrix<T> cayleyParam)
     {
-        int n = cayleyParam.GetLength(0);
+        int n = cayleyParam.Rows;
 
         // Compute (I + A) and (I - A)
-        var iPlusA = new double[n, n];
-        var iMinusA = new double[n, n];
+        var iPlusA = new Matrix<T>(n, n);
+        var iMinusA = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                double identity = i == j ? 1.0 : 0.0;
-                iPlusA[i, j] = identity + cayleyParam[i, j];
-                iMinusA[i, j] = identity - cayleyParam[i, j];
+                T identity = i == j ? NumOps.One : NumOps.Zero;
+                iPlusA[i, j] = NumOps.Add(identity, cayleyParam[i, j]);
+                iMinusA[i, j] = NumOps.Subtract(identity, cayleyParam[i, j]);
             }
         }
 
@@ -379,15 +397,15 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
         var iPlusAInv = InvertMatrix(iPlusA);
 
         // Multiply: R = (I + A)^-1 * (I - A)
-        var rotation = new double[n, n];
+        var rotation = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int k = 0; k < n; k++)
                 {
-                    sum += iPlusAInv[i, k] * iMinusA[k, j];
+                    sum = NumOps.Add(sum, NumOps.Multiply(iPlusAInv[i, k], iMinusA[k, j]));
                 }
                 rotation[i, j] = sum;
             }
@@ -399,10 +417,10 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
     /// <summary>
     /// Inverts a matrix using Gaussian elimination with partial pivoting.
     /// </summary>
-    private double[,] InvertMatrix(double[,] matrix)
+    private Matrix<T> InvertMatrix(Matrix<T> matrix)
     {
-        int n = matrix.GetLength(0);
-        var augmented = new double[n, 2 * n];
+        int n = matrix.Rows;
+        var augmented = new Matrix<T>(n, 2 * n);
 
         // Create augmented matrix [A | I]
         for (int i = 0; i < n; i++)
@@ -411,7 +429,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
             {
                 augmented[i, j] = matrix[i, j];
             }
-            augmented[i, n + i] = 1.0;
+            augmented[i, n + i] = NumOps.One;
         }
 
         // Gaussian elimination
@@ -421,7 +439,7 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
             int maxRow = col;
             for (int row = col + 1; row < n; row++)
             {
-                if (Math.Abs(augmented[row, col]) > Math.Abs(augmented[maxRow, col]))
+                if (NumOps.Compare(NumOps.Abs(augmented[row, col]), NumOps.Abs(augmented[maxRow, col])) > 0)
                 {
                     maxRow = row;
                 }
@@ -434,19 +452,18 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
             }
 
             // Scale pivot row
-            double pivot = augmented[col, col];
-            if (Math.Abs(pivot) < 1e-10)
+            T pivot = augmented[col, col];
+            T pivotThreshold = NumOps.FromDouble(1e-10);
+            if (NumOps.Compare(NumOps.Abs(pivot), pivotThreshold) < 0)
             {
                 // Matrix is singular - add warning and return identity as fallback
                 _calibrationWarnings.Add($"Warning: Singular matrix detected at column {col} during Cayley transform, falling back to identity rotation.");
-                var identity = new double[n, n];
-                for (int i = 0; i < n; i++) identity[i, i] = 1.0;
-                return identity;
+                return Matrix<T>.CreateIdentity(n);
             }
 
             for (int j = 0; j < 2 * n; j++)
             {
-                augmented[col, j] /= pivot;
+                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
             }
 
             // Eliminate column
@@ -454,17 +471,17 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
             {
                 if (row != col)
                 {
-                    double factor = augmented[row, col];
+                    T factor = augmented[row, col];
                     for (int j = 0; j < 2 * n; j++)
                     {
-                        augmented[row, j] -= factor * augmented[col, j];
+                        augmented[row, j] = NumOps.Subtract(augmented[row, j], NumOps.Multiply(factor, augmented[col, j]));
                     }
                 }
             }
         }
 
         // Extract inverse
-        var inverse = new double[n, n];
+        var inverse = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -477,34 +494,13 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
     }
 
     /// <summary>
-    /// Computes the transpose of a matrix.
-    /// For orthogonal rotation matrices, transpose equals inverse.
-    /// </summary>
-    private static double[,] TransposeMatrix(double[,] matrix)
-    {
-        int rows = matrix.GetLength(0);
-        int cols = matrix.GetLength(1);
-        var transpose = new double[cols, rows];
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                transpose[j, i] = matrix[i, j];
-            }
-        }
-
-        return transpose;
-    }
-
-    /// <summary>
     /// Applies rotation matrix to weight vector.
     /// </summary>
-    private Vector<T> ApplyRotation(Vector<T> weights, double[,] rotation)
+    private Vector<T> ApplyRotation(Vector<T> weights, Matrix<T> rotation)
     {
         int n = weights.Length;
-        int size = rotation.GetLength(0);
-        var result = new T[n];
+        int size = rotation.Rows;
+        var result = new Vector<T>(n);
 
         // Apply rotation in blocks
         for (int blockStart = 0; blockStart < n; blockStart += size)
@@ -514,31 +510,37 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
 
             for (int i = 0; i < blockLen; i++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int j = 0; j < blockLen; j++)
                 {
-                    sum += rotation[i, j] * Convert.ToDouble(weights[blockStart + j]);
+                    sum = NumOps.Add(sum, NumOps.Multiply(rotation[i, j], weights[blockStart + j]));
                 }
-                result[blockStart + i] = NumOps.FromDouble(sum);
+                result[blockStart + i] = sum;
             }
         }
 
-        return new Vector<T>(result);
+        return result;
     }
 
     /// <summary>
     /// Computes scale factors from parameter statistics.
     /// </summary>
-    private void ComputeScaleFactors(Vector<T> parameters)
+    private void ComputeScaleFactors(Vector<T> parameters, QuantizationConfiguration config)
     {
-        double maxAbs = 0;
+        T maxAbs = NumOps.Zero;
         for (int i = 0; i < parameters.Length; i++)
         {
-            maxAbs = Math.Max(maxAbs, Math.Abs(Convert.ToDouble(parameters[i])));
+            T absVal = NumOps.Abs(parameters[i]);
+            if (NumOps.Compare(absVal, maxAbs) > 0)
+            {
+                maxAbs = absVal;
+            }
         }
 
-        double qMax = (1L << (_config.EffectiveBitWidth - 1)) - 1;
-        _scaleFactors["global"] = maxAbs > 0 ? maxAbs / qMax : 1.0;
+        T qMax = NumOps.FromDouble((1L << (config.EffectiveBitWidth - 1)) - 1);
+        _scaleFactors["global"] = NumOps.Compare(maxAbs, NumOps.Zero) > 0
+            ? NumOps.Divide(maxAbs, qMax)
+            : NumOps.One;
     }
 
     /// <summary>
@@ -547,31 +549,43 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
     private Vector<T> QuantizeSymmetric(Vector<T> parameters, QuantizationConfiguration config)
     {
         int n = parameters.Length;
-        var result = new T[n];
+        var result = new Vector<T>(n);
 
-        double qMax = (1L << (config.EffectiveBitWidth - 1)) - 1;
-        double qMin = -qMax;
+        T qMax = NumOps.FromDouble((1L << (config.EffectiveBitWidth - 1)) - 1);
+        T qMin = NumOps.Negate(qMax);
 
         // Compute scale from rotated parameters
-        double maxAbs = 0;
+        T maxAbs = NumOps.Zero;
         for (int i = 0; i < n; i++)
         {
-            maxAbs = Math.Max(maxAbs, Math.Abs(Convert.ToDouble(parameters[i])));
+            T absVal = NumOps.Abs(parameters[i]);
+            if (NumOps.Compare(absVal, maxAbs) > 0)
+            {
+                maxAbs = absVal;
+            }
         }
 
-        double scale = maxAbs > 0 ? maxAbs / qMax : 1.0;
+        T scale = NumOps.Compare(maxAbs, NumOps.Zero) > 0
+            ? NumOps.Divide(maxAbs, qMax)
+            : NumOps.One;
         _scaleFactors["global"] = scale;
 
         // Quantize
         for (int i = 0; i < n; i++)
         {
-            double value = Convert.ToDouble(parameters[i]);
-            double quantized = Math.Round(value / scale);
-            quantized = MathHelper.Clamp(quantized, qMin, qMax);
-            double dequantized = quantized * scale;
-            result[i] = NumOps.FromDouble(dequantized);
+            T value = parameters[i];
+            T quantized = NumOps.Round(NumOps.Divide(value, scale));
+
+            // Clamp to quantization range
+            if (NumOps.Compare(quantized, qMin) < 0)
+                quantized = qMin;
+            else if (NumOps.Compare(quantized, qMax) > 0)
+                quantized = qMax;
+
+            T dequantized = NumOps.Multiply(quantized, scale);
+            result[i] = dequantized;
         }
 
-        return new Vector<T>(result);
+        return result;
     }
 }

@@ -90,17 +90,19 @@ public class CalibrationHelper<T, TInput, TOutput>
             CollectTensorBasedActivations(nn, dataList.Take(maxSamples).Cast<Tensor<T>>(), stats);
             stats.IsFromRealForwardPasses = true;
         }
-        // Fall back to prediction-based collection
-        else if (CanRunPredictions(model))
-        {
-            CollectPredictionBasedActivations(model, dataList.Take(maxSamples), stats);
-            stats.IsFromRealForwardPasses = true;
-        }
-        // Final fallback: parameter-based estimation
+        // Prediction-based collection with parameter fallback if none succeed
         else
         {
-            CollectParameterBasedEstimates(model, stats);
-            stats.IsFromRealForwardPasses = false;
+            CollectPredictionBasedActivations(model, dataList.Take(maxSamples), stats);
+            if (stats.SampleCount == 0)
+            {
+                CollectParameterBasedEstimates(model, stats);
+                stats.IsFromRealForwardPasses = false;
+            }
+            else
+            {
+                stats.IsFromRealForwardPasses = true;
+            }
         }
 
         // Compute global statistics from layer statistics
@@ -497,7 +499,7 @@ public class CalibrationHelper<T, TInput, TOutput>
             {
                 // Validate return type before invoking to provide clearer failure
                 var returnType = toArrayMethod.ReturnType;
-                if (returnType == typeof(T[]) || returnType.IsAssignableFrom(typeof(T[])))
+                if (returnType == typeof(T[]) || typeof(T[]).IsAssignableFrom(returnType))
                 {
                     var arr = toArrayMethod.Invoke(sample, null) as T[];
                     if (arr != null && arr.Length > 0)

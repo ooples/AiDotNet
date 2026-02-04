@@ -368,12 +368,12 @@ public class BlockQuantizationState
     /// <summary>
     /// Scale factors for each block.
     /// </summary>
-    public double[] BlockScales { get; set; } = [];
+    public double[] BlockScales { get; set; } = Array.Empty<double>();
 
     /// <summary>
     /// Zero points for each block.
     /// </summary>
-    public int[] BlockZeroPoints { get; set; } = [];
+    public int[] BlockZeroPoints { get; set; } = Array.Empty<int>();
 
     /// <summary>
     /// Size of each block.
