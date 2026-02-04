@@ -36,6 +36,13 @@ namespace AiDotNet.GaussianProcesses;
 /// - Harder to train (requires careful initialization and optimization)
 /// - May overfit on small datasets
 /// </para>
+/// <para>
+/// <b>Implementation Note:</b> This is an experimental/research implementation with simplified
+/// layer optimization. The current training uses a greedy layer-by-layer approach rather than
+/// full ELBO gradient optimization. For production use cases requiring state-of-the-art DGP
+/// performance, consider using specialized DGP libraries or extending this implementation
+/// with proper doubly-stochastic variational inference.
+/// </para>
 /// </remarks>
 public class DeepGaussianProcess<T> : IGaussianProcess<T>
 {

@@ -248,6 +248,10 @@ public class StringKernel<T>
     ///
     /// This kernel is more flexible than spectrum kernel because it allows
     /// for insertions/deletions in the middle of patterns.
+    ///
+    /// <b>Complexity:</b> O(n*m*k) time and O(n*m) space, where n and m are string lengths
+    /// and k is the subsequence length. For long strings (>1000 characters), consider using
+    /// the Spectrum kernel instead or preprocessing strings to extract relevant segments.
     /// </para>
     /// </remarks>
     private double CalculateSubsequenceKernel(string s1, string s2)

@@ -24,6 +24,12 @@ namespace AiDotNet.GaussianProcesses;
 ///
 /// For large datasets with Gaussian likelihood, use SparseVariationalGaussianProcess instead.
 /// </para>
+/// <para>
+/// <b>Implementation Note:</b> The ELBO (Evidence Lower Bound) computation uses a simplified
+/// trace approximation (S ≈ K) for numerical stability. This approximation may affect the
+/// absolute ELBO values, making them unreliable for cross-model comparison. For hyperparameter
+/// optimization, consider using the prediction accuracy on a held-out validation set instead.
+/// </para>
 /// </remarks>
 public class VariationalGaussianProcess<T> : IGaussianProcess<T>
 {
