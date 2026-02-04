@@ -121,16 +121,36 @@ public class LayerPrecisionPolicy
     }
 
     /// <summary>
-    /// Determines if a layer should be kept in higher precision (FP32 or FP16).
+    /// Determines if a layer should be kept in higher precision (FP32, FP16, or BF16).
     /// </summary>
     /// <param name="layerName">Name of the layer.</param>
     /// <returns>True if the layer should use higher precision than the default.</returns>
     public bool ShouldUseHigherPrecision(string layerName)
     {
         var precision = GetPrecision(layerName);
-        return precision == MixedPrecisionType.None || // FP32
-               (precision == MixedPrecisionType.FP16 && _defaultPrecision >= MixedPrecisionType.FP8_E4M3);
+
+        // FP32 is always higher precision
+        if (precision == MixedPrecisionType.None)
+        {
+            return true;
+        }
+
+        // FP16 or BF16 are higher precision when default is FP8
+        if (precision == MixedPrecisionType.FP16 || precision == MixedPrecisionType.BF16)
+        {
+            return IsFp8(_defaultPrecision);
+        }
+
+        return false;
     }
+
+    /// <summary>
+    /// Determines whether the specified precision type is an FP8 variant.
+    /// </summary>
+    private static bool IsFp8(MixedPrecisionType precision) =>
+        precision == MixedPrecisionType.FP8_E4M3 ||
+        precision == MixedPrecisionType.FP8_E5M2 ||
+        precision == MixedPrecisionType.FP8_Hybrid;
 
     /// <summary>
     /// Determines if a layer should skip mixed precision entirely (stay in FP32).

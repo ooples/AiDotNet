@@ -170,8 +170,18 @@ public readonly struct Float8E4M3 : IEquatable<Float8E4M3>, IComparable<Float8E4
 
         // Convert exponent (clamp to E4M3 range)
         int e4m3Exponent = floatExponent + ExponentBias;
-        if (e4m3Exponent < 0)
-            e4m3Exponent = 0;
+        if (e4m3Exponent <= 0)
+        {
+            // Subnormal range: value = mantissa * 2^(1-ExponentBias) = mantissa * 2^-6
+            // For E4M3, subnormal encoding has exponent=0 and denormalized mantissa
+            // Smallest subnormal = 2^-9, largest subnormal = 7 * 2^-9
+            int subMantissa = (int)(value * 512f + 0.5f); // Round to nearest, 512 = 2^9
+            if (subMantissa <= 0)
+                return sign == 1 ? new Float8E4M3(0x80) : Zero;
+            if (subMantissa > 7) subMantissa = 7;
+            byte sub = (byte)((sign << SignBit) | subMantissa);
+            return new Float8E4M3(sub);
+        }
         else if (e4m3Exponent > 15)
             e4m3Exponent = 15;
 
@@ -191,10 +201,11 @@ public readonly struct Float8E4M3 : IEquatable<Float8E4M3>, IComparable<Float8E4
 
         // Ensure exponent does not overflow its 4-bit range after rounding.
         // E4M3 does not support infinities, so saturate to the maximum finite value.
-        if (e4m3Exponent > 15)
+        // Use mantissa = 6 (not 7) because 0x7F (exp=15, mantissa=7) is the NaN encoding.
+        if (e4m3Exponent > 15 || (e4m3Exponent == 15 && e4m3Mantissa == 7))
         {
             e4m3Exponent = 15;
-            e4m3Mantissa = 7;
+            e4m3Mantissa = 6; // Max finite value, avoiding NaN encoding
         }
 
         byte result = (byte)((sign << SignBit) | (e4m3Exponent << MantissaBits) | e4m3Mantissa);
