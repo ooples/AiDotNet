@@ -123,6 +123,16 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
         double trimMax = 0.99,
         bool stabilizedWeights = true)
     {
+        // Validate trimming bounds to prevent infinite weights
+        if (trimMin <= 0 || trimMin >= 1)
+            throw new ArgumentOutOfRangeException(nameof(trimMin),
+                "trimMin must be in (0, 1) to avoid infinite weights.");
+        if (trimMax <= 0 || trimMax >= 1)
+            throw new ArgumentOutOfRangeException(nameof(trimMax),
+                "trimMax must be in (0, 1) to avoid infinite weights.");
+        if (trimMin >= trimMax)
+            throw new ArgumentException("trimMin must be less than trimMax.");
+
         _trimMin = trimMin;
         _trimMax = trimMax;
         _stabilizedWeights = stabilizedWeights;
@@ -477,6 +487,9 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
         double sumWeightsTreated = 0;
         double sumWeightsControl = 0;
 
+        // Compute marginal probability for stabilized weights
+        double marginalP = treatment.Select(t => (double)t).Average();
+
         for (int i = 0; i < n; i++)
         {
             double e = NumOps.ToDouble(propensityScores[i]);
@@ -484,7 +497,20 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
 
             if (treatment[i] == 1)
             {
-                double weight = 1.0 / e;
+                double weight;
+                if (type == EstimateType.ATT)
+                {
+                    // For ATT, treated units are not weighted
+                    weight = 1.0;
+                }
+                else // ATE
+                {
+                    weight = 1.0 / e;
+                    if (_stabilizedWeights)
+                    {
+                        weight *= marginalP;
+                    }
+                }
                 sumWeightedTreated += weight * y;
                 sumWeightsTreated += weight;
             }
@@ -494,6 +520,10 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
                 if (type == EstimateType.ATE)
                 {
                     weight = 1.0 / (1.0 - e);
+                    if (_stabilizedWeights)
+                    {
+                        weight *= (1.0 - marginalP);
+                    }
                 }
                 else // ATT
                 {

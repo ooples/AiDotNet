@@ -126,6 +126,19 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
         bool useCrossFitting = false,
         int numFolds = 5)
     {
+        // Validate trimming bounds to prevent divide-by-zero in DR/IPW corrections
+        if (trimMin <= 0 || trimMin >= 1)
+            throw new ArgumentOutOfRangeException(nameof(trimMin),
+                "trimMin must be in (0, 1) to avoid infinite weights.");
+        if (trimMax <= 0 || trimMax >= 1)
+            throw new ArgumentOutOfRangeException(nameof(trimMax),
+                "trimMax must be in (0, 1) to avoid infinite weights.");
+        if (trimMin >= trimMax)
+            throw new ArgumentException("trimMin must be less than trimMax.");
+        if (useCrossFitting && numFolds < 2)
+            throw new ArgumentOutOfRangeException(nameof(numFolds),
+                "numFolds must be at least 2 when using cross-fitting.");
+
         _trimMin = trimMin;
         _trimMax = trimMax;
         _useCrossFitting = useCrossFitting;

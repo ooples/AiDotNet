@@ -732,8 +732,9 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
                     varControl += (val - meanControl) * (val - meanControl);
                 }
             }
-            varTreated /= (nTreated - 1);
-            varControl /= (nControl - 1);
+            // Guard against divide-by-zero when group has < 2 samples
+            varTreated = nTreated > 1 ? varTreated / (nTreated - 1) : 0;
+            varControl = nControl > 1 ? varControl / (nControl - 1) : 0;
 
             double pooledStd = Math.Sqrt((varTreated + varControl) / 2);
             beforeSMD[j] = NumOps.FromDouble(pooledStd > 0 ? (meanTreated - meanControl) / pooledStd : 0);
