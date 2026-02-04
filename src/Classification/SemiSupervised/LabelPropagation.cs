@@ -328,6 +328,15 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
                     transition[i, j] = NumOps.Divide(affinity[i, j], rowSum);
                 }
             }
+            else
+            {
+                // Fallback to uniform distribution when all affinities are zero
+                T uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
+                for (int j = 0; j < n; j++)
+                {
+                    transition[i, j] = uniform;
+                }
+            }
         }
 
         return transition;

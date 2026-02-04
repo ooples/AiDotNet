@@ -127,6 +127,18 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
         int matchRatio = 1,
         int? seed = null)
     {
+        if (caliper <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(caliper),
+                "Caliper must be positive. A negative caliper would prevent any matches.");
+        }
+
+        if (matchRatio < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(matchRatio),
+                "Match ratio must be at least 1.");
+        }
+
         _caliper = caliper;
         _withReplacement = withReplacement;
         _matchRatio = matchRatio;
@@ -203,14 +215,16 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
     {
         EnsureFitted();
 
+        if (_cachedFeatures is null || _cachedTreatment is null || _cachedOutcome is null)
+        {
+            throw new InvalidOperationException(
+                "Model must be fitted with outcome data to estimate treatment effects. " +
+                "Use Fit(features, treatment, outcome) instead of Fit(features, treatment).");
+        }
+
         // PSM doesn't naturally produce heterogeneous effects
         // We return the estimated ATE for all individuals
-        T ate = NumOps.Zero;
-        if (_cachedFeatures is not null && _cachedTreatment is not null && _cachedOutcome is not null)
-        {
-            var (estimate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
-            ate = estimate;
-        }
+        var (ate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
 
         var effects = new Vector<T>(features.Rows);
         for (int i = 0; i < features.Rows; i++)
@@ -510,12 +524,21 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
     {
         EnsureFitted();
 
+        if (_cachedFeatures is null || _cachedTreatment is null || _cachedOutcome is null)
+        {
+            throw new InvalidOperationException(
+                "Model must be fitted with outcome data to predict treatment effects. " +
+                "Use Fit(features, treatment, outcome) instead of Fit(features, treatment).");
+        }
+
         // PSM doesn't model heterogeneous effects well
-        // Return a constant effect (would need training data to compute)
+        // Return a constant effect (the ATE from training data)
+        var (ate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
+
         var effects = new Vector<T>(x.Rows);
         for (int i = 0; i < x.Rows; i++)
         {
-            effects[i] = NumOps.Zero;
+            effects[i] = ate;
         }
 
         return effects;
@@ -716,6 +739,14 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
                     nControl++;
                 }
             }
+
+            // Guard against divide-by-zero when a group has zero samples
+            if (nTreated == 0 || nControl == 0)
+            {
+                beforeSMD[j] = NumOps.Zero;
+                continue;
+            }
+
             meanTreated /= nTreated;
             meanControl /= nControl;
 

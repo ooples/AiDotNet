@@ -186,6 +186,13 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
+        if (NumClasses != 2)
+        {
+            throw new ArgumentException(
+                "EasyEnsembleClassifier only supports binary classification. " +
+                $"Found {NumClasses} classes. For multi-class problems, consider One-vs-Rest strategies.");
+        }
+
         _subClassifiers.Clear();
 
         // Group samples by class

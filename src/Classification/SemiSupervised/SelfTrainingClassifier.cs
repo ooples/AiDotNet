@@ -123,6 +123,14 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     {
         _baseClassifier = baseClassifier ?? throw new ArgumentNullException(nameof(baseClassifier));
 
+        if (baseClassifier is not IProbabilisticClassifier<T>)
+        {
+            throw new ArgumentException(
+                "Self-training requires a probabilistic classifier that implements IProbabilisticClassifier<T>. " +
+                "Non-probabilistic classifiers cannot provide confidence scores needed for pseudo-labeling.",
+                nameof(baseClassifier));
+        }
+
         if (confidenceThreshold < 0 || confidenceThreshold > 1)
         {
             throw new ArgumentOutOfRangeException(nameof(confidenceThreshold),

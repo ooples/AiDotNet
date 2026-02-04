@@ -81,6 +81,14 @@ public class SmoteTomekAugmenter<T> : TabularAugmenterBase<T>
     {
         // Step 1: Identify minority and majority classes
         var classCounts = GetClassCounts(labels, out var classLabels);
+
+        if (classCounts.Count > 2)
+        {
+            throw new ArgumentException(
+                "SMOTE-Tomek only supports binary classification. " +
+                $"Found {classCounts.Count} classes. For multi-class problems, apply SMOTE-Tomek to each minority class separately.");
+        }
+
         var (minorityClass, majorityClass, minorityCount, majorityCount) =
             IdentifyClasses(classCounts, classLabels);
 

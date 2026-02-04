@@ -479,13 +479,9 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     /// </remarks>
     public override IFullModel<T, Matrix<T>, Matrix<T>> WithParameters(Vector<T> parameters)
     {
-        var newClassifier = new ClassifierChainClassifier<T>(
-            _classifierFactory, _specifiedOrder, _useRandomOrder, null, Options, Regularization);
-        newClassifier.NumLabels = NumLabels;
-        newClassifier.NumFeatures = NumFeatures;
-        newClassifier._chainOrder = _chainOrder;
-        newClassifier.SetParameters(parameters);
-        return newClassifier;
+        var clone = (ClassifierChainClassifier<T>)Clone();
+        clone.SetParameters(parameters);
+        return clone;
     }
 
     /// <summary>
@@ -552,7 +548,9 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
                 binaryTarget[i] = target[i, labelIdx];
             }
 
-            var gradients = classifier.ComputeGradients(input, binaryTarget, lossFunction);
+            // Use augmented features to match training dimensions
+            var augmentedX = CreateAugmentedFeatures(input, target, chainIdx);
+            var gradients = classifier.ComputeGradients(augmentedX, binaryTarget, lossFunction);
             for (int i = 0; i < gradients.Length; i++)
             {
                 allGradients.Add(gradients[i]);

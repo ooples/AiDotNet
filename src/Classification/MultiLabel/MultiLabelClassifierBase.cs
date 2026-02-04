@@ -110,6 +110,11 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>
     /// <returns>Binary label matrix.</returns>
     public virtual Matrix<T> Predict(Matrix<T> features)
     {
+        if (NumLabels == 0)
+        {
+            throw new InvalidOperationException("Model must be trained before making predictions.");
+        }
+
         var probabilities = PredictProbabilities(features);
         var predictions = new Matrix<T>(features.Rows, NumLabels);
 

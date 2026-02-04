@@ -347,7 +347,7 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
                 {
                     Means = new double[NumFeatures],
                     M2 = new double[NumFeatures],
-                    Count = 1 // Minimum count to compute variance
+                    Count = 2 // Minimum count so Variances is defined (variance = M2 / (Count - 1))
                 };
             }
 
@@ -365,6 +365,14 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
                 stats.M2![f] = variance * (stats.Count - 1);
             }
         }
+
+        // Recompute SamplesSeen from class counts
+        long totalCount = 0;
+        foreach (var s in _classStats.Values)
+        {
+            totalCount += s.Count;
+        }
+        SamplesSeen = totalCount;
     }
 
     /// <inheritdoc />

@@ -201,14 +201,16 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     {
         EnsureFitted();
 
+        if (_cachedFeatures is null || _cachedTreatment is null || _cachedOutcome is null)
+        {
+            throw new InvalidOperationException(
+                "Model must be fitted with outcome data to estimate treatment effects. " +
+                "Use Fit(features, treatment, outcome) instead of Fit(features, treatment).");
+        }
+
         // IPW doesn't model heterogeneous effects
         // Return the estimated ATE for all individuals
-        T ate = NumOps.Zero;
-        if (_cachedFeatures is not null && _cachedTreatment is not null && _cachedOutcome is not null)
-        {
-            var (estimate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
-            ate = estimate;
-        }
+        var (ate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
 
         var effects = new Vector<T>(features.Rows);
         for (int i = 0; i < features.Rows; i++)
@@ -386,6 +388,12 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// </remarks>
     public Vector<T> ComputeWeights(Matrix<T> x, Vector<int> treatment)
     {
+        if (x.Rows != treatment.Length)
+        {
+            throw new ArgumentException(
+                $"Number of samples in X ({x.Rows}) must match number of treatments ({treatment.Length}).");
+        }
+
         var propensityScores = EstimatePropensityScores(x);
         var weights = new Vector<T>(x.Rows);
 
@@ -592,13 +600,15 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     {
         EnsureFitted();
 
-        // IPW doesn't model heterogeneous effects - return constant ATE
-        T ate = NumOps.Zero;
-        if (_cachedFeatures is not null && _cachedTreatment is not null && _cachedOutcome is not null)
+        if (_cachedFeatures is null || _cachedTreatment is null || _cachedOutcome is null)
         {
-            var (estimate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
-            ate = estimate;
+            throw new InvalidOperationException(
+                "Model must be fitted with outcome data to predict treatment effects. " +
+                "Use Fit(features, treatment, outcome) instead of Fit(features, treatment).");
         }
+
+        // IPW doesn't model heterogeneous effects - return constant ATE
+        var (ate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
 
         var effects = new Vector<T>(x.Rows);
         for (int i = 0; i < x.Rows; i++)

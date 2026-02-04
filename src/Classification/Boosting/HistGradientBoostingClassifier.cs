@@ -241,19 +241,29 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         // Step 4: Gradient boosting iterations
         for (int iter = 0; iter < _nEstimators; iter++)
         {
+            // Compute all gradients from the same predictions snapshot
+            var grads = new double[numOutputs][];
+            var hess = new double[numOutputs][];
             for (int k = 0; k < numOutputs; k++)
             {
-                // Compute gradients and hessians
-                var (gradients, hessians) = ComputeGradientsAndHessians(y, predictions, k);
+                (grads[k], hess[k]) = ComputeGradientsAndHessians(y, predictions, k);
+            }
 
-                // Build histogram-based tree
-                var tree = BuildHistTree(binnedX, gradients, hessians, 0);
+            // Build trees for all classes
+            var treesThisIter = new HistTree[numOutputs];
+            for (int k = 0; k < numOutputs; k++)
+            {
+                var tree = BuildHistTree(binnedX, grads[k], hess[k], 0);
+                treesThisIter[k] = tree;
                 _trees.Add(tree);
+            }
 
-                // Update predictions
-                for (int i = 0; i < n; i++)
+            // Update predictions for all classes together
+            for (int i = 0; i < n; i++)
+            {
+                for (int k = 0; k < numOutputs; k++)
                 {
-                    double treeOutput = PredictTree(tree, binnedX, i);
+                    double treeOutput = PredictTree(treesThisIter[k], binnedX, i);
                     predictions[i, k] += _learningRate * treeOutput;
                 }
             }

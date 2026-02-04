@@ -391,14 +391,9 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     /// </remarks>
     public override IFullModel<T, Matrix<T>, Matrix<T>> WithParameters(Vector<T> parameters)
     {
-        var newClassifier = new LabelPowerset<T>(_classifierFactory, Options, Regularization);
-        newClassifier.NumLabels = NumLabels;
-        newClassifier.NumFeatures = NumFeatures;
-        newClassifier._classToLabels = _classToLabels;
-        newClassifier._labelsToClass = _labelsToClass;
-        newClassifier._numCombinations = _numCombinations;
-        newClassifier.SetParameters(parameters);
-        return newClassifier;
+        var clone = (LabelPowerset<T>)Clone();
+        clone.SetParameters(parameters);
+        return clone;
     }
 
     /// <summary>

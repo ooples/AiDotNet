@@ -221,7 +221,7 @@ public class BorderlineSmoteAugmenter<T> : TabularAugmenterBase<T>
             var minorityNeighbors = GetKNearestNeighbors(minorityDistances, dangerIdx, effectiveM);
 
             int neighborIdx;
-            if (UseBorderline2 && majorityData is not null && context.Random.NextDouble() < 0.5)
+            if (UseBorderline2 && majorityData is not null && majorityData.Rows > 0 && context.Random.NextDouble() < 0.5)
             {
                 // Borderline-SMOTE2: sometimes use a majority neighbor
                 neighborIdx = GetNearestMajorityNeighbor(minorityData, dangerIdx, majorityData, context);
@@ -330,11 +330,13 @@ public class BorderlineSmoteAugmenter<T> : TabularAugmenterBase<T>
             int majorityNeighbors = kNearest.Count(x => x.IsMajority);
 
             // Classify based on majority neighbor ratio
+            // Use ceiling division (KNeighbors + 1) / 2 to handle odd K correctly
+            int halfK = (KNeighbors + 1) / 2;
             if (majorityNeighbors == KNeighbors)
             {
                 types[i] = SampleType.Noise;
             }
-            else if (majorityNeighbors >= KNeighbors / 2)
+            else if (majorityNeighbors >= halfK)
             {
                 types[i] = SampleType.Danger;
             }

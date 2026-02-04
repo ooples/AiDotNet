@@ -230,6 +230,12 @@ public abstract class CausalModelBase<T> : ICausalModel<T>
     public virtual (T treatmentMin, T treatmentMax, T controlMin, T controlMax) CheckOverlap(
         Matrix<T> x, Vector<int> treatment)
     {
+        if (x.Rows != treatment.Length)
+        {
+            throw new ArgumentException(
+                $"Number of samples in X ({x.Rows}) must match number of treatments ({treatment.Length}).");
+        }
+
         var propensityScores = EstimatePropensityScores(x);
 
         T treatmentMin = NumOps.MaxValue;

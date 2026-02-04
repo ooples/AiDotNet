@@ -94,6 +94,14 @@ public class SmoteEnnAugmenter<T> : TabularAugmenterBase<T>
     {
         // Step 1: Identify minority class
         var classCounts = GetClassCounts(labels, out var classLabelsList);
+
+        if (classCounts.Count > 2)
+        {
+            throw new ArgumentException(
+                "SMOTE-ENN only supports binary classification. " +
+                $"Found {classCounts.Count} classes. For multi-class problems, apply SMOTE-ENN to each minority class separately.");
+        }
+
         var (minorityClass, majorityClass, _, _) = IdentifyClasses(classCounts, classLabelsList);
 
         // Step 2: Extract minority class samples

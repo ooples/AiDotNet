@@ -412,7 +412,7 @@ public class BetaLikelihood<T>
     /// </summary>
     private static double Digamma(double x)
     {
-        // Asymptotic expansion for large x (use >= to avoid infinite recursion at boundary)
+        // Asymptotic expansion for x >= 6; smaller x are handled via recurrence/iteration below
         if (x >= 6)
         {
             double result = Math.Log(x) - 1.0 / (2 * x);
@@ -448,7 +448,7 @@ public class BetaLikelihood<T>
     /// </summary>
     private static double Trigamma(double x)
     {
-        // Asymptotic expansion (use >= to avoid infinite recursion at boundary)
+        // Asymptotic expansion for large x (valid for x >= 6)
         if (x >= 6)
         {
             double result = 1.0 / x + 1.0 / (2 * x * x);

@@ -470,13 +470,10 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        var clone = new HoeffdingTreeClassifier<T>(_options);
-        clone._root = _root;
-        clone._knownClasses.AddRange(_knownClasses);
-        clone.NumClasses = NumClasses;
-        clone.NumFeatures = NumFeatures;
-        clone.ClassLabels = ClassLabels is not null ? new Vector<T>(ClassLabels.ToArray()) : null;
-        return clone;
+        // Return a cold instance to avoid inconsistent state and shared mutable references.
+        // Tree structure cannot be set from flat parameters - deep cloning would be needed
+        // to properly copy the tree, which is non-trivial.
+        return new HoeffdingTreeClassifier<T>(_options);
     }
 
     /// <inheritdoc />
