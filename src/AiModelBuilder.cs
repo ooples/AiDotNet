@@ -1889,7 +1889,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                         runId: experimentRunId,
                         modelId: null); // Model ID will be set after registry
                 }
-                catch
+                catch (Exception)
                 {
                     // Data version control linkage is optional - don't fail training
                 }
@@ -2299,7 +2299,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             hyperparameters["model_type"] = model.GetType().Name;
             hyperparameters["optimizer_type"] = finalOptimizer.GetType().Name;
         }
-        catch
+        catch (Exception)
         {
             // Ignore errors collecting hyperparameters - they are optional
         }
@@ -2315,6 +2315,52 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 fitnessHistoryAsDouble.Add(Convert.ToDouble(optimizationResult.FitnessHistory[i]));
             }
             trainingMetricsHistory["fitness"] = fitnessHistoryAsDouble;
+        }
+
+        // QUANTIZATION (if configured)
+        // Apply post-training quantization to reduce model size and improve inference speed
+        QuantizationInfo? quantizationInfo = null;
+        if (_quantizationConfig != null && _quantizationConfig.Mode != QuantizationMode.None && optimizationResult.BestSolution != null)
+        {
+            try
+            {
+                // Use preprocessed training data as calibration data for consistent quantization
+                // This ensures calibration sees the same data distribution as during training
+                int calibrationSampleCount = _quantizationConfig?.CalibrationSamples ?? 100;
+                IEnumerable<TInput>? calibrationData = null;
+                if (XTrain is TInput[] xTrainArray)
+                {
+                    calibrationData = xTrainArray.Take(Math.Min(calibrationSampleCount, xTrainArray.Length));
+                }
+                else if (XTrain is IEnumerable<TInput> xTrainEnumerable)
+                {
+                    calibrationData = xTrainEnumerable.Take(calibrationSampleCount);
+                }
+                else if (XTrain != null)
+                {
+                    // Wrap single item as calibration data if not enumerable
+                    calibrationData = new[] { XTrain };
+                }
+
+                var (quantizedModel, quantizationInfoResult) = ApplyQuantizationIfConfigured(
+                    optimizationResult.BestSolution,
+                    _quantizationConfig,
+                    calibrationData);
+
+                if (quantizedModel != null && quantizationInfoResult != null)
+                {
+                    // CRITICAL: Use the quantized model instead of the original
+                    optimizationResult.BestSolution = quantizedModel;
+                    quantizationInfo = quantizationInfoResult;
+                    var strategy = _quantizationConfig?.Strategy ?? QuantizationStrategy.Dynamic;
+                    Console.WriteLine($"Quantization applied: {strategy} strategy, " +
+                        $"{quantizationInfo.BitWidth}-bit, compression ratio: {quantizationInfo.CompressionRatio:F2}x");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: Quantization failed: {ex.Message}. Model will use original precision.");
+            }
         }
 
         // Return AiModelResult with CV results, agent data, JIT compilation, reasoning config, and training infrastructure
@@ -2335,6 +2381,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             AgentConfig = _agentConfig,
             AgentRecommendation = agentRecommendation,
             DeploymentConfiguration = deploymentConfig,
+            QuantizationInfo = quantizationInfo,
             JitCompiledFunction = jitCompiledFunction,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             AugmentationConfig = _augmentationConfig,
@@ -5675,7 +5722,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     property.SetValue(options, convertedValue);
                 }
             }
-            catch
+            catch (Exception)
             {
                 // Skip hyperparameters that cannot be converted - this is non-fatal
                 // as the optimizer will use its default value
@@ -5813,7 +5860,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             return Convert.ChangeType(value, targetType);
         }
-        catch
+        catch (Exception)
         {
             return null;
         }
@@ -6012,7 +6059,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             {
                 AiDotNetEngine.AutoDetectAndConfigureGpu();
             }
-            catch
+            catch (Exception)
             {
                 // Silently fall back to CPU if GPU detection fails
                 // This ensures the library works out of the box on any hardware
@@ -7084,5 +7131,136 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 config.AzureDeployment ?? "gpt-4"),
             _ => throw new ArgumentException($"Unknown provider: {config.Provider}")
         };
+    }
+
+    /// <summary>
+    /// Applies quantization to the model if configured.
+    /// </summary>
+    /// <param name="model">The model to quantize.</param>
+    /// <param name="config">The quantization configuration.</param>
+    /// <param name="calibrationData">Optional calibration data for advanced quantization strategies.</param>
+    /// <returns>A tuple containing the quantized model and QuantizationInfo, or (null, null) if quantization was not configured.</returns>
+    private (IFullModel<T, TInput, TOutput>? QuantizedModel, QuantizationInfo? Info) ApplyQuantizationIfConfigured(
+        IFullModel<T, TInput, TOutput> model,
+        QuantizationConfig? config,
+        IEnumerable<TInput>? calibrationData = null)
+    {
+        // Check if quantization is enabled (Mode != None indicates enabled)
+        if (config == null || config.Mode == QuantizationMode.None)
+        {
+            return (null, null);
+        }
+
+        // Convert user-facing config to internal configuration
+        var internalConfig = config.ToQuantizationConfiguration();
+
+        // Create the appropriate quantizer based on strategy
+        Deployment.Optimization.Quantization.IQuantizer<T, TInput, TOutput> quantizer = internalConfig.Strategy switch
+        {
+            QuantizationStrategy.GPTQ => new Deployment.Optimization.Quantization.Strategies.GPTQQuantizer<T, TInput, TOutput>(internalConfig),
+            QuantizationStrategy.AWQ => new Deployment.Optimization.Quantization.Strategies.AWQQuantizer<T, TInput, TOutput>(internalConfig),
+            QuantizationStrategy.SmoothQuant => new Deployment.Optimization.Quantization.Strategies.SmoothQuantQuantizer<T, TInput, TOutput>(internalConfig),
+            QuantizationStrategy.SpinQuant => new Deployment.Optimization.Quantization.Strategies.SpinQuantQuantizer<T, TInput, TOutput>(internalConfig),
+            QuantizationStrategy.QuIPSharp => new Deployment.Optimization.Quantization.Strategies.QuIPSharpQuantizer<T, TInput, TOutput>(internalConfig),
+            QuantizationStrategy.MinMax or QuantizationStrategy.Dynamic => internalConfig.Mode switch
+            {
+                QuantizationMode.Int8 => new Deployment.Optimization.Quantization.Int8Quantizer<T, TInput, TOutput>(),
+                QuantizationMode.Float16 => new Deployment.Optimization.Quantization.Float16Quantizer<T, TInput, TOutput>(),
+                QuantizationMode.Float32 => throw new NotSupportedException("Float32 mode represents no quantization. Use QuantizationMode.None instead."),
+                QuantizationMode.Mixed => throw new NotSupportedException("Mixed precision requires a specific strategy like GPTQ or AWQ."),
+                _ => throw new NotSupportedException($"Quantization mode {internalConfig.Mode} is not supported with {internalConfig.Strategy} strategy. " +
+                    "Use a specific strategy like GPTQ or AWQ for advanced quantization, or use Int8/Float16 mode.")
+            },
+            _ => new Deployment.Optimization.Quantization.Int8Quantizer<T, TInput, TOutput>()
+        };
+
+        // Get model parameters for size calculation
+        var parameters = model.GetParameters();
+        // Estimate parameter size based on type: 8 bytes for double, 4 for float/int, 2 for half
+        int bytesPerParameter = typeof(T) == typeof(float) ? 4
+            : typeof(T) == typeof(double) ? 8
+            : typeof(T) == typeof(Half) ? 2
+            : 8; // Default to 8 bytes for unknown types
+        // Cast to long first to prevent int overflow for large models
+        long originalSizeBytes = (long)parameters.Length * bytesPerParameter;
+
+        // Calibrate if calibration data is provided and strategy requires it
+        if (calibrationData != null && internalConfig.CalibrationMethod != CalibrationMethod.None)
+        {
+            try
+            {
+                quantizer.Calibrate(model, calibrationData);
+            }
+            catch (Exception ex)
+            {
+                // Log detailed error info to help diagnose calibration issues
+                Console.WriteLine($"Warning: Calibration failed ({ex.GetType().Name}): {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"  Inner exception: {ex.InnerException.Message}");
+                }
+                Console.WriteLine("Proceeding with default quantization behavior.");
+            }
+        }
+
+        // QAT SIMULATION (Post-Training): If QAT is enabled, apply fake quantization once
+        // to condition parameters. NOTE: This is a simplified post-training simulation, not true QAT.
+        // Real QAT integrates fake quantization into the training loop across multiple epochs,
+        // allowing the model to learn under quantization constraints. This simulation provides
+        // some benefit by conditioning parameters but won't achieve the full accuracy of true QAT.
+        // For full QAT, use the training API with quantization hooks enabled during training.
+        if (internalConfig.UseQuantizationAwareTraining)
+        {
+            try
+            {
+                var qatHook = new Deployment.Optimization.Quantization.Training.QATTrainingHook<T>(internalConfig);
+
+                // Simulate warmup completion by setting epoch to warmup value
+                qatHook.OnEpochStart(internalConfig.QATWarmupEpochs);
+
+                // Apply fake quantization to model parameters to condition them for quantization
+                // This simulates what would happen during QAT training iterations
+                var currentParams = model.GetParameters();
+                var qatConditionedParams = qatHook.ApplyFakeQuantization(currentParams, "model_weights");
+
+                // Create a new model with QAT-conditioned parameters
+                model = model.WithParameters(qatConditionedParams);
+
+                Console.WriteLine($"QAT simulation applied using {internalConfig.QATMethod} method");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: QAT simulation failed: {ex.Message}. Proceeding with standard PTQ.");
+            }
+        }
+
+        // Apply quantization - this returns a NEW model with quantized parameters
+        var quantizedModel = quantizer.Quantize(model, internalConfig);
+        var quantizedParameters = quantizedModel.GetParameters();
+
+        // Calculate actual quantized size based on bit width
+        // For sub-byte quantization (4-bit), we need to account for packing
+        long quantizedSizeBytes = ((long)quantizedParameters.Length * internalConfig.EffectiveBitWidth + 7) / 8;
+
+        // Build QuantizationInfo
+        var info = new QuantizationInfo
+        {
+            IsQuantized = true,
+            Mode = internalConfig.Mode,
+            Strategy = internalConfig.Strategy,
+            Granularity = internalConfig.Granularity,
+            BitWidth = internalConfig.EffectiveBitWidth,
+            OriginalSizeBytes = originalSizeBytes,
+            QuantizedSizeBytes = quantizedSizeBytes,
+            TotalParameters = parameters.Length,
+            QuantizedParameters = quantizedParameters.Length,
+            CalibrationMethod = internalConfig.CalibrationMethod,
+            GroupSize = internalConfig.Granularity == QuantizationGranularity.PerGroup ? internalConfig.GroupSize : 128,
+            ActivationsQuantized = internalConfig.QuantizeActivations,
+            UsedQAT = internalConfig.UseQuantizationAwareTraining,
+            QATMethod = internalConfig.UseQuantizationAwareTraining ? internalConfig.QATMethod : null
+        };
+
+        return (quantizedModel, info);
     }
 }
