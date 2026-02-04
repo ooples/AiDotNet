@@ -235,17 +235,22 @@ public class BorderlineSmoteAugmenter<T> : TabularAugmenterBase<T>
             // Generate synthetic sample by interpolating
             double gap = context.Random.NextDouble();
 
+            // For SMOTE2 with majority neighbor, only interpolate half way toward majority
+            bool isMajorityNeighbor = UseBorderline2 && majorityData is not null && neighborIdx >= minorityCount;
+            if (isMajorityNeighbor)
+            {
+                gap *= 0.5;
+            }
+
             for (int c = 0; c < cols; c++)
             {
                 double val1 = NumOps.ToDouble(minorityData[dangerIdx, c]);
                 double val2;
 
-                if (UseBorderline2 && majorityData is not null && neighborIdx >= minorityCount)
+                if (isMajorityNeighbor && majorityData is not null)
                 {
                     // neighborIdx is in majority data
                     val2 = NumOps.ToDouble(majorityData[neighborIdx - minorityCount, c]);
-                    // For SMOTE2, only interpolate half way toward majority
-                    gap *= 0.5;
                 }
                 else
                 {
