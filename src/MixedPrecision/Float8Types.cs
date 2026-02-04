@@ -170,8 +170,18 @@ public readonly struct Float8E4M3 : IEquatable<Float8E4M3>, IComparable<Float8E4
 
         // Convert exponent (clamp to E4M3 range)
         int e4m3Exponent = floatExponent + ExponentBias;
-        if (e4m3Exponent < 0)
-            e4m3Exponent = 0;
+        if (e4m3Exponent <= 0)
+        {
+            // Subnormal range: value = mantissa * 2^(1-ExponentBias) = mantissa * 2^-6
+            // For E4M3, subnormal encoding has exponent=0 and denormalized mantissa
+            // Smallest subnormal = 2^-9, largest subnormal = 7 * 2^-9
+            int subMantissa = (int)(value * 512f + 0.5f); // Round to nearest, 512 = 2^9
+            if (subMantissa <= 0)
+                return sign == 1 ? new Float8E4M3(0x80) : Zero;
+            if (subMantissa > 7) subMantissa = 7;
+            byte sub = (byte)((sign << SignBit) | subMantissa);
+            return new Float8E4M3(sub);
+        }
         else if (e4m3Exponent > 15)
             e4m3Exponent = 15;
 
@@ -187,6 +197,15 @@ public readonly struct Float8E4M3 : IEquatable<Float8E4M3>, IComparable<Float8E4
                 e4m3Mantissa = 0;
                 e4m3Exponent++;
             }
+        }
+
+        // Ensure exponent does not overflow its 4-bit range after rounding.
+        // E4M3 does not support infinities, so saturate to the maximum finite value.
+        // Use mantissa = 6 (not 7) because 0x7F (exp=15, mantissa=7) is the NaN encoding.
+        if (e4m3Exponent > 15 || (e4m3Exponent == 15 && e4m3Mantissa == 7))
+        {
+            e4m3Exponent = 15;
+            e4m3Mantissa = 6; // Max finite value, avoiding NaN encoding
         }
 
         byte result = (byte)((sign << SignBit) | (e4m3Exponent << MantissaBits) | e4m3Mantissa);
@@ -270,7 +289,7 @@ public readonly struct Float8E4M3 : IEquatable<Float8E4M3>, IComparable<Float8E4
 /// <item><description>5 exponent bits (bias = 15)</description></item>
 /// <item><description>2 mantissa bits</description></item>
 /// <item><description>Range: ±57344</description></item>
-/// <item><description>Smallest positive: ~0.0000610352</description></item>
+/// <item><description>Smallest positive (subnormal): ~0.0000152588 (2^-16)</description></item>
 /// </list>
 /// </para>
 /// <para>
@@ -302,9 +321,9 @@ public readonly struct Float8E5M2 : IEquatable<Float8E5M2>, IComparable<Float8E5
     public static readonly Float8E5M2 MaxValue = FromFloat(57344f);
 
     /// <summary>
-    /// Minimum representable positive value in E5M2 format.
+    /// Minimum representable positive value in E5M2 format (smallest subnormal: 2^-16).
     /// </summary>
-    public static readonly Float8E5M2 MinPositive = FromFloat(0.0000610352f);
+    public static readonly Float8E5M2 MinPositive = FromFloat(0.0000152588f);
 
     /// <summary>
     /// Represents positive zero.
@@ -403,7 +422,7 @@ public readonly struct Float8E5M2 : IEquatable<Float8E5M2>, IComparable<Float8E5
 
         // Clamp to E5M2 range
         const float maxVal = 57344f;
-        const float minVal = 0.0000610352f; // 2^-14
+        const float minVal = 0.0000152588f; // 2^-16 (smallest subnormal)
 
         if (value > maxVal)
             return sign == 1 ? NegativeInfinity : PositiveInfinity;
@@ -417,8 +436,17 @@ public readonly struct Float8E5M2 : IEquatable<Float8E5M2>, IComparable<Float8E5
 
         // Convert exponent (clamp to E5M2 range)
         int e5m2Exponent = floatExponent + ExponentBias;
-        if (e5m2Exponent < 0)
-            e5m2Exponent = 0;
+        if (e5m2Exponent <= 0)
+        {
+            // Subnormal range: value = mantissa * 2^-16
+            // For E5M2, subnormal encoding has exponent=0 and denormalized mantissa (0-3)
+            int subMantissa = (int)(value * 65536f + 0.5f); // Round to nearest, 65536 = 2^16
+            if (subMantissa <= 0)
+                return sign == 1 ? new Float8E5M2(0x80) : Zero;
+            if (subMantissa > 3) subMantissa = 3;
+            byte sub = (byte)((sign << SignBit) | subMantissa);
+            return new Float8E5M2(sub);
+        }
         else if (e5m2Exponent > 30)
             e5m2Exponent = 30;
 
@@ -434,6 +462,13 @@ public readonly struct Float8E5M2 : IEquatable<Float8E5M2>, IComparable<Float8E5
                 e5m2Mantissa = 0;
                 e5m2Exponent++;
             }
+        }
+
+        // If rounding causes the exponent to overflow past the maximum finite value,
+        // treat this as overflow to infinity rather than encoding an invalid finite value.
+        if (e5m2Exponent > 30)
+        {
+            return sign == 1 ? NegativeInfinity : PositiveInfinity;
         }
 
         byte result = (byte)((sign << SignBit) | (e5m2Exponent << MantissaBits) | e5m2Mantissa);

@@ -278,6 +278,31 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <inheritdoc/>
     public virtual Vector<T> LastComputedGradients => _lastComputedGradients;
 
+    /// <summary>
+    /// Gets the last computed gradients, unscaled from loss scaling if mixed precision is enabled.
+    /// </summary>
+    /// <returns>The unscaled gradients, or an empty vector if none have been computed.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When using mixed-precision training with loss scaling,
+    /// the stored gradients are scaled by a large factor to prevent underflow.
+    /// This method returns the "true" gradients by dividing out the scale factor,
+    /// which is necessary for accurate gradient health checks.</para>
+    /// </remarks>
+    private Vector<T> GetUnscaledGradients()
+    {
+        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
+            return _lastComputedGradients ?? new Vector<T>(0);
+
+        if (_mixedPrecisionContext == null)
+            return _lastComputedGradients;
+
+        double scale = _mixedPrecisionContext.LossScaler.Scale;
+        if (scale <= 0 || double.IsNaN(scale) || double.IsInfinity(scale))
+            scale = 1.0;
+
+        return _lastComputedGradients.Divide(NumOps.FromDouble(scale));
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// <para><b>Note:</b> This overload extracts parameters from the model. For distributed training,
@@ -334,6 +359,45 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
 
         // Standard path without mixed precision
+        return ApplyGradientsCore(originalParameters, gradients, model);
+    }
+
+    /// <summary>
+    /// Applies gradients to parameters with explicit control over whether gradients are already unscaled.
+    /// </summary>
+    /// <param name="originalParameters">The original parameters before the update.</param>
+    /// <param name="gradients">The gradients to apply.</param>
+    /// <param name="model">The model to update.</param>
+    /// <param name="gradientsAlreadyUnscaled">If true, skips the mixed-precision unscaling step.</param>
+    /// <returns>The updated model with new parameters.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This overload is useful when you've already unscaled the gradients
+    /// manually (e.g., after checking for overflow) and want to avoid double-unscaling.</para>
+    /// </remarks>
+    public virtual IFullModel<T, TInput, TOutput> ApplyGradients(
+        Vector<T> originalParameters,
+        Vector<T> gradients,
+        IFullModel<T, TInput, TOutput> model,
+        bool gradientsAlreadyUnscaled)
+    {
+        if (originalParameters == null)
+            throw new ArgumentNullException(nameof(originalParameters));
+        if (gradients == null)
+            throw new ArgumentNullException(nameof(gradients));
+        if (model == null)
+            throw new ArgumentNullException(nameof(model));
+
+        if (gradients.Length != originalParameters.Length)
+        {
+            throw new ArgumentException(
+                $"Gradient size ({gradients.Length}) must match original parameter count ({originalParameters.Length})",
+                nameof(gradients));
+        }
+
+        // Skip mixed-precision path if gradients are already unscaled
+        if (_mixedPrecisionContext != null && !gradientsAlreadyUnscaled)
+            return ApplyGradientsWithMixedPrecision(originalParameters, gradients, model);
+
         return ApplyGradientsCore(originalParameters, gradients, model);
     }
 
@@ -723,7 +787,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return false;
         }
 
-        return GradientClippingHelper.AreGradientsExploding(_lastComputedGradients, threshold);
+        return GradientClippingHelper.AreGradientsExploding(GetUnscaledGradients(), threshold);
     }
 
     /// <summary>
@@ -744,7 +808,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return false;
         }
 
-        return GradientClippingHelper.AreGradientsVanishing(_lastComputedGradients, threshold);
+        return GradientClippingHelper.AreGradientsVanishing(GetUnscaledGradients(), threshold);
     }
 
     /// <summary>
@@ -764,7 +828,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return NumOps.Zero;
         }
 
-        return GradientClippingHelper.ComputeNorm(_lastComputedGradients);
+        return GradientClippingHelper.ComputeNorm(GetUnscaledGradients());
     }
 
     /// <summary>

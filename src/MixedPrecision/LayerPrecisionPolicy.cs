@@ -123,9 +123,17 @@ public class LayerPrecisionPolicy
     public bool ShouldUseHigherPrecision(string layerName)
     {
         var precision = GetPrecision(layerName);
-        return precision == MixedPrecisionType.None || // FP32
-               (precision == MixedPrecisionType.FP16 && _defaultPrecision >= MixedPrecisionType.FP8_E4M3);
+        if (precision == MixedPrecisionType.None)
+            return true;
+        if (precision == MixedPrecisionType.FP16 || precision == MixedPrecisionType.BF16)
+            return IsFp8(_defaultPrecision);
+        return false;
     }
+
+    private static bool IsFp8(MixedPrecisionType precision) =>
+        precision == MixedPrecisionType.FP8_E4M3 ||
+        precision == MixedPrecisionType.FP8_E5M2 ||
+        precision == MixedPrecisionType.FP8_Hybrid;
 
     /// <summary>
     /// Determines if a layer should skip mixed precision entirely (stay in FP32).
