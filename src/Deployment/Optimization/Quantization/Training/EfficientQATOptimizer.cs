@@ -48,6 +48,40 @@ public class EfficientQATOptimizer<T>
     public double CurrentBitWidth => _currentBitWidth;
 
     /// <summary>
+    /// Computes quantization parameters (scale and zero-point) for a given value range.
+    /// </summary>
+    /// <param name="maxAbs">Maximum absolute value in the range.</param>
+    /// <param name="minVal">Minimum value in the range.</param>
+    /// <param name="maxVal">Maximum value in the range.</param>
+    /// <param name="bitWidth">Effective bit width for quantization.</param>
+    /// <param name="minScaleFactor">Minimum allowed scale factor.</param>
+    /// <param name="symmetric">Whether to use symmetric quantization.</param>
+    /// <returns>A tuple of (scale, zeroPoint).</returns>
+    private static (double scale, int zeroPoint) ComputeQuantizationParameters(
+        double maxAbs, double minVal, double maxVal, int bitWidth, double minScaleFactor, bool symmetric)
+    {
+        double qMax = symmetric ? (1 << (bitWidth - 1)) - 1 : (1 << bitWidth) - 1;
+        double scale;
+        int zeroPoint;
+
+        if (symmetric)
+        {
+            scale = maxAbs / qMax;
+            zeroPoint = 0;
+        }
+        else
+        {
+            scale = (maxVal - minVal) / ((1 << bitWidth) - 1);
+            scale = Math.Max(scale, minScaleFactor);
+            zeroPoint = (int)MathHelper.Clamp(Math.Round(-minVal / scale), 0, qMax);
+        }
+
+        // Ensure minimum scale factor
+        scale = Math.Max(scale, minScaleFactor);
+        return (scale, zeroPoint);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the EfficientQATOptimizer.
     /// </summary>
     /// <param name="config">Quantization configuration</param>
@@ -284,10 +318,6 @@ public class EfficientQATOptimizer<T>
         int blockSize = _config.GroupSize;
         int effectiveBitWidth = (int)Math.Round(_currentBitWidth);
 
-        double qMax = _config.UseSymmetricQuantization ?
-            (1 << (effectiveBitWidth - 1)) - 1 :
-            (1 << effectiveBitWidth) - 1;
-
         var blockScales = new double[numBlocks];
         var blockZeroPoints = new int[numBlocks];
 
@@ -308,22 +338,11 @@ public class EfficientQATOptimizer<T>
                 maxVal = Math.Max(maxVal, val);
             }
 
-            if (_config.UseSymmetricQuantization)
-            {
-                blockScales[b] = maxAbs / qMax;
-                blockZeroPoints[b] = 0;
-            }
-            else
-            {
-                blockScales[b] = (maxVal - minVal) / ((1 << effectiveBitWidth) - 1);
-                // Clamp scale BEFORE computing zero-point to prevent divide by zero
-                blockScales[b] = Math.Max(blockScales[b], _config.MinScaleFactor);
-                // Clamp zero-point to valid asymmetric range [0, qMax]
-                blockZeroPoints[b] = (int)MathHelper.Clamp(Math.Round(-minVal / blockScales[b]), 0, qMax);
-            }
-
-            // Ensure minimum scale factor (redundant for asymmetric but ensures consistency)
-            blockScales[b] = Math.Max(blockScales[b], _config.MinScaleFactor);
+            var (scale, zeroPoint) = ComputeQuantizationParameters(
+                maxAbs, minVal, maxVal, effectiveBitWidth,
+                _config.MinScaleFactor, _config.UseSymmetricQuantization);
+            blockScales[b] = scale;
+            blockZeroPoints[b] = zeroPoint;
         }
 
         return new BlockQuantizationState
