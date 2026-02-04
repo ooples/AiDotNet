@@ -300,7 +300,7 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
             if (sumWeight == 0)
             {
                 throw new InvalidOperationException(
-                    $"No treated matches found within caliper {_caliper} for control query at index {i}.");
+                    $"No treated matches found within caliper {_caliper} for query at index {i}.");
             }
             predictions[i] = NumOps.FromDouble(sumOutcome / sumWeight);
         }
@@ -359,7 +359,7 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
             if (sumWeight == 0)
             {
                 throw new InvalidOperationException(
-                    $"No control matches found within caliper {_caliper} for treated query at index {i}.");
+                    $"No control matches found within caliper {_caliper} for query at index {i}.");
             }
             predictions[i] = NumOps.FromDouble(sumOutcome / sumWeight);
         }
@@ -437,7 +437,14 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
             }
         }
 
-        T ate = NumOps.FromDouble(numMatches > 0 ? sumDiff / numMatches : 0);
+        if (numMatches == 0)
+        {
+            throw new InvalidOperationException(
+                $"No matches found within caliper {_caliper}. ATE is undefined. " +
+                "Consider relaxing the caliper or adjusting the match ratio.");
+        }
+
+        T ate = NumOps.FromDouble(sumDiff / numMatches);
         T se = CalculateBootstrapStandardError(
             (xB, tB, oB) => EstimateATEInternal(xB, tB, oB),
             x, treatment, outcome);
@@ -464,7 +471,14 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
             }
         }
 
-        return NumOps.FromDouble(numMatches > 0 ? sumDiff / numMatches : 0);
+        if (numMatches == 0)
+        {
+            throw new InvalidOperationException(
+                $"No matches found within caliper {_caliper}. ATE is undefined. " +
+                "Consider relaxing the caliper or adjusting the match ratio.");
+        }
+
+        return NumOps.FromDouble(sumDiff / numMatches);
     }
 
     /// <summary>
@@ -747,6 +761,7 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
                 {
                     _propensityCoefficients[i] = NumOps.FromDouble(coeffs[i]);
                 }
+                NumFeatures = coeffs.Length - 1; // -1 for intercept
             }
         }
     }

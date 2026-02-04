@@ -562,8 +562,15 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
             }
         }
 
-        double meanTreated = sumWeightsTreated > 0 ? sumWeightedTreated / sumWeightsTreated : 0;
-        double meanControl = sumWeightsControl > 0 ? sumWeightedControl / sumWeightsControl : 0;
+        if (sumWeightsTreated == 0 || sumWeightsControl == 0)
+        {
+            throw new InvalidOperationException(
+                "IPW requires both treated and control groups with non-zero effective weight. " +
+                "Check propensity scores and trimming settings.");
+        }
+
+        double meanTreated = sumWeightedTreated / sumWeightsTreated;
+        double meanControl = sumWeightedControl / sumWeightsControl;
 
         return NumOps.FromDouble(meanTreated - meanControl);
     }

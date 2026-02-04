@@ -325,6 +325,23 @@ public class SmoteEnnAugmenter<T> : TabularAugmenterBase<T>
                 "SMOTE-ENN requires at least two classes. Only one class found in the data.");
         }
 
+        // For binary classification, ensure minority and majority are always distinct
+        // even when classes have equal counts
+        if (classCounts.Count == 2)
+        {
+            var keys = classCounts.Keys.ToList();
+            if (classCounts[keys[0]] <= classCounts[keys[1]])
+            {
+                return (classLabels[keys[0]], classLabels[keys[1]],
+                        classCounts[keys[0]], classCounts[keys[1]]);
+            }
+            else
+            {
+                return (classLabels[keys[1]], classLabels[keys[0]],
+                        classCounts[keys[1]], classCounts[keys[0]]);
+            }
+        }
+
         // Use the first entry as a real (non-default) baseline for both min and max.
         // Initializing both minority and majority to the same class is intentional:
         // the loop below will update them when it finds smaller or larger counts.
