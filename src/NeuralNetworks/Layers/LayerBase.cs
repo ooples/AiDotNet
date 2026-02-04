@@ -41,7 +41,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <summary>
     /// The unique instance ID for this layer, used to distinguish multiple instances of the same layer type.
     /// </summary>
-    private int _instanceId;
+    private readonly int _instanceId;
 
     /// <summary>
     /// Gets the global execution engine for vector operations.
@@ -959,7 +959,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         if (requiresFP32)
         {
             // Layer needs FP32 - register the input so it can be retrieved if needed
-            // For T=float, this tracks the tensor without creating an unnecessary FP16 copy
+            // For T=float, this is a no-op in terms of precision but tracks the tensor
             string tensorName = $"{LayerName}_input";
             if (typeof(T) == typeof(float) && !scope.HasTensor(tensorName))
             {
@@ -967,17 +967,14 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
                 var floatInput = input as Tensor<float>;
                 if (floatInput != null)
                 {
-                    // Use RegisterFP32Only to avoid unnecessary FP16 conversion overhead
-                    // for layers that will use the FP32 path anyway
-                    scope.RegisterFP32Only(tensorName, floatInput);
+                    scope.RegisterAndCastToFP16(tensorName, floatInput);
                 }
             }
         }
 
         // Perform the forward pass
         // The actual precision handling is done at the network level
-        // This method allows layers to be aware of the precision context without
-        // creating unnecessary FP16 copies for layers that require FP32
+        // This method allows layers to be aware of the precision context
         return Forward(input);
     }
 
@@ -1688,9 +1685,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     public virtual LayerBase<T> Clone()
     {
         var copy = (LayerBase<T>)this.MemberwiseClone();
-
-        // Assign a fresh instance ID to ensure unique LayerName for precision policies and tensor tracking
-        copy._instanceId = Interlocked.Increment(ref _instanceCounter);
 
         // Deep copy any reference type members
         copy.InputShape = (int[])InputShape.Clone();

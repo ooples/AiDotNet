@@ -278,6 +278,31 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <inheritdoc/>
     public virtual Vector<T> LastComputedGradients => _lastComputedGradients;
 
+    /// <summary>
+    /// Gets the last computed gradients, unscaled from loss scaling if mixed precision is enabled.
+    /// </summary>
+    /// <returns>The unscaled gradients, or an empty vector if none have been computed.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When using mixed-precision training with loss scaling,
+    /// the stored gradients are scaled by a large factor to prevent underflow.
+    /// This method returns the "true" gradients by dividing out the scale factor,
+    /// which is necessary for accurate gradient health checks.</para>
+    /// </remarks>
+    private Vector<T> GetUnscaledGradients()
+    {
+        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
+            return _lastComputedGradients ?? new Vector<T>(0);
+
+        if (_mixedPrecisionContext == null)
+            return _lastComputedGradients;
+
+        double scale = _mixedPrecisionContext.LossScaler.Scale;
+        if (scale <= 0 || double.IsNaN(scale) || double.IsInfinity(scale))
+            scale = 1.0;
+
+        return _lastComputedGradients.Divide(NumOps.FromDouble(scale));
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// <para><b>Note:</b> This overload extracts parameters from the model. For distributed training,
@@ -328,29 +353,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         // Route through mixed-precision handler when enabled
         // ApplyGradientsWithMixedPrecision will call ApplyGradientsCore internally
-        //
-        // IMPORTANT: If gradients have already been unscaled (e.g., by MixedPrecisionTrainingLoop),
-        // ensure the optimizer does NOT have a mixed-precision context set to avoid double-unscaling.
-        // MixedPrecisionTrainingLoop handles unscaling internally and should use an optimizer
-        // without mixed-precision enabled to avoid this issue.
-        return ApplyGradients(originalParameters, gradients, model, gradientsAlreadyUnscaled: false);
+        if (_mixedPrecisionContext != null)
+        {
+            return ApplyGradientsWithMixedPrecision(originalParameters, gradients, model);
+        }
+
+        // Standard path without mixed precision
+        return ApplyGradientsCore(originalParameters, gradients, model);
     }
 
     /// <summary>
-    /// Applies pre-computed gradients to explicit original parameters with explicit unscaling control.
+    /// Applies gradients to parameters with explicit control over whether gradients are already unscaled.
     /// </summary>
     /// <param name="originalParameters">The original parameters before the update.</param>
     /// <param name="gradients">The gradients to apply.</param>
     /// <param name="model">The model to update.</param>
-    /// <param name="gradientsAlreadyUnscaled">
-    /// If true, skips unscaling even when mixed-precision is enabled.
-    /// Use this when gradients have already been unscaled externally (e.g., by MixedPrecisionTrainingLoop).
-    /// </param>
-    /// <returns>The model with updated parameters.</returns>
+    /// <param name="gradientsAlreadyUnscaled">If true, skips the mixed-precision unscaling step.</param>
+    /// <returns>The updated model with new parameters.</returns>
     /// <remarks>
-    /// <para><b>Defensive Double-Unscaling Prevention:</b> When <paramref name="gradientsAlreadyUnscaled"/>
-    /// is true, this method bypasses the mixed-precision unscaling path to prevent corrupting gradients
-    /// that were already unscaled by an external component like MixedPrecisionTrainingLoop.</para>
+    /// <para><b>For Beginners:</b> This overload is useful when you've already unscaled the gradients
+    /// manually (e.g., after checking for overflow) and want to avoid double-unscaling.</para>
     /// </remarks>
     public virtual IFullModel<T, TInput, TOutput> ApplyGradients(
         Vector<T> originalParameters,
@@ -374,11 +396,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         // Skip mixed-precision path if gradients are already unscaled
         if (_mixedPrecisionContext != null && !gradientsAlreadyUnscaled)
-        {
             return ApplyGradientsWithMixedPrecision(originalParameters, gradients, model);
-        }
 
-        // Standard path without mixed precision (or when gradients are pre-unscaled)
         return ApplyGradientsCore(originalParameters, gradients, model);
     }
 
@@ -643,9 +662,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             // which would corrupt the cache for future calls with the same key.
             var clonedGradient = new Vector<T>(cachedGradient.Parameters.ToArray());
 
-            // Gradients are cached in UNSCALED form to handle dynamic loss scaling correctly.
-            // Scale them now with the CURRENT loss scale factor.
-            clonedGradient = ApplyMixedPrecisionScaling(clonedGradient);
+            // Note: Cached gradients are already scaled for mixed-precision (scaling applied before caching).
+            // Do NOT scale again here to avoid double-scaling.
 
             _lastComputedGradients = clonedGradient;
             return clonedGradient;
@@ -689,23 +707,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // Apply gradient clipping if enabled
         gradient = ApplyGradientClipping(gradient);
 
-        // Cache gradients in UNSCALED form to avoid issues with dynamic loss scaling.
-        // The loss scale can change between gradient computation and application (e.g., when
-        // overflow is detected in another batch). Caching scaled gradients would cause incorrect
-        // unscaling if the scale changed. Instead, scale on retrieval using the current scale.
+        // Scale gradients for mixed-precision training
+        // The gradients will be unscaled in ApplyGradientsWithMixedPrecision before the optimizer step
+        gradient = ApplyMixedPrecisionScaling(gradient);
+
         var gradientModel = new GradientModel<T>(gradient);
         GradientCache.CacheGradient(cacheKey, gradientModel);
 
-        // Scale gradients for mixed-precision training AFTER caching
-        // The gradients will be unscaled in ApplyGradientsWithMixedPrecision before the optimizer step
-        //
-        // NOTE: The returned gradient (and _lastComputedGradients) is SCALED. The cache stores
-        // UNSCALED gradients. This ensures that cached gradients are scaled with the CURRENT
-        // loss scale on retrieval, even if the scale has changed since the gradient was computed.
-        gradient = ApplyMixedPrecisionScaling(gradient);
-
         // Store for external access (enables gradient clipping, true DDP, debugging, etc.)
-        // This contains the SCALED gradient (same as what's returned)
         _lastComputedGradients = gradient;
 
         return gradient;
@@ -761,34 +770,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
-    /// Gets the unscaled version of the last computed gradients.
-    /// </summary>
-    /// <remarks>
-    /// When mixed-precision is enabled, gradients are stored SCALED (multiplied by loss scale).
-    /// This helper divides by the current loss scale to get the actual gradient magnitudes.
-    /// </remarks>
-    private Vector<T> GetUnscaledGradients()
-    {
-        if (_lastComputedGradients == null || _lastComputedGradients.Length == 0)
-        {
-            return _lastComputedGradients ?? new Vector<T>(0);
-        }
-
-        if (_mixedPrecisionContext == null)
-        {
-            return _lastComputedGradients;
-        }
-
-        // Unscale by dividing by the current loss scale
-        double scale = _mixedPrecisionContext.LossScaler.Scale;
-        if (scale <= 0 || double.IsNaN(scale) || double.IsInfinity(scale))
-        {
-            scale = 1.0;
-        }
-        return _lastComputedGradients.Divide(NumOps.FromDouble(scale));
-    }
-
-    /// <summary>
     /// Checks if the current gradients are exhibiting exploding gradient behavior.
     /// </summary>
     /// <param name="threshold">The threshold above which gradients are considered exploding. Default is 1000.</param>
@@ -798,8 +779,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// If gradients become too large, it usually indicates a problem with the learning rate
     /// or model architecture that needs to be addressed.
     /// </para>
-    /// <para><b>Mixed-Precision Note:</b> This method uses UNSCALED gradients for the check,
-    /// so the threshold represents actual gradient magnitudes regardless of loss scaling.</para>
     /// </remarks>
     public bool AreGradientsExploding(double threshold = 1000.0)
     {
@@ -808,9 +787,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return false;
         }
 
-        // Use unscaled gradients to avoid false positives from loss scaling
-        var unscaledGradients = GetUnscaledGradients();
-        return GradientClippingHelper.AreGradientsExploding(unscaledGradients, threshold);
+        return GradientClippingHelper.AreGradientsExploding(GetUnscaledGradients(), threshold);
     }
 
     /// <summary>
@@ -823,8 +800,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// learning effectively stops. This is common in deep networks and can indicate the need
     /// for techniques like residual connections, batch normalization, or different activation functions.
     /// </para>
-    /// <para><b>Mixed-Precision Note:</b> This method uses UNSCALED gradients for the check,
-    /// so the threshold represents actual gradient magnitudes regardless of loss scaling.</para>
     /// </remarks>
     public bool AreGradientsVanishing(double threshold = 1e-7)
     {
@@ -833,9 +808,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return false;
         }
 
-        // Use unscaled gradients to avoid false negatives from loss scaling
-        var unscaledGradients = GetUnscaledGradients();
-        return GradientClippingHelper.AreGradientsVanishing(unscaledGradients, threshold);
+        return GradientClippingHelper.AreGradientsVanishing(GetUnscaledGradients(), threshold);
     }
 
     /// <summary>
@@ -847,8 +820,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// gradient is. Monitoring this value during training can help diagnose issues with
     /// exploding or vanishing gradients.
     /// </para>
-    /// <para><b>Mixed-Precision Note:</b> This returns the UNSCALED gradient norm,
-    /// representing actual gradient magnitudes regardless of loss scaling.</para>
     /// </remarks>
     public T GetGradientNorm()
     {
@@ -857,9 +828,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return NumOps.Zero;
         }
 
-        // Use unscaled gradients for consistent norm reporting
-        var unscaledGradients = GetUnscaledGradients();
-        return GradientClippingHelper.ComputeNorm(unscaledGradients);
+        return GradientClippingHelper.ComputeNorm(GetUnscaledGradients());
     }
 
     /// <summary>

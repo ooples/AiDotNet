@@ -66,11 +66,6 @@ public class LayerPrecisionPolicy
     /// </remarks>
     public LayerPrecisionPolicy AddPattern(string pattern, MixedPrecisionType precision)
     {
-        if (string.IsNullOrWhiteSpace(pattern))
-        {
-            throw new ArgumentException("Pattern cannot be null or whitespace.", nameof(pattern));
-        }
-
         _patterns.Add((pattern, precision));
         return this;
     }
@@ -121,32 +116,20 @@ public class LayerPrecisionPolicy
     }
 
     /// <summary>
-    /// Determines if a layer should be kept in higher precision (FP32, FP16, or BF16).
+    /// Determines if a layer should be kept in higher precision (FP32 or FP16).
     /// </summary>
     /// <param name="layerName">Name of the layer.</param>
     /// <returns>True if the layer should use higher precision than the default.</returns>
     public bool ShouldUseHigherPrecision(string layerName)
     {
         var precision = GetPrecision(layerName);
-
-        // FP32 is always higher precision
         if (precision == MixedPrecisionType.None)
-        {
             return true;
-        }
-
-        // FP16 or BF16 are higher precision when default is FP8
         if (precision == MixedPrecisionType.FP16 || precision == MixedPrecisionType.BF16)
-        {
             return IsFp8(_defaultPrecision);
-        }
-
         return false;
     }
 
-    /// <summary>
-    /// Determines whether the specified precision type is an FP8 variant.
-    /// </summary>
     private static bool IsFp8(MixedPrecisionType precision) =>
         precision == MixedPrecisionType.FP8_E4M3 ||
         precision == MixedPrecisionType.FP8_E5M2 ||
@@ -300,15 +283,9 @@ public class LayerPrecisionPolicy
     /// <summary>
     /// Determines if a layer's required precision should exclude it from a target precision.
     /// </summary>
-    /// <remarks>
-    /// Precision hierarchy (highest to lowest):
-    /// - None (FP32) - highest precision
-    /// - TF32 - TensorFloat32, high range with reduced mantissa
-    /// - FP16/BF16 - half precision variants
-    /// - FP8_E4M3/FP8_E5M2/FP8_Hybrid - lowest precision
-    /// </remarks>
     private static bool ShouldExcludeForPrecision(MixedPrecisionType requiredPrecision, MixedPrecisionType targetPrecision)
     {
+        // FP32 (None) is highest precision, followed by FP16/BF16, then FP8 variants
         // Exclude if required precision is higher than target
         if (requiredPrecision == MixedPrecisionType.None)
         {
@@ -316,22 +293,13 @@ public class LayerPrecisionPolicy
             return targetPrecision != MixedPrecisionType.None;
         }
 
-        if (requiredPrecision == MixedPrecisionType.TF32)
-        {
-            // TF32 required - exclude from FP16/BF16 and FP8 variants
-            // TF32 has FP32-like range but reduced precision, treat it as needing at least TF32
-            return targetPrecision != MixedPrecisionType.None && targetPrecision != MixedPrecisionType.TF32;
-        }
-
         if (requiredPrecision == MixedPrecisionType.FP16 || requiredPrecision == MixedPrecisionType.BF16)
         {
             // FP16/BF16 required - exclude from FP8 variants
-            return targetPrecision == MixedPrecisionType.FP8_E4M3 ||
-                   targetPrecision == MixedPrecisionType.FP8_E5M2 ||
-                   targetPrecision == MixedPrecisionType.FP8_Hybrid;
+            return targetPrecision >= MixedPrecisionType.FP8_E4M3;
         }
 
-        // FP8 variants - no need to exclude (lowest precision)
+        // FP8 or lower - no need to exclude
         return false;
     }
 
