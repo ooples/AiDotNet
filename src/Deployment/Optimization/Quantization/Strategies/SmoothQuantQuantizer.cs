@@ -71,6 +71,18 @@ public class SmoothQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TO
     public bool UsedRealForwardPasses => _activationStats?.IsFromRealForwardPasses ?? false;
 
     /// <summary>
+    /// Computes the zero-point for asymmetric quantization.
+    /// </summary>
+    /// <param name="min">The minimum value in the range.</param>
+    /// <param name="scale">The quantization scale factor.</param>
+    /// <param name="qMax">The maximum quantized value.</param>
+    /// <returns>The clamped zero-point value.</returns>
+    private static int ComputeAsymmetricZeroPoint(double min, double scale, double qMax)
+    {
+        return (int)MathHelper.Clamp(Math.Round(-min / scale), 0, qMax);
+    }
+
+    /// <summary>
     /// Initializes a new instance of the SmoothQuantQuantizer.
     /// </summary>
     /// <param name="config">Quantization configuration</param>
@@ -241,7 +253,7 @@ public class SmoothQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TO
                 scale = (max - min) / ((1 << bitWidth) - 1);
                 scale = Math.Max(scale, config.MinScaleFactor);
                 // Clamp zero-point to valid asymmetric range [0, qMax]
-                zeroPoint = (int)MathHelper.Clamp(Math.Round(-min / scale), 0, qMax);
+                zeroPoint = ComputeAsymmetricZeroPoint(min, scale, qMax);
             }
 
             _scaleFactors["global"] = scale;
@@ -291,7 +303,7 @@ public class SmoothQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TO
                     scale = (max - min) / ((1 << bitWidth) - 1);
                     scale = Math.Max(scale, config.MinScaleFactor);
                     // Clamp zero-point to valid asymmetric range [0, qMax]
-                    zeroPoint = (int)MathHelper.Clamp(Math.Round(-min / scale), 0, qMax);
+                    zeroPoint = ComputeAsymmetricZeroPoint(min, scale, qMax);
                 }
 
                 _scaleFactors[$"channel_{c}"] = scale;
@@ -351,7 +363,7 @@ public class SmoothQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TO
                 scale = (max - min) / ((1 << bitWidth) - 1);
                 scale = Math.Max(scale, config.MinScaleFactor);
                 // Clamp zero-point to valid asymmetric range [0, qMax]
-                zeroPoint = (int)MathHelper.Clamp(Math.Round(-min / scale), 0, qMax);
+                zeroPoint = ComputeAsymmetricZeroPoint(min, scale, qMax);
             }
 
             _scaleFactors[$"group_{g}"] = scale;
