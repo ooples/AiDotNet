@@ -286,6 +286,14 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
         }
         // "auto" or unrecognized strategy uses samplesPerClass as-is (minority class size)
 
+        // Guard against ratio producing zero majority samples
+        if (targetSamples < 1)
+        {
+            throw new ArgumentException(
+                "samplingStrategy results in zero samples for the majority class. " +
+                "Use a ratio that yields at least one sample.");
+        }
+
         foreach (var (classIdx, samples) in classSamples)
         {
             if (classIdx == minorityClass)

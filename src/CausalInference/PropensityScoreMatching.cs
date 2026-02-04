@@ -57,22 +57,22 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
     /// <summary>
     /// The caliper width for matching (maximum allowed propensity score difference).
     /// </summary>
-    private readonly double _caliper;
+    private double _caliper;
 
     /// <summary>
     /// Whether to use replacement in matching.
     /// </summary>
-    private readonly bool _withReplacement;
+    private bool _withReplacement;
 
     /// <summary>
     /// Number of matches per treated individual.
     /// </summary>
-    private readonly int _matchRatio;
+    private int _matchRatio;
 
     /// <summary>
     /// Random number generator for tie-breaking.
     /// </summary>
-    private readonly Random _random;
+    private Random _random;
 
     /// <summary>
     /// Cached treatment vector from fitting.
@@ -714,6 +714,22 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
     /// </summary>
     protected override void LoadAdditionalModelData(Newtonsoft.Json.Linq.JObject modelDataObj)
     {
+        // Restore matching hyperparameters
+        var caliperToken = modelDataObj["Caliper"];
+        if (caliperToken is not null)
+            _caliper = caliperToken.ToObject<double>();
+
+        var withReplacementToken = modelDataObj["WithReplacement"];
+        if (withReplacementToken is not null)
+            _withReplacement = withReplacementToken.ToObject<bool>();
+
+        var matchRatioToken = modelDataObj["MatchRatio"];
+        if (matchRatioToken is not null)
+            _matchRatio = matchRatioToken.ToObject<int>();
+
+        // Reinitialize random with cryptographically secure randomness (cannot restore exact state)
+        _random = RandomHelper.CreateSecureRandom();
+
         var coeffsToken = modelDataObj["PropensityCoefficients"];
         if (coeffsToken is not null)
         {

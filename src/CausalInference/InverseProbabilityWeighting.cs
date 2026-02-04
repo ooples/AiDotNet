@@ -60,17 +60,17 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// <summary>
     /// Minimum propensity score to avoid extreme weights.
     /// </summary>
-    private readonly double _trimMin;
+    private double _trimMin;
 
     /// <summary>
     /// Maximum propensity score to avoid extreme weights.
     /// </summary>
-    private readonly double _trimMax;
+    private double _trimMax;
 
     /// <summary>
     /// Whether to use stabilized weights.
     /// </summary>
-    private readonly bool _stabilizedWeights;
+    private bool _stabilizedWeights;
 
     /// <summary>
     /// Cached treatment vector from fitting.
@@ -721,6 +721,19 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// </summary>
     protected override void LoadAdditionalModelData(Newtonsoft.Json.Linq.JObject modelDataObj)
     {
+        // Restore trim/stabilization settings
+        var trimMinToken = modelDataObj["TrimMin"];
+        if (trimMinToken is not null)
+            _trimMin = trimMinToken.ToObject<double>();
+
+        var trimMaxToken = modelDataObj["TrimMax"];
+        if (trimMaxToken is not null)
+            _trimMax = trimMaxToken.ToObject<double>();
+
+        var stabilizedToken = modelDataObj["StabilizedWeights"];
+        if (stabilizedToken is not null)
+            _stabilizedWeights = stabilizedToken.ToObject<bool>();
+
         var coeffsToken = modelDataObj["PropensityCoefficients"];
         if (coeffsToken is not null)
         {

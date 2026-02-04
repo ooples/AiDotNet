@@ -192,6 +192,13 @@ public class SmoteEnnAugmenter<T> : TabularAugmenterBase<T>
             }
         }
 
+        // Guard against empty results from aggressive ENN cleaning
+        if (keepIndices.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "ENN cleaning removed all samples. Consider reducing ennKNeighbors or reviewing data quality.");
+        }
+
         // Create cleaned dataset
         var cleanedData = new Matrix<T>(keepIndices.Count, cols);
         var cleanedLabels = new Vector<T>(keepIndices.Count);
@@ -363,6 +370,12 @@ public class SmoteEnnAugmenter<T> : TabularAugmenterBase<T>
         Matrix<T> data1, Vector<T> labels1,
         Matrix<T> data2, Vector<T> labels2)
     {
+        if (data1.Columns != data2.Columns)
+        {
+            throw new ArgumentException(
+                $"Cannot combine datasets with different column counts: {data1.Columns} vs {data2.Columns}.");
+        }
+
         int totalRows = data1.Rows + data2.Rows;
         int cols = data1.Columns;
 
