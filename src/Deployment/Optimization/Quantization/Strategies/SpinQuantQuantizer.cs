@@ -217,12 +217,17 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
 
             // Update Cayley parameter - only update upper triangular (i < j)
             // then enforce skew-symmetry after all updates to avoid overwriting
+            const double gradientThreshold = 1e-10;
             for (int i = 0; i < rotationSize; i++)
             {
                 for (int j = i + 1; j < rotationSize; j++)
                 {
-                    // Only update upper triangular elements
-                    cayleyParam[i, j] -= _learningRate * gradient[i, j];
+                    // Skip negligible gradients to reduce floating point operations
+                    double grad = gradient[i, j];
+                    if (Math.Abs(grad) >= gradientThreshold)
+                    {
+                        cayleyParam[i, j] -= _learningRate * grad;
+                    }
                 }
             }
 
