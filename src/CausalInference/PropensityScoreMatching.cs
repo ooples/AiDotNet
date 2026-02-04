@@ -167,6 +167,7 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
         // Cache data for later predictions
         _cachedFeatures = x;
         _cachedTreatment = treatment;
+        _cachedOutcome = null; // Clear stale outcomes from prior fits
 
         IsFitted = true;
     }

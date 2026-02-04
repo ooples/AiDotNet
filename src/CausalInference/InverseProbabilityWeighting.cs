@@ -149,6 +149,7 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
         // Cache data for predictions
         _cachedFeatures = x;
         _cachedTreatment = treatment;
+        _cachedOutcome = null; // Clear stale outcomes from prior fits
 
         // Fit logistic regression for propensity scores
         _propensityCoefficients = FitLogisticRegression(x, treatment);
@@ -282,9 +283,12 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
                 }
             }
 
-            predictions[i] = sumWeight > 0
-                ? NumOps.FromDouble(sumOutcome / sumWeight)
-                : NumOps.Zero;
+            if (sumWeight == 0)
+            {
+                throw new InvalidOperationException(
+                    $"No treated matches available for prediction at index {i}.");
+            }
+            predictions[i] = NumOps.FromDouble(sumOutcome / sumWeight);
         }
 
         return predictions;
@@ -337,9 +341,12 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
                 }
             }
 
-            predictions[i] = sumWeight > 0
-                ? NumOps.FromDouble(sumOutcome / sumWeight)
-                : NumOps.Zero;
+            if (sumWeight == 0)
+            {
+                throw new InvalidOperationException(
+                    $"No control matches available for prediction at index {i}.");
+            }
+            predictions[i] = NumOps.FromDouble(sumOutcome / sumWeight);
         }
 
         return predictions;
