@@ -108,6 +108,12 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
         {
             NumFeatures = features.Length;
         }
+        else if (features.Length != NumFeatures)
+        {
+            throw new ArgumentException(
+                $"Feature vector length {features.Length} does not match expected {NumFeatures}.",
+                nameof(features));
+        }
 
         int classIdx = GetOrCreateClassIndex(label);
 
@@ -248,6 +254,11 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
     /// </summary>
     public Vector<T> PredictProbabilities(Vector<T> features)
     {
+        if (_knownClasses.Count == 0)
+        {
+            return new Vector<T>(0);
+        }
+
         var logProbs = new double[_knownClasses.Count];
         double maxLogProb = double.NegativeInfinity;
 

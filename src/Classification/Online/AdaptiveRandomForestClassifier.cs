@@ -151,33 +151,16 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
         // Update each tree in the ensemble
         foreach (var member in _ensemble)
         {
-            // Poisson sampling for diversity
-            int sampleWeight = PoissonSample(_options.LambdaPoisson);
-
-            if (sampleWeight > 0)
+            // Validate member state - these must be initialized during ensemble creation
+            if (member.Tree is null || member.SelectedFeatures is null ||
+                member.DriftDetector is null || member.WarningDetector is null)
             {
-                // Extract selected features
-                var selectedFeatures = ExtractSelectedFeatures(features, member.SelectedFeatures!);
-
-                // Train tree (weighted by Poisson sample)
-                for (int w = 0; w < sampleWeight; w++)
-                {
-                    member.Tree!.PartialFit(selectedFeatures, label);
-                }
-
-                // Update background tree if in warning state
-                if (member.InWarning && member.BackgroundTree is not null)
-                {
-                    for (int w = 0; w < sampleWeight; w++)
-                    {
-                        member.BackgroundTree.PartialFit(selectedFeatures, label);
-                    }
-                }
+                throw new InvalidOperationException("Ensemble member is not properly initialized.");
             }
 
-            // Evaluate and update drift detectors
-            var selectedFeaturesForPred = ExtractSelectedFeatures(features, member.SelectedFeatures!);
-            var prediction = member.Tree!.Predict(ConvertToMatrix(selectedFeaturesForPred));
+            // Evaluate prequentially (predict BEFORE training to avoid bias)
+            var selectedFeaturesForPred = ExtractSelectedFeatures(features, member.SelectedFeatures);
+            var prediction = member.Tree.Predict(ConvertToMatrix(selectedFeaturesForPred));
             bool isCorrect = NumOps.Compare(prediction[0], label) == 0;
 
             // Update accuracy estimate with exponential decay
@@ -188,8 +171,8 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
             // Update drift detectors with error (1 = error, 0 = correct)
             T error = isCorrect ? NumOps.Zero : NumOps.One;
 
-            bool warningTriggered = member.WarningDetector!.AddObservation(error);
-            bool driftTriggered = member.DriftDetector!.AddObservation(error);
+            bool warningTriggered = member.WarningDetector.AddObservation(error);
+            bool driftTriggered = member.DriftDetector.AddObservation(error);
 
             // Handle warning state
             if (member.WarningDetector.IsInWarning && !member.InWarning)
@@ -226,6 +209,20 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
                 member.CorrectCount = 0;
                 member.TotalCount = 0;
                 member.AccuracyEstimate = 1.0;
+            }
+
+            // Poisson sampling for diversity (train AFTER evaluation)
+            int sampleWeight = PoissonSample(_options.LambdaPoisson);
+            if (sampleWeight > 0)
+            {
+                var selectedFeatures = ExtractSelectedFeatures(features, member.SelectedFeatures);
+                for (int w = 0; w < sampleWeight; w++)
+                    member.Tree.PartialFit(selectedFeatures, label);
+                if (member.InWarning && member.BackgroundTree is not null)
+                {
+                    for (int w = 0; w < sampleWeight; w++)
+                        member.BackgroundTree.PartialFit(selectedFeatures, label);
+                }
             }
         }
     }

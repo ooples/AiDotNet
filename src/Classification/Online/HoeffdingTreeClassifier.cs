@@ -85,6 +85,9 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     {
         public double Min { get; set; } = double.MaxValue;
         public double Max { get; set; } = double.MinValue;
+        // Fixed bin boundaries - frozen after first observation to keep bins consistent
+        public double BinMin { get; set; } = double.NaN;
+        public double BinMax { get; set; } = double.NaN;
         public Dictionary<int, BinStats>? BinsByClass { get; set; }
     }
 
@@ -104,6 +107,12 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
         : base(options)
     {
         _options = options ?? new HoeffdingTreeOptions<T>();
+
+        if (_options.GracePeriod <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "GracePeriod must be > 0.");
+        if (_options.NumBins <= 1)
+            throw new ArgumentOutOfRangeException(nameof(options), "NumBins must be > 1.");
+
         _random = _options.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -291,9 +300,22 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
             double value = NumOps.ToDouble(features[f]);
             var stats = leaf.FeatureStatistics![f];
 
-            // Update min/max
+            // Update min/max for tracking
             stats.Min = Math.Min(stats.Min, value);
             stats.Max = Math.Max(stats.Max, value);
+
+            // Freeze bin edges on first observation to keep bins consistent
+            if (double.IsNaN(stats.BinMin))
+            {
+                stats.BinMin = value;
+                stats.BinMax = value;
+            }
+            else
+            {
+                // Expand bin range if needed (but historical counts remain valid)
+                stats.BinMin = Math.Min(stats.BinMin, value);
+                stats.BinMax = Math.Max(stats.BinMax, value);
+            }
 
             // Initialize bins for this class if needed
             if (!stats.BinsByClass!.ContainsKey(classIdx))
@@ -304,8 +326,8 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
                 };
             }
 
-            // Update bin count
-            int binIdx = GetBinIndex(value, stats.Min, stats.Max);
+            // Update bin count using fixed bin edges
+            int binIdx = GetBinIndex(value, stats.BinMin, stats.BinMax);
             stats.BinsByClass[classIdx].Counts[binIdx]++;
         }
     }

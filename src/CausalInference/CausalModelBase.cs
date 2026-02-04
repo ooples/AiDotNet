@@ -353,6 +353,12 @@ public abstract class CausalModelBase<T> : ICausalModel<T>
             { "IsFitted", IsFitted }
         };
 
+        // Allow derived classes to contribute additional model data
+        foreach (var kvp in GetAdditionalModelData())
+        {
+            modelData[kvp.Key] = kvp.Value;
+        }
+
         var modelMetadata = GetModelMetadata();
         modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
 
@@ -382,6 +388,9 @@ public abstract class CausalModelBase<T> : ICausalModel<T>
 
         NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
         IsFitted = modelDataObj["IsFitted"]?.ToObject<bool>() ?? false;
+
+        // Allow derived classes to load additional model data
+        LoadAdditionalModelData(modelDataObj);
     }
 
     /// <summary>
@@ -548,6 +557,20 @@ public abstract class CausalModelBase<T> : ICausalModel<T>
     {
         throw new NotSupportedException("JIT compilation is not supported for this causal model.");
     }
+
+    /// <summary>
+    /// Gets additional model data to include in serialization.
+    /// Override in derived classes to persist class-specific state.
+    /// </summary>
+    /// <returns>A dictionary of additional key-value pairs to serialize.</returns>
+    protected virtual Dictionary<string, object> GetAdditionalModelData() => new();
+
+    /// <summary>
+    /// Loads additional model data from deserialization.
+    /// Override in derived classes to restore class-specific state.
+    /// </summary>
+    /// <param name="modelDataObj">The deserialized model data object.</param>
+    protected virtual void LoadAdditionalModelData(Newtonsoft.Json.Linq.JObject modelDataObj) { }
 
     #endregion
 

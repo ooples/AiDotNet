@@ -25,7 +25,7 @@ namespace AiDotNet.Classification.Boosting;
 /// <list type="bullet">
 /// <item><b>Speed:</b> Much faster than traditional gradient boosting on large datasets</item>
 /// <item><b>Memory:</b> Uses less memory due to binning</item>
-/// <item><b>Native missing value support:</b> Can handle missing values without imputation</item>
+/// <item><b>Missing values:</b> Please impute before training (missing-value handling is not built in)</item>
 /// <item><b>Scalability:</b> Scales well to millions of samples</item>
 /// </list>
 /// </para>
@@ -292,6 +292,11 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
+        if (input.Columns != NumFeatures)
+        {
+            throw new ArgumentException($"Expected {NumFeatures} features but got {input.Columns}.", nameof(input));
+        }
+
         var binnedX = BinFeatures(input, _binBoundaries);
         int numOutputs = NumClasses == 2 ? 1 : NumClasses;
         var predictions = new Vector<T>(input.Rows);
@@ -362,11 +367,18 @@ public class HistGradientBoostingClassifier<T> : ClassifierBase<T>
 
         for (int j = 0; j < p; j++)
         {
-            // Collect unique values
+            // Collect unique values with validation
             var values = new List<double>();
             for (int i = 0; i < x.Rows; i++)
             {
-                values.Add(NumOps.ToDouble(x[i, j]));
+                double val = NumOps.ToDouble(x[i, j]);
+                if (double.IsNaN(val) || double.IsInfinity(val))
+                {
+                    throw new ArgumentException(
+                        $"Missing/NaN/Infinity values are not supported. Found at row {i}, feature {j}. Please impute before training.",
+                        nameof(x));
+                }
+                values.Add(val);
             }
             values.Sort();
 

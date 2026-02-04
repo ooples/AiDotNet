@@ -599,6 +599,15 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
                 similarities[i] = NumOps.Divide(similarities[i], sumSim);
             }
         }
+        else
+        {
+            // Fallback to uniform similarities when total similarity is zero
+            T uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
+            for (int i = 0; i < n; i++)
+            {
+                similarities[i] = uniform;
+            }
+        }
 
         // Compute weighted label distribution
         var distribution = new Vector<T>(NumClasses);
@@ -691,6 +700,15 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
             for (int i = 0; i < n; i++)
             {
                 similarities[i] = NumOps.Divide(similarities[i], sumSim);
+            }
+        }
+        else
+        {
+            // Fallback to uniform similarities when total similarity is zero
+            T uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
+            for (int i = 0; i < n; i++)
+            {
+                similarities[i] = uniform;
             }
         }
 

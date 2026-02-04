@@ -436,11 +436,15 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
             var labels = new bool[target.Columns];
             for (int j = 0; j < target.Columns; j++)
             {
-                labels[j] = NumOps.ToDouble(target[i, j]) > 0.5;
+                // Use >= 0.5 for consistency with GetLabelKey
+                labels[j] = NumOps.ToDouble(target[i, j]) >= 0.5;
             }
 
             var key = string.Join(",", labels.Select(l => l ? "1" : "0"));
-            int classIdx = _labelsToClass.TryGetValue(key, out var idx) ? idx : 0;
+            if (!_labelsToClass.TryGetValue(key, out var classIdx))
+            {
+                throw new ArgumentException($"Label combination '{key}' was not seen during training.", nameof(target));
+            }
             classTargets[i] = NumOps.FromDouble(classIdx);
         }
 

@@ -171,11 +171,17 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// </remarks>
     public override void Fit(Matrix<T> features, Vector<T> treatment, Vector<T> outcome)
     {
-        // Convert treatment vector to int
+        // Convert treatment vector to int with validation
         var treatmentInt = new Vector<int>(treatment.Length);
         for (int i = 0; i < treatment.Length; i++)
         {
-            treatmentInt[i] = (int)Math.Round(NumOps.ToDouble(treatment[i]));
+            double raw = NumOps.ToDouble(treatment[i]);
+            double rounded = Math.Round(raw);
+            if (Math.Abs(raw - rounded) > 1e-6 || (rounded != 0 && rounded != 1))
+            {
+                throw new ArgumentException("Treatment indicators must be 0 or 1.", nameof(treatment));
+            }
+            treatmentInt[i] = (int)rounded;
         }
 
         // Cache outcome for predictions
@@ -670,6 +676,51 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new InverseProbabilityWeighting<T>(_trimMin, _trimMax, _stabilizedWeights);
+    }
+
+    /// <summary>
+    /// Gets additional model data for serialization.
+    /// </summary>
+    protected override Dictionary<string, object> GetAdditionalModelData()
+    {
+        var data = new Dictionary<string, object>
+        {
+            { "TrimMin", _trimMin },
+            { "TrimMax", _trimMax },
+            { "StabilizedWeights", _stabilizedWeights }
+        };
+
+        if (_propensityCoefficients is not null)
+        {
+            var coeffs = new double[_propensityCoefficients.Length];
+            for (int i = 0; i < _propensityCoefficients.Length; i++)
+            {
+                coeffs[i] = NumOps.ToDouble(_propensityCoefficients[i]);
+            }
+            data["PropensityCoefficients"] = coeffs;
+        }
+
+        return data;
+    }
+
+    /// <summary>
+    /// Loads additional model data from deserialization.
+    /// </summary>
+    protected override void LoadAdditionalModelData(Newtonsoft.Json.Linq.JObject modelDataObj)
+    {
+        var coeffsToken = modelDataObj["PropensityCoefficients"];
+        if (coeffsToken is not null)
+        {
+            var coeffs = coeffsToken.ToObject<double[]>();
+            if (coeffs is not null && coeffs.Length > 0)
+            {
+                _propensityCoefficients = new Vector<T>(coeffs.Length);
+                for (int i = 0; i < coeffs.Length; i++)
+                {
+                    _propensityCoefficients[i] = NumOps.FromDouble(coeffs[i]);
+                }
+            }
+        }
     }
 
     #endregion

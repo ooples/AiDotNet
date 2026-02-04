@@ -144,6 +144,17 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
         int? seed = null)
         : base()
     {
+        if (nSubsets < 1)
+            throw new ArgumentOutOfRangeException(nameof(nSubsets), "nSubsets must be at least 1.");
+        if (nEstimatorsPerSubset < 1)
+            throw new ArgumentOutOfRangeException(nameof(nEstimatorsPerSubset), "nEstimatorsPerSubset must be at least 1.");
+        if (maxDepth < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxDepth), "maxDepth must be at least 1.");
+        if (learningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), "learningRate must be greater than 0.");
+        if (string.IsNullOrWhiteSpace(samplingStrategy))
+            throw new ArgumentException("samplingStrategy cannot be null or whitespace.", nameof(samplingStrategy));
+
         _nSubsets = nSubsets;
         _nEstimatorsPerSubset = nEstimatorsPerSubset;
         _maxDepth = maxDepth;
@@ -213,6 +224,12 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
 
         // Find minority class size and majority class
         int minoritySize = classSamples.Values.Min(v => v.Count);
+        if (minoritySize == 0)
+        {
+            throw new ArgumentException(
+                "One or more classes have no samples. Cannot train on empty class data.",
+                nameof(y));
+        }
         int minorityClass = classSamples.First(kv => kv.Value.Count == minoritySize).Key;
         int majorityClass = NumClasses == 2 ? 1 - minorityClass :
             classSamples.First(kv => kv.Key != minorityClass).Key;
@@ -421,6 +438,14 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
                     }
                 }
             }
+        }
+
+        // If no valid split was found (all features constant), throw an exception
+        if (bestWeightedError == double.MaxValue)
+        {
+            throw new InvalidOperationException(
+                "No valid split found: all features appear to be constant. " +
+                "Cannot train a weak learner when there is no feature variation.");
         }
 
         return bestLearner;

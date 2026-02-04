@@ -145,7 +145,9 @@ public class SmoteTomekAugmenter<T> : TabularAugmenterBase<T>
             throw new InvalidOperationException("Cannot identify classes from empty class counts.");
         }
 
-        // Use first entry as initial values to avoid default!
+        // Use the first entry as a real (non-default) baseline for both min and max.
+        // Initializing both minority and majority to the same class is intentional:
+        // the loop below will update them when it finds smaller or larger counts.
         var firstEntry = classCounts.First();
         T minority = classLabels[firstEntry.Key];
         T majority = classLabels[firstEntry.Key];
