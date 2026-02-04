@@ -91,7 +91,9 @@ public class SpinQuantQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOut
 
         if (_config.Strategy != QuantizationStrategy.SpinQuant)
         {
-            _config.Strategy = QuantizationStrategy.SpinQuant;
+            throw new ArgumentException(
+                $"SpinQuantQuantizer requires Strategy to be SpinQuant, but got {_config.Strategy}",
+                nameof(config));
         }
 
         _numIterations = Math.Max(1, numIterations);
