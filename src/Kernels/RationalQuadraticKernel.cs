@@ -248,22 +248,26 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
         // dk/d(variance) = (1 + r^2/(2*alpha*l^2))^(-alpha)
         gradients["variance"] = baseTermPowAlpha;
 
-        // dk/d(lengthScale) = sigma^2 * (-alpha) * (1 + ...)^(-alpha-1) * r^2 / (alpha * l^3)
-        //                   = k * alpha * r^2 / (l^3 * (2*alpha*l^2 + r^2))
+        // dk/d(lengthScale) = sigma^2 * (-alpha) * (1 + ...)^(-alpha-1) * d/dl[r^2/(2*alpha*l^2)]
+        // The derivative d/dl[r^2/(2*alpha*l^2)] = -r^2/(alpha*l^3)
+        // So dk/dl = k * r^2 / (l * l^2 * baseTerm) = k * r^2 / (l * (l^2 + r^2/(2*alpha)))
+        //          = k * 2*alpha * r^2 / (l * (2*alpha*l^2 + r^2))
         double denom = 2.0 * _alpha * l2 + r2;
         if (Math.Abs(denom) > 1e-10)
         {
-            gradients["lengthScale"] = k * _alpha * r2 / (_lengthScale * denom);
+            // Fixed: added factor of 2 that was missing
+            gradients["lengthScale"] = k * 2.0 * _alpha * r2 / (_lengthScale * denom);
         }
         else
         {
             gradients["lengthScale"] = 0;
         }
 
-        // dk/d(alpha) is more complex
-        // dk/d(alpha) = sigma^2 * [ -log(baseTerm) * baseTerm^(-alpha) + baseTerm^(-alpha-1) * r^2/(2*alpha^2*l^2) ]
+        // dk/d(alpha) = k * [ r^2/(alpha*l^2*baseTerm) - log(baseTerm) ]
+        // Note: scaledR2 = r^2/(2*alpha*l^2), so r^2/(alpha*l^2) = 2*scaledR2
+        // Fixed: removed extraneous division by alpha
         double logBase = Math.Log(Math.Max(baseTerm, 1e-10));
-        gradients["alpha"] = k * (scaledR2 / (_alpha * baseTerm) - logBase);
+        gradients["alpha"] = k * (2.0 * scaledR2 / baseTerm - logBase);
 
         return gradients;
     }

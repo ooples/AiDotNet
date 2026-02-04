@@ -384,11 +384,12 @@ public class DeepNeuralNetworkKernel<T> : IKernelFunction<T>
             double scaleFactor = (1.0 / Math.PI) * Math.Pow(norm1, _order) * Math.Pow(norm2, _order);
 
             // Update for next layer
-            // For self-kernels, the computation is similar but simplified
-            double newK11 = _biasVariance + _weightVariance * scaleFactor * ComputeJ(0, 1.0) *
-                Math.Pow(norm1, _order) * Math.Pow(norm1, _order) / Math.PI;
-            double newK22 = _biasVariance + _weightVariance * scaleFactor * ComputeJ(0, 1.0) *
-                Math.Pow(norm2, _order) * Math.Pow(norm2, _order) / Math.PI;
+            // Self-kernels: K_n^(l)(x,x) = σ_b² + (σ_w² / π) * K^(l-1)(x,x)^n * J_n(0, 1)
+            // Fixed: removed extra scaleFactor and norm terms - K11^n = (norm1^2)^n = norm1^(2n)
+            double j0 = ComputeJ(0, 1.0); // J_n at θ=0 for self-kernel
+            double newK11 = _biasVariance + _weightVariance * j0 / Math.PI * Math.Pow(K11, _order);
+            double newK22 = _biasVariance + _weightVariance * j0 / Math.PI * Math.Pow(K22, _order);
+            // Cross-kernel: K_n^(l)(x,y) = σ_b² + (σ_w² / π) * ||x||^n * ||y||^n * J_n(θ)
             double newK12 = _biasVariance + _weightVariance * scaleFactor * jn;
 
             K11 = newK11;
