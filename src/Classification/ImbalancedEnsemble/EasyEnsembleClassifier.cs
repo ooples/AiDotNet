@@ -275,6 +275,17 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     {
         var selected = new List<int>();
 
+        // Determine target samples based on sampling strategy
+        int targetSamples = samplesPerClass;
+        if (_samplingStrategy.StartsWith("ratio:", StringComparison.OrdinalIgnoreCase))
+        {
+            if (double.TryParse(_samplingStrategy.Substring(6), out double ratio) && ratio > 0)
+            {
+                targetSamples = (int)(samplesPerClass * ratio);
+            }
+        }
+        // "auto" or unrecognized strategy uses samplesPerClass as-is (minority class size)
+
         foreach (var (classIdx, samples) in classSamples)
         {
             if (classIdx == minorityClass)
@@ -284,8 +295,8 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
             }
             else
             {
-                // Undersample majority class
-                var shuffled = samples.OrderBy(_ => _random.Next()).Take(samplesPerClass).ToList();
+                // Undersample majority class using the computed target
+                var shuffled = samples.OrderBy(_ => _random.Next()).Take(targetSamples).ToList();
                 selected.AddRange(shuffled);
             }
         }

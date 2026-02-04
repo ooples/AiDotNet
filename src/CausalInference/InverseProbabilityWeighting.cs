@@ -184,6 +184,14 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
             treatmentInt[i] = (int)rounded;
         }
 
+        // Validate outcome alignment before caching
+        if (features.Rows != outcome.Length)
+        {
+            throw new ArgumentException(
+                $"Number of samples in X ({features.Rows}) must match number of outcomes ({outcome.Length}).",
+                nameof(outcome));
+        }
+
         // Cache outcome for predictions
         _cachedOutcome = outcome;
 
@@ -394,6 +402,11 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// </remarks>
     public Vector<T> ComputeWeights(Matrix<T> x, Vector<int> treatment)
     {
+        if (treatment.Length == 0)
+        {
+            throw new ArgumentException("Treatment vector cannot be empty.", nameof(treatment));
+        }
+
         if (x.Rows != treatment.Length)
         {
             throw new ArgumentException(

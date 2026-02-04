@@ -134,6 +134,12 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
             NumFeatures = features.Length;
             InitializeFeatureStats(_root!, NumFeatures);
         }
+        else if (features.Length != NumFeatures)
+        {
+            throw new ArgumentException(
+                $"Expected feature length {NumFeatures} but got {features.Length}.",
+                nameof(features));
+        }
 
         // Register new class if needed
         int classIdx = GetOrCreateClassIndex(label);
@@ -178,6 +184,13 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
+        if (NumFeatures > 0 && input.Columns != NumFeatures)
+        {
+            throw new ArgumentException(
+                $"Expected feature length {NumFeatures} but got {input.Columns}.",
+                nameof(input));
+        }
+
         var predictions = new Vector<T>(input.Rows);
 
         for (int i = 0; i < input.Rows; i++)

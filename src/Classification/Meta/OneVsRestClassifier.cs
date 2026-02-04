@@ -3,17 +3,18 @@ using AiDotNet.Models.Options;
 namespace AiDotNet.Classification.Meta;
 
 /// <summary>
-/// One-vs-Rest (also called One-vs-All) classifier for multi-class classification.
+/// One-vs-Rest (also called One-vs-All) classifier for multi-class and multi-label classification.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
 /// Trains one binary classifier per class, treating it as the positive class
-/// and all other classes as the negative class.
+/// and all other classes as the negative class. This approach works for both
+/// multi-class (exactly one label per sample) and multi-label (zero or more labels per sample) problems.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b>
-/// One-vs-Rest is a simple strategy for multi-class classification:
+/// One-vs-Rest is a simple strategy for multi-class and multi-label classification:
 ///
 /// For 3 classes (A, B, C):
 /// - Classifier 1: Is it A vs not-A?

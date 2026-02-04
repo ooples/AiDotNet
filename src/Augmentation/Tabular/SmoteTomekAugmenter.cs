@@ -145,6 +145,12 @@ public class SmoteTomekAugmenter<T> : TabularAugmenterBase<T>
             throw new InvalidOperationException("Cannot identify classes from empty class counts.");
         }
 
+        if (classCounts.Count == 1)
+        {
+            throw new InvalidOperationException(
+                "SMOTE-Tomek requires at least two classes. Only one class found in the data.");
+        }
+
         // Use the first entry as a real (non-default) baseline for both min and max.
         // Initializing both minority and majority to the same class is intentional:
         // the loop below will update them when it finds smaller or larger counts.

@@ -198,6 +198,14 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
             treatmentInt[i] = (int)rounded;
         }
 
+        // Validate outcome alignment before caching
+        if (features.Rows != outcome.Length)
+        {
+            throw new ArgumentException(
+                $"Number of samples in X ({features.Rows}) must match number of outcomes ({outcome.Length}).",
+                nameof(outcome));
+        }
+
         // Cache outcome for predictions
         _cachedOutcome = outcome;
 

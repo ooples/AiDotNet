@@ -142,6 +142,12 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
             NumFeatures = features.Length;
             InitializeEnsemble();
         }
+        else if (features.Length != NumFeatures)
+        {
+            throw new ArgumentException(
+                $"Expected feature length {NumFeatures} but got {features.Length}.",
+                nameof(features));
+        }
 
         // Register new class if needed
         int classIdx = GetOrCreateClassIndex(label);
@@ -252,6 +258,13 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
     /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
+        if (NumFeatures > 0 && input.Columns != NumFeatures)
+        {
+            throw new ArgumentException(
+                $"Expected feature length {NumFeatures} but got {input.Columns}.",
+                nameof(input));
+        }
+
         var predictions = new Vector<T>(input.Rows);
 
         for (int i = 0; i < input.Rows; i++)
@@ -332,8 +345,13 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
             var member = new TreeMember
             {
                 Tree = CreateTree(),
+                // Drift detector uses the configured thresholds
                 DriftDetector = new DDMDriftDetector<T>(_options.WarningThreshold, _options.DriftThreshold),
-                WarningDetector = new DDMDriftDetector<T>(_options.WarningThreshold, _options.DriftThreshold),
+                // Warning detector uses more sensitive thresholds (70% of drift thresholds)
+                // so it fires earlier, giving the background tree time to train before drift triggers replacement
+                WarningDetector = new DDMDriftDetector<T>(
+                    _options.WarningThreshold * 0.7,
+                    _options.DriftThreshold * 0.7),
                 SelectedFeatures = selectedFeatures
             };
 
