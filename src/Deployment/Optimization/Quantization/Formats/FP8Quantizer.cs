@@ -86,12 +86,19 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Note: The FP8 format (E4M3 or E5M2) is determined by the configuration passed to the constructor,
+    /// not by the config parameter here. This is because the format affects how calibration is performed,
+    /// so it must be consistent throughout the quantizer's lifecycle.
+    /// </remarks>
     public IFullModel<T, TInput, TOutput> Quantize(IFullModel<T, TInput, TOutput> model, QuantizationConfiguration config)
     {
         if (model == null) throw new ArgumentNullException(nameof(model));
 
+        // Use provided config for any overridable settings (currently uses instance format/calibration)
+        var effectiveConfig = config ?? _config;
         var parameters = model.GetParameters();
-        var quantizedParams = QuantizeToFP8(parameters, config);
+        var quantizedParams = QuantizeToFP8(parameters, effectiveConfig);
         return model.WithParameters(quantizedParams);
     }
 
