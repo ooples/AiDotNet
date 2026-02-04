@@ -152,6 +152,8 @@ public class InducingPointKernel<T> : IKernelFunction<T>
     public void UpdateInducingPoints(Matrix<T> newInducingPoints)
     {
         if (newInducingPoints is null) throw new ArgumentNullException(nameof(newInducingPoints));
+        if (newInducingPoints.Rows == 0)
+            throw new ArgumentException("Inducing points matrix cannot be empty. Must have at least one inducing point.", nameof(newInducingPoints));
         _inducingPoints = newInducingPoints;
         _numInducingPoints = newInducingPoints.Rows;
         _matricesValid = false;

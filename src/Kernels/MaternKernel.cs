@@ -255,6 +255,16 @@ public class MaternKernel<T> : IKernelFunction<T>
         // For non-integer nu, use relation between K_nu and K_{-nu}
         // K_nu = K_{-nu} (symmetry)
 
+        // Guard against integer nu which causes sin(π*nu) = 0
+        double nuRounded = Math.Round(nu);
+        if (Math.Abs(nu - nuRounded) < 1e-10)
+        {
+            // For integer nu, fall back to asymptotic expansion (always valid for moderate x)
+            // This avoids the sin(π*nu) = 0 singularity
+            return Math.Sqrt(Math.PI / (2 * x)) * Math.Exp(-x) *
+                   (1 + (4 * nu * nu - 1) / (8 * x));
+        }
+
         // Use recurrence relation and continued fraction
         // This is a simplified implementation
 

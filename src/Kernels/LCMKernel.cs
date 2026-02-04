@@ -416,10 +416,26 @@ public class LCMKernel<T> : IKernelFunction<T>
         int numOutputs,
         double outputCorrelation = 0.5)
     {
-        if (outputCorrelation < -1.0 / (numOutputs - 1) || outputCorrelation > 1.0)
-            throw new ArgumentException(
-                $"Correlation must be between {-1.0 / (numOutputs - 1):F3} and 1.0.",
-                nameof(outputCorrelation));
+        if (numOutputs < 1)
+            throw new ArgumentOutOfRangeException(nameof(numOutputs), "Number of outputs must be at least 1.");
+
+        // For single output, correlation is irrelevant (no cross-correlation to define)
+        if (numOutputs == 1)
+        {
+            if (outputCorrelation != 0.5 && outputCorrelation != 0.0 && outputCorrelation != 1.0)
+            {
+                // Just ignore correlation for single output since it doesn't matter
+            }
+        }
+        else
+        {
+            // For numOutputs >= 2, validate correlation bounds
+            double minCorrelation = -1.0 / (numOutputs - 1);
+            if (outputCorrelation < minCorrelation || outputCorrelation > 1.0)
+                throw new ArgumentException(
+                    $"Correlation must be between {minCorrelation:F3} and 1.0 for {numOutputs} outputs.",
+                    nameof(outputCorrelation));
+        }
 
         var B = new double[numOutputs, numOutputs];
         for (int i = 0; i < numOutputs; i++)

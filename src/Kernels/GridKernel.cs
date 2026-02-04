@@ -98,6 +98,17 @@ public class GridKernel<T> : IKernelFunction<T>
         if (dimensionKernels.Length == 0)
             throw new ArgumentException("Must have at least one dimension.");
 
+        // Validate each dimension to prevent null/empty which causes divide-by-zero in Kronecker paths
+        for (int i = 0; i < dimensionKernels.Length; i++)
+        {
+            if (dimensionKernels[i] is null)
+                throw new ArgumentNullException($"dimensionKernels[{i}]", $"Kernel for dimension {i} cannot be null.");
+            if (gridCoordinates[i] is null)
+                throw new ArgumentNullException($"gridCoordinates[{i}]", $"Grid coordinates for dimension {i} cannot be null.");
+            if (gridCoordinates[i].Length == 0)
+                throw new ArgumentException($"Grid coordinates for dimension {i} cannot be empty.");
+        }
+
         _dimensionKernels = (IKernelFunction<T>[])dimensionKernels.Clone();
         _gridCoordinates = gridCoordinates.Select(c => (double[])c.Clone()).ToArray();
         _numOps = MathHelper.GetNumericOperations<T>();
@@ -457,10 +468,24 @@ public class GridKernel<T> : IKernelFunction<T>
                     dot += v[i] * w[i];
                     normV += v[i] * v[i];
                 }
+
+                // Guard against zero norm (matrix became zero after deflation)
+                const double minNorm = 1e-15;
+                if (normV < minNorm)
+                {
+                    eigenvalue = 0;
+                    break;
+                }
                 eigenvalue = dot / normV;
 
                 // Normalize w
                 double normW = Math.Sqrt(w.Sum(x => x * x));
+                if (normW < minNorm)
+                {
+                    // w is effectively zero, eigenvalue is zero
+                    eigenvalue = 0;
+                    break;
+                }
                 for (int i = 0; i < n; i++)
                     v[i] = w[i] / normW;
             }
