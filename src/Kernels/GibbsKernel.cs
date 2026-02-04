@@ -244,8 +244,16 @@ public class GibbsKernel<T> : IKernelFunction<T>
         double frequency = 1.0,
         double variance = 1.0)
     {
-        if (baseScale <= amplitude)
-            throw new ArgumentException("Base scale must be greater than amplitude to ensure positive length scales.");
+        if (baseScale <= 0)
+            throw new ArgumentOutOfRangeException(nameof(baseScale), "Base scale must be positive.");
+        if (amplitude < 0)
+            throw new ArgumentOutOfRangeException(nameof(amplitude), "Amplitude cannot be negative.");
+        if (baseScale <= Math.Abs(amplitude))
+            throw new ArgumentException($"Base scale ({baseScale}) must be greater than |amplitude| ({Math.Abs(amplitude)}) to ensure length scales are always positive.");
+        if (frequency <= 0)
+            throw new ArgumentOutOfRangeException(nameof(frequency), "Frequency must be positive.");
+        if (variance <= 0)
+            throw new ArgumentOutOfRangeException(nameof(variance), "Variance must be positive.");
 
         var numOps = MathHelper.GetNumericOperations<T>();
 

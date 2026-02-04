@@ -690,14 +690,22 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// <inheritdoc/>
     public Matrix<T> PredictProbabilities(Matrix<T> X)
     {
+        if (_numClasses != 2)
+        {
+            throw new NotSupportedException(
+                $"PredictProbabilities currently supports binary classification only. " +
+                $"Found {_numClasses} classes. For multi-class problems, consider One-vs-Rest or One-vs-One strategies.");
+        }
+
         int nSamples = X.Rows;
-        var probabilities = new Matrix<T>(nSamples, _numClasses);
+        // Binary classification: always 2 columns (class 0 and class 1)
+        var probabilities = new Matrix<T>(nSamples, 2);
 
         for (int i = 0; i < nSamples; i++)
         {
             var (_, prob, _) = Predict(X.GetRow(i));
 
-            // For binary classification
+            // For binary classification - reconstruct both class probabilities
             double probClass1 = _numOps.ToDouble(prob);
             // Since prob is the probability of the predicted class,
             // we need to reconstruct both class probabilities

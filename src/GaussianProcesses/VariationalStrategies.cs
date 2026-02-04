@@ -388,8 +388,23 @@ public class VariationalStrategies<T>
         if (variationalMean is null) throw new ArgumentNullException(nameof(variationalMean));
         if (variationalCovChol is null) throw new ArgumentNullException(nameof(variationalCovChol));
 
+        // Validate noise variance to prevent divide-by-zero
+        if (noiseVariance <= 0)
+            throw new ArgumentOutOfRangeException(nameof(noiseVariance),
+                "Noise variance must be positive to prevent divide-by-zero in ELBO computation.");
+
         int n = X.Rows;
         int m = Z.Rows;
+
+        // Validate dimension consistency
+        if (y.Length != n)
+            throw new ArgumentException($"y length ({y.Length}) must match X rows ({n}).", nameof(y));
+        if (variationalMean.Length != m)
+            throw new ArgumentException($"variationalMean length ({variationalMean.Length}) must match Z rows ({m}).", nameof(variationalMean));
+        if (variationalCovChol.Rows != m || variationalCovChol.Columns != m)
+            throw new ArgumentException($"variationalCovChol must be {m}x{m} to match Z rows.", nameof(variationalCovChol));
+        if (X.Columns != Z.Columns)
+            throw new ArgumentException($"X columns ({X.Columns}) must match Z columns ({Z.Columns}).", nameof(Z));
 
         // Compute kernel matrices
         var Kuu = ComputeKernelMatrix(Z, Z, kernel);
@@ -483,16 +498,33 @@ public class VariationalStrategies<T>
             mKuuInvM += _numOps.ToDouble(variationalMean[i]) * _numOps.ToDouble(KuuInvM[i]);
         }
 
-        // Simplified trace term (assumes S is well-conditioned)
+        // Compute tr(Kuu^{-1} S) = ||Luu^{-1} @ S_chol||_F^2
+        // where S = S_chol @ S_chol^T and Kuu = Luu @ Luu^T
         double traceKuuInvS = 0;
-        for (int i = 0; i < m; i++)
+        bool traceFailed = false;
+        for (int j = 0; j < m && !traceFailed; j++)
         {
-            for (int j = 0; j < m; j++)
+            // Solve Luu @ x = S_chol[:, j] for each column of S_chol
+            var sCol = new Vector<T>(m);
+            for (int i = 0; i < m; i++)
             {
-                traceKuuInvS += _numOps.ToDouble(variationalCovChol[i, j]) * _numOps.ToDouble(variationalCovChol[i, j]);
+                sCol[i] = variationalCovChol[i, j];
+            }
+            var x = SolveTriangularSystem(Luu, sCol);
+            if (x is null)
+            {
+                // Fallback to heuristic if solve fails
+                traceKuuInvS = m; // Assume trace = m as approximation
+                traceFailed = true;
+                break;
+            }
+            // Add ||x||^2 to the trace
+            for (int i = 0; i < m; i++)
+            {
+                double xi = _numOps.ToDouble(x[i]);
+                traceKuuInvS += xi * xi;
             }
         }
-        traceKuuInvS /= (logDetKuu / (2 * m) + 1e-6);
 
         klTerm = 0.5 * (traceKuuInvS + mKuuInvM - m + logDetKuu - logDetS);
 

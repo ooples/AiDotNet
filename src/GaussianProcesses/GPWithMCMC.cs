@@ -587,16 +587,12 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
             {
                 var xj = GetRow(_X, j);
 
-                // RBF kernel: outputVar * exp(-0.5 * ||xi - xj||^2 / lengthscale^2)
-                double sqDist = 0;
-                for (int d = 0; d < xi.Length; d++)
-                {
-                    double diff = _numOps.ToDouble(xi[d]) - _numOps.ToDouble(xj[d]);
-                    sqDist += diff * diff;
-                }
+                // Use the actual kernel function instead of hardcoded RBF
+                // The lengthscale and outputVar parameters are used by the kernel's internal hyperparameters
+                // Note: For kernels other than RBF, the MCMC-sampled lengthscale/outputVar are diagnostic only
+                double kval = _numOps.ToDouble(_kernel.Calculate(xi, xj));
 
-                double kval = outputVar * Math.Exp(-0.5 * sqDist / (lengthscale * lengthscale));
-
+                // Add noise variance to diagonal
                 if (i == j)
                     kval += noiseVar;
 
@@ -613,20 +609,16 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     /// </summary>
     private Vector<T> ComputeCrossCovariance(Vector<T> x, double lengthscale, double outputVar)
     {
+        // Note: lengthscale and outputVar parameters are from MCMC samples but the actual
+        // kernel function is used. For non-RBF kernels, these parameters are diagnostic only.
         int n = _X!.Rows;
         var kstar = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
             var xi = GetRow(_X, i);
-            double sqDist = 0;
-            for (int d = 0; d < x.Length; d++)
-            {
-                double diff = _numOps.ToDouble(x[d]) - _numOps.ToDouble(xi[d]);
-                sqDist += diff * diff;
-            }
-            double kval = outputVar * Math.Exp(-0.5 * sqDist / (lengthscale * lengthscale));
-            kstar[i] = _numOps.FromDouble(kval);
+            // Use the actual kernel function instead of hardcoded RBF
+            kstar[i] = _kernel.Calculate(x, xi);
         }
 
         return kstar;

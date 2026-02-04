@@ -118,6 +118,14 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
         {
             if (weights.Length != _numComponents)
                 throw new ArgumentException("Weights length must match number of components.");
+            // Validate weights to preserve kernel positive semi-definiteness
+            for (int i = 0; i < weights.Length; i++)
+            {
+                if (weights[i] < 0)
+                    throw new ArgumentException($"Weight at index {i} is negative ({weights[i]}). Weights must be non-negative to preserve kernel PSD property.");
+                if (double.IsNaN(weights[i]) || double.IsInfinity(weights[i]))
+                    throw new ArgumentException($"Weight at index {i} is not finite ({weights[i]}). Weights must be finite real numbers.");
+            }
             _weights = (double[])weights.Clone();
         }
 
@@ -165,6 +173,14 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
         {
             if (weights.Length != _numComponents)
                 throw new ArgumentException("Weights length must match number of features.");
+            // Validate weights to preserve kernel positive semi-definiteness
+            for (int i = 0; i < weights.Length; i++)
+            {
+                if (weights[i] < 0)
+                    throw new ArgumentException($"Weight at index {i} is negative ({weights[i]}). Weights must be non-negative to preserve kernel PSD property.");
+                if (double.IsNaN(weights[i]) || double.IsInfinity(weights[i]))
+                    throw new ArgumentException($"Weight at index {i} is not finite ({weights[i]}). Weights must be finite real numbers.");
+            }
             _weights = (double[])weights.Clone();
         }
 

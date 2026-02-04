@@ -248,16 +248,21 @@ public class BetaLikelihood<T>
             double mu = Sigmoid(fi);
             var (alpha, beta) = GetBetaParameters(mu);
 
-            // Second derivative (simplified form)
-            double dMu_dF = mu * (1 - mu);
-            double d2Mu_dF2 = dMu_dF * (1 - 2 * mu);
+            // Derivatives of sigmoid: μ = sigmoid(f)
+            double dMu_dF = mu * (1 - mu);           // ∂μ/∂f
+            double d2Mu_dF2 = dMu_dF * (1 - 2 * mu); // ∂²μ/∂f²
 
-            // ∂²/∂μ² (from trigamma functions)
+            // First derivative: ∂logP/∂μ (needed for chain rule)
+            double dLogP_dMu = _precision * (Digamma(beta) - Digamma(alpha));
+            dLogP_dMu += _precision * Math.Log(yi);
+            dLogP_dMu -= _precision * Math.Log(1 - yi);
+
+            // Second derivative: ∂²logP/∂μ² (from trigamma functions)
             double d2LogP_dMu2 = -_precision * _precision * (Trigamma(alpha) + Trigamma(beta));
 
-            // Chain rule for second derivative
-            double d2 = d2LogP_dMu2 * dMu_dF * dMu_dF;
-            // Plus term from second derivative of sigmoid (often negligible)
+            // Full chain rule for second derivative:
+            // ∂²logP/∂f² = (∂²logP/∂μ²)(∂μ/∂f)² + (∂logP/∂μ)(∂²μ/∂f²)
+            double d2 = d2LogP_dMu2 * dMu_dF * dMu_dF + dLogP_dMu * d2Mu_dF2;
 
             hess[i] = _numOps.FromDouble(d2);
         }
