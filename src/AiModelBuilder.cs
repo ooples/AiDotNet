@@ -2355,14 +2355,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             {
                 // Use preprocessed training data as calibration data for consistent quantization
                 // This ensures calibration sees the same data distribution as during training
+                int calibrationSampleCount = _quantizationConfig?.CalibrationSamples ?? 100;
                 IEnumerable<TInput>? calibrationData = null;
                 if (XTrain is TInput[] xTrainArray)
                 {
-                    calibrationData = xTrainArray.Take(Math.Min(128, xTrainArray.Length));
+                    calibrationData = xTrainArray.Take(Math.Min(calibrationSampleCount, xTrainArray.Length));
                 }
                 else if (XTrain is IEnumerable<TInput> xTrainEnumerable)
                 {
-                    calibrationData = xTrainEnumerable.Take(128);
+                    calibrationData = xTrainEnumerable.Take(calibrationSampleCount);
                 }
                 else if (XTrain != null)
                 {
@@ -2380,7 +2381,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     // CRITICAL: Use the quantized model instead of the original
                     optimizationResult.BestSolution = quantizedModel;
                     quantizationInfo = quantizationInfoResult;
-                    Console.WriteLine($"Quantization applied: {_quantizationConfig.Strategy} strategy, " +
+                    var strategy = _quantizationConfig?.Strategy ?? QuantizationStrategy.Dynamic;
+                    Console.WriteLine($"Quantization applied: {strategy} strategy, " +
                         $"{quantizationInfo.BitWidth}-bit, compression ratio: {quantizationInfo.CompressionRatio:F2}x");
                 }
             }
