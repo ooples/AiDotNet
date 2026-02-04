@@ -287,7 +287,7 @@ public class VariationalGaussianProcess<T> : IGaussianProcess<T>
             var choleskyS = new CholeskyDecomposition<T>(S);
             _variationalCovCholesky = choleskyS.L;
         }
-        catch (Exception ex)
+        catch (ArgumentException ex)
         {
             // If Cholesky fails, use scaled identity (matrix may not be positive definite)
             System.Diagnostics.Debug.WriteLine($"Cholesky decomposition failed: {ex.Message}. Using scaled identity.");
@@ -511,7 +511,7 @@ public class VariationalGaussianProcess<T> : IGaussianProcess<T>
             var choleskyS = new CholeskyDecomposition<T>(S);
             _variationalCovCholesky = choleskyS.L;
         }
-        catch (Exception ex)
+        catch (ArgumentException ex)
         {
             // Keep current covariance if decomposition fails
             System.Diagnostics.Debug.WriteLine($"Covariance Cholesky failed: {ex.Message}. Keeping current covariance.");
@@ -680,7 +680,7 @@ public class VariationalGaussianProcess<T> : IGaussianProcess<T>
                 }
             }
         }
-        catch (Exception)
+        catch (ArgumentException)
         {
             // Fallback: use identity approximation (S ≈ K means trace ≈ n)
             trace = n;

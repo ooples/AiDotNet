@@ -106,11 +106,8 @@ public class ARDKernel<T> : IKernelFunction<T>
         if (variance <= 0)
             throw new ArgumentException("Variance must be positive.", nameof(variance));
 
-        foreach (var ls in lengthScales)
-        {
-            if (ls <= 0)
-                throw new ArgumentException("All length scales must be positive.", nameof(lengthScales));
-        }
+        if (lengthScales.Any(ls => ls <= 0))
+            throw new ArgumentException("All length scales must be positive.", nameof(lengthScales));
 
         _lengthScales = (double[])lengthScales.Clone();
         _variance = variance;

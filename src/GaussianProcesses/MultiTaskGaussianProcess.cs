@@ -255,7 +255,7 @@ public class MultiTaskGaussianProcess<T>
             var chol = new CholeskyDecomposition<T>(_taskCovariance);
             _taskCovCholesky = chol.L;
         }
-        catch (Exception ex)
+        catch (ArgumentException ex)
         {
             // Fall back to identity if not positive definite
             System.Diagnostics.Debug.WriteLine($"Task covariance Cholesky failed: {ex.Message}. Using identity.");

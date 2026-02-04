@@ -365,8 +365,8 @@ public class SparseVariationalGaussianProcess<T> : IGaussianProcess<T>
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Compute S = L * L^T (variational covariance)
-            var S = _variationalCovCholesky.Multiply(_variationalCovCholesky.Transpose());
+            // Note: S = L * L^T (variational covariance) is stored implicitly via _variationalCovCholesky
+            // The covariance is reconstructed only when needed (e.g., in ComputeKLDivergence)
 
             // Compute gradient of ELBO with respect to m (variational mean)
             // grad_m = Kuf * (y - predictive_mean) / σ² - Kuu^(-1) * m
@@ -475,7 +475,7 @@ public class SparseVariationalGaussianProcess<T> : IGaussianProcess<T>
             var choleskyS = new CholeskyDecomposition<T>(S);
             _variationalCovCholesky = choleskyS.L;
         }
-        catch (Exception ex)
+        catch (ArgumentException ex)
         {
             // If decomposition fails, keep identity covariance
             // This can happen when S is not positive definite due to numerical issues

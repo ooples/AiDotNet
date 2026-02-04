@@ -278,9 +278,9 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
         var transformed = new Vector<T>(y.Length);
         for (int i = 0; i < y.Length; i++)
         {
-            // Convert 0 -> -1, 1 -> +1
+            // Convert 0 -> -1, 1 -> +1 (use threshold comparison to avoid floating point equality)
             double label = _numOps.ToDouble(y[i]);
-            transformed[i] = _numOps.FromDouble(label == 0 ? -1.0 : 1.0);
+            transformed[i] = _numOps.FromDouble(label < 0.5 ? -1.0 : 1.0);
         }
         return transformed;
     }
@@ -547,14 +547,9 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
         {
             for (int j = 0; j < B.Columns; j++)
             {
-                if (i == j)
-                {
-                    B[i, j] = _numOps.Add(_numOps.One, sqrtWKsqrtW[i, j]);
-                }
-                else
-                {
-                    B[i, j] = sqrtWKsqrtW[i, j];
-                }
+                B[i, j] = i == j
+                    ? _numOps.Add(_numOps.One, sqrtWKsqrtW[i, j])
+                    : sqrtWKsqrtW[i, j];
             }
         }
         return B;
@@ -587,9 +582,6 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// </remarks>
     private T CalculateLogMarginalLikelihood()
     {
-        // Calculate sigmoid probabilities
-        var pi = CalculateSigmoid(_f);
-
         // Log-likelihood term: sum of log p(y|f)
         double logLik = 0.0;
         for (int i = 0; i < _y.Length; i++)
@@ -623,7 +615,7 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
                 logDetB += 2.0 * Math.Log(Math.Abs(_numOps.ToDouble(choleskyB.L[i, i])));
             }
         }
-        catch (Exception ex)
+        catch (ArgumentException ex)
         {
             // If Cholesky fails, use a fallback estimate (matrix may not be positive definite)
             System.Diagnostics.Debug.WriteLine($"Cholesky decomposition failed in log marginal likelihood: {ex.Message}");
@@ -703,12 +695,7 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
 
         for (int i = 0; i < nSamples; i++)
         {
-            var (_, prob, _) = Predict(X.GetRow(i));
-
-            // For binary classification - reconstruct both class probabilities
-            double probClass1 = _numOps.ToDouble(prob);
-            // Since prob is the probability of the predicted class,
-            // we need to reconstruct both class probabilities
+            // Compute probabilities directly from latent function
             var kStar = CalculateKernelVector(_X, X.GetRow(i));
             var alpha = MatrixSolutionHelper.SolveLinearSystem(_K, _f, _decompositionType);
             T fMean = kStar.DotProduct(alpha);
