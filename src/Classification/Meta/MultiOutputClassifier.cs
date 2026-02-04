@@ -30,15 +30,22 @@ namespace AiDotNet.Classification.Meta;
 /// Note: Unlike ClassifierChain, this does NOT capture label dependencies.
 /// </para>
 /// </remarks>
-public class MultiOutputClassifier<T> : MetaClassifierBase<T>, IMultiLabelClassifier<T>
+public class MultiOutputClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>
     /// The classifiers, one per output.
     /// </summary>
     private IClassifier<T>[]? _classifiers;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the number of labels (same as number of classes for multi-label).
+    /// </summary>
     public int NumLabels => NumClasses;
+
+    /// <summary>
+    /// Gets or sets the label names if available.
+    /// </summary>
+    public string[]? LabelNames { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the MultiOutputClassifier class.
@@ -161,7 +168,11 @@ public class MultiOutputClassifier<T> : MetaClassifierBase<T>, IMultiLabelClassi
         return predictions;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Predicts multi-label output for the given input.
+    /// </summary>
+    /// <param name="input">The input features matrix.</param>
+    /// <returns>A matrix of binary predictions for each label.</returns>
     public Matrix<T> PredictMultiLabel(Matrix<T> input)
     {
         if (_classifiers is null)

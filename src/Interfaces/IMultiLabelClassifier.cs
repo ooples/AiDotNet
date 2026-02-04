@@ -1,45 +1,59 @@
 namespace AiDotNet.Interfaces;
 
 /// <summary>
-/// Interface for multi-label classifiers that can predict multiple labels per sample.
+/// Interface for multi-label classification models.
 /// </summary>
-/// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <remarks>
-/// <para>
-/// Multi-label classification differs from multi-class classification:
-/// - Multi-class: One label per sample (mutually exclusive)
-/// - Multi-label: Zero, one, or many labels per sample (not mutually exclusive)
+/// <para><b>For Beginners:</b> Multi-label classification assigns multiple labels to each sample,
+/// unlike traditional classification which assigns exactly one label. For example, a news article
+/// might be tagged with both "politics" and "economy".</para>
+///
+/// <para><b>Key differences from multi-class classification:</b>
+/// <list type="bullet">
+/// <item>Each sample can have zero, one, or multiple labels</item>
+/// <item>Labels are not mutually exclusive</item>
+/// <item>Output is a binary indicator matrix (1 = label present, 0 = absent)</item>
+/// </list>
 /// </para>
-/// <para>
-/// <b>For Beginners:</b>
-/// In multi-label classification, each sample can have multiple labels:
 ///
-/// Examples:
-/// - An article tagged with "politics", "economy", and "international"
-/// - A movie classified as "action", "comedy", and "romance"
-/// - An image containing "dog", "person", and "outdoor"
-///
-/// The output is a binary matrix where each column is a label indicator.
+/// <para><b>Common approaches:</b>
+/// <list type="bullet">
+/// <item><b>Problem Transformation:</b> Convert to multiple binary problems (Binary Relevance, Classifier Chains)</item>
+/// <item><b>Algorithm Adaptation:</b> Adapt algorithms to handle multiple labels (ML-kNN, RAkEL)</item>
+/// </list>
 /// </para>
 /// </remarks>
-public interface IMultiLabelClassifier<T> : IClassifier<T>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
+public interface IMultiLabelClassifier<T> : IFullModel<T, Matrix<T>, Matrix<T>>
 {
     /// <summary>
-    /// Gets the number of labels that can be predicted.
+    /// Gets the number of possible labels.
     /// </summary>
     int NumLabels { get; }
 
     /// <summary>
-    /// Predicts binary indicators for each label for each sample.
+    /// Gets the label names if available.
     /// </summary>
-    /// <param name="input">The input feature matrix.</param>
-    /// <returns>A binary matrix where each row is a sample and each column is a label indicator (1=present, 0=absent).</returns>
-    Matrix<T> PredictMultiLabel(Matrix<T> input);
+    string[]? LabelNames { get; }
 
     /// <summary>
-    /// Predicts probabilities for each label for each sample.
+    /// Trains the multi-label classifier.
     /// </summary>
-    /// <param name="input">The input feature matrix.</param>
-    /// <returns>A probability matrix where each row is a sample and each column is the probability of that label.</returns>
-    Matrix<T> PredictMultiLabelProbabilities(Matrix<T> input);
+    /// <param name="features">Feature matrix [n_samples, n_features].</param>
+    /// <param name="labels">Binary label matrix [n_samples, n_labels] where 1 indicates label presence.</param>
+    new void Train(Matrix<T> features, Matrix<T> labels);
+
+    /// <summary>
+    /// Predicts binary label indicators for input samples.
+    /// </summary>
+    /// <param name="features">Feature matrix [n_samples, n_features].</param>
+    /// <returns>Binary label matrix [n_samples, n_labels].</returns>
+    new Matrix<T> Predict(Matrix<T> features);
+
+    /// <summary>
+    /// Predicts label probabilities for input samples.
+    /// </summary>
+    /// <param name="features">Feature matrix [n_samples, n_features].</param>
+    /// <returns>Probability matrix [n_samples, n_labels] with values in [0, 1].</returns>
+    Matrix<T> PredictProbabilities(Matrix<T> features);
 }

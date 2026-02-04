@@ -3,17 +3,18 @@ using AiDotNet.Models.Options;
 namespace AiDotNet.Classification.Meta;
 
 /// <summary>
-/// One-vs-Rest (also called One-vs-All) classifier for multi-class classification.
+/// One-vs-Rest (also called One-vs-All) classifier for multi-class and multi-label classification.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
 /// Trains one binary classifier per class, treating it as the positive class
-/// and all other classes as the negative class.
+/// and all other classes as the negative class. This approach works for both
+/// multi-class (exactly one label per sample) and multi-label (zero or more labels per sample) problems.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b>
-/// One-vs-Rest is a simple strategy for multi-class classification:
+/// One-vs-Rest is a simple strategy for multi-class and multi-label classification:
 ///
 /// For 3 classes (A, B, C):
 /// - Classifier 1: Is it A vs not-A?
@@ -31,16 +32,32 @@ namespace AiDotNet.Classification.Meta;
 /// - Class imbalance (one class vs all others)
 /// - Classifiers don't see inter-class relationships
 /// </para>
+/// <para>
+/// <b>Multi-label usage:</b>
+/// This classifier also supports multi-label classification via
+/// <see cref="TrainMultiLabel(Matrix{T}, Matrix{T})"/>, along with the
+/// <see cref="NumLabels"/> and <see cref="LabelNames"/> properties.
+/// When using this class in a multi-label setting, prefer
+/// <see cref="TrainMultiLabel(Matrix{T}, Matrix{T})"/> over
+/// <see cref="Train(Matrix{T}, Vector{T})"/>.
+/// </para>
 /// </remarks>
-public class OneVsRestClassifier<T> : MetaClassifierBase<T>, IMultiLabelClassifier<T>
+public class OneVsRestClassifier<T> : MetaClassifierBase<T>
 {
     /// <summary>
     /// The binary classifiers, one per class.
     /// </summary>
     private IClassifier<T>[]? _estimators;
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Gets the number of labels (same as number of classes for multi-label).
+    /// </summary>
     public int NumLabels => NumClasses;
+
+    /// <summary>
+    /// Gets or sets the label names if available.
+    /// </summary>
+    public string[]? LabelNames { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the OneVsRestClassifier class.
@@ -60,6 +77,47 @@ public class OneVsRestClassifier<T> : MetaClassifierBase<T>, IMultiLabelClassifi
     /// Returns the model type identifier for this classifier.
     /// </summary>
     protected override ModelType GetModelType() => ModelType.OneVsRestClassifier;
+
+    /// <summary>
+    /// Trains the One-vs-Rest classifier on multi-label data.
+    /// </summary>
+    /// <param name="x">The input features matrix.</param>
+    /// <param name="yMultiLabel">The multi-label target matrix (rows=samples, cols=labels).</param>
+    public void TrainMultiLabel(Matrix<T> x, Matrix<T> yMultiLabel)
+    {
+        if (x.Rows != yMultiLabel.Rows)
+        {
+            throw new ArgumentException("Number of samples in X must match number of rows in Y.");
+        }
+
+        NumFeatures = x.Columns;
+        NumClasses = yMultiLabel.Columns;
+        TaskType = ClassificationTaskType.MultiLabel;
+
+        // Create class labels (0 to NumClasses-1)
+        ClassLabels = new Vector<T>(NumClasses);
+        for (int c = 0; c < NumClasses; c++)
+        {
+            ClassLabels[c] = NumOps.FromDouble(c);
+        }
+
+        // Train one binary classifier per label
+        _estimators = new IClassifier<T>[NumClasses];
+
+        for (int c = 0; c < NumClasses; c++)
+        {
+            // Get labels for this output
+            var yLabel = new Vector<T>(x.Rows);
+            for (int i = 0; i < x.Rows; i++)
+            {
+                yLabel[i] = yMultiLabel[i, c];
+            }
+
+            // Train binary classifier
+            _estimators[c] = CreateBaseEstimator();
+            _estimators[c].Train(x, yLabel);
+        }
+    }
 
     /// <summary>
     /// Trains the One-vs-Rest classifier on the provided data.
