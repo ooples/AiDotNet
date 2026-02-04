@@ -21,6 +21,12 @@ namespace AiDotNet.Kernels;
 /// - Natural language processing
 /// - Any domain with sequential/string data
 /// </para>
+/// <para>
+/// <b>Note:</b> This class does NOT implement IKernelFunction&lt;T&gt; by design. Unlike numeric
+/// kernels that operate on Vector&lt;T&gt; feature vectors, string kernels operate directly on
+/// text data. To use string kernels with standard GP models, use this class to compute a
+/// kernel matrix from your text data, then use that matrix with a custom kernel implementation.
+/// </para>
 /// </remarks>
 public class StringKernel<T>
 {
