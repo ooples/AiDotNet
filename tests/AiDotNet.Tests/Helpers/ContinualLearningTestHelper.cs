@@ -353,6 +353,14 @@ public class MockLayer<T> : ILayer<T>
         return input; // Identity for testing
     }
 
+    public Tensor<T> ForwardWithPrecisionCheck(Tensor<T> input)
+    {
+        // For testing, just delegate to Forward
+        return Forward(input);
+    }
+
+    public string LayerName => "MockLayer";
+
     public Tensor<T> Backward(Tensor<T> outputGradient)
     {
         // Set some gradients for testing

@@ -1025,8 +1025,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Store input to each layer for backpropagation
             _layerInputs[i] = current;
 
-            // Forward pass through layer
-            current = Layers[i].Forward(current);
+            // Forward pass through layer with mixed-precision awareness
+            // ForwardWithPrecisionCheck automatically handles precision based on
+            // the current MixedPrecisionScope and LayerPrecisionPolicy
+            current = Layers[i].ForwardWithPrecisionCheck(current);
 
             // Store output from each layer for backpropagation
             _layerOutputs[i] = current;
