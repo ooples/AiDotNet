@@ -1319,6 +1319,12 @@ public class MixedPrecisionIntegrationTests
         // - Run training with EnableMixedPrecision = true
         // - Run same training with EnableMixedPrecision = false
         // - Assert final loss within 5% tolerance
+        //
+        // NOTE: This test uses simulated training loops to verify the mathematical
+        // equivalence of mixed-precision vs full-precision computations. It validates
+        // that FP16+scaling produces similar results to FP32 within tolerance.
+        // For end-to-end integration testing of MixedPrecisionTrainingLoop, optimizer
+        // routing, and actual neural network training, see dedicated neural network tests.
 
         // Arrange
         const int numIterations = 10;
@@ -1616,8 +1622,8 @@ public class MixedPrecisionIntegrationTests
         // Arrange
         var layer = new TestLayer();
 
-        // Assert
-        Assert.Equal("TestLayer", layer.LayerName);
+        // Assert - LayerName now includes instance ID suffix for uniqueness (e.g., "TestLayer_1")
+        Assert.StartsWith("TestLayer_", layer.LayerName);
     }
 
     [Fact]

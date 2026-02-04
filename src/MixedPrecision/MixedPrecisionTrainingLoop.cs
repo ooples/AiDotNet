@@ -111,11 +111,17 @@ public class MixedPrecisionTrainingLoop<T>
     {
         return precisionType switch
         {
+            Enums.MixedPrecisionType.FP16 => LayerPrecisionPolicy.ForFP16(),
             Enums.MixedPrecisionType.BF16 => LayerPrecisionPolicy.ForBF16(),
             Enums.MixedPrecisionType.FP8_E4M3 or
             Enums.MixedPrecisionType.FP8_E5M2 or
             Enums.MixedPrecisionType.FP8_Hybrid => LayerPrecisionPolicy.ForFP8(),
-            _ => LayerPrecisionPolicy.ForFP16()
+            Enums.MixedPrecisionType.None or Enums.MixedPrecisionType.TF32 =>
+                throw new ArgumentException(
+                    $"Precision type '{precisionType}' is not supported by MixedPrecisionTrainingLoop. " +
+                    "Configure a mixed-precision mode (e.g., FP16, BF16, or FP8) for mixed-precision training.",
+                    nameof(precisionType)),
+            _ => throw new ArgumentOutOfRangeException(nameof(precisionType), precisionType, "Unknown precision type.")
         };
     }
 

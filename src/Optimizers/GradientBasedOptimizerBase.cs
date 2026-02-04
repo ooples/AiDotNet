@@ -598,8 +598,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             // which would corrupt the cache for future calls with the same key.
             var clonedGradient = new Vector<T>(cachedGradient.Parameters.ToArray());
 
-            // Note: Cached gradients are already scaled for mixed-precision (scaling applied before caching).
-            // Do NOT scale again here to avoid double-scaling.
+            // Gradients are cached in UNSCALED form to handle dynamic loss scaling correctly.
+            // Scale them now with the CURRENT loss scale factor.
+            clonedGradient = ApplyMixedPrecisionScaling(clonedGradient);
 
             _lastComputedGradients = clonedGradient;
             return clonedGradient;
@@ -643,12 +644,16 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // Apply gradient clipping if enabled
         gradient = ApplyGradientClipping(gradient);
 
-        // Scale gradients for mixed-precision training
-        // The gradients will be unscaled in ApplyGradientsWithMixedPrecision before the optimizer step
-        gradient = ApplyMixedPrecisionScaling(gradient);
-
+        // Cache gradients in UNSCALED form to avoid issues with dynamic loss scaling.
+        // The loss scale can change between gradient computation and application (e.g., when
+        // overflow is detected in another batch). Caching scaled gradients would cause incorrect
+        // unscaling if the scale changed. Instead, scale on retrieval using the current scale.
         var gradientModel = new GradientModel<T>(gradient);
         GradientCache.CacheGradient(cacheKey, gradientModel);
+
+        // Scale gradients for mixed-precision training AFTER caching
+        // The gradients will be unscaled in ApplyGradientsWithMixedPrecision before the optimizer step
+        gradient = ApplyMixedPrecisionScaling(gradient);
 
         // Store for external access (enables gradient clipping, true DDP, debugging, etc.)
         _lastComputedGradients = gradient;

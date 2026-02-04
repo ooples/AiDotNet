@@ -203,6 +203,28 @@ public class MixedPrecisionScope : IDisposable
     }
 
     /// <summary>
+    /// Registers an FP32 tensor for tracking without creating an FP16 copy.
+    /// </summary>
+    /// <param name="name">A unique name to identify this tensor in the scope.</param>
+    /// <param name="fp32Tensor">The FP32 tensor to register.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this method for layers that require FP32 precision
+    /// (like BatchNorm, LayerNorm). It stores the tensor for tracking purposes without
+    /// the overhead of creating an unnecessary FP16 copy.
+    /// </para>
+    /// </remarks>
+    public void RegisterFP32Only(string name, Tensor<float> fp32Tensor)
+    {
+        if (fp32Tensor == null)
+        {
+            throw new ArgumentNullException(nameof(fp32Tensor));
+        }
+
+        // Store only the FP32 version - no FP16 copy needed for FP32-only layers
+        _fp32Tensors[name] = fp32Tensor;
+    }
+
+    /// <summary>
     /// Retrieves the FP32 version of a previously registered tensor.
     /// </summary>
     /// <param name="name">The name used when registering the tensor.</param>
