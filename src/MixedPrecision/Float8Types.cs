@@ -289,7 +289,7 @@ public readonly struct Float8E4M3 : IEquatable<Float8E4M3>, IComparable<Float8E4
 /// <item><description>5 exponent bits (bias = 15)</description></item>
 /// <item><description>2 mantissa bits</description></item>
 /// <item><description>Range: ±57344</description></item>
-/// <item><description>Smallest positive: ~0.0000610352</description></item>
+/// <item><description>Smallest positive (subnormal): ~0.0000152588 (2^-16)</description></item>
 /// </list>
 /// </para>
 /// <para>
@@ -321,9 +321,9 @@ public readonly struct Float8E5M2 : IEquatable<Float8E5M2>, IComparable<Float8E5
     public static readonly Float8E5M2 MaxValue = FromFloat(57344f);
 
     /// <summary>
-    /// Minimum representable positive value in E5M2 format.
+    /// Minimum representable positive value in E5M2 format (smallest subnormal: 2^-16).
     /// </summary>
-    public static readonly Float8E5M2 MinPositive = FromFloat(0.0000610352f);
+    public static readonly Float8E5M2 MinPositive = FromFloat(0.0000152588f);
 
     /// <summary>
     /// Represents positive zero.
