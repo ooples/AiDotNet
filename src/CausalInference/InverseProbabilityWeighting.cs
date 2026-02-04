@@ -745,6 +745,8 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
                 {
                     _propensityCoefficients[i] = NumOps.FromDouble(coeffs[i]);
                 }
+                // Restore NumFeatures (coefficients include bias, so features = length - 1)
+                NumFeatures = coeffs.Length - 1;
             }
         }
     }

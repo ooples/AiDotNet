@@ -297,9 +297,12 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
                 }
             }
 
-            predictions[i] = sumWeight > 0
-                ? NumOps.FromDouble(sumOutcome / sumWeight)
-                : NumOps.Zero;
+            if (sumWeight == 0)
+            {
+                throw new InvalidOperationException(
+                    $"No treated matches found within caliper {_caliper} for control query at index {i}.");
+            }
+            predictions[i] = NumOps.FromDouble(sumOutcome / sumWeight);
         }
 
         return predictions;
@@ -353,9 +356,12 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
                 }
             }
 
-            predictions[i] = sumWeight > 0
-                ? NumOps.FromDouble(sumOutcome / sumWeight)
-                : NumOps.Zero;
+            if (sumWeight == 0)
+            {
+                throw new InvalidOperationException(
+                    $"No control matches found within caliper {_caliper} for treated query at index {i}.");
+            }
+            predictions[i] = NumOps.FromDouble(sumOutcome / sumWeight);
         }
 
         return predictions;
@@ -874,8 +880,15 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
                 nControl++;
             }
 
-            if (nTreated > 0) meanTreated /= nTreated;
-            if (nControl > 0) meanControl /= nControl;
+            // Guard: if either group has zero matched samples, SMD is undefined
+            if (nTreated == 0 || nControl == 0)
+            {
+                afterSMD[j] = NumOps.Zero;
+                continue;
+            }
+
+            meanTreated /= nTreated;
+            meanControl /= nControl;
 
             // Second pass: variances
             foreach (var (treatedIdx, _) in matches)

@@ -92,6 +92,17 @@ public class SmoteEnnAugmenter<T> : TabularAugmenterBase<T>
         Vector<T> labels,
         AugmentationContext<T> context)
     {
+        // Validate inputs
+        if (data.Rows == 0 || labels.Length == 0)
+        {
+            throw new ArgumentException("Data and labels must be non-empty.");
+        }
+        if (data.Rows != labels.Length)
+        {
+            throw new ArgumentException(
+                $"Row count mismatch: data has {data.Rows} rows but labels has {labels.Length} items.");
+        }
+
         // Step 1: Identify minority class
         var classCounts = GetClassCounts(labels, out var classLabelsList);
 
