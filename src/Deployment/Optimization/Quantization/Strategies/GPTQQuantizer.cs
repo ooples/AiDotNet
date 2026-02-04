@@ -162,7 +162,9 @@ public class GPTQQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
         }
 
         // Get column processing order (ActOrder optimization)
-        int[] order = GetProcessingOrder(weights, n, config.GPTQActOrder);
+        // Cache ActOrder flag to avoid repeated property access in hot loop
+        bool useActOrder = config.GPTQActOrder;
+        int[] order = GetProcessingOrder(weights, n, useActOrder);
 
         // Process each group
         for (int g = 0; g < numGroups; g++)
@@ -231,7 +233,7 @@ public class GPTQQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
                 if (Math.Abs(error) > 1e-10)
                 {
                     // When ActOrder is enabled, idx may differ from i, so use idx for Hessian lookup
-                    double hDiag = config.GPTQActOrder
+                    double hDiag = useActOrder
                         ? GetHessianDiagonalValue(idx)
                         : hessianDiag[i - groupStart];
 
