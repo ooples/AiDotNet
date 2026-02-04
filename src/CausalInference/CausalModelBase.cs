@@ -557,6 +557,10 @@ public abstract class CausalModelBase<T> : ICausalModel<T>
         Vector<T> outcome,
         int numBootstraps = 100)
     {
+        if (numBootstraps < 2)
+            throw new ArgumentOutOfRangeException(nameof(numBootstraps),
+                "numBootstraps must be at least 2 to compute variance.");
+
         var random = Tensors.Helpers.RandomHelper.CreateSecureRandom();
         var estimates = new List<double>();
         int n = x.Rows;
@@ -616,6 +620,11 @@ public abstract class CausalModelBase<T> : ICausalModel<T>
     {
         int n = x.Rows;
         int p = x.Columns;
+
+        if (n == 0)
+            throw new ArgumentException("Training data cannot be empty (n == 0).", nameof(x));
+        if (treatment.Length != n)
+            throw new ArgumentException($"Treatment vector length ({treatment.Length}) must match data rows ({n}).", nameof(treatment));
 
         // Initialize coefficients to zero
         var coefficients = new Vector<T>(p + 1); // +1 for intercept

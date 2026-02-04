@@ -217,15 +217,18 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
             }
 
             // Add selected samples to training set
-            foreach (int idx in selectedIndices)
+            // Note: selectedIndices contains indices into remainingUnlabeled
+            // predictedLabels and confidences are parallel lists aligned with selectedIndices
+            for (int i = 0; i < selectedIndices.Count; i++)
             {
+                int idx = selectedIndices[i]; // Index into remainingUnlabeled
                 int originalIndex = remainingUnlabeled[idx];
                 currentLabeledX.Add(unlabeledX.GetRow(originalIndex));
-                currentLabeledY.Add(predictedLabels[idx]);
+                currentLabeledY.Add(predictedLabels[i]); // Use i, not idx
 
                 // Store pseudo-label info
-                PseudoLabels[originalIndex] = predictedLabels[idx];
-                PseudoLabelConfidences[originalIndex] = confidences[idx];
+                PseudoLabels[originalIndex] = predictedLabels[i];
+                PseudoLabelConfidences[originalIndex] = confidences[i];
             }
 
             SamplesAdded += selectedIndices.Count;
