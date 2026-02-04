@@ -106,6 +106,15 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
         if (interpolationOrder < 2)
             throw new ArgumentException("Interpolation order must be at least 2.");
 
+        // Validate each dimension has at least one coordinate
+        for (int i = 0; i < gridCoordinates.Length; i++)
+        {
+            if (gridCoordinates[i] is null)
+                throw new ArgumentNullException($"gridCoordinates[{i}]", $"Grid coordinates for dimension {i} cannot be null.");
+            if (gridCoordinates[i].Length == 0)
+                throw new ArgumentException($"Grid coordinates for dimension {i} cannot be empty. Each dimension must have at least one coordinate.");
+        }
+
         _gridSizes = gridCoordinates.Select(c => c.Length).ToArray();
         _interpolationOrder = interpolationOrder;
         _numOps = MathHelper.GetNumericOperations<T>();
@@ -143,6 +152,27 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
     {
         int d = NumDimensions;
         _toeplitzColumns = new Vector<T>[d];
+
+        // Validate uniform grid spacing (required for Toeplitz structure)
+        for (int dim = 0; dim < d; dim++)
+        {
+            var coords = _gridCoordinates[dim];
+            if (coords.Length >= 2)
+            {
+                double expectedSpacing = coords[1] - coords[0];
+                const double tolerance = 1e-10;
+                for (int i = 2; i < coords.Length; i++)
+                {
+                    double actualSpacing = coords[i] - coords[i - 1];
+                    if (Math.Abs(actualSpacing - expectedSpacing) > tolerance * Math.Max(1.0, Math.Abs(expectedSpacing)))
+                    {
+                        throw new InvalidOperationException(
+                            $"Grid dimension {dim} is not uniformly spaced. Toeplitz structure requires uniform spacing. " +
+                            $"Expected spacing {expectedSpacing:G6}, got {actualSpacing:G6} between indices {i - 1} and {i}.");
+                    }
+                }
+            }
+        }
 
         for (int dim = 0; dim < d; dim++)
         {
@@ -414,6 +444,10 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
         int gridPointsPerDim,
         int interpolationOrder = 4)
     {
+        if (gridPointsPerDim < 2)
+            throw new ArgumentOutOfRangeException(nameof(gridPointsPerDim),
+                "gridPointsPerDim must be at least 2 to create a grid with valid spacing.");
+
         var gridCoordinates = new double[bounds.Length][];
 
         for (int d = 0; d < bounds.Length; d++)

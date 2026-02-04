@@ -102,6 +102,10 @@ public class GradientKernel<T> : IKernelFunction<T>
             throw new ArgumentException("Length scale must be positive.", nameof(lengthScale));
         if (outputScale <= 0)
             throw new ArgumentException("Output scale must be positive.", nameof(outputScale));
+        if (kernelType == GradientKernelType.Polynomial)
+            throw new NotSupportedException(
+                "Polynomial kernel does not support gradient observations because its derivatives " +
+                "are not implemented. Use RBF, Matern52, or Matern32 instead.");
 
         _inputDim = inputDim;
         _kernelType = kernelType;
@@ -115,7 +119,6 @@ public class GradientKernel<T> : IKernelFunction<T>
             GradientKernelType.RBF => new GaussianKernel<T>(lengthScale),
             GradientKernelType.Matern52 => new MaternKernel<T>(2.5, lengthScale, outputScale),
             GradientKernelType.Matern32 => new MaternKernel<T>(1.5, lengthScale, outputScale),
-            GradientKernelType.Polynomial => new PolynomialKernel<T>(),
             _ => new GaussianKernel<T>(lengthScale)
         };
     }
@@ -166,12 +169,23 @@ public class GradientKernel<T> : IKernelFunction<T>
 
         int len1 = x1.Length;
         int len2 = x2.Length;
+        int expectedLen = _inputDim + 1;
 
-        if (len1 < 2 || len2 < 2)
-            throw new ArgumentException("Extended vectors must have at least 2 elements.");
+        if (len1 != expectedLen)
+            throw new ArgumentException($"x1 must have length {expectedLen} (inputDim + 1), got {len1}.", nameof(x1));
+        if (len2 != expectedLen)
+            throw new ArgumentException($"x2 must have length {expectedLen} (inputDim + 1), got {len2}.", nameof(x2));
 
         int gradDim1 = (int)Math.Round(_numOps.ToDouble(x1[len1 - 1]));
         int gradDim2 = (int)Math.Round(_numOps.ToDouble(x2[len2 - 1]));
+
+        // Validate gradient dimensions: -1 for value, or [0, inputDim-1] for gradient
+        if (gradDim1 < -1 || gradDim1 >= _inputDim)
+            throw new ArgumentOutOfRangeException(nameof(x1),
+                $"Gradient dimension {gradDim1} in x1 must be -1 (value) or in [0, {_inputDim - 1}].");
+        if (gradDim2 < -1 || gradDim2 >= _inputDim)
+            throw new ArgumentOutOfRangeException(nameof(x2),
+                $"Gradient dimension {gradDim2} in x2 must be -1 (value) or in [0, {_inputDim - 1}].");
 
         // Extract input parts
         var input1 = ExtractInput(x1);
