@@ -8,9 +8,8 @@ public class SteadyStateGeneticAlgorithm<T, TInput, TOutput> :
     public SteadyStateGeneticAlgorithm(
         Func<IFullModel<T, TInput, TOutput>> modelFactory,
         IFitnessCalculator<T, TInput, TOutput> fitnessCalculator,
-        IModelEvaluator<T, TInput, TOutput> modelEvaluator,
         double replacementRate = 0.1)
-        : base(modelFactory, fitnessCalculator, modelEvaluator)
+        : base(modelFactory, fitnessCalculator)
     {
         _replacementRate = replacementRate;
     }

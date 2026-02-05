@@ -27,8 +27,8 @@ namespace AiDotNet.AutoML;
 /// </remarks>
 public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput>
 {
-    public RandomSearchAutoML(IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null, Random? random = null)
-        : base(modelEvaluator, random)
+    public RandomSearchAutoML(Random? random = null)
+        : base(random)
     {
     }
 
@@ -135,6 +135,6 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
 
     protected override AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy()
     {
-        return new RandomSearchAutoML<T, TInput, TOutput>(_modelEvaluator, Random);
+        return new RandomSearchAutoML<T, TInput, TOutput>(Random);
     }
 }

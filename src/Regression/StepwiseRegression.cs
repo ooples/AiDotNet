@@ -95,26 +95,6 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// </remarks>
     private List<int> _selectedFeatures;
 
-    /// <summary>
-    /// The evaluator used to assess the performance of models during the feature selection process.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This component evaluates various metrics about each potential model, such as prediction error,
-    /// R-squared, and other statistics that help determine the quality of the model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the measurement tools in your kitchen.
-    /// 
-    /// The model evaluator:
-    /// - Measures different aspects of your recipe's performance
-    /// - Calculates things like how close your predictions are to the actual values
-    /// - Provides data that the fitness calculator uses to score each model
-    /// 
-    /// Think of it as the thermometer, scale, and timer that help you objectively assess 
-    /// how well your recipe turned out.
-    /// </para>
-    /// </remarks>
-    private readonly IModelEvaluator<T, Matrix<T>, Vector<T>> _modelEvaluator;
 
     /// <summary>
     /// Creates a new stepwise regression model.
@@ -134,12 +114,8 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// If not provided, adjusted R-squared will be used as the fitness metric.
     /// </param>
     /// <param name="regularization">
-    /// Optional regularization method to prevent overfitting. 
+    /// Optional regularization method to prevent overfitting.
     /// If not provided, no regularization will be applied.
-    /// </param>
-    /// <param name="modelEvaluator">
-    /// Optional evaluator for assessing model performance.
-    /// If not provided, the default model evaluator will be used.
     /// </param>
     /// <remarks>
     /// <para>
@@ -162,14 +138,12 @@ public class StepwiseRegression<T> : RegressionBase<T>
     public StepwiseRegression(StepwiseRegressionOptions<T>? options = null,
         PredictionStatsOptions? predictionOptions = null,
         IFitnessCalculator<T, Matrix<T>, Vector<T>>? fitnessCalculator = null,
-        IRegularization<T, Matrix<T>, Vector<T>>? regularization = null,
-        IModelEvaluator<T, Matrix<T>, Vector<T>>? modelEvaluator = null)
+        IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
         _options = options ?? new StepwiseRegressionOptions<T>();
         _fitnessCalculator = fitnessCalculator ?? new AdjustedRSquaredFitnessCalculator<T, Matrix<T>, Vector<T>>();
         _selectedFeatures = new List<int>();
-        _modelEvaluator = modelEvaluator ?? new DefaultModelEvaluator<T, Matrix<T>, Vector<T>>();
     }
 
     /// <summary>
@@ -417,12 +391,8 @@ public class StepwiseRegression<T> : RegressionBase<T>
             var regression = new MultipleRegression<T>(Options, Regularization);
             regression.Train(currentX, y);
 
-            var input = new ModelEvaluationInput<T, Matrix<T>, Vector<T>>
-            {
-                Model = regression,
-                InputData = OptimizerHelper<T, Matrix<T>, Vector<T>>.CreateOptimizationInputData(currentX, y, currentX, y, currentX, y)
-            };
-            var evaluationData = _modelEvaluator.EvaluateModel(input);
+            // Inline evaluation - create ModelEvaluationData directly
+            var evaluationData = EvaluateModelDirectly(regression, currentX, y);
             var score = _fitnessCalculator.CalculateFitnessScore(evaluationData);
 
             if (_fitnessCalculator.IsBetterFitness(score, bestScore))
@@ -433,6 +403,70 @@ public class StepwiseRegression<T> : RegressionBase<T>
         }
 
         return (bestFeatureIndex, bestScore);
+    }
+
+    /// <summary>
+    /// Evaluates a model directly without using an external evaluator.
+    /// </summary>
+    private ModelEvaluationData<T, Matrix<T>, Vector<T>> EvaluateModelDirectly(
+        IFullModel<T, Matrix<T>, Vector<T>> model,
+        Matrix<T> inputs,
+        Vector<T> targets)
+    {
+        var predictions = model.Predict(inputs);
+
+        // Calculate error stats using proper input class
+        var errorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
+        {
+            Actual = targets,
+            Predicted = predictions,
+            FeatureCount = inputs.Columns,
+            PredictionType = PredictionType.Regression
+        });
+
+        // Calculate basic stats using proper input class
+        var actualBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = targets });
+        var predictedBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = predictions });
+
+        // Calculate prediction stats using proper input class
+        var predictionStats = new PredictionStats<T>(new PredictionStatsInputs<T>
+        {
+            Actual = targets,
+            Predicted = predictions,
+            NumberOfParameters = inputs.Columns,
+            PredictionType = PredictionType.Regression
+        });
+
+        // Create dataset stats
+        var dataSetStats = new DataSetStats<T, Matrix<T>, Vector<T>>
+        {
+            ErrorStats = errorStats,
+            ActualBasicStats = actualBasicStats,
+            PredictedBasicStats = predictedBasicStats,
+            PredictionStats = predictionStats,
+            Features = inputs,
+            Actual = targets,
+            Predicted = predictions,
+            IsDataProvided = true
+        };
+
+        // Create model stats using proper input class
+        var modelStats = new ModelStats<T, Matrix<T>, Vector<T>>(new ModelStatsInputs<T, Matrix<T>, Vector<T>>
+        {
+            XMatrix = inputs,
+            FeatureCount = inputs.Columns,
+            Actual = targets,
+            Predicted = predictions
+        });
+
+        // Return evaluation data with same data for training/validation/test
+        return new ModelEvaluationData<T, Matrix<T>, Vector<T>>
+        {
+            TrainingSet = dataSetStats,
+            ValidationSet = dataSetStats,
+            TestSet = dataSetStats,
+            ModelStats = modelStats
+        };
     }
 
     /// <summary>
@@ -566,20 +600,19 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// <remarks>
     /// <para>
     /// This method creates a deep copy of the current Stepwise Regression model, including its coefficients,
-    /// intercept, configuration options, selected features, fitness calculator, and model evaluator. 
-    /// The new instance is completely independent of the original, allowing modifications without 
+    /// intercept, configuration options, selected features, and fitness calculator.
+    /// The new instance is completely independent of the original, allowing modifications without
     /// affecting the original model.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates an exact copy of the current regression model.
-    /// 
+    ///
     /// The copy includes:
     /// - The same coefficients (the importance values for each feature)
     /// - The same intercept (the starting point value)
     /// - The same list of selected features (the ingredients that were chosen as important)
     /// - The same configuration settings (like whether to use forward or backward selection)
     /// - The same fitness calculator (the judge that evaluates model quality)
-    /// - The same model evaluator (the measurement tools that assess performance)
-    /// 
+    ///
     /// This is useful when you want to:
     /// - Create a backup before further training or modification
     /// - Create variations of the same model for different purposes
@@ -592,8 +625,7 @@ public class StepwiseRegression<T> : RegressionBase<T>
             options: _options,
             predictionOptions: null,
             fitnessCalculator: _fitnessCalculator,
-            regularization: Regularization,
-            modelEvaluator: _modelEvaluator);
+            regularization: Regularization);
 
         // Copy the coefficients
         if (Coefficients != null)

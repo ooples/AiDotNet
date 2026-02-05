@@ -773,23 +773,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         IShardingConfiguration<T>? configuration = null);
 
     /// <summary>
-    /// Configures the model evaluator component for comprehensive model evaluation and cross-validation.
-    /// </summary>
-    /// <remarks>
-    /// A model evaluator provides methods to evaluate model performance on different datasets and
-    /// perform cross-validation to assess generalization.
-    ///
-    /// <b>For Beginners:</b> The model evaluator helps you understand how well your model performs.
-    /// If you configure both a model evaluator and cross-validator (via ConfigureCrossValidation),
-    /// cross-validation will automatically run during Build() and the results will be included
-    /// in your trained model.
-    /// </remarks>
-    /// <param name="evaluator">The model evaluator implementation to use.</param>
-    /// <returns>The builder instance for method chaining.</returns>
-    IAiModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator);
-
-    /// <summary>
-    /// Configures the cross-validation strategy for automatic model evaluation during training.
+    /// Configures the cross-validation strategy for model evaluation.
     /// </summary>
     /// <remarks>
     /// A cross-validator determines how data should be split into folds for cross-validation.
@@ -798,9 +782,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     ///
     /// <b>For Beginners:</b> Cross-validation tests how well your model will perform on new data
     /// by training and testing it multiple times on different subsets of your training data.
-    /// If you configure both a cross-validator and model evaluator (via ConfigureModelEvaluator),
-    /// cross-validation will automatically run during Build() and the results will be included
-    /// in your trained model.
+    /// Use the evaluation methods on AiModelResult to perform cross-validation after building.
     ///
     /// Common strategies:
     /// - StandardCrossValidator (K-Fold): General purpose, splits data into K equal parts

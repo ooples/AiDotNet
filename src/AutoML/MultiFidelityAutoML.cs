@@ -41,10 +41,9 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
     private readonly AutoMLMultiFidelityOptions _options;
 
     public MultiFidelityAutoML(
-        IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null,
         Random? random = null,
         AutoMLMultiFidelityOptions? options = null)
-        : base(modelEvaluator, random)
+        : base(random)
     {
         _options = options ?? new AutoMLMultiFidelityOptions();
     }
@@ -386,7 +385,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
 
     protected override AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy()
     {
-        return new MultiFidelityAutoML<T, TInput, TOutput>(_modelEvaluator, Random, _options);
+        return new MultiFidelityAutoML<T, TInput, TOutput>(Random, _options);
     }
 
     private static double[] ResolveFidelityFractions(AutoMLMultiFidelityOptions options)

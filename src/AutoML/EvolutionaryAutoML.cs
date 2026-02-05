@@ -29,8 +29,8 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
     private const double MutationRate = 0.2;
     private const double ExplorationRate = 0.1;
 
-    public EvolutionaryAutoML(IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null, Random? random = null)
-        : base(modelEvaluator, random)
+    public EvolutionaryAutoML(Random? random = null)
+        : base(random)
     {
     }
 
@@ -138,7 +138,7 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
 
     protected override AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy()
     {
-        return new EvolutionaryAutoML<T, TInput, TOutput>(_modelEvaluator, Random);
+        return new EvolutionaryAutoML<T, TInput, TOutput>(Random);
     }
 
     private double ToReward(double score) => _maximize ? score : -score;
