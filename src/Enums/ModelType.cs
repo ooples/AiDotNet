@@ -285,6 +285,18 @@ public enum ModelType
     SuperLearner,
 
     /// <summary>
+    /// Calibrated classifier wrapper for improved probability estimates.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Wraps any classifier and improves its probability predictions
+    /// using calibration methods like Platt scaling, isotonic regression, or beta calibration.
+    /// Essential when you need reliable probability estimates for decision making.
+    /// </para>
+    /// </remarks>
+    CalibratedClassifier,
+
+    /// <summary>
     /// A boosting algorithm specifically designed for regression problems.
     /// </summary>
     /// <remarks>

@@ -34,6 +34,11 @@ public enum ProbabilityCalibrationMethod
     /// <summary>
     /// Uses isotonic regression calibration (non-parametric monotonic calibration, typically for binary classification).
     /// </summary>
-    IsotonicRegression
+    IsotonicRegression,
+
+    /// <summary>
+    /// Uses beta calibration (more flexible than Platt scaling, handles asymmetric distortions).
+    /// </summary>
+    BetaCalibration
 }
 
