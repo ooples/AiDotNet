@@ -261,6 +261,18 @@ public enum ModelType
     MixedEffectsModel,
 
     /// <summary>
+    /// Generalized Linear Mixed-Effects Model (GLMM) for non-Gaussian hierarchical data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GLMMs extend mixed models to non-continuous outcomes like
+    /// binary (yes/no), count (0,1,2,...), or positive continuous data. Use logistic GLMM
+    /// for pass/fail outcomes, Poisson GLMM for count data with clustering.
+    /// </para>
+    /// </remarks>
+    GeneralizedLinearMixedModel,
+
+    /// <summary>
     /// Super Learner (Stacking) ensemble for optimal model combination.
     /// </summary>
     /// <remarks>
