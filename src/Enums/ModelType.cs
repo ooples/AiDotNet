@@ -3017,7 +3017,45 @@ public enum ModelType
     /// This focuses synthetic data generation on the decision boundary where it matters most.
     /// </para>
     /// </remarks>
-    SvmSMOTE
+    SvmSMOTE,
+
+    // ==================== Probabilistic Boosting Classifiers ====================
+
+    /// <summary>
+    /// NGBoost classifier for probabilistic classification with calibrated probabilities.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> NGBoost classifier produces well-calibrated probability estimates.
+    /// When it says 70% probability for a class, approximately 70% of similar predictions will
+    /// actually be that class. Uses natural gradients for stable training.
+    /// </para>
+    /// </remarks>
+    NGBoostClassifier,
+
+    /// <summary>
+    /// DART classifier with dropout regularization for boosting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DART classifier applies dropout regularization to gradient boosting.
+    /// During training, random trees are temporarily dropped when fitting new trees. This prevents
+    /// overfitting and produces more robust models, especially on smaller datasets.
+    /// </para>
+    /// </remarks>
+    DARTClassifier,
+
+    /// <summary>
+    /// Explainable Boosting Machine classifier - a glass-box interpretable model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> EBM classifier provides both high accuracy and full interpretability.
+    /// You can see exactly how each feature contributes to predictions through visual shape functions.
+    /// Crucial for domains requiring explainable AI like healthcare and finance.
+    /// </para>
+    /// </remarks>
+    ExplainableBoostingClassifier
 }
 
 
