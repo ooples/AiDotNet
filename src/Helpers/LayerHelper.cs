@@ -16622,6 +16622,466 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates default layers for a GANDALF (Gated Additive Neural Decision Forest) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="outputSize">Number of output dimensions.</param>
+    /// <param name="numTrees">Number of soft decision trees in the ensemble (default: 20).</param>
+    /// <param name="treeDepth">Depth of each decision tree (default: 6).</param>
+    /// <param name="gatingHiddenDim">Hidden dimension for gating network (default: 128).</param>
+    /// <param name="numGatingLayers">Number of gating network hidden layers (default: 2).</param>
+    /// <param name="leafDimension">Output dimension per leaf node (default: 1).</param>
+    /// <param name="temperature">Temperature for soft tree decisions (default: 1.0).</param>
+    /// <param name="initScale">Initialization scale for tree parameters (default: 0.01).</param>
+    /// <param name="useBatchNorm">Whether to use batch normalization (default: true).</param>
+    /// <param name="dropoutRate">Dropout rate for regularization (default: 0.1).</param>
+    /// <returns>A collection of layers forming the GANDALF network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GANDALF combines learned feature gating with soft decision trees:
+    ///
+    /// 1. **Gating Network**: Learns which features are important for each prediction
+    ///    - Multiple fully connected layers with ReLU activation
+    ///    - Final sigmoid layer produces [0,1] importance weights per feature
+    ///
+    /// 2. **Soft Decision Tree Ensemble**: Trees with differentiable splits
+    ///    - Each tree has learnable split weights and leaf values
+    ///    - "Soft" decisions allow partial paths (differentiable for backprop)
+    ///
+    /// 3. **Output Projection**: Aggregates tree outputs to final prediction
+    /// </para>
+    /// <para>
+    /// Reference: "GANDALF: Gated Adaptive Network for Deep Automated Learning of Features" (2022)
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultGANDALFLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int outputSize = 1,
+        int numTrees = 20,
+        int treeDepth = 6,
+        int gatingHiddenDim = 128,
+        int numGatingLayers = 2,
+        int leafDimension = 1,
+        double temperature = 1.0,
+        double initScale = 0.01,
+        bool useBatchNorm = true,
+        double dropoutRate = 0.1)
+    {
+        // ============================================
+        // 1. GATING NETWORK - learns feature importance
+        // ============================================
+        int prevDim = numFeatures;
+
+        // Gating hidden layers with ReLU activation
+        for (int i = 0; i < numGatingLayers; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, gatingHiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
+
+            if (useBatchNorm)
+            {
+                yield return new BatchNormalizationLayer<T>(gatingHiddenDim);
+            }
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            }
+
+            prevDim = gatingHiddenDim;
+        }
+
+        // Gating output layer - sigmoid produces [0,1] feature importance weights
+        yield return new DenseLayer<T>(prevDim, numFeatures, (IActivationFunction<T>)new SigmoidActivation<T>());
+
+        // ============================================
+        // 2. SOFT DECISION TREE ENSEMBLE
+        // ============================================
+        // Each tree processes the gated features independently
+        for (int t = 0; t < numTrees; t++)
+        {
+            yield return new SoftTreeLayer<T>(
+                inputDim: numFeatures,
+                depth: treeDepth,
+                outputDim: leafDimension,
+                temperature: temperature,
+                initScale: initScale);
+        }
+
+        // ============================================
+        // 3. OUTPUT PROJECTION
+        // ============================================
+        // Aggregate tree outputs to final prediction dimension
+        int treeTotalOutputDim = numTrees * leafDimension;
+
+        if (treeTotalOutputDim != outputSize)
+        {
+            yield return new DenseLayer<T>(treeTotalOutputDim, outputSize, (IActivationFunction<T>?)null);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for a NODE (Neural Oblivious Decision Ensembles) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="numTrees">Number of oblivious decision trees.</param>
+    /// <param name="treeDepth">Depth of each tree.</param>
+    /// <param name="treeOutputDim">Output dimension per tree.</param>
+    /// <param name="outputSize">Final output size.</param>
+    /// <param name="useBatchNorm">Whether to use batch normalization.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>A collection of layers forming the NODE network.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultNODELayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int numTrees = 20,
+        int treeDepth = 6,
+        int treeOutputDim = 3,
+        int outputSize = 1,
+        bool useBatchNorm = true,
+        double dropoutRate = 0.0)
+    {
+        // Optional input batch normalization
+        if (useBatchNorm)
+        {
+            yield return new BatchNormalizationLayer<T>(numFeatures);
+        }
+
+        // Feature preprocessing layer
+        yield return new DenseLayer<T>(numFeatures, numFeatures * 2, (IActivationFunction<T>)new ReLUActivation<T>());
+
+        if (useBatchNorm)
+        {
+            yield return new BatchNormalizationLayer<T>(numFeatures * 2);
+        }
+
+        // Soft tree ensemble (using SoftTreeLayer)
+        for (int t = 0; t < numTrees; t++)
+        {
+            yield return new SoftTreeLayer<T>(
+                inputDim: numFeatures * 2,
+                depth: treeDepth,
+                outputDim: treeOutputDim,
+                temperature: 1.0,
+                initScale: 0.01);
+        }
+
+        // Aggregate tree outputs
+        int totalTreeOutput = numTrees * treeOutputDim;
+        yield return new DenseLayer<T>(totalTreeOutput, outputSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for an AutoInt (Automatic Feature Interaction) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="embeddingDimension">Embedding dimension for features.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="numLayers">Number of interacting layers.</param>
+    /// <param name="numClasses">Number of output classes.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>A collection of layers forming the AutoInt network.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultAutoIntLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int embeddingDimension = 16,
+        int numHeads = 2,
+        int numLayers = 3,
+        int numClasses = 2,
+        double dropoutRate = 0.0)
+    {
+        // Feature embedding layer
+        yield return new DenseLayer<T>(numFeatures, numFeatures * embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new LayerNormalizationLayer<T>(numFeatures * embeddingDimension);
+
+        // Multi-head self-attention layers for feature interactions
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numFeatures,
+                embeddingDimension: embeddingDimension,
+                headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(numFeatures * embeddingDimension);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            }
+        }
+
+        // MLP head for final prediction
+        yield return new DenseLayer<T>(numFeatures * embeddingDimension, 64, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(64, 32, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(32, numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a Mambular (State Space Model for Tabular) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="embeddingDimension">Embedding dimension.</param>
+    /// <param name="stateDimension">State dimension for SSM.</param>
+    /// <param name="numLayers">Number of Mamba layers.</param>
+    /// <param name="numClasses">Number of output classes.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>A collection of layers forming the Mambular network.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultMambularLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int embeddingDimension = 32,
+        int stateDimension = 16,
+        int numLayers = 4,
+        int numClasses = 2,
+        double dropoutRate = 0.1)
+    {
+        // Feature embedding
+        yield return new DenseLayer<T>(numFeatures, embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+
+        // Mamba-style layers (approximated with dense + gating)
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Expand dimension
+            yield return new DenseLayer<T>(embeddingDimension, embeddingDimension * 2, (IActivationFunction<T>)new SiLUActivation<T>());
+
+            // State space processing (simplified)
+            yield return new DenseLayer<T>(embeddingDimension * 2, embeddingDimension * 2, (IActivationFunction<T>?)null);
+
+            // Contract back
+            yield return new DenseLayer<T>(embeddingDimension * 2, embeddingDimension, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            }
+        }
+
+        // MLP head
+        yield return new DenseLayer<T>(embeddingDimension, 64, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(64, 32, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(32, numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a TabDPT (Tabular Data Pre-Training) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="embeddingDimension">Embedding dimension.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="numLayers">Number of transformer layers.</param>
+    /// <param name="numClasses">Number of output classes.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>A collection of layers forming the TabDPT network.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabDPTLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int embeddingDimension = 128,
+        int numHeads = 4,
+        int numLayers = 6,
+        int numClasses = 2,
+        double dropoutRate = 0.1)
+    {
+        // Input projection
+        yield return new DenseLayer<T>(numFeatures, embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1,
+                embeddingDimension: embeddingDimension,
+                headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+
+            yield return new DenseLayer<T>(embeddingDimension, embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            yield return new DenseLayer<T>(embeddingDimension * 4, embeddingDimension, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+        }
+
+        // Output head
+        yield return new DenseLayer<T>(embeddingDimension, 64, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(64, numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a TabPFN (Prior-Fitted Network) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="embeddingDimension">Embedding dimension.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="numLayers">Number of transformer layers.</param>
+    /// <param name="numClasses">Number of output classes.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>A collection of layers forming the TabPFN network.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabPFNLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int embeddingDimension = 128,
+        int numHeads = 4,
+        int numLayers = 12,
+        int numClasses = 2,
+        double dropoutRate = 0.0)
+    {
+        // Input projection
+        yield return new DenseLayer<T>(numFeatures, embeddingDimension, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+
+        // Deep transformer encoder (TabPFN uses many layers)
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1,
+                embeddingDimension: embeddingDimension,
+                headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+
+            yield return new DenseLayer<T>(embeddingDimension, embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            }
+            yield return new DenseLayer<T>(embeddingDimension * 4, embeddingDimension, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+        }
+
+        // Output head
+        yield return new DenseLayer<T>(embeddingDimension, 64, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new DenseLayer<T>(64, numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a TabM (Parameter-Efficient Ensemble) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="hiddenDimensions">Array of hidden layer dimensions.</param>
+    /// <param name="numClasses">Number of output classes.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>A collection of layers forming the TabM network.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabMLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int[]? hiddenDimensions = null,
+        int numClasses = 2,
+        double dropoutRate = 0.1)
+    {
+        hiddenDimensions ??= [256, 256];
+
+        int prevDim = numFeatures;
+
+        // Hidden layers
+        foreach (int hiddenDim in hiddenDimensions)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            }
+            prevDim = hiddenDim;
+        }
+
+        // Output layer
+        yield return new DenseLayer<T>(prevDim, numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for an FT-Transformer (Feature Tokenizer + Transformer) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="embeddingDimension">Embedding dimension for feature tokens.</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="numLayers">Number of transformer layers.</param>
+    /// <param name="numClasses">Number of output classes.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>A collection of layers forming the FT-Transformer network.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultFTTransformerLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int embeddingDimension = 192,
+        int numHeads = 8,
+        int numLayers = 3,
+        int numClasses = 2,
+        double dropoutRate = 0.1)
+    {
+        // Feature tokenization (embedding each feature)
+        yield return new DenseLayer<T>(numFeatures, embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1,
+                embeddingDimension: embeddingDimension,
+                headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+
+            // ReGLU-style feed-forward (using GELU approximation)
+            yield return new DenseLayer<T>(embeddingDimension, embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
+            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            yield return new DenseLayer<T>(embeddingDimension * 4, embeddingDimension, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(embeddingDimension);
+        }
+
+        // CLS token aggregation and classification head
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(embeddingDimension / 2, numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default layers for a TabR (Retrieval-Augmented) model.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture configuration.</param>
+    /// <param name="numFeatures">Number of input features.</param>
+    /// <param name="embeddingDimension">Embedding dimension.</param>
+    /// <param name="numLayers">Number of MLP layers.</param>
+    /// <param name="numClasses">Number of output classes.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>A collection of layers forming the TabR network.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabRLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 50,
+        int embeddingDimension = 256,
+        int numLayers = 4,
+        int numClasses = 2,
+        double dropoutRate = 0.1)
+    {
+        int prevDim = numFeatures;
+
+        // Feature encoder MLP
+        for (int i = 0; i < numLayers; i++)
+        {
+            int nextDim = i == 0 ? embeddingDimension : embeddingDimension;
+            yield return new DenseLayer<T>(prevDim, nextDim, (IActivationFunction<T>)new ReLUActivation<T>());
+            yield return new LayerNormalizationLayer<T>(nextDim);
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+            }
+            prevDim = nextDim;
+        }
+
+        // Context encoding (simplified - full implementation would include retrieval)
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new LayerNormalizationLayer<T>(embeddingDimension);
+
+        // Classification head
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
+        yield return new DenseLayer<T>(embeddingDimension / 2, numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+    }
+
+    /// <summary>
     /// Creates default layers for a NeuralStressTest model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultNeuralStressTestLayers(
