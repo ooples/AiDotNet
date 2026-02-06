@@ -133,6 +133,15 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </summary>
     private IFullModel<T, TInput, TOutput>? _model;
 
+    /// <summary>
+    /// Returns the current model or throws if none has been set via <see cref="SetModel"/>.
+    /// </summary>
+    protected IFullModel<T, TInput, TOutput> RequireModel()
+    {
+        return _model ?? throw new InvalidOperationException(
+            "No model has been set. Call SetModel() before optimizing.");
+    }
+
     /// <inheritdoc />
     /// <remarks>
     /// Derived classes can override this method to perform additional initialization
@@ -1268,7 +1277,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
             // For Matrix input: compute min and max of each column (feature)
             int features = matrix.Columns;
-            int paramCount = _model!.ParameterCount;
+            int paramCount = RequireModel().ParameterCount;
 
             // If the model is untrained (ParameterCount is less than the number of features),
             // infer the correct parameter count from the input dimensions.
@@ -1348,7 +1357,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             }
 
             // Bounds should match parameter count, not input dimensionality
-            int paramCount = _model!.ParameterCount;
+            int paramCount = RequireModel().ParameterCount;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
@@ -1360,7 +1369,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         else
         {
             // Fallback: create reasonable default bounds based on parameter count
-            int paramCount = _model!.ParameterCount;
+            int paramCount = RequireModel().ParameterCount;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
 
@@ -1377,7 +1386,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         var randomParams = InitializeRandomSolution(lowerBounds, upperBounds);
 
         // Create a new model with these random parameters
-        var randomModel = _model.Clone();
+        var randomModel = RequireModel().Clone();
         randomModel.SetParameters(randomParams);
         return randomModel;
     }
