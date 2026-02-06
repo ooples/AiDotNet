@@ -82,13 +82,13 @@ public class EnergyScoreMetric<T> : IRegressionMetric<T>
         }
         term1 /= m;
 
-        // 0.5 * E||X - X'||
+        // 0.5 * E||X - X'|| — only compute j > i and multiply by 2
         double term2 = 0;
         for (int i = 0; i < m; i++)
         {
-            for (int j = 0; j < m; j++)
+            for (int j = i + 1; j < m; j++)
             {
-                term2 += EuclideanNorm(ensembleSamples[i], ensembleSamples[j]);
+                term2 += 2 * EuclideanNorm(ensembleSamples[i], ensembleSamples[j]);
             }
         }
         term2 = 0.5 * term2 / (m * m);

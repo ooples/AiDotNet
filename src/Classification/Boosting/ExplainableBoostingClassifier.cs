@@ -794,7 +794,17 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         byte[] baseData = reader.ReadBytes(baseLen);
         base.Deserialize(baseData);
 
+        const int MaxFeatures = 100_000;
+        const int MaxArrayLength = 10_000_000;
+        const int MaxInteractions = 1_000_000;
+
         _numFeatures = reader.ReadInt32();
+        if (_numFeatures < 0 || _numFeatures > MaxFeatures)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized _numFeatures ({_numFeatures}) is out of valid range [0, {MaxFeatures}]. Data may be corrupted.");
+        }
+
         _intercept = NumOps.FromDouble(reader.ReadDouble());
 
         // Shape functions
@@ -802,6 +812,11 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         for (int f = 0; f < _numFeatures; f++)
         {
             int len = reader.ReadInt32();
+            if (len < 0 || len > MaxArrayLength)
+            {
+                throw new InvalidOperationException(
+                    $"Deserialized shape function length ({len}) for feature {f} is out of valid range. Data may be corrupted.");
+            }
             _shapeFunctions[f] = new T[len];
             for (int b = 0; b < len; b++)
             {
@@ -814,6 +829,11 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         for (int f = 0; f < _numFeatures; f++)
         {
             int len = reader.ReadInt32();
+            if (len < 0 || len > MaxArrayLength)
+            {
+                throw new InvalidOperationException(
+                    $"Deserialized bin edges length ({len}) for feature {f} is out of valid range. Data may be corrupted.");
+            }
             _binEdges[f] = new T[len];
             for (int e = 0; e < len; e++)
             {
@@ -823,6 +843,11 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
 
         // Interaction terms
         int numInteractions = reader.ReadInt32();
+        if (numInteractions < 0 || numInteractions > MaxInteractions)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized numInteractions ({numInteractions}) is out of valid range. Data may be corrupted.");
+        }
         _interactionTerms = [];
         for (int k = 0; k < numInteractions; k++)
         {
@@ -830,6 +855,11 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             int f2 = reader.ReadInt32();
             int dim1 = reader.ReadInt32();
             int dim2 = reader.ReadInt32();
+            if (dim1 < 0 || dim1 > MaxArrayLength || dim2 < 0 || dim2 > MaxArrayLength)
+            {
+                throw new InvalidOperationException(
+                    $"Deserialized interaction dimensions ({dim1}x{dim2}) are out of valid range. Data may be corrupted.");
+            }
             var term = new T[dim1, dim2];
             for (int i = 0; i < dim1; i++)
             {

@@ -50,7 +50,7 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Configuration options.
     /// </summary>
-    private readonly MixedEffectsOptions<T> _options;
+    private readonly LinearMixedModelOptions<T> _options;
 
     /// <summary>
     /// List of random effect specifications.
@@ -134,11 +134,11 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <param name="options">Configuration options.</param>
     /// <param name="regularization">Optional regularization.</param>
     public LinearMixedModel(
-        MixedEffectsOptions<T>? options = null,
+        LinearMixedModelOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new MixedEffectsOptions<T>(), regularization)
+        : base(options ?? new LinearMixedModelOptions<T>(), regularization)
     {
-        _options = options ?? new MixedEffectsOptions<T>();
+        _options = options ?? new LinearMixedModelOptions<T>();
         _randomEffects = [];
     }
 

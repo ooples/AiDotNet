@@ -78,9 +78,8 @@ public class CLSToken<T>
             throw new ArgumentException(
                 $"Embeddings must be at least rank-3 [..., seqLen, embDim], but got rank {embeddings.Shape.Length}.");
 
-        int batchSize = embeddings.Shape[0];
-        int seqLen = embeddings.Shape[1];
-        int inputEmbDim = embeddings.Shape[2];
+        int seqLen = embeddings.Shape[^2];
+        int inputEmbDim = embeddings.Shape[^1];
 
         if (inputEmbDim != EmbeddingDimension)
         {
@@ -90,14 +89,33 @@ public class CLSToken<T>
 
         int embDim = EmbeddingDimension;
 
-        var output = new Tensor<T>([batchSize, seqLen + 1, embDim]);
+        // Compute total batch elements from all leading dimensions
+        int totalBatchElements = 1;
+        for (int i = 0; i < embeddings.Shape.Length - 2; i++)
+        {
+            totalBatchElements *= embeddings.Shape[i];
+        }
 
-        for (int b = 0; b < batchSize; b++)
+        // Build output shape: same leading dims, seqLen+1, embDim
+        var outputShape = new int[embeddings.Shape.Length];
+        for (int i = 0; i < embeddings.Shape.Length - 2; i++)
+        {
+            outputShape[i] = embeddings.Shape[i];
+        }
+        outputShape[^2] = seqLen + 1;
+        outputShape[^1] = embDim;
+
+        var output = new Tensor<T>(outputShape);
+
+        int srcStride = seqLen * embDim;
+        int dstStride = (seqLen + 1) * embDim;
+
+        for (int b = 0; b < totalBatchElements; b++)
         {
             // Add CLS token at position 0
             for (int d = 0; d < embDim; d++)
             {
-                output[b * (seqLen + 1) * embDim + d] = _clsEmbedding[d];
+                output[b * dstStride + d] = _clsEmbedding[d];
             }
 
             // Copy original embeddings starting at position 1
@@ -105,8 +123,8 @@ public class CLSToken<T>
             {
                 for (int d = 0; d < embDim; d++)
                 {
-                    int srcIdx = b * seqLen * embDim + s * embDim + d;
-                    int dstIdx = b * (seqLen + 1) * embDim + (s + 1) * embDim + d;
+                    int srcIdx = b * srcStride + s * embDim + d;
+                    int dstIdx = b * dstStride + (s + 1) * embDim + d;
                     output[dstIdx] = embeddings[srcIdx];
                 }
             }
@@ -126,8 +144,8 @@ public class CLSToken<T>
             throw new ArgumentException(
                 $"Transformer output must be at least rank-3 [..., seqLen+1, embDim], but got rank {transformerOutput.Shape.Length}.");
 
-        int batchSize = transformerOutput.Shape[0];
-        int inputEmbDim = transformerOutput.Shape[2];
+        int seqLenPlus1 = transformerOutput.Shape[^2];
+        int inputEmbDim = transformerOutput.Shape[^1];
         if (inputEmbDim != EmbeddingDimension)
         {
             throw new ArgumentException(
@@ -136,14 +154,31 @@ public class CLSToken<T>
 
         int embDim = EmbeddingDimension;
 
-        var clsOutput = new Tensor<T>([batchSize, embDim]);
+        // Compute total batch elements from all leading dimensions
+        int totalBatchElements = 1;
+        for (int i = 0; i < transformerOutput.Shape.Length - 2; i++)
+        {
+            totalBatchElements *= transformerOutput.Shape[i];
+        }
 
-        for (int b = 0; b < batchSize; b++)
+        // Build output shape: leading dims + embDim (drop the sequence dimension)
+        var outputShape = new int[transformerOutput.Shape.Length - 1];
+        for (int i = 0; i < transformerOutput.Shape.Length - 2; i++)
+        {
+            outputShape[i] = transformerOutput.Shape[i];
+        }
+        outputShape[^1] = embDim;
+
+        var clsOutput = new Tensor<T>(outputShape);
+
+        int srcStride = seqLenPlus1 * embDim;
+
+        for (int b = 0; b < totalBatchElements; b++)
         {
             for (int d = 0; d < embDim; d++)
             {
                 // CLS is at position 0
-                int srcIdx = b * transformerOutput.Shape[1] * embDim + d;
+                int srcIdx = b * srcStride + d;
                 clsOutput[b * embDim + d] = transformerOutput[srcIdx];
             }
         }
@@ -213,5 +248,13 @@ public class CLSToken<T>
     /// <summary>
     /// Gets the current CLS embedding values.
     /// </summary>
-    public Tensor<T> GetEmbedding() => _clsEmbedding;
+    public Tensor<T> GetEmbedding()
+    {
+        var copy = new Tensor<T>(_clsEmbedding.Shape);
+        for (int i = 0; i < _clsEmbedding.Length; i++)
+        {
+            copy[i] = _clsEmbedding[i];
+        }
+        return copy;
+    }
 }

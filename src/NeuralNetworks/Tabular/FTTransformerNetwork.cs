@@ -81,6 +81,12 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
         _lossFunction = lossFunction;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
+        if (_options.NumHeads <= 0)
+        {
+            throw new ArgumentException(
+                $"NumHeads ({_options.NumHeads}) must be positive.");
+        }
+
         if (_options.EmbeddingDimension % _options.NumHeads != 0)
         {
             throw new ArgumentException(
@@ -251,6 +257,11 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
     {
         int embDim = reader.ReadInt32();
         int numHeads = reader.ReadInt32();
+        if (embDim <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized EmbeddingDimension ({embDim}) must be positive. Data may be corrupted.");
+        }
         if (numHeads <= 0)
         {
             throw new InvalidOperationException(

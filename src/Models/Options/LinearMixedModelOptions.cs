@@ -26,7 +26,7 @@ namespace AiDotNet.Models.Options;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class MixedEffectsOptions<T> : RegressionOptions<T>
+public class LinearMixedModelOptions<T> : RegressionOptions<T>
 {
     /// <summary>
     /// Gets or sets the estimation method.
