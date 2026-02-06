@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class AutoIntNetwork<T> : NeuralNetworkBase<T>
 {
-    private readonly AutoIntOptions<T> _options;
+    private AutoIntOptions<T> _options;
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private ILossFunction<T> _lossFunction;
@@ -262,6 +262,8 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
             }
             options.CategoricalCardinalities = cardinalities;
         }
+
+        _options = options;
     }
 
     /// <inheritdoc/>

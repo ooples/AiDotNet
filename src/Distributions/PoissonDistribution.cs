@@ -154,6 +154,9 @@ public class PoissonDistribution<T> : DistributionBase<T>
     public override T[] GradLogPdf(T x)
     {
         int k = (int)Math.Round(NumOps.ToDouble(x));
+        if (k < 0)
+            return [NumOps.FromDouble(double.NaN)];
+
         double lambda = NumOps.ToDouble(_lambda);
 
         // d/d(lambda) log(pmf) = k/λ - 1
@@ -217,17 +220,34 @@ public class PoissonDistribution<T> : DistributionBase<T>
     /// Q(a, x) = e^{-x} * sum_{i=0}^{a-1} x^i / i!
     /// For Poisson CDF: P(X &lt;= k) = Q(k+1, lambda)
     /// </summary>
+    /// <summary>
+    /// Computes the regularized upper incomplete gamma function Q(a, x) = e^{-x} * sum_{i=0}^{a-1} x^i / i!
+    /// Uses log-space computation to avoid underflow for large x.
+    /// </summary>
     private static double RegularizedUpperGamma(int a, double x)
     {
-        double sum = 0;
-        double term = Math.Exp(-x);
+        if (x <= 0) return 1.0;
+
+        // For large x, Math.Exp(-x) underflows to 0.
+        // Compute in log-space: log(term_i) = -x + i*log(x) - log(i!)
+        double logSum = double.NegativeInfinity;
+        double logFactorial = 0;
 
         for (int i = 0; i < a; i++)
         {
-            sum += term;
-            term *= x / (i + 1);
+            double logTerm = -x + i * Math.Log(x) - logFactorial;
+            // LogSumExp: log(exp(a) + exp(b))
+            if (double.IsNegativeInfinity(logSum))
+                logSum = logTerm;
+            else
+            {
+                double max = Math.Max(logSum, logTerm);
+                logSum = max + Math.Log(Math.Exp(logSum - max) + Math.Exp(logTerm - max));
+            }
+
+            logFactorial += Math.Log(i + 1);
         }
 
-        return sum;
+        return Math.Exp(logSum);
     }
 }

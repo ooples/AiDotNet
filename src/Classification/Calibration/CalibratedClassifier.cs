@@ -622,7 +622,6 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         }
 
         var uncalibrated = _baseClassifier.PredictProbabilities(input);
-        var calibrated = new Matrix<T>(input.Rows, NumClasses);
 
         if (_options.CalibrationMethod == ProbabilityCalibrationMethod.None
             || _options.CalibrationMethod == ProbabilityCalibrationMethod.Auto)
@@ -637,6 +636,8 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
                 "Calibration currently supports binary classification only. " +
                 "For multiclass, apply one-vs-rest calibration externally.");
         }
+
+        var calibrated = new Matrix<T>(input.Rows, NumClasses);
 
         for (int i = 0; i < input.Rows; i++)
         {
@@ -794,15 +795,18 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length >= 6)
+        if (parameters.Length < 6)
         {
-            _plattA = NumOps.ToDouble(parameters[0]);
-            _plattB = NumOps.ToDouble(parameters[1]);
-            _betaA = NumOps.ToDouble(parameters[2]);
-            _betaB = NumOps.ToDouble(parameters[3]);
-            _betaC = NumOps.ToDouble(parameters[4]);
-            _temperature = NumOps.ToDouble(parameters[5]);
+            throw new ArgumentException(
+                $"Expected at least 6 parameters, but received {parameters.Length}.", nameof(parameters));
         }
+
+        _plattA = NumOps.ToDouble(parameters[0]);
+        _plattB = NumOps.ToDouble(parameters[1]);
+        _betaA = NumOps.ToDouble(parameters[2]);
+        _betaB = NumOps.ToDouble(parameters[3]);
+        _betaC = NumOps.ToDouble(parameters[4]);
+        _temperature = NumOps.ToDouble(parameters[5]);
     }
 
     /// <inheritdoc/>

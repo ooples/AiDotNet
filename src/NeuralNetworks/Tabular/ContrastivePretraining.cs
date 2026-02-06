@@ -160,11 +160,25 @@ public class ContrastivePretraining<T>
     /// <returns>Contrastive loss value.</returns>
     public T ComputeContrastiveLoss(Tensor<T> originalEmbeddings, Tensor<T> corruptedEmbeddings)
     {
+        if (originalEmbeddings.Shape[0] != corruptedEmbeddings.Shape[0] ||
+            originalEmbeddings.Shape[1] != corruptedEmbeddings.Shape[1])
+        {
+            throw new ArgumentException(
+                $"Shape mismatch: original {originalEmbeddings.Shape[0]}x{originalEmbeddings.Shape[1]} " +
+                $"vs corrupted {corruptedEmbeddings.Shape[0]}x{corruptedEmbeddings.Shape[1]}.");
+        }
+
+        int embDim = originalEmbeddings.Shape[1];
+        if (embDim != _numFeatures)
+        {
+            throw new ArgumentException(
+                $"Embedding dimension ({embDim}) does not match expected ({_numFeatures}).");
+        }
+
         _originalEmbeddingsCache = originalEmbeddings;
         _corruptedEmbeddingsCache = corruptedEmbeddings;
 
         int batchSize = originalEmbeddings.Shape[0];
-        int embDim = originalEmbeddings.Shape[1];
 
         // Project embeddings
         var originalProjected = ProjectEmbeddings(originalEmbeddings, batchSize, embDim);
@@ -309,6 +323,21 @@ public class ContrastivePretraining<T>
             return NumOps.Zero;
         }
 
+        if (reconstructed.Length != original.Length)
+        {
+            throw new ArgumentException(
+                $"Shape mismatch: reconstructed length ({reconstructed.Length}) != original length ({original.Length}).");
+        }
+
+        int maxIdx = 0;
+        foreach (var idx in _corruptedIndicesCache)
+            if (idx > maxIdx) maxIdx = idx;
+        if (maxIdx >= reconstructed.Length)
+        {
+            throw new ArgumentException(
+                $"Cached corruption index ({maxIdx}) exceeds tensor length ({reconstructed.Length}).");
+        }
+
         var loss = NumOps.Zero;
         foreach (var idx in _corruptedIndicesCache)
         {
@@ -348,6 +377,18 @@ public class ContrastivePretraining<T>
     /// </summary>
     public void UpdateParameters(T learningRate, Tensor<T> gradWeights, Tensor<T> gradBias)
     {
+        if (gradWeights.Length != _projectionWeights.Length)
+        {
+            throw new ArgumentException(
+                $"gradWeights length ({gradWeights.Length}) does not match projection weights length ({_projectionWeights.Length}).");
+        }
+
+        if (gradBias.Length != _projectionBias.Length)
+        {
+            throw new ArgumentException(
+                $"gradBias length ({gradBias.Length}) does not match projection bias length ({_projectionBias.Length}).");
+        }
+
         for (int i = 0; i < _projectionWeights.Length; i++)
         {
             _projectionWeights[i] = NumOps.Subtract(_projectionWeights[i],

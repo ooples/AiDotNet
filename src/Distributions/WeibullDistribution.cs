@@ -183,6 +183,9 @@ public class WeibullDistribution<T> : DistributionBase<T>
     public override T[] GradLogPdf(T x)
     {
         double xVal = NumOps.ToDouble(x);
+        if (xVal <= 0)
+            return [NumOps.FromDouble(double.NaN), NumOps.FromDouble(double.NaN)];
+
         double k = NumOps.ToDouble(_shape);
         double lambda = NumOps.ToDouble(_scale);
 
@@ -207,7 +210,7 @@ public class WeibullDistribution<T> : DistributionBase<T>
         // Euler-Mascheroni constant
         const double gamma = 0.5772156649;
 
-        double iShape = (1 + (1 - gamma) * (1 - gamma) + Math.PI * Math.PI / 6) / (k * k);
+        double iShape = ((1 - gamma) * (1 - gamma) + Math.PI * Math.PI / 6) / (k * k);
         double iScale = k * k / (lambda * lambda);
         double iShapeScale = -(1 - gamma) / lambda;
 

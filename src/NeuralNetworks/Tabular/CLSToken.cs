@@ -48,6 +48,8 @@ public class CLSToken<T>
     /// <param name="initScale">Initialization scale for the embedding.</param>
     public CLSToken(int embeddingDimension, double initScale = 0.02)
     {
+        if (embeddingDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(embeddingDimension), "Embedding dimension must be positive.");
         EmbeddingDimension = embeddingDimension;
         _random = RandomHelper.CreateSecureRandom();
 
@@ -117,6 +119,13 @@ public class CLSToken<T>
     public Tensor<T> ExtractCLS(Tensor<T> transformerOutput)
     {
         int batchSize = transformerOutput.Shape[0];
+        int inputEmbDim = transformerOutput.Shape[2];
+        if (inputEmbDim != EmbeddingDimension)
+        {
+            throw new ArgumentException(
+                $"Input embedding dimension ({inputEmbDim}) does not match CLS token dimension ({EmbeddingDimension}).");
+        }
+
         int embDim = EmbeddingDimension;
 
         var clsOutput = new Tensor<T>([batchSize, embDim]);
@@ -151,7 +160,7 @@ public class CLSToken<T>
             {
                 gradSum = NumOps.Add(gradSum, gradient[b * embDim + d]);
             }
-            _clsGradient[d] = gradSum;
+            _clsGradient[d] = NumOps.Add(_clsGradient[d], gradSum);
         }
     }
 

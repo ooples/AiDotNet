@@ -175,6 +175,12 @@ public class ColumnEmbedding<T>
                 $"Gradient embedding dimension ({embDim}) does not match column embedding dimension ({_embeddingDim}).");
         }
 
+        if (numCols > _numColumns)
+        {
+            throw new ArgumentException(
+                $"Gradient column count ({numCols}) exceeds embedding column count ({_numColumns}).");
+        }
+
         // Accumulate gradients from all batch samples
         for (int c = 0; c < numCols; c++)
         {
@@ -186,7 +192,8 @@ public class ColumnEmbedding<T>
                     int gradIdx = b * numCols * embDim + c * embDim + d;
                     gradSum = NumOps.Add(gradSum, gradient[gradIdx]);
                 }
-                _embeddingGradients[c * _embeddingDim + d] = gradSum;
+                _embeddingGradients[c * _embeddingDim + d] = NumOps.Add(
+                    _embeddingGradients[c * _embeddingDim + d], gradSum);
             }
         }
     }

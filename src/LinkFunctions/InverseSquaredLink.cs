@@ -71,6 +71,7 @@ public class InverseSquaredLink<T> : ILinkFunction<T>
     {
         // For Inverse Gaussian: V(mu) = mu^3
         double m = NumOps.ToDouble(mu);
+        if (m <= 0) m = 1e-10;
         return NumOps.FromDouble(m * m * m);
     }
 }

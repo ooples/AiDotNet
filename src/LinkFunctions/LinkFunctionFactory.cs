@@ -60,7 +60,8 @@ public static class LinkFunctionFactory<T>
             DistributionFamily.InverseGaussian => new InverseSquaredLink<T>(),
             DistributionFamily.NegativeBinomial => new LogLink<T>(),
             DistributionFamily.Tweedie => new LogLink<T>(),
-            _ => new IdentityLink<T>()
+            _ => throw new ArgumentOutOfRangeException(nameof(family), family,
+                $"No canonical link function defined for distribution family '{family}'.")
         };
     }
 
