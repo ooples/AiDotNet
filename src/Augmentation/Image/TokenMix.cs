@@ -1,3 +1,6 @@
+using AiDotNet.Augmentation;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
@@ -5,7 +8,7 @@ namespace AiDotNet.Augmentation.Image;
 /// Randomly selects and replaces individual patches (tokens).
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class TokenMix<T> : ImageAugmenterBase<T>
+public class TokenMix<T> : ImageMixingAugmenterBase<T>
 {
     public int PatchSize { get; }
     public double MinMixRatio { get; }
@@ -21,7 +24,7 @@ public class TokenMix<T> : ImageAugmenterBase<T>
     /// Mixes two images at the token (patch) level.
     /// </summary>
     public ImageTensor<T> ApplyTokenMix(ImageTensor<T> image1, ImageTensor<T> image2,
-        AugmentationContext<T> context)
+        Vector<T>? labels1, Vector<T>? labels2, AugmentationContext<T> context)
     {
         if (image1.Height != image2.Height || image1.Width != image2.Width)
             image2 = new Resize<T>(image1.Height, image1.Width).Apply(image2, context);
@@ -60,6 +63,18 @@ public class TokenMix<T> : ImageAugmenterBase<T>
                 for (int x = startX; x < endX; x++)
                     for (int c = 0; c < Math.Min(image1.Channels, image2.Channels); c++)
                         result.SetPixel(y, x, c, image2.GetPixel(y, x, c));
+        }
+
+        // Lambda = proportion of image1 remaining
+        double lambda = 1.0 - mixRatio;
+        LastMixingLambda = NumOps.FromDouble(lambda);
+
+        if (labels1 is not null && labels2 is not null)
+        {
+            var args = new LabelMixingEventArgs<T>(
+                labels1, labels2, LastMixingLambda,
+                context.SampleIndex, -1, MixingStrategy.Custom);
+            RaiseLabelMixing(args);
         }
 
         return result;

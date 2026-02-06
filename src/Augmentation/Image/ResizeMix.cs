@@ -1,10 +1,13 @@
+using AiDotNet.Augmentation;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
 /// ResizeMix augmentation - resizes one image and pastes it onto another.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class ResizeMix<T> : ImageAugmenterBase<T>
+public class ResizeMix<T> : ImageMixingAugmenterBase<T>
 {
     public double MinScale { get; }
     public double MaxScale { get; }
@@ -19,7 +22,7 @@ public class ResizeMix<T> : ImageAugmenterBase<T>
     /// Resizes image2 and pastes it onto a random location in image1.
     /// </summary>
     public ImageTensor<T> ApplyResizeMix(ImageTensor<T> image1, ImageTensor<T> image2,
-        AugmentationContext<T> context)
+        Vector<T>? labels1, Vector<T>? labels2, AugmentationContext<T> context)
     {
         var result = image1.Clone();
         double scale = context.GetRandomDouble(MinScale, MaxScale);
@@ -35,6 +38,20 @@ public class ResizeMix<T> : ImageAugmenterBase<T>
             for (int x = 0; x < pasteW && (startX + x) < image1.Width; x++)
                 for (int c = 0; c < Math.Min(image1.Channels, resized.Channels); c++)
                     result.SetPixel(startY + y, startX + x, c, resized.GetPixel(y, x, c));
+
+        // Lambda = proportion of image1 remaining
+        double pasteArea = pasteH * pasteW;
+        double totalArea = image1.Height * image1.Width;
+        double lambda = 1.0 - pasteArea / totalArea;
+        LastMixingLambda = NumOps.FromDouble(lambda);
+
+        if (labels1 is not null && labels2 is not null)
+        {
+            var args = new LabelMixingEventArgs<T>(
+                labels1, labels2, LastMixingLambda,
+                context.SampleIndex, -1, MixingStrategy.Custom);
+            RaiseLabelMixing(args);
+        }
 
         return result;
     }

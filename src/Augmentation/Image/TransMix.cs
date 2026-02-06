@@ -1,3 +1,6 @@
+using AiDotNet.Augmentation;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
@@ -5,28 +8,28 @@ namespace AiDotNet.Augmentation.Image;
 /// Creates patch-level mixing masks based on attention-like scores.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class TransMix<T> : ImageAugmenterBase<T>
+public class TransMix<T> : ImageMixingAugmenterBase<T>
 {
-    public double Alpha { get; }
     public int PatchSize { get; }
 
     public TransMix(double alpha = 1.0, int patchSize = 16,
-        double probability = 0.5) : base(probability)
+        double probability = 0.5) : base(probability, alpha)
     {
-        Alpha = alpha; PatchSize = patchSize;
+        PatchSize = patchSize;
     }
 
     /// <summary>
     /// Mixes two images using patch-level attention-guided masks.
     /// </summary>
     public ImageTensor<T> ApplyTransMix(ImageTensor<T> image1, ImageTensor<T> image2,
-        AugmentationContext<T> context)
+        Vector<T>? labels1, Vector<T>? labels2, AugmentationContext<T> context)
     {
         if (image1.Height != image2.Height || image1.Width != image2.Width)
             image2 = new Resize<T>(image1.Height, image1.Width).Apply(image2, context);
 
         var result = image1.Clone();
-        double lambda = context.SampleBeta(Alpha, Alpha);
+        double lambda = SampleLambda(context);
+        LastMixingLambda = NumOps.FromDouble(lambda);
 
         int numPatchesH = Math.Max(1, image1.Height / PatchSize);
         int numPatchesW = Math.Max(1, image1.Width / PatchSize);
@@ -67,6 +70,14 @@ public class TransMix<T> : ImageAugmenterBase<T>
                             result.SetPixel(y, x, c, image2.GetPixel(y, x, c));
             }
 
+        if (labels1 is not null && labels2 is not null)
+        {
+            var args = new LabelMixingEventArgs<T>(
+                labels1, labels2, LastMixingLambda,
+                context.SampleIndex, -1, MixingStrategy.Custom);
+            RaiseLabelMixing(args);
+        }
+
         return result;
     }
 
@@ -78,7 +89,7 @@ public class TransMix<T> : ImageAugmenterBase<T>
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();
-        p["alpha"] = Alpha; p["patch_size"] = PatchSize;
+        p["patch_size"] = PatchSize;
         return p;
     }
 }

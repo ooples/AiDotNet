@@ -1,3 +1,6 @@
+using AiDotNet.Augmentation;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
@@ -5,27 +8,24 @@ namespace AiDotNet.Augmentation.Image;
 /// Uses class activation map (CAM) inspired saliency for proportional label mixing.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class SnapMix<T> : ImageAugmenterBase<T>
+public class SnapMix<T> : ImageMixingAugmenterBase<T>
 {
-    public double Alpha { get; }
-
-    public SnapMix(double alpha = 5.0, double probability = 0.5) : base(probability)
+    public SnapMix(double alpha = 5.0, double probability = 0.5) : base(probability, alpha)
     {
-        Alpha = alpha;
     }
 
     /// <summary>
     /// Mixes two images using saliency-proportional mixing.
-    /// Returns the mixed image and approximate lambda.
     /// </summary>
-    public (ImageTensor<T> mixed, double lambda) ApplySnapMix(
-        ImageTensor<T> image1, ImageTensor<T> image2, AugmentationContext<T> context)
+    public ImageTensor<T> ApplySnapMix(
+        ImageTensor<T> image1, ImageTensor<T> image2,
+        Vector<T>? labels1, Vector<T>? labels2, AugmentationContext<T> context)
     {
         if (image1.Height != image2.Height || image1.Width != image2.Width)
             image2 = new Resize<T>(image1.Height, image1.Width).Apply(image2, context);
 
         var result = image1.Clone();
-        double betaLambda = context.SampleBeta(Alpha, Alpha);
+        double betaLambda = SampleLambda(context);
 
         // CutMix-style region selection
         int cutH = (int)(image1.Height * Math.Sqrt(1 - betaLambda));
@@ -58,8 +58,17 @@ public class SnapMix<T> : ImageAugmenterBase<T>
 
         // Lambda proportional to saliency
         double lambda = salTotal1 > 1e-10 ? 1.0 - salPaste / salTotal1 : betaLambda;
+        LastMixingLambda = NumOps.FromDouble(lambda);
 
-        return (result, lambda);
+        if (labels1 is not null && labels2 is not null)
+        {
+            var args = new LabelMixingEventArgs<T>(
+                labels1, labels2, LastMixingLambda,
+                context.SampleIndex, -1, MixingStrategy.Custom);
+            RaiseLabelMixing(args);
+        }
+
+        return result;
     }
 
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
@@ -69,8 +78,6 @@ public class SnapMix<T> : ImageAugmenterBase<T>
 
     public override IDictionary<string, object> GetParameters()
     {
-        var p = base.GetParameters();
-        p["alpha"] = Alpha;
-        return p;
+        return base.GetParameters();
     }
 }

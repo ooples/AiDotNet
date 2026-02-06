@@ -1,31 +1,43 @@
+using AiDotNet.Augmentation;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
 /// FMix augmentation (Harris et al., 2020) - mixes images using Fourier-space masks.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class FMix<T> : ImageAugmenterBase<T>
+public class FMix<T> : ImageMixingAugmenterBase<T>
 {
-    public double Alpha { get; }
     public double DecayPower { get; }
 
     public FMix(double alpha = 1.0, double decayPower = 3.0,
-        double probability = 0.5) : base(probability)
+        double probability = 0.5) : base(probability, alpha)
     {
-        Alpha = alpha; DecayPower = decayPower;
+        DecayPower = decayPower;
     }
 
     /// <summary>
     /// Mixes two images using a Fourier-space generated mask.
     /// </summary>
     public ImageTensor<T> ApplyFMix(ImageTensor<T> image1, ImageTensor<T> image2,
-        AugmentationContext<T> context)
+        Vector<T>? labels1, Vector<T>? labels2, AugmentationContext<T> context)
     {
         if (image1.Height != image2.Height || image1.Width != image2.Width)
             image2 = new Resize<T>(image1.Height, image1.Width).Apply(image2, context);
 
         // Generate low-frequency mask
         var mask = GenerateFourierMask(image1.Height, image1.Width, context);
+
+        // Compute lambda as area ratio of mask
+        double maskSum = 0;
+        int totalPixels = image1.Height * image1.Width;
+        for (int y = 0; y < image1.Height; y++)
+            for (int x = 0; x < image1.Width; x++)
+                maskSum += mask[y, x];
+        double lambda = maskSum / totalPixels;
+        LastMixingLambda = NumOps.FromDouble(lambda);
+
         var result = image1.Clone();
 
         for (int y = 0; y < image1.Height; y++)
@@ -39,6 +51,14 @@ public class FMix<T> : ImageAugmenterBase<T>
                     result.SetPixel(y, x, c, NumOps.FromDouble(v1 * m + v2 * (1 - m)));
                 }
             }
+
+        if (labels1 is not null && labels2 is not null)
+        {
+            var args = new LabelMixingEventArgs<T>(
+                labels1, labels2, LastMixingLambda,
+                context.SampleIndex, -1, MixingStrategy.Custom);
+            RaiseLabelMixing(args);
+        }
 
         return result;
     }
@@ -78,7 +98,6 @@ public class FMix<T> : ImageAugmenterBase<T>
             }
 
         // Threshold to binary mask
-        // Sort values to find median
         var values = new double[height * width];
         int idx = 0;
         for (int y = 0; y < height; y++)
@@ -96,13 +115,13 @@ public class FMix<T> : ImageAugmenterBase<T>
 
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
-        return data.Clone(); // No-op without second image
+        return data.Clone();
     }
 
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();
-        p["alpha"] = Alpha; p["decay_power"] = DecayPower;
+        p["decay_power"] = DecayPower;
         return p;
     }
 }

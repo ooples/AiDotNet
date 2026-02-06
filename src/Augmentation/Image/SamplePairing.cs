@@ -1,10 +1,13 @@
+using AiDotNet.Augmentation;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
 /// Sample Pairing augmentation (Inoue, 2018) - averages two images together.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class SamplePairing<T> : ImageAugmenterBase<T>
+public class SamplePairing<T> : ImageMixingAugmenterBase<T>
 {
     public double MinWeight { get; }
     public double MaxWeight { get; }
@@ -19,7 +22,7 @@ public class SamplePairing<T> : ImageAugmenterBase<T>
     /// Pairs two images by weighted averaging.
     /// </summary>
     public ImageTensor<T> ApplyPairing(ImageTensor<T> image1, ImageTensor<T> image2,
-        AugmentationContext<T> context)
+        Vector<T>? labels1, Vector<T>? labels2, AugmentationContext<T> context)
     {
         if (image1.Height != image2.Height || image1.Width != image2.Width)
         {
@@ -28,6 +31,8 @@ public class SamplePairing<T> : ImageAugmenterBase<T>
 
         var result = image1.Clone();
         double weight = context.GetRandomDouble(MinWeight, MaxWeight);
+        double lambda = 1 - weight;
+        LastMixingLambda = NumOps.FromDouble(lambda);
 
         for (int y = 0; y < image1.Height; y++)
             for (int x = 0; x < image1.Width; x++)
@@ -39,12 +44,20 @@ public class SamplePairing<T> : ImageAugmenterBase<T>
                     result.SetPixel(y, x, c, NumOps.FromDouble(paired));
                 }
 
+        if (labels1 is not null && labels2 is not null)
+        {
+            var args = new LabelMixingEventArgs<T>(
+                labels1, labels2, LastMixingLambda,
+                context.SampleIndex, -1, MixingStrategy.Mixup);
+            RaiseLabelMixing(args);
+        }
+
         return result;
     }
 
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
-        return data.Clone(); // No-op without second image
+        return data.Clone();
     }
 
     public override IDictionary<string, object> GetParameters()

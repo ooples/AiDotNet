@@ -1,3 +1,6 @@
+using AiDotNet.Augmentation;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
@@ -5,20 +8,17 @@ namespace AiDotNet.Augmentation.Image;
 /// Uses simple gradient-based saliency estimation.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class SaliencyMix<T> : ImageAugmenterBase<T>
+public class SaliencyMix<T> : ImageMixingAugmenterBase<T>
 {
-    public double Alpha { get; }
-
-    public SaliencyMix(double alpha = 1.0, double probability = 0.5) : base(probability)
+    public SaliencyMix(double alpha = 1.0, double probability = 0.5) : base(probability, alpha)
     {
-        Alpha = alpha;
     }
 
     /// <summary>
     /// Mixes two images using saliency-guided selection of the paste region.
     /// </summary>
     public ImageTensor<T> ApplySaliencyMix(ImageTensor<T> image1, ImageTensor<T> image2,
-        AugmentationContext<T> context)
+        Vector<T>? labels1, Vector<T>? labels2, AugmentationContext<T> context)
     {
         if (image1.Height != image2.Height || image1.Width != image2.Width)
             image2 = new Resize<T>(image1.Height, image1.Width).Apply(image2, context);
@@ -31,7 +31,9 @@ public class SaliencyMix<T> : ImageAugmenterBase<T>
         // Find most salient region
         int bestY = 0, bestX = 0;
         double bestSaliency = double.MinValue;
-        double lambda = context.SampleBeta(Alpha, Alpha);
+        double lambda = SampleLambda(context);
+        LastMixingLambda = NumOps.FromDouble(lambda);
+
         int cropH = (int)(image1.Height * Math.Sqrt(1 - lambda));
         int cropW = (int)(image1.Width * Math.Sqrt(1 - lambda));
         cropH = Math.Max(1, Math.Min(cropH, image1.Height));
@@ -65,6 +67,14 @@ public class SaliencyMix<T> : ImageAugmenterBase<T>
                         image2.GetPixel(bestY + y, bestX + x, c));
             }
 
+        if (labels1 is not null && labels2 is not null)
+        {
+            var args = new LabelMixingEventArgs<T>(
+                labels1, labels2, LastMixingLambda,
+                context.SampleIndex, -1, MixingStrategy.Custom);
+            RaiseLabelMixing(args);
+        }
+
         return result;
     }
 
@@ -97,8 +107,6 @@ public class SaliencyMix<T> : ImageAugmenterBase<T>
 
     public override IDictionary<string, object> GetParameters()
     {
-        var p = base.GetParameters();
-        p["alpha"] = Alpha;
-        return p;
+        return base.GetParameters();
     }
 }

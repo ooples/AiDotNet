@@ -1,31 +1,35 @@
+using AiDotNet.Augmentation;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
 /// PuzzleMix (Kim et al., 2020) - optimal mixing using saliency and local statistics.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class PuzzleMix<T> : ImageAugmenterBase<T>
+public class PuzzleMix<T> : ImageMixingAugmenterBase<T>
 {
-    public double Alpha { get; }
     public int GridSize { get; }
 
     public PuzzleMix(double alpha = 1.0, int gridSize = 4,
-        double probability = 0.5) : base(probability)
+        double probability = 0.5) : base(probability, alpha)
     {
-        Alpha = alpha; GridSize = gridSize;
+        GridSize = gridSize;
     }
 
     /// <summary>
     /// Mixes two images using puzzle-style optimal transport.
     /// </summary>
     public ImageTensor<T> ApplyPuzzleMix(ImageTensor<T> image1, ImageTensor<T> image2,
-        AugmentationContext<T> context)
+        Vector<T>? labels1, Vector<T>? labels2, AugmentationContext<T> context)
     {
         if (image1.Height != image2.Height || image1.Width != image2.Width)
             image2 = new Resize<T>(image1.Height, image1.Width).Apply(image2, context);
 
         var result = image1.Clone();
-        double lambda = context.SampleBeta(Alpha, Alpha);
+        double lambda = SampleLambda(context);
+        LastMixingLambda = NumOps.FromDouble(lambda);
+
         int cellH = Math.Max(1, image1.Height / GridSize);
         int cellW = Math.Max(1, image1.Width / GridSize);
 
@@ -68,6 +72,14 @@ public class PuzzleMix<T> : ImageAugmenterBase<T>
                             result.SetPixel(y, x, c, image2.GetPixel(y, x, c));
             }
 
+        if (labels1 is not null && labels2 is not null)
+        {
+            var args = new LabelMixingEventArgs<T>(
+                labels1, labels2, LastMixingLambda,
+                context.SampleIndex, -1, MixingStrategy.Custom);
+            RaiseLabelMixing(args);
+        }
+
         return result;
     }
 
@@ -109,7 +121,7 @@ public class PuzzleMix<T> : ImageAugmenterBase<T>
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();
-        p["alpha"] = Alpha; p["grid_size"] = GridSize;
+        p["grid_size"] = GridSize;
         return p;
     }
 }
