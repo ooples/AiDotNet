@@ -1933,15 +1933,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 // Create objective function that trains the model and returns validation loss
                 T ObjectiveFunction(Dictionary<string, object> trialHyperparameters)
                 {
-                    // Reset optimizer state for fresh training with new hyperparameters
-                    finalOptimizer.Reset();
-
-                    // Set the model on the optimizer so InitializeRandomSolution knows the parameter count
-                    finalOptimizer.SetModel(model);
-
-                    // Apply trial hyperparameters to the optimizer
+                    // Apply trial hyperparameters first so Reset() initializes adaptive state from them
                     var optimizerOptions = finalOptimizer.GetOptions();
                     ApplyTrialHyperparameters(optimizerOptions, trialHyperparameters);
+
+                    // Reset optimizer state to reinitialize adaptive parameters from new hyperparameters
+                    finalOptimizer.Reset();
+
+                    // Ensure the optimizer has a model set (required if optimizer was constructed without one)
+                    finalOptimizer.SetModel(model);
 
                     // Log hyperparameters for this trial to experiment tracker
                     if (experimentRun is not null)
@@ -6790,7 +6790,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             var memberOptimizer = CreateOptimizerForEnsembleMember(memberModel, templateOptimizer);
             memberOptimizer.Reset();
 
-            // Set the model so the optimizer can access parameter count during optimization
+            // Ensure the optimizer has a model set before calling Optimize/InitializeRandomSolution
             memberOptimizer.SetModel(memberModel);
 
             var memberInputData = CreateDeepEnsembleMemberOptimizationInputData(optimizationInputData, baseSeed, memberIndex);

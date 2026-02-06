@@ -141,18 +141,28 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     public virtual void SetModel(IFullModel<T, TInput, TOutput> model)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
-        OnModelChanged();
+        if (model is null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        var oldModel = _model;
+        _model = model;
+        OnModelChanged(oldModel, _model);
     }
 
     /// <summary>
-    /// Called after the model is set via <see cref="SetModel"/>. Override this method
-    /// in derived classes to perform model-specific initialization.
+    /// Called whenever the optimizer's model is changed via <see cref="SetModel"/>.
     /// </summary>
-    protected virtual void OnModelChanged()
+    /// <param name="oldModel">The previous model instance, or <c>null</c> if none was set.</param>
+    /// <param name="newModel">The new model instance that has just been set.</param>
+    /// <remarks>
+    /// Derived optimizers can override this method to update or reset any internal state that depends on the model.
+    /// </remarks>
+    protected virtual void OnModelChanged(IFullModel<T, TInput, TOutput>? oldModel, IFullModel<T, TInput, TOutput> newModel)
     {
         // Default implementation does nothing.
-        // Derived classes can override to reinitialize state based on new model.
+        // Derived classes can override to reinitialize state based on model changes.
     }
 
     /// <summary>
