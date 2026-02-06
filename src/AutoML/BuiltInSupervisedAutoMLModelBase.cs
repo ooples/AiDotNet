@@ -23,8 +23,8 @@ namespace AiDotNet.AutoML;
 /// </remarks>
 public abstract class BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput> : SupervisedAutoMLModelBase<T, TInput, TOutput>
 {
-    protected BuiltInSupervisedAutoMLModelBase(IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null, Random? random = null)
-        : base(modelEvaluator, random)
+    protected BuiltInSupervisedAutoMLModelBase(Random? random = null)
+        : base(random)
     {
     }
 

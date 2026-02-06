@@ -198,11 +198,5 @@ namespace AiDotNet.Interfaces
             TOutput targets,
             TInput validationInputs,
             TOutput validationTargets);
-
-        /// <summary>
-        /// Sets the model evaluator to use for evaluating candidate models
-        /// </summary>
-        /// <param name="evaluator">The model evaluator</param>
-        void SetModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator);
     }
 }

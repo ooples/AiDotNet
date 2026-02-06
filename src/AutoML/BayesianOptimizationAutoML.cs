@@ -30,8 +30,8 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
     private const double ExplorationRate = 0.15;
     private const double UcbExploration = 0.7;
 
-    public BayesianOptimizationAutoML(IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null, Random? random = null)
-        : base(modelEvaluator, random)
+    public BayesianOptimizationAutoML(Random? random = null)
+        : base(random)
     {
     }
 
@@ -132,7 +132,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
 
     protected override AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy()
     {
-        return new BayesianOptimizationAutoML<T, TInput, TOutput>(_modelEvaluator, Random);
+        return new BayesianOptimizationAutoML<T, TInput, TOutput>(Random);
     }
 
     private ModelType PickModelTypeByUcb()

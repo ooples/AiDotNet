@@ -40,12 +40,10 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
     /// <summary>
     /// Initializes a new supervised AutoML model with sensible default dependencies.
     /// </summary>
-    /// <param name="modelEvaluator">Optional evaluator; if null, a default evaluator is used.</param>
     /// <param name="random">Optional RNG; if null, a secure RNG is used.</param>
-    protected SupervisedAutoMLModelBase(IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null, Random? random = null)
+    protected SupervisedAutoMLModelBase(Random? random = null)
     {
         _random = random ?? RandomHelper.CreateSecureRandom();
-        _modelEvaluator = modelEvaluator ?? new DefaultModelEvaluator<T, TInput, TOutput>();
     }
 
     /// <summary>

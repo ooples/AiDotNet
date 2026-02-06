@@ -64,11 +64,6 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     protected readonly ModelStatsOptions ModelStatsOptions;
 
     /// <summary>
-    /// Evaluates the performance of models.
-    /// </summary>
-    protected readonly IModelEvaluator<T, TInput, TOutput> ModelEvaluator;
-
-    /// <summary>
     /// Detects the quality of fit for models.
     /// </summary>
     protected readonly IFitDetector<T, TInput, TOutput> FitDetector;
@@ -134,6 +129,47 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     private IFullModel<T, TInput, TOutput>? _model;
 
     /// <summary>
+    /// Returns the current model or throws if none has been set via <see cref="SetModel"/>.
+    /// </summary>
+    protected IFullModel<T, TInput, TOutput> RequireModel()
+    {
+        return _model ?? throw new InvalidOperationException(
+            "No model has been set. Call SetModel() before optimizing.");
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Derived classes can override this method to perform additional initialization
+    /// when the model is set, such as caching model-specific parameters or resizing
+    /// internal data structures based on the model's parameter count.
+    /// </remarks>
+    public virtual void SetModel(IFullModel<T, TInput, TOutput> model)
+    {
+        if (model is null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        var oldModel = _model;
+        _model = model;
+        OnModelChanged(oldModel, _model);
+    }
+
+    /// <summary>
+    /// Called whenever the optimizer's model is changed via <see cref="SetModel"/>.
+    /// </summary>
+    /// <param name="oldModel">The previous model instance, or <c>null</c> if none was set.</param>
+    /// <param name="newModel">The new model instance that has just been set.</param>
+    /// <remarks>
+    /// Derived optimizers can override this method to update or reset any internal state that depends on the model.
+    /// </remarks>
+    protected virtual void OnModelChanged(IFullModel<T, TInput, TOutput>? oldModel, IFullModel<T, TInput, TOutput> newModel)
+    {
+        // Default implementation does nothing.
+        // Derived classes can override to reinitialize state based on model changes.
+    }
+
+    /// <summary>
     /// Initializes a new instance of the OptimizerBase class.
     /// </summary>
     /// <param name="model">The model to be optimized (can be null if set later).</param>
@@ -147,7 +183,6 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         Options = options ?? new OptimizationAlgorithmOptions<T, TInput, TOutput>();
         PredictionOptions = Options.PredictionOptions;
         ModelStatsOptions = Options.ModelStatsOptions;
-        ModelEvaluator = Options.ModelEvaluator;
         FitDetector = Options.FitDetector;
         FitnessCalculator = Options.FitnessCalculator;
         FitnessList = new List<T>();
@@ -424,7 +459,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
-    /// Evaluates a solution using the model evaluator, fit detector, and fitness calculator.
+    /// Evaluates a solution using the fit detector and fitness calculator.
     /// </summary>
     /// <param name="input">The input data for model evaluation.</param>
     /// <returns>A tuple containing the fitness score, fit detection result, and evaluation data.</returns>
@@ -434,12 +469,166 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // Train the model
         input.Model?.Train(input.InputData.XTrain, input.InputData.YTrain);
 
-        // Evaluate the trained model
-        var evaluationData = ModelEvaluator.EvaluateModel(input);
+        // Evaluate the trained model using inline evaluation
+        var evaluationData = EvaluateModelDirectly(input);
         var fitDetectionResult = FitDetector.DetectFit(evaluationData);
         var currentFitnessScore = FitnessCalculator.CalculateFitnessScore(evaluationData);
 
         return (currentFitnessScore, fitDetectionResult, evaluationData);
+    }
+
+    /// <summary>
+    /// Directly evaluates a model without external evaluator dependency.
+    /// </summary>
+    private ModelEvaluationData<T, TInput, TOutput> EvaluateModelDirectly(ModelEvaluationInput<T, TInput, TOutput> input)
+    {
+        var model = input.Model;
+        var inputData = input.InputData;
+        var predictionType = input.PredictionTypeOverride
+            ?? PredictionTypeInference.InferFromTargets<T, TOutput>(inputData.YTrain);
+
+        var trainingSet = CalculateDataSetStatsForOptimizer(
+            model, inputData.XTrain, inputData.YTrain, predictionType);
+
+        DataSetStats<T, TInput, TOutput>? validationSet = null;
+        if (inputData.XValidation != null && InputHelper<T, TInput>.GetInputSize(inputData.XValidation) > 0)
+        {
+            validationSet = CalculateDataSetStatsForOptimizer(
+                model, inputData.XValidation, inputData.YValidation, predictionType);
+        }
+
+        DataSetStats<T, TInput, TOutput>? testSet = null;
+        if (inputData.XTest != null && InputHelper<T, TInput>.GetInputSize(inputData.XTest) > 0)
+        {
+            testSet = CalculateDataSetStatsForOptimizer(
+                model, inputData.XTest, inputData.YTest, predictionType);
+        }
+
+        var statsForModelCalc = validationSet ?? trainingSet;
+
+        return new ModelEvaluationData<T, TInput, TOutput>
+        {
+            TrainingSet = trainingSet,
+            ValidationSet = validationSet ?? new DataSetStats<T, TInput, TOutput>(),
+            TestSet = testSet ?? new DataSetStats<T, TInput, TOutput>(),
+            ModelStats = TryCalculateModelStatsForOptimizer(
+                model, statsForModelCalc.Features, statsForModelCalc.Actual, statsForModelCalc.Predicted, input.PreprocessingInfo)
+        };
+    }
+
+    private DataSetStats<T, TInput, TOutput> CalculateDataSetStatsForOptimizer(
+        IFullModel<T, TInput, TOutput>? model,
+        TInput X,
+        TOutput y,
+        PredictionType predictionType)
+    {
+        if (model == null)
+        {
+            return new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.Empty(),
+                IsDataProvided = true
+            };
+        }
+
+        var predictions = model.Predict(X);
+        var inputSize = InputHelper<T, TInput>.GetInputSize(X);
+
+        if (!TryGetAlignedVectorsForOptimizer(y, predictions, predictionType, out var actual, out var predicted))
+        {
+            return new DataSetStats<T, TInput, TOutput>
+            {
+                ErrorStats = ErrorStats<T>.Empty(),
+                ActualBasicStats = BasicStats<T>.Empty(),
+                PredictedBasicStats = BasicStats<T>.Empty(),
+                PredictionStats = PredictionStats<T>.Empty(),
+                Predicted = predictions,
+                Features = X,
+                Actual = y,
+                IsDataProvided = true
+            };
+        }
+
+        return new DataSetStats<T, TInput, TOutput>
+        {
+            ErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
+            {
+                Actual = actual,
+                Predicted = predicted,
+                FeatureCount = inputSize,
+                PredictionType = predictionType
+            }),
+            ActualBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = actual }),
+            PredictedBasicStats = new BasicStats<T>(new BasicStatsInputs<T> { Values = predicted }),
+            PredictionStats = new PredictionStats<T>(new PredictionStatsInputs<T>
+            {
+                Actual = actual,
+                Predicted = predicted,
+                NumberOfParameters = inputSize,
+                ConfidenceLevel = PredictionOptions.ConfidenceLevel,
+                LearningCurveSteps = PredictionOptions.LearningCurveSteps,
+                PredictionType = predictionType
+            }),
+            Predicted = predictions,
+            Features = X,
+            Actual = y,
+            IsDataProvided = true
+        };
+    }
+
+    private static bool TryGetAlignedVectorsForOptimizer(
+        TOutput actualOutput,
+        TOutput predictedOutput,
+        PredictionType predictionType,
+        out Vector<T> actual,
+        out Vector<T> predicted)
+    {
+        actual = Vector<T>.Empty();
+        predicted = Vector<T>.Empty();
+
+        try
+        {
+            actual = ConversionsHelper.ConvertToVector<T, TOutput>(actualOutput);
+            predicted = ConversionsHelper.ConvertToVector<T, TOutput>(predictedOutput);
+
+            if (actual.Length == predicted.Length)
+            {
+                return true;
+            }
+        }
+        catch (InvalidOperationException) { }
+        catch (ArgumentException) { }
+        catch (NotSupportedException) { }
+
+        return false;
+    }
+
+    private static ModelStats<T, TInput, TOutput> TryCalculateModelStatsForOptimizer(
+        IFullModel<T, TInput, TOutput>? model,
+        TInput xForStatistics,
+        TOutput actual,
+        TOutput predicted,
+        Preprocessing.PreprocessingInfo<T, TInput, TOutput>? preprocessingInfo)
+    {
+        try
+        {
+            return new ModelStats<T, TInput, TOutput>(new ModelStatsInputs<T, TInput, TOutput>
+            {
+                XMatrix = xForStatistics,
+                FeatureCount = InputHelper<T, TInput>.GetInputSize(xForStatistics),
+                Actual = actual,
+                Predicted = predicted,
+                Model = model
+            });
+        }
+        catch (InvalidOperationException) { return ModelStats<T, TInput, TOutput>.Empty(); }
+        catch (ArgumentException) { return ModelStats<T, TInput, TOutput>.Empty(); }
+        catch (NotSupportedException) { return ModelStats<T, TInput, TOutput>.Empty(); }
+        catch (ArithmeticException) { return ModelStats<T, TInput, TOutput>.Empty(); }
+        catch (IndexOutOfRangeException) { return ModelStats<T, TInput, TOutput>.Empty(); }
     }
 
     /// <summary>
@@ -1236,7 +1425,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
             // For Matrix input: compute min and max of each column (feature)
             int features = matrix.Columns;
-            int paramCount = _model!.ParameterCount;
+            int paramCount = RequireModel().ParameterCount;
 
             // If the model is untrained (ParameterCount is less than the number of features),
             // infer the correct parameter count from the input dimensions.
@@ -1316,7 +1505,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             }
 
             // Bounds should match parameter count, not input dimensionality
-            int paramCount = _model!.ParameterCount;
+            int paramCount = RequireModel().ParameterCount;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
@@ -1328,7 +1517,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         else
         {
             // Fallback: create reasonable default bounds based on parameter count
-            int paramCount = _model!.ParameterCount;
+            int paramCount = RequireModel().ParameterCount;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
 
@@ -1345,7 +1534,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         var randomParams = InitializeRandomSolution(lowerBounds, upperBounds);
 
         // Create a new model with these random parameters
-        var randomModel = _model.Clone();
+        var randomModel = RequireModel().Clone();
         randomModel.SetParameters(randomParams);
         return randomModel;
     }

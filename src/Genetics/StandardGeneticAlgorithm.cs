@@ -9,9 +9,8 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
 
     public StandardGeneticAlgorithm(
         Func<IFullModel<T, TInput, TOutput>> modelFactory,
-        IFitnessCalculator<T, TInput, TOutput> fitnessCalculator,
-        IModelEvaluator<T, TInput, TOutput> modelEvaluator)
-        : base(fitnessCalculator, modelEvaluator)
+        IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
+        : base(fitnessCalculator)
     {
         _modelFactory = modelFactory ?? throw new ArgumentNullException(nameof(modelFactory));
     }
