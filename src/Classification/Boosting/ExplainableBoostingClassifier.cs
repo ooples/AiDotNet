@@ -188,6 +188,17 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         double bestLoss = double.MaxValue;
         int roundsWithoutImprovement = 0;
 
+        // Maintain running log-odds to avoid recomputing from scratch each iteration
+        var runningLogOdds = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            runningLogOdds[i] = NumOps.ToDouble(_intercept);
+            for (int f = 0; f < _numFeatures; f++)
+            {
+                runningLogOdds[i] += NumOps.ToDouble(_shapeFunctions[f][sampleBins[f][i]]);
+            }
+        }
+
         for (int outer = 0; outer < _options.OuterBags; outer++)
         {
             for (int inner = 0; inner < _options.InnerBags; inner++)
@@ -195,16 +206,13 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 // Cycle through features in round-robin fashion
                 for (int f = 0; f < _numFeatures; f++)
                 {
-                    // Compute current predictions (log-odds)
-                    var logOdds = ComputeLogOdds(x, sampleBins);
-
-                    // Compute gradient and hessian for each bin
+                    // Compute gradient and hessian for each bin using running log-odds
                     var binGradients = new double[_binEdges[f].Length + 1];
                     var binHessians = new double[_binEdges[f].Length + 1];
 
                     for (int i = 0; i < n; i++)
                     {
-                        double prob = Sigmoid(logOdds[i]);
+                        double prob = Sigmoid(runningLogOdds[i]);
                         double grad = yBinary[i] - prob;  // Negative gradient of log-loss
                         double hess = prob * (1 - prob);   // Hessian
 
@@ -213,7 +221,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                         binHessians[bin] += hess;
                     }
 
-                    // Update shape function for this feature
+                    // Update shape function for this feature and adjust running log-odds
                     for (int b = 0; b <= _binEdges[f].Length; b++)
                     {
                         if (binHessians[b] > 1e-10)
@@ -224,14 +232,25 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                             _shapeFunctions[f][b] = NumOps.Add(_shapeFunctions[f][b], NumOps.FromDouble(update));
                         }
                     }
+
+                    // Update running log-odds incrementally for this feature's changes
+                    for (int i = 0; i < n; i++)
+                    {
+                        int bin = sampleBins[f][i];
+                        if (binHessians[bin] > 1e-10)
+                        {
+                            double update = (binGradients[bin] / (binHessians[bin] + _options.L2Regularization))
+                                           * _options.LearningRate;
+                            runningLogOdds[i] += update;
+                        }
+                    }
                 }
             }
 
             // Early stopping check
             if (_options.EarlyStoppingRounds.HasValue)
             {
-                var logOdds = ComputeLogOdds(x, sampleBins);
-                double loss = ComputeLogLoss(logOdds, yBinary);
+                double loss = ComputeLogLoss(runningLogOdds, yBinary);
 
                 if (loss < bestLoss)
                 {
@@ -250,8 +269,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
 
             if (_options.Verbose && (outer + 1) % _options.VerboseEval == 0)
             {
-                var logOdds = ComputeLogOdds(x, sampleBins);
-                double loss = ComputeLogLoss(logOdds, yBinary);
+                double loss = ComputeLogLoss(runningLogOdds, yBinary);
                 Console.WriteLine($"[{outer + 1}] Log Loss: {loss:F6}");
             }
         }
@@ -294,6 +312,12 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// </summary>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {
+        if (NumClasses != 2)
+        {
+            throw new NotSupportedException(
+                $"EBM classifier currently supports binary classification only (NumClasses={NumClasses}).");
+        }
+
         int n = input.Rows;
         var probs = new Matrix<T>(n, NumClasses);
 
@@ -338,14 +362,31 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// </summary>
     /// <param name="sample">A single input sample.</param>
     /// <returns>Dictionary mapping feature index to its contribution.</returns>
-    public Dictionary<int, T> ExplainPrediction(Vector<T> sample)
+    public Dictionary<string, T> ExplainPrediction(Vector<T> sample)
     {
-        var contributions = new Dictionary<int, T>();
+        var contributions = new Dictionary<string, T>();
 
+        // Main effects
         for (int f = 0; f < _numFeatures; f++)
         {
             int bin = GetBinIndex(NumOps.ToDouble(sample[f]), f);
-            contributions[f] = _shapeFunctions[f][bin];
+            contributions[$"feature_{f}"] = _shapeFunctions[f][bin];
+        }
+
+        // Interaction effects
+        foreach (var kvp in _interactionTerms)
+        {
+            int f1 = kvp.Key.Item1;
+            int f2 = kvp.Key.Item2;
+            int bin1 = GetBinIndex(NumOps.ToDouble(sample[f1]), f1);
+            int bin2 = GetBinIndex(NumOps.ToDouble(sample[f2]), f2);
+
+            int maxBin1 = kvp.Value.GetLength(0) - 1;
+            int maxBin2 = kvp.Value.GetLength(1) - 1;
+            bin1 = Math.Min(bin1, maxBin1);
+            bin2 = Math.Min(bin2, maxBin2);
+
+            contributions[$"interaction_{f1}x{f2}"] = kvp.Value[bin1, bin2];
         }
 
         return contributions;
@@ -370,8 +411,8 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             values = values.Distinct().ToList();
 
             // Create quantile-based bins
-            int numBins = Math.Min(_options.MaxBins, values.Count - 1);
-            if (numBins <= 0)
+            int numBins = Math.Min(_options.MaxBins, values.Count);
+            if (numBins <= 1)
             {
                 _binEdges[f] = [];
                 continue;
@@ -381,7 +422,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             for (int b = 1; b < numBins; b++)
             {
                 int idx = (int)((double)b / numBins * values.Count);
-                idx = Math.Min(idx, values.Count - 1);
+                idx = Math.Max(0, Math.Min(idx, values.Count - 1));
                 edges.Add(NumOps.FromDouble(values[idx]));
             }
             _binEdges[f] = edges.Distinct().ToArray();

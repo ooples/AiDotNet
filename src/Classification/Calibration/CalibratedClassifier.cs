@@ -437,34 +437,74 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         }
         Array.Sort(indexed, (a, b) => a.prob.CompareTo(b.prob));
 
-        // Pool Adjacent Violators Algorithm (PAVA)
-        var calibrated = new double[n];
-        var weights = new int[n];
+        // Pool Adjacent Violators Algorithm (PAVA) - block-based implementation
+        // Each block tracks: weighted sum, weight, and start/end indices
+        var blockValues = new double[n];
+        var blockWeights = new double[n];
+        var blockEnds = new int[n]; // blockEnds[i] = last index in block starting at i
+        int numBlocks = n;
+
         for (int i = 0; i < n; i++)
         {
-            calibrated[i] = indexed[i].target;
-            weights[i] = 1;
+            blockValues[i] = indexed[i].target;
+            blockWeights[i] = 1.0;
+            blockEnds[i] = i;
         }
 
-        bool changed = true;
-        while (changed)
-        {
-            changed = false;
-            for (int i = 0; i < n - 1; i++)
-            {
-                if (calibrated[i] > calibrated[i + 1])
-                {
-                    // Merge pools
-                    double newValue = (calibrated[i] * weights[i] + calibrated[i + 1] * weights[i + 1])
-                                     / (weights[i] + weights[i + 1]);
-                    int newWeight = weights[i] + weights[i + 1];
+        // Forward pass: merge violating adjacent blocks
+        int current = 0;
+        var blockStarts = new List<int> { 0 };
 
-                    calibrated[i] = newValue;
-                    calibrated[i + 1] = newValue;
-                    weights[i] = newWeight;
-                    weights[i + 1] = newWeight;
-                    changed = true;
+        while (current < n - 1)
+        {
+            int next = blockEnds[current] + 1;
+            if (next >= n) break;
+
+            if (blockValues[current] > blockValues[next])
+            {
+                // Merge current and next blocks
+                double totalWeight = blockWeights[current] + blockWeights[next];
+                blockValues[current] = (blockValues[current] * blockWeights[current]
+                                      + blockValues[next] * blockWeights[next]) / totalWeight;
+                blockWeights[current] = totalWeight;
+                blockEnds[current] = blockEnds[next];
+
+                // Check if we need to merge backwards
+                while (blockStarts.Count > 1)
+                {
+                    int prev = blockStarts[^2];
+                    if (blockValues[prev] > blockValues[current])
+                    {
+                        // Merge prev and current
+                        double tw = blockWeights[prev] + blockWeights[current];
+                        blockValues[prev] = (blockValues[prev] * blockWeights[prev]
+                                           + blockValues[current] * blockWeights[current]) / tw;
+                        blockWeights[prev] = tw;
+                        blockEnds[prev] = blockEnds[current];
+                        blockStarts.RemoveAt(blockStarts.Count - 1);
+                        current = prev;
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
+            }
+            else
+            {
+                current = next;
+                blockStarts.Add(current);
+            }
+        }
+
+        // Expand blocks to per-element calibrated values
+        var calibrated = new double[n];
+        foreach (int start in blockStarts)
+        {
+            int end = blockEnds[start];
+            for (int i = start; i <= end; i++)
+            {
+                calibrated[i] = blockValues[start];
             }
         }
 
@@ -508,12 +548,12 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
                 double z = a * logP - b * log1mP + c;
                 double calibrated = 1.0 / (1.0 + Math.Exp(-z));
 
+                // Cross-entropy gradient through sigmoid: dL/dz = sigma(z) - target
                 double error = calibrated - targets[i];
-                double dCalib_dZ = calibrated * (1 - calibrated);
 
-                gradA += error * dCalib_dZ * logP;
-                gradB += error * dCalib_dZ * (-log1mP);
-                gradC += error * dCalib_dZ;
+                gradA += error * logP;
+                gradB += error * (-log1mP);
+                gradC += error;
 
                 // Cross-entropy loss
                 double clampedCalib = Math.Max(1e-10, Math.Min(1 - 1e-10, calibrated));
@@ -584,7 +624,8 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         var uncalibrated = _baseClassifier.PredictProbabilities(input);
         var calibrated = new Matrix<T>(input.Rows, NumClasses);
 
-        if (_options.CalibrationMethod == ProbabilityCalibrationMethod.None)
+        if (_options.CalibrationMethod == ProbabilityCalibrationMethod.None
+            || _options.CalibrationMethod == ProbabilityCalibrationMethod.Auto)
         {
             // No calibration, return raw probabilities
             return uncalibrated;

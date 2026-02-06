@@ -109,18 +109,22 @@ public class ContrastivePretraining<T>
         }
 
         // Corrupt features by swapping with values from other samples
+        // Note: When batchSize == 1, swapping from the same sample produces no real corruption
+        if (batchSize <= 1)
+        {
+            _corruptedIndicesCache = [];
+            return corrupted;
+        }
+
         for (int b = 0; b < batchSize; b++)
         {
             for (int f = 0; f < numFeatures; f++)
             {
                 if (_random.NextDouble() < _corruptionRate)
                 {
-                    // Pick a random sample to swap from
-                    int otherSample = _random.Next(batchSize);
-                    while (otherSample == b && batchSize > 1)
-                    {
-                        otherSample = _random.Next(batchSize);
-                    }
+                    // Pick a different sample to swap from
+                    int otherSample = _random.Next(batchSize - 1);
+                    if (otherSample >= b) otherSample++;
 
                     corrupted[b * numFeatures + f] = input[otherSample * numFeatures + f];
                     corruptedIndices.Add(b * numFeatures + f);
@@ -244,21 +248,24 @@ public class ContrastivePretraining<T>
         }
 
         // Compute cross-entropy loss (positive pairs are original vs. corrupted)
+        // Exclude self-similarity (anchor vs. anchor) from the denominator
         var totalLoss = NumOps.Zero;
         for (int i = 0; i < batchSize; i++)
         {
-            // Find max for numerical stability
-            var maxSim = similarities[i, 0];
-            for (int j = 1; j < batchSize * 2; j++)
+            // Find max for numerical stability (excluding self-similarity at j == i)
+            var maxSim = similarities[i, batchSize]; // Start with first corrupted entry
+            for (int j = 0; j < batchSize * 2; j++)
             {
+                if (j == i) continue; // Skip self-similarity
                 if (NumOps.Compare(similarities[i, j], maxSim) > 0)
                     maxSim = similarities[i, j];
             }
 
-            // Compute log-sum-exp
+            // Compute log-sum-exp (excluding self-similarity)
             var sumExp = NumOps.Zero;
             for (int j = 0; j < batchSize * 2; j++)
             {
+                if (j == i) continue; // Skip self-similarity
                 sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(similarities[i, j], maxSim)));
             }
 
@@ -304,12 +311,16 @@ public class ContrastivePretraining<T>
     public Tensor<T> GetCorruptionMask(int batchSize)
     {
         var mask = new Tensor<T>([batchSize, _numFeatures]);
+        int maskLength = batchSize * _numFeatures;
 
         if (_corruptedIndicesCache != null)
         {
             foreach (var idx in _corruptedIndicesCache)
             {
-                mask[idx] = NumOps.One;
+                if (idx >= 0 && idx < maskLength)
+                {
+                    mask[idx] = NumOps.One;
+                }
             }
         }
 

@@ -287,6 +287,12 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
     /// </summary>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {
+        if (NumClasses != 2)
+        {
+            throw new NotSupportedException(
+                $"DART classifier currently supports binary classification only (NumClasses={NumClasses}).");
+        }
+
         int n = input.Rows;
         var probs = new Matrix<T>(n, NumClasses);
 
@@ -323,6 +329,11 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
     /// </summary>
     private int SelectNumDropout(int numTrees)
     {
+        if (_options.DropoutRate <= 0)
+        {
+            return 0;
+        }
+
         return _options.DropoutType switch
         {
             DARTDropoutType.Uniform => Math.Max(1, (int)(numTrees * _options.DropoutRate)),

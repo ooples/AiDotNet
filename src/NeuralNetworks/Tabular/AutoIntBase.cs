@@ -189,6 +189,13 @@ public abstract class AutoIntBase<T>
                 for (int f = 0; f < NumCategoricalFeatures; f++)
                 {
                     int catIdx = categoricalIndices[b, f];
+                    int cardinality = Options.CategoricalCardinalities![f];
+                    if ((uint)catIdx >= (uint)cardinality)
+                    {
+                        throw new ArgumentOutOfRangeException(
+                            nameof(categoricalIndices),
+                            $"Categorical index {catIdx} for feature {f} (batch {b}) is out of range [0, {cardinality}).");
+                    }
                     int featureIdx = NumNumericalFeatures + f;
 
                     for (int d = 0; d < Options.EmbeddingDimension; d++)
