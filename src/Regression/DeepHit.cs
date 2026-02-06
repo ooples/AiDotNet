@@ -106,7 +106,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         _outputWeights = [];
         _outputBiases = [];
         _numFeatures = 0;
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

@@ -93,7 +93,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         _baseModels = baseModels.ToList();
         _options = options ?? new SuperLearnerOptions();
         _metaIntercept = NumOps.Zero;
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
 
         if (_baseModels.Count == 0)
         {

@@ -75,7 +75,7 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _trees = [];
         _treeWeights = [];
         _numFeatures = 0;
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>

@@ -105,7 +105,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     {
         _options = options ?? new MixedEffectsModelOptions();
         _residualVariance = NumOps.One;
-        _random = _options.Seed.HasValue ? new Random(_options.Seed.Value) : new Random();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

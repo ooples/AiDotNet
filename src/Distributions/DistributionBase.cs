@@ -28,7 +28,7 @@ public abstract class DistributionBase<T> : ISamplingDistribution<T>
     /// <summary>
     /// Default random number generator for sampling.
     /// </summary>
-    private static readonly ThreadLocal<Random> DefaultRandom = new(() => new Random());
+    private static readonly ThreadLocal<Random> DefaultRandom = new(() => RandomHelper.CreateSecureRandom());
 
     /// <summary>
     /// Mathematical constants.
