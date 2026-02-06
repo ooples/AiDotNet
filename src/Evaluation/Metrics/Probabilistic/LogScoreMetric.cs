@@ -39,7 +39,7 @@ public class LogScoreMetric<T> : IRegressionMetric<T>
     public MetricDirection Direction => MetricDirection.LowerIsBetter;
 
     /// <inheritdoc/>
-    public T? MinValue => NumOps.Zero;
+    public T? MinValue => default;
 
     /// <inheritdoc/>
     public T? MaxValue => default;

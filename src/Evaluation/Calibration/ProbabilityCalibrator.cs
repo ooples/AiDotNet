@@ -66,6 +66,12 @@ public class ProbabilityCalibrator<T>
     private double[]? _binProbabilities;
 
     /// <summary>
+    /// Stored calibration data for Venn-ABERS per-point dual isotonic fits.
+    /// </summary>
+    private double[]? _vennCalibrationScores;
+    private double[]? _vennCalibrationLabels;
+
+    /// <summary>
     /// Configuration options.
     /// </summary>
     private readonly ProbabilityCalibratorOptions _options;
@@ -142,9 +148,15 @@ public class ProbabilityCalibrator<T>
                 FitVennABERS(scoresDouble, labelsDouble);
                 break;
 
-            default:
-                FitPlattScaling(scoresDouble, labelsDouble);
+            case ProbabilityCalibrationMethod.None:
+                // No calibration - identity transform
                 break;
+
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(_options.CalibratorMethod),
+                    _options.CalibratorMethod,
+                    "Unknown calibration method.");
         }
 
         _isFitted = true;
@@ -192,9 +204,16 @@ public class ProbabilityCalibrator<T>
                 calibrated = TransformVennABERS(scoresDouble);
                 break;
 
-            default:
-                calibrated = TransformPlattScaling(scoresDouble);
+            case ProbabilityCalibrationMethod.None:
+                // Identity transform - return scores unchanged
+                calibrated = scoresDouble;
                 break;
+
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(_options.CalibratorMethod),
+                    _options.CalibratorMethod,
+                    "Unknown calibration method.");
         }
 
         return new Vector<T>(calibrated.Select(c => NumOps.FromDouble(c)).ToArray());
@@ -229,8 +248,9 @@ public class ProbabilityCalibrator<T>
             double lower = (double)b / numBins;
             double upper = (double)(b + 1) / numBins;
 
+            // Include scores == 1.0 in the last bin
             var binIndices = Enumerable.Range(0, n)
-                .Where(i => scoresDouble[i] >= lower && scoresDouble[i] < upper)
+                .Where(i => scoresDouble[i] >= lower && (b == numBins - 1 ? scoresDouble[i] <= upper : scoresDouble[i] < upper))
                 .ToList();
 
             if (binIndices.Count > 0)
@@ -262,8 +282,9 @@ public class ProbabilityCalibrator<T>
             double lower = (double)b / numBins;
             double upper = (double)(b + 1) / numBins;
 
+            // Include scores == 1.0 in the last bin
             var binIndices = Enumerable.Range(0, n)
-                .Where(i => scoresDouble[i] >= lower && scoresDouble[i] < upper)
+                .Where(i => scoresDouble[i] >= lower && (b == numBins - 1 ? scoresDouble[i] <= upper : scoresDouble[i] < upper))
                 .ToList();
 
             if (binIndices.Count > 0)
@@ -322,8 +343,9 @@ public class ProbabilityCalibrator<T>
             double lower = (double)b / numBins;
             double upper = (double)(b + 1) / numBins;
 
+            // Include scores == 1.0 in the last bin
             var binIndices = Enumerable.Range(0, n)
-                .Where(i => scoresDouble[i] >= lower && scoresDouble[i] < upper)
+                .Where(i => scoresDouble[i] >= lower && (b == numBins - 1 ? scoresDouble[i] <= upper : scoresDouble[i] < upper))
                 .ToList();
 
             binCounts[b] = binIndices.Count;
@@ -404,7 +426,7 @@ public class ProbabilityCalibrator<T>
 
             // Newton update
             double det = h11 * h22 - h21 * h21;
-            if (Math.Abs(det) < 1e-10) det = 1e-10;
+            if (Math.Abs(det) < 1e-10) det = Math.Sign(det) == 0 ? 1e-10 : Math.Sign(det) * 1e-10;
 
             double dA = (g1 * h22 - g2 * h21) / det;
             double dB = (g2 * h11 - g1 * h21) / det;
@@ -553,8 +575,9 @@ public class ProbabilityCalibrator<T>
                 double scaledLogit = logits[i] / T;
                 double p = 1 / (1 + Math.Exp(-scaledLogit));
 
-                // Gradient of cross-entropy w.r.t. T
-                gradient += (p - labels[i]) * logits[i] / (T * T);
+                // Gradient of cross-entropy w.r.t. T:
+                // dL/dT = -(p - y) * logit / T²
+                gradient += -(p - labels[i]) * logits[i] / (T * T);
             }
 
             gradient /= logits.Length;
@@ -668,8 +691,9 @@ public class ProbabilityCalibrator<T>
 
         for (int b = 0; b < numBins; b++)
         {
+            // Include scores == 1.0 in the last bin
             var binIndices = Enumerable.Range(0, scores.Length)
-                .Where(i => scores[i] >= _binEdges[b] && scores[i] < _binEdges[b + 1])
+                .Where(i => scores[i] >= _binEdges[b] && (b == numBins - 1 ? scores[i] <= _binEdges[b + 1] : scores[i] < _binEdges[b + 1]))
                 .ToList();
 
             if (binIndices.Count > 0)
@@ -705,8 +729,9 @@ public class ProbabilityCalibrator<T>
         _binProbabilities = new double[numBins];
         for (int b = 0; b < numBins; b++)
         {
+            // Include scores == 1.0 in the last bin
             var binIndices = Enumerable.Range(0, scores.Length)
-                .Where(i => scores[i] >= _binEdges[b] && scores[i] < _binEdges[b + 1])
+                .Where(i => scores[i] >= _binEdges[b] && (b == numBins - 1 ? scores[i] <= _binEdges[b + 1] : scores[i] < _binEdges[b + 1]))
                 .ToList();
 
             if (binIndices.Count > 0)
@@ -746,17 +771,50 @@ public class ProbabilityCalibrator<T>
 
     private void FitVennABERS(double[] scores, double[] labels)
     {
-        // Venn-ABERS fits isotonic regression twice:
-        // once assuming new point is positive, once assuming negative
-        // For simplicity, we just fit isotonic regression here
+        // Venn-ABERS produces calibrated probability intervals by fitting
+        // isotonic regression twice for each test point (once assuming y=0, once y=1).
+        // Here we pre-fit isotonic regression on the calibration set; the per-point
+        // dual isotonic fits are applied at transform time.
         FitIsotonicRegression(scores, labels);
+        // Store calibration data for per-point dual fits
+        _vennCalibrationScores = scores;
+        _vennCalibrationLabels = labels;
     }
 
     private double[] TransformVennABERS(double[] scores)
     {
-        // In full implementation, this would return probability intervals
-        // For now, return point estimates from isotonic regression
-        return TransformIsotonicRegression(scores);
+        if (_vennCalibrationScores == null || _vennCalibrationLabels == null)
+        {
+            return TransformIsotonicRegression(scores);
+        }
+
+        // For each test point, fit two isotonic regressions:
+        // p0: assuming test point label = 0, p1: assuming test point label = 1
+        // Final calibrated probability = p1 / (1 - p0 + p1)
+        var calibrated = new double[scores.Length];
+        for (int i = 0; i < scores.Length; i++)
+        {
+            // Augment calibration set with test point labeled 0
+            var scores0 = _vennCalibrationScores.Append(scores[i]).ToArray();
+            var labels0 = _vennCalibrationLabels.Append(0.0).ToArray();
+            FitIsotonicRegression(scores0, labels0);
+            double p0 = TransformIsotonicRegression([scores[i]])[0];
+
+            // Augment calibration set with test point labeled 1
+            var scores1 = _vennCalibrationScores.Append(scores[i]).ToArray();
+            var labels1 = _vennCalibrationLabels.Append(1.0).ToArray();
+            FitIsotonicRegression(scores1, labels1);
+            double p1 = TransformIsotonicRegression([scores[i]])[0];
+
+            // Combine to get point estimate
+            double denom = 1 - p0 + p1;
+            calibrated[i] = denom > 1e-10 ? p1 / denom : 0.5;
+        }
+
+        // Re-fit isotonic on original calibration data (restore state)
+        FitIsotonicRegression(_vennCalibrationScores, _vennCalibrationLabels);
+
+        return calibrated;
     }
 
     #endregion

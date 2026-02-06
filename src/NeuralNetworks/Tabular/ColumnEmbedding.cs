@@ -109,7 +109,7 @@ public class ColumnEmbedding<T>
     /// <returns>Embeddings with column information added.</returns>
     public Tensor<T> AddColumnEmbeddings(Tensor<T> featureEmbeddings)
     {
-        if (featureEmbeddings.Shape.Length < 3)
+        if (featureEmbeddings.Shape.Length != 3)
             throw new ArgumentException(
                 $"Feature embeddings must be rank-3 [batchSize, numColumns, embeddingDim], but got rank {featureEmbeddings.Shape.Length}.");
 
@@ -173,6 +173,10 @@ public class ColumnEmbedding<T>
     public void Backward(Tensor<T> gradient)
     {
         if (!_learnable) return;
+
+        if (gradient.Shape.Length != 3)
+            throw new ArgumentException(
+                $"Gradient must be rank-3 [batchSize, numColumns, embeddingDim], but got rank {gradient.Shape.Length}.");
 
         int batchSize = gradient.Shape[0];
         int numCols = gradient.Shape[1];

@@ -74,6 +74,10 @@ public class CLSToken<T>
     /// <returns>Embeddings with CLS token prepended: [batchSize, seqLen+1, embDim].</returns>
     public Tensor<T> PrependCLS(Tensor<T> embeddings)
     {
+        if (embeddings.Shape.Length != 3)
+            throw new ArgumentException(
+                $"Embeddings must be rank-3 [batchSize, seqLen, embDim], but got rank {embeddings.Shape.Length}.");
+
         int batchSize = embeddings.Shape[0];
         int seqLen = embeddings.Shape[1];
         int inputEmbDim = embeddings.Shape[2];
@@ -118,6 +122,10 @@ public class CLSToken<T>
     /// <returns>CLS representations with shape [batchSize, embDim].</returns>
     public Tensor<T> ExtractCLS(Tensor<T> transformerOutput)
     {
+        if (transformerOutput.Shape.Length != 3)
+            throw new ArgumentException(
+                $"Transformer output must be rank-3 [batchSize, seqLen, embDim], but got rank {transformerOutput.Shape.Length}.");
+
         int batchSize = transformerOutput.Shape[0];
         int inputEmbDim = transformerOutput.Shape[2];
         if (inputEmbDim != EmbeddingDimension)

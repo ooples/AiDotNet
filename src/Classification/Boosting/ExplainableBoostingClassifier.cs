@@ -366,7 +366,11 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// <returns>Dictionary mapping feature index to its contribution.</returns>
     public Dictionary<string, T> ExplainPrediction(Vector<T> sample)
     {
-        var contributions = new Dictionary<string, T>();
+        var contributions = new Dictionary<string, T>
+        {
+            // Include intercept so contributions sum to the full log-odds
+            ["intercept"] = _intercept
+        };
 
         // Main effects
         for (int f = 0; f < _numFeatures; f++)

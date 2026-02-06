@@ -171,12 +171,13 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     /// <para>
     /// When CategoricalCardinalities is set, this property returns its length.
     /// Can also be set directly to override the inferred value.
-    /// A default of 0 means "infer from CategoricalCardinalities" or "no categorical features".
+    /// Setting to 0 resets to inference mode (infer from CategoricalCardinalities).
+    /// A positive value permanently overrides inference.
     /// </para>
     /// </remarks>
     public int NumCategoricalFeatures
     {
         get => _numCategoricalFeatures ?? CategoricalCardinalities?.Length ?? 0;
-        set => _numCategoricalFeatures = value;
+        set => _numCategoricalFeatures = value == 0 ? null : value;
     }
 }

@@ -174,6 +174,11 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
         var importance = new Dictionary<string, T>();
         int numFeatures = Architecture.CalculatedInputSize;
 
+        if (numFeatures == 0)
+        {
+            return importance;
+        }
+
         // For FT-Transformer, importance could be derived from attention weights
         var uniformValue = NumOps.FromDouble(1.0 / numFeatures);
         for (int f = 0; f < numFeatures; f++)

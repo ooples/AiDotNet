@@ -137,9 +137,16 @@ public class PoissonDistribution<T> : DistributionBase<T>
         int high = (int)(lambda + 10 * Math.Sqrt(lambda) + 10);
 
         // Dynamically expand upper bound if CDF at high is still less than p
+        // Use long arithmetic to detect overflow before it wraps around
         while (RegularizedUpperGamma(high + 1, lambda) < pVal)
         {
-            high *= 2;
+            long next = (long)high * 2;
+            if (next > int.MaxValue)
+            {
+                high = int.MaxValue;
+                break;
+            }
+            high = (int)next;
         }
 
         while (low < high)
