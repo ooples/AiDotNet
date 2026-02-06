@@ -226,17 +226,19 @@ public class Pad<T> : SpatialImageAugmenterBase<T>
                 return Math.Max(0, Math.Min(coord, size - 1));
 
             case PaddingMode.Reflect:
-                if (coord < 0)
-                    coord = -coord - 1;
-                if (coord >= size)
-                    coord = 2 * size - coord - 1;
-                return Math.Max(0, Math.Min(coord, size - 1));
-
-            case PaddingMode.Symmetric:
+                // Non-edge-duplicating: coord=-1 maps to index 1
                 if (coord < 0)
                     coord = -coord;
                 if (coord >= size)
                     coord = 2 * size - coord - 2;
+                return Math.Max(0, Math.Min(coord, size - 1));
+
+            case PaddingMode.Symmetric:
+                // Edge-duplicating: coord=-1 maps to index 0
+                if (coord < 0)
+                    coord = -coord - 1;
+                if (coord >= size)
+                    coord = 2 * size - coord - 1;
                 return Math.Max(0, Math.Min(coord, size - 1));
 
             default:

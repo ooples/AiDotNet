@@ -75,14 +75,9 @@ public class RgbToHls<T> : ImageAugmenterBase<T>
 
                 // Saturation
                 double s;
-                if (delta < 1e-10)
-                {
-                    s = 0;
-                }
-                else
-                {
-                    s = l <= 0.5 ? delta / (max + min) : delta / (2.0 - max - min);
-                }
+                s = delta < 1e-10
+                    ? 0
+                    : l <= 0.5 ? delta / (max + min) : delta / (2.0 - max - min);
 
                 // Hue
                 double h;

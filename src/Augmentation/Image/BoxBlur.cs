@@ -13,6 +13,7 @@ public class BoxBlur<T> : ImageAugmenterBase<T>
         : base(probability)
     {
         if (minKernelSize < 1) throw new ArgumentOutOfRangeException(nameof(minKernelSize));
+        if (maxKernelSize < minKernelSize) throw new ArgumentOutOfRangeException(nameof(maxKernelSize), "maxKernelSize must be >= minKernelSize.");
         MinKernelSize = minKernelSize; MaxKernelSize = maxKernelSize;
     }
 
@@ -21,7 +22,7 @@ public class BoxBlur<T> : ImageAugmenterBase<T>
         int kSize = context.GetRandomInt(MinKernelSize, MaxKernelSize + 1);
         if (kSize % 2 == 0) kSize++;
         int half = kSize / 2;
-        double weight = 1.0 / (kSize * kSize);
+        double weight = 1.0 / ((double)kSize * kSize);
         var result = data.Clone();
 
         for (int c = 0; c < data.Channels; c++)

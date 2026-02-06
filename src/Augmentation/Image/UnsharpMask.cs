@@ -16,6 +16,7 @@ public class UnsharpMask<T> : ImageAugmenterBase<T>
         double probability = 0.5) : base(probability)
     {
         if (kernelSize < 3 || kernelSize % 2 == 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
+        if (sigma <= 0) throw new ArgumentOutOfRangeException(nameof(sigma), "Sigma must be positive.");
         KernelSize = kernelSize; Sigma = sigma;
         Amount = amount; Threshold = threshold;
     }
@@ -58,11 +59,9 @@ public class UnsharpMask<T> : ImageAugmenterBase<T>
                         }
 
                     double diff = original - blurred;
-                    double sharpened;
-                    if (Math.Abs(diff) >= Threshold * maxVal)
-                        sharpened = original + Amount * diff;
-                    else
-                        sharpened = original;
+                    double sharpened = Math.Abs(diff) >= Threshold * maxVal
+                        ? original + Amount * diff
+                        : original;
 
                     result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, sharpened))));
                 }

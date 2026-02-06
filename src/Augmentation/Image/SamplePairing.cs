@@ -15,6 +15,8 @@ public class SamplePairing<T> : ImageMixingAugmenterBase<T>
     public SamplePairing(double minWeight = 0.0, double maxWeight = 0.5,
         double probability = 0.5) : base(probability)
     {
+        if (minWeight < 0 || minWeight > 1) throw new ArgumentOutOfRangeException(nameof(minWeight), "MinWeight must be in [0, 1].");
+        if (maxWeight < minWeight || maxWeight > 1) throw new ArgumentOutOfRangeException(nameof(maxWeight), "MaxWeight must be >= MinWeight and <= 1.");
         MinWeight = minWeight; MaxWeight = maxWeight;
     }
 

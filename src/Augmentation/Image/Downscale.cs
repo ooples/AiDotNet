@@ -28,10 +28,10 @@ public class Downscale<T> : ImageAugmenterBase<T>
         int smallH = Math.Max(1, (int)(data.Height * scale));
         int smallW = Math.Max(1, (int)(data.Width * scale));
 
-        var downResize = new Resize<T>(smallH, smallW, DownInterpolation);
+        var downResize = new Resize<T>(smallH, smallW, DownInterpolation, probability: 1.0);
         var small = downResize.Apply(data, context);
 
-        var upResize = new Resize<T>(data.Height, data.Width, UpInterpolation);
+        var upResize = new Resize<T>(data.Height, data.Width, UpInterpolation, probability: 1.0);
         return upResize.Apply(small, context);
     }
 

@@ -49,16 +49,61 @@ public class HistogramEqualization<T> : ImageAugmenterBase<T>
         }
         else
         {
-            // Equalize luminance only (average of channels as approximation)
-            EqualizeChannel(data, result, h, w, 0, numBins, maxVal);
-            // Apply same mapping to other channels proportionally
-            for (int c = 1; c < data.Channels; c++)
-            {
-                EqualizeChannel(data, result, h, w, c, numBins, maxVal);
-            }
+            // Equalize based on luminance: build histogram from average luminance,
+            // then apply the same mapping to all channels proportionally
+            EqualizeLuminance(data, result, h, w, numBins, maxVal);
         }
 
         return result;
+    }
+
+    private static void EqualizeLuminance(ImageTensor<T> src, ImageTensor<T> dst,
+        int h, int w, int numBins, double maxVal)
+    {
+        // Build luminance histogram (average of all channels)
+        var histogram = new int[numBins];
+        int totalPixels = h * w;
+
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                double lum = 0;
+                for (int c = 0; c < src.Channels; c++)
+                    lum += NumOps.ToDouble(src.GetPixel(y, x, c));
+                lum /= src.Channels;
+                int bin = Math.Max(0, Math.Min(numBins - 1, (int)(lum / maxVal * (numBins - 1))));
+                histogram[bin]++;
+            }
+
+        // Build CDF
+        var cdf = new double[numBins];
+        cdf[0] = histogram[0];
+        for (int i = 1; i < numBins; i++) cdf[i] = cdf[i - 1] + histogram[i];
+
+        double cdfMin = 0;
+        for (int i = 0; i < numBins; i++)
+            if (cdf[i] > 0) { cdfMin = cdf[i]; break; }
+
+        double denom = totalPixels - cdfMin;
+        if (denom < 1) denom = 1;
+
+        // Apply the same luminance-based mapping to all channels
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                double lum = 0;
+                for (int c = 0; c < src.Channels; c++)
+                    lum += NumOps.ToDouble(src.GetPixel(y, x, c));
+                lum /= src.Channels;
+                int bin = Math.Max(0, Math.Min(numBins - 1, (int)(lum / maxVal * (numBins - 1))));
+                double scale = lum > 1e-10 ? ((cdf[bin] - cdfMin) / denom * maxVal) / lum : 1.0;
+
+                for (int c = 0; c < src.Channels; c++)
+                {
+                    double val = NumOps.ToDouble(src.GetPixel(y, x, c)) * scale;
+                    dst.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
+                }
+            }
     }
 
     private static void EqualizeChannel(ImageTensor<T> src, ImageTensor<T> dst,

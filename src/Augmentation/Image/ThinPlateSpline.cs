@@ -119,7 +119,7 @@ public class ThinPlateSpline<T> : ImageAugmenterBase<T>
 
                 for (int c = 0; c < data.Channels; c++)
                 {
-                    if (mappedX >= 0 && mappedX < w - 1 && mappedY >= 0 && mappedY < h - 1)
+                    if (mappedX >= 0 && mappedX < w && mappedY >= 0 && mappedY < h)
                     {
                         result.SetPixel(y, x, c, BilinearSample(data, mappedX, mappedY, c));
                     }

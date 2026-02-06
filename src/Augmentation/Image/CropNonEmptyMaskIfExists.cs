@@ -25,6 +25,40 @@ public class CropNonEmptyMaskIfExists<T> : SpatialImageAugmenterBase<T>
         int bestY = context.GetRandomInt(0, Math.Max(1, data.Height - cropH + 1));
         int bestX = context.GetRandomInt(0, Math.Max(1, data.Width - cropW + 1));
 
+        // Try multiple attempts to find a crop containing non-empty content
+        // Use pixel variance as a proxy for non-empty regions when no mask is available
+        double bestScore = -1;
+        for (int attempt = 0; attempt < MaxAttempts; attempt++)
+        {
+            int candY = context.GetRandomInt(0, Math.Max(1, data.Height - cropH + 1));
+            int candX = context.GetRandomInt(0, Math.Max(1, data.Width - cropW + 1));
+
+            // Check if region has non-zero content
+            double sum = 0;
+            int sampleStep = Math.Max(1, cropH * cropW / 100);
+            int count = 0;
+            for (int i = 0; i < cropH * cropW; i += sampleStep)
+            {
+                int sy = candY + i / cropW;
+                int sx = candX + i % cropW;
+                if (sy < data.Height && sx < data.Width)
+                {
+                    sum += Math.Abs(NumOps.ToDouble(data.GetPixel(sy, sx, 0)));
+                    count++;
+                }
+            }
+
+            double score = count > 0 ? sum / count : 0;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestY = candY;
+                bestX = candX;
+            }
+
+            if (score > 0) break;
+        }
+
         var parms = new Dictionary<string, object>
         {
             ["crop_y"] = bestY, ["crop_x"] = bestX,

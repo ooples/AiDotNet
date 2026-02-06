@@ -53,7 +53,7 @@ public class LongestMaxSize<T> : ImageAugmenterBase<T>
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         int longest = Math.Max(data.Height, data.Width);
-        if (longest <= MaxSize)
+        if (longest == MaxSize)
             return data.Clone();
 
         double scale = (double)MaxSize / longest;

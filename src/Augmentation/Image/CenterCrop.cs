@@ -133,13 +133,19 @@ public class CenterCrop<T> : SpatialImageAugmenterBase<T>
     {
         int cropX = (int)transformParams["crop_x"];
         int cropY = (int)transformParams["crop_y"];
+        int cropW = (int)transformParams["crop_width"];
+        int cropH = (int)transformParams["crop_height"];
+
+        // When crop is larger than source, pixels are centered in the output
+        int destOffsetX = (CropWidth - cropW) / 2;
+        int destOffsetY = (CropHeight - cropH) / 2;
 
         var (x, y, w, h) = box.ToXYWH();
 
-        double newX1 = x - cropX;
-        double newY1 = y - cropY;
-        double newX2 = x + w - cropX;
-        double newY2 = y + h - cropY;
+        double newX1 = x - cropX + destOffsetX;
+        double newY1 = y - cropY + destOffsetY;
+        double newX2 = x + w - cropX + destOffsetX;
+        double newY2 = y + h - cropY + destOffsetY;
 
         newX1 = Math.Max(0, Math.Min(CropWidth, newX1));
         newY1 = Math.Max(0, Math.Min(CropHeight, newY1));
@@ -165,12 +171,18 @@ public class CenterCrop<T> : SpatialImageAugmenterBase<T>
     {
         int cropX = (int)transformParams["crop_x"];
         int cropY = (int)transformParams["crop_y"];
+        int cropW = (int)transformParams["crop_width"];
+        int cropH = (int)transformParams["crop_height"];
+
+        // When crop is larger than source, pixels are centered in the output
+        int destOffsetX = (CropWidth - cropW) / 2;
+        int destOffsetY = (CropHeight - cropH) / 2;
 
         double x = NumOps.ToDouble(keypoint.X);
         double y = NumOps.ToDouble(keypoint.Y);
 
-        double newX = x - cropX;
-        double newY = y - cropY;
+        double newX = x - cropX + destOffsetX;
+        double newY = y - cropY + destOffsetY;
 
         var result = keypoint.Clone();
         result.X = NumOps.FromDouble(newX);

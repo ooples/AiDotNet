@@ -13,6 +13,7 @@ public class RandomGamma<T> : ImageAugmenterBase<T>
         double probability = 0.5) : base(probability)
     {
         if (minGamma <= 0) throw new ArgumentOutOfRangeException(nameof(minGamma));
+        if (maxGamma < minGamma) throw new ArgumentOutOfRangeException(nameof(maxGamma), "maxGamma must be >= minGamma.");
         MinGamma = minGamma; MaxGamma = maxGamma;
     }
 

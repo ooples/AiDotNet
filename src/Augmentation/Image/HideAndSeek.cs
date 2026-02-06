@@ -27,7 +27,7 @@ public class HideAndSeek<T> : ImageAugmenterBase<T>
         {
             for (int gx = 0; gx < GridSize; gx++)
             {
-                if (context.GetRandomDouble(0, 1) > HideProbability) continue;
+                if (context.GetRandomDouble(0, 1) >= HideProbability) continue;
 
                 int startY = gy * patchH;
                 int startX = gx * patchW;

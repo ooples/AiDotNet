@@ -13,6 +13,8 @@ public class BBoxSafeRandomCrop<T> : SpatialImageAugmenterBase<T>
     public BBoxSafeRandomCrop(double minCropScale = 0.5, int maxAttempts = 50,
         double minBBoxAreaRatio = 0.25, double probability = 0.5) : base(probability)
     {
+        if (minCropScale <= 0 || minCropScale > 1) throw new ArgumentOutOfRangeException(nameof(minCropScale), "MinCropScale must be in (0, 1].");
+        if (maxAttempts < 1) throw new ArgumentOutOfRangeException(nameof(maxAttempts), "MaxAttempts must be at least 1.");
         MinCropScale = minCropScale; MaxAttempts = maxAttempts;
         MinBBoxAreaRatio = minBBoxAreaRatio;
     }

@@ -107,7 +107,8 @@ public class ToFloat<T> : ImageAugmenterBase<T>
             }
         }
 
-        result.IsNormalized = (TargetMin >= -1.1 && TargetMax <= 1.1);
+        // Mark as normalized if target range is within typical normalized ranges [0,1] or [-1,1]
+        result.IsNormalized = (TargetMin >= -1.0 && TargetMax <= 1.0);
 
         return result;
     }

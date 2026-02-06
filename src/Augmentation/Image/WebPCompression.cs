@@ -13,6 +13,7 @@ public class WebPCompression<T> : ImageAugmenterBase<T>
         : base(probability)
     {
         if (minQuality < 1 || minQuality > 100) throw new ArgumentOutOfRangeException(nameof(minQuality));
+        if (maxQuality < minQuality || maxQuality > 100) throw new ArgumentOutOfRangeException(nameof(maxQuality));
         MinQuality = minQuality; MaxQuality = maxQuality;
     }
 

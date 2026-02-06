@@ -60,7 +60,7 @@ public class SunFlare<T> : ImageAugmenterBase<T>
         for (int y = yMin; y <= yMax; y++)
             for (int x = xMin; x <= xMax; x++)
             {
-                double dist = Math.Sqrt((y - centerY) * (y - centerY) + (x - centerX) * (x - centerX));
+                double dist = Math.Sqrt((double)(y - centerY) * (y - centerY) + (double)(x - centerX) * (x - centerX));
                 if (dist > radius) continue;
 
                 double alpha = (1 - dist / radius) * intensity;

@@ -21,10 +21,7 @@ public class PlasmaTransform<T> : ImageAugmenterBase<T>
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
         double intensity = context.GetRandomDouble(MinIntensity, MaxIntensity);
 
-        // Generate plasma pattern using diamond-square algorithm approximation
-        int size = Math.Max(data.Height, data.Width);
-
-        // Multi-octave noise for each channel
+        // Generate plasma pattern using diamond-square algorithm (multi-octave noise per channel)
         for (int c = 0; c < data.Channels; c++)
         {
             var plasma = new double[data.Height, data.Width];

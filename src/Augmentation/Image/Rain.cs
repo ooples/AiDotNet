@@ -37,18 +37,24 @@ public class Rain<T> : ImageAugmenterBase<T>
             int startY = context.GetRandomInt(0, data.Height);
             int startX = context.GetRandomInt(0, data.Width);
 
+            int halfWidth = Math.Max(0, (int)(DropWidth / 2));
+
             for (int i = 0; i < dropLen; i++)
             {
                 int y = startY + i;
-                int x = startX + (int)(i * Math.Tan(slantRad));
+                int xCenter = startX + (int)(i * Math.Tan(slantRad));
 
-                if (y < 0 || y >= data.Height || x < 0 || x >= data.Width) continue;
-
-                for (int c = 0; c < data.Channels; c++)
+                for (int dx = -halfWidth; dx <= halfWidth; dx++)
                 {
-                    double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    double drop = val + Brightness * maxVal * 0.3;
-                    result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, drop))));
+                    int x = xCenter + dx;
+                    if (y < 0 || y >= data.Height || x < 0 || x >= data.Width) continue;
+
+                    for (int c = 0; c < data.Channels; c++)
+                    {
+                        double val = NumOps.ToDouble(data.GetPixel(y, x, c));
+                        double drop = val + Brightness * maxVal * 0.3;
+                        result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, drop))));
+                    }
                 }
             }
         }

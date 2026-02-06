@@ -15,6 +15,10 @@ public class Shadow<T> : ImageAugmenterBase<T>
         double minDarkness = 0.3, double maxDarkness = 0.7,
         double probability = 0.5) : base(probability)
     {
+        if (minShadows < 0) throw new ArgumentOutOfRangeException(nameof(minShadows));
+        if (maxShadows < minShadows) throw new ArgumentOutOfRangeException(nameof(maxShadows), "maxShadows must be >= minShadows.");
+        if (minDarkness < 0 || minDarkness > 1) throw new ArgumentOutOfRangeException(nameof(minDarkness));
+        if (maxDarkness < minDarkness || maxDarkness > 1) throw new ArgumentOutOfRangeException(nameof(maxDarkness), "maxDarkness must be >= minDarkness and <= 1.");
         MinShadows = minShadows; MaxShadows = maxShadows;
         MinDarkness = minDarkness; MaxDarkness = maxDarkness;
     }
@@ -29,17 +33,7 @@ public class Shadow<T> : ImageAugmenterBase<T>
         {
             double darkness = context.GetRandomDouble(MinDarkness, MaxDarkness);
 
-            // Generate random polygon vertices for shadow boundary
-            int numVertices = context.GetRandomInt(3, 6);
-            var verticesX = new double[numVertices];
-            var verticesY = new double[numVertices];
-            for (int i = 0; i < numVertices; i++)
-            {
-                verticesX[i] = context.GetRandomDouble(0, data.Width);
-                verticesY[i] = context.GetRandomDouble(0, data.Height);
-            }
-
-            // Simple approach: use half-plane shadow with gradient
+            // Use half-plane shadow with gradient
             double x1 = context.GetRandomDouble(0, data.Width);
             double y1 = context.GetRandomDouble(0, data.Height);
             double angle = context.GetRandomDouble(0, Math.PI * 2);

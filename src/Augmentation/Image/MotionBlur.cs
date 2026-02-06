@@ -13,6 +13,7 @@ public class MotionBlur<T> : ImageAugmenterBase<T>
         : base(probability)
     {
         if (minKernelSize < 3) throw new ArgumentOutOfRangeException(nameof(minKernelSize));
+        if (maxKernelSize < minKernelSize) throw new ArgumentOutOfRangeException(nameof(maxKernelSize), "maxKernelSize must be >= minKernelSize.");
         MinKernelSize = minKernelSize;
         MaxKernelSize = maxKernelSize;
     }
@@ -36,8 +37,10 @@ public class MotionBlur<T> : ImageAugmenterBase<T>
             int kx = (int)Math.Round(half + offset * cosA);
             if (ky >= 0 && ky < kSize && kx >= 0 && kx < kSize)
             {
+                // Track if this cell was already set to avoid double-counting in sum
+                if (kernel[ky, kx] == 0.0)
+                    sum += 1.0;
                 kernel[ky, kx] = 1.0;
-                sum += 1.0;
             }
         }
 

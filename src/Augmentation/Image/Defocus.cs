@@ -28,7 +28,7 @@ public class Defocus<T> : ImageAugmenterBase<T>
             for (int kx = 0; kx < kSize; kx++)
             {
                 double dx = kx - radius, dy = ky - radius;
-                if (dx * dx + dy * dy <= radius * radius)
+                if (dx * dx + dy * dy <= (double)radius * radius)
                 {
                     kernel[ky, kx] = 1.0;
                     sum += 1.0;

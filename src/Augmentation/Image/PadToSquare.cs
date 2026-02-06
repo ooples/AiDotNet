@@ -58,7 +58,6 @@ public class PadToSquare<T> : ImageAugmenterBase<T>
         if (height == width)
             return data.Clone();
 
-        int maxSide = Math.Max(height, width);
         int padTop = 0, padBottom = 0, padLeft = 0, padRight = 0;
 
         if (height < width)
@@ -75,8 +74,7 @@ public class PadToSquare<T> : ImageAugmenterBase<T>
         }
 
         var pad = new Pad<T>(padLeft, padRight, padTop, padBottom, Mode, FillValue);
-        var padContext = new AugmentationContext<T>(isTraining: false);
-        return pad.Apply(data, padContext);
+        return pad.Apply(data, context);
     }
 
     /// <inheritdoc />

@@ -24,6 +24,8 @@ public class GridDropout<T> : ImageAugmenterBase<T>
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
+        if (Ratio <= 0) return result;
+
         int cellH = Math.Max(1, data.Height / GridSize);
         int cellW = Math.Max(1, data.Width / GridSize);
         int dropH = Math.Max(1, (int)(cellH * Ratio));

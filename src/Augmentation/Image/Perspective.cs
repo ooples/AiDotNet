@@ -114,7 +114,7 @@ public class Perspective<T> : SpatialImageAugmenterBase<T>
 
                 for (int c = 0; c < data.Channels; c++)
                 {
-                    if (srcX >= 0 && srcX < w - 1 && srcY >= 0 && srcY < h - 1)
+                    if (srcX >= 0 && srcX < w && srcY >= 0 && srcY < h)
                     {
                         result.SetPixel(y, x, c, BilinearSample(data, srcX, srcY, c));
                     }

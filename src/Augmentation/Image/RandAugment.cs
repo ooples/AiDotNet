@@ -31,7 +31,6 @@ public class RandAugment<T> : ImageAugmenterBase<T>
                 magnitude = Math.Max(0, Math.Min(1, magnitude));
             }
 
-            var autoAug = new AutoAugment<T>(probability: 1.0);
             result = ApplyOp(result, op, magnitude, context);
         }
 

@@ -15,6 +15,7 @@ public class TransMix<T> : ImageMixingAugmenterBase<T>
     public TransMix(double alpha = 1.0, int patchSize = 16,
         double probability = 0.5) : base(probability, alpha)
     {
+        if (patchSize < 1) throw new ArgumentOutOfRangeException(nameof(patchSize), "PatchSize must be at least 1.");
         PatchSize = patchSize;
     }
 
@@ -45,7 +46,7 @@ public class TransMix<T> : ImageMixingAugmenterBase<T>
         var indices = new int[totalPatches];
         for (int i = 0; i < totalPatches; i++) indices[i] = i;
 
-        // Sort by score to select top patches
+        // Sort ascending by score; lowest-scored patches are selected for mixing
         Array.Sort(scores, indices);
 
         var mixMask = new bool[totalPatches];

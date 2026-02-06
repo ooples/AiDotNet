@@ -108,9 +108,12 @@ public class RgbToLab<T> : ImageAugmenterBase<T>
 
                 if (NormalizeOutput)
                 {
+                    // Shift a*/b* from [-128, 127] to [0, 255] using center offset,
+                    // then normalize to [0, 1]
+                    const double LabCenterOffset = 128.0;
                     lStar /= 100.0;
-                    aStar = (aStar + 128.0) / 255.0;
-                    bStar = (bStar + 128.0) / 255.0;
+                    aStar = (aStar + LabCenterOffset) / 255.0;
+                    bStar = (bStar + LabCenterOffset) / 255.0;
                 }
 
                 result.SetPixel(y, x, 0, NumOps.FromDouble(lStar));

@@ -27,8 +27,11 @@ public class ChannelDropout<T> : ImageAugmenterBase<T>
 
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
-        int numToDrop = context.GetRandomInt(MinChannelsToDrop,
-            Math.Min(MaxChannelsToDrop, data.Channels - 1) + 1);
+        int clampedMin = Math.Min(MinChannelsToDrop, data.Channels - 1);
+        int clampedMax = Math.Min(MaxChannelsToDrop, data.Channels - 1);
+        clampedMin = Math.Max(1, clampedMin);
+        clampedMax = Math.Max(clampedMin, clampedMax);
+        int numToDrop = context.GetRandomInt(clampedMin, clampedMax + 1);
 
         // Select channels to drop
         var candidates = new List<int>();

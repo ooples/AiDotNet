@@ -35,10 +35,10 @@ public class CoarseDropout<T> : ImageAugmenterBase<T>
 
         for (int h = 0; h < numHoles; h++)
         {
-            int holeH = Math.Max(1, (int)(data.Height * context.GetRandomDouble(MinHoleHeight, MaxHoleHeight)));
-            int holeW = Math.Max(1, (int)(data.Width * context.GetRandomDouble(MinHoleWidth, MaxHoleWidth)));
-            int y1 = context.GetRandomInt(0, data.Height - holeH + 1);
-            int x1 = context.GetRandomInt(0, data.Width - holeW + 1);
+            int holeH = Math.Max(1, Math.Min(data.Height, (int)(data.Height * context.GetRandomDouble(MinHoleHeight, MaxHoleHeight))));
+            int holeW = Math.Max(1, Math.Min(data.Width, (int)(data.Width * context.GetRandomDouble(MinHoleWidth, MaxHoleWidth))));
+            int y1 = context.GetRandomInt(0, Math.Max(1, data.Height - holeH + 1));
+            int x1 = context.GetRandomInt(0, Math.Max(1, data.Width - holeW + 1));
 
             for (int y = y1; y < y1 + holeH; y++)
                 for (int x = x1; x < x1 + holeW; x++)

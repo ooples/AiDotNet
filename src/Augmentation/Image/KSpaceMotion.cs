@@ -20,7 +20,6 @@ public class KSpaceMotion<T> : ImageAugmenterBase<T>
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
-        double maxVal = data.IsNormalized ? 1.0 : 255.0;
 
         // Simulate motion by applying random shifts to horizontal lines
         // (approximation of k-space corruption)

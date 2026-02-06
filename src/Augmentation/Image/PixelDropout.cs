@@ -20,6 +20,7 @@ public class PixelDropout<T> : ImageAugmenterBase<T>
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
+        T fill = NumOps.FromDouble(FillValue);
 
         if (PerChannel)
         {
@@ -28,7 +29,7 @@ public class PixelDropout<T> : ImageAugmenterBase<T>
                     for (int c = 0; c < data.Channels; c++)
                     {
                         if (context.GetRandomDouble(0, 1) < DropoutRate)
-                            result.SetPixel(y, x, c, NumOps.FromDouble(FillValue));
+                            result.SetPixel(y, x, c, fill);
                     }
         }
         else
@@ -39,7 +40,7 @@ public class PixelDropout<T> : ImageAugmenterBase<T>
                     if (context.GetRandomDouble(0, 1) < DropoutRate)
                     {
                         for (int c = 0; c < data.Channels; c++)
-                            result.SetPixel(y, x, c, NumOps.FromDouble(FillValue));
+                            result.SetPixel(y, x, c, fill);
                     }
                 }
         }

@@ -14,6 +14,7 @@ public class PuzzleMix<T> : ImageMixingAugmenterBase<T>
     public PuzzleMix(double alpha = 1.0, int gridSize = 4,
         double probability = 0.5) : base(probability, alpha)
     {
+        if (gridSize < 1) throw new ArgumentOutOfRangeException(nameof(gridSize), "GridSize must be at least 1.");
         GridSize = gridSize;
     }
 

@@ -22,22 +22,23 @@ public class RandomBrightnessContrast<T> : ImageAugmenterBase<T>
         double brightnessFactor = context.GetRandomDouble(-BrightnessLimit, BrightnessLimit);
         double contrastFactor = context.GetRandomDouble(1 - ContrastLimit, 1 + ContrastLimit);
 
-        // Compute mean for contrast adjustment
-        double mean = 0;
-        int total = data.Height * data.Width * data.Channels;
+        // Compute per-channel mean for contrast adjustment (prevents color shifts)
+        int pixelCount = data.Height * data.Width;
+        var channelMean = new double[data.Channels];
         for (int y = 0; y < data.Height; y++)
             for (int x = 0; x < data.Width; x++)
                 for (int c = 0; c < data.Channels; c++)
-                    mean += NumOps.ToDouble(data.GetPixel(y, x, c));
-        mean /= total;
+                    channelMean[c] += NumOps.ToDouble(data.GetPixel(y, x, c));
+        for (int c = 0; c < data.Channels; c++)
+            channelMean[c] /= pixelCount;
 
         for (int y = 0; y < data.Height; y++)
             for (int x = 0; x < data.Width; x++)
                 for (int c = 0; c < data.Channels; c++)
                 {
                     double val = NumOps.ToDouble(data.GetPixel(y, x, c));
-                    // Apply contrast around mean, then brightness
-                    val = (val - mean) * contrastFactor + mean + brightnessFactor * maxVal;
+                    // Apply contrast around per-channel mean, then brightness
+                    val = (val - channelMean[c]) * contrastFactor + channelMean[c] + brightnessFactor * maxVal;
                     result.SetPixel(y, x, c, NumOps.FromDouble(Math.Max(0, Math.Min(maxVal, val))));
                 }
 

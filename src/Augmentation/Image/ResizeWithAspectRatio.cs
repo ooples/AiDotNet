@@ -115,8 +115,7 @@ public class ResizeWithAspectRatio<T> : ImageAugmenterBase<T>
 
         // Step 1: Resize
         var resize = new Resize<T>(resizedH, resizedW, Interpolation);
-        var resizeContext = new AugmentationContext<T>(isTraining: false);
-        var resized = resize.Apply(data, resizeContext);
+        var resized = resize.Apply(data, context);
 
         // Step 2: Pad to target size if needed
         if (resizedH == TargetHeight && resizedW == TargetWidth)
@@ -128,8 +127,7 @@ public class ResizeWithAspectRatio<T> : ImageAugmenterBase<T>
         int padRight = TargetWidth - resizedW - padLeft;
 
         var pad = new Pad<T>(padLeft, padRight, padTop, padBottom, PadMode, FillValue);
-        var padContext = new AugmentationContext<T>(isTraining: false);
-        return pad.Apply(resized, padContext);
+        return pad.Apply(resized, context);
     }
 
     /// <inheritdoc />

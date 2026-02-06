@@ -15,6 +15,10 @@ public class RandomSizedBBoxSafeCrop<T> : SpatialImageAugmenterBase<T>
         double minCropScale = 0.5, double maxCropScale = 1.0,
         double probability = 0.5) : base(probability)
     {
+        if (targetHeight < 1) throw new ArgumentOutOfRangeException(nameof(targetHeight));
+        if (targetWidth < 1) throw new ArgumentOutOfRangeException(nameof(targetWidth));
+        if (minCropScale <= 0 || minCropScale > 1) throw new ArgumentOutOfRangeException(nameof(minCropScale));
+        if (maxCropScale < minCropScale || maxCropScale > 1) throw new ArgumentOutOfRangeException(nameof(maxCropScale));
         TargetHeight = targetHeight; TargetWidth = targetWidth;
         MinCropScale = minCropScale; MaxCropScale = maxCropScale;
     }

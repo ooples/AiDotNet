@@ -96,6 +96,7 @@ public class Resize<T> : ImageAugmenterBase<T>
         {
             for (int x = 0; x < TargetWidth; x++)
             {
+                // Map target pixel to source pixel centers for accurate interpolation
                 double srcY = (y + 0.5) * scaleY - 0.5;
                 double srcX = (x + 0.5) * scaleX - 0.5;
 

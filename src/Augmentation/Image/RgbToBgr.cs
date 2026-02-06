@@ -41,11 +41,27 @@ public class RgbToBgr<T> : ImageAugmenterBase<T>
 
         var targetColorSpace = data.ColorSpace == ColorSpace.RGB ? ColorSpace.BGR : ColorSpace.RGB;
 
+        // Swap normalization metadata indices 0 and 2 to match channel swap
+        T[]? swappedMean = data.NormalizationMean;
+        T[]? swappedStd = data.NormalizationStd;
+
+        if (swappedMean is { Length: >= 3 })
+        {
+            swappedMean = (T[])swappedMean.Clone();
+            (swappedMean[0], swappedMean[2]) = (swappedMean[2], swappedMean[0]);
+        }
+
+        if (swappedStd is { Length: >= 3 })
+        {
+            swappedStd = (T[])swappedStd.Clone();
+            (swappedStd[0], swappedStd[2]) = (swappedStd[2], swappedStd[0]);
+        }
+
         var result = new ImageTensor<T>(data.Height, data.Width, data.Channels, data.ChannelOrder, targetColorSpace)
         {
             IsNormalized = data.IsNormalized,
-            NormalizationMean = data.NormalizationMean,
-            NormalizationStd = data.NormalizationStd,
+            NormalizationMean = swappedMean,
+            NormalizationStd = swappedStd,
             OriginalRange = data.OriginalRange
         };
 

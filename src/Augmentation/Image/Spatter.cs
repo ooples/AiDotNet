@@ -40,7 +40,7 @@ public class Spatter<T> : ImageAugmenterBase<T>
             {
                 for (int x = xMin; x <= xMax; x++)
                 {
-                    double dist = Math.Sqrt((y - centerY) * (y - centerY) + (x - centerX) * (x - centerX));
+                    double dist = Math.Sqrt((double)(y - centerY) * (y - centerY) + (double)(x - centerX) * (x - centerX));
                     if (dist > spotRadius) continue;
 
                     double alpha = 1.0 - (dist / spotRadius);
@@ -48,7 +48,7 @@ public class Spatter<T> : ImageAugmenterBase<T>
 
                     for (int c = 0; c < data.Channels; c++)
                     {
-                        double original = NumOps.ToDouble(data.GetPixel(y, x, c));
+                        double original = NumOps.ToDouble(result.GetPixel(y, x, c));
                         double spotColor = GetSpotColor(c, maxVal);
                         double blended = original * (1 - alpha) + spotColor * alpha;
                         result.SetPixel(y, x, c,

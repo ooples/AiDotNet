@@ -88,12 +88,12 @@ public class FancyPCA<T> : ImageAugmenterBase<T>
                     tempCov[i, j] -= eigenvalue * v[i] * v[j];
         }
 
-        // Generate random alpha values
+        // Generate random alpha values (Krizhevsky: perturbation = sum_i(alpha_i * lambda_i * p_i))
         var alpha = new double[3];
         for (int i = 0; i < 3; i++)
-            alpha[i] = context.SampleGaussian(0, AlphaStd) * Math.Sqrt(eigenvalues[i]);
+            alpha[i] = context.SampleGaussian(0, AlphaStd) * eigenvalues[i];
 
-        // Compute perturbation per channel
+        // Compute perturbation per channel: [p1, p2, p3] * [alpha1*lambda1, alpha2*lambda2, alpha3*lambda3]
         var perturbation = new double[3];
         for (int c = 0; c < 3; c++)
             for (int ev = 0; ev < 3; ev++)

@@ -26,16 +26,19 @@ public class FMix<T> : ImageMixingAugmenterBase<T>
         if (image1.Height != image2.Height || image1.Width != image2.Width)
             image2 = new Resize<T>(image1.Height, image1.Width).Apply(image2, context);
 
-        // Generate low-frequency mask
-        var mask = GenerateFourierMask(image1.Height, image1.Width, context);
+        // Sample lambda from Beta(alpha, alpha) distribution
+        double lambda = SampleLambda(context);
 
-        // Compute lambda as area ratio of mask
+        // Generate low-frequency mask with target lambda
+        var mask = GenerateFourierMask(image1.Height, image1.Width, lambda, context);
+
+        // Recompute actual lambda from mask area
         double maskSum = 0;
-        int totalPixels = image1.Height * image1.Width;
+        long totalPixels = (long)image1.Height * image1.Width;
         for (int y = 0; y < image1.Height; y++)
             for (int x = 0; x < image1.Width; x++)
                 maskSum += mask[y, x];
-        double lambda = maskSum / totalPixels;
+        lambda = maskSum / totalPixels;
         LastMixingLambda = NumOps.FromDouble(lambda);
 
         var result = image1.Clone();
@@ -63,7 +66,7 @@ public class FMix<T> : ImageMixingAugmenterBase<T>
         return result;
     }
 
-    private double[,] GenerateFourierMask(int height, int width, AugmentationContext<T> context)
+    private double[,] GenerateFourierMask(int height, int width, double targetLambda, AugmentationContext<T> context)
     {
         // Generate random low-frequency pattern
         var mask = new double[height, width];
@@ -75,7 +78,7 @@ public class FMix<T> : ImageMixingAugmenterBase<T>
         for (int y = 0; y < freqH; y++)
             for (int x = 0; x < freqW; x++)
             {
-                double dist = Math.Sqrt((double)(y * y + x * x) / (freqH * freqH + freqW * freqW));
+                double dist = Math.Sqrt(((double)y * y + (double)x * x) / ((double)freqH * freqH + (double)freqW * freqW));
                 double decay = Math.Pow(Math.Max(dist, 0.01), -DecayPower);
                 lowFreq[y, x] = context.SampleGaussian(0, 1) * decay;
             }
@@ -97,14 +100,15 @@ public class FMix<T> : ImageMixingAugmenterBase<T>
                              lowFreq[y1, x1] * ty * tx;
             }
 
-        // Threshold to binary mask
+        // Threshold to binary mask at the targetLambda percentile
         var values = new double[height * width];
         int idx = 0;
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++)
                 values[idx++] = mask[y, x];
         Array.Sort(values);
-        double threshold = values[values.Length / 2];
+        int thresholdIdx = Math.Max(0, Math.Min(values.Length - 1, (int)((1 - targetLambda) * values.Length)));
+        double threshold = values[thresholdIdx];
 
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++)

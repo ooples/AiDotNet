@@ -31,21 +31,35 @@ public class MinIoURandomCrop<T> : SpatialImageAugmenterBase<T>
 
         if (Math.Abs(minIoU - 1.0) < 1e-10) return (data.Clone(), parms);
 
-        double scale = context.GetRandomDouble(0.3, 1.0);
-        double aspectRatio = context.GetRandomDouble(0.5, 2.0);
+        int bestY = 0, bestX = 0, bestCropH = data.Height, bestCropW = data.Width;
 
-        int cropW = (int)(data.Width * scale * Math.Sqrt(aspectRatio));
-        int cropH = (int)(data.Height * scale / Math.Sqrt(aspectRatio));
-        cropW = Math.Max(1, Math.Min(cropW, data.Width));
-        cropH = Math.Max(1, Math.Min(cropH, data.Height));
+        for (int attempt = 0; attempt < MaxAttempts; attempt++)
+        {
+            double scale = context.GetRandomDouble(0.3, 1.0);
+            double aspectRatio = context.GetRandomDouble(0.5, 2.0);
 
-        int y = context.GetRandomInt(0, Math.Max(1, data.Height - cropH + 1));
-        int x = context.GetRandomInt(0, Math.Max(1, data.Width - cropW + 1));
+            int cropW = (int)(data.Width * scale * Math.Sqrt(aspectRatio));
+            int cropH = (int)(data.Height * scale / Math.Sqrt(aspectRatio));
+            cropW = Math.Max(1, Math.Min(cropW, data.Width));
+            cropH = Math.Max(1, Math.Min(cropH, data.Height));
 
-        parms["crop_y"] = y; parms["crop_x"] = x;
-        parms["crop_h"] = cropH; parms["crop_w"] = cropW;
+            int y = context.GetRandomInt(0, Math.Max(1, data.Height - cropH + 1));
+            int x = context.GetRandomInt(0, Math.Max(1, data.Width - cropW + 1));
 
-        return (data.Crop(y, x, cropH, cropW), parms);
+            bestY = y; bestX = x; bestCropH = cropH; bestCropW = cropW;
+
+            // Compute IoU of crop region with full image
+            double cropArea = (double)cropH * cropW;
+            double imageArea = (double)data.Height * data.Width;
+            double iou = cropArea / imageArea;
+
+            if (iou >= minIoU) break;
+        }
+
+        parms["crop_y"] = bestY; parms["crop_x"] = bestX;
+        parms["crop_h"] = bestCropH; parms["crop_w"] = bestCropW;
+
+        return (data.Crop(bestY, bestX, bestCropH, bestCropW), parms);
     }
 
     protected override BoundingBox<T> TransformBoundingBox(BoundingBox<T> box,

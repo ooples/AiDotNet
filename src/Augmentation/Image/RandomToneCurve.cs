@@ -12,6 +12,7 @@ public class RandomToneCurve<T> : ImageAugmenterBase<T>
     public RandomToneCurve(double scale = 0.1, int numControlPoints = 4,
         double probability = 0.5) : base(probability)
     {
+        if (numControlPoints < 0) throw new ArgumentOutOfRangeException(nameof(numControlPoints), "Must be non-negative.");
         Scale = scale; NumControlPoints = numControlPoints;
     }
 

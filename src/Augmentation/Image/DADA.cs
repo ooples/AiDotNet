@@ -13,6 +13,8 @@ public class DADA<T> : ImageAugmenterBase<T>
     public DADA(double temperature = 0.5, int operationCount = 2,
         double probability = 1.0) : base(probability)
     {
+        if (temperature <= 0) throw new ArgumentOutOfRangeException(nameof(temperature), "Temperature must be positive.");
+        if (operationCount < 1) throw new ArgumentOutOfRangeException(nameof(operationCount), "OperationCount must be at least 1.");
         Temperature = temperature; OperationCount = operationCount;
     }
 

@@ -15,6 +15,8 @@ public class ResizeMix<T> : ImageMixingAugmenterBase<T>
     public ResizeMix(double minScale = 0.1, double maxScale = 0.8,
         double probability = 0.5) : base(probability)
     {
+        if (minScale <= 0) throw new ArgumentOutOfRangeException(nameof(minScale), "MinScale must be positive.");
+        if (maxScale < minScale || maxScale > 1.0) throw new ArgumentOutOfRangeException(nameof(maxScale), "MaxScale must be >= MinScale and <= 1.");
         MinScale = minScale; MaxScale = maxScale;
     }
 
@@ -40,8 +42,8 @@ public class ResizeMix<T> : ImageMixingAugmenterBase<T>
                     result.SetPixel(startY + y, startX + x, c, resized.GetPixel(y, x, c));
 
         // Lambda = proportion of image1 remaining
-        double pasteArea = pasteH * pasteW;
-        double totalArea = image1.Height * image1.Width;
+        double pasteArea = (double)pasteH * pasteW;
+        double totalArea = (double)image1.Height * image1.Width;
         double lambda = 1.0 - pasteArea / totalArea;
         LastMixingLambda = NumOps.FromDouble(lambda);
 

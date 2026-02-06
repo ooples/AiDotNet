@@ -29,7 +29,7 @@ public class RandomErasing<T> : ImageAugmenterBase<T>
     {
         var result = data.Clone();
         double maxVal = data.IsNormalized ? 1.0 : 255.0;
-        double imageArea = data.Height * data.Width;
+        double imageArea = (double)data.Height * data.Width;
 
         for (int attempt = 0; attempt < MaxAttempts; attempt++)
         {
