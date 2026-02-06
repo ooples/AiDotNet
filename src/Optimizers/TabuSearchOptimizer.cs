@@ -60,7 +60,6 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         TabuSearchOptions<T, TInput, TOutput>? options = null,
         GeneticBase<T, TInput, TOutput>? geneticAlgorithm = null,
         IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null,
-        IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null,
         IEngine? engine = null)
         : base(model, options ?? new())
     {
@@ -75,8 +74,7 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
 
             _geneticAlgorithm = new StandardGeneticAlgorithm<T, TInput, TOutput>(
                 ModelFactory,
-                fitnessCalculator ?? new MeanSquaredErrorFitnessCalculator<T, TInput, TOutput>(),
-                modelEvaluator ?? new DefaultModelEvaluator<T, TInput, TOutput>());
+                fitnessCalculator ?? new MeanSquaredErrorFitnessCalculator<T, TInput, TOutput>());
         }
         else
         {

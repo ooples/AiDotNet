@@ -10,9 +10,8 @@ public class NSGAII<T, TInput, TOutput> :
 
     public NSGAII(
         Func<IFullModel<T, TInput, TOutput>> modelFactory,
-        List<IFitnessCalculator<T, TInput, TOutput>> objectives,
-        IModelEvaluator<T, TInput, TOutput> modelEvaluator)
-        : base(modelFactory, objectives[0], modelEvaluator)
+        List<IFitnessCalculator<T, TInput, TOutput>> objectives)
+        : base(modelFactory, objectives[0])
     {
         if (objectives == null || objectives.Count < 2)
         {

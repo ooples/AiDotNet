@@ -163,7 +163,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private ICommunicationBackend<T>? _distributedBackend;
     private DistributedStrategy _distributedStrategy = DistributedStrategy.DDP;
     private IShardingConfiguration<T>? _distributedConfiguration;
-    private IModelEvaluator<T, TInput, TOutput>? _modelEvaluator;
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
     private AgentConfiguration<T>? _agentConfig;
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
@@ -1545,12 +1544,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             var autoMLXVal = splitResult.XVal;
             var autoMLYVal = splitResult.yVal;
 
-            // Configure AutoML with model evaluator if available
-            if (_modelEvaluator != null)
-            {
-                _autoMLModel.SetModelEvaluator(_modelEvaluator);
-            }
-
             if (_autoMLOptions?.TaskFamilyOverride is AutoMLTaskFamily taskFamilyOverride)
             {
                 int featureCount = InputHelper<T, TInput>.GetInputSize(autoMLXTrain);
@@ -1798,25 +1791,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 preprocessedX, preprocessedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: true);
         }
 
-        // Perform cross-validation on training data BEFORE final model training (if configured)
-        // This follows industry standard patterns from H2O and caret where CV is integrated into model building
+        // Cross-validation can be performed using the new evaluation framework via AiModelResult.
+        // Users can call CrossValidationEngine<T> directly for cross-validation needs.
         CrossValidationResult<T, TInput, TOutput>? cvResults = null;
-        if (_crossValidator != null && _modelEvaluator != null)
-        {
-            // Cross-validation uses only the training data to prevent data leakage
-            // It trains multiple models on different folds to assess generalization
-            cvResults = _modelEvaluator.PerformCrossValidation(
-                model: _model,
-                X: XTrain,
-                y: yTrain,
-                optimizer: optimizer,
-                crossValidator: _crossValidator
-            );
-        }
-
-        // Reset optimizer state after cross-validation to ensure final model training starts fresh
-        // This prevents state contamination from CV (accumulated fitness lists, cache, learning rates)
-        optimizer.Reset();
 
         // ============================================================================
         // Start Training Infrastructure (before optimization)
@@ -3386,33 +3363,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
-    /// Configures the model evaluator component for comprehensive model evaluation and cross-validation.
-    /// </summary>
-    /// <param name="evaluator">The model evaluator implementation to use.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> The model evaluator helps you understand how well your model performs.
-    /// If you configure both a model evaluator and cross-validator (via ConfigureCrossValidation),
-    /// cross-validation will automatically run during Build() on your training data, and the results
-    /// will be included in your trained model.
-    /// </remarks>
-    public IAiModelBuilder<T, TInput, TOutput> ConfigureModelEvaluator(IModelEvaluator<T, TInput, TOutput> evaluator)
-    {
-        _modelEvaluator = evaluator;
-        return this;
-    }
-
-    /// <summary>
-    /// Configures the cross-validation strategy for automatic model evaluation during training.
+    /// Configures the cross-validation strategy for model evaluation.
     /// </summary>
     /// <param name="crossValidator">The cross-validation strategy to use.</param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> Cross-validation tests how well your model will perform on new data
     /// by training and testing it multiple times on different subsets of your training data.
-    /// If you configure both a cross-validator and model evaluator (via ConfigureModelEvaluator),
-    /// cross-validation will automatically run during Build() and the results will be included
-    /// in your trained model.
+    /// Use the evaluation methods on AiModelResult to perform cross-validation after building.
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator)
     {
@@ -3589,10 +3547,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     {
         return strategy switch
         {
-            AutoMLSearchStrategy.RandomSearch => new AiDotNet.AutoML.RandomSearchAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
-            AutoMLSearchStrategy.BayesianOptimization => new AiDotNet.AutoML.BayesianOptimizationAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
-            AutoMLSearchStrategy.Evolutionary => new AiDotNet.AutoML.EvolutionaryAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom()),
-            AutoMLSearchStrategy.MultiFidelity => new AiDotNet.AutoML.MultiFidelityAutoML<T, TInput, TOutput>(_modelEvaluator, RandomHelper.CreateSecureRandom(), _autoMLOptions?.MultiFidelity),
+            AutoMLSearchStrategy.RandomSearch => new AiDotNet.AutoML.RandomSearchAutoML<T, TInput, TOutput>(RandomHelper.CreateSecureRandom()),
+            AutoMLSearchStrategy.BayesianOptimization => new AiDotNet.AutoML.BayesianOptimizationAutoML<T, TInput, TOutput>(RandomHelper.CreateSecureRandom()),
+            AutoMLSearchStrategy.Evolutionary => new AiDotNet.AutoML.EvolutionaryAutoML<T, TInput, TOutput>(RandomHelper.CreateSecureRandom()),
+            AutoMLSearchStrategy.MultiFidelity => new AiDotNet.AutoML.MultiFidelityAutoML<T, TInput, TOutput>(RandomHelper.CreateSecureRandom(), _autoMLOptions?.MultiFidelity),
             AutoMLSearchStrategy.NeuralArchitectureSearch or
             AutoMLSearchStrategy.DARTS or
             AutoMLSearchStrategy.GDAS or

@@ -30,7 +30,6 @@ public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor
     /// Initializes a new FinancialAutoML instance.
     /// </summary>
     /// <param name="options">AutoML configuration options.</param>
-    /// <param name="modelEvaluator">Optional evaluator for scoring models.</param>
     /// <param name="random">Optional random number generator.</param>
     /// <remarks>
     /// <para>
@@ -40,9 +39,8 @@ public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor
     /// </remarks>
     public FinancialAutoML(
         FinancialAutoMLOptions<T>? options = null,
-        IModelEvaluator<T, Tensor<T>, Tensor<T>>? modelEvaluator = null,
         Random? random = null)
-        : base(modelEvaluator, random)
+        : base(random)
     {
         _options = options ?? new FinancialAutoMLOptions<T>();
         _options.Validate();
@@ -233,7 +231,7 @@ public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor
     /// </remarks>
     protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
     {
-        return new FinancialAutoML<T>(_options, _modelEvaluator, Random);
+        return new FinancialAutoML<T>(_options, Random);
     }
 
     /// <summary>

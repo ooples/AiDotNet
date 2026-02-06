@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.IntegrationTests.Evaluation;
 
 /// <summary>
 /// Comprehensive integration tests for the Evaluation module.
-/// Tests PredictionType enum, DefaultModelEvaluator, and prediction type inference.
+/// Tests PredictionType enum, PredictionStatsOptions, and prediction type inference.
 /// </summary>
 public class EvaluationIntegrationTests
 {
@@ -52,57 +52,6 @@ public class EvaluationIntegrationTests
 
         // Assert
         Assert.NotEqual("Unknown", description);
-    }
-
-    #endregion
-
-    #region DefaultModelEvaluator Constructor Tests
-
-    [Fact]
-    public void DefaultModelEvaluator_DefaultConstruction()
-    {
-        // Act
-        var evaluator = new DefaultModelEvaluator<double, Matrix<double>, Vector<double>>();
-
-        // Assert - no exception means success
-        Assert.NotNull(evaluator);
-    }
-
-    [Fact]
-    public void DefaultModelEvaluator_WithOptions()
-    {
-        // Arrange
-        var options = new PredictionStatsOptions
-        {
-            ConfidenceLevel = 0.99,
-            LearningCurveSteps = 20
-        };
-
-        // Act
-        var evaluator = new DefaultModelEvaluator<double, Matrix<double>, Vector<double>>(options);
-
-        // Assert - no exception means success
-        Assert.NotNull(evaluator);
-    }
-
-    [Fact]
-    public void DefaultModelEvaluator_WithNullOptions()
-    {
-        // Act
-        var evaluator = new DefaultModelEvaluator<double, Matrix<double>, Vector<double>>(null);
-
-        // Assert - no exception means success (uses defaults)
-        Assert.NotNull(evaluator);
-    }
-
-    [Fact]
-    public void DefaultModelEvaluator_Float_DefaultConstruction()
-    {
-        // Act
-        var evaluator = new DefaultModelEvaluator<float, Matrix<float>, Vector<float>>();
-
-        // Assert - no exception means success
-        Assert.NotNull(evaluator);
     }
 
     #endregion
@@ -607,7 +556,8 @@ public class EvaluationIntegrationTests
 
     private static System.Reflection.MethodInfo GetInferMethod()
     {
-        var inferenceType = typeof(DefaultModelEvaluator<double, Matrix<double>, Vector<double>>).Assembly
+        // Use ErrorStats from the same assembly to get the PredictionTypeInference type
+        var inferenceType = typeof(AiDotNet.Statistics.ErrorStats<double>).Assembly
             .GetType("AiDotNet.Evaluation.PredictionTypeInference");
 
         if (inferenceType == null)
@@ -628,7 +578,8 @@ public class EvaluationIntegrationTests
 
     private static System.Reflection.MethodInfo GetInferFromTargetsMethod()
     {
-        var inferenceType = typeof(DefaultModelEvaluator<double, Matrix<double>, Vector<double>>).Assembly
+        // Use ErrorStats from the same assembly to get the PredictionTypeInference type
+        var inferenceType = typeof(AiDotNet.Statistics.ErrorStats<double>).Assembly
             .GetType("AiDotNet.Evaluation.PredictionTypeInference");
 
         if (inferenceType == null)

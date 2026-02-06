@@ -60,8 +60,7 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
         IFullModel<T, TInput, TOutput>? model,
         GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null,
         GeneticBase<T, TInput, TOutput>? geneticAlgorithm = null,
-        IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null,
-        IModelEvaluator<T, TInput, TOutput>? modelEvaluator = null)
+        IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null)
         : base(model, options ?? new())
     {
         _geneticOptions = options ?? new GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>();
@@ -85,8 +84,7 @@ public class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
 
             _geneticAlgorithm = new StandardGeneticAlgorithm<T, TInput, TOutput>(
                 modelFactory,
-                fitnessCalculator ?? new MeanSquaredErrorFitnessCalculator<T, TInput, TOutput>(),
-                modelEvaluator ?? new DefaultModelEvaluator<T, TInput, TOutput>());
+                fitnessCalculator ?? new MeanSquaredErrorFitnessCalculator<T, TInput, TOutput>());
         }
         else
         {

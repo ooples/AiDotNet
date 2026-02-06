@@ -4537,7 +4537,7 @@ using AiDotNet.Kernels;
 using AiDotNet.Tensors.LinearAlgebra;
 
 var rbfKernel = new GaussianKernel<double>(sigma: 1.0);
-var matern = new MaternKernel<double>(nu: 2.5, length: 1.0);
+var matern = new MaternKernel<double>(nu: 2.5, lengthScale: 1.0);
 var laplacian = new LaplacianKernel<double>(sigma: 1.0);
 
 var origin = new Vector<double>(new double[] { 0.0 });

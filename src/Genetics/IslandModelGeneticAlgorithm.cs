@@ -11,11 +11,10 @@ public class IslandModelGeneticAlgorithm<T, TInput, TOutput> :
     public IslandModelGeneticAlgorithm(
         Func<IFullModel<T, TInput, TOutput>> modelFactory,
         IFitnessCalculator<T, TInput, TOutput> fitnessCalculator,
-        IModelEvaluator<T, TInput, TOutput> modelEvaluator,
         int islandCount = 5,
         int migrationInterval = 10,
         double migrationRate = 0.1)
-        : base(modelFactory, fitnessCalculator, modelEvaluator)
+        : base(modelFactory, fitnessCalculator)
     {
         _islandCount = islandCount;
         _migrationInterval = migrationInterval;
