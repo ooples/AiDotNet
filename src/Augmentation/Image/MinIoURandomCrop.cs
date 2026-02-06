@@ -102,7 +102,30 @@ public class MinIoURandomCrop<T> : SpatialImageAugmenterBase<T>
     protected override SegmentationMask<T> TransformMask(SegmentationMask<T> mask,
         IDictionary<string, object> transformParams, AugmentationContext<T> context)
     {
-        return mask;
+        int cropY = (int)transformParams["crop_y"];
+        int cropX = (int)transformParams["crop_x"];
+        int cropH = (int)transformParams["crop_h"];
+        int cropW = (int)transformParams["crop_w"];
+
+        var dense = mask.ToDense();
+        var cropped = new T[cropH, cropW];
+
+        for (int y = 0; y < cropH; y++)
+        {
+            for (int x = 0; x < cropW; x++)
+            {
+                int srcY = cropY + y;
+                int srcX = cropX + x;
+                if (srcY >= 0 && srcY < mask.Height && srcX >= 0 && srcX < mask.Width)
+                    cropped[y, x] = dense[srcY, srcX];
+            }
+        }
+
+        return new SegmentationMask<T>(cropped, mask.Type, mask.ClassIndex)
+        {
+            ClassName = mask.ClassName,
+            InstanceId = mask.InstanceId
+        };
     }
 
     public override IDictionary<string, object> GetParameters()

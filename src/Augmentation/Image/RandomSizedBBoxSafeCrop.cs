@@ -100,7 +100,32 @@ public class RandomSizedBBoxSafeCrop<T> : SpatialImageAugmenterBase<T>
     protected override SegmentationMask<T> TransformMask(SegmentationMask<T> mask,
         IDictionary<string, object> transformParams, AugmentationContext<T> context)
     {
-        return mask;
+        int cropY = (int)transformParams["crop_y"];
+        int cropX = (int)transformParams["crop_x"];
+        int cropH = (int)transformParams["crop_h"];
+        int cropW = (int)transformParams["crop_w"];
+        int targetH = (int)transformParams["target_h"];
+        int targetW = (int)transformParams["target_w"];
+
+        var dense = mask.ToDense();
+        var resized = new T[targetH, targetW];
+
+        for (int y = 0; y < targetH; y++)
+        {
+            for (int x = 0; x < targetW; x++)
+            {
+                int srcY = cropY + (int)((double)y / targetH * cropH);
+                int srcX = cropX + (int)((double)x / targetW * cropW);
+                if (srcY >= 0 && srcY < mask.Height && srcX >= 0 && srcX < mask.Width)
+                    resized[y, x] = dense[srcY, srcX];
+            }
+        }
+
+        return new SegmentationMask<T>(resized, mask.Type, mask.ClassIndex)
+        {
+            ClassName = mask.ClassName,
+            InstanceId = mask.InstanceId
+        };
     }
 
     public override IDictionary<string, object> GetParameters()
