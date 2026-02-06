@@ -169,10 +169,10 @@ public class ContrastivePretraining<T>
         }
 
         int embDim = originalEmbeddings.Shape[1];
-        if (embDim != _numFeatures)
+        if (embDim != _projectionWeights.Shape[0])
         {
             throw new ArgumentException(
-                $"Embedding dimension ({embDim}) does not match expected ({_numFeatures}).");
+                $"Embedding dimension ({embDim}) does not match projection input dimension ({_projectionWeights.Shape[0]}).");
         }
 
         _originalEmbeddingsCache = originalEmbeddings;

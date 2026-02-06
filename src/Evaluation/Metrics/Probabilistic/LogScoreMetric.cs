@@ -72,16 +72,23 @@ public class LogScoreMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        // For point predictions without distribution, compute squared error as proxy
-        double sum = 0;
+        // For point predictions, compute Gaussian negative log-likelihood:
+        // NLL = 0.5 * log(2π * σ²) + (y - ŷ)² / (2σ²)
+        // First estimate σ² from residuals, then compute mean NLL
+        double sumSqErr = 0;
         for (int i = 0; i < predictions.Length; i++)
         {
             double diff = NumOps.ToDouble(predictions[i]) - NumOps.ToDouble(actuals[i]);
-            // Squared error is proportional to negative log likelihood for Gaussian
-            sum += diff * diff;
+            sumSqErr += diff * diff;
         }
 
-        return NumOps.FromDouble(sum / predictions.Length);
+        double variance = sumSqErr / predictions.Length;
+        if (variance < 1e-15) variance = 1e-15;
+
+        // Mean NLL under Gaussian with estimated variance
+        double meanNll = 0.5 * Math.Log(2 * Math.PI * variance) + 0.5;
+
+        return NumOps.FromDouble(meanNll);
     }
 
     /// <inheritdoc/>

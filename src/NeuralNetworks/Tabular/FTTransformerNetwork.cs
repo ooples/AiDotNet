@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
 {
-    private readonly FTTransformerOptions<T> _options;
+    private FTTransformerOptions<T> _options;
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private ILossFunction<T> _lossFunction;
@@ -130,8 +130,11 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         Tensor<T> prediction = Predict(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        Tensor<T> error = prediction.Subtract(expectedOutput);
+        var predVector = prediction.ToVector();
+        var expectedVector = expectedOutput.ToVector();
+        LastLoss = _lossFunction.CalculateLoss(predVector, expectedVector);
+        var gradientVector = _lossFunction.CalculateDerivative(predVector, expectedVector);
+        var error = Tensor<T>.FromVector(gradientVector);
         BackpropagateError(error);
         UpdateNetworkParameters();
     }
@@ -241,15 +244,45 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        _options.EmbeddingDimension = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        _options.NumLayers = reader.ReadInt32();
+        _options.FeedForwardMultiplier = reader.ReadInt32();
+        _options.DropoutRate = reader.ReadDouble();
+        _options.AttentionDropoutRate = reader.ReadDouble();
+        _options.ResidualDropoutRate = reader.ReadDouble();
+        _options.UsePreLayerNorm = reader.ReadBoolean();
+        _options.LayerNormEpsilon = reader.ReadDouble();
+        _options.EmbeddingInitScale = reader.ReadDouble();
+        _options.UseNumericalBias = reader.ReadBoolean();
+        _options.EnableGradientClipping = reader.ReadBoolean();
+        _options.MaxGradientNorm = reader.ReadDouble();
+        _options.WeightDecay = reader.ReadDouble();
+        _options.UseReGLU = reader.ReadBoolean();
+
+        int cardCount = reader.ReadInt32();
+        if (cardCount > 0)
+        {
+            _options.CategoricalCardinalities = new int[cardCount];
+            for (int i = 0; i < cardCount; i++)
+            {
+                _options.CategoricalCardinalities[i] = reader.ReadInt32();
+            }
+        }
+        else
+        {
+            _options.CategoricalCardinalities = null;
+        }
     }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        // Create with cloned options and a fresh optimizer to avoid shared mutable state
         return new FTTransformerNetwork<T>(
             Architecture,
-            _options,
-            _optimizer,
+            _options.Clone(),
+            optimizer: null,
             _lossFunction);
     }
 }

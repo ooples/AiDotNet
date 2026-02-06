@@ -697,7 +697,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         writer.Write(baseData);
 
         writer.Write(_numFeatures);
-        writer.Write(Convert.ToDouble(_intercept));
+        writer.Write(NumOps.ToDouble(_intercept));
 
         // Shape functions
         for (int f = 0; f < _numFeatures; f++)
@@ -705,7 +705,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             writer.Write(_shapeFunctions[f].Length);
             foreach (var val in _shapeFunctions[f])
             {
-                writer.Write(Convert.ToDouble(val));
+                writer.Write(NumOps.ToDouble(val));
             }
         }
 
@@ -715,7 +715,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             writer.Write(_binEdges[f].Length);
             foreach (var edge in _binEdges[f])
             {
-                writer.Write(Convert.ToDouble(edge));
+                writer.Write(NumOps.ToDouble(edge));
             }
         }
 
@@ -731,7 +731,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             {
                 for (int j = 0; j < kvp.Value.GetLength(1); j++)
                 {
-                    writer.Write(Convert.ToDouble(kvp.Value[i, j]));
+                    writer.Write(NumOps.ToDouble(kvp.Value[i, j]));
                 }
             }
         }

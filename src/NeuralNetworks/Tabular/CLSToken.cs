@@ -149,8 +149,15 @@ public class CLSToken<T>
     /// <param name="gradient">Gradient with respect to CLS output [batchSize, embDim].</param>
     public void Backward(Tensor<T> gradient)
     {
+        if (gradient.Shape.Length < 2)
+            throw new ArgumentException($"Gradient must be at least rank-2 [batchSize, embDim], but got rank {gradient.Shape.Length}.");
+
         int batchSize = gradient.Shape[0];
-        int embDim = EmbeddingDimension;
+        int embDim = gradient.Shape[1];
+
+        if (embDim != EmbeddingDimension)
+            throw new ArgumentException(
+                $"Gradient embedding dimension ({embDim}) does not match CLS token dimension ({EmbeddingDimension}).");
 
         // Accumulate gradients from all batch samples
         for (int d = 0; d < embDim; d++)

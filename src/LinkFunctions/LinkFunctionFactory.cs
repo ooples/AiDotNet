@@ -59,7 +59,10 @@ public static class LinkFunctionFactory<T>
             DistributionFamily.Gamma => new ReciprocalLink<T>(),
             DistributionFamily.InverseGaussian => new InverseSquaredLink<T>(),
             DistributionFamily.NegativeBinomial => new LogLink<T>(),
-            DistributionFamily.Tweedie => new LogLink<T>(),
+            DistributionFamily.Tweedie => throw new NotSupportedException(
+                "The Tweedie canonical link is a power link g(μ)=μ^(1-p)/(1-p) that depends on the " +
+                "Tweedie power parameter p. Use the appropriate link for your specific p value " +
+                "(e.g., Log for p=1, Inverse for p=2)."),
             _ => throw new ArgumentOutOfRangeException(nameof(family), family,
                 $"No canonical link function defined for distribution family '{family}'.")
         };

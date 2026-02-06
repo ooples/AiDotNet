@@ -58,6 +58,11 @@ public class ColumnEmbedding<T>
     /// <param name="initScale">Initialization scale for learnable embeddings.</param>
     public ColumnEmbedding(int numColumns, int embeddingDim, bool learnable = true, double initScale = 0.02)
     {
+        if (numColumns <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numColumns), "Number of columns must be positive.");
+        if (embeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(embeddingDim), "Embedding dimension must be positive.");
+
         _numColumns = numColumns;
         _embeddingDim = embeddingDim;
         _learnable = learnable;
@@ -104,6 +109,10 @@ public class ColumnEmbedding<T>
     /// <returns>Embeddings with column information added.</returns>
     public Tensor<T> AddColumnEmbeddings(Tensor<T> featureEmbeddings)
     {
+        if (featureEmbeddings.Shape.Length < 3)
+            throw new ArgumentException(
+                $"Feature embeddings must be rank-3 [batchSize, numColumns, embeddingDim], but got rank {featureEmbeddings.Shape.Length}.");
+
         int batchSize = featureEmbeddings.Shape[0];
         int numCols = featureEmbeddings.Shape[1];
         int embDim = featureEmbeddings.Shape[2];

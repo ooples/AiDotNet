@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
@@ -113,31 +114,31 @@ public class ProbabilityCalibrator<T>
 
         switch (_options.CalibratorMethod)
         {
-            case ProbabilityCalibratorMethod.PlattScaling:
+            case ProbabilityCalibrationMethod.PlattScaling:
                 FitPlattScaling(scoresDouble, labelsDouble);
                 break;
 
-            case ProbabilityCalibratorMethod.IsotonicRegression:
+            case ProbabilityCalibrationMethod.IsotonicRegression:
                 FitIsotonicRegression(scoresDouble, labelsDouble);
                 break;
 
-            case ProbabilityCalibratorMethod.TemperatureScaling:
+            case ProbabilityCalibrationMethod.TemperatureScaling:
                 FitTemperatureScaling(scoresDouble, labelsDouble);
                 break;
 
-            case ProbabilityCalibratorMethod.BetaCalibration:
+            case ProbabilityCalibrationMethod.BetaCalibration:
                 FitBetaCalibration(scoresDouble, labelsDouble);
                 break;
 
-            case ProbabilityCalibratorMethod.HistogramBinning:
+            case ProbabilityCalibrationMethod.HistogramBinning:
                 FitHistogramBinning(scoresDouble, labelsDouble);
                 break;
 
-            case ProbabilityCalibratorMethod.BayesianBinning:
+            case ProbabilityCalibrationMethod.BayesianBinning:
                 FitBayesianBinning(scoresDouble, labelsDouble);
                 break;
 
-            case ProbabilityCalibratorMethod.VennABERS:
+            case ProbabilityCalibrationMethod.VennABERS:
                 FitVennABERS(scoresDouble, labelsDouble);
                 break;
 
@@ -166,28 +167,28 @@ public class ProbabilityCalibrator<T>
 
         switch (_options.CalibratorMethod)
         {
-            case ProbabilityCalibratorMethod.PlattScaling:
+            case ProbabilityCalibrationMethod.PlattScaling:
                 calibrated = TransformPlattScaling(scoresDouble);
                 break;
 
-            case ProbabilityCalibratorMethod.IsotonicRegression:
+            case ProbabilityCalibrationMethod.IsotonicRegression:
                 calibrated = TransformIsotonicRegression(scoresDouble);
                 break;
 
-            case ProbabilityCalibratorMethod.TemperatureScaling:
+            case ProbabilityCalibrationMethod.TemperatureScaling:
                 calibrated = TransformTemperatureScaling(scoresDouble);
                 break;
 
-            case ProbabilityCalibratorMethod.BetaCalibration:
+            case ProbabilityCalibrationMethod.BetaCalibration:
                 calibrated = TransformBetaCalibration(scoresDouble);
                 break;
 
-            case ProbabilityCalibratorMethod.HistogramBinning:
-            case ProbabilityCalibratorMethod.BayesianBinning:
+            case ProbabilityCalibrationMethod.HistogramBinning:
+            case ProbabilityCalibrationMethod.BayesianBinning:
                 calibrated = TransformHistogramBinning(scoresDouble);
                 break;
 
-            case ProbabilityCalibratorMethod.VennABERS:
+            case ProbabilityCalibrationMethod.VennABERS:
                 calibrated = TransformVennABERS(scoresDouble);
                 break;
 
@@ -763,7 +764,7 @@ public class ProbabilityCalibrator<T>
     /// <summary>
     /// Gets the calibration method being used.
     /// </summary>
-    public ProbabilityCalibratorMethod ProbabilityCalibratorMethod => _options.CalibratorMethod;
+    public ProbabilityCalibrationMethod ProbabilityCalibrationMethod => _options.CalibratorMethod;
 
     /// <summary>
     /// Gets the Platt scaling parameters (A, B).

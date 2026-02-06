@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -33,7 +35,7 @@ public class ProbabilityCalibratorOptions
     /// Gets or sets the calibration method.
     /// </summary>
     /// <value>Default is PlattScaling.</value>
-    public ProbabilityCalibratorMethod CalibratorMethod { get; set; } = ProbabilityCalibratorMethod.PlattScaling;
+    public ProbabilityCalibrationMethod CalibratorMethod { get; set; } = ProbabilityCalibrationMethod.PlattScaling;
 
     /// <summary>
     /// Gets or sets the number of bins for histogram-based methods.
@@ -85,52 +87,4 @@ public class ProbabilityCalibratorOptions
     /// </summary>
     /// <value>Default is 5.</value>
     public int NumFolds { get; set; } = 5;
-}
-
-/// <summary>
-/// Types of calibration methods.
-/// </summary>
-public enum ProbabilityCalibratorMethod
-{
-    /// <summary>
-    /// Platt Scaling - fits sigmoid (logistic regression) to scores.
-    /// Good for most cases, especially for SVM outputs.
-    /// </summary>
-    PlattScaling,
-
-    /// <summary>
-    /// Isotonic Regression - non-parametric, monotonic calibration.
-    /// More flexible than Platt but needs more data and may overfit.
-    /// </summary>
-    IsotonicRegression,
-
-    /// <summary>
-    /// Temperature Scaling - divides logits by a learned temperature.
-    /// Popular for neural networks, preserves accuracy while calibrating.
-    /// </summary>
-    TemperatureScaling,
-
-    /// <summary>
-    /// Beta Calibration - fits beta distribution parameters.
-    /// Works well when predictions are bounded in (0,1).
-    /// </summary>
-    BetaCalibration,
-
-    /// <summary>
-    /// Histogram Binning - assigns average probability to each bin.
-    /// Simple and interpretable but may need many samples.
-    /// </summary>
-    HistogramBinning,
-
-    /// <summary>
-    /// Bayesian Binning into Quantiles (BBQ) - adaptive binning.
-    /// Good balance between flexibility and reliability.
-    /// </summary>
-    BayesianBinning,
-
-    /// <summary>
-    /// Venn-ABERS - provides probability intervals, not point estimates.
-    /// Useful when you need calibration guarantees.
-    /// </summary>
-    VennABERS
 }

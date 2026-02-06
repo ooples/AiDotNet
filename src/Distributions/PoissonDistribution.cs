@@ -136,6 +136,12 @@ public class PoissonDistribution<T> : DistributionBase<T>
         int low = 0;
         int high = (int)(lambda + 10 * Math.Sqrt(lambda) + 10);
 
+        // Dynamically expand upper bound if CDF at high is still less than p
+        while (RegularizedUpperGamma(high + 1, lambda) < pVal)
+        {
+            high *= 2;
+        }
+
         while (low < high)
         {
             int mid = (low + high) / 2;
@@ -216,13 +222,9 @@ public class PoissonDistribution<T> : DistributionBase<T>
     }
 
     /// <summary>
-    /// Computes the regularized upper incomplete gamma function Q(a, x) for integer a.
-    /// Q(a, x) = e^{-x} * sum_{i=0}^{a-1} x^i / i!
-    /// For Poisson CDF: P(X &lt;= k) = Q(k+1, lambda)
-    /// </summary>
-    /// <summary>
     /// Computes the regularized upper incomplete gamma function Q(a, x) = e^{-x} * sum_{i=0}^{a-1} x^i / i!
-    /// Uses log-space computation to avoid underflow for large x.
+    /// for integer a. Uses log-space computation to avoid underflow for large x.
+    /// For Poisson CDF: P(X &lt;= k) = Q(k+1, lambda).
     /// </summary>
     private static double RegularizedUpperGamma(int a, double x)
     {

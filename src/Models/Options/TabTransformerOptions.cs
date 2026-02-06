@@ -163,10 +163,15 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     /// <summary>
     /// Gets or sets the number of categorical features.
     /// </summary>
+    /// <value>
+    /// Defaults to the length of <see cref="CategoricalCardinalities"/> if set, otherwise 0
+    /// (meaning no categorical features).
+    /// </value>
     /// <remarks>
     /// <para>
     /// When CategoricalCardinalities is set, this property returns its length.
-    /// Can also be set directly for backward compatibility with legacy code.
+    /// Can also be set directly to override the inferred value.
+    /// A default of 0 means "infer from CategoricalCardinalities" or "no categorical features".
     /// </para>
     /// </remarks>
     public int NumCategoricalFeatures

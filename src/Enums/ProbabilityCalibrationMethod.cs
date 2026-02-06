@@ -39,6 +39,24 @@ public enum ProbabilityCalibrationMethod
     /// <summary>
     /// Uses beta calibration (more flexible than Platt scaling, handles asymmetric distortions).
     /// </summary>
-    BetaCalibration
+    BetaCalibration,
+
+    /// <summary>
+    /// Histogram Binning - assigns average probability to each bin.
+    /// Simple and interpretable but may need many samples.
+    /// </summary>
+    HistogramBinning,
+
+    /// <summary>
+    /// Bayesian Binning into Quantiles (BBQ) - adaptive binning.
+    /// Good balance between flexibility and reliability.
+    /// </summary>
+    BayesianBinning,
+
+    /// <summary>
+    /// Venn-ABERS - provides probability intervals, not point estimates.
+    /// Useful when you need calibration guarantees.
+    /// </summary>
+    VennABERS
 }
 
