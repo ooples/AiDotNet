@@ -72,6 +72,16 @@ public class ExplainableBoostingClassifierOptions<T> : ClassifierOptions<T>
     public int MaxInteractions { get; set; } = 10;
 
     /// <summary>
+    /// Gets or sets the maximum number of features to consider when searching for interactions.
+    /// </summary>
+    /// <value>Default is 10.</value>
+    /// <remarks>
+    /// Limits the candidate feature pairs for interaction detection.
+    /// Increase for broader search at the cost of additional compute.
+    /// </remarks>
+    public int MaxInteractionFeatures { get; set; } = 10;
+
+    /// <summary>
     /// Gets or sets the maximum number of bins for interaction terms.
     /// </summary>
     /// <value>Default is 32.</value>

@@ -243,7 +243,7 @@ public class ContrastivePretraining<T>
             }
         }
 
-        // Compute cross-entropy loss (positive pairs are diagonal original-original)
+        // Compute cross-entropy loss (positive pairs are original vs. corrupted)
         var totalLoss = NumOps.Zero;
         for (int i = 0; i < batchSize; i++)
         {
@@ -263,7 +263,7 @@ public class ContrastivePretraining<T>
             }
 
             // Loss = -log(exp(pos) / sum(exp)) = -pos + log(sum(exp))
-            var posScore = NumOps.Subtract(similarities[i, i], maxSim); // Diagonal is positive pair
+            var posScore = NumOps.Subtract(similarities[i, batchSize + i], maxSim);
             var loss = NumOps.Subtract(
                 NumOps.Add(NumOps.Log(sumExp), maxSim),
                 NumOps.Add(posScore, maxSim));

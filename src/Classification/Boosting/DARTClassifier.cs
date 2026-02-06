@@ -148,6 +148,7 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
             var droppedIndices = new HashSet<int>();
             var keptPredictions = new double[n];
             Array.Copy(predictions, keptPredictions, n);
+            var droppedTreePreds = new Dictionary<int, Vector<T>>();
 
             if (_trees.Count > 0)
             {
@@ -163,14 +164,18 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
                         allIndices.RemoveAt(randomIdx);
                     }
 
+                    foreach (int dropIdx in droppedIndices)
+                    {
+                        droppedTreePreds[dropIdx] = _trees[dropIdx].Predict(x);
+                    }
+
                     // Subtract dropped tree contributions
                     foreach (int dropIdx in droppedIndices)
                     {
-                        var treePred = _trees[dropIdx].Predict(x);
                         double weight = _treeWeights[dropIdx] * _options.LearningRate;
                         for (int i = 0; i < n; i++)
                         {
-                            keptPredictions[i] -= weight * NumOps.ToDouble(treePred[i]);
+                            keptPredictions[i] -= weight * NumOps.ToDouble(droppedTreePreds[dropIdx][i]);
                         }
                     }
                 }
@@ -223,8 +228,7 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
                 // Re-add dropped tree contributions with updated weights
                 foreach (int dropIdx in droppedIndices)
                 {
-                    var treePred = _trees[dropIdx].Predict(x);
-                    predictions[i] += _treeWeights[dropIdx] * _options.LearningRate * NumOps.ToDouble(treePred[i]);
+                    predictions[i] += _treeWeights[dropIdx] * _options.LearningRate * NumOps.ToDouble(droppedTreePreds[dropIdx][i]);
                 }
             }
 

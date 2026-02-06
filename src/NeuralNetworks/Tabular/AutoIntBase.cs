@@ -41,16 +41,22 @@ public abstract class AutoIntBase<T>
     private readonly Tensor<T>[]? _categoricalEmbeddings;
 
     // Interacting layers (multi-head self-attention)
-    private readonly List<InteractingLayer> _interactingLayers;
+    private readonly List<InteractingLayer<T>> _interactingLayers;
 
     // MLP output
     private readonly List<FullyConnectedLayer<T>> _mlpLayers;
     protected int MLPOutputDimension { get; }
 
     // Caches
+    private Tensor<T>? _numericalFeaturesCache;
+    private Matrix<int>? _categoricalIndicesCache;
     private Tensor<T>? _embeddedFeaturesCache;
     private List<Tensor<T>>? _interactingOutputsCache;
     private Tensor<T>? _mlpOutputCache;
+
+    // Embedding gradients
+    private readonly Tensor<T> _numericalEmbeddingsGrad;
+    private readonly Tensor<T>[]? _categoricalEmbeddingsGrad;
 
     /// <summary>
     /// Gets the total number of trainable parameters.
@@ -97,16 +103,19 @@ public abstract class AutoIntBase<T>
         // Numerical feature embeddings (one embedding vector per feature)
         _numericalEmbeddings = new Tensor<T>(new[] { NumNumericalFeatures, Options.EmbeddingDimension });
         InitializeEmbedding(_numericalEmbeddings);
+        _numericalEmbeddingsGrad = new Tensor<T>(new[] { NumNumericalFeatures, Options.EmbeddingDimension });
 
         // Categorical embeddings
         if (NumCategoricalFeatures > 0 && Options.CategoricalCardinalities != null)
         {
             _categoricalEmbeddings = new Tensor<T>[NumCategoricalFeatures];
+            _categoricalEmbeddingsGrad = new Tensor<T>[NumCategoricalFeatures];
             for (int i = 0; i < NumCategoricalFeatures; i++)
             {
                 int cardinality = Options.CategoricalCardinalities[i];
                 _categoricalEmbeddings[i] = new Tensor<T>(new[] { cardinality, Options.EmbeddingDimension });
                 InitializeEmbedding(_categoricalEmbeddings[i]);
+                _categoricalEmbeddingsGrad[i] = new Tensor<T>(new[] { cardinality, Options.EmbeddingDimension });
             }
         }
 
@@ -114,12 +123,12 @@ public abstract class AutoIntBase<T>
         _interactingLayers = [];
         for (int i = 0; i < Options.NumLayers; i++)
         {
-            _interactingLayers.Add(new InteractingLayer(
+            _interactingLayers.Add(new InteractingLayer<T>(
                 Options.EmbeddingDimension,
-                Options.AttentionDimension,
                 Options.NumHeads,
+                Options.AttentionDimension * Options.NumHeads,
                 Options.UseResidual,
-                _random));
+                Options.EmbeddingInitScale));
         }
 
         // MLP output layers
@@ -202,6 +211,8 @@ public abstract class AutoIntBase<T>
     {
         int batchSize = numericalFeatures.Shape[0];
         _interactingOutputsCache = [];
+        _numericalFeaturesCache = numericalFeatures;
+        _categoricalIndicesCache = categoricalIndices;
 
         // Embed features
         var embedded = EmbedFeatures(numericalFeatures, categoricalIndices);
@@ -211,7 +222,7 @@ public abstract class AutoIntBase<T>
         var current = embedded;
         foreach (var layer in _interactingLayers)
         {
-            current = layer.Forward(current, batchSize, TotalFeatures, Options.EmbeddingDimension);
+            current = layer.Forward(current);
             _interactingOutputsCache.Add(current);
         }
 
@@ -242,12 +253,116 @@ public abstract class AutoIntBase<T>
     /// </summary>
     protected Tensor<T> BackwardBackbone(Tensor<T> gradOutput)
     {
+        if (_embeddedFeaturesCache == null)
+        {
+            throw new InvalidOperationException("Forward must be called before backward.");
+        }
+
         var grad = gradOutput;
         for (int i = _mlpLayers.Count - 1; i >= 0; i--)
         {
             grad = _mlpLayers[i].Backward(grad);
         }
-        return grad;
+
+        int batchSize = _embeddedFeaturesCache.Shape[0];
+        int embeddingDim = Options.EmbeddingDimension;
+
+        // Unflatten gradients back to [batch, features, embeddingDim]
+        var gradEmbedded = new Tensor<T>(new[] { batchSize, TotalFeatures, embeddingDim });
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < TotalFeatures * embeddingDim; i++)
+            {
+                gradEmbedded[b * TotalFeatures * embeddingDim + i] =
+                    grad[b * TotalFeatures * embeddingDim + i];
+            }
+        }
+
+        // Backprop through interacting layers
+        for (int i = _interactingLayers.Count - 1; i >= 0; i--)
+        {
+            gradEmbedded = _interactingLayers[i].Backward(gradEmbedded);
+        }
+
+        AccumulateEmbeddingGradients(gradEmbedded);
+
+        // Return flattened gradient for compatibility with callers
+        var gradFlat = new Tensor<T>(new[] { batchSize, TotalFeatures * embeddingDim });
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < TotalFeatures * embeddingDim; i++)
+            {
+                gradFlat[b * TotalFeatures * embeddingDim + i] =
+                    gradEmbedded[b * TotalFeatures * embeddingDim + i];
+            }
+        }
+
+        return gradFlat;
+    }
+
+    private void AccumulateEmbeddingGradients(Tensor<T> gradEmbedded)
+    {
+        // Reset gradients
+        for (int i = 0; i < _numericalEmbeddingsGrad.Length; i++)
+        {
+            _numericalEmbeddingsGrad[i] = NumOps.Zero;
+        }
+
+        if (_categoricalEmbeddingsGrad != null)
+        {
+            foreach (var grad in _categoricalEmbeddingsGrad)
+            {
+                for (int i = 0; i < grad.Length; i++)
+                {
+                    grad[i] = NumOps.Zero;
+                }
+            }
+        }
+
+        if (_numericalFeaturesCache == null)
+        {
+            return;
+        }
+
+        int batchSize = gradEmbedded.Shape[0];
+        int embeddingDim = Options.EmbeddingDimension;
+
+        // Numerical embeddings: gradient accumulates scaled by feature values
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int f = 0; f < NumNumericalFeatures; f++)
+            {
+                var featureValue = _numericalFeaturesCache[b * NumNumericalFeatures + f];
+                for (int d = 0; d < embeddingDim; d++)
+                {
+                    int gradIdx = (b * TotalFeatures + f) * embeddingDim + d;
+                    int embIdx = f * embeddingDim + d;
+                    _numericalEmbeddingsGrad[embIdx] = NumOps.Add(
+                        _numericalEmbeddingsGrad[embIdx],
+                        NumOps.Multiply(gradEmbedded[gradIdx], featureValue));
+                }
+            }
+        }
+
+        if (_categoricalEmbeddings != null && _categoricalEmbeddingsGrad != null && _categoricalIndicesCache != null)
+        {
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int f = 0; f < NumCategoricalFeatures; f++)
+                {
+                    int catIdx = _categoricalIndicesCache[b, f];
+                    int featureIdx = NumNumericalFeatures + f;
+                    for (int d = 0; d < embeddingDim; d++)
+                    {
+                        int gradIdx = (b * TotalFeatures + featureIdx) * embeddingDim + d;
+                        int embIdx = catIdx * embeddingDim + d;
+                        _categoricalEmbeddingsGrad[f][embIdx] = NumOps.Add(
+                            _categoricalEmbeddingsGrad[f][embIdx],
+                            gradEmbedded[gradIdx]);
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -260,7 +375,7 @@ public abstract class AutoIntBase<T>
             return null;
 
         // Return the attention weights from the last interacting layer
-        return _interactingLayers[^1].GetAttentionWeights();
+        return _interactingLayers[^1].GetAttentionScores();
     }
 
     /// <summary>
@@ -268,6 +383,28 @@ public abstract class AutoIntBase<T>
     /// </summary>
     public virtual void UpdateParameters(T learningRate)
     {
+        for (int i = 0; i < _numericalEmbeddings.Length; i++)
+        {
+            _numericalEmbeddings[i] = NumOps.Subtract(
+                _numericalEmbeddings[i],
+                NumOps.Multiply(learningRate, _numericalEmbeddingsGrad[i]));
+        }
+
+        if (_categoricalEmbeddings != null && _categoricalEmbeddingsGrad != null)
+        {
+            for (int f = 0; f < _categoricalEmbeddings.Length; f++)
+            {
+                var emb = _categoricalEmbeddings[f];
+                var grad = _categoricalEmbeddingsGrad[f];
+                for (int i = 0; i < emb.Length; i++)
+                {
+                    emb[i] = NumOps.Subtract(
+                        emb[i],
+                        NumOps.Multiply(learningRate, grad[i]));
+                }
+            }
+        }
+
         foreach (var layer in _interactingLayers)
         {
             layer.UpdateParameters(learningRate);
@@ -284,6 +421,8 @@ public abstract class AutoIntBase<T>
     /// </summary>
     public virtual void ResetState()
     {
+        _numericalFeaturesCache = null;
+        _categoricalIndicesCache = null;
         _embeddedFeaturesCache = null;
         _interactingOutputsCache = null;
         _mlpOutputCache = null;
@@ -299,207 +438,4 @@ public abstract class AutoIntBase<T>
         }
     }
 
-    /// <summary>
-    /// Multi-head self-attention layer for feature interaction.
-    /// </summary>
-    private class InteractingLayer
-    {
-        private readonly int _embeddingDim;
-        private readonly int _attentionDim;
-        private readonly int _numHeads;
-        private readonly bool _useResidual;
-
-        // Query, Key, Value projection weights per head
-        private readonly Tensor<T> _queryWeights;
-        private readonly Tensor<T> _keyWeights;
-        private readonly Tensor<T> _valueWeights;
-
-        // Output projection
-        private readonly Tensor<T> _outputWeights;
-
-        // Cache
-        private Tensor<T>? _attentionWeightsCache;
-        private Tensor<T>? _inputCache;
-
-        public int ParameterCount =>
-            _queryWeights.Length + _keyWeights.Length +
-            _valueWeights.Length + _outputWeights.Length;
-
-        public InteractingLayer(int embeddingDim, int attentionDim, int numHeads, bool useResidual, Random random)
-        {
-            _embeddingDim = embeddingDim;
-            _attentionDim = attentionDim;
-            _numHeads = numHeads;
-            _useResidual = useResidual;
-
-            var scale = NumOps.FromDouble(Math.Sqrt(2.0 / (embeddingDim + attentionDim)));
-
-            _queryWeights = new Tensor<T>(new[] { numHeads, embeddingDim, attentionDim });
-            _keyWeights = new Tensor<T>(new[] { numHeads, embeddingDim, attentionDim });
-            _valueWeights = new Tensor<T>(new[] { numHeads, embeddingDim, attentionDim });
-            _outputWeights = new Tensor<T>(new[] { numHeads * attentionDim, embeddingDim });
-
-            InitializeWeights(_queryWeights, scale, random);
-            InitializeWeights(_keyWeights, scale, random);
-            InitializeWeights(_valueWeights, scale, random);
-            InitializeWeights(_outputWeights, scale, random);
-        }
-
-        private static void InitializeWeights(Tensor<T> weights, T scale, Random random)
-        {
-            for (int i = 0; i < weights.Length; i++)
-            {
-                weights[i] = NumOps.Multiply(NumOps.FromDouble(random.NextGaussian()), scale);
-            }
-        }
-
-        public Tensor<T> Forward(Tensor<T> input, int batchSize, int numFeatures, int embeddingDim)
-        {
-            _inputCache = input;
-            var output = new Tensor<T>(input.Shape);
-
-            // Multi-head attention
-            var allHeadOutputs = new Tensor<T>(new[] { batchSize, numFeatures, _numHeads * _attentionDim });
-            _attentionWeightsCache = new Tensor<T>(new[] { batchSize, _numHeads, numFeatures, numFeatures });
-
-            for (int h = 0; h < _numHeads; h++)
-            {
-                // Compute Q, K, V for this head
-                for (int b = 0; b < batchSize; b++)
-                {
-                    var queries = new T[numFeatures, _attentionDim];
-                    var keys = new T[numFeatures, _attentionDim];
-                    var values = new T[numFeatures, _attentionDim];
-
-                    // Project to Q, K, V
-                    for (int f = 0; f < numFeatures; f++)
-                    {
-                        for (int a = 0; a < _attentionDim; a++)
-                        {
-                            var q = NumOps.Zero;
-                            var k = NumOps.Zero;
-                            var v = NumOps.Zero;
-
-                            for (int d = 0; d < embeddingDim; d++)
-                            {
-                                var inputVal = input[(b * numFeatures + f) * embeddingDim + d];
-                                int wIdx = (h * embeddingDim + d) * _attentionDim + a;
-                                q = NumOps.Add(q, NumOps.Multiply(inputVal, _queryWeights[wIdx]));
-                                k = NumOps.Add(k, NumOps.Multiply(inputVal, _keyWeights[wIdx]));
-                                v = NumOps.Add(v, NumOps.Multiply(inputVal, _valueWeights[wIdx]));
-                            }
-
-                            queries[f, a] = q;
-                            keys[f, a] = k;
-                            values[f, a] = v;
-                        }
-                    }
-
-                    // Compute attention scores
-                    var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_attentionDim));
-                    var attentionScores = new T[numFeatures, numFeatures];
-
-                    for (int i = 0; i < numFeatures; i++)
-                    {
-                        for (int j = 0; j < numFeatures; j++)
-                        {
-                            var score = NumOps.Zero;
-                            for (int a = 0; a < _attentionDim; a++)
-                            {
-                                score = NumOps.Add(score, NumOps.Multiply(queries[i, a], keys[j, a]));
-                            }
-                            attentionScores[i, j] = NumOps.Multiply(score, scale);
-                        }
-                    }
-
-                    // Softmax per row
-                    for (int i = 0; i < numFeatures; i++)
-                    {
-                        var maxScore = attentionScores[i, 0];
-                        for (int j = 1; j < numFeatures; j++)
-                        {
-                            if (NumOps.Compare(attentionScores[i, j], maxScore) > 0)
-                                maxScore = attentionScores[i, j];
-                        }
-
-                        var sumExp = NumOps.Zero;
-                        for (int j = 0; j < numFeatures; j++)
-                        {
-                            var exp = NumOps.Exp(NumOps.Subtract(attentionScores[i, j], maxScore));
-                            attentionScores[i, j] = exp;
-                            sumExp = NumOps.Add(sumExp, exp);
-                        }
-
-                        for (int j = 0; j < numFeatures; j++)
-                        {
-                            attentionScores[i, j] = NumOps.Divide(attentionScores[i, j], sumExp);
-                            _attentionWeightsCache![(((b * _numHeads) + h) * numFeatures + i) * numFeatures + j] =
-                                attentionScores[i, j];
-                        }
-                    }
-
-                    // Weighted sum of values
-                    for (int i = 0; i < numFeatures; i++)
-                    {
-                        for (int a = 0; a < _attentionDim; a++)
-                        {
-                            var weighted = NumOps.Zero;
-                            for (int j = 0; j < numFeatures; j++)
-                            {
-                                weighted = NumOps.Add(weighted,
-                                    NumOps.Multiply(attentionScores[i, j], values[j, a]));
-                            }
-                            allHeadOutputs[(b * numFeatures + i) * (_numHeads * _attentionDim) + h * _attentionDim + a] =
-                                weighted;
-                        }
-                    }
-                }
-            }
-
-            // Project back to embedding dimension
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < numFeatures; f++)
-                {
-                    for (int d = 0; d < embeddingDim; d++)
-                    {
-                        var projected = NumOps.Zero;
-                        for (int ha = 0; ha < _numHeads * _attentionDim; ha++)
-                        {
-                            var headOut = allHeadOutputs[(b * numFeatures + f) * (_numHeads * _attentionDim) + ha];
-                            projected = NumOps.Add(projected,
-                                NumOps.Multiply(headOut, _outputWeights[ha * embeddingDim + d]));
-                        }
-
-                        int outIdx = (b * numFeatures + f) * embeddingDim + d;
-
-                        if (_useResidual)
-                        {
-                            output[outIdx] = NumOps.Add(input[outIdx], projected);
-                        }
-                        else
-                        {
-                            output[outIdx] = projected;
-                        }
-                    }
-                }
-            }
-
-            return output;
-        }
-
-        public Tensor<T>? GetAttentionWeights() => _attentionWeightsCache;
-
-        public void UpdateParameters(T learningRate)
-        {
-            // Simplified parameter update
-            // In practice, would use proper gradient computation
-        }
-
-        public void ResetState()
-        {
-            _attentionWeightsCache = null;
-            _inputCache = null;
-        }
-    }
 }

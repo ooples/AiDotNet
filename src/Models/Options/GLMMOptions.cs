@@ -220,7 +220,7 @@ public enum GLMMLinkFunction
     Logit,
 
     /// <summary>
-    /// Log link: g(mu) = log(mu). Default for Poisson.
+    /// Log link: g(mu) = log(mu). Default for Poisson and used for Gamma in ForPositiveContinuous.
     /// </summary>
     Log,
 
@@ -235,7 +235,7 @@ public enum GLMMLinkFunction
     CLogLog,
 
     /// <summary>
-    /// Inverse link: g(mu) = 1/mu. Default for Gamma.
+    /// Inverse link: g(mu) = 1/mu.
     /// </summary>
     Inverse,
 

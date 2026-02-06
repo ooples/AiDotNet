@@ -59,6 +59,8 @@ public class InteractingLayer<T>
     private Tensor<T>? _keysCache;
     private Tensor<T>? _valuesCache;
     private Tensor<T>? _attentionScoresCache;
+    private Tensor<T>? _attendedCache;
+    private Tensor<T>? _preActivationCache;
 
     /// <summary>
     /// Gets the total parameter count.
@@ -170,6 +172,7 @@ public class InteractingLayer<T>
 
         // Multi-head self-attention
         var attended = MultiHeadAttention(queries, keys, values, batchSize, numFeatures);
+        _attendedCache = attended;
 
         // Output projection
         var output = ProjectOutput(attended, batchSize, numFeatures);
@@ -179,6 +182,8 @@ public class InteractingLayer<T>
         {
             output = AddResidual(input, output, batchSize, numFeatures, embDim);
         }
+
+        _preActivationCache = output;
 
         // Apply ReLU activation
         output = ApplyReLU(output);
@@ -216,6 +221,7 @@ public class InteractingLayer<T>
         int batchSize, int numFeatures)
     {
         var output = new Tensor<T>([batchSize, numFeatures, _attentionDim]);
+        var attentionScores = new Tensor<T>([batchSize, numFeatures, numFeatures]);
         var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
 
         for (int b = 0; b < batchSize; b++)
@@ -258,6 +264,7 @@ public class InteractingLayer<T>
                 for (int j = 0; j < numFeatures; j++)
                 {
                     scores[i, j] = NumOps.Divide(scores[i, j], sumExp);
+                    attentionScores[b * numFeatures * numFeatures + i * numFeatures + j] = scores[i, j];
                 }
             }
 
@@ -278,6 +285,7 @@ public class InteractingLayer<T>
             }
         }
 
+        _attentionScoresCache = attentionScores;
         return output;
     }
 
@@ -365,7 +373,13 @@ public class InteractingLayer<T>
     /// <returns>Gradient with respect to input.</returns>
     public Tensor<T> Backward(Tensor<T> gradient)
     {
-        if (_inputCache == null)
+        if (_inputCache == null
+            || _queriesCache == null
+            || _keysCache == null
+            || _valuesCache == null
+            || _attentionScoresCache == null
+            || _attendedCache == null
+            || _preActivationCache == null)
         {
             throw new InvalidOperationException("Forward must be called before backward");
         }
@@ -385,17 +399,236 @@ public class InteractingLayer<T>
             _valueWeightsGrad[i] = NumOps.Zero;
         for (int i = 0; i < _outputWeightsGrad.Length; i++)
             _outputWeightsGrad[i] = NumOps.Zero;
+        if (_residualWeightsGrad != null)
+        {
+            for (int i = 0; i < _residualWeightsGrad.Length; i++)
+            {
+                _residualWeightsGrad[i] = NumOps.Zero;
+            }
+        }
 
-        // Simplified backward - full implementation would backprop through attention
-        // For now, propagate gradients through output weights
+        // ReLU backward
+        var gradPreActivation = new Tensor<T>(gradient.Shape);
+        for (int i = 0; i < gradient.Length; i++)
+        {
+            gradPreActivation[i] = NumOps.Compare(_preActivationCache[i], NumOps.Zero) > 0
+                ? gradient[i]
+                : NumOps.Zero;
+        }
+
+        // Residual backward
+        if (_useResidual)
+        {
+            if (_residualWeights != null && _residualWeightsGrad != null)
+            {
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int f = 0; f < numFeatures; f++)
+                    {
+                        for (int o = 0; o < embDim; o++)
+                        {
+                            int outIdx = b * numFeatures * embDim + f * embDim + o;
+                            var gradVal = gradPreActivation[outIdx];
+                            for (int i = 0; i < embDim; i++)
+                            {
+                                int wIdx = i * embDim + o;
+                                int inIdx = b * numFeatures * embDim + f * embDim + i;
+                                _residualWeightsGrad[wIdx] = NumOps.Add(
+                                    _residualWeightsGrad[wIdx],
+                                    NumOps.Multiply(_inputCache[inIdx], gradVal));
+                            }
+                        }
+                    }
+                }
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int f = 0; f < numFeatures; f++)
+                    {
+                        for (int i = 0; i < embDim; i++)
+                        {
+                            var sum = NumOps.Zero;
+                            for (int o = 0; o < embDim; o++)
+                            {
+                                int outIdx = b * numFeatures * embDim + f * embDim + o;
+                                int wIdx = i * embDim + o;
+                                sum = NumOps.Add(sum, NumOps.Multiply(
+                                    gradPreActivation[outIdx],
+                                    _residualWeights[wIdx]));
+                            }
+                            int inIdx = b * numFeatures * embDim + f * embDim + i;
+                            inputGrad[inIdx] = NumOps.Add(inputGrad[inIdx], sum);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < inputGrad.Length; i++)
+                {
+                    inputGrad[i] = NumOps.Add(inputGrad[i], gradPreActivation[i]);
+                }
+            }
+        }
+
+        // Output projection backward
+        var gradAttended = new Tensor<T>([batchSize, numFeatures, _attentionDim]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int f = 0; f < numFeatures; f++)
+            {
+                for (int a = 0; a < _attentionDim; a++)
+                {
+                    var sum = NumOps.Zero;
+                    int attIdx = b * numFeatures * _attentionDim + f * _attentionDim + a;
+                    for (int e = 0; e < embDim; e++)
+                    {
+                        int outIdx = b * numFeatures * embDim + f * embDim + e;
+                        int wIdx = a * embDim + e;
+                        var gradOut = gradPreActivation[outIdx];
+                        _outputWeightsGrad[wIdx] = NumOps.Add(
+                            _outputWeightsGrad[wIdx],
+                            NumOps.Multiply(_attendedCache[attIdx], gradOut));
+                        sum = NumOps.Add(sum, NumOps.Multiply(gradOut, _outputWeights[wIdx]));
+                    }
+                    gradAttended[attIdx] = sum;
+                }
+            }
+        }
+
+        // Attention backward
+        var gradValues = new Tensor<T>([batchSize, numFeatures, _attentionDim]);
+        var gradScores = new Tensor<T>([batchSize, numFeatures, numFeatures]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < numFeatures; i++)
+            {
+                var rowDot = new T[numFeatures];
+                for (int j = 0; j < numFeatures; j++)
+                {
+                    var sum = NumOps.Zero;
+                    for (int d = 0; d < _attentionDim; d++)
+                    {
+                        int attIdx = b * numFeatures * _attentionDim + i * _attentionDim + d;
+                        int valIdx = b * numFeatures * _attentionDim + j * _attentionDim + d;
+                        sum = NumOps.Add(sum, NumOps.Multiply(gradAttended[attIdx], _valuesCache[valIdx]));
+                    }
+                    rowDot[j] = sum;
+                }
+
+                var rowSum = NumOps.Zero;
+                for (int j = 0; j < numFeatures; j++)
+                {
+                    int scoreIdx = b * numFeatures * numFeatures + i * numFeatures + j;
+                    rowSum = NumOps.Add(rowSum, NumOps.Multiply(rowDot[j], _attentionScoresCache[scoreIdx]));
+                }
+
+                for (int j = 0; j < numFeatures; j++)
+                {
+                    int scoreIdx = b * numFeatures * numFeatures + i * numFeatures + j;
+                    gradScores[scoreIdx] = NumOps.Multiply(
+                        _attentionScoresCache[scoreIdx],
+                        NumOps.Subtract(rowDot[j], rowSum));
+
+                    for (int d = 0; d < _attentionDim; d++)
+                    {
+                        int attIdx = b * numFeatures * _attentionDim + i * _attentionDim + d;
+                        int valIdx = b * numFeatures * _attentionDim + j * _attentionDim + d;
+                        gradValues[valIdx] = NumOps.Add(
+                            gradValues[valIdx],
+                            NumOps.Multiply(_attentionScoresCache[scoreIdx], gradAttended[attIdx]));
+                    }
+                }
+            }
+        }
+
+        var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
+        var gradQueries = new Tensor<T>([batchSize, numFeatures, _attentionDim]);
+        var gradKeys = new Tensor<T>([batchSize, numFeatures, _attentionDim]);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < numFeatures; i++)
+            {
+                for (int d = 0; d < _attentionDim; d++)
+                {
+                    var sum = NumOps.Zero;
+                    for (int j = 0; j < numFeatures; j++)
+                    {
+                        int scoreIdx = b * numFeatures * numFeatures + i * numFeatures + j;
+                        int keyIdx = b * numFeatures * _attentionDim + j * _attentionDim + d;
+                        sum = NumOps.Add(sum, NumOps.Multiply(gradScores[scoreIdx], _keysCache[keyIdx]));
+                    }
+                    int qIdx = b * numFeatures * _attentionDim + i * _attentionDim + d;
+                    gradQueries[qIdx] = NumOps.Multiply(sum, scale);
+                }
+            }
+
+            for (int j = 0; j < numFeatures; j++)
+            {
+                for (int d = 0; d < _attentionDim; d++)
+                {
+                    var sum = NumOps.Zero;
+                    for (int i = 0; i < numFeatures; i++)
+                    {
+                        int scoreIdx = b * numFeatures * numFeatures + i * numFeatures + j;
+                        int queryIdx = b * numFeatures * _attentionDim + i * _attentionDim + d;
+                        sum = NumOps.Add(sum, NumOps.Multiply(gradScores[scoreIdx], _queriesCache[queryIdx]));
+                    }
+                    int kIdx = b * numFeatures * _attentionDim + j * _attentionDim + d;
+                    gradKeys[kIdx] = NumOps.Multiply(sum, scale);
+                }
+            }
+        }
+
+        // Parameter gradients for projections
+        for (int i = 0; i < embDim; i++)
+        {
+            for (int a = 0; a < _attentionDim; a++)
+            {
+                var sumQ = NumOps.Zero;
+                var sumK = NumOps.Zero;
+                var sumV = NumOps.Zero;
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int f = 0; f < numFeatures; f++)
+                    {
+                        int inIdx = b * numFeatures * embDim + f * embDim + i;
+                        int attIdx = b * numFeatures * _attentionDim + f * _attentionDim + a;
+                        var inputVal = _inputCache[inIdx];
+                        sumQ = NumOps.Add(sumQ, NumOps.Multiply(inputVal, gradQueries[attIdx]));
+                        sumK = NumOps.Add(sumK, NumOps.Multiply(inputVal, gradKeys[attIdx]));
+                        sumV = NumOps.Add(sumV, NumOps.Multiply(inputVal, gradValues[attIdx]));
+                    }
+                }
+
+                int wIdx = i * _attentionDim + a;
+                _queryWeightsGrad[wIdx] = sumQ;
+                _keyWeightsGrad[wIdx] = sumK;
+                _valueWeightsGrad[wIdx] = sumV;
+            }
+        }
+
+        // Input gradients from Q, K, V projections
         for (int b = 0; b < batchSize; b++)
         {
             for (int f = 0; f < numFeatures; f++)
             {
                 for (int i = 0; i < embDim; i++)
                 {
-                    inputGrad[b * numFeatures * embDim + f * embDim + i] =
-                        gradient[b * numFeatures * embDim + f * embDim + i];
+                    var sum = NumOps.Zero;
+                    for (int a = 0; a < _attentionDim; a++)
+                    {
+                        int wIdx = i * _attentionDim + a;
+                        int attIdx = b * numFeatures * _attentionDim + f * _attentionDim + a;
+                        sum = NumOps.Add(sum, NumOps.Multiply(gradQueries[attIdx], _queryWeights[wIdx]));
+                        sum = NumOps.Add(sum, NumOps.Multiply(gradKeys[attIdx], _keyWeights[wIdx]));
+                        sum = NumOps.Add(sum, NumOps.Multiply(gradValues[attIdx], _valueWeights[wIdx]));
+                    }
+                    int inIdx = b * numFeatures * embDim + f * embDim + i;
+                    inputGrad[inIdx] = NumOps.Add(inputGrad[inIdx], sum);
                 }
             }
         }
@@ -457,6 +690,8 @@ public class InteractingLayer<T>
         _keysCache = null;
         _valuesCache = null;
         _attentionScoresCache = null;
+        _attendedCache = null;
+        _preActivationCache = null;
 
         for (int i = 0; i < _queryWeightsGrad.Length; i++)
             _queryWeightsGrad[i] = NumOps.Zero;
@@ -466,5 +701,12 @@ public class InteractingLayer<T>
             _valueWeightsGrad[i] = NumOps.Zero;
         for (int i = 0; i < _outputWeightsGrad.Length; i++)
             _outputWeightsGrad[i] = NumOps.Zero;
+        if (_residualWeightsGrad != null)
+        {
+            for (int i = 0; i < _residualWeightsGrad.Length; i++)
+            {
+                _residualWeightsGrad[i] = NumOps.Zero;
+            }
+        }
     }
 }

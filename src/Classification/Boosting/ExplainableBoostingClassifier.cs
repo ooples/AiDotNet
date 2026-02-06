@@ -257,7 +257,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         }
 
         // Detect and add interaction terms if enabled
-        if (_options.MaxInteractionBins > 0)
+        if (_options.MaxInteractions > 0)
         {
             DetectInteractions(x, sampleBins, yBinary);
         }
@@ -475,9 +475,15 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         // Check top feature pairs
         var candidates = new List<(int, int, double)>();
 
-        for (int f1 = 0; f1 < Math.Min(_numFeatures, 10); f1++)
+        int maxFeaturesToConsider = Math.Min(_numFeatures, Math.Max(0, _options.MaxInteractionFeatures));
+        if (maxFeaturesToConsider < 2)
         {
-            for (int f2 = f1 + 1; f2 < Math.Min(_numFeatures, 10); f2++)
+            return;
+        }
+
+        for (int f1 = 0; f1 < maxFeaturesToConsider; f1++)
+        {
+            for (int f2 = f1 + 1; f2 < maxFeaturesToConsider; f2++)
             {
                 // Simple correlation-based score
                 double score = ComputeInteractionScore(sampleBins[f1], sampleBins[f2], residuals);

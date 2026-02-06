@@ -124,6 +124,14 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
+        if (_options.CalibrationMethod == ProbabilityCalibrationMethod.None
+            || _options.CalibrationMethod == ProbabilityCalibrationMethod.Auto)
+        {
+            _baseClassifier.Train(x, y);
+            _isTrained = true;
+            return;
+        }
+
         int n = x.Rows;
 
         if (_options.CrossValidationFolds > 1)
@@ -252,8 +260,18 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     private void TrainWithHoldout(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
+        if (_options.CalibrationSetFraction <= 0 || _options.CalibrationSetFraction >= 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(_options.CalibrationSetFraction),
+                "CalibrationSetFraction must be between 0 and 1 (exclusive).");
+        }
         int calibSize = (int)(n * _options.CalibrationSetFraction);
         int trainSize = n - calibSize;
+
+        if (trainSize < 1)
+        {
+            throw new ArgumentException("Training set too small after calibration split.");
+        }
 
         if (calibSize < 10)
         {
@@ -311,18 +329,25 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     {
         int n = uncalibrated.Rows;
 
+        if (NumClasses != 2)
+        {
+            throw new NotSupportedException(
+                "Per-class calibration is not implemented. Use binary classification or add per-class parameters.");
+        }
+
         // For binary classification, use probability of positive class (last column)
-        // For multi-class, we calibrate each class independently
         var probs = new double[n];
         var targets = new double[n];
 
         // Use last class as the "positive" class for calibration
         int positiveClassIdx = NumClasses - 1;
+        var classLabels = ClassLabels ?? throw new InvalidOperationException("Class labels not initialized.");
+        var positiveLabel = classLabels[positiveClassIdx];
 
         for (int i = 0; i < n; i++)
         {
             probs[i] = NumOps.ToDouble(uncalibrated[i, positiveClassIdx]);
-            targets[i] = NumOps.ToDouble(actuals[i]) >= 0.5 ? 1.0 : 0.0;
+            targets[i] = NumOps.Compare(actuals[i], positiveLabel) == 0 ? 1.0 : 0.0;
         }
 
         switch (_options.CalibrationMethod)

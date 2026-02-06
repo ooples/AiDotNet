@@ -48,13 +48,37 @@ public class MixedEffectsOptions<T> : RegressionOptions<T>
     /// Gets or sets the maximum number of iterations for the optimization.
     /// </summary>
     /// <value>Default is 100.</value>
-    public int MaxIterations { get; set; } = 100;
+    private int _maxIterations = 100;
+    public int MaxIterations
+    {
+        get => _maxIterations;
+        set
+        {
+            if (value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(MaxIterations), "MaxIterations must be > 0.");
+            }
+            _maxIterations = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the convergence tolerance.
     /// </summary>
     /// <value>Default is 1e-6.</value>
-    public double Tolerance { get; set; } = 1e-6;
+    private double _tolerance = 1e-6;
+    public double Tolerance
+    {
+        get => _tolerance;
+        set
+        {
+            if (value <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(Tolerance), "Tolerance must be > 0.");
+            }
+            _tolerance = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets whether to compute confidence intervals for variance components.
@@ -66,7 +90,19 @@ public class MixedEffectsOptions<T> : RegressionOptions<T>
     /// Gets or sets the confidence level for intervals.
     /// </summary>
     /// <value>Default is 0.95 (95% confidence).</value>
-    public double ConfidenceLevel { get; set; } = 0.95;
+    private double _confidenceLevel = 0.95;
+    public double ConfidenceLevel
+    {
+        get => _confidenceLevel;
+        set
+        {
+            if (value <= 0 || value >= 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(ConfidenceLevel), "ConfidenceLevel must be between 0 and 1.");
+            }
+            _confidenceLevel = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets whether to use the bounded optimization for variance components.
