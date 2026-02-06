@@ -269,7 +269,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 }
             }
 
-            if (_options.Verbose && (outer + 1) % _options.VerboseEval == 0)
+            if (_options.Verbose && _options.VerboseEval > 0 && (outer + 1) % _options.VerboseEval == 0)
             {
                 double loss = ComputeLogLoss(runningLogOdds, yBinary);
                 Console.WriteLine($"[{outer + 1}] Log Loss: {loss:F6}");
@@ -318,6 +318,12 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         {
             throw new NotSupportedException(
                 $"EBM classifier currently supports binary classification only (NumClasses={NumClasses}).");
+        }
+
+        if (input.Columns < _numFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {input.Columns} columns but model requires at least {_numFeatures} features.");
         }
 
         int n = input.Rows;
@@ -504,13 +510,10 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     }
 
     /// <summary>
-    /// Detects important pairwise interactions.
+    /// Detects important pairwise interactions and trains them with cyclic boosting.
     /// </summary>
     private void DetectInteractions(Matrix<T> x, int[][] sampleBins, double[] yBinary)
     {
-        // Simple heuristic: detect interactions that reduce residual variance
-        // In production, would use FAST or similar algorithm
-
         int n = x.Rows;
         var logOdds = ComputeLogOdds(x, sampleBins);
         var residuals = new double[n];
@@ -532,51 +535,82 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         {
             for (int f2 = f1 + 1; f2 < maxFeaturesToConsider; f2++)
             {
-                // Simple correlation-based score
                 double score = ComputeInteractionScore(sampleBins[f1], sampleBins[f2], residuals);
                 candidates.Add((f1, f2, score));
             }
         }
 
-        // Add top interactions
-        var topInteractions = candidates.OrderByDescending(c => c.Item3).Take(_options.MaxInteractions);
+        // Select top interactions and initialize their terms
+        var topInteractions = candidates.OrderByDescending(c => c.Item3).Take(_options.MaxInteractions).ToList();
 
         foreach (var (f1, f2, _) in topInteractions)
         {
-            int numBins1 = _binEdges[f1].Length + 1;
-            int numBins2 = _binEdges[f2].Length + 1;
+            int numBins1 = Math.Min(_binEdges[f1].Length + 1, _options.MaxInteractionBins);
+            int numBins2 = Math.Min(_binEdges[f2].Length + 1, _options.MaxInteractionBins);
+            _interactionTerms[(f1, f2)] = new T[numBins1, numBins2];
+        }
 
-            // Limit interaction bins
-            numBins1 = Math.Min(numBins1, _options.MaxInteractionBins);
-            numBins2 = Math.Min(numBins2, _options.MaxInteractionBins);
+        if (_interactionTerms.Count == 0) return;
 
-            var interactionTerm = new T[numBins1, numBins2];
+        // Recompute running log-odds including main effects
+        var runningLogOdds = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            runningLogOdds[i] = logOdds[i];
+        }
 
-            // Initialize with gradient boosting
-            var binGradients = new double[numBins1, numBins2];
-            var binCounts = new int[numBins1, numBins2];
-
-            for (int i = 0; i < n; i++)
+        // Cyclic boosting over interaction terms (same structure as main effect training)
+        for (int outer = 0; outer < _options.InnerBags; outer++)
+        {
+            foreach (var kvp in _interactionTerms)
             {
-                int b1 = Math.Min(sampleBins[f1][i], numBins1 - 1);
-                int b2 = Math.Min(sampleBins[f2][i], numBins2 - 1);
-                binGradients[b1, b2] += residuals[i];
-                binCounts[b1, b2]++;
-            }
+                int f1 = kvp.Key.Item1;
+                int f2 = kvp.Key.Item2;
+                var term = kvp.Value;
+                int numBins1 = term.GetLength(0);
+                int numBins2 = term.GetLength(1);
 
-            for (int b1 = 0; b1 < numBins1; b1++)
-            {
-                for (int b2 = 0; b2 < numBins2; b2++)
+                var binGradients = new double[numBins1, numBins2];
+                var binHessians = new double[numBins1, numBins2];
+
+                for (int i = 0; i < n; i++)
                 {
-                    if (binCounts[b1, b2] > 0)
+                    double prob = Sigmoid(runningLogOdds[i]);
+                    double grad = yBinary[i] - prob;
+                    double hess = prob * (1 - prob);
+
+                    int b1 = Math.Min(sampleBins[f1][i], numBins1 - 1);
+                    int b2 = Math.Min(sampleBins[f2][i], numBins2 - 1);
+                    binGradients[b1, b2] += grad;
+                    binHessians[b1, b2] += hess;
+                }
+
+                for (int b1 = 0; b1 < numBins1; b1++)
+                {
+                    for (int b2 = 0; b2 < numBins2; b2++)
                     {
-                        double update = (binGradients[b1, b2] / binCounts[b1, b2]) * _options.LearningRate;
-                        interactionTerm[b1, b2] = NumOps.FromDouble(update);
+                        if (binHessians[b1, b2] > 1e-10)
+                        {
+                            double update = (binGradients[b1, b2] / (binHessians[b1, b2] + _options.L2Regularization))
+                                           * _options.LearningRate;
+                            term[b1, b2] = NumOps.Add(term[b1, b2], NumOps.FromDouble(update));
+                        }
+                    }
+                }
+
+                // Update running log-odds for this interaction's changes
+                for (int i = 0; i < n; i++)
+                {
+                    int b1 = Math.Min(sampleBins[f1][i], numBins1 - 1);
+                    int b2 = Math.Min(sampleBins[f2][i], numBins2 - 1);
+                    if (binHessians[b1, b2] > 1e-10)
+                    {
+                        double update = (binGradients[b1, b2] / (binHessians[b1, b2] + _options.L2Regularization))
+                                       * _options.LearningRate;
+                        runningLogOdds[i] += update;
                     }
                 }
             }
-
-            _interactionTerms[(f1, f2)] = interactionTerm;
         }
     }
 

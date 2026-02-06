@@ -249,8 +249,15 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _options.EmbeddingDimension = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
+        int embDim = reader.ReadInt32();
+        int numHeads = reader.ReadInt32();
+        if (numHeads > 0 && embDim % numHeads != 0)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized EmbeddingDimension ({embDim}) is not divisible by NumHeads ({numHeads}). Data may be corrupted.");
+        }
+        _options.EmbeddingDimension = embDim;
+        _options.NumHeads = numHeads;
         _options.NumLayers = reader.ReadInt32();
         _options.FeedForwardMultiplier = reader.ReadInt32();
         _options.DropoutRate = reader.ReadDouble();

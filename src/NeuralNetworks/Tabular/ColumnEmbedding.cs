@@ -109,13 +109,12 @@ public class ColumnEmbedding<T>
     /// <returns>Embeddings with column information added.</returns>
     public Tensor<T> AddColumnEmbeddings(Tensor<T> featureEmbeddings)
     {
-        if (featureEmbeddings.Shape.Length != 3)
+        if (featureEmbeddings.Shape.Length < 3)
             throw new ArgumentException(
-                $"Feature embeddings must be rank-3 [batchSize, numColumns, embeddingDim], but got rank {featureEmbeddings.Shape.Length}.");
+                $"Feature embeddings must be at least rank-3 [..., numColumns, embeddingDim], but got rank {featureEmbeddings.Shape.Length}.");
 
-        int batchSize = featureEmbeddings.Shape[0];
-        int numCols = featureEmbeddings.Shape[1];
-        int embDim = featureEmbeddings.Shape[2];
+        int numCols = featureEmbeddings.Shape[^2];
+        int embDim = featureEmbeddings.Shape[^1];
 
         if (numCols > _numColumns)
         {
@@ -128,15 +127,23 @@ public class ColumnEmbedding<T>
                 $"Input embedding dimension ({embDim}) does not match column embedding dimension ({_embeddingDim}).");
         }
 
-        var output = new Tensor<T>(featureEmbeddings.Shape);
+        // Compute total batch elements (all dims except last two)
+        int totalBatchElements = 1;
+        for (int i = 0; i < featureEmbeddings.Shape.Length - 2; i++)
+        {
+            totalBatchElements *= featureEmbeddings.Shape[i];
+        }
 
-        for (int b = 0; b < batchSize; b++)
+        var output = new Tensor<T>(featureEmbeddings.Shape);
+        int stride = numCols * embDim;
+
+        for (int b = 0; b < totalBatchElements; b++)
         {
             for (int c = 0; c < numCols; c++)
             {
                 for (int d = 0; d < embDim; d++)
                 {
-                    int inputIdx = b * numCols * embDim + c * embDim + d;
+                    int inputIdx = b * stride + c * embDim + d;
                     int embIdx = c * _embeddingDim + d;
                     output[inputIdx] = NumOps.Add(featureEmbeddings[inputIdx], _embeddings[embIdx]);
                 }
@@ -174,13 +181,12 @@ public class ColumnEmbedding<T>
     {
         if (!_learnable) return;
 
-        if (gradient.Shape.Length != 3)
+        if (gradient.Shape.Length < 3)
             throw new ArgumentException(
-                $"Gradient must be rank-3 [batchSize, numColumns, embeddingDim], but got rank {gradient.Shape.Length}.");
+                $"Gradient must be at least rank-3 [..., numColumns, embeddingDim], but got rank {gradient.Shape.Length}.");
 
-        int batchSize = gradient.Shape[0];
-        int numCols = gradient.Shape[1];
-        int embDim = gradient.Shape[2];
+        int numCols = gradient.Shape[^2];
+        int embDim = gradient.Shape[^1];
 
         if (embDim != _embeddingDim)
         {
@@ -194,15 +200,24 @@ public class ColumnEmbedding<T>
                 $"Gradient column count ({numCols}) exceeds embedding column count ({_numColumns}).");
         }
 
-        // Accumulate gradients from all batch samples
+        // Compute total batch elements (all dims except last two)
+        int totalBatchElements = 1;
+        for (int i = 0; i < gradient.Shape.Length - 2; i++)
+        {
+            totalBatchElements *= gradient.Shape[i];
+        }
+
+        int stride = numCols * embDim;
+
+        // Accumulate gradients from all batch elements
         for (int c = 0; c < numCols; c++)
         {
             for (int d = 0; d < embDim; d++)
             {
                 var gradSum = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++)
+                for (int b = 0; b < totalBatchElements; b++)
                 {
-                    int gradIdx = b * numCols * embDim + c * embDim + d;
+                    int gradIdx = b * stride + c * embDim + d;
                     gradSum = NumOps.Add(gradSum, gradient[gradIdx]);
                 }
                 _embeddingGradients[c * _embeddingDim + d] = NumOps.Add(

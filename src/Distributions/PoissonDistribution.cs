@@ -134,7 +134,10 @@ public class PoissonDistribution<T> : DistributionBase<T>
         // Binary search for the quantile
         double lambda = NumOps.ToDouble(_lambda);
         int low = 0;
-        int high = (int)(lambda + 10 * Math.Sqrt(lambda) + 10);
+        double rawHigh = lambda + 10 * Math.Sqrt(lambda) + 10;
+        int high = rawHigh >= int.MaxValue || double.IsNaN(rawHigh) || double.IsInfinity(rawHigh)
+            ? int.MaxValue
+            : (int)rawHigh;
 
         // Dynamically expand upper bound if CDF at high is still less than p
         // Use long arithmetic to detect overflow before it wraps around

@@ -178,6 +178,11 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     public int NumCategoricalFeatures
     {
         get => _numCategoricalFeatures ?? CategoricalCardinalities?.Length ?? 0;
-        set => _numCategoricalFeatures = value == 0 ? null : value;
+        set
+        {
+            if (value < 0)
+                throw new ArgumentOutOfRangeException(nameof(value), "NumCategoricalFeatures cannot be negative.");
+            _numCategoricalFeatures = value == 0 ? null : value;
+        }
     }
 }

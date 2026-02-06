@@ -74,9 +74,9 @@ public class CLSToken<T>
     /// <returns>Embeddings with CLS token prepended: [batchSize, seqLen+1, embDim].</returns>
     public Tensor<T> PrependCLS(Tensor<T> embeddings)
     {
-        if (embeddings.Shape.Length != 3)
+        if (embeddings.Shape.Length < 3)
             throw new ArgumentException(
-                $"Embeddings must be rank-3 [batchSize, seqLen, embDim], but got rank {embeddings.Shape.Length}.");
+                $"Embeddings must be at least rank-3 [..., seqLen, embDim], but got rank {embeddings.Shape.Length}.");
 
         int batchSize = embeddings.Shape[0];
         int seqLen = embeddings.Shape[1];
@@ -122,9 +122,9 @@ public class CLSToken<T>
     /// <returns>CLS representations with shape [batchSize, embDim].</returns>
     public Tensor<T> ExtractCLS(Tensor<T> transformerOutput)
     {
-        if (transformerOutput.Shape.Length != 3)
+        if (transformerOutput.Shape.Length < 3)
             throw new ArgumentException(
-                $"Transformer output must be rank-3 [batchSize, seqLen, embDim], but got rank {transformerOutput.Shape.Length}.");
+                $"Transformer output must be at least rank-3 [..., seqLen+1, embDim], but got rank {transformerOutput.Shape.Length}.");
 
         int batchSize = transformerOutput.Shape[0];
         int inputEmbDim = transformerOutput.Shape[2];
@@ -158,20 +158,26 @@ public class CLSToken<T>
     public void Backward(Tensor<T> gradient)
     {
         if (gradient.Shape.Length < 2)
-            throw new ArgumentException($"Gradient must be at least rank-2 [batchSize, embDim], but got rank {gradient.Shape.Length}.");
+            throw new ArgumentException($"Gradient must be at least rank-2 with last dimension = embDim, but got rank {gradient.Shape.Length}.");
 
-        int batchSize = gradient.Shape[0];
-        int embDim = gradient.Shape[1];
+        int embDim = gradient.Shape[^1];
 
         if (embDim != EmbeddingDimension)
             throw new ArgumentException(
-                $"Gradient embedding dimension ({embDim}) does not match CLS token dimension ({EmbeddingDimension}).");
+                $"Gradient last dimension ({embDim}) does not match CLS token dimension ({EmbeddingDimension}).");
 
-        // Accumulate gradients from all batch samples
+        // Compute total number of batch elements (all dims except last)
+        int totalBatchElements = 1;
+        for (int i = 0; i < gradient.Shape.Length - 1; i++)
+        {
+            totalBatchElements *= gradient.Shape[i];
+        }
+
+        // Accumulate gradients from all batch elements using stride-based indexing
         for (int d = 0; d < embDim; d++)
         {
             var gradSum = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
+            for (int b = 0; b < totalBatchElements; b++)
             {
                 gradSum = NumOps.Add(gradSum, gradient[b * embDim + d]);
             }

@@ -77,11 +77,6 @@ public class ProbabilityCalibrator<T>
     private readonly ProbabilityCalibratorOptions _options;
 
     /// <summary>
-    /// Random number generator.
-    /// </summary>
-    private readonly Random _random;
-
-    /// <summary>
     /// Whether the calibrator has been fitted.
     /// </summary>
     private bool _isFitted;
@@ -99,7 +94,6 @@ public class ProbabilityCalibrator<T>
         _betaA = NumOps.One;
         _betaB = NumOps.One;
         _betaC = NumOps.Zero;
-        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
         _isFitted = false;
     }
 
@@ -788,31 +782,39 @@ public class ProbabilityCalibrator<T>
             return TransformIsotonicRegression(scores);
         }
 
-        // For each test point, fit two isotonic regressions:
+        // For each test point, fit two isotonic regressions using local state
+        // to avoid mutating the shared _isotonicPoints field.
         // p0: assuming test point label = 0, p1: assuming test point label = 1
         // Final calibrated probability = p1 / (1 - p0 + p1)
+        var savedIsotonicPoints = _isotonicPoints;
         var calibrated = new double[scores.Length];
-        for (int i = 0; i < scores.Length; i++)
+
+        try
         {
-            // Augment calibration set with test point labeled 0
-            var scores0 = _vennCalibrationScores.Append(scores[i]).ToArray();
-            var labels0 = _vennCalibrationLabels.Append(0.0).ToArray();
-            FitIsotonicRegression(scores0, labels0);
-            double p0 = TransformIsotonicRegression([scores[i]])[0];
+            for (int i = 0; i < scores.Length; i++)
+            {
+                // Augment calibration set with test point labeled 0
+                var scores0 = _vennCalibrationScores.Append(scores[i]).ToArray();
+                var labels0 = _vennCalibrationLabels.Append(0.0).ToArray();
+                FitIsotonicRegression(scores0, labels0);
+                double p0 = TransformIsotonicRegression([scores[i]])[0];
 
-            // Augment calibration set with test point labeled 1
-            var scores1 = _vennCalibrationScores.Append(scores[i]).ToArray();
-            var labels1 = _vennCalibrationLabels.Append(1.0).ToArray();
-            FitIsotonicRegression(scores1, labels1);
-            double p1 = TransformIsotonicRegression([scores[i]])[0];
+                // Augment calibration set with test point labeled 1
+                var scores1 = _vennCalibrationScores.Append(scores[i]).ToArray();
+                var labels1 = _vennCalibrationLabels.Append(1.0).ToArray();
+                FitIsotonicRegression(scores1, labels1);
+                double p1 = TransformIsotonicRegression([scores[i]])[0];
 
-            // Combine to get point estimate
-            double denom = 1 - p0 + p1;
-            calibrated[i] = denom > 1e-10 ? p1 / denom : 0.5;
+                // Combine to get point estimate
+                double denom = 1 - p0 + p1;
+                calibrated[i] = denom > 1e-10 ? p1 / denom : 0.5;
+            }
         }
-
-        // Re-fit isotonic on original calibration data (restore state)
-        FitIsotonicRegression(_vennCalibrationScores, _vennCalibrationLabels);
+        finally
+        {
+            // Always restore the original isotonic state
+            _isotonicPoints = savedIsotonicPoints;
+        }
 
         return calibrated;
     }
