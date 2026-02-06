@@ -631,46 +631,21 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
             return uncalibrated;
         }
 
+        if (NumClasses != 2)
+        {
+            throw new NotSupportedException(
+                "Calibration currently supports binary classification only. " +
+                "For multiclass, apply one-vs-rest calibration externally.");
+        }
+
         for (int i = 0; i < input.Rows; i++)
         {
-            if (NumClasses == 2)
-            {
-                // Binary classification: calibrate positive class
-                double p = NumOps.ToDouble(uncalibrated[i, 1]);
-                double calibP = CalibrateProb(p);
+            // Binary classification: calibrate positive class
+            double p = NumOps.ToDouble(uncalibrated[i, 1]);
+            double calibP = CalibrateProb(p);
 
-                calibrated[i, 0] = NumOps.FromDouble(1 - calibP);
-                calibrated[i, 1] = NumOps.FromDouble(calibP);
-            }
-            else
-            {
-                // Multi-class: calibrate each class and renormalize
-                double sum = 0;
-                var tempProbs = new double[NumClasses];
-
-                for (int c = 0; c < NumClasses; c++)
-                {
-                    tempProbs[c] = CalibrateProb(NumOps.ToDouble(uncalibrated[i, c]));
-                    sum += tempProbs[c];
-                }
-
-                // Renormalize to sum to 1
-                if (sum > 0)
-                {
-                    for (int c = 0; c < NumClasses; c++)
-                    {
-                        calibrated[i, c] = NumOps.FromDouble(tempProbs[c] / sum);
-                    }
-                }
-                else
-                {
-                    // Fallback to uniform
-                    for (int c = 0; c < NumClasses; c++)
-                    {
-                        calibrated[i, c] = NumOps.FromDouble(1.0 / NumClasses);
-                    }
-                }
-            }
+            calibrated[i, 0] = NumOps.FromDouble(1 - calibP);
+            calibrated[i, 1] = NumOps.FromDouble(calibP);
         }
 
         return calibrated;
@@ -864,6 +839,9 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         metadata.AdditionalInfo["CrossValidationFolds"] = _options.CrossValidationFolds;
         metadata.AdditionalInfo["PlattA"] = _plattA;
         metadata.AdditionalInfo["PlattB"] = _plattB;
+        metadata.AdditionalInfo["BetaA"] = _betaA;
+        metadata.AdditionalInfo["BetaB"] = _betaB;
+        metadata.AdditionalInfo["BetaC"] = _betaC;
         metadata.AdditionalInfo["Temperature"] = _temperature;
         return metadata;
     }

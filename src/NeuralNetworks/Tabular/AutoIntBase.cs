@@ -90,6 +90,12 @@ public abstract class AutoIntBase<T>
     /// <param name="options">Model configuration options.</param>
     protected AutoIntBase(int numNumericalFeatures, AutoIntOptions<T>? options = null)
     {
+        if (numNumericalFeatures < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numNumericalFeatures),
+                "Number of numerical features cannot be negative.");
+        }
+
         Options = options ?? new AutoIntOptions<T>();
         NumNumericalFeatures = numNumericalFeatures;
         NumCategoricalFeatures = Options.CategoricalCardinalities?.Length ?? 0;
@@ -390,11 +396,17 @@ public abstract class AutoIntBase<T>
     /// </summary>
     public virtual void UpdateParameters(T learningRate)
     {
+        // Scale learning rate by batch size to normalize gradients that were accumulated across samples
+        int batchSize = _numericalFeaturesCache?.Shape[0] ?? 1;
+        var scaledLr = batchSize > 1
+            ? NumOps.Divide(learningRate, NumOps.FromDouble(batchSize))
+            : learningRate;
+
         for (int i = 0; i < _numericalEmbeddings.Length; i++)
         {
             _numericalEmbeddings[i] = NumOps.Subtract(
                 _numericalEmbeddings[i],
-                NumOps.Multiply(learningRate, _numericalEmbeddingsGrad[i]));
+                NumOps.Multiply(scaledLr, _numericalEmbeddingsGrad[i]));
         }
 
         if (_categoricalEmbeddings != null && _categoricalEmbeddingsGrad != null)
@@ -407,7 +419,7 @@ public abstract class AutoIntBase<T>
                 {
                     emb[i] = NumOps.Subtract(
                         emb[i],
-                        NumOps.Multiply(learningRate, grad[i]));
+                        NumOps.Multiply(scaledLr, grad[i]));
                 }
             }
         }

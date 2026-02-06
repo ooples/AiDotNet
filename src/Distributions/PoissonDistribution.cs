@@ -118,7 +118,7 @@ public class PoissonDistribution<T> : DistributionBase<T>
         double lambda = NumOps.ToDouble(_lambda);
 
         // CDF = regularized incomplete gamma function Q(k+1, λ)
-        return NumOps.FromDouble(GammaUpperIncomplete(k + 1, lambda));
+        return NumOps.FromDouble(RegularizedUpperGamma(k + 1, lambda));
     }
 
     /// <inheritdoc/>
@@ -139,7 +139,7 @@ public class PoissonDistribution<T> : DistributionBase<T>
         while (low < high)
         {
             int mid = (low + high) / 2;
-            double cdf = GammaUpperIncomplete(mid + 1, lambda);
+            double cdf = RegularizedUpperGamma(mid + 1, lambda);
 
             if (cdf < pVal)
                 low = mid + 1;
@@ -212,11 +212,13 @@ public class PoissonDistribution<T> : DistributionBase<T>
         return LogGamma(n + 1);
     }
 
-    private static double GammaUpperIncomplete(int a, double x)
+    /// <summary>
+    /// Computes the regularized upper incomplete gamma function Q(a, x) for integer a.
+    /// Q(a, x) = e^{-x} * sum_{i=0}^{a-1} x^i / i!
+    /// For Poisson CDF: P(X &lt;= k) = Q(k+1, lambda)
+    /// </summary>
+    private static double RegularizedUpperGamma(int a, double x)
     {
-        // For integer a, this is the regularized upper incomplete gamma function
-        // P(a, x) = 1 - Q(a, x) where Q is the regularized lower incomplete gamma
-
         double sum = 0;
         double term = Math.Exp(-x);
 

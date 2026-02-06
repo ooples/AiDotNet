@@ -39,6 +39,7 @@ public static class LinkFunctionFactory<T>
             LinkFunctionType.Inverse => new ReciprocalLink<T>(),
             LinkFunctionType.CLogLog => new CLogLogLink<T>(),
             LinkFunctionType.Sqrt => new SqrtLink<T>(),
+            LinkFunctionType.InverseSquared => new InverseSquaredLink<T>(),
             _ => throw new ArgumentException($"Unknown link function type: {linkType}", nameof(linkType))
         };
     }
@@ -56,7 +57,7 @@ public static class LinkFunctionFactory<T>
             DistributionFamily.Binomial => new LogitLink<T>(),
             DistributionFamily.Poisson => new LogLink<T>(),
             DistributionFamily.Gamma => new ReciprocalLink<T>(),
-            DistributionFamily.InverseGaussian => Create(LinkFunctionType.Inverse),
+            DistributionFamily.InverseGaussian => new InverseSquaredLink<T>(),
             DistributionFamily.NegativeBinomial => new LogLink<T>(),
             DistributionFamily.Tweedie => new LogLink<T>(),
             _ => new IdentityLink<T>()
@@ -77,7 +78,8 @@ public static class LinkFunctionFactory<T>
             { "Probit", new ProbitLink<T>() },
             { "Inverse", new ReciprocalLink<T>() },
             { "CLogLog", new CLogLogLink<T>() },
-            { "Sqrt", new SqrtLink<T>() }
+            { "Sqrt", new SqrtLink<T>() },
+            { "InverseSquared", new InverseSquaredLink<T>() }
         };
     }
 }
@@ -120,7 +122,12 @@ public enum LinkFunctionType
     /// <summary>
     /// Square root link: g(μ) = √μ. Alternative for count data.
     /// </summary>
-    Sqrt
+    Sqrt,
+
+    /// <summary>
+    /// Inverse squared link: g(μ) = 1/μ². Canonical link for Inverse Gaussian distribution.
+    /// </summary>
+    InverseSquared
 }
 
 /// <summary>

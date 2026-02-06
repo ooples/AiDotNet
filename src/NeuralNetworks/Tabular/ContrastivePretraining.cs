@@ -61,6 +61,16 @@ public class ContrastivePretraining<T>
         double corruptionRate = 0.3,
         double temperature = 0.1)
     {
+        if (temperature <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(temperature), "Temperature must be positive.");
+        }
+
+        if (corruptionRate < 0 || corruptionRate > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(corruptionRate), "Corruption rate must be in [0, 1].");
+        }
+
         _numFeatures = numFeatures;
         _projectionDim = projectionDim;
         _corruptionRate = corruptionRate;
@@ -98,6 +108,12 @@ public class ContrastivePretraining<T>
     {
         int batchSize = input.Shape[0];
         int numFeatures = input.Shape[1];
+
+        if (numFeatures != _numFeatures)
+        {
+            throw new ArgumentException(
+                $"Input has {numFeatures} features but expected {_numFeatures}.");
+        }
 
         var corrupted = new Tensor<T>(input.Shape);
         var corruptedIndices = new List<int>();

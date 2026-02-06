@@ -113,6 +113,12 @@ public class ColumnEmbedding<T>
             throw new ArgumentException($"Input has {numCols} columns but only {_numColumns} column embeddings");
         }
 
+        if (embDim != _embeddingDim)
+        {
+            throw new ArgumentException(
+                $"Input embedding dimension ({embDim}) does not match column embedding dimension ({_embeddingDim}).");
+        }
+
         var output = new Tensor<T>(featureEmbeddings.Shape);
 
         for (int b = 0; b < batchSize; b++)
@@ -162,6 +168,12 @@ public class ColumnEmbedding<T>
         int batchSize = gradient.Shape[0];
         int numCols = gradient.Shape[1];
         int embDim = gradient.Shape[2];
+
+        if (embDim != _embeddingDim)
+        {
+            throw new ArgumentException(
+                $"Gradient embedding dimension ({embDim}) does not match column embedding dimension ({_embeddingDim}).");
+        }
 
         // Accumulate gradients from all batch samples
         for (int c = 0; c < numCols; c++)

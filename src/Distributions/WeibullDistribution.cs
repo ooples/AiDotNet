@@ -127,8 +127,16 @@ public class WeibullDistribution<T> : DistributionBase<T>
     /// <inheritdoc/>
     public override T LogPdf(T x)
     {
-        if (NumOps.Compare(x, Zero) <= 0)
+        if (NumOps.Compare(x, Zero) < 0)
             return NumOps.FromDouble(double.NegativeInfinity);
+
+        if (NumOps.Compare(x, Zero) == 0)
+        {
+            double k = NumOps.ToDouble(_shape);
+            if (k < 1) return NumOps.FromDouble(double.PositiveInfinity);
+            if (k == 1) return NumOps.FromDouble(Math.Log(NumOps.ToDouble(_shape)) - Math.Log(NumOps.ToDouble(_scale)));
+            return NumOps.FromDouble(double.NegativeInfinity);
+        }
 
         double xVal = NumOps.ToDouble(x);
         double kVal = NumOps.ToDouble(_shape);

@@ -151,6 +151,12 @@ public class AutoIntRegression<T> : AutoIntBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
+        if (targets.Length != _predictionsCache.Length)
+        {
+            throw new ArgumentException(
+                $"Targets length ({targets.Length}) must match predictions length ({_predictionsCache.Length}).");
+        }
+
         int batchSize = _predictionsCache.Shape[0];
         int outputDim = _predictionsCache.Shape.Length > 1 ? _predictionsCache.Shape[1] : 1;
 

@@ -74,9 +74,9 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
     /// <param name="regularization">Optional regularization.</param>
     public DARTClassifier(DARTClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new DARTClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ??= new DARTClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
     {
-        _options = options ?? new DARTClassifierOptions<T>();
+        _options = options;
         _trees = [];
         _treeWeights = [];
         _initPrediction = NumOps.Zero;
@@ -152,7 +152,7 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
 
             if (_trees.Count > 0)
             {
-                int numToDrop = SelectNumDropout(_trees.Count);
+                int numToDrop = Math.Min(SelectNumDropout(_trees.Count), _trees.Count);
 
                 if (numToDrop > 0)
                 {

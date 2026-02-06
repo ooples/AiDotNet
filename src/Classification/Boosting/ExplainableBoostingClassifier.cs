@@ -113,7 +113,9 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         _interactionTerms = [];
         _intercept = NumOps.Zero;
         _numFeatures = 0;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <summary>

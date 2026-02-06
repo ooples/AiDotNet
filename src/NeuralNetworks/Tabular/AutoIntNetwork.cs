@@ -124,7 +124,8 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
     {
         Tensor<T> prediction = Predict(input);
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        Tensor<T> error = prediction.Subtract(expectedOutput);
+        Vector<T> lossGrad = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+        Tensor<T> error = Tensor<T>.FromVector(lossGrad, prediction.Shape);
         BackpropagateError(error);
         UpdateNetworkParameters();
     }
@@ -231,6 +232,36 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        var options = new AutoIntOptions<T>
+        {
+            EmbeddingDimension = reader.ReadInt32(),
+            NumLayers = reader.ReadInt32(),
+            NumHeads = reader.ReadInt32(),
+            AttentionDimension = reader.ReadInt32(),
+            DropoutRate = reader.ReadDouble(),
+            UseResidual = reader.ReadBoolean(),
+            UseLayerNorm = reader.ReadBoolean(),
+            EmbeddingInitScale = reader.ReadDouble()
+        };
+
+        int mlpDimCount = reader.ReadInt32();
+        var mlpDims = new int[mlpDimCount];
+        for (int i = 0; i < mlpDimCount; i++)
+        {
+            mlpDims[i] = reader.ReadInt32();
+        }
+        options.MLPHiddenDimensions = mlpDims;
+
+        int catCount = reader.ReadInt32();
+        if (catCount > 0)
+        {
+            var cardinalities = new int[catCount];
+            for (int i = 0; i < catCount; i++)
+            {
+                cardinalities[i] = reader.ReadInt32();
+            }
+            options.CategoricalCardinalities = cardinalities;
+        }
     }
 
     /// <inheritdoc/>

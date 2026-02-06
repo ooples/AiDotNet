@@ -74,6 +74,14 @@ public class CLSToken<T>
     {
         int batchSize = embeddings.Shape[0];
         int seqLen = embeddings.Shape[1];
+        int inputEmbDim = embeddings.Shape[2];
+
+        if (inputEmbDim != EmbeddingDimension)
+        {
+            throw new ArgumentException(
+                $"Input embedding dimension ({inputEmbDim}) does not match CLS token dimension ({EmbeddingDimension}).");
+        }
+
         int embDim = EmbeddingDimension;
 
         var output = new Tensor<T>([batchSize, seqLen + 1, embDim]);
