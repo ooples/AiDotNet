@@ -75,10 +75,10 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        : base(architecture, lossFunction ??= NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         _options = options ?? new FTTransformerOptions<T>();
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        _lossFunction = lossFunction;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         if (_options.EmbeddingDimension % _options.NumHeads != 0)
@@ -251,7 +251,12 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
     {
         int embDim = reader.ReadInt32();
         int numHeads = reader.ReadInt32();
-        if (numHeads > 0 && embDim % numHeads != 0)
+        if (numHeads <= 0)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized NumHeads ({numHeads}) must be positive. Data may be corrupted.");
+        }
+        if (embDim % numHeads != 0)
         {
             throw new InvalidOperationException(
                 $"Deserialized EmbeddingDimension ({embDim}) is not divisible by NumHeads ({numHeads}). Data may be corrupted.");
@@ -273,6 +278,12 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
         _options.UseReGLU = reader.ReadBoolean();
 
         int cardCount = reader.ReadInt32();
+        const int MaxReasonableCardinalities = 100_000;
+        if (cardCount < 0 || cardCount > MaxReasonableCardinalities)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized CategoricalCardinalities count ({cardCount}) is out of valid range [0, {MaxReasonableCardinalities}]. Data may be corrupted.");
+        }
         if (cardCount > 0)
         {
             _options.CategoricalCardinalities = new int[cardCount];

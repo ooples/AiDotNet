@@ -138,6 +138,13 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         NumFeatures = _numFeatures;
         ClassLabels = ExtractClassLabels(y);
         NumClasses = ClassLabels.Length;
+
+        if (NumClasses != 2)
+        {
+            throw new NotSupportedException(
+                $"EBM classifier currently supports binary classification only (found {NumClasses} classes).");
+        }
+
         TaskType = InferTaskType(y);
 
         _random = _options.Seed.HasValue
