@@ -117,4 +117,19 @@ public interface IOptimizer<T, TInput, TOutput> : IModelSerializer
     /// - Maintains correct adaptive learning rate dynamics
     /// </remarks>
     void Reset();
+
+    /// <summary>
+    /// Sets the model that this optimizer will optimize.
+    /// </summary>
+    /// <remarks>
+    /// This method allows setting or updating the model after the optimizer is constructed.
+    /// It is typically called by the AiModelBuilder when configuring the optimization pipeline,
+    /// ensuring the optimizer has access to the model before Optimize() is called.
+    ///
+    /// <b>For Beginners:</b> This method tells the optimizer which model to work with. The optimizer
+    /// needs to know about the model to properly initialize random solutions based on the model's
+    /// parameter count and structure.
+    /// </remarks>
+    /// <param name="model">The model to be optimized.</param>
+    void SetModel(IFullModel<T, TInput, TOutput> model);
 }

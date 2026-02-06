@@ -1936,6 +1936,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     // Reset optimizer for fresh training
                     finalOptimizer.Reset();
 
+                    // Ensure the model is set on the optimizer (required after Reset)
+                    finalOptimizer.SetModel(model);
+
                     // Apply trial hyperparameters to the optimizer
                     var optimizerOptions = finalOptimizer.GetOptions();
                     ApplyTrialHyperparameters(optimizerOptions, trialHyperparameters);
@@ -2099,6 +2102,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         else
         {
             // REGULAR TRAINING PATH
+            // Ensure the optimizer has the model configured before optimization
+            // This is required for InitializeRandomSolution to access model.ParameterCount
+            finalOptimizer.SetModel(model);
+
             // Optimize the final model on the full training set (optionally using knowledge distillation)
             optimizationResult = _knowledgeDistillationOptions != null
                 ? await PerformKnowledgeDistillationAsync(
@@ -5258,6 +5265,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             Console.WriteLine($"Error setting up knowledge distillation: {ex.Message}");
             Console.WriteLine("Falling back to standard training.");
+            // Ensure the model is set on the optimizer before falling back to standard training
+            optimizer.SetModel(studentModel);
             return Task.FromResult(optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
                 XTrain, yTrain, XVal, yVal, XTest, yTest)));
         }
@@ -6779,6 +6788,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
             var memberOptimizer = CreateOptimizerForEnsembleMember(memberModel, templateOptimizer);
             memberOptimizer.Reset();
+
+            // Ensure the model is set on the optimizer (required after Reset for InitializeRandomSolution)
+            memberOptimizer.SetModel(memberModel);
 
             var memberInputData = CreateDeepEnsembleMemberOptimizationInputData(optimizationInputData, baseSeed, memberIndex);
             var memberResult = memberOptimizer.Optimize(memberInputData);

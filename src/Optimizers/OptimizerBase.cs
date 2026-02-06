@@ -133,6 +133,12 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </summary>
     private IFullModel<T, TInput, TOutput>? _model;
 
+    /// <inheritdoc />
+    public void SetModel(IFullModel<T, TInput, TOutput> model)
+    {
+        _model = model ?? throw new ArgumentNullException(nameof(model));
+    }
+
     /// <summary>
     /// Initializes a new instance of the OptimizerBase class.
     /// </summary>
