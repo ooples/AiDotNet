@@ -20,6 +20,7 @@ public class TokenMix<T> : ImageMixingAugmenterBase<T>
         if (patchSize < 1) throw new ArgumentOutOfRangeException(nameof(patchSize), "PatchSize must be at least 1.");
         if (minMixRatio < 0) throw new ArgumentOutOfRangeException(nameof(minMixRatio), "MinMixRatio must be non-negative.");
         if (maxMixRatio < minMixRatio) throw new ArgumentOutOfRangeException(nameof(maxMixRatio), "MaxMixRatio must be >= MinMixRatio.");
+        if (maxMixRatio > 1.0) throw new ArgumentOutOfRangeException(nameof(maxMixRatio), "MaxMixRatio must be <= 1.0.");
         PatchSize = patchSize; MinMixRatio = minMixRatio; MaxMixRatio = maxMixRatio;
     }
 

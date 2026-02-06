@@ -63,7 +63,7 @@ public class ThinPlateSpline<T> : ImageAugmenterBase<T>
     }
 
     /// <summary>
-    /// Applies TPS transformation using grid-based approximation for efficiency.
+    /// Applies TPS transformation by computing per-pixel warp from control point displacements.
     /// </summary>
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {

@@ -47,7 +47,7 @@ public class RgbToHls<T> : ImageAugmenterBase<T>
 
         var result = new ImageTensor<T>(data.Height, data.Width, data.Channels, data.ChannelOrder, ColorSpace.HSL)
         {
-            IsNormalized = data.IsNormalized,
+            IsNormalized = true,  // HLS output is always in [0, 1] regardless of input range
             OriginalRange = data.OriginalRange
         };
 

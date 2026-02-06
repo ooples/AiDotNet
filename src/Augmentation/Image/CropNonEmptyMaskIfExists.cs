@@ -43,7 +43,9 @@ public class CropNonEmptyMaskIfExists<T> : SpatialImageAugmenterBase<T>
                 int sx = candX + i % cropW;
                 if (sy < data.Height && sx < data.Width)
                 {
-                    sum += Math.Abs(NumOps.ToDouble(data.GetPixel(sy, sx, 0)));
+                    // Check all channels for non-empty content
+                    for (int c = 0; c < data.Channels; c++)
+                        sum += Math.Abs(NumOps.ToDouble(data.GetPixel(sy, sx, c)));
                     count++;
                 }
             }

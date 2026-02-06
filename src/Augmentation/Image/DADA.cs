@@ -46,21 +46,25 @@ public class DADA<T> : ImageAugmenterBase<T>
         var result = data;
         for (int n = 0; n < OperationCount; n++)
         {
-            // Select operation with highest Gumbel-Softmax score
-            int bestIdx = 0;
-            double bestScore = logits[0] / sumExp;
-            for (int i = 1; i < logits.Length; i++)
+            // Gumbel-max trick: add fresh Gumbel noise and take argmax (equivalent to sampling from softmax)
+            int bestIdx = -1;
+            double bestPerturbed = double.NegativeInfinity;
+            for (int i = 0; i < logits.Length; i++)
             {
-                double score = logits[i] / sumExp;
-                if (score > bestScore) { bestScore = score; bestIdx = i; }
+                if (logits[i] <= 0) continue; // Already used
+                double gumbel = -Math.Log(-Math.Log(Math.Max(1e-20, context.GetRandomDouble(0, 1))));
+                double perturbed = Math.Log(logits[i] / sumExp) + gumbel;
+                if (perturbed > bestPerturbed) { bestPerturbed = perturbed; bestIdx = i; }
             }
+
+            if (bestIdx < 0) break;
 
             double magnitude = context.GetRandomDouble(0, 1);
             result = ApplyOp(result, ops[bestIdx], magnitude, context);
 
-            // Re-sample for next operation
+            // Remove selected operation from future selection
+            sumExp -= logits[bestIdx];
             logits[bestIdx] = 0;
-            sumExp -= bestScore * sumExp;
         }
 
         return result;

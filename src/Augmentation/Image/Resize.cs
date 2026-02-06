@@ -100,6 +100,7 @@ public class Resize<T> : ImageAugmenterBase<T>
                 double srcY = (y + 0.5) * scaleY - 0.5;
                 double srcX = (x + 0.5) * scaleX - 0.5;
 
+                double maxVal = data.IsNormalized ? 1.0 : 255.0;
                 for (int c = 0; c < data.Channels; c++)
                 {
                     double value = Interpolation switch
@@ -112,6 +113,8 @@ public class Resize<T> : ImageAugmenterBase<T>
                         _ => SampleBilinear(data, srcX, srcY, c)
                     };
 
+                    // Clamp to valid range (bicubic and Lanczos can overshoot)
+                    value = Math.Max(0, Math.Min(maxVal, value));
                     result.SetPixel(y, x, c, NumOps.FromDouble(value));
                 }
             }

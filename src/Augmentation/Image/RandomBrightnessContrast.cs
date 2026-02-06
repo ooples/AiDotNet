@@ -12,6 +12,8 @@ public class RandomBrightnessContrast<T> : ImageAugmenterBase<T>
     public RandomBrightnessContrast(double brightnessLimit = 0.2, double contrastLimit = 0.2,
         double probability = 0.5) : base(probability)
     {
+        if (brightnessLimit < 0) throw new ArgumentOutOfRangeException(nameof(brightnessLimit), "BrightnessLimit must be non-negative.");
+        if (contrastLimit < 0) throw new ArgumentOutOfRangeException(nameof(contrastLimit), "ContrastLimit must be non-negative.");
         BrightnessLimit = brightnessLimit; ContrastLimit = contrastLimit;
     }
 

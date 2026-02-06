@@ -62,7 +62,7 @@ public class HistogramEqualization<T> : ImageAugmenterBase<T>
     {
         // Build luminance histogram (average of all channels)
         var histogram = new int[numBins];
-        int totalPixels = h * w;
+        long totalPixels = (long)h * w;
 
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
@@ -110,7 +110,7 @@ public class HistogramEqualization<T> : ImageAugmenterBase<T>
         int h, int w, int channel, int numBins, double maxVal)
     {
         var histogram = new int[numBins];
-        int totalPixels = h * w;
+        long totalPixels = (long)h * w;
 
         // Build histogram
         for (int y = 0; y < h; y++)

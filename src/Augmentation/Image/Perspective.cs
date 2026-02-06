@@ -275,7 +275,7 @@ public class Perspective<T> : SpatialImageAugmenterBase<T>
     protected override SegmentationMask<T> TransformMask(SegmentationMask<T> mask,
         IDictionary<string, object> transformParams, AugmentationContext<T> context)
     {
-        return mask;
+        return mask.Clone();
     }
 
     /// <inheritdoc />

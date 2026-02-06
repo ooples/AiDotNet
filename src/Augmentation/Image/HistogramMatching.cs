@@ -81,7 +81,7 @@ public class HistogramMatching<T> : ImageAugmenterBase<T>
         // Build reference CDF
         var refCdf = new double[numBins];
         if (ReferenceHistograms != null && channel < ReferenceHistograms.Length
-            && ReferenceHistograms[channel].Length > 0)
+            && ReferenceHistograms[channel] != null && ReferenceHistograms[channel].Length > 0)
         {
             var refHist = ReferenceHistograms[channel];
             refCdf[0] = refHist[0];

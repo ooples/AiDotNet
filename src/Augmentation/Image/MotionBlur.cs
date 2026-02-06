@@ -21,12 +21,14 @@ public class MotionBlur<T> : ImageAugmenterBase<T>
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         int kSize = context.GetRandomInt(MinKernelSize, MaxKernelSize + 1);
-        if (kSize % 2 == 0) kSize++;
+        if (kSize % 2 == 0) kSize--;
+        kSize = Math.Max(3, kSize);
         double angle = context.GetRandomDouble(0, 360) * Math.PI / 180.0;
         int half = kSize / 2;
 
         // Generate motion blur kernel along the angle
         var kernel = new double[kSize, kSize];
+        var visited = new bool[kSize, kSize];
         double cosA = Math.Cos(angle), sinA = Math.Sin(angle);
         double sum = 0;
 
@@ -37,9 +39,9 @@ public class MotionBlur<T> : ImageAugmenterBase<T>
             int kx = (int)Math.Round(half + offset * cosA);
             if (ky >= 0 && ky < kSize && kx >= 0 && kx < kSize)
             {
-                // Track if this cell was already set to avoid double-counting in sum
-                if (kernel[ky, kx] == 0.0)
+                if (!visited[ky, kx])
                     sum += 1.0;
+                visited[ky, kx] = true;
                 kernel[ky, kx] = 1.0;
             }
         }

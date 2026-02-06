@@ -30,7 +30,6 @@ public class TransMix<T> : ImageMixingAugmenterBase<T>
 
         var result = image1.Clone();
         double lambda = SampleLambda(context);
-        LastMixingLambda = NumOps.FromDouble(lambda);
 
         int numPatchesH = Math.Max(1, image1.Height / PatchSize);
         int numPatchesW = Math.Max(1, image1.Width / PatchSize);
@@ -42,7 +41,11 @@ public class TransMix<T> : ImageMixingAugmenterBase<T>
             scores[i] = context.GetRandomDouble(0, 1);
 
         // Select patches to mix based on lambda
-        int patchesToMix = (int)(totalPatches * (1 - lambda));
+        int patchesToMix = Math.Min((int)(totalPatches * (1 - lambda)), totalPatches);
+
+        // Update lambda to reflect the actual mixed pixel ratio
+        double actualLambda = totalPatches > 0 ? 1.0 - (double)patchesToMix / totalPatches : lambda;
+        LastMixingLambda = NumOps.FromDouble(actualLambda);
         var indices = new int[totalPatches];
         for (int i = 0; i < totalPatches; i++) indices[i] = i;
 

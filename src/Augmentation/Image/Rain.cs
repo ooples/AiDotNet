@@ -37,7 +37,7 @@ public class Rain<T> : ImageAugmenterBase<T>
             int startY = context.GetRandomInt(0, data.Height);
             int startX = context.GetRandomInt(0, data.Width);
 
-            int halfWidth = Math.Max(0, (int)(DropWidth / 2));
+            int halfWidth = Math.Max(0, (int)((DropWidth - 1) / 2));
 
             for (int i = 0; i < dropLen; i++)
             {
@@ -75,7 +75,8 @@ public class Rain<T> : ImageAugmenterBase<T>
     {
         var p = base.GetParameters();
         p["min_slant"] = MinSlant; p["max_slant"] = MaxSlant;
-        p["drop_length"] = DropLength; p["intensity"] = Intensity;
+        p["drop_length"] = DropLength; p["drop_width"] = DropWidth;
+        p["intensity"] = Intensity; p["brightness"] = Brightness;
         return p;
     }
 }
