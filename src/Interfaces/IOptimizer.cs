@@ -117,4 +117,24 @@ public interface IOptimizer<T, TInput, TOutput> : IModelSerializer
     /// - Maintains correct adaptive learning rate dynamics
     /// </remarks>
     void Reset();
+
+    /// <summary>
+    /// Sets the model that this optimizer will optimize.
+    /// </summary>
+    /// <remarks>
+    /// This method allows setting or updating the model after the optimizer is constructed.
+    /// It is typically called by the AiModelBuilder when configuring the optimization pipeline,
+    /// ensuring the optimizer has access to the model before Optimize() is called.
+    ///
+    /// <b>For Beginners:</b> This method tells the optimizer which model to work with. The optimizer
+    /// needs to know about the model to properly initialize random solutions based on the model's
+    /// parameter count and structure.
+    ///
+    /// <b>Breaking Change Note:</b> This method was added to fix Issue #225 where optimizers
+    /// could have a null model reference, causing NullReferenceException in InitializeRandomSolution.
+    /// Custom IOptimizer implementations must add this method. A simple no-op implementation
+    /// is acceptable for optimizers that don't need late model binding.
+    /// </remarks>
+    /// <param name="model">The model to be optimized.</param>
+    void SetModel(IFullModel<T, TInput, TOutput> model);
 }

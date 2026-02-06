@@ -1,0 +1,103 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+tone_instructions: "Be thorough but constructive. Focus on architectural concerns and API surface area."
+early_access: true
+enable_free_tier: true
+
+reviews:
+  profile: chill
+  request_changes_workflow: true
+  high_level_summary: true
+  high_level_summary_placeholder: "@coderabbitai summary"
+  auto_title_placeholder: "@coderabbitai"
+  review_status: true
+  commit_status: true
+  poem: true
+  collapse_walkthrough: false
+  sequence_diagrams: true
+  changed_files_summary: true
+  labeling_instructions: []
+  path_filters: []
+  path_instructions:
+    - path: "src/**"
+      instructions: |
+        ## AiDotNet Architecture Guidelines
+
+        This library uses the **Facade Pattern**. When reviewing code changes, apply these principles:
+
+        ### Public API Surface (CRITICAL)
+        - **Users should ONLY interact with `AiModelBuilder.cs` and `AiModelResult.cs`**
+        - These are the facade classes that expose a clean, simple API
+        - Any new public methods or classes that users might call directly should be scrutinized
+        - Ask: "Does this need to be public, or can it be internal?"
+
+        ### Access Modifier Guidelines
+        - **Prefer `internal` over `public`** for all classes, methods, and properties unless they are part of the facade API
+        - **Prefer `private` over `internal`** when the member is only used within its own class
+        - Helper classes, utilities, and implementation details should be `internal`
+        - Only `AiModelBuilder`, `AiModelResult`, and types they directly expose should be `public`
+
+        ### Why This Matters
+        1. **Simplicity**: Users get a clean API without overwhelming options
+        2. **IP Protection**: Internal implementation details are hidden
+        3. **Flexibility**: We can refactor internals without breaking changes
+        4. **Maintainability**: Smaller public API surface = fewer breaking changes
+
+        ### Review Checklist
+        - [ ] Are new public classes/methods necessary, or can they be internal?
+        - [ ] Does the change maintain the facade pattern (users use AiModelBuilder/AiModelResult)?
+        - [ ] Are implementation details properly hidden as internal/private?
+        - [ ] If adding public API, is it on AiModelBuilder or AiModelResult?
+        - [ ] Could this change expose internal complexity to end users?
+
+    - path: "src/Interfaces/**"
+      instructions: |
+        ## Interface Review Guidelines
+
+        Interfaces in this library are primarily for **internal extensibility**, not public API.
+
+        ### Key Principles
+        - Most interfaces should be `internal` unless they need to be implemented by library consumers
+        - `IOptimizer`, `IModel`, `IDataLoader` etc. are internal extension points
+        - Users interact through `AiModelBuilder` facade, not directly with interfaces
+        - Adding methods to interfaces is a breaking change for any external implementations
+
+        ### When Reviewing Interface Changes
+        - Verify the interface is `internal` unless there's a clear reason for `public`
+        - Document breaking changes in PR description if modifying public interfaces
+        - Consider if the change could be handled through the facade instead
+
+    - path: "src/Optimizers/**"
+      instructions: |
+        ## Optimizer Review Guidelines
+
+        Optimizers are **internal implementation details**. Users select optimizers through `AiModelBuilder` configuration, not by instantiating them directly.
+
+        ### Key Principles
+        - Optimizer classes should be `internal` or have internal constructors
+        - Users configure optimizers via `AiModelBuilder.ConfigureOptimizer()` fluent API
+        - Complex optimizer logic should be hidden from users
+
+    - path: "tests/**"
+      instructions: |
+        ## Test Review Guidelines
+
+        - Tests may need access to internal members via `[assembly: InternalsVisibleTo]`
+        - Test classes implementing interfaces (like `IOptimizer`) need all interface methods
+        - Prefer testing through the public facade (`AiModelBuilder`) when possible
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  opt_out: false
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  jira:
+    project_keys: []
+  linear:
+    team_keys: []
+  pull_requests:
+    scope: auto

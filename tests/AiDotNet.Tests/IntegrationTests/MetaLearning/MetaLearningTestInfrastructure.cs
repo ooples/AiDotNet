@@ -344,6 +344,11 @@ internal sealed class ResetTrackingOptimizer : IGradientBasedOptimizer<double, M
     {
         // No GPU state to dispose
     }
+
+    public void SetModel(IFullModel<double, Matrix<double>, Vector<double>> model)
+    {
+        // No-op for test optimizer
+    }
 }
 
 /// <summary>

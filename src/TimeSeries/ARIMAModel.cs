@@ -161,7 +161,9 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         Vector<T> predictions = new(input.Rows);
-        Vector<T> lastObservedValues = new(_arimaOptions.LagOrder);
+        // Use _arCoefficients.Length (which is P) for the AR component, not LagOrder
+        // This ensures the dot product vectors have matching lengths
+        Vector<T> lastObservedValues = new(_arCoefficients.Length);
         Vector<T> lastErrors = new(_maCoefficients.Length);
 
         for (int i = 0; i < predictions.Length; i++)
@@ -191,7 +193,11 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
                     lastObservedValues[j] = shifted[j - 1];
                 }
             }
-            lastObservedValues[0] = prediction;
+            // Only set observed value if there are AR coefficients (P > 0)
+            if (lastObservedValues.Length > 0)
+            {
+                lastObservedValues[0] = prediction;
+            }
 
             // VECTORIZED: Shift last errors using slice and copy
             if (lastErrors.Length > 1)
@@ -202,7 +208,11 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
                     lastErrors[j] = shiftedErrors[j - 1];
                 }
             }
-            lastErrors[0] = NumOps.Zero; // Assume zero error for future predictions
+            // Only set error if there are MA coefficients (Q > 0)
+            if (lastErrors.Length > 0)
+            {
+                lastErrors[0] = NumOps.Zero; // Assume zero error for future predictions
+            }
         }
 
         return predictions;

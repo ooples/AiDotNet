@@ -129,6 +129,47 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     private IFullModel<T, TInput, TOutput>? _model;
 
     /// <summary>
+    /// Returns the current model or throws if none has been set via <see cref="SetModel"/>.
+    /// </summary>
+    protected IFullModel<T, TInput, TOutput> RequireModel()
+    {
+        return _model ?? throw new InvalidOperationException(
+            "No model has been set. Call SetModel() before optimizing.");
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Derived classes can override this method to perform additional initialization
+    /// when the model is set, such as caching model-specific parameters or resizing
+    /// internal data structures based on the model's parameter count.
+    /// </remarks>
+    public virtual void SetModel(IFullModel<T, TInput, TOutput> model)
+    {
+        if (model is null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        var oldModel = _model;
+        _model = model;
+        OnModelChanged(oldModel, _model);
+    }
+
+    /// <summary>
+    /// Called whenever the optimizer's model is changed via <see cref="SetModel"/>.
+    /// </summary>
+    /// <param name="oldModel">The previous model instance, or <c>null</c> if none was set.</param>
+    /// <param name="newModel">The new model instance that has just been set.</param>
+    /// <remarks>
+    /// Derived optimizers can override this method to update or reset any internal state that depends on the model.
+    /// </remarks>
+    protected virtual void OnModelChanged(IFullModel<T, TInput, TOutput>? oldModel, IFullModel<T, TInput, TOutput> newModel)
+    {
+        // Default implementation does nothing.
+        // Derived classes can override to reinitialize state based on model changes.
+    }
+
+    /// <summary>
     /// Initializes a new instance of the OptimizerBase class.
     /// </summary>
     /// <param name="model">The model to be optimized (can be null if set later).</param>
@@ -1384,7 +1425,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
             // For Matrix input: compute min and max of each column (feature)
             int features = matrix.Columns;
-            int paramCount = _model!.ParameterCount;
+            int paramCount = RequireModel().ParameterCount;
 
             // If the model is untrained (ParameterCount is less than the number of features),
             // infer the correct parameter count from the input dimensions.
@@ -1464,7 +1505,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             }
 
             // Bounds should match parameter count, not input dimensionality
-            int paramCount = _model!.ParameterCount;
+            int paramCount = RequireModel().ParameterCount;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
@@ -1476,7 +1517,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         else
         {
             // Fallback: create reasonable default bounds based on parameter count
-            int paramCount = _model!.ParameterCount;
+            int paramCount = RequireModel().ParameterCount;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
 
@@ -1493,7 +1534,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         var randomParams = InitializeRandomSolution(lowerBounds, upperBounds);
 
         // Create a new model with these random parameters
-        var randomModel = _model.Clone();
+        var randomModel = RequireModel().Clone();
         randomModel.SetParameters(randomParams);
         return randomModel;
     }

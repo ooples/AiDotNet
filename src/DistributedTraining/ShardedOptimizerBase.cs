@@ -229,6 +229,13 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
     }
 
     /// <inheritdoc/>
+    public virtual void SetModel(IFullModel<T, TInput, TOutput> model)
+    {
+        // Delegate to wrapped optimizer
+        WrappedOptimizer.SetModel(model);
+    }
+
+    /// <inheritdoc/>
     public abstract byte[] Serialize();
 
     /// <inheritdoc/>

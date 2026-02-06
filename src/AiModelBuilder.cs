@@ -1910,12 +1910,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 // Create objective function that trains the model and returns validation loss
                 T ObjectiveFunction(Dictionary<string, object> trialHyperparameters)
                 {
-                    // Reset optimizer for fresh training
-                    finalOptimizer.Reset();
-
-                    // Apply trial hyperparameters to the optimizer
+                    // Apply trial hyperparameters first so Reset() initializes adaptive state from them
                     var optimizerOptions = finalOptimizer.GetOptions();
                     ApplyTrialHyperparameters(optimizerOptions, trialHyperparameters);
+
+                    // Reset optimizer state to reinitialize adaptive parameters from new hyperparameters
+                    finalOptimizer.Reset();
+
+                    // Ensure the optimizer has a model set (required if optimizer was constructed without one)
+                    finalOptimizer.SetModel(model);
 
                     // Log hyperparameters for this trial to experiment tracker
                     if (experimentRun is not null)
@@ -2076,6 +2079,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         else
         {
             // REGULAR TRAINING PATH
+            // Ensure the optimizer has the model configured before optimization
+            // This is required for InitializeRandomSolution to access model.ParameterCount
+            finalOptimizer.SetModel(model);
+
             // Optimize the final model on the full training set (optionally using knowledge distillation)
             optimizationResult = _knowledgeDistillationOptions != null
                 ? await PerformKnowledgeDistillationAsync(
@@ -5216,6 +5223,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             Console.WriteLine($"Error setting up knowledge distillation: {ex.Message}");
             Console.WriteLine("Falling back to standard training.");
+            // Reset optimizer and set model before falling back to standard training
+            optimizer.Reset();
+            optimizer.SetModel(studentModel);
             return Task.FromResult(optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
                 XTrain, yTrain, XVal, yVal, XTest, yTest)));
         }
@@ -6737,6 +6747,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
             var memberOptimizer = CreateOptimizerForEnsembleMember(memberModel, templateOptimizer);
             memberOptimizer.Reset();
+
+            // Ensure the optimizer has a model set before calling Optimize/InitializeRandomSolution
+            memberOptimizer.SetModel(memberModel);
 
             var memberInputData = CreateDeepEnsembleMemberOptimizationInputData(optimizationInputData, baseSeed, memberIndex);
             var memberResult = memberOptimizer.Optimize(memberInputData);

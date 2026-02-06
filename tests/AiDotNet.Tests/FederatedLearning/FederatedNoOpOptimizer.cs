@@ -47,6 +47,11 @@ internal sealed class FederatedNoOpOptimizer : IOptimizer<double, Matrix<double>
     {
     }
 
+    public void SetModel(IFullModel<double, Matrix<double>, Vector<double>> model)
+    {
+        // No-op for test optimizer
+    }
+
     public byte[] Serialize() => Array.Empty<byte>();
 
     public void Deserialize(byte[] data)
