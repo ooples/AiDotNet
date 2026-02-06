@@ -19,7 +19,7 @@ public class RandomGamma<T> : ImageAugmenterBase<T>
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         double gamma = context.GetRandomDouble(MinGamma, MaxGamma);
-        var correction = new GammaCorrection<T>(gamma, probability: 1.0);
+        var correction = new GammaCorrection<T>(gamma, gamma, probability: 1.0);
         return correction.Apply(data, context);
     }
 
