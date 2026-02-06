@@ -75,6 +75,11 @@ public class CheckpointManagerTests : IDisposable
         public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
+
+        public void SetModel(IFullModel<double, double[], double> model)
+        {
+            // No-op for test optimizer
+        }
     }
 
     #endregion

@@ -1933,10 +1933,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 // Create objective function that trains the model and returns validation loss
                 T ObjectiveFunction(Dictionary<string, object> trialHyperparameters)
                 {
-                    // Reset optimizer for fresh training
+                    // Reset optimizer state for fresh training with new hyperparameters
                     finalOptimizer.Reset();
 
-                    // Ensure the model is set on the optimizer (required after Reset)
+                    // Set the model on the optimizer so InitializeRandomSolution knows the parameter count
                     finalOptimizer.SetModel(model);
 
                     // Apply trial hyperparameters to the optimizer
@@ -5265,7 +5265,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             Console.WriteLine($"Error setting up knowledge distillation: {ex.Message}");
             Console.WriteLine("Falling back to standard training.");
-            // Ensure the model is set on the optimizer before falling back to standard training
+            // Reset optimizer and set model before falling back to standard training
+            optimizer.Reset();
             optimizer.SetModel(studentModel);
             return Task.FromResult(optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
                 XTrain, yTrain, XVal, yVal, XTest, yTest)));
@@ -6789,7 +6790,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             var memberOptimizer = CreateOptimizerForEnsembleMember(memberModel, templateOptimizer);
             memberOptimizer.Reset();
 
-            // Ensure the model is set on the optimizer (required after Reset for InitializeRandomSolution)
+            // Set the model so the optimizer can access parameter count during optimization
             memberOptimizer.SetModel(memberModel);
 
             var memberInputData = CreateDeepEnsembleMemberOptimizationInputData(optimizationInputData, baseSeed, memberIndex);

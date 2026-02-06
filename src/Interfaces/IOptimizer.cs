@@ -129,6 +129,11 @@ public interface IOptimizer<T, TInput, TOutput> : IModelSerializer
     /// <b>For Beginners:</b> This method tells the optimizer which model to work with. The optimizer
     /// needs to know about the model to properly initialize random solutions based on the model's
     /// parameter count and structure.
+    ///
+    /// <b>Breaking Change Note:</b> This method was added to fix Issue #225 where optimizers
+    /// could have a null model reference, causing NullReferenceException in InitializeRandomSolution.
+    /// Custom IOptimizer implementations must add this method. A simple no-op implementation
+    /// is acceptable for optimizers that don't need late model binding.
     /// </remarks>
     /// <param name="model">The model to be optimized.</param>
     void SetModel(IFullModel<T, TInput, TOutput> model);

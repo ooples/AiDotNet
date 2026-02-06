@@ -134,9 +134,25 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     private IFullModel<T, TInput, TOutput>? _model;
 
     /// <inheritdoc />
-    public void SetModel(IFullModel<T, TInput, TOutput> model)
+    /// <remarks>
+    /// Derived classes can override this method to perform additional initialization
+    /// when the model is set, such as caching model-specific parameters or resizing
+    /// internal data structures based on the model's parameter count.
+    /// </remarks>
+    public virtual void SetModel(IFullModel<T, TInput, TOutput> model)
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
+        OnModelChanged();
+    }
+
+    /// <summary>
+    /// Called after the model is set via <see cref="SetModel"/>. Override this method
+    /// in derived classes to perform model-specific initialization.
+    /// </summary>
+    protected virtual void OnModelChanged()
+    {
+        // Default implementation does nothing.
+        // Derived classes can override to reinitialize state based on new model.
     }
 
     /// <summary>
