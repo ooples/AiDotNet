@@ -1,7 +1,9 @@
 using AiDotNet.Data.Audio;
 using AiDotNet.Data.Formats;
 using AiDotNet.Data.Geometry;
+using AiDotNet.Data.Multimodal;
 using AiDotNet.Data.Text.Benchmarks;
+using AiDotNet.Data.Transforms;
 using AiDotNet.Data.Video;
 using AiDotNet.Data.Vision;
 using AiDotNet.Data.Vision.Benchmarks;
@@ -1441,6 +1443,85 @@ public static class DataLoaders
         }
 
         return new StatefulDataLoader<T, TInput, TOutput>(loader);
+    }
+
+    /// <summary>
+    /// Creates a new empty multimodal dataset for building vision-language or multi-modal training samples.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A multimodal dataset holds samples that combine data from
+    /// different modalities (image + text, audio + video, etc.):
+    /// <code>
+    /// var dataset = DataLoaders.Multimodal&lt;float&gt;();
+    /// var sample = new MultimodalSample&lt;float&gt;(
+    ///     new ModalitySample&lt;float&gt;(ModalityType.Image, imageTensor),
+    ///     new ModalitySample&lt;float&gt;(ModalityType.Text, textTensor));
+    /// dataset.Add(sample);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <returns>An empty multimodal dataset ready for sample addition.</returns>
+    public static MultimodalDataset<T> Multimodal<T>()
+    {
+        return new MultimodalDataset<T>();
+    }
+
+    /// <summary>
+    /// Creates a multimodal dataset pre-populated with samples.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="samples">The multimodal samples to add.</param>
+    /// <returns>A multimodal dataset containing the provided samples.</returns>
+    public static MultimodalDataset<T> Multimodal<T>(
+        IEnumerable<MultimodalSample<T>> samples)
+    {
+        if (samples is null)
+        {
+            throw new ArgumentNullException(nameof(samples));
+        }
+
+        var dataset = new MultimodalDataset<T>();
+        foreach (var sample in samples)
+        {
+            dataset.Add(sample);
+        }
+
+        return dataset;
+    }
+
+    /// <summary>
+    /// Wraps a data loader with a composable transform pipeline applied to features.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this to add preprocessing to any existing data loader
+    /// without modifying the loader itself. The transforms are applied to each batch's features.
+    /// <code>
+    /// var baseLoader = DataLoaders.FromArrays(features, labels);
+    /// var normalized = DataLoaders.WithTransforms(baseLoader,
+    ///     new NormalizeTransform&lt;float&gt;(mean, std));
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="loader">The source data loader.</param>
+    /// <param name="transform">The transform to apply to each feature array in the batch.</param>
+    /// <returns>A new data loader that applies transforms on iteration.</returns>
+    public static TransformedDataLoader<T> WithTransforms<T>(
+        InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>> loader,
+        ITransform<T[], T[]> transform)
+    {
+        if (loader is null)
+        {
+            throw new ArgumentNullException(nameof(loader));
+        }
+
+        if (transform is null)
+        {
+            throw new ArgumentNullException(nameof(transform));
+        }
+
+        return new TransformedDataLoader<T>(loader, transform);
     }
 
     #endregion
