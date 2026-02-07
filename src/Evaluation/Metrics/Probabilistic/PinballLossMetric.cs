@@ -104,6 +104,14 @@ public class PinballLossMetric<T> : IRegressionMetric<T>
         int bootstrapSamples = 1000,
         int? randomSeed = null)
     {
+        if (ciMethod != ConfidenceIntervalMethod.PercentileBootstrap &&
+            ciMethod != ConfidenceIntervalMethod.BasicBootstrap &&
+            ciMethod != ConfidenceIntervalMethod.BCaBootstrap &&
+            ciMethod != ConfidenceIntervalMethod.StudentizedBootstrap)
+        {
+            throw new NotSupportedException(
+                $"PinballLossMetric only supports bootstrap CI methods. '{ciMethod}' is not supported.");
+        }
         if (bootstrapSamples < 2)
             throw new ArgumentOutOfRangeException(nameof(bootstrapSamples), "Bootstrap samples must be at least 2.");
         if (confidenceLevel <= 0 || confidenceLevel >= 1)

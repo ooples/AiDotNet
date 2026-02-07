@@ -131,25 +131,40 @@ public class PoissonDistribution<T> : DistributionBase<T>
         if (pVal == 0) return Zero;
         if (pVal == 1) return NumOps.FromDouble(double.PositiveInfinity);
 
-        // Binary search for the quantile
         double lambda = NumOps.ToDouble(_lambda);
-        int low = 0;
-        double rawHigh = lambda + 10 * Math.Sqrt(lambda) + 10;
-        int high = rawHigh >= int.MaxValue || double.IsNaN(rawHigh) || double.IsInfinity(rawHigh)
-            ? int.MaxValue
-            : (int)rawHigh;
 
-        // Dynamically expand upper bound if CDF at high is still less than p
-        // Use long arithmetic to detect overflow before it wraps around
-        while (high < int.MaxValue && RegularizedUpperGamma(high + 1, lambda) < pVal)
+        // For large λ, use normal approximation as initial guess then refine
+        int low, high;
+        if (lambda >= 30)
         {
-            long next = (long)high * 2;
-            if (next > int.MaxValue)
+            // Normal approximation: X ~ N(λ, λ) for large λ
+            double z = NormalQuantile(pVal);
+            double guess = lambda + z * Math.Sqrt(lambda);
+            int center = Math.Max(0, (int)Math.Round(guess));
+            // Search in a narrow band around the guess
+            int band = Math.Max(10, (int)(4 * Math.Sqrt(lambda)));
+            low = Math.Max(0, center - band);
+            high = center + band;
+            // Expand if needed
+            while (high < int.MaxValue && RegularizedUpperGamma(high + 1, lambda) < pVal)
             {
-                high = int.MaxValue;
-                break;
+                long next = (long)high * 2;
+                high = next > int.MaxValue ? int.MaxValue : (int)next;
             }
-            high = (int)next;
+        }
+        else
+        {
+            low = 0;
+            double rawHigh = lambda + 10 * Math.Sqrt(lambda) + 10;
+            high = rawHigh >= int.MaxValue || double.IsNaN(rawHigh) || double.IsInfinity(rawHigh)
+                ? int.MaxValue
+                : (int)rawHigh;
+
+            while (high < int.MaxValue && RegularizedUpperGamma(high + 1, lambda) < pVal)
+            {
+                long next = (long)high * 2;
+                high = next > int.MaxValue ? int.MaxValue : (int)next;
+            }
         }
 
         while (low < high)
@@ -232,23 +247,42 @@ public class PoissonDistribution<T> : DistributionBase<T>
     }
 
     /// <summary>
-    /// Computes the regularized upper incomplete gamma function Q(a, x) = e^{-x} * sum_{i=0}^{a-1} x^i / i!
-    /// for integer a. Uses log-space computation to avoid underflow for large x.
-    /// For Poisson CDF: P(X &lt;= k) = Q(k+1, lambda).
+    /// Computes the regularized upper incomplete gamma function Q(a, x) = P(X &lt;= a-1)
+    /// for Poisson with rate x. For Poisson CDF: P(X &lt;= k) = Q(k+1, lambda).
+    /// Uses series summation for small a and continued fraction for large a.
     /// </summary>
     private static double RegularizedUpperGamma(int a, double x)
     {
         if (x <= 0) return 1.0;
+        if (a <= 0) return 0.0;
 
-        // For large x, Math.Exp(-x) underflows to 0.
-        // Compute in log-space: log(term_i) = -x + i*log(x) - log(i!)
+        // For large a, use continued fraction (Lentz's method) for the
+        // upper incomplete gamma Γ(a,x)/Γ(a) = 1 - P(a,x), then
+        // Q(a,x) = P(a,x) = 1 - Γ(a,x)/Γ(a).
+        // The series is O(a) but with early stopping on convergence.
+        if (a > 200 && x < a + 1)
+        {
+            // Use regularized lower gamma via series: P(a,x) = e^{-x} x^a / Gamma(a) * sum
+            return LowerGammaSeries(a, x);
+        }
+        else if (a > 200)
+        {
+            // Use upper gamma via continued fraction: Q(a,x) = 1 - P(a,x)
+            return 1.0 - UpperGammaCF(a, x);
+        }
+
+        // For moderate a, use log-space summation with early stopping
         double logSum = double.NegativeInfinity;
         double logFactorial = 0;
+        double logX = Math.Log(x);
 
         for (int i = 0; i < a; i++)
         {
-            double logTerm = -x + i * Math.Log(x) - logFactorial;
-            // LogSumExp: log(exp(a) + exp(b))
+            double logTerm = -x + i * logX - logFactorial;
+
+            // Early stop: if terms become negligibly small
+            if (i > 0 && logTerm < logSum - 50) break;
+
             if (double.IsNegativeInfinity(logSum))
                 logSum = logTerm;
             else
@@ -261,5 +295,72 @@ public class PoissonDistribution<T> : DistributionBase<T>
         }
 
         return Math.Exp(logSum);
+    }
+
+    /// <summary>
+    /// Regularized lower incomplete gamma P(a,x) via series expansion.
+    /// P(a,x) = e^{-x} * x^a / Gamma(a) * sum_{n=0}^inf x^n / (a*(a+1)*...*(a+n))
+    /// </summary>
+    private static double LowerGammaSeries(int a, double x)
+    {
+        double logPrefix = -x + a * Math.Log(x) - LogGamma(a);
+        double sum = 1.0;
+        double term = 1.0;
+
+        for (int n = 1; n < 1000; n++)
+        {
+            term *= x / (a + n);
+            sum += term;
+            if (Math.Abs(term) < sum * 1e-15) break;
+        }
+
+        return Math.Exp(logPrefix) * sum / a;
+    }
+
+    /// <summary>
+    /// Upper incomplete gamma Γ(a,x)/Γ(a) via Lentz continued fraction.
+    /// Returns 1 - P(a,x).
+    /// </summary>
+    private static double UpperGammaCF(int a, double x)
+    {
+        double logPrefix = -x + a * Math.Log(x) - LogGamma(a);
+
+        // Lentz's method for continued fraction
+        double f = 1e-30;
+        double c = 1e-30;
+        double d = 1.0 / (x + 1 - a);
+        f = d;
+
+        for (int n = 1; n < 1000; n++)
+        {
+            double an = n * ((double)a - n);
+            double bn = x + 2 * n + 1 - a;
+            d = bn + an * d;
+            if (Math.Abs(d) < 1e-30) d = 1e-30;
+            c = bn + an / c;
+            if (Math.Abs(c) < 1e-30) c = 1e-30;
+            d = 1.0 / d;
+            double delta = c * d;
+            f *= delta;
+            if (Math.Abs(delta - 1.0) < 1e-15) break;
+        }
+
+        return 1.0 - Math.Exp(logPrefix) * f;
+    }
+
+    /// <summary>
+    /// Approximate normal quantile using rational approximation (Abramowitz and Stegun).
+    /// </summary>
+    private static double NormalQuantile(double p)
+    {
+        if (p <= 0) return double.NegativeInfinity;
+        if (p >= 1) return double.PositiveInfinity;
+        if (Math.Abs(p - 0.5) < 1e-15) return 0.0;
+
+        // Rational approximation
+        double t = p < 0.5 ? Math.Sqrt(-2.0 * Math.Log(p)) : Math.Sqrt(-2.0 * Math.Log(1.0 - p));
+        double z = t - (2.515517 + t * (0.802853 + t * 0.010328))
+                       / (1.0 + t * (1.432788 + t * (0.189269 + t * 0.001308)));
+        return p < 0.5 ? -z : z;
     }
 }
