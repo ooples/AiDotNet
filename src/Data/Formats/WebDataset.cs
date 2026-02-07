@@ -17,7 +17,7 @@ namespace AiDotNet.Data.Formats;
 /// can then decode the bytes as needed (images, text, JSON, etc.).
 /// </para>
 /// </remarks>
-public class WebDataset : IDisposable
+internal class WebDataset : IDisposable
 {
     private readonly string[] _tarPaths;
     private readonly WebDatasetOptions _options;

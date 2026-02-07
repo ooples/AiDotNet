@@ -18,7 +18,7 @@ namespace AiDotNet.Data.Formats;
 /// Each shard file has the format: [4-byte little-endian length][record bytes][4-byte LE length][record bytes]...
 /// </para>
 /// </remarks>
-public class ShardedStreamingDataset : IDisposable
+internal class ShardedStreamingDataset : IDisposable
 {
     private readonly string[] _shardPaths;
     private readonly ShardedStreamingDatasetOptions _options;

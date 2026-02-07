@@ -17,7 +17,7 @@ namespace AiDotNet.Data.Formats;
 /// and configurable field extraction.
 /// </para>
 /// </remarks>
-public class JsonlStreamingLoader : IDisposable
+internal class JsonlStreamingLoader : IDisposable
 {
     private readonly string[] _filePaths;
     private readonly string? _textField;
