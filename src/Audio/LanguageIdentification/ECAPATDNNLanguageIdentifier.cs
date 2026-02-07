@@ -117,6 +117,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
 
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new ECAPATDNNOptions();
+        Options = _options;
         _options.ModelPath = modelPath;
 
         SampleRate = _options.SampleRate;
@@ -168,6 +169,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
 
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new ECAPATDNNOptions();
+        Options = _options;
 
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMels;

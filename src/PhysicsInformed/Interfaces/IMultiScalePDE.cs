@@ -178,7 +178,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// Configuration options for multi-scale PINN training.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
-    public class MultiScaleTrainingOptions<T>
+    public class MultiScaleTrainingOptions<T> : AiDotNet.Models.Options.ModelOptions
     {
         /// <summary>
         /// Whether to use adaptive scale weighting during training.

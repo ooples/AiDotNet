@@ -124,6 +124,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _initialCondition = initialCondition;
             _numCollocationPoints = numCollocationPoints;
             _options = options ?? new InverseProblemOptions<T>();
+            Options = _options;
 
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = optimizer == null;

@@ -32,7 +32,7 @@ namespace AiDotNet.Audio.LanguageIdentification;
 /// </code>
 /// </para>
 /// </remarks>
-public class LanguageIdentifierOptions
+public class LanguageIdentifierOptions : AiDotNet.Models.Options.ModelOptions
 {
     /// <summary>
     /// Gets or sets the sample rate of input audio in Hz.

@@ -116,6 +116,7 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         ValidateOptions(options);
 
         _options = options;
+        Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

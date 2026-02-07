@@ -113,6 +113,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _initialCondition = initialCondition;
             _numCollocationPointsPerScale = numCollocationPointsPerScale;
             _trainingOptions = trainingOptions ?? new MultiScaleTrainingOptions<T>();
+            Options = _trainingOptions;
 
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = optimizer == null;

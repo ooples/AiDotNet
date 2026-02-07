@@ -65,6 +65,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         : base(options)
     {
         _options = options;
+        Options = _options;
 
         // Validate options
         if (_options.EmbeddingDim <= 0)

@@ -141,6 +141,7 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        Options = _options;
         _options.Validate();
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

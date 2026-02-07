@@ -173,6 +173,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw new FileNotFoundException($"Vocoder not found: {vocoderPath}");
 
         _options = options ?? new AudioLDMOptions();
+        Options = _options;
         _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
             "Tokenizer is required. Use CLAP tokenizer or compatible tokenizer.");
         _useNativeMode = false;
@@ -247,6 +248,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         _options = options ?? new AudioLDMOptions();
+        Options = _options;
         _useNativeMode = true;
 
         // Set dimensions based on model size

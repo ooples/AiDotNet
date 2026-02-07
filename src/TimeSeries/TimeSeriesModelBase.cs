@@ -60,7 +60,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// - AutocorrelationCorrection: Whether to fix systematic errors in predictions
     /// </para>
     /// </remarks>
-    protected TimeSeriesRegressionOptions<T> Options { get; private set; }
+    protected TimeSeriesRegressionOptions<T> Options { get; set; }
 
     /// <inheritdoc/>
     public virtual ModelOptions GetOptions() => Options;

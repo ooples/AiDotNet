@@ -109,6 +109,7 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
 
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new Wav2Vec2LidOptions();
+        Options = _options;
         _options.ModelPath = modelPath;
 
         SampleRate = _options.SampleRate;
@@ -148,6 +149,7 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
 
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new Wav2Vec2LidOptions();
+        Options = _options;
 
         SampleRate = _options.SampleRate;
 

@@ -25,7 +25,7 @@ namespace AiDotNet.Audio.MusicGen;
 /// - Mention energy level (energetic, calm, building)
 /// </para>
 /// </remarks>
-public class MusicGenOptions
+public class MusicGenOptions : AiDotNet.Models.Options.ModelOptions
 {
     /// <summary>
     /// Gets or sets the model size variant.
@@ -102,15 +102,6 @@ public class MusicGenOptions
     /// </para>
     /// </remarks>
     public double GuidanceScale { get; set; } = 3.0;
-
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// Set to a specific value to generate the same music each time.
-    /// Null for random generation.
-    /// </remarks>
-    public int? Seed { get; set; }
 
     /// <summary>
     /// Gets or sets whether to generate stereo audio.

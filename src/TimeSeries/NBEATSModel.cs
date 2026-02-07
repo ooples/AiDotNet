@@ -64,6 +64,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     public NBEATSModel(NBEATSModelOptions<T>? options = null) : base(options ?? new NBEATSModelOptions<T>())
     {
         _options = options ?? new NBEATSModelOptions<T>();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
         _blocks = new List<NBEATSBlock<T>>();
 
