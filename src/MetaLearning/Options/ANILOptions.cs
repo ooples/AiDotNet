@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -29,7 +30,7 @@ namespace AiDotNet.MetaLearning.Options;
 /// - Often performs as well as full MAML
 /// </para>
 /// </remarks>
-public class ANILOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
+public class ANILOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
     #region Required Properties
 
@@ -111,7 +112,7 @@ public class ANILOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// <summary>
     /// Gets or sets the random seed for reproducibility.
     /// </summary>
-    public int? RandomSeed { get; set; }
+    public int? RandomSeed { get => Seed; set => Seed = value; }
 
     /// <summary>
     /// Gets or sets the number of tasks to use for evaluation.

@@ -40,7 +40,7 @@ namespace AiDotNet.TimeSeries;
 /// - Website traffic prediction
 /// </para>
 /// </remarks>
-public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
+public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>
 {
     /// <summary>
     /// Configuration options for the time series model.
@@ -61,6 +61,9 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>
     /// </para>
     /// </remarks>
     protected TimeSeriesRegressionOptions<T> Options { get; private set; }
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => Options;
 
     /// <summary>
     /// Provides numeric operations for the specific type T.

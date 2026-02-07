@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNet.Finance.Base;
@@ -44,6 +45,7 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
         double maxGradNorm = 1.0)
         : base(architecture, lossFunction, maxGradNorm)
     {
+        Options = new ForecastingModelOptions();
     }
 
     /// <summary>
@@ -68,6 +70,7 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
         ILossFunction<T>? lossFunction = null)
         : base(architecture, sequenceLength, predictionHorizon, numFeatures, lossFunction)
     {
+        Options = new ForecastingModelOptions();
     }
 
     /// <summary>
@@ -92,6 +95,7 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
         int numFeatures)
         : base(architecture, onnxModelPath, sequenceLength, predictionHorizon, numFeatures)
     {
+        Options = new ForecastingModelOptions();
     }
 
     /// <inheritdoc/>

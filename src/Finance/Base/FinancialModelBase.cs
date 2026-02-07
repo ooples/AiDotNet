@@ -208,7 +208,7 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         _basePredictionHorizon = predictionHorizon;
         _baseNumFeatures = numFeatures;
         _lastTrainingLoss = NumOps.Zero;
-
+        Options = new FinancialNeuralNetworkOptions();
     }
 
     /// <summary>
@@ -258,6 +258,8 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         _baseNumFeatures = numFeatures;
         _lastTrainingLoss = NumOps.Zero;
 
+        Options = new FinancialNeuralNetworkOptions();
+
         // Load ONNX model
         try
         {
@@ -294,6 +296,7 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         _basePredictionHorizon = 0;
         _baseNumFeatures = architecture.InputSize;
         _lastTrainingLoss = NumOps.Zero;
+        Options = new FinancialNeuralNetworkOptions();
     }
 
     /// <summary>

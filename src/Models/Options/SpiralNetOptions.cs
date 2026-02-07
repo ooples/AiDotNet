@@ -15,7 +15,7 @@ namespace AiDotNet.Models.Options;
 /// - PoolRatios: How much to simplify the mesh at each pooling step
 /// </para>
 /// </remarks>
-public class SpiralNetOptions
+public class SpiralNetOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Gets or sets the number of output classes for classification.

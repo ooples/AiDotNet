@@ -1,4 +1,5 @@
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.Clustering.Options;
 
@@ -10,6 +11,7 @@ namespace AiDotNet.Clustering.Options;
 /// <para>
 /// This class provides common configuration options shared by most clustering algorithms.
 /// Specific clustering implementations may extend this with algorithm-specific options.
+/// Inherits from ModelOptions to provide the standard Seed property for reproducibility.
 /// </para>
 /// <para><b>For Beginners:</b> These are the settings you can adjust to control
 /// how the clustering algorithm works.
@@ -17,11 +19,11 @@ namespace AiDotNet.Clustering.Options;
 /// Common options include:
 /// - How many iterations to run
 /// - When to stop (convergence threshold)
-/// - Random seed for reproducibility
+/// - Random seed for reproducibility (inherited Seed property)
 /// - Which distance metric to use
 /// </para>
 /// </remarks>
-public class ClusteringOptions<T>
+public class ClusteringOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the maximum number of iterations.
@@ -49,6 +51,7 @@ public class ClusteringOptions<T>
 
     /// <summary>
     /// Gets or sets the random seed for reproducibility.
+    /// This property delegates to the inherited Seed property from ModelOptions.
     /// </summary>
     /// <value>The random seed, or null for non-deterministic behavior.</value>
     /// <remarks>
@@ -57,7 +60,11 @@ public class ClusteringOptions<T>
     /// results every time you run with the same data.
     /// </para>
     /// </remarks>
-    public int? RandomState { get; set; }
+    public int? RandomState
+    {
+        get => Seed;
+        set => Seed = value;
+    }
 
     /// <summary>
     /// Gets or sets the number of times to run with different random initializations.

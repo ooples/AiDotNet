@@ -7,6 +7,7 @@ using AiDotNet.Factories;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.Regularization;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
@@ -17,7 +18,7 @@ namespace AiDotNet.Clustering.Base;
 /// Provides a base implementation for clustering algorithms that group similar data points together.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public abstract class ClusteringBase<T> : IClustering<T>
+public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -33,6 +34,9 @@ public abstract class ClusteringBase<T> : IClustering<T>
     /// Gets the clustering options.
     /// </summary>
     protected ClusteringOptions<T> Options { get; private set; }
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => Options;
 
     /// <summary>
     /// Gets the regularization method.

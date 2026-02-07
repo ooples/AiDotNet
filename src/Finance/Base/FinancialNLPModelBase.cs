@@ -1,5 +1,6 @@
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.LossFunctions;
 using System.IO;
@@ -91,6 +92,7 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
         _baseVocabularySize = vocabularySize;
         _baseHiddenDimension = hiddenDimension;
         _baseNumSentimentClasses = numSentimentClasses;
+        Options = new FinancialNLPOptions();
     }
 
     /// <summary>
@@ -130,6 +132,7 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
         _baseVocabularySize = vocabularySize;
         _baseHiddenDimension = hiddenDimension;
         _baseNumSentimentClasses = numSentimentClasses;
+        Options = new FinancialNLPOptions();
     }
 
     /// <summary>
@@ -154,6 +157,7 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
         _baseVocabularySize = 0;
         _baseHiddenDimension = 0;
         _baseNumSentimentClasses = 0;
+        Options = new FinancialNLPOptions();
     }
 
     /// <inheritdoc/>

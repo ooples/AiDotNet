@@ -27,7 +27,7 @@ namespace AiDotNet.Regression;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
+public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, IConfigurableModel<T>
 {
     /// <summary>
     /// Provides operations for performing numeric calculations appropriate for the type T.
@@ -67,6 +67,9 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>
     /// </para>
     /// </remarks>
     protected DecisionTreeOptions Options { get; private set; }
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => Options;
 
     /// <summary>
     /// Gets the regularization strategy applied to the model to prevent overfitting.

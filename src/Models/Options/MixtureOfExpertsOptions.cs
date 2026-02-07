@@ -32,7 +32,7 @@ namespace AiDotNet.Models.Options;
 /// - Whether to use load balancing to ensure all experts are utilized
 /// </para>
 /// </remarks>
-public class MixtureOfExpertsOptions<T>
+public class MixtureOfExpertsOptions<T> : NeuralNetworkOptions
 {
     /// <summary>
     /// Gets or sets the number of expert networks in the mixture.
@@ -290,7 +290,7 @@ public class MixtureOfExpertsOptions<T>
     /// Note: This only controls initialization. Other factors like data shuffling may still introduce variability.
     /// </para>
     /// </remarks>
-    public int? RandomSeed { get; set; } = null;
+    public int? RandomSeed { get => Seed; set => Seed = value; }
 
     /// <summary>
     /// Validates that all option values are within acceptable ranges.

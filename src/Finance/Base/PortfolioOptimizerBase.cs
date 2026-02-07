@@ -1,5 +1,6 @@
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.LossFunctions;
 using System.IO;
@@ -64,6 +65,7 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
                 "numAssets must be greater than 0 to create valid tensor shapes.");
         }
         _numAssets = numAssets;
+        Options = new PortfolioOptimizerOptions<T>();
     }
 
     /// <summary>
@@ -90,6 +92,7 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
                 "numAssets must be greater than 0 to create valid tensor shapes.");
         }
         _numAssets = numAssets;
+        Options = new PortfolioOptimizerOptions<T>();
     }
 
     /// <summary>

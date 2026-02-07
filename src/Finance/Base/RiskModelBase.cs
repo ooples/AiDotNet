@@ -2,6 +2,7 @@ using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using System.IO;
 
@@ -82,6 +83,7 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
             throw new ArgumentOutOfRangeException(nameof(timeHorizon), "Time horizon must be at least 1.");
         _confidenceLevel = confidenceLevel;
         _timeHorizon = timeHorizon;
+        Options = new RiskModelOptions<T>();
     }
 
     /// <summary>
@@ -107,6 +109,7 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
             throw new ArgumentOutOfRangeException(nameof(timeHorizon), "Time horizon must be at least 1.");
         _confidenceLevel = confidenceLevel;
         _timeHorizon = timeHorizon;
+        Options = new RiskModelOptions<T>();
     }
 
     /// <summary>

@@ -28,7 +28,7 @@ namespace AiDotNet.Classification;
 /// functionality.
 /// </para>
 /// </remarks>
-public abstract class ClassifierBase<T> : IClassifier<T>
+public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -63,6 +63,9 @@ public abstract class ClassifierBase<T> : IClassifier<T>
     /// Configuration options for the classifier model.
     /// </value>
     protected ClassifierOptions<T> Options { get; private set; }
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => Options;
 
     /// <summary>
     /// Gets the regularization method used to prevent overfitting.

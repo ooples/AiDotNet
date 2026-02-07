@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -35,7 +36,7 @@ namespace AiDotNet.MetaLearning.Options;
 /// BOIL: Towards Representation Change for Few-shot Learning.
 /// </para>
 /// </remarks>
-public class BOILOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
+public class BOILOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
     #region Required Properties
 
@@ -117,7 +118,7 @@ public class BOILOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// <summary>
     /// Gets or sets the random seed for reproducibility.
     /// </summary>
-    public int? RandomSeed { get; set; }
+    public int? RandomSeed { get => Seed; set => Seed = value; }
 
     /// <summary>
     /// Gets or sets the number of tasks to use for evaluation.

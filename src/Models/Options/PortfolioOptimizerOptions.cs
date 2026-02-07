@@ -6,7 +6,7 @@ namespace AiDotNet.Models.Options;
 /// Base options for portfolio optimizers.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class PortfolioOptimizerOptions<T> : ModelOptions
+public class PortfolioOptimizerOptions<T> : FinancialNeuralNetworkOptions
 {
     /// <summary>
     /// Number of assets in the portfolio.
