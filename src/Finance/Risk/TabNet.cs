@@ -71,6 +71,7 @@ public class TabNet<T> : RiskModelBase<T>
             lossFunction)
     {
         _options = options ?? new TabNetOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -114,6 +115,7 @@ public class TabNet<T> : RiskModelBase<T>
             options?.TimeHorizon ?? 1)
     {
         _options = options ?? new TabNetOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

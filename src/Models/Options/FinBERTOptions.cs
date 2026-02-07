@@ -50,7 +50,7 @@ namespace AiDotNet.Models.Options;
 /// https://arxiv.org/abs/1908.10063
 /// </para>
 /// </remarks>
-public class FinBERTOptions<T>
+public class FinBERTOptions<T> : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="FinBERTOptions{T}"/> class with default values.

@@ -71,6 +71,7 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
             options?.NumAssets ?? 1)
     {
         _options = options ?? new NeuralGARCHOptions<T>();
+        Options = _options;
         _options.Validate();
 
         _numAssets = _options.NumAssets;
@@ -105,6 +106,7 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
             lossFunction)
     {
         _options = options ?? new NeuralGARCHOptions<T>();
+        Options = _options;
         _options.Validate();
 
         _numAssets = _options.NumAssets;

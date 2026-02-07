@@ -69,6 +69,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
             options?.NumAssets ?? 1)
     {
         _options = options ?? new RealizedVolatilityTransformerOptions<T>();
+        Options = _options;
         _options.Validate();
 
         _numAssets = _options.NumAssets;
@@ -103,6 +104,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
             lossFunction)
     {
         _options = options ?? new RealizedVolatilityTransformerOptions<T>();
+        Options = _options;
         _options.Validate();
 
         _numAssets = _options.NumAssets;

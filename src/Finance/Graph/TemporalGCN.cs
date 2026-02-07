@@ -220,6 +220,7 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new TemporalGCNOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -265,6 +266,7 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
     {
         _useNativeMode = true;
         _options = options ?? new TemporalGCNOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

@@ -184,6 +184,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         OnnxSession = new InferenceSession(onnxModelPath);
 
         _options = options ?? new FactorVAEOptions<T>();
+        Options = _options;
         _options.Validate();
 
         _numFactors = _options.NumFactors;
@@ -231,6 +232,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         OnnxSession = null;
 
         _options = options ?? new FactorVAEOptions<T>();
+        Options = _options;
         _options.Validate();
 
         _numFactors = _options.NumFactors;
