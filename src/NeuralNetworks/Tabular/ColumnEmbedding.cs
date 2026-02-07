@@ -95,7 +95,8 @@ public class ColumnEmbedding<T>
         {
             for (int d = 0; d < _embeddingDim; d++)
             {
-                double angle = col / Math.Pow(10000.0, (2.0 * (d / 2.0)) / _embeddingDim);
+                int pair = d / 2;
+                double angle = col / Math.Pow(10000.0, (2.0 * pair) / _embeddingDim);
                 double value = d % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle);
                 _embeddings[col * _embeddingDim + d] = NumOps.FromDouble(value);
             }

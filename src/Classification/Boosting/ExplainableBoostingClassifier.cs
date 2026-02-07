@@ -853,12 +853,18 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         {
             int f1 = reader.ReadInt32();
             int f2 = reader.ReadInt32();
-            int dim1 = reader.ReadInt32();
-            int dim2 = reader.ReadInt32();
-            if (dim1 < 0 || dim1 > MaxArrayLength || dim2 < 0 || dim2 > MaxArrayLength)
+            if (f1 < 0 || f1 >= _numFeatures || f2 < 0 || f2 >= _numFeatures)
             {
                 throw new InvalidOperationException(
-                    $"Deserialized interaction dimensions ({dim1}x{dim2}) are out of valid range. Data may be corrupted.");
+                    $"Deserialized interaction feature indices ({f1}, {f2}) are out of valid range [0, {_numFeatures}). Data may be corrupted.");
+            }
+            int dim1 = reader.ReadInt32();
+            int dim2 = reader.ReadInt32();
+            long totalElements = (long)dim1 * (long)dim2;
+            if (dim1 < 0 || dim2 < 0 || totalElements > MaxArrayLength)
+            {
+                throw new InvalidOperationException(
+                    $"Deserialized interaction dimensions ({dim1}x{dim2} = {totalElements} elements) exceed maximum allowed ({MaxArrayLength}). Data may be corrupted.");
             }
             var term = new T[dim1, dim2];
             for (int i = 0; i < dim1; i++)

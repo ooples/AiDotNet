@@ -25,7 +25,7 @@ namespace AiDotNet.Evaluation.Metrics.Probabilistic;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class EnergyScoreMetric<T> : IRegressionMetric<T>
+internal class EnergyScoreMetric<T> : IRegressionMetric<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -99,7 +99,8 @@ public class EnergyScoreMetric<T> : IRegressionMetric<T>
     /// <inheritdoc/>
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
-        // For univariate case, Energy Score reduces to MAE
+        // Fallback for point predictions: computes MAE. The true univariate
+        // Energy Score reduces to CRPS and requires ensemble samples.
         if (predictions.Length != actuals.Length)
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
@@ -171,6 +172,7 @@ public class EnergyScoreMetric<T> : IRegressionMetric<T>
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
+        hi = Math.Min(samples - 1, Math.Max(hi, lo + 1));
         return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
     }
 }
