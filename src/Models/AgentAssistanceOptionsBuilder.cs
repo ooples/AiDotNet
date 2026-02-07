@@ -309,6 +309,34 @@ public class AgentAssistanceOptionsBuilder
     }
 
     /// <summary>
+    /// Enables automatic application of agent-recommended hyperparameters to the model before training.
+    /// Also enables hyperparameter tuning if not already enabled, since auto-apply requires recommendations.
+    /// </summary>
+    /// <returns>The current builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This tells the AI agent to not only recommend hyperparameters
+    /// but also automatically apply them to your model. This creates a fully automated workflow
+    /// where the agent analyzes your data, suggests settings, and configures your model.
+    /// </para>
+    /// </remarks>
+    public AgentAssistanceOptionsBuilder EnableAutoApplyHyperparameters()
+    {
+        _options.EnableAutoApplyHyperparameters = true;
+        _options.EnableHyperparameterTuning = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Disables automatic application of agent-recommended hyperparameters.
+    /// </summary>
+    /// <returns>The current builder instance for method chaining.</returns>
+    public AgentAssistanceOptionsBuilder DisableAutoApplyHyperparameters()
+    {
+        _options.EnableAutoApplyHyperparameters = false;
+        return this;
+    }
+
+    /// <summary>
     /// Builds and returns the configured AgentAssistanceOptions instance.
     /// </summary>
     /// <returns>An AgentAssistanceOptions instance with all configured settings.</returns>

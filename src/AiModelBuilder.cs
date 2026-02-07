@@ -5430,11 +5430,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             recommendation.TuningReasoning = hyperparameterResult;
             reasoningTrace.AppendLine($"Hyperparameter Recommendations:\n{hyperparameterResult}\n");
 
-            // Try to extract hyperparameters (simplified - could be enhanced)
-            recommendation.SuggestedHyperparameters = new Dictionary<string, object>
-            {
-                ["info"] = "See TuningReasoning for detailed hyperparameter recommendations"
-            };
+            // Parse structured hyperparameters from the LLM response
+            var hyperparameterParser = new HyperparameterResponseParser();
+            recommendation.SuggestedHyperparameters = hyperparameterParser.Parse(hyperparameterResult);
         }
 
         // 4. FEATURE ANALYSIS
@@ -5864,8 +5862,25 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             Console.WriteLine("===========================\n");
         }
 
-        // Note: Hyperparameter recommendations are currently stored in recommendation.SuggestedHyperparameters
-        // but not auto-applied. Future enhancement: Apply hyperparameters to compatible models.
+        // Auto-apply hyperparameters if enabled
+        if (_agentOptions.EnableAutoApplyHyperparameters
+            && _model is IConfigurableModel<T> configurableModel
+            && recommendation.SuggestedHyperparameters is { Count: > 0 })
+        {
+            var registry = new HyperparameterRegistry();
+            var applicator = new AgentHyperparameterApplicator<T>(registry);
+            var modelType = recommendation.SuggestedModelType ?? ModelType.SimpleRegression;
+
+            var applicationResult = applicator.Apply(configurableModel, modelType, recommendation.SuggestedHyperparameters);
+            recommendation.HyperparameterApplicationResult = applicationResult;
+
+            if (applicationResult.HasAppliedParameters)
+            {
+                Console.WriteLine("\n=== AGENT HYPERPARAMETER APPLICATION ===");
+                Console.WriteLine(applicationResult.GetSummary());
+                Console.WriteLine("========================================\n");
+            }
+        }
     }
 
     /// <summary>
