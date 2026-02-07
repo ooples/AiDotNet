@@ -71,6 +71,7 @@
 	  <PackageReference Include="System.ValueTuple" Version="4.6.1" />
 	  <PackageReference Include="TreeSitter.DotNet" Version="1.2.0" />
 	  <PackageReference Include="FftSharp" Version="2.2.0" />
+	  <PackageReference Include="Parquet.Net" Version="4.24.0" />
 	</ItemGroup>
 
 	<!-- PostgreSQL package only for .NET 10.0+ -->
