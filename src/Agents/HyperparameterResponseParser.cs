@@ -135,7 +135,7 @@ public class HyperparameterResponseParser
     internal Dictionary<string, object> TryParseColonSeparated(string text)
     {
         var result = new Dictionary<string, object>();
-        var pattern = new Regex(@"^\s*[-\*\s]*(\w[\w_]*?)\s*[:=]\s*([^\s(,]+)", RegexOptions.Multiline | RegexOptions.Compiled);
+        var pattern = new Regex(@"^\s*[-\*\s]*(\w[\w_]*?)\s*[:=][^\S\n]*([^\s(,]+)", RegexOptions.Multiline | RegexOptions.Compiled);
 
         foreach (Match match in pattern.Matches(text))
         {
