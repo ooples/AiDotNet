@@ -1,4 +1,10 @@
+using AiDotNet.Data.Audio;
+using AiDotNet.Data.Formats;
 using AiDotNet.Data.Geometry;
+using AiDotNet.Data.Text.Benchmarks;
+using AiDotNet.Data.Video;
+using AiDotNet.Data.Vision;
+using AiDotNet.Data.Vision.Benchmarks;
 using AiDotNet.FederatedLearning.Benchmarks.Leaf;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -1037,6 +1043,404 @@ public static class DataLoaders
 
         return new CsvStreamingDataLoader<T, TInput, TOutput>(
             filePath, lineParser, batchSize, hasHeader, prefetchCount);
+    }
+
+    #endregion
+
+    #region Domain-Specific Loaders
+
+    /// <summary>
+    /// Creates an image folder dataset loader that reads images from a directory structure
+    /// where each subdirectory name is a class label.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If you have images organized like:
+    /// <code>
+    /// root/
+    ///   cats/
+    ///     cat001.bmp
+    ///     cat002.bmp
+    ///   dogs/
+    ///     dog001.bmp
+    ///     dog002.bmp
+    /// </code>
+    /// Use this method:
+    /// <code>
+    /// var loader = DataLoaders.ImageFolder&lt;float&gt;(new ImageFolderDatasetOptions
+    /// {
+    ///     RootDirectory = "root/",
+    ///     ImageWidth = 64,
+    ///     ImageHeight = 64
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Options specifying the root directory, image dimensions, and file extensions.</param>
+    /// <returns>An image folder dataset loader.</returns>
+    public static ImageFolderDataset<T> ImageFolder<T>(ImageFolderDatasetOptions options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new ImageFolderDataset<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an audio file dataset loader that reads WAV/PCM audio files from directories.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Organize audio files into class directories, then:
+    /// <code>
+    /// var loader = DataLoaders.AudioFiles&lt;float&gt;(new AudioFileDatasetOptions
+    /// {
+    ///     RootDirectory = "audio/",
+    ///     SampleRate = 16000,
+    ///     DurationSeconds = 3.0
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Options specifying the root directory, sample rate, and duration.</param>
+    /// <returns>An audio file dataset loader.</returns>
+    public static AudioFileDataset<T> AudioFiles<T>(AudioFileDatasetOptions options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new AudioFileDataset<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a video frame dataset loader that extracts frames from video directories.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Point this at directories containing frame images extracted from videos:
+    /// <code>
+    /// var loader = DataLoaders.VideoFrames&lt;float&gt;(new VideoFrameDatasetOptions
+    /// {
+    ///     RootDirectory = "videos/",
+    ///     FramesPerVideo = 16,
+    ///     FrameWidth = 112,
+    ///     FrameHeight = 112
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Options specifying the root directory, frame count, and dimensions.</param>
+    /// <returns>A video frame dataset loader.</returns>
+    public static VideoFrameDataset<T> VideoFrames<T>(VideoFrameDatasetOptions options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new VideoFrameDataset<T>(options);
+    }
+
+    #endregion
+
+    #region Benchmark Dataset Loaders
+
+    /// <summary>
+    /// Creates a MNIST handwritten digit dataset loader (60k train / 10k test, 28x28 grayscale).
+    /// Auto-downloads data if not found locally.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> MNIST is the "Hello World" of machine learning datasets.
+    /// <code>
+    /// var loader = DataLoaders.Mnist&lt;float&gt;(); // Downloads to ~/.aidotnet/datasets/mnist/
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, normalization, flatten).</param>
+    /// <returns>A MNIST data loader.</returns>
+    public static MnistDataLoader<T> Mnist<T>(MnistDataLoaderOptions? options = null)
+    {
+        return new MnistDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a Fashion-MNIST dataset loader (60k train / 10k test, 28x28 grayscale clothing images).
+    /// Auto-downloads data if not found locally.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Fashion-MNIST is a drop-in replacement for MNIST with clothing images.
+    /// <code>
+    /// var loader = DataLoaders.FashionMnist&lt;float&gt;();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, normalization, flatten).</param>
+    /// <returns>A Fashion-MNIST data loader.</returns>
+    public static FashionMnistDataLoader<T> FashionMnist<T>(FashionMnistDataLoaderOptions? options = null)
+    {
+        return new FashionMnistDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a CIFAR-10 dataset loader (50k train / 10k test, 32x32 RGB, 10 classes).
+    /// Auto-downloads data if not found locally.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> CIFAR-10 has 10 classes of natural images (airplane, car, bird, etc.).
+    /// <code>
+    /// var loader = DataLoaders.Cifar10&lt;float&gt;();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, normalization).</param>
+    /// <returns>A CIFAR-10 data loader.</returns>
+    public static Cifar10DataLoader<T> Cifar10<T>(Cifar10DataLoaderOptions? options = null)
+    {
+        return new Cifar10DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a CIFAR-100 dataset loader (50k train / 10k test, 32x32 RGB, 100 classes).
+    /// Auto-downloads data if not found locally.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> CIFAR-100 is similar to CIFAR-10 but with 100 fine-grained classes.
+    /// <code>
+    /// var loader = DataLoaders.Cifar100&lt;float&gt;();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, use fine labels).</param>
+    /// <returns>A CIFAR-100 data loader.</returns>
+    public static Cifar100DataLoader<T> Cifar100<T>(Cifar100DataLoaderOptions? options = null)
+    {
+        return new Cifar100DataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates an IMDB 50k movie review sentiment dataset loader (25k train / 25k test).
+    /// Auto-downloads data if not found locally.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This dataset contains movie reviews labeled as positive or negative.
+    /// <code>
+    /// var loader = DataLoaders.Imdb50k&lt;float&gt;();
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Optional configuration (data path, vocabulary size, max sequence length).</param>
+    /// <returns>An IMDB 50k data loader.</returns>
+    public static Imdb50kDataLoader<T> Imdb50k<T>(Imdb50kDataLoaderOptions? options = null)
+    {
+        return new Imdb50kDataLoader<T>(options);
+    }
+
+    #endregion
+
+    #region Format-Specific Loaders
+
+    /// <summary>
+    /// Creates a Parquet file data loader for reading columnar data from Apache Parquet files.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Parquet is a popular columnar file format for tabular data.
+    /// <code>
+    /// var loader = DataLoaders.FromParquet&lt;float&gt;(new ParquetDataLoaderOptions
+    /// {
+    ///     FilePath = "data.parquet",
+    ///     LabelColumn = "target"
+    /// });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="options">Options specifying the file path, label column, and feature columns.</param>
+    /// <returns>A Parquet data loader.</returns>
+    public static ParquetDataLoader<T> FromParquet<T>(ParquetDataLoaderOptions options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return new ParquetDataLoader<T>(options);
+    }
+
+    /// <summary>
+    /// Creates a WebDataset reader for reading samples from TAR archives with sequential I/O.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> WebDataset is a format where training samples are packed into TAR files
+    /// for efficient sequential reading, commonly used for large-scale training.
+    /// <code>
+    /// var dataset = DataLoaders.FromWebDataset("shard-{000..099}.tar");
+    /// foreach (var sample in dataset.ReadSamples())
+    /// {
+    ///     byte[] imageBytes = sample["jpg"];
+    ///     byte[] labelBytes = sample["cls"];
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="tarPaths">One or more paths to TAR archive files.</param>
+    /// <param name="options">Optional WebDataset configuration.</param>
+    /// <returns>A WebDataset reader.</returns>
+    public static WebDataset FromWebDataset(string[] tarPaths, WebDatasetOptions? options = null)
+    {
+        if (tarPaths is null || tarPaths.Length == 0)
+        {
+            throw new ArgumentException("At least one TAR path is required.", nameof(tarPaths));
+        }
+
+        return new WebDataset(tarPaths, options);
+    }
+
+    /// <summary>
+    /// Creates a WebDataset reader for a single TAR archive.
+    /// </summary>
+    /// <param name="tarPath">Path to the TAR archive file.</param>
+    /// <param name="options">Optional WebDataset configuration.</param>
+    /// <returns>A WebDataset reader.</returns>
+    public static WebDataset FromWebDataset(string tarPath, WebDatasetOptions? options = null)
+    {
+        if (string.IsNullOrWhiteSpace(tarPath))
+        {
+            throw new ArgumentNullException(nameof(tarPath));
+        }
+
+        return new WebDataset(tarPath, options);
+    }
+
+    /// <summary>
+    /// Creates a JSONL streaming loader for reading JSON Lines files line-by-line.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> JSONL files have one JSON object per line, commonly used for LLM training data.
+    /// <code>
+    /// var loader = DataLoaders.FromJsonl("train.jsonl", textField: "text", labelField: "label");
+    /// foreach (var record in loader.ReadRecords())
+    /// {
+    ///     string text = record["text"]?.ToString() ?? "";
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="filePath">Path to the JSONL file.</param>
+    /// <param name="textField">Optional field name for text content.</param>
+    /// <param name="labelField">Optional field name for labels.</param>
+    /// <param name="shuffleBufferSize">Buffer size for shuffling (0 = no shuffle).</param>
+    /// <returns>A JSONL streaming loader.</returns>
+    public static JsonlStreamingLoader FromJsonl(
+        string filePath,
+        string? textField = null,
+        string? labelField = null,
+        int shuffleBufferSize = 0)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentNullException(nameof(filePath));
+        }
+
+        return new JsonlStreamingLoader(filePath, textField, labelField, shuffleBufferSize);
+    }
+
+    /// <summary>
+    /// Creates a JSONL streaming loader for reading multiple JSONL files.
+    /// </summary>
+    /// <param name="filePaths">Paths to the JSONL files.</param>
+    /// <param name="textField">Optional field name for text content.</param>
+    /// <param name="labelField">Optional field name for labels.</param>
+    /// <param name="shuffleBufferSize">Buffer size for shuffling (0 = no shuffle).</param>
+    /// <returns>A JSONL streaming loader.</returns>
+    public static JsonlStreamingLoader FromJsonl(
+        string[] filePaths,
+        string? textField = null,
+        string? labelField = null,
+        int shuffleBufferSize = 0)
+    {
+        if (filePaths is null || filePaths.Length == 0)
+        {
+            throw new ArgumentException("At least one file path is required.", nameof(filePaths));
+        }
+
+        return new JsonlStreamingLoader(filePaths, textField, labelField, shuffleBufferSize);
+    }
+
+    /// <summary>
+    /// Creates a sharded streaming dataset for deterministic, resumable reading from binary shard files.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Sharded datasets split data into multiple files (shards)
+    /// for parallel and resumable loading, ideal for large-scale distributed training.
+    /// <code>
+    /// var dataset = DataLoaders.FromShards(new[] { "shard_0.bin", "shard_1.bin" });
+    /// foreach (var sample in dataset.ReadSamples(rank: 0, worldSize: 2))
+    /// {
+    ///     // Process sample bytes
+    /// }
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="shardPaths">Paths to the shard files.</param>
+    /// <param name="options">Optional sharded streaming configuration.</param>
+    /// <returns>A sharded streaming dataset.</returns>
+    public static ShardedStreamingDataset FromShards(
+        string[] shardPaths,
+        ShardedStreamingDatasetOptions? options = null)
+    {
+        if (shardPaths is null || shardPaths.Length == 0)
+        {
+            throw new ArgumentException("At least one shard path is required.", nameof(shardPaths));
+        }
+
+        return new ShardedStreamingDataset(shardPaths, options);
+    }
+
+    #endregion
+
+    #region Wrapper/Utility Methods
+
+    /// <summary>
+    /// Wraps any data loader with stateful checkpointing support for mid-epoch resume.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This adds the ability to save and restore the exact position
+    /// in a dataset, so training can resume after interruptions without repeating data.
+    /// <code>
+    /// var baseLoader = DataLoaders.Mnist&lt;float&gt;();
+    /// var stateful = DataLoaders.WithCheckpointing(baseLoader);
+    ///
+    /// // Save state mid-epoch
+    /// var state = stateful.GetState();
+    ///
+    /// // Later, resume exactly where you left off
+    /// stateful.LoadState(state);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <typeparam name="TInput">The input type.</typeparam>
+    /// <typeparam name="TOutput">The output type.</typeparam>
+    /// <param name="loader">The data loader to wrap with checkpointing.</param>
+    /// <returns>A stateful data loader with checkpoint support.</returns>
+    public static StatefulDataLoader<T, TInput, TOutput> WithCheckpointing<T, TInput, TOutput>(
+        InputOutputDataLoaderBase<T, TInput, TOutput> loader)
+    {
+        if (loader is null)
+        {
+            throw new ArgumentNullException(nameof(loader));
+        }
+
+        return new StatefulDataLoader<T, TInput, TOutput>(loader);
     }
 
     #endregion
