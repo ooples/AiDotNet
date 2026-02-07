@@ -1278,11 +1278,83 @@ public static class DataLoaders
     }
 
     /// <summary>
-    /// Creates a WebDataset reader for reading samples from TAR archives with sequential I/O.
+    /// Creates a typed WebDataset data loader for reading samples from TAR archives,
+    /// compatible with <c>AiModelBuilder.ConfigureDataLoader()</c>.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> WebDataset is a format where training samples are packed into TAR files
     /// for efficient sequential reading, commonly used for large-scale training.
+    /// <code>
+    /// var loader = DataLoaders.FromWebDataset&lt;float&gt;(
+    ///     new[] { "shard-000.tar", "shard-001.tar" },
+    ///     sample =&gt;
+    ///     {
+    ///         var image = ImageHelper&lt;float&gt;.LoadImageFromBytes(sample[".jpg"]);
+    ///         var label = new Tensor&lt;float&gt;(new[] { 1 });
+    ///         return (image, label);
+    ///     });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="tarPaths">One or more paths to TAR archive files.</param>
+    /// <param name="sampleParser">Function to convert raw sample bytes into tensor pairs.</param>
+    /// <param name="batchSize">Number of samples per batch. Default is 32.</param>
+    /// <param name="options">Optional WebDataset configuration.</param>
+    /// <returns>A typed WebDataset data loader.</returns>
+    public static WebDatasetDataLoader<T> FromWebDataset<T>(
+        string[] tarPaths,
+        Func<Dictionary<string, byte[]>, (Tensor<T>, Tensor<T>)> sampleParser,
+        int batchSize = 32,
+        WebDatasetOptions? options = null)
+    {
+        if (tarPaths is null || tarPaths.Length == 0)
+        {
+            throw new ArgumentException("At least one TAR path is required.", nameof(tarPaths));
+        }
+
+        if (sampleParser is null)
+        {
+            throw new ArgumentNullException(nameof(sampleParser));
+        }
+
+        return new WebDatasetDataLoader<T>(tarPaths, sampleParser, batchSize, options);
+    }
+
+    /// <summary>
+    /// Creates a typed WebDataset data loader for a single TAR archive.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="tarPath">Path to the TAR archive file.</param>
+    /// <param name="sampleParser">Function to convert raw sample bytes into tensor pairs.</param>
+    /// <param name="batchSize">Number of samples per batch. Default is 32.</param>
+    /// <param name="options">Optional WebDataset configuration.</param>
+    /// <returns>A typed WebDataset data loader.</returns>
+    public static WebDatasetDataLoader<T> FromWebDataset<T>(
+        string tarPath,
+        Func<Dictionary<string, byte[]>, (Tensor<T>, Tensor<T>)> sampleParser,
+        int batchSize = 32,
+        WebDatasetOptions? options = null)
+    {
+        if (string.IsNullOrWhiteSpace(tarPath))
+        {
+            throw new ArgumentNullException(nameof(tarPath));
+        }
+
+        if (sampleParser is null)
+        {
+            throw new ArgumentNullException(nameof(sampleParser));
+        }
+
+        return new WebDatasetDataLoader<T>(new[] { tarPath }, sampleParser, batchSize, options);
+    }
+
+    /// <summary>
+    /// Creates a raw WebDataset reader for reading samples from TAR archives.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for low-level access to TAR archive samples as raw bytes.
+    /// For a typed data loader compatible with AiModelBuilder, use the generic overload instead.
     /// <code>
     /// var dataset = DataLoaders.FromWebDataset("shard-{000..099}.tar");
     /// foreach (var sample in dataset.ReadSamples())
@@ -1307,7 +1379,7 @@ public static class DataLoaders
     }
 
     /// <summary>
-    /// Creates a WebDataset reader for a single TAR archive.
+    /// Creates a raw WebDataset reader for a single TAR archive.
     /// </summary>
     /// <param name="tarPath">Path to the TAR archive file.</param>
     /// <param name="options">Optional WebDataset configuration.</param>
@@ -1323,10 +1395,92 @@ public static class DataLoaders
     }
 
     /// <summary>
-    /// Creates a JSONL streaming loader for reading JSON Lines files line-by-line.
+    /// Creates a typed JSONL data loader for reading JSON Lines files,
+    /// compatible with <c>AiModelBuilder.ConfigureDataLoader()</c>.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> JSONL files have one JSON object per line, commonly used for LLM training data.
+    /// <code>
+    /// var loader = DataLoaders.FromJsonl&lt;float&gt;(
+    ///     "train.jsonl",
+    ///     record =&gt;
+    ///     {
+    ///         var features = new Tensor&lt;float&gt;(new[] { 10 });
+    ///         var label = new Tensor&lt;float&gt;(new[] { 1 });
+    ///         return (features, label);
+    ///     });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="filePath">Path to the JSONL file.</param>
+    /// <param name="recordParser">Function to convert a parsed JObject into tensor pairs.</param>
+    /// <param name="batchSize">Number of samples per batch. Default is 32.</param>
+    /// <param name="textField">Optional field name for text content.</param>
+    /// <param name="labelField">Optional field name for labels.</param>
+    /// <param name="shuffleBufferSize">Buffer size for shuffling (0 = no shuffle).</param>
+    /// <returns>A typed JSONL data loader.</returns>
+    public static JsonlDataLoader<T> FromJsonl<T>(
+        string filePath,
+        Func<Newtonsoft.Json.Linq.JObject, (Tensor<T>, Tensor<T>)> recordParser,
+        int batchSize = 32,
+        string? textField = null,
+        string? labelField = null,
+        int shuffleBufferSize = 0)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentNullException(nameof(filePath));
+        }
+
+        if (recordParser is null)
+        {
+            throw new ArgumentNullException(nameof(recordParser));
+        }
+
+        return new JsonlDataLoader<T>(
+            new[] { filePath }, recordParser, batchSize, textField, labelField, shuffleBufferSize);
+    }
+
+    /// <summary>
+    /// Creates a typed JSONL data loader for reading multiple JSONL files.
+    /// </summary>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="filePaths">Paths to the JSONL files.</param>
+    /// <param name="recordParser">Function to convert a parsed JObject into tensor pairs.</param>
+    /// <param name="batchSize">Number of samples per batch. Default is 32.</param>
+    /// <param name="textField">Optional field name for text content.</param>
+    /// <param name="labelField">Optional field name for labels.</param>
+    /// <param name="shuffleBufferSize">Buffer size for shuffling (0 = no shuffle).</param>
+    /// <returns>A typed JSONL data loader.</returns>
+    public static JsonlDataLoader<T> FromJsonl<T>(
+        string[] filePaths,
+        Func<Newtonsoft.Json.Linq.JObject, (Tensor<T>, Tensor<T>)> recordParser,
+        int batchSize = 32,
+        string? textField = null,
+        string? labelField = null,
+        int shuffleBufferSize = 0)
+    {
+        if (filePaths is null || filePaths.Length == 0)
+        {
+            throw new ArgumentException("At least one file path is required.", nameof(filePaths));
+        }
+
+        if (recordParser is null)
+        {
+            throw new ArgumentNullException(nameof(recordParser));
+        }
+
+        return new JsonlDataLoader<T>(
+            filePaths, recordParser, batchSize, textField, labelField, shuffleBufferSize);
+    }
+
+    /// <summary>
+    /// Creates a raw JSONL streaming loader for reading JSON Lines files line-by-line.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for low-level access to JSONL records as JObjects.
+    /// For a typed data loader compatible with AiModelBuilder, use the generic overload instead.
     /// <code>
     /// var loader = DataLoaders.FromJsonl("train.jsonl", textField: "text", labelField: "label");
     /// foreach (var record in loader.ReadRecords())
@@ -1356,7 +1510,7 @@ public static class DataLoaders
     }
 
     /// <summary>
-    /// Creates a JSONL streaming loader for reading multiple JSONL files.
+    /// Creates a raw JSONL streaming loader for reading multiple JSONL files.
     /// </summary>
     /// <param name="filePaths">Paths to the JSONL files.</param>
     /// <param name="textField">Optional field name for text content.</param>
@@ -1378,14 +1532,58 @@ public static class DataLoaders
     }
 
     /// <summary>
-    /// Creates a sharded streaming dataset for deterministic, resumable reading from binary shard files.
+    /// Creates a typed sharded streaming data loader for deterministic, resumable reading,
+    /// compatible with <c>AiModelBuilder.ConfigureDataLoader()</c>.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> Sharded datasets split data into multiple files (shards)
     /// for parallel and resumable loading, ideal for large-scale distributed training.
     /// <code>
+    /// var loader = DataLoaders.FromShards&lt;float&gt;(
+    ///     new[] { "shard_0.bin", "shard_1.bin" },
+    ///     recordBytes =&gt;
+    ///     {
+    ///         var features = new Tensor&lt;float&gt;(new[] { 784 });
+    ///         var label = new Tensor&lt;float&gt;(new[] { 10 });
+    ///         return (features, label);
+    ///     });
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The numeric type.</typeparam>
+    /// <param name="shardPaths">Paths to the shard files.</param>
+    /// <param name="recordParser">Function to convert raw byte records into tensor pairs.</param>
+    /// <param name="batchSize">Number of samples per batch. Default is 32.</param>
+    /// <param name="options">Optional sharded streaming configuration.</param>
+    /// <returns>A typed sharded streaming data loader.</returns>
+    public static ShardedStreamingDataLoader<T> FromShards<T>(
+        string[] shardPaths,
+        Func<byte[], (Tensor<T>, Tensor<T>)> recordParser,
+        int batchSize = 32,
+        ShardedStreamingDatasetOptions? options = null)
+    {
+        if (shardPaths is null || shardPaths.Length == 0)
+        {
+            throw new ArgumentException("At least one shard path is required.", nameof(shardPaths));
+        }
+
+        if (recordParser is null)
+        {
+            throw new ArgumentNullException(nameof(recordParser));
+        }
+
+        return new ShardedStreamingDataLoader<T>(shardPaths, recordParser, batchSize, options);
+    }
+
+    /// <summary>
+    /// Creates a raw sharded streaming dataset for deterministic, resumable reading from binary shard files.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this for low-level access to sharded binary records.
+    /// For a typed data loader compatible with AiModelBuilder, use the generic overload instead.
+    /// <code>
     /// var dataset = DataLoaders.FromShards(new[] { "shard_0.bin", "shard_1.bin" });
-    /// foreach (var sample in dataset.ReadSamples(rank: 0, worldSize: 2))
+    /// foreach (var sample in dataset.ReadRecords())
     /// {
     ///     // Process sample bytes
     /// }

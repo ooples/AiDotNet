@@ -18,9 +18,9 @@ public sealed class VideoFrameDatasetOptions
     public string RootDirectory { get; set; } = string.Empty;
 
     /// <summary>
-    /// File extensions for frame images. Default supports formats decoded by ImageHelper (BMP, PPM, PGM).
+    /// File extensions for frame images. Default supports formats decoded by ImageHelper (PNG, JPEG, BMP, PPM, PGM, GIF, TIFF).
     /// </summary>
-    public string[] FrameExtensions { get; set; } = new[] { ".bmp", ".ppm", ".pgm" };
+    public string[] FrameExtensions { get; set; } = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".ppm", ".pgm", ".gif", ".tiff" };
 
     /// <summary>
     /// Number of frames to sample per video. Default is 16.
