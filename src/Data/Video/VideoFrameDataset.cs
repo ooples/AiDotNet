@@ -1,20 +1,39 @@
 using AiDotNet.Data.Loaders;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Video;
 
 /// <summary>
-/// Loads video files and extracts frames for video classification and understanding tasks.
+/// Loads videos represented as directories of sequentially numbered image frames.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <remarks>
 /// <para>
-/// Extracts a fixed number of frames from each video file, producing tensors of shape
-/// [N, FramesPerVideo, Height, Width, Channels]. Frames are sampled uniformly from the
-/// raw bytes of each video file.
+/// This loader expects videos stored as frame directories (the standard preprocessing format
+/// for ML video datasets like UCF-101, Kinetics, HMDB51, etc.). Each video is a directory
+/// containing sequentially numbered image frames (BMP, PPM, or PGM format).
 /// </para>
-/// <para><b>For Beginners:</b> This loader reads video files and extracts frames as images.
-/// Each video becomes a sequence of frames that can be fed to temporal models like 3D CNNs.
+/// <para>
+/// Expected structure:
+/// <code>
+/// root/
+///   class1/
+///     video1/
+///       frame_001.bmp
+///       frame_002.bmp
+///       ...
+///     video2/
+///       frame_001.bmp
+///       ...
+///   class2/
+///     video3/
+///       ...
+/// </code>
+/// </para>
+/// <para>
+/// Frames are sampled uniformly across the video duration to produce a fixed number of frames
+/// per video. Output tensor shape is [N, FramesPerVideo, Height, Width, Channels].
 /// </para>
 /// </remarks>
 public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>
@@ -69,11 +88,13 @@ public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             throw new DirectoryNotFoundException($"Video folder root directory not found: {rootDir}");
         }
 
-        var extensions = new HashSet<string>(
-            _options.Extensions.Select(e => e.StartsWith(".", StringComparison.Ordinal) ? e : "." + e),
+        var frameExtensions = new HashSet<string>(
+            _options.FrameExtensions.Select(e => e.StartsWith(".", StringComparison.Ordinal) ? e : "." + e),
             StringComparer.OrdinalIgnoreCase);
 
-        List<(string FilePath, int ClassIndex)> samples;
+        // Discover videos: each video is a subdirectory containing frame images
+        // Structure: root/class/video_dir/frame_*.ext
+        List<(string VideoDir, int ClassIndex)> videos;
 
         if (_options.UseDirectoryLabels)
         {
@@ -87,17 +108,22 @@ public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
                 .ToList();
             _numClasses = _classNames.Count;
 
-            samples = new List<(string, int)>();
+            if (_numClasses == 0)
+                throw new InvalidOperationException($"No class subdirectories found in {rootDir}.");
+
+            videos = new List<(string, int)>();
             for (int classIdx = 0; classIdx < classDirs.Count; classIdx++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var files = Directory.GetFiles(classDirs[classIdx], "*.*", SearchOption.TopDirectoryOnly)
-                    .Where(f => extensions.Contains(Path.GetExtension(f)))
-                    .ToList();
 
-                foreach (var file in files)
+                foreach (string videoDir in Directory.GetDirectories(classDirs[classIdx]))
                 {
-                    samples.Add((file, classIdx));
+                    // Verify the directory contains frame images
+                    var framePaths = GetSortedFramePaths(videoDir, frameExtensions);
+                    if (framePaths.Length > 0)
+                    {
+                        videos.Add((videoDir, classIdx));
+                    }
                 }
             }
         }
@@ -106,24 +132,29 @@ public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             _classNames = new List<string> { "default" };
             _numClasses = 1;
 
-            samples = Directory.GetFiles(rootDir, "*.*", SearchOption.TopDirectoryOnly)
-                .Where(f => extensions.Contains(Path.GetExtension(f)))
-                .Select(f => (f, 0))
-                .ToList();
+            videos = new List<(string, int)>();
+            foreach (string videoDir in Directory.GetDirectories(rootDir))
+            {
+                var dirFrames = GetSortedFramePaths(videoDir, frameExtensions);
+                if (dirFrames.Length > 0)
+                {
+                    videos.Add((videoDir, 0));
+                }
+            }
         }
 
-        if (_options.MaxSamples.HasValue && _options.MaxSamples.Value < samples.Count)
+        if (_options.MaxSamples.HasValue && _options.MaxSamples.Value < videos.Count)
         {
             var random = _options.RandomSeed.HasValue
                 ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
                 : RandomHelper.CreateSecureRandom();
-            samples = samples.OrderBy(_ => random.Next()).Take(_options.MaxSamples.Value).ToList();
+            videos = videos.OrderBy(_ => random.Next()).Take(_options.MaxSamples.Value).ToList();
         }
 
-        _sampleCount = samples.Count;
+        _sampleCount = videos.Count;
         if (_sampleCount == 0)
         {
-            throw new InvalidOperationException("No video files found matching the specified extensions.");
+            throw new InvalidOperationException("No video frame directories found.");
         }
 
         int frames = _options.FramesPerVideo;
@@ -139,42 +170,28 @@ public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var (filePath, classIndex) = samples[i];
-            byte[] rawBytes = File.ReadAllBytes(filePath);
+            var (videoDir, classIndex) = videos[i];
+            var framePaths = GetSortedFramePaths(videoDir, frameExtensions);
 
-            // Sample frames uniformly from the byte stream
-            int bytesPerFrame = pixelsPerFrame;
-            int totalFramesAvailable = rawBytes.Length / Math.Max(1, bytesPerFrame);
-            int frameStride = totalFramesAvailable > frames
-                ? totalFramesAvailable / frames
-                : 1;
-
-            int featureOffset = i * frames * pixelsPerFrame;
+            // Sample frames uniformly across the video
+            int totalAvailableFrames = framePaths.Length;
             for (int f = 0; f < frames; f++)
             {
-                int byteStart = (f * frameStride) * bytesPerFrame;
-                for (int p = 0; p < pixelsPerFrame; p++)
-                {
-                    int srcIdx = byteStart + p;
-                    double value = srcIdx < rawBytes.Length ? rawBytes[srcIdx] : 0;
-                    if (_options.NormalizePixels)
-                    {
-                        value /= 255.0;
-                    }
+                // Uniform sampling: pick frame index proportional to position
+                int frameIdx = totalAvailableFrames <= frames
+                    ? Math.Min(f, totalAvailableFrames - 1)
+                    : (int)((long)f * (totalAvailableFrames - 1) / (frames - 1));
 
-                    featuresData[featureOffset + f * pixelsPerFrame + p] = NumOps.FromDouble(value);
-                }
+                T[] framePixels = LoadFramePixels(framePaths[frameIdx], w, h, c);
+                int dstOffset = (i * frames + f) * pixelsPerFrame;
+                Array.Copy(framePixels, 0, featuresData, dstOffset, pixelsPerFrame);
             }
 
-            int labelOffset = i * _numClasses;
-            labelsData[labelOffset + classIndex] = NumOps.One;
+            labelsData[i * _numClasses + classIndex] = NumOps.One;
         }
 
-        var features = new Tensor<T>(featuresData, new[] { _sampleCount, frames, h, w, c });
-        var labels = new Tensor<T>(labelsData, new[] { _sampleCount, _numClasses });
-
-        LoadedFeatures = features;
-        LoadedLabels = labels;
+        LoadedFeatures = new Tensor<T>(featuresData, new[] { _sampleCount, frames, h, w, c });
+        LoadedLabels = new Tensor<T>(labelsData, new[] { _sampleCount, _numClasses });
         InitializeIndices(_sampleCount);
 
         return Task.CompletedTask;
@@ -218,15 +235,86 @@ public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
 
         return (
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Take(trainSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Take(trainSize).ToArray())),
+                ExtractTensorBatch(LoadedFeatures ?? throw new InvalidOperationException("Not loaded."),
+                    shuffled.Take(trainSize).ToArray()),
+                ExtractTensorBatch(LoadedLabels ?? throw new InvalidOperationException("Not loaded."),
+                    shuffled.Take(trainSize).ToArray())),
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Skip(trainSize).Take(valSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Skip(trainSize).Take(valSize).ToArray())),
+                ExtractTensorBatch(LoadedFeatures ?? throw new InvalidOperationException("Not loaded."),
+                    shuffled.Skip(trainSize).Take(valSize).ToArray()),
+                ExtractTensorBatch(LoadedLabels ?? throw new InvalidOperationException("Not loaded."),
+                    shuffled.Skip(trainSize).Take(valSize).ToArray())),
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Skip(trainSize + valSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Skip(trainSize + valSize).ToArray()))
+                ExtractTensorBatch(LoadedFeatures ?? throw new InvalidOperationException("Not loaded."),
+                    shuffled.Skip(trainSize + valSize).ToArray()),
+                ExtractTensorBatch(LoadedLabels ?? throw new InvalidOperationException("Not loaded."),
+                    shuffled.Skip(trainSize + valSize).ToArray()))
         );
+    }
+
+    private static string[] GetSortedFramePaths(string videoDir, HashSet<string> extensions)
+    {
+        if (!Directory.Exists(videoDir)) return Array.Empty<string>();
+
+        var frames = Directory.GetFiles(videoDir)
+            .Where(f => extensions.Contains(Path.GetExtension(f)))
+            .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return frames;
+    }
+
+    private T[] LoadFramePixels(string framePath, int targetWidth, int targetHeight, int targetChannels)
+    {
+        // Load image using ImageHelper which properly decodes BMP, PPM, PGM
+        // ImageHelper returns [1, C, H, W] in CHW format
+        Tensor<T> imageTensor = ImageHelper<T>.LoadImage(framePath, _options.NormalizePixels);
+
+        int srcChannels = imageTensor.Shape[1];
+        int srcHeight = imageTensor.Shape[2];
+        int srcWidth = imageTensor.Shape[3];
+        var srcSpan = imageTensor.AsSpan();
+
+        int totalPixels = targetHeight * targetWidth * targetChannels;
+        var pixels = new T[totalPixels];
+
+        // Bilinear resize from source to target, converting CHW -> HWC
+        for (int y = 0; y < targetHeight; y++)
+        {
+            for (int x = 0; x < targetWidth; x++)
+            {
+                double srcY = (double)y * (srcHeight - 1) / Math.Max(1, targetHeight - 1);
+                double srcX = (double)x * (srcWidth - 1) / Math.Max(1, targetWidth - 1);
+
+                int y0 = (int)Math.Floor(srcY);
+                int y1 = Math.Min(y0 + 1, srcHeight - 1);
+                int x0 = (int)Math.Floor(srcX);
+                int x1 = Math.Min(x0 + 1, srcWidth - 1);
+
+                double dy = srcY - y0;
+                double dx = srcX - x0;
+
+                for (int ch = 0; ch < targetChannels; ch++)
+                {
+                    int srcCh = ch < srcChannels ? ch : (srcChannels == 1 ? 0 : ch);
+                    int chOffset = srcCh * srcHeight * srcWidth;
+
+                    double v00 = NumOps.ToDouble(srcSpan[chOffset + y0 * srcWidth + x0]);
+                    double v01 = NumOps.ToDouble(srcSpan[chOffset + y0 * srcWidth + x1]);
+                    double v10 = NumOps.ToDouble(srcSpan[chOffset + y1 * srcWidth + x0]);
+                    double v11 = NumOps.ToDouble(srcSpan[chOffset + y1 * srcWidth + x1]);
+
+                    double value = v00 * (1 - dx) * (1 - dy) +
+                                   v01 * dx * (1 - dy) +
+                                   v10 * (1 - dx) * dy +
+                                   v11 * dx * dy;
+
+                    pixels[(y * targetWidth + x) * targetChannels + ch] = NumOps.FromDouble(value);
+                }
+            }
+        }
+
+        return pixels;
     }
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)

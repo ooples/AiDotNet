@@ -3,32 +3,40 @@ namespace AiDotNet.Data.Video;
 /// <summary>
 /// Configuration options for the <see cref="VideoFrameDataset{T}"/>.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Videos are represented as directories of sequentially numbered image frames.
+/// This is the standard format for preprocessed ML video datasets (UCF-101, Kinetics, etc.).
+/// Structure: root/class_name/video_name/frame_001.bmp, frame_002.bmp, ...
+/// </para>
+/// </remarks>
 public sealed class VideoFrameDatasetOptions
 {
     /// <summary>
-    /// Root directory containing video files or class subdirectories.
+    /// Root directory containing class subdirectories, each with video subdirectories containing frame images.
     /// </summary>
     public string RootDirectory { get; set; } = string.Empty;
 
     /// <summary>
-    /// File extensions to include. Default is common video formats.
+    /// File extensions for frame images. Default supports formats decoded by ImageHelper (BMP, PPM, PGM).
     /// </summary>
-    public string[] Extensions { get; set; } = new[] { ".mp4", ".avi", ".mkv", ".mov", ".wmv" };
+    public string[] FrameExtensions { get; set; } = new[] { ".bmp", ".ppm", ".pgm" };
 
     /// <summary>
-    /// Number of frames to extract per video. Default is 16.
+    /// Number of frames to sample per video. Default is 16.
+    /// Frames are sampled uniformly across the video duration.
     /// </summary>
     public int FramesPerVideo { get; set; } = 16;
 
     /// <summary>
-    /// Target frame width in pixels. Default is 224.
+    /// Target frame width in pixels. Default is 112.
     /// </summary>
-    public int FrameWidth { get; set; } = 224;
+    public int FrameWidth { get; set; } = 112;
 
     /// <summary>
-    /// Target frame height in pixels. Default is 224.
+    /// Target frame height in pixels. Default is 112.
     /// </summary>
-    public int FrameHeight { get; set; } = 224;
+    public int FrameHeight { get; set; } = 112;
 
     /// <summary>
     /// Number of color channels per frame. Default is 3 (RGB).
@@ -51,7 +59,7 @@ public sealed class VideoFrameDatasetOptions
     public int? RandomSeed { get; set; }
 
     /// <summary>
-    /// Whether class labels are determined by subdirectory names. Default is true.
+    /// Whether class labels are determined by parent directory names. Default is true.
     /// </summary>
     public bool UseDirectoryLabels { get; set; } = true;
 }

@@ -212,32 +212,153 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         byte[] rawBytes = File.ReadAllBytes(filePath);
         var samples = new T[_samplesPerFile];
 
-        // Simple WAV parsing: skip 44-byte header for standard WAV files
         string ext = Path.GetExtension(filePath);
-        int headerOffset = ext.Equals(".wav", StringComparison.OrdinalIgnoreCase) ? 44 : 0;
-        int dataLength = rawBytes.Length - headerOffset;
-
-        // Assume 16-bit signed PCM
-        int numRawSamples = dataLength / 2;
-        int copyLen = Math.Min(numRawSamples, _samplesPerFile);
-
-        for (int j = 0; j < copyLen; j++)
+        if (ext.Equals(".wav", StringComparison.OrdinalIgnoreCase))
         {
-            int byteIdx = headerOffset + j * 2;
-            if (byteIdx + 1 < rawBytes.Length)
-            {
-                short sample = (short)(rawBytes[byteIdx] | (rawBytes[byteIdx + 1] << 8));
-                double value = sample;
-                if (_options.Normalize)
-                {
-                    value /= 32768.0;
-                }
-
-                samples[j] = NumOps.FromDouble(value);
-            }
+            LoadWavSamples(rawBytes, samples);
+        }
+        else
+        {
+            // Raw PCM: assume 16-bit signed little-endian
+            LoadPcmSamples(rawBytes, 0, rawBytes.Length, 16, 1, samples);
         }
 
         return samples;
+    }
+
+    private void LoadWavSamples(byte[] rawBytes, T[] samples)
+    {
+        // Parse RIFF/WAVE header properly
+        if (rawBytes.Length < 12)
+            throw new InvalidDataException("File too small to be a valid WAV file.");
+
+        // Check RIFF header
+        string riffTag = System.Text.Encoding.ASCII.GetString(rawBytes, 0, 4);
+        string waveTag = System.Text.Encoding.ASCII.GetString(rawBytes, 8, 4);
+        if (riffTag != "RIFF" || waveTag != "WAVE")
+            throw new InvalidDataException("Not a valid WAV file (missing RIFF/WAVE header).");
+
+        // Walk through chunks to find 'fmt ' and 'data'
+        int bitsPerSample = 16;
+        int numChannels = 1;
+        int dataOffset = -1;
+        int dataSize = 0;
+
+        int pos = 12;
+        while (pos + 8 <= rawBytes.Length)
+        {
+            string chunkId = System.Text.Encoding.ASCII.GetString(rawBytes, pos, 4);
+            int chunkSize = BitConverter.ToInt32(rawBytes, pos + 4);
+
+            if (chunkId == "fmt ")
+            {
+                if (chunkSize >= 16 && pos + 8 + 16 <= rawBytes.Length)
+                {
+                    int audioFormat = BitConverter.ToInt16(rawBytes, pos + 8);
+                    numChannels = BitConverter.ToInt16(rawBytes, pos + 10);
+                    // int sampleRate = BitConverter.ToInt32(rawBytes, pos + 12);
+                    // int byteRate = BitConverter.ToInt32(rawBytes, pos + 16);
+                    // int blockAlign = BitConverter.ToInt16(rawBytes, pos + 20);
+                    bitsPerSample = BitConverter.ToInt16(rawBytes, pos + 22);
+
+                    if (audioFormat != 1) // PCM
+                        throw new InvalidDataException(
+                            $"Unsupported WAV format: {audioFormat}. Only PCM (format 1) is supported.");
+                }
+            }
+            else if (chunkId == "data")
+            {
+                dataOffset = pos + 8;
+                dataSize = chunkSize;
+                break;
+            }
+
+            // Move to next chunk (chunks are word-aligned)
+            pos += 8 + chunkSize;
+            if (chunkSize % 2 != 0) pos++;
+        }
+
+        if (dataOffset < 0)
+            throw new InvalidDataException("WAV file missing 'data' chunk.");
+
+        LoadPcmSamples(rawBytes, dataOffset, dataSize, bitsPerSample, numChannels, samples);
+    }
+
+    private void LoadPcmSamples(byte[] rawBytes, int dataOffset, int dataSize, int bitsPerSample,
+        int numChannels, T[] samples)
+    {
+        int bytesPerSample = bitsPerSample / 8;
+        int bytesPerFrame = bytesPerSample * numChannels;
+
+        if (bytesPerFrame == 0) return;
+
+        int totalFrames = dataSize / bytesPerFrame;
+        int framesToRead = Math.Min(totalFrames, _samplesPerFile);
+
+        for (int i = 0; i < framesToRead; i++)
+        {
+            int frameOffset = dataOffset + i * bytesPerFrame;
+            if (frameOffset + bytesPerSample > rawBytes.Length) break;
+
+            double value;
+            if (bitsPerSample == 8)
+            {
+                // 8-bit PCM is unsigned (0-255, centered at 128)
+                value = rawBytes[frameOffset] - 128.0;
+                if (_options.Normalize) value /= 128.0;
+            }
+            else if (bitsPerSample == 16)
+            {
+                short pcm16 = (short)(rawBytes[frameOffset] | (rawBytes[frameOffset + 1] << 8));
+                value = pcm16;
+                if (_options.Normalize) value /= 32768.0;
+            }
+            else if (bitsPerSample == 24)
+            {
+                int pcm24 = rawBytes[frameOffset] | (rawBytes[frameOffset + 1] << 8) | (rawBytes[frameOffset + 2] << 16);
+                if ((pcm24 & 0x800000) != 0) pcm24 |= unchecked((int)0xFF000000); // Sign extend
+                value = pcm24;
+                if (_options.Normalize) value /= 8388608.0;
+            }
+            else if (bitsPerSample == 32)
+            {
+                int pcm32 = BitConverter.ToInt32(rawBytes, frameOffset);
+                value = pcm32;
+                if (_options.Normalize) value /= 2147483648.0;
+            }
+            else
+            {
+                throw new InvalidDataException($"Unsupported bits per sample: {bitsPerSample}. Supported: 8, 16, 24, 32.");
+            }
+
+            // If multi-channel and Mono requested, average all channels
+            if (numChannels > 1 && _options.Mono)
+            {
+                double sum = value;
+                for (int ch = 1; ch < numChannels; ch++)
+                {
+                    int chOffset = frameOffset + ch * bytesPerSample;
+                    if (chOffset + bytesPerSample > rawBytes.Length) break;
+
+                    if (bitsPerSample == 16)
+                    {
+                        short s = (short)(rawBytes[chOffset] | (rawBytes[chOffset + 1] << 8));
+                        double chVal = s;
+                        if (_options.Normalize) chVal /= 32768.0;
+                        sum += chVal;
+                    }
+                    else if (bitsPerSample == 8)
+                    {
+                        double chVal = rawBytes[chOffset] - 128.0;
+                        if (_options.Normalize) chVal /= 128.0;
+                        sum += chVal;
+                    }
+                }
+                value = sum / numChannels;
+            }
+
+            samples[i] = NumOps.FromDouble(value);
+        }
     }
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)
