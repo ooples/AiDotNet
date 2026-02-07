@@ -1350,51 +1350,6 @@ public static class DataLoaders
     }
 
     /// <summary>
-    /// Creates a raw WebDataset reader for reading samples from TAR archives.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this for low-level access to TAR archive samples as raw bytes.
-    /// For a typed data loader compatible with AiModelBuilder, use the generic overload instead.
-    /// <code>
-    /// var dataset = DataLoaders.FromWebDataset("shard-{000..099}.tar");
-    /// foreach (var sample in dataset.ReadSamples())
-    /// {
-    ///     byte[] imageBytes = sample["jpg"];
-    ///     byte[] labelBytes = sample["cls"];
-    /// }
-    /// </code>
-    /// </para>
-    /// </remarks>
-    /// <param name="tarPaths">One or more paths to TAR archive files.</param>
-    /// <param name="options">Optional WebDataset configuration.</param>
-    /// <returns>A WebDataset reader.</returns>
-    public static WebDataset FromWebDataset(string[] tarPaths, WebDatasetOptions? options = null)
-    {
-        if (tarPaths is null || tarPaths.Length == 0)
-        {
-            throw new ArgumentException("At least one TAR path is required.", nameof(tarPaths));
-        }
-
-        return new WebDataset(tarPaths, options);
-    }
-
-    /// <summary>
-    /// Creates a raw WebDataset reader for a single TAR archive.
-    /// </summary>
-    /// <param name="tarPath">Path to the TAR archive file.</param>
-    /// <param name="options">Optional WebDataset configuration.</param>
-    /// <returns>A WebDataset reader.</returns>
-    public static WebDataset FromWebDataset(string tarPath, WebDatasetOptions? options = null)
-    {
-        if (string.IsNullOrWhiteSpace(tarPath))
-        {
-            throw new ArgumentNullException(nameof(tarPath));
-        }
-
-        return new WebDataset(tarPath, options);
-    }
-
-    /// <summary>
     /// Creates a typed JSONL data loader for reading JSON Lines files,
     /// compatible with <c>AiModelBuilder.ConfigureDataLoader()</c>.
     /// </summary>
@@ -1476,62 +1431,6 @@ public static class DataLoaders
     }
 
     /// <summary>
-    /// Creates a raw JSONL streaming loader for reading JSON Lines files line-by-line.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this for low-level access to JSONL records as JObjects.
-    /// For a typed data loader compatible with AiModelBuilder, use the generic overload instead.
-    /// <code>
-    /// var loader = DataLoaders.FromJsonl("train.jsonl", textField: "text", labelField: "label");
-    /// foreach (var record in loader.ReadRecords())
-    /// {
-    ///     string text = record["text"]?.ToString() ?? "";
-    /// }
-    /// </code>
-    /// </para>
-    /// </remarks>
-    /// <param name="filePath">Path to the JSONL file.</param>
-    /// <param name="textField">Optional field name for text content.</param>
-    /// <param name="labelField">Optional field name for labels.</param>
-    /// <param name="shuffleBufferSize">Buffer size for shuffling (0 = no shuffle).</param>
-    /// <returns>A JSONL streaming loader.</returns>
-    public static JsonlStreamingLoader FromJsonl(
-        string filePath,
-        string? textField = null,
-        string? labelField = null,
-        int shuffleBufferSize = 0)
-    {
-        if (string.IsNullOrWhiteSpace(filePath))
-        {
-            throw new ArgumentNullException(nameof(filePath));
-        }
-
-        return new JsonlStreamingLoader(filePath, textField, labelField, shuffleBufferSize);
-    }
-
-    /// <summary>
-    /// Creates a raw JSONL streaming loader for reading multiple JSONL files.
-    /// </summary>
-    /// <param name="filePaths">Paths to the JSONL files.</param>
-    /// <param name="textField">Optional field name for text content.</param>
-    /// <param name="labelField">Optional field name for labels.</param>
-    /// <param name="shuffleBufferSize">Buffer size for shuffling (0 = no shuffle).</param>
-    /// <returns>A JSONL streaming loader.</returns>
-    public static JsonlStreamingLoader FromJsonl(
-        string[] filePaths,
-        string? textField = null,
-        string? labelField = null,
-        int shuffleBufferSize = 0)
-    {
-        if (filePaths is null || filePaths.Length == 0)
-        {
-            throw new ArgumentException("At least one file path is required.", nameof(filePaths));
-        }
-
-        return new JsonlStreamingLoader(filePaths, textField, labelField, shuffleBufferSize);
-    }
-
-    /// <summary>
     /// Creates a typed sharded streaming data loader for deterministic, resumable reading,
     /// compatible with <c>AiModelBuilder.ConfigureDataLoader()</c>.
     /// </summary>
@@ -1573,36 +1472,6 @@ public static class DataLoaders
         }
 
         return new ShardedStreamingDataLoader<T>(shardPaths, recordParser, batchSize, options);
-    }
-
-    /// <summary>
-    /// Creates a raw sharded streaming dataset for deterministic, resumable reading from binary shard files.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this for low-level access to sharded binary records.
-    /// For a typed data loader compatible with AiModelBuilder, use the generic overload instead.
-    /// <code>
-    /// var dataset = DataLoaders.FromShards(new[] { "shard_0.bin", "shard_1.bin" });
-    /// foreach (var sample in dataset.ReadRecords())
-    /// {
-    ///     // Process sample bytes
-    /// }
-    /// </code>
-    /// </para>
-    /// </remarks>
-    /// <param name="shardPaths">Paths to the shard files.</param>
-    /// <param name="options">Optional sharded streaming configuration.</param>
-    /// <returns>A sharded streaming dataset.</returns>
-    public static ShardedStreamingDataset FromShards(
-        string[] shardPaths,
-        ShardedStreamingDatasetOptions? options = null)
-    {
-        if (shardPaths is null || shardPaths.Length == 0)
-        {
-            throw new ArgumentException("At least one shard path is required.", nameof(shardPaths));
-        }
-
-        return new ShardedStreamingDataset(shardPaths, options);
     }
 
     #endregion
