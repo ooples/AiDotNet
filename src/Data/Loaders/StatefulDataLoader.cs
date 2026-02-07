@@ -115,10 +115,15 @@ public class StatefulDataLoader<T, TInput, TOutput> :
         // Reset and reload to the saved position
         _inner.Reset();
 
-        // If shuffled indices were saved, restore the shuffle order
+        // Restore the shuffle order so batches are replayed in the same sequence
         if (state.ShuffledIndices is not null && state.ShuffledIndices.Length > 0)
         {
             _currentShuffledIndices = (int[])state.ShuffledIndices.Clone();
+            // Reapply the same shuffle seed so the inner loader uses the same ordering
+            if (state.RandomSeed.HasValue)
+            {
+                _inner.Shuffle(state.RandomSeed.Value);
+            }
         }
 
         // Advance to the saved position by consuming batches

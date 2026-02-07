@@ -74,6 +74,16 @@ public class TokenizedTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
             throw new ArgumentOutOfRangeException(nameof(sequenceLength), "Sequence length must be positive.");
         }
 
+        for (int i = 0; i < labels.Length; i++)
+        {
+            if (labels[i] < 0)
+            {
+                throw new ArgumentException(
+                    $"Label at index {i} is negative ({labels[i]}). All labels must be non-negative.",
+                    nameof(labels));
+            }
+        }
+
         _sequenceLength = sequenceLength;
         _numClasses = labels.Length > 0 ? labels.Max() + 1 : 0;
 
@@ -87,6 +97,14 @@ public class TokenizedTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
                 int copyLen = Math.Min(tokenIds[i].Length, sequenceLength);
                 Array.Copy(tokenIds[i], _tokenIds[i], copyLen);
                 for (int j = copyLen; j < sequenceLength; j++)
+                {
+                    _tokenIds[i][j] = paddingTokenId;
+                }
+            }
+            else
+            {
+                // Null sequence - fill entirely with padding token
+                for (int j = 0; j < sequenceLength; j++)
                 {
                     _tokenIds[i][j] = paddingTokenId;
                 }
@@ -162,16 +180,19 @@ public class TokenizedTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
             : RandomHelper.CreateSecureRandom();
         var shuffled = Enumerable.Range(0, n).OrderBy(_ => random.Next()).ToArray();
 
+        var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded. Call LoadAsync() first.");
+        var labels = LoadedLabels ?? throw new InvalidOperationException("Labels not loaded. Call LoadAsync() first.");
+
         return (
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Take(trainSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Take(trainSize).ToArray())),
+                ExtractTensorBatch(features, shuffled.Take(trainSize).ToArray()),
+                ExtractTensorBatch(labels, shuffled.Take(trainSize).ToArray())),
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Skip(trainSize).Take(valSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Skip(trainSize).Take(valSize).ToArray())),
+                ExtractTensorBatch(features, shuffled.Skip(trainSize).Take(valSize).ToArray()),
+                ExtractTensorBatch(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Skip(trainSize + valSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Skip(trainSize + valSize).ToArray()))
+                ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()),
+                ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
         );
     }
 

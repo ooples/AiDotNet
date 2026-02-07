@@ -117,7 +117,11 @@ public class TransformedDataLoader<T> :
     {
         // Split the inner loader, then wrap each part with the same transform
         var (train, val, test) = _inner.Split(trainRatio, validationRatio, seed);
-        return (train, val, test);
+        return (
+            new TransformedDataLoader<T>((InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>)train, _transform),
+            new TransformedDataLoader<T>((InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>)val, _transform),
+            new TransformedDataLoader<T>((InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>)test, _transform)
+        );
     }
 
     /// <inheritdoc/>

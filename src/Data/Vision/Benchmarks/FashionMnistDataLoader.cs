@@ -15,7 +15,7 @@ namespace AiDotNet.Data.Vision.Benchmarks;
 /// </remarks>
 public class FashionMnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>
 {
-    private static readonly string BaseUrl = "http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/";
+    private static readonly string BaseUrl = "https://fashion-mnist.s3-website.eu-central-1.amazonaws.com/";
     private static readonly string TrainImagesFile = "train-images-idx3-ubyte";
     private static readonly string TrainLabelsFile = "train-labels-idx1-ubyte";
     private static readonly string TestImagesFile = "t10k-images-idx3-ubyte";
@@ -119,6 +119,10 @@ public class FashionMnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
             }
 
             int label = labelBytes[8 + i];
+            if (label < 0 || label >= 10)
+            {
+                throw new InvalidDataException($"Invalid label {label} at sample {i}. Expected 0-9.");
+            }
             labelsData[i * 10 + label] = NumOps.One;
         }
 
@@ -158,16 +162,19 @@ public class FashionMnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
             : Tensors.Helpers.RandomHelper.CreateSecureRandom();
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
 
+        var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded. Call LoadAsync() first.");
+        var labels = LoadedLabels ?? throw new InvalidOperationException("Labels not loaded. Call LoadAsync() first.");
+
         return (
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Take(trainSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Take(trainSize).ToArray())),
+                ExtractTensorBatch(features, shuffled.Take(trainSize).ToArray()),
+                ExtractTensorBatch(labels, shuffled.Take(trainSize).ToArray())),
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Skip(trainSize).Take(valSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Skip(trainSize).Take(valSize).ToArray())),
+                ExtractTensorBatch(features, shuffled.Skip(trainSize).Take(valSize).ToArray()),
+                ExtractTensorBatch(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Skip(trainSize + valSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Skip(trainSize + valSize).ToArray()))
+                ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()),
+                ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
         );
     }
 

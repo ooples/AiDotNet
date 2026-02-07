@@ -155,16 +155,19 @@ public class Cifar10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             ? Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value)
             : Tensors.Helpers.RandomHelper.CreateSecureRandom();
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
+        var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded. Call LoadAsync() first.");
+        var labels = LoadedLabels ?? throw new InvalidOperationException("Labels not loaded. Call LoadAsync() first.");
+
         return (
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Take(trainSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Take(trainSize).ToArray())),
+                ExtractTensorBatch(features, shuffled.Take(trainSize).ToArray()),
+                ExtractTensorBatch(labels, shuffled.Take(trainSize).ToArray())),
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Skip(trainSize).Take(valSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Skip(trainSize).Take(valSize).ToArray())),
+                ExtractTensorBatch(features, shuffled.Skip(trainSize).Take(valSize).ToArray()),
+                ExtractTensorBatch(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(
-                ExtractTensorBatch(LoadedFeatures!, shuffled.Skip(trainSize + valSize).ToArray()),
-                ExtractTensorBatch(LoadedLabels!, shuffled.Skip(trainSize + valSize).ToArray()))
+                ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()),
+                ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
         );
     }
 

@@ -178,6 +178,13 @@ public class WebDataset : IDisposable
 
             if (typeFlag == '0' || typeFlag == '\0')
             {
+                // Guard against TAR entries larger than int.MaxValue
+                if (size > int.MaxValue)
+                {
+                    throw new InvalidOperationException(
+                        $"TAR entry '{name}' has size {size} bytes which exceeds the maximum supported size of {int.MaxValue} bytes.");
+                }
+
                 // Regular file - read contents
                 byte[] fileData = new byte[size];
                 ReadFull(stream, fileData, (int)size);
