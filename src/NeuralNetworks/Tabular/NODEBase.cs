@@ -275,9 +275,9 @@ public abstract class NODEBase<T>
         return output;
     }
 
-    private T[] ComputeSoftmax(Tensor<T> weights, int depthIdx)
+    private Vector<T> ComputeSoftmax(Tensor<T> weights, int depthIdx)
     {
-        var result = new T[NumFeatures];
+        var result = new Vector<T>(NumFeatures);
         var maxVal = weights[depthIdx * NumFeatures + 0];
 
         for (int f = 1; f < NumFeatures; f++)

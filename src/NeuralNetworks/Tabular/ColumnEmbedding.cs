@@ -159,14 +159,14 @@ public class ColumnEmbedding<T>
     /// </summary>
     /// <param name="columnIndex">Column index.</param>
     /// <returns>Column embedding [embeddingDim].</returns>
-    public T[] GetColumnEmbedding(int columnIndex)
+    public Vector<T> GetColumnEmbedding(int columnIndex)
     {
         if (columnIndex < 0 || columnIndex >= _numColumns)
         {
             throw new ArgumentOutOfRangeException(nameof(columnIndex));
         }
 
-        var embedding = new T[_embeddingDim];
+        var embedding = new Vector<T>(_embeddingDim);
         for (int d = 0; d < _embeddingDim; d++)
         {
             embedding[d] = _embeddings[columnIndex * _embeddingDim + d];

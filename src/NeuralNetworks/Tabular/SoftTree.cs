@@ -160,7 +160,7 @@ public class SoftTree<T>
         for (int b = 0; b < batchSize; b++)
         {
             // Initialize all paths with probability 1
-            var nodeProbs = new T[_numInternalNodes + _numLeaves];
+            var nodeProbs = new Vector<T>(_numInternalNodes + _numLeaves);
             nodeProbs[0] = NumOps.One;  // Root node
 
             // Traverse tree level by level
@@ -260,9 +260,9 @@ public class SoftTree<T>
     /// <summary>
     /// Gets feature importance based on split weights.
     /// </summary>
-    public T[] GetFeatureImportance()
+    public Vector<T> GetFeatureImportance()
     {
-        var importance = new T[_inputDim];
+        var importance = new Vector<T>(_inputDim);
 
         for (int d = 0; d < _inputDim; d++)
         {

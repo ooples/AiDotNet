@@ -166,7 +166,7 @@ public class GatedFeatureLearningUnit<T>
     /// Gets feature importance based on gate activation magnitudes.
     /// </summary>
     /// <returns>Average gate activation per output dimension.</returns>
-    public T[] GetFeatureImportance()
+    public Vector<T> GetFeatureImportance()
     {
         if (_gateCache == null)
         {
@@ -174,7 +174,7 @@ public class GatedFeatureLearningUnit<T>
         }
 
         int batchSize = _gateCache.Shape[0];
-        var importance = new T[_outputDim];
+        var importance = new Vector<T>(_outputDim);
 
         for (int d = 0; d < _outputDim; d++)
         {

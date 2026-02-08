@@ -89,7 +89,7 @@ public class RetrievalModule<T>
         int labelDim = _trainingLabels.Shape[1];
 
         var neighborIndices = new int[batchSize, actualNeighbors];
-        var neighborDistances = new T[batchSize, actualNeighbors];
+        var neighborDistances = new Matrix<T>(batchSize, actualNeighbors);
         var attentionWeights = new Tensor<T>([batchSize, actualNeighbors]);
         var retrievedValues = new Tensor<T>([batchSize, actualNeighbors, _embeddingDim]);
         var retrievedLabels = new Tensor<T>([batchSize, actualNeighbors, labelDim]);
@@ -138,9 +138,9 @@ public class RetrievalModule<T>
         };
     }
 
-    private T[] ComputeDistances(Tensor<T> queryKeys, int batchIdx)
+    private Vector<T> ComputeDistances(Tensor<T> queryKeys, int batchIdx)
     {
-        var distances = new T[_numTrainingSamples];
+        var distances = new Vector<T>(_numTrainingSamples);
 
         for (int t = 0; t < _numTrainingSamples; t++)
         {
@@ -158,16 +158,16 @@ public class RetrievalModule<T>
         return distances;
     }
 
-    private (int index, T distance)[] GetTopKIndices(T[] distances, int k)
+    private (int index, T distance)[] GetTopKIndices(Vector<T> distances, int k)
     {
         var indexed = distances.Select((d, i) => (index: i, distance: d)).ToArray();
         Array.Sort(indexed, (a, b) => NumOps.Compare(a.distance, b.distance));
         return indexed.Take(k).ToArray();
     }
 
-    private T[] ComputeAttentionWeights(T[,] distances, int batchIdx, int numNeighbors)
+    private Vector<T> ComputeAttentionWeights(Matrix<T> distances, int batchIdx, int numNeighbors)
     {
-        var weights = new T[numNeighbors];
+        var weights = new Vector<T>(numNeighbors);
         var tempScale = NumOps.FromDouble(-1.0 / _temperature);
 
         // Compute exp(-distance / temperature)

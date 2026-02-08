@@ -303,9 +303,9 @@ public class ObliviousDecisionTree<T>
     /// <summary>
     /// Gets feature importance based on selection weights.
     /// </summary>
-    public T[] GetFeatureImportance()
+    public Vector<T> GetFeatureImportance()
     {
-        var importance = new T[_inputDim];
+        var importance = new Vector<T>(_inputDim);
 
         if (_featureSelectionsCache != null)
         {
