@@ -51,6 +51,9 @@ internal class ShardedStreamingDataset : IDisposable
     /// <returns>An enumerable of raw byte records.</returns>
     public IEnumerable<byte[]> ReadRecords(int epoch = 0)
     {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(ShardedStreamingDataset));
+
         string[] shardOrder;
         if (_options.ShuffleShards)
         {

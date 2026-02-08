@@ -176,7 +176,11 @@ internal class WebDataset : IDisposable
         while (true)
         {
             int bytesRead = ReadFull(stream, header, 512);
-            if (bytesRead < 512) break;
+            if (bytesRead == 0) break;
+            if (bytesRead < 512)
+            {
+                throw new InvalidDataException("TAR header is truncated.");
+            }
 
             // Check for zero block
             bool allZero = true;
@@ -218,7 +222,12 @@ internal class WebDataset : IDisposable
                 {
                     int padSize = (int)(512 - remainder);
                     byte[] pad = new byte[padSize];
-                    ReadFull(stream, pad, padSize);
+                    int padRead = ReadFull(stream, pad, padSize);
+                    if (padRead < padSize)
+                    {
+                        throw new InvalidDataException(
+                            $"TAR entry '{name}' padding is truncated: expected {padSize} bytes but only read {padRead}.");
+                    }
                 }
 
                 string ext = Path.GetExtension(name);
@@ -262,7 +271,11 @@ internal class WebDataset : IDisposable
                 {
                     int toRead = (int)Math.Min(skip.Length, remaining);
                     int read = stream.Read(skip, 0, toRead);
-                    if (read == 0) break;
+                    if (read == 0)
+                    {
+                        throw new InvalidDataException(
+                            $"TAR entry '{name}' is truncated while skipping an unknown entry type.");
+                    }
                     remaining -= read;
                 }
             }
