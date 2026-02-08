@@ -198,13 +198,29 @@ internal class AgentHyperparameterApplicator<T>
             {
                 try
                 {
-                    return Enum.Parse(targetType, strVal, ignoreCase: true);
+                    var parsed = Enum.Parse(targetType, strVal, ignoreCase: true);
+                    if (Enum.IsDefined(targetType, parsed))
+                    {
+                        return parsed;
+                    }
                 }
-                catch (ArgumentException)
+                catch (ArgumentException) { }
+                return null;
+            }
+
+            // Handle numeric inputs (e.g., int from JSON deserialization)
+            try
+            {
+                var underlyingEnumType = Enum.GetUnderlyingType(targetType);
+                var numeric = Convert.ChangeType(value, underlyingEnumType, CultureInfo.InvariantCulture);
+                if (numeric != null && Enum.IsDefined(targetType, numeric))
                 {
-                    return null;
+                    return Enum.ToObject(targetType, numeric);
                 }
             }
+            catch (InvalidCastException) { }
+            catch (FormatException) { }
+            catch (OverflowException) { }
 
             return null;
         }
