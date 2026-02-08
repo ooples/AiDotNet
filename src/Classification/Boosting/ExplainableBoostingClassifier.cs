@@ -44,18 +44,18 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// Shape functions for each feature (additive terms).
     /// Indexed as: _shapeFunction[featureIndex][binIndex]
     /// </summary>
-    private T[][] _shapeFunctions;
+    private List<Vector<T>> _shapeFunctions;
 
     /// <summary>
     /// Bin edges for each feature.
     /// Indexed as: _binEdges[featureIndex][edgeIndex]
     /// </summary>
-    private T[][] _binEdges;
+    private List<Vector<T>> _binEdges;
 
     /// <summary>
     /// Interaction terms: pairs of features and their joint effect.
     /// </summary>
-    private Dictionary<(int, int), T[,]> _interactionTerms;
+    private Dictionary<(int, int), Matrix<T>> _interactionTerms;
 
     /// <summary>
     /// The intercept (baseline log-odds).
@@ -85,17 +85,17 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Gets the shape functions for each feature.
     /// </summary>
-    public IReadOnlyList<T[]> ShapeFunctions => _shapeFunctions;
+    public IReadOnlyList<Vector<T>> ShapeFunctions => _shapeFunctions;
 
     /// <summary>
     /// Gets the bin edges for each feature.
     /// </summary>
-    public IReadOnlyList<T[]> BinEdges => _binEdges;
+    public IReadOnlyList<Vector<T>> BinEdges => _binEdges;
 
     /// <summary>
     /// Gets the interaction terms.
     /// </summary>
-    public IReadOnlyDictionary<(int, int), T[,]> InteractionTerms => _interactionTerms;
+    public IReadOnlyDictionary<(int, int), Matrix<T>> InteractionTerms => _interactionTerms;
 
     /// <summary>
     /// Initializes a new instance of ExplainableBoostingClassifier.
@@ -110,7 +110,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         _options = options;
         _shapeFunctions = [];
         _binEdges = [];
-        _interactionTerms = [];
+        _interactionTerms = new Dictionary<(int, int), Matrix<T>>();
         _intercept = NumOps.Zero;
         _numFeatures = 0;
         _random = _options.Seed.HasValue
@@ -152,7 +152,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             : RandomHelper.CreateSecureRandom();
 
         // Convert to binary labels
-        var yBinary = new double[n];
+        var yBinary = new Vector<double>(n);
         T positiveClass = ClassLabels[ClassLabels.Length - 1];
         int posCount = 0;
         for (int i = 0; i < n; i++)
@@ -169,18 +169,19 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         CreateBins(x);
 
         // Initialize shape functions to zero
-        _shapeFunctions = new T[_numFeatures][];
+        _shapeFunctions = new List<Vector<T>>(_numFeatures);
         for (int f = 0; f < _numFeatures; f++)
         {
-            _shapeFunctions[f] = new T[_binEdges[f].Length + 1];
+            var sf = new Vector<T>(_binEdges[f].Length + 1);
             for (int b = 0; b <= _binEdges[f].Length; b++)
             {
-                _shapeFunctions[f][b] = NumOps.Zero;
+                sf[b] = NumOps.Zero;
             }
+            _shapeFunctions.Add(sf);
         }
 
         // Initialize interaction terms
-        _interactionTerms = [];
+        _interactionTerms = new Dictionary<(int, int), Matrix<T>>();
 
         // Map samples to bins for each feature
         var sampleBins = new int[_numFeatures][];
@@ -198,7 +199,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         int roundsWithoutImprovement = 0;
 
         // Maintain running log-odds to avoid recomputing from scratch each iteration
-        var runningLogOdds = new double[n];
+        var runningLogOdds = new Vector<double>(n);
         for (int i = 0; i < n; i++)
         {
             runningLogOdds[i] = NumOps.ToDouble(_intercept);
@@ -356,8 +357,8 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 int bin2 = GetBinIndex(NumOps.ToDouble(input[i, f2]), f2);
 
                 // Ensure we don't go out of bounds
-                int maxBin1 = kvp.Value.GetLength(0) - 1;
-                int maxBin2 = kvp.Value.GetLength(1) - 1;
+                int maxBin1 = kvp.Value.Rows - 1;
+                int maxBin2 = kvp.Value.Columns - 1;
                 bin1 = Math.Min(bin1, maxBin1);
                 bin2 = Math.Min(bin2, maxBin2);
 
@@ -400,8 +401,8 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             int bin1 = GetBinIndex(NumOps.ToDouble(sample[f1]), f1);
             int bin2 = GetBinIndex(NumOps.ToDouble(sample[f2]), f2);
 
-            int maxBin1 = kvp.Value.GetLength(0) - 1;
-            int maxBin2 = kvp.Value.GetLength(1) - 1;
+            int maxBin1 = kvp.Value.Rows - 1;
+            int maxBin2 = kvp.Value.Columns - 1;
             bin1 = Math.Min(bin1, maxBin1);
             bin2 = Math.Min(bin2, maxBin2);
 
@@ -416,7 +417,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// </summary>
     private void CreateBins(Matrix<T> x)
     {
-        _binEdges = new T[_numFeatures][];
+        _binEdges = new List<Vector<T>>(_numFeatures);
 
         for (int f = 0; f < _numFeatures; f++)
         {
@@ -433,7 +434,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             int numBins = Math.Min(_options.MaxBins, values.Count);
             if (numBins <= 1)
             {
-                _binEdges[f] = [];
+                _binEdges.Add(new Vector<T>(0));
                 continue;
             }
 
@@ -444,7 +445,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 idx = Math.Max(0, Math.Min(idx, values.Count - 1));
                 edges.Add(NumOps.FromDouble(values[idx]));
             }
-            _binEdges[f] = edges.Distinct().ToArray();
+            _binEdges.Add(new Vector<T>(edges.Distinct()));
         }
     }
 
@@ -467,10 +468,10 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Computes log-odds for all samples.
     /// </summary>
-    private double[] ComputeLogOdds(Matrix<T> x, int[][] sampleBins)
+    private Vector<double> ComputeLogOdds(Matrix<T> x, int[][] sampleBins)
     {
         int n = x.Rows;
-        var logOdds = new double[n];
+        var logOdds = new Vector<double>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -504,7 +505,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Computes log loss.
     /// </summary>
-    private static double ComputeLogLoss(double[] logOdds, double[] yBinary)
+    private static double ComputeLogLoss(Vector<double> logOdds, Vector<double> yBinary)
     {
         double loss = 0;
         for (int i = 0; i < logOdds.Length; i++)
@@ -519,11 +520,11 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Detects important pairwise interactions and trains them with cyclic boosting.
     /// </summary>
-    private void DetectInteractions(Matrix<T> x, int[][] sampleBins, double[] yBinary)
+    private void DetectInteractions(Matrix<T> x, int[][] sampleBins, Vector<double> yBinary)
     {
         int n = x.Rows;
         var logOdds = ComputeLogOdds(x, sampleBins);
-        var residuals = new double[n];
+        var residuals = new Vector<double>(n);
         for (int i = 0; i < n; i++)
         {
             residuals[i] = yBinary[i] - Sigmoid(logOdds[i]);
@@ -554,13 +555,13 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         {
             int numBins1 = Math.Min(_binEdges[f1].Length + 1, _options.MaxInteractionBins);
             int numBins2 = Math.Min(_binEdges[f2].Length + 1, _options.MaxInteractionBins);
-            _interactionTerms[(f1, f2)] = new T[numBins1, numBins2];
+            _interactionTerms[(f1, f2)] = new Matrix<T>(numBins1, numBins2);
         }
 
         if (_interactionTerms.Count == 0) return;
 
         // Recompute running log-odds including main effects
-        var runningLogOdds = new double[n];
+        var runningLogOdds = new Vector<double>(n);
         for (int i = 0; i < n; i++)
         {
             runningLogOdds[i] = logOdds[i];
@@ -574,8 +575,8 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 int f1 = kvp.Key.Item1;
                 int f2 = kvp.Key.Item2;
                 var term = kvp.Value;
-                int numBins1 = term.GetLength(0);
-                int numBins2 = term.GetLength(1);
+                int numBins1 = term.Rows;
+                int numBins2 = term.Columns;
 
                 var binGradients = new double[numBins1, numBins2];
                 var binHessians = new double[numBins1, numBins2];
@@ -685,16 +686,16 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// </summary>
     private void CalculateFeatureImportances()
     {
-        var importances = new T[_numFeatures];
+        var importances = new Vector<T>(_numFeatures);
 
         for (int f = 0; f < _numFeatures; f++)
         {
             // Importance = range of shape function values
             double min = double.MaxValue;
             double max = double.MinValue;
-            foreach (var val in _shapeFunctions[f])
+            for (int b = 0; b < _shapeFunctions[f].Length; b++)
             {
-                double v = NumOps.ToDouble(val);
+                double v = NumOps.ToDouble(_shapeFunctions[f][b]);
                 min = Math.Min(min, v);
                 max = Math.Max(max, v);
             }
@@ -702,7 +703,11 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         }
 
         // Normalize
-        T sum = importances.Aggregate(NumOps.Zero, NumOps.Add);
+        T sum = NumOps.Zero;
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            sum = NumOps.Add(sum, importances[f]);
+        }
         if (NumOps.ToDouble(sum) > 0)
         {
             for (int f = 0; f < _numFeatures; f++)
@@ -711,7 +716,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             }
         }
 
-        FeatureImportances = new Vector<T>(importances);
+        FeatureImportances = importances;
     }
 
     /// <inheritdoc/>
@@ -770,11 +775,11 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         {
             writer.Write(kvp.Key.Item1);
             writer.Write(kvp.Key.Item2);
-            writer.Write(kvp.Value.GetLength(0));
-            writer.Write(kvp.Value.GetLength(1));
-            for (int i = 0; i < kvp.Value.GetLength(0); i++)
+            writer.Write(kvp.Value.Rows);
+            writer.Write(kvp.Value.Columns);
+            for (int i = 0; i < kvp.Value.Rows; i++)
             {
-                for (int j = 0; j < kvp.Value.GetLength(1); j++)
+                for (int j = 0; j < kvp.Value.Columns; j++)
                 {
                     writer.Write(NumOps.ToDouble(kvp.Value[i, j]));
                 }
@@ -808,7 +813,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         _intercept = NumOps.FromDouble(reader.ReadDouble());
 
         // Shape functions
-        _shapeFunctions = new T[_numFeatures][];
+        _shapeFunctions = new List<Vector<T>>(_numFeatures);
         for (int f = 0; f < _numFeatures; f++)
         {
             int len = reader.ReadInt32();
@@ -817,15 +822,16 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 throw new InvalidOperationException(
                     $"Deserialized shape function length ({len}) for feature {f} is out of valid range. Data may be corrupted.");
             }
-            _shapeFunctions[f] = new T[len];
+            var sf = new Vector<T>(len);
             for (int b = 0; b < len; b++)
             {
-                _shapeFunctions[f][b] = NumOps.FromDouble(reader.ReadDouble());
+                sf[b] = NumOps.FromDouble(reader.ReadDouble());
             }
+            _shapeFunctions.Add(sf);
         }
 
         // Bin edges
-        _binEdges = new T[_numFeatures][];
+        _binEdges = new List<Vector<T>>(_numFeatures);
         for (int f = 0; f < _numFeatures; f++)
         {
             int len = reader.ReadInt32();
@@ -834,11 +840,12 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 throw new InvalidOperationException(
                     $"Deserialized bin edges length ({len}) for feature {f} is out of valid range. Data may be corrupted.");
             }
-            _binEdges[f] = new T[len];
+            var edges = new Vector<T>(len);
             for (int e = 0; e < len; e++)
             {
-                _binEdges[f][e] = NumOps.FromDouble(reader.ReadDouble());
+                edges[e] = NumOps.FromDouble(reader.ReadDouble());
             }
+            _binEdges.Add(edges);
         }
 
         // Interaction terms
@@ -848,7 +855,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
             throw new InvalidOperationException(
                 $"Deserialized numInteractions ({numInteractions}) is out of valid range. Data may be corrupted.");
         }
-        _interactionTerms = [];
+        _interactionTerms = new Dictionary<(int, int), Matrix<T>>();
         for (int k = 0; k < numInteractions; k++)
         {
             int f1 = reader.ReadInt32();
@@ -866,7 +873,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
                 throw new InvalidOperationException(
                     $"Deserialized interaction dimensions ({dim1}x{dim2} = {totalElements} elements) exceed maximum allowed ({MaxArrayLength}). Data may be corrupted.");
             }
-            var term = new T[dim1, dim2];
+            var term = new Matrix<T>(dim1, dim2);
             for (int i = 0; i < dim1; i++)
             {
                 for (int j = 0; j < dim2; j++)

@@ -133,7 +133,7 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
         _initPrediction = NumOps.FromDouble(Math.Log(p / (1 - p)));
 
         // Current predictions (log-odds)
-        var predictions = new double[n];
+        var predictions = new Vector<double>(n);
         for (int i = 0; i < n; i++)
         {
             predictions[i] = NumOps.ToDouble(_initPrediction);
@@ -146,8 +146,11 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
         {
             // Perform dropout - select trees to drop
             var droppedIndices = new HashSet<int>();
-            var keptPredictions = new double[n];
-            Array.Copy(predictions, keptPredictions, n);
+            var keptPredictions = new Vector<double>(n);
+            for (int i = 0; i < n; i++)
+            {
+                keptPredictions[i] = predictions[i];
+            }
             var droppedTreePreds = new Dictionary<int, Vector<T>>();
 
             if (_trees.Count > 0)
@@ -297,7 +300,7 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
         var probs = new Matrix<T>(n, NumClasses);
 
         // Compute log-odds predictions
-        var logOdds = new double[n];
+        var logOdds = new Vector<double>(n);
         for (int i = 0; i < n; i++)
         {
             logOdds[i] = NumOps.ToDouble(_initPrediction);
@@ -378,7 +381,7 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Computes log loss for current predictions.
     /// </summary>
-    private double ComputeLoss(double[] logOdds, Vector<T> yBinary)
+    private double ComputeLoss(Vector<double> logOdds, Vector<T> yBinary)
     {
         double loss = 0;
         for (int i = 0; i < logOdds.Length; i++)
@@ -396,7 +399,7 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
     /// </summary>
     private void CalculateFeatureImportances(int featureCount)
     {
-        var importances = new T[featureCount];
+        var importances = new Vector<T>(featureCount);
 
         for (int t = 0; t < _trees.Count; t++)
         {
@@ -411,7 +414,11 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
         }
 
         // Normalize
-        T sum = importances.Aggregate(NumOps.Zero, NumOps.Add);
+        T sum = NumOps.Zero;
+        for (int i = 0; i < featureCount; i++)
+        {
+            sum = NumOps.Add(sum, importances[i]);
+        }
         if (NumOps.ToDouble(sum) > 0)
         {
             for (int i = 0; i < featureCount; i++)
@@ -420,7 +427,7 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
             }
         }
 
-        FeatureImportances = new Vector<T>(importances);
+        FeatureImportances = importances;
     }
 
     /// <inheritdoc/>
@@ -450,7 +457,7 @@ public class DARTClassifier<T> : EnsembleClassifierBase<T>
         writer.Write(baseData.Length);
         writer.Write(baseData);
 
-        writer.Write(Convert.ToDouble(_initPrediction));
+        writer.Write(NumOps.ToDouble(_initPrediction));
         writer.Write(_options.NumberOfIterations);
         writer.Write(_options.LearningRate);
         writer.Write(_options.DropoutRate);
