@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 
@@ -50,6 +51,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class InfoGAN<T> : NeuralNetworkBase<T>
 {
+    private readonly InfoGANOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The optimizer used for training the generator network.
     /// </summary>
@@ -268,10 +274,13 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? qNetworkOptimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double mutualInfoCoefficient = 1.0)
+        double mutualInfoCoefficient = 1.0,
+        InfoGANOptions? options = null)
         : base(CreateInfoGANArchitecture(generatorArchitecture, discriminatorArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
+        _options = options ?? new InfoGANOptions();
+        Options = _options;
         if (generatorArchitecture is null)
             throw new ArgumentNullException(nameof(generatorArchitecture));
         if (discriminatorArchitecture is null)

@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
@@ -36,6 +37,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ACGAN<T> : NeuralNetworkBase<T>
 {
+    private readonly ACGANOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly List<T> _generatorLosses = new List<T>();
     private readonly List<T> _discriminatorLosses = new List<T>();
 
@@ -105,7 +111,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         InputType inputType,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        ACGANOptions? options = null)
         : base(new NeuralNetworkArchitecture<T>(
             InputType.OneDimensional,
             NeuralNetworkTaskType.Generative,
@@ -115,6 +122,9 @@ public class ACGAN<T> : NeuralNetworkBase<T>
             discriminatorArchitecture.OutputSize,
             null), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
+        _options = options ?? new ACGANOptions();
+        Options = _options;
+
         if (generatorArchitecture is null)
         {
             throw new ArgumentNullException(nameof(generatorArchitecture), "Generator architecture cannot be null.");

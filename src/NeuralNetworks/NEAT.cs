@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -35,6 +37,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class NEAT<T> : NeuralNetworkBase<T>
 {
+    private readonly NEATOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the current population of genomes (neural network structures).
     /// </summary>
@@ -199,9 +206,11 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// that will grow more complex through evolution.
     /// </para>
     /// </remarks>
-    public NEAT(NeuralNetworkArchitecture<T> architecture, int populationSize, double mutationRate = 0.1, double crossoverRate = 0.75, ILossFunction<T>? lossFunction = null)
+    public NEAT(NeuralNetworkArchitecture<T> architecture, int populationSize, double mutationRate = 0.1, double crossoverRate = 0.75, ILossFunction<T>? lossFunction = null, NEATOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new NEATOptions();
+        Options = _options;
         _populationSize = populationSize;
         _mutationRate = mutationRate;
         _crossoverRate = crossoverRate;

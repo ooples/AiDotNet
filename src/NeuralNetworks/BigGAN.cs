@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks;
@@ -37,6 +38,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
 public class BigGAN<T> : NeuralNetworkBase<T>
 {
+    private readonly BigGANOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     // Generator optimizer state
     private Vector<T> _genMomentum;
     private Vector<T> _genSecondMoment;
@@ -144,7 +150,8 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         int discriminatorChannels = 96,
         InputType inputType = InputType.TwoDimensional,
         ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.0001)
+        double initialLearningRate = 0.0001,
+        BigGANOptions? options = null)
         : base(new NeuralNetworkArchitecture<T>(
             InputType.OneDimensional,  // Base GAN takes latent vector input (1D)
             NeuralNetworkTaskType.Generative,
@@ -154,6 +161,9 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             imageChannels * imageHeight * imageWidth,  // outputSize
             null), lossFunction ?? new HingeLoss<T>())
     {
+        _options = options ?? new BigGANOptions();
+        Options = _options;
+
         // Input validation
         if (generatorArchitecture is null)
         {

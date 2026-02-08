@@ -8,6 +8,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
@@ -19,6 +20,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimodalModel<T>
 {
+    private readonly UnifiedMultimodalNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Constants
 
     private const int DEFAULT_EMBEDDING_DIM = 768;
@@ -93,9 +99,13 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         int numTransformerLayers = DEFAULT_NUM_LAYERS,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int? seed = null)
+        int? seed = null,
+        UnifiedMultimodalNetworkOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new UnifiedMultimodalNetworkOptions();
+        Options = _options;
+
         _numOps = MathHelper.GetNumericOperations<T>();
         _embeddingDimension = embeddingDimension;
         _maxSequenceLength = maxSequenceLength;

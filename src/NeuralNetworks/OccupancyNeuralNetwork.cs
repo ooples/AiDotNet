@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -20,6 +22,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly OccupancyNeuralNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets a value indicating whether this network processes temporal data.
     /// </summary>
@@ -105,9 +112,12 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         bool includeTemporalData = false,
         int historyWindowSize = 5,
-        ILossFunction<T>? lossFunction = null) :
+        ILossFunction<T>? lossFunction = null,
+        OccupancyNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new OccupancyNeuralNetworkOptions();
+        Options = _options;
         _includeTemporalData = includeTemporalData;
         _historyWindowSize = includeTemporalData ? Math.Max(1, historyWindowSize) : 0;
         _internalSensorHistory = new Queue<Vector<T>>(_historyWindowSize);

@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -31,6 +32,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
 public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 {
+    private readonly ProgressiveGANOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Constants
 
     private const double DefaultLearningRate = 0.001;
@@ -173,7 +179,8 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         InputType inputType = InputType.TwoDimensional,
         ILossFunction<T>? lossFunction = null,
         double initialLearningRate = DefaultLearningRate,
-        double learningRateDecay = DefaultLearningRateDecay)
+        double learningRateDecay = DefaultLearningRateDecay,
+        ProgressiveGANOptions? options = null)
         : base(new NeuralNetworkArchitecture<T>(
             InputType.OneDimensional,  // Base GAN takes latent vector input (1D)
             NeuralNetworkTaskType.Generative,
@@ -183,6 +190,8 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
             imageChannels * 4 * (int)Math.Pow(2, maxResolutionLevel) * 4 * (int)Math.Pow(2, maxResolutionLevel),  // outputSize
             null), lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new ProgressiveGANOptions();
+        Options = _options;
         // Validate inputs
         if (latentSize <= 0)
         {

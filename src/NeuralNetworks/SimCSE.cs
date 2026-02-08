@@ -8,6 +8,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.NeuralNetworks
@@ -33,6 +34,11 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     public class SimCSE<T> : TransformerEmbeddingNetwork<T>
     {
+        private readonly SimCSEOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         #region Fields
 
         private SimCSEType _simCseType;
@@ -63,9 +69,12 @@ namespace AiDotNet.NeuralNetworks
             double dropoutRate = 0.1,
             PoolingStrategy poolingStrategy = PoolingStrategy.ClsToken,
             ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0)
+            double maxGradNorm = 1.0,
+            SimCSEOptions? options = null)
             : base(architecture, tokenizer, optimizer, vocabSize, embeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, poolingStrategy, lossFunction, maxGradNorm)
         {
+            _options = options ?? new SimCSEOptions();
+            Options = _options;
             _simCseType = type;
             _dropoutRate = dropoutRate;
             _vocabSize = vocabSize;

@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -28,6 +30,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class VisionTransformer<T> : NeuralNetworkBase<T>
 {
+    private readonly VisionTransformerOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The size of each square patch.
     /// </summary>
@@ -140,9 +147,13 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         int numLayers = 12,
         int numHeads = 12,
         int mlpDim = 3072,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        VisionTransformerOptions? options = null)
         : base(architecture, lossFunction ?? new CategoricalCrossEntropyLoss<T>())
     {
+        _options = options ?? new VisionTransformerOptions();
+        Options = _options;
+
         // Validate all parameters are positive
         if (imageHeight <= 0)
             throw new ArgumentOutOfRangeException(nameof(imageHeight), imageHeight, "Image height must be greater than 0.");

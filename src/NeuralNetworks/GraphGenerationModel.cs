@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
@@ -50,6 +51,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class GraphGenerationModel<T> : NeuralNetworkBase<T>
 {
+    private readonly GraphGenerationModelOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
@@ -194,11 +200,14 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         double klWeight = 1.0,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
+        double maxGradNorm = 1.0,
+        GraphGenerationModelOptions? options = null)
         : base(CreateArchitecture(inputFeatures, hiddenDim, latentDim, numEncoderLayers),
                lossFunction ?? new BinaryCrossEntropyLoss<T>(),
                maxGradNorm)
     {
+        _options = options ?? new GraphGenerationModelOptions();
+        Options = _options;
         LatentDim = latentDim;
         HiddenDim = hiddenDim;
         NumEncoderLayers = numEncoderLayers;

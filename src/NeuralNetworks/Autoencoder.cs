@@ -1,5 +1,6 @@
 global using AiDotNet.LossFunctions;
 using AiDotNet.Extensions;
+using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -35,6 +36,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    private readonly AutoencoderOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the size of the encoded representation (latent space).
     /// </summary>
@@ -188,9 +194,12 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// These parameters balance learning speed against stability and accuracy.
     /// </para>
     /// </remarks>
-    public Autoencoder(NeuralNetworkArchitecture<T> architecture, T learningRate, int epochs = 1, int batchSize = 32, ILossFunction<T>? lossFunction = null)
+    public Autoencoder(NeuralNetworkArchitecture<T> architecture, T learningRate, int epochs = 1, int batchSize = 32, ILossFunction<T>? lossFunction = null, AutoencoderOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new AutoencoderOptions();
+        Options = _options;
+
         EncodedSize = 0;
         _learningRate = learningRate;
         _epochs = epochs;

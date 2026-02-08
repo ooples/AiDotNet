@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NestedLearning;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -14,6 +15,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type</typeparam>
 public class HopeNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly HopeNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly int _hiddenDim;
     private readonly int _numCMSLevels;
     private readonly int _numRecurrentLayers;
@@ -38,9 +44,12 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         int hiddenDim = 256,
         int numCMSLevels = 4,
         int numRecurrentLayers = 3,
-        int inContextLearningLevels = 5)
+        int inContextLearningLevels = 5,
+        HopeNetworkOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm: 1.0)
     {
+        _options = options ?? new HopeNetworkOptions();
+        Options = _options;
         _hiddenDim = hiddenDim;
         _numCMSLevels = numCMSLevels;
         _numRecurrentLayers = numRecurrentLayers;

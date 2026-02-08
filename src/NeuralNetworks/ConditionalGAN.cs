@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
@@ -35,6 +36,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
 {
+    private readonly ConditionalGANOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly List<T> _generatorLosses = new List<T>();
 
     /// <summary>
@@ -157,7 +163,8 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         InputType inputType,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        ConditionalGANOptions? options = null)
         : base(
             CreateConditionalGeneratorArchitecture(generatorArchitecture, numConditionClasses),
             CreateConditionalDiscriminatorArchitecture(discriminatorArchitecture, numConditionClasses),
@@ -166,6 +173,9 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             discriminatorOptimizer,
             lossFunction)
     {
+        _options = options ?? new ConditionalGANOptions();
+        Options = _options;
+
         // Input validation
         if (generatorArchitecture is null)
         {

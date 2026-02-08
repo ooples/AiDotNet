@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -33,6 +35,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class MemoryNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly MemoryNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the size of the memory (number of memory slots).
     /// </summary>
@@ -142,9 +149,11 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     /// and sets up the layers needed for processing inputs and interacting with memory.
     /// </para>
     /// </remarks>
-    public MemoryNetwork(NeuralNetworkArchitecture<T> architecture, int memorySize, int embeddingSize, ILossFunction<T>? lossFunction = null) :
+    public MemoryNetwork(NeuralNetworkArchitecture<T> architecture, int memorySize, int embeddingSize, ILossFunction<T>? lossFunction = null, MemoryNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new MemoryNetworkOptions();
+        Options = _options;
         _memorySize = memorySize;
         _embeddingSize = embeddingSize;
         _memory = new Matrix<T>(_memorySize, _embeddingSize);

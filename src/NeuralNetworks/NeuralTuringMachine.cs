@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -28,6 +30,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    private readonly NeuralTuringMachineOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets whether auxiliary loss (memory usage regularization) should be used during training.
     /// </summary>
@@ -165,9 +172,12 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? contentAddressingActivation = null,
         IActivationFunction<T>? gateActivation = null,
-        IActivationFunction<T>? outputActivation = null)
+        IActivationFunction<T>? outputActivation = null,
+        NeuralTuringMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new NeuralTuringMachineOptions();
+        Options = _options;
         if (memorySize <= 0) throw new ArgumentOutOfRangeException(nameof(memorySize), "Memory size must be positive");
         if (memoryVectorSize <= 0) throw new ArgumentOutOfRangeException(nameof(memoryVectorSize), "Memory vector size must be positive");
         if (controllerSize <= 0) throw new ArgumentOutOfRangeException(nameof(controllerSize), "Controller size must be positive");
@@ -220,9 +230,12 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         ILossFunction<T>? lossFunction = null,
         IVectorActivationFunction<T>? contentAddressingActivation = null,
         IVectorActivationFunction<T>? gateActivation = null,
-        IVectorActivationFunction<T>? outputActivation = null)
+        IVectorActivationFunction<T>? outputActivation = null,
+        NeuralTuringMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new NeuralTuringMachineOptions();
+        Options = _options;
         if (memorySize <= 0) throw new ArgumentOutOfRangeException(nameof(memorySize), "Memory size must be positive");
         if (memoryVectorSize <= 0) throw new ArgumentOutOfRangeException(nameof(memoryVectorSize), "Memory vector size must be positive");
         if (controllerSize <= 0) throw new ArgumentOutOfRangeException(nameof(controllerSize), "Controller size must be positive");

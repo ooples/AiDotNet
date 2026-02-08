@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -30,6 +32,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class DCGAN<T> : GenerativeAdversarialNetwork<T>
 {
+    private readonly DCGANOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DCGAN{T}"/> class with default DCGAN architecture.
     /// </summary>
@@ -66,7 +73,8 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         int imageWidth,
         int generatorFeatureMaps = 64,
         int discriminatorFeatureMaps = 64,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DCGANOptions? options = null)
         : base(
             CreateDCGANGeneratorArchitecture(latentSize, imageChannels, imageHeight, imageWidth, generatorFeatureMaps),
             CreateDCGANDiscriminatorArchitecture(imageChannels, imageHeight, imageWidth, discriminatorFeatureMaps),
@@ -75,6 +83,8 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
             discriminatorOptimizer: null,
             lossFunction)
     {
+        _options = options ?? new DCGANOptions();
+        Options = _options;
     }
 
     /// <summary>

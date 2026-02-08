@@ -7,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 
@@ -24,6 +25,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioVisualCorrespondenceModel<T>
 {
+    private readonly AudioVisualCorrespondenceOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Constants
 
     private const int DEFAULT_EMBEDDING_DIM = 512;
@@ -108,9 +114,13 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         double videoFrameRate = DEFAULT_FRAME_RATE,
         int numEncoderLayers = 6,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        AudioVisualCorrespondenceOptions? options = null)
         : base(architecture, lossFunction ?? new ContrastiveLoss<T>(), 1.0)
     {
+        _options = options ?? new AudioVisualCorrespondenceOptions();
+        Options = _options;
+
         _embeddingDimension = embeddingDimension;
         _audioSampleRate = audioSampleRate;
         _videoFrameRate = videoFrameRate;

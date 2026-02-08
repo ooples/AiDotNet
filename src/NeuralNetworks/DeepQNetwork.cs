@@ -1,3 +1,4 @@
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 
 namespace AiDotNet.NeuralNetworks;
@@ -29,6 +30,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class DeepQNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly DeepQNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets the number of possible actions the agent can take in the environment.
     /// </summary>
@@ -171,8 +177,8 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// a curiosity level (epsilon) that determines how often they'll experiment versus stick with what they know.
     /// </para>
     /// </remarks>
-    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1.0) :
-        this(architecture, lossFunction, epsilon, isTargetNetwork: false)
+    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1.0, DeepQNetworkOptions? options = null) :
+        this(architecture, lossFunction, epsilon, isTargetNetwork: false, options: options)
     {
     }
 
@@ -183,9 +189,11 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// <param name="lossFunction">The loss function to use for training.</param>
     /// <param name="epsilon">The initial exploration rate.</param>
     /// <param name="isTargetNetwork">If true, this is a target network and won't create its own target network.</param>
-    private DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction, double epsilon, bool isTargetNetwork) :
+    private DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction, double epsilon, bool isTargetNetwork, DeepQNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new DeepQNetworkOptions();
+        Options = _options;
         _epsilon = NumOps.FromDouble(epsilon);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 

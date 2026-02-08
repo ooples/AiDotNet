@@ -1,6 +1,7 @@
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks;
@@ -53,6 +54,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class VGGNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly VGGOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
@@ -123,9 +129,13 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
         VGGConfiguration configuration,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
+        double maxGradNorm = 1.0,
+        VGGOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
+        _options = options ?? new VGGOptions();
+        Options = _options;
+
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
 
         ArchitectureValidator.ValidateInputType(

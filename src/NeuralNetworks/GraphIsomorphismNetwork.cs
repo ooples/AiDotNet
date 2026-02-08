@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -56,6 +57,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly GraphIsomorphismNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
@@ -135,11 +141,14 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         double initialEpsilon = 0.0,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
+        double maxGradNorm = 1.0,
+        GraphIsomorphismNetworkOptions? options = null)
         : base(architecture,
                lossFunction ?? new CrossEntropyLoss<T>(),
                maxGradNorm)
     {
+        _options = options ?? new GraphIsomorphismNetworkOptions();
+        Options = _options;
         LearnEpsilon = learnEpsilon;
         InitialEpsilon = initialEpsilon;
         MlpHiddenDim = mlpHiddenDim;

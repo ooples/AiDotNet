@@ -8,6 +8,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.NeuralNetworks
@@ -39,6 +40,11 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     public class Word2Vec<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
+        private readonly Word2VecOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         #region Fields
 
         /// <summary>
@@ -155,9 +161,13 @@ namespace AiDotNet.NeuralNetworks
             int maxTokens = 512,
             Word2VecType type = Word2VecType.SkipGram,
             ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0)
+            double maxGradNorm = 1.0,
+            Word2VecOptions? options = null)
             : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), maxGradNorm)
         {
+            _options = options ?? new Word2VecOptions();
+            Options = _options;
+
             _tokenizer = tokenizer;
             _vocabSize = vocabSize;
             _embeddingDimension = embeddingDimension;

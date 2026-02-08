@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -31,6 +32,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class UNet3D<T> : NeuralNetworkBase<T>
 {
+    private readonly UNet3DOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The loss function used to compute the error between predictions and targets.
     /// </summary>
@@ -116,9 +122,13 @@ public class UNet3D<T> : NeuralNetworkBase<T>
         int baseFilters = 32,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
+        double maxGradNorm = 1.0,
+        UNet3DOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
+        _options = options ?? new UNet3DOptions();
+        Options = _options;
+
         if (architecture == null)
             throw new ArgumentNullException(nameof(architecture));
         if (voxelResolution <= 0)

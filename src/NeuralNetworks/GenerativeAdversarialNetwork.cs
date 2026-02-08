@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -29,6 +31,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    private readonly GenerativeAdversarialNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets the list of recent generator loss values for monitoring training progress.
     /// </summary>
@@ -346,10 +353,13 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         InputType inputType,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        GenerativeAdversarialNetworkOptions? options = null)
         : base(CreateGANArchitecture(generatorArchitecture, discriminatorArchitecture, inputType),
             lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
+        _options = options ?? new GenerativeAdversarialNetworkOptions();
+        Options = _options;
         // Initialize auxiliary loss fields
         AuxiliaryLossWeight = NumOps.FromDouble(10.0);
         _lastGradientPenalty = NumOps.Zero;

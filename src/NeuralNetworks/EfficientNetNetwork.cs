@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Validation;
 
@@ -60,6 +61,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly EfficientNetOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly EfficientNetConfiguration _configuration;
@@ -92,9 +98,12 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
         EfficientNetConfiguration configuration,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
+        double maxGradNorm = 1.0,
+        EfficientNetOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
+        _options = options ?? new EfficientNetOptions();
+        Options = _options;
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
 
         ArchitectureValidator.ValidateInputType(

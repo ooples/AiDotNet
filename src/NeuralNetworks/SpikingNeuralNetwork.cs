@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -6,6 +8,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly SpikingNeuralNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets the simulation time step for the spiking neural network.
     /// </summary>
@@ -155,9 +162,13 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <param name="simulationSteps">The number of time steps to simulate, defaults to 100.</param>
     /// <param name="vectorActivation">The vector activation function to use. If null, a default activation is used.</param>
     public SpikingNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double timeStep = 0.1, int simulationSteps = 100,
-        IVectorActivationFunction<T>? vectorActivation = null, ILossFunction<T>? lossFunction = null)
+        IVectorActivationFunction<T>? vectorActivation = null, ILossFunction<T>? lossFunction = null,
+        SpikingNeuralNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new SpikingNeuralNetworkOptions();
+        Options = _options;
+
         _timeStep = timeStep;
         _simulationSteps = simulationSteps;
         _vectorActivation = vectorActivation ?? new BinarySpikingActivation<T>();
@@ -180,9 +191,13 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <param name="simulationSteps">The number of time steps to simulate, defaults to 100.</param>
     /// <param name="scalarActivation">The scalar activation function to use. If null, a default activation is used.</param>
     public SpikingNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double timeStep = 0.1, int simulationSteps = 100,
-        IActivationFunction<T>? scalarActivation = null, ILossFunction<T>? lossFunction = null)
+        IActivationFunction<T>? scalarActivation = null, ILossFunction<T>? lossFunction = null,
+        SpikingNeuralNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new SpikingNeuralNetworkOptions();
+        Options = _options;
+
         _timeStep = timeStep;
         _simulationSteps = simulationSteps;
         _scalarActivation = scalarActivation ?? new BinarySpikingActivation<T>();
