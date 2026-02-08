@@ -264,4 +264,93 @@ public class TimeSeriesIntegrationTests
     }
 
     #endregion
+
+    #region SetParameters Tests (Fix for optimizer parameter initialization)
+
+    [Theory]
+    [InlineData(new double[] { 0.5, 0.3 })]
+    [InlineData(new double[] { 0.5, 0.3, 0.2 })]
+    public void ExponentialSmoothingModel_SetParameters_WithUntrainedModel_InitializesParameters(double[] paramValues)
+    {
+        // Arrange: Create an untrained model (ModelParameters.Length = 0)
+        var options = new ExponentialSmoothingOptions<double>();
+        var model = new ExponentialSmoothingModel<double>(options);
+
+        // Verify model starts untrained with empty parameters
+        Assert.Equal(0, model.ParameterCount);
+
+        // Act: Set parameters on untrained model (simulates optimizer initialization)
+        var parameters = new Tensors.LinearAlgebra.Vector<double>(paramValues);
+        model.SetParameters(parameters);
+
+        // Assert: Model should now have parameters with correct count and values
+        Assert.Equal(paramValues.Length, model.ParameterCount);
+        var retrieved = model.GetParameters();
+        for (int i = 0; i < paramValues.Length; i++)
+        {
+            Assert.Equal(paramValues[i], retrieved[i], precision: 10);
+        }
+    }
+
+    [Fact]
+    public void ExponentialSmoothingModel_SetParameters_WithTrainedModel_UpdatesParameterValues()
+    {
+        // Arrange: Create a model and set initial parameters
+        var options = new ExponentialSmoothingOptions<double>();
+        var model = new ExponentialSmoothingModel<double>(options);
+
+        var initialParams = new Tensors.LinearAlgebra.Vector<double>(new double[] { 0.5, 0.3 });
+        model.SetParameters(initialParams);
+        Assert.Equal(2, model.ParameterCount);
+
+        // Act: Update parameters
+        var newParams = new Tensors.LinearAlgebra.Vector<double>(new double[] { 0.8, 0.1 });
+        model.SetParameters(newParams);
+
+        // Assert: Parameters should be updated with new values
+        Assert.Equal(2, model.ParameterCount);
+        var retrieved = model.GetParameters();
+        Assert.Equal(0.8, retrieved[0], precision: 10);
+        Assert.Equal(0.1, retrieved[1], precision: 10);
+    }
+
+    [Fact]
+    public void ExponentialSmoothingModel_SetParameters_WithMismatchedLength_ThrowsException()
+    {
+        // Arrange: Create a model and set initial parameters
+        var options = new ExponentialSmoothingOptions<double>();
+        var model = new ExponentialSmoothingModel<double>(options);
+
+        var initialParams = new Tensors.LinearAlgebra.Vector<double>(new double[] { 0.5, 0.3 });
+        model.SetParameters(initialParams);
+
+        // Act & Assert: Trying to set different length should throw
+        var wrongLengthParams = new Tensors.LinearAlgebra.Vector<double>(new double[] { 0.5 });
+        Assert.Throws<ArgumentException>(() => model.SetParameters(wrongLengthParams));
+    }
+
+    [Fact]
+    public void ARModel_SetParameters_WithUntrainedModel_Succeeds()
+    {
+        // Arrange
+        var options = new ARModelOptions<double> { AROrder = 3 };
+        var model = new ARModel<double>(options);
+
+        Assert.Equal(0, model.ParameterCount);
+
+        // Act
+        var paramValues = new double[] { 0.1, 0.2, 0.3, 0.4 };
+        var parameters = new Tensors.LinearAlgebra.Vector<double>(paramValues);
+        model.SetParameters(parameters);
+
+        // Assert: Verify count and values
+        Assert.Equal(4, model.ParameterCount);
+        var retrieved = model.GetParameters();
+        for (int i = 0; i < paramValues.Length; i++)
+        {
+            Assert.Equal(paramValues[i], retrieved[i], precision: 10);
+        }
+    }
+
+    #endregion
 }
