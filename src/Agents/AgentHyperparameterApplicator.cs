@@ -53,7 +53,8 @@ internal class AgentHyperparameterApplicator<T>
         if (hyperparameters is null) throw new ArgumentNullException(nameof(hyperparameters));
 
         var result = new HyperparameterApplicationResult();
-        var options = model.GetOptions();
+        var options = model.GetOptions()
+            ?? throw new InvalidOperationException("Model.GetOptions() returned null. Ensure the model is properly configured.");
 
         foreach (var kvp in hyperparameters)
         {
@@ -104,6 +105,11 @@ internal class AgentHyperparameterApplicator<T>
 
         // Step 4: Validate against registry ranges
         var validation = _registry.Validate(modelType, paramName, paramValue);
+        if (!validation.IsValid)
+        {
+            result.Failed[paramName] = validation.Warning ?? $"Validation failed for {paramName}";
+            return;
+        }
         if (validation.HasWarning)
         {
             result.Warnings.Add(validation.Warning ?? $"Warning for {paramName}");
@@ -146,8 +152,7 @@ internal class AgentHyperparameterApplicator<T>
         // Try normalized match (remove underscores, case-insensitive)
         var normalized = HyperparameterDefinition.NormalizeName(propertyName);
         return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanWrite && HyperparameterDefinition.NormalizeName(p.Name) == normalized)
-            .FirstOrDefault();
+            .FirstOrDefault(p => p.CanWrite && HyperparameterDefinition.NormalizeName(p.Name) == normalized);
     }
 
     /// <summary>

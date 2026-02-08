@@ -99,8 +99,7 @@ internal class HyperparameterResponseParser
             var jObject = JObject.Parse(json);
             foreach (var property in jObject.Properties())
             {
-                var value = InferTypedValue(property.Value);
-                if (value != null)
+                if (InferTypedValue(property.Value) is { } value)
                 {
                     result[property.Name] = value;
                 }
@@ -124,8 +123,7 @@ internal class HyperparameterResponseParser
         {
             var name = match.Groups[1].Value;
             var rawValue = match.Groups[2].Value.TrimEnd(',', '.', ';');
-            var value = InferTypedValue(rawValue);
-            if (value != null)
+            if (InferTypedValue(rawValue) is { } value)
             {
                 result[name] = value;
             }
@@ -152,8 +150,7 @@ internal class HyperparameterResponseParser
             }
 
             var rawValue = match.Groups[2].Value.TrimEnd(',', '.', ';');
-            var value = InferTypedValue(rawValue);
-            if (value != null)
+            if (InferTypedValue(rawValue) is { } value)
             {
                 result[name] = value;
             }

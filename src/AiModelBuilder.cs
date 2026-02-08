@@ -5912,12 +5912,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
         }
 
-        // Heuristic fallback based on common patterns
-        if (modelTypeName.Contains("Neural", StringComparison.OrdinalIgnoreCase))
-        {
-            return ModelType.NeuralNetworkRegression;
-        }
-
         return ModelType.None;
     }
 
