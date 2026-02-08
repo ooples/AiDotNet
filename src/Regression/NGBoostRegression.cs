@@ -336,7 +336,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <param name="input">Input feature matrix.</param>
     /// <param name="quantiles">Array of quantile levels (e.g., [0.1, 0.5, 0.9]).</param>
     /// <returns>Matrix where each row is a sample and each column is a quantile.</returns>
-    public async Task<Matrix<T>> PredictQuantilesAsync(Matrix<T> input, double[] quantiles)
+    public async Task<Matrix<T>> PredictQuantilesAsync(Matrix<T> input, Vector<double> quantiles)
     {
         var distributions = await PredictDistributionsAsync(input);
         var result = new Matrix<T>(input.Rows, quantiles.Length);
@@ -361,7 +361,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public async Task<(Vector<T> Lower, Vector<T> Upper)> PredictIntervalAsync(Matrix<T> input, double confidenceLevel = 0.95)
     {
         double alpha = 1 - confidenceLevel;
-        double[] quantiles = [alpha / 2, 1 - alpha / 2];
+        var quantiles = new Vector<double>(new[] { alpha / 2, 1 - alpha / 2 });
 
         var quantileMatrix = await PredictQuantilesAsync(input, quantiles);
 
@@ -472,7 +472,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         var naturalGrads = new Vector<T>[_numParams];
 
         // Average Fisher Information Matrix
-        var fisherAvg = new double[_numParams, _numParams];
+        var fisherAvg = new Matrix<double>(_numParams, _numParams);
         for (int i = 0; i < _numParams; i++)
         {
             for (int j = 0; j < _numParams; j++)
@@ -509,9 +509,9 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Inverts a small matrix with regularization.
     /// </summary>
-    private double[,] InvertMatrix(double[,] matrix)
+    private Matrix<double> InvertMatrix(Matrix<double> matrix)
     {
-        int n = matrix.GetLength(0);
+        int n = matrix.Rows;
 
         // Add small regularization for numerical stability
         for (int i = 0; i < n; i++)
@@ -522,17 +522,20 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         // For small matrices (2x2 or 3x3), use analytical formulas
         if (n == 1)
         {
-            return new double[,] { { 1.0 / matrix[0, 0] } };
+            var result1 = new Matrix<double>(1, 1);
+            result1[0, 0] = 1.0 / matrix[0, 0];
+            return result1;
         }
         else if (n == 2)
         {
             double det = matrix[0, 0] * matrix[1, 1] - matrix[0, 1] * matrix[1, 0];
             if (Math.Abs(det) < 1e-10) det = 1e-10;
-            return new double[,]
-            {
-                { matrix[1, 1] / det, -matrix[0, 1] / det },
-                { -matrix[1, 0] / det, matrix[0, 0] / det }
-            };
+            var result2 = new Matrix<double>(2, 2);
+            result2[0, 0] = matrix[1, 1] / det;
+            result2[0, 1] = -matrix[0, 1] / det;
+            result2[1, 0] = -matrix[1, 0] / det;
+            result2[1, 1] = matrix[0, 0] / det;
+            return result2;
         }
 
         // For larger matrices, use Gaussian elimination
@@ -542,10 +545,10 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Matrix inversion using Gaussian elimination.
     /// </summary>
-    private double[,] GaussianElimination(double[,] matrix, int n)
+    private Matrix<double> GaussianElimination(Matrix<double> matrix, int n)
     {
         // Create augmented matrix [A | I]
-        var augmented = new double[n, 2 * n];
+        var augmented = new Matrix<double>(n, 2 * n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -597,7 +600,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         // Extract inverse
-        var inverse = new double[n, n];
+        var inverse = new Matrix<double>(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)

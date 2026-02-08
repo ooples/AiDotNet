@@ -341,9 +341,9 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes posterior probability of being a structural zero.
     /// </summary>
-    private double[] ComputePosteriorZero(Vector<T> y, Vector<T> lambdas, Vector<T> pis)
+    private Vector<double> ComputePosteriorZero(Vector<T> y, Vector<T> lambdas, Vector<T> pis)
     {
-        var posterior = new double[y.Length];
+        var posterior = new Vector<double>(y.Length);
 
         for (int i = 0; i < y.Length; i++)
         {
@@ -393,14 +393,14 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates the count model parameters.
     /// </summary>
-    private void UpdateCountModel(Matrix<T> x, Vector<T> y, double[] posteriorZero)
+    private void UpdateCountModel(Matrix<T> x, Vector<T> y, Vector<double> posteriorZero)
     {
         int n = x.Rows;
         int p = _numFeatures;
 
         // Weighted IRLS for Poisson/NB regression
-        var weights = new double[n];
-        var z = new double[n];
+        var weights = new Vector<double>(n);
+        var z = new Vector<double>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -432,14 +432,14 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates the zero-inflation model parameters.
     /// </summary>
-    private void UpdateZeroModel(Matrix<T> x, double[] posteriorZero)
+    private void UpdateZeroModel(Matrix<T> x, Vector<double> posteriorZero)
     {
         int n = x.Rows;
         int p = _numFeatures;
 
         // Weighted logistic regression for zero model
-        var weights = new double[n];
-        var z = new double[n];
+        var weights = new Vector<double>(n);
+        var z = new Vector<double>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -471,7 +471,7 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates dispersion parameter for Negative Binomial.
     /// </summary>
-    private void UpdateDispersion(Vector<T> y, Vector<T> lambdas, double[] posteriorZero)
+    private void UpdateDispersion(Vector<T> y, Vector<T> lambdas, Vector<double> posteriorZero)
     {
         // Method of moments estimate
         double sumSqDev = 0;
@@ -510,14 +510,14 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates coefficients using weighted least squares.
     /// </summary>
-    private void UpdateCoefficientsWLS(Matrix<T> x, double[] z, double[] weights,
+    private void UpdateCoefficientsWLS(Matrix<T> x, Vector<double> z, Vector<double> weights,
         ref Vector<T> coefficients, ref T intercept)
     {
         int n = x.Rows;
         int p = _numFeatures;
 
-        var xtwx = new double[p + 1, p + 1];
-        var xtwz = new double[p + 1];
+        var xtwx = new Matrix<double>(p + 1, p + 1);
+        var xtwz = new Vector<double>(p + 1);
 
         for (int i = 0; i < n; i++)
         {
@@ -617,9 +617,9 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return -tmp + Math.Log(2.5066282746310005 * ser / x);
     }
 
-    private double[] SolveSystem(double[,] a, double[] b, int n)
+    private Vector<double> SolveSystem(Matrix<double> a, Vector<double> b, int n)
     {
-        var aug = new double[n, n + 1];
+        var aug = new Matrix<double>(n, n + 1);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++) aug[i, j] = a[i, j];
@@ -649,7 +649,7 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        var sol = new double[n];
+        var sol = new Vector<double>(n);
         for (int i = 0; i < n; i++) sol[i] = aug[i, n];
         return sol;
     }

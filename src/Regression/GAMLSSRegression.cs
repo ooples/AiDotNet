@@ -387,8 +387,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         int p = _numFeatures;
 
         // Compute X'WX and X'Wz with intercept
-        var xtwx = new double[p + 1, p + 1];
-        var xtwz = new double[p + 1];
+        var xtwx = new Matrix<double>(p + 1, p + 1);
+        var xtwz = new Vector<double>(p + 1);
 
         for (int i = 0; i < n; i++)
         {
@@ -525,9 +525,9 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Solves a linear system using Gaussian elimination.
     /// </summary>
-    private double[] SolveLinearSystem(double[,] a, double[] b, int n)
+    private Vector<double> SolveLinearSystem(Matrix<double> a, Vector<double> b, int n)
     {
-        var augmented = new double[n, n + 1];
+        var augmented = new Matrix<double>(n, n + 1);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -575,7 +575,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        var solution = new double[n];
+        var solution = new Vector<double>(n);
         for (int i = 0; i < n; i++)
         {
             solution[i] = augmented[i, n];

@@ -291,8 +291,8 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         int p = _numFeatures;
 
         // Working weights and adjusted dependent variable
-        var weights = new double[n];
-        var z = new double[n];
+        var weights = new Vector<double>(n);
+        var z = new Vector<double>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -325,8 +325,8 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         int n = x.Rows;
 
-        var weights = new double[n];
-        var z = new double[n];
+        var weights = new Vector<double>(n);
+        var z = new Vector<double>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -358,14 +358,14 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates coefficients using weighted least squares.
     /// </summary>
-    private void UpdateCoefficientsWLS(Matrix<T> x, double[] z, double[] weights, ref Vector<T> coefficients, ref T intercept)
+    private void UpdateCoefficientsWLS(Matrix<T> x, Vector<double> z, Vector<double> weights, ref Vector<T> coefficients, ref T intercept)
     {
         int n = x.Rows;
         int p = _numFeatures;
 
         // X'WX and X'Wz
-        var xtwx = new double[p + 1, p + 1];
-        var xtwz = new double[p + 1];
+        var xtwx = new Matrix<double>(p + 1, p + 1);
+        var xtwz = new Vector<double>(p + 1);
 
         for (int i = 0; i < n; i++)
         {
@@ -556,9 +556,9 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return result;
     }
 
-    private double[] SolveSystem(double[,] a, double[] b, int n)
+    private Vector<double> SolveSystem(Matrix<double> a, Vector<double> b, int n)
     {
-        var aug = new double[n, n + 1];
+        var aug = new Matrix<double>(n, n + 1);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++) aug[i, j] = a[i, j];
@@ -588,7 +588,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        var sol = new double[n];
+        var sol = new Vector<double>(n);
         for (int i = 0; i < n; i++) sol[i] = aug[i, n];
         return sol;
     }
