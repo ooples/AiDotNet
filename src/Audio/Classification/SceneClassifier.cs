@@ -46,6 +46,10 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     #region Fields
 
     private readonly SceneClassifierOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly MelSpectrogram<T> _melSpectrogram;
     private readonly MfccExtractor<T> _mfccExtractor;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

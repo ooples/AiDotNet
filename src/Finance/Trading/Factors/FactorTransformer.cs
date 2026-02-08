@@ -51,6 +51,10 @@ public class FactorTransformer<T> : FinancialModelBase<T>, IFactorModel<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly FactorTransformerOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private int _numFactors;
     private int _numAssets;
     private int _numFeatures;

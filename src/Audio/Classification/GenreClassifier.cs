@@ -48,6 +48,10 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
     #region Fields
 
     private readonly GenreClassifierOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly MfccExtractor<T> _mfccExtractor;
     private readonly SpectralFeatureExtractor<T> _spectralExtractor;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;

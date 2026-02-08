@@ -85,6 +85,9 @@ public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerE
     /// </summary>
     private readonly SpeakerEmbeddingOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Whether the model has been disposed.
     /// </summary>

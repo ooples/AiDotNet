@@ -59,6 +59,10 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     #region Fields
 
     private readonly AudioEventDetectorOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private MelSpectrogram<T>? _melSpectrogram;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private bool _useNativeMode;

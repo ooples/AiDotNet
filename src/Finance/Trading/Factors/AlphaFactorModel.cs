@@ -52,6 +52,10 @@ public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly AlphaFactorOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private int _numFactors;
     private int _numAssets;
     private int _numFeatures;

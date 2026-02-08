@@ -59,6 +59,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private readonly IBoundaryCondition<T>[] _boundaryConditions;
         private readonly IInitialCondition<T>? _initialCondition;
         private readonly MultiScaleTrainingOptions<T> _trainingOptions;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _trainingOptions;
+
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         private readonly bool _usesDefaultOptimizer;
 

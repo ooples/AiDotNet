@@ -53,6 +53,9 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
     /// </summary>
     private readonly MeshCNNOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Cached edge adjacency for the current mesh being processed.
     /// </summary>

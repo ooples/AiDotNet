@@ -54,6 +54,10 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
     #region Fields
 
     private readonly SpeakerDiarizerOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly SpeakerEmbeddingExtractor<T> _embeddingExtractor;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly bool _useNativeMode;

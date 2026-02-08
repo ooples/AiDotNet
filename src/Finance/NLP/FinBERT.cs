@@ -102,6 +102,10 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly FinBERTOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private int _maxSequenceLength;
     private int _vocabularySize;
     private int _hiddenDimension;

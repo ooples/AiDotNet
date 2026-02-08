@@ -90,6 +90,10 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly TemporalGCNOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private int _sequenceLength;
     private int _forecastHorizon;
     private int _numNodes;
