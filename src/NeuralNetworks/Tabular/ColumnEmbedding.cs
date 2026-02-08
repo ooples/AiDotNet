@@ -175,8 +175,13 @@ public class ColumnEmbedding<T>
     }
 
     /// <summary>
-    /// Computes gradients for column embeddings.
+    /// Computes gradients for column embeddings by summing upstream gradients across the batch dimension.
     /// </summary>
+    /// <remarks>
+    /// Each call overwrites the stored gradients (does not accumulate across calls).
+    /// Call <see cref="ResetGradients"/> before the next backward pass if gradients from a previous
+    /// pass should not persist, though this method already overwrites them.
+    /// </remarks>
     /// <param name="gradient">Gradient from upstream [batchSize, numColumns, embeddingDim].</param>
     public void Backward(Tensor<T> gradient)
     {
@@ -228,8 +233,9 @@ public class ColumnEmbedding<T>
     }
 
     /// <summary>
-    /// Updates parameters.
+    /// Updates embeddings via gradient descent using the gradients computed by <see cref="Backward"/>.
     /// </summary>
+    /// <param name="learningRate">Step size for the gradient descent update.</param>
     public void UpdateParameters(T learningRate)
     {
         if (!_learnable) return;
@@ -242,7 +248,8 @@ public class ColumnEmbedding<T>
     }
 
     /// <summary>
-    /// Resets gradients.
+    /// Zeros all stored gradients. Call between training steps to prevent stale gradient values
+    /// from affecting subsequent <see cref="UpdateParameters"/> calls.
     /// </summary>
     public void ResetGradients()
     {

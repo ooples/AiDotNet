@@ -157,11 +157,9 @@ public class AutoIntRegression<T> : AutoIntBase<T>
                 $"Targets length ({targets.Length}) must match predictions length ({_predictionsCache.Length}).");
         }
 
-        int batchSize = _predictionsCache.Shape[0];
-        int outputDim = _predictionsCache.Shape.Length > 1 ? _predictionsCache.Shape[1] : 1;
 
         var predictionGrad = new Tensor<T>(_predictionsCache.Shape);
-        var scale = NumOps.FromDouble(2.0 / (batchSize * outputDim));
+        var scale = NumOps.FromDouble(2.0 / _predictionsCache.Length);
 
         for (int i = 0; i < _predictionsCache.Length; i++)
         {

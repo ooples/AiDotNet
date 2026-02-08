@@ -95,6 +95,8 @@ public class CRPSMetric<T> : IRegressionMetric<T>
         int bootstrapSamples = 1000,
         int? randomSeed = null)
     {
+        if (ciMethod != ConfidenceIntervalMethod.PercentileBootstrap)
+            throw new NotSupportedException($"Only {nameof(ConfidenceIntervalMethod.PercentileBootstrap)} is supported. Got: {ciMethod}.");
         if (bootstrapSamples < 2)
             throw new ArgumentOutOfRangeException(nameof(bootstrapSamples), "Bootstrap samples must be at least 2.");
         if (confidenceLevel <= 0 || confidenceLevel >= 1)
