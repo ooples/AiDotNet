@@ -87,13 +87,22 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _trees = [];
         _treeWeights = [];
 
-        // Convert to double arrays for efficient computation
-        var xData = ConvertToDoubleArray(x);
-        var yData = y.Select(yi => NumOps.ToDouble(yi)).ToArray();
+        // Convert to double types for efficient computation
+        var xData = ConvertToDoubleMatrix(x);
+        var yData = new Vector<double>(n);
+        for (int i = 0; i < n; i++)
+        {
+            yData[i] = NumOps.ToDouble(y[i]);
+        }
 
         // Current predictions (starts as zeros or mean)
-        var predictions = new double[n];
-        double meanY = yData.Average();
+        var predictions = new Vector<double>(n);
+        double meanY = 0;
+        for (int i = 0; i < n; i++)
+        {
+            meanY += yData[i];
+        }
+        meanY /= n;
         for (int i = 0; i < n; i++)
         {
             predictions[i] = meanY;
@@ -112,7 +121,7 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
             var droppedPredictions = ComputePartialPredictions(xData, keptIndices);
 
             // Compute residuals (negative gradient for MSE)
-            var residuals = new double[n];
+            var residuals = new Vector<double>(n);
             for (int i = 0; i < n; i++)
             {
                 residuals[i] = yData[i] - droppedPredictions[i];
@@ -126,10 +135,10 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
             var newTree = FitTree(xData, residuals, sampleIndices, featureIndices, 0);
 
             // Compute new tree's predictions
-            var newPredictions = new double[n];
+            var newPredictions = new Vector<double>(n);
             for (int i = 0; i < n; i++)
             {
-                newPredictions[i] = PredictTree(newTree, xData[i]);
+                newPredictions[i] = PredictTree(newTree, xData, i);
             }
 
             // Compute normalization factor
@@ -188,7 +197,7 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <returns>Vector of predictions.</returns>
     public new Vector<T> Predict(Matrix<T> input)
     {
-        var xData = ConvertToDoubleArray(input);
+        var xData = ConvertToDoubleMatrix(input);
         var result = new Vector<T>(input.Rows);
 
         // Use all trees at prediction time (no dropout)
@@ -208,10 +217,14 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     /// <param name="input">Single input sample.</param>
     /// <returns>Array of weighted tree predictions.</returns>
-    public double[] GetTreePredictions(T[] input)
+    public Vector<double> GetTreePredictions(Vector<T> input)
     {
-        var xDouble = input.Select(xi => NumOps.ToDouble(xi)).ToArray();
-        var treePreds = new double[_trees.Count];
+        var xDouble = new Vector<double>(input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            xDouble[i] = NumOps.ToDouble(input[i]);
+        }
+        var treePreds = new Vector<double>(_trees.Count);
 
         for (int t = 0; t < _trees.Count; t++)
         {
@@ -224,10 +237,10 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Gets the tree weights.
     /// </summary>
-    /// <returns>Array of tree weights.</returns>
-    public double[] GetTreeWeights()
+    /// <returns>Vector of tree weights.</returns>
+    public Vector<double> GetTreeWeights()
     {
-        return [.. _treeWeights];
+        return new Vector<double>(_treeWeights);
     }
 
     /// <summary>
@@ -300,17 +313,17 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes predictions using only specified trees.
     /// </summary>
-    private double[] ComputePartialPredictions(double[][] xData, int[] treeIndices)
+    private Vector<double> ComputePartialPredictions(Matrix<double> xData, int[] treeIndices)
     {
-        int n = xData.Length;
-        var predictions = new double[n];
+        int n = xData.Rows;
+        var predictions = new Vector<double>(n);
 
         foreach (int t in treeIndices)
         {
             double weight = _treeWeights[t];
             for (int i = 0; i < n; i++)
             {
-                predictions[i] += PredictTree(_trees[t], xData[i]) * weight;
+                predictions[i] += PredictTree(_trees[t], xData, i) * weight;
             }
         }
 
@@ -354,7 +367,7 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Fits a decision tree to the data.
     /// </summary>
-    private DARTTree FitTree(double[][] xData, double[] y, int[] sampleIndices, int[] featureIndices, int depth)
+    private DARTTree FitTree(Matrix<double> xData, Vector<double> y, int[] sampleIndices, int[] featureIndices, int depth)
     {
         // Check stopping conditions
         if (depth >= _options.MaxDepth || sampleIndices.Length < _options.MinSamplesLeaf * 2)
@@ -395,7 +408,7 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Creates a leaf node.
     /// </summary>
-    private DARTTree CreateLeaf(double[] y, int[] indices)
+    private DARTTree CreateLeaf(Vector<double> y, int[] indices)
     {
         double sum = 0;
         double sumSq = 0;
@@ -425,7 +438,7 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// Finds the best split for a node.
     /// </summary>
     private (int feature, double threshold, double gain) FindBestSplit(
-        double[][] xData, double[] y, int[] indices, int[] featureIndices)
+        Matrix<double> xData, Vector<double> y, int[] indices, int[] featureIndices)
     {
         int bestFeature = -1;
         double bestThreshold = 0;
@@ -444,7 +457,7 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         foreach (int f in featureIndices)
         {
             // Sort indices by feature value
-            var sortedIndices = indices.OrderBy(i => xData[i][f]).ToArray();
+            var sortedIndices = indices.OrderBy(i => xData[i, f]).ToArray();
 
             double leftSum = 0;
             double leftSumSq = 0;
@@ -466,7 +479,7 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 }
 
                 // Skip if same feature value as next point
-                if (Math.Abs(xData[sortedIndices[i]][f] - xData[sortedIndices[i + 1]][f]) < 1e-10)
+                if (Math.Abs(xData[sortedIndices[i], f] - xData[sortedIndices[i + 1], f]) < 1e-10)
                 {
                     continue;
                 }
@@ -483,7 +496,7 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 {
                     bestGain = gain;
                     bestFeature = f;
-                    bestThreshold = (xData[sortedIndices[i]][f] + xData[sortedIndices[i + 1]][f]) / 2;
+                    bestThreshold = (xData[sortedIndices[i], f] + xData[sortedIndices[i + 1], f]) / 2;
                 }
             }
         }
@@ -494,14 +507,14 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Splits data based on a feature and threshold.
     /// </summary>
-    private (int[] left, int[] right) SplitData(double[][] xData, int[] indices, int feature, double threshold)
+    private (int[] left, int[] right) SplitData(Matrix<double> xData, int[] indices, int feature, double threshold)
     {
         var left = new List<int>();
         var right = new List<int>();
 
         foreach (int idx in indices)
         {
-            if (xData[idx][feature] <= threshold)
+            if (xData[idx, feature] <= threshold)
             {
                 left.Add(idx);
             }
@@ -515,9 +528,34 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Makes a prediction using a single tree.
+    /// Makes a prediction using a single tree for a row of a matrix.
     /// </summary>
-    private double PredictTree(DARTTree tree, double[] x)
+    private double PredictTree(DARTTree tree, Matrix<double> x, int row)
+    {
+        if (tree.IsConstant)
+        {
+            return tree.ConstantValue;
+        }
+
+        while (!tree.IsLeaf)
+        {
+            if (x[row, tree.SplitFeature] <= tree.SplitThreshold)
+            {
+                tree = tree.Left!;
+            }
+            else
+            {
+                tree = tree.Right!;
+            }
+        }
+
+        return tree.LeafValue;
+    }
+
+    /// <summary>
+    /// Makes a prediction using a single tree for a vector input.
+    /// </summary>
+    private double PredictTree(DARTTree tree, Vector<double> x)
     {
         if (tree.IsConstant)
         {
@@ -540,17 +578,16 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Converts matrix to double array for efficient computation.
+    /// Converts generic matrix to double matrix for efficient computation.
     /// </summary>
-    private double[][] ConvertToDoubleArray(Matrix<T> x)
+    private Matrix<double> ConvertToDoubleMatrix(Matrix<T> x)
     {
-        var result = new double[x.Rows][];
+        var result = new Matrix<double>(x.Rows, x.Columns);
         for (int i = 0; i < x.Rows; i++)
         {
-            result[i] = new double[x.Columns];
             for (int j = 0; j < x.Columns; j++)
             {
-                result[i][j] = NumOps.ToDouble(x[i, j]);
+                result[i, j] = NumOps.ToDouble(x[i, j]);
             }
         }
         return result;
@@ -559,7 +596,7 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <inheritdoc/>
     protected override Task CalculateFeatureImportancesAsync(int featureCount)
     {
-        var importances = new double[_numFeatures];
+        var importances = new Vector<double>(_numFeatures);
 
         // Accumulate split counts for each feature
         foreach (var tree in _trees)
@@ -568,7 +605,11 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         // Normalize
-        double sum = importances.Sum();
+        double sum = 0;
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            sum += importances[f];
+        }
         if (sum > 0)
         {
             for (int f = 0; f < _numFeatures; f++)
@@ -577,14 +618,14 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        FeatureImportances = new Vector<T>(importances.Select(i => NumOps.FromDouble(i)).ToArray());
+        FeatureImportances = new Vector<T>(importances.Select(i => NumOps.FromDouble(i)));
         return Task.CompletedTask;
     }
 
     /// <summary>
     /// Recursively accumulates feature importance from a tree.
     /// </summary>
-    private void AccumulateFeatureImportance(DARTTree tree, double[] importances)
+    private void AccumulateFeatureImportance(DARTTree tree, Vector<double> importances)
     {
         if (tree.IsLeaf || tree.IsConstant)
         {
