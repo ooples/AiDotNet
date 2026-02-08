@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -46,6 +47,11 @@ namespace AiDotNet.Document.LayoutAware;
 /// </remarks>
 public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentClassifier<T>
 {
+    private readonly DiTOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -130,9 +136,13 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
         int numHeads = 12,
         string modelSize = "base",
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DiTOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DiTOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -178,9 +188,13 @@ public class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumen
         int numHeads = 12,
         string modelSize = "base",
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DiTOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DiTOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _numClasses = numClasses;
         _hiddenDim = hiddenDim;

@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -47,6 +48,11 @@ namespace AiDotNet.Document.LayoutAware;
 /// </remarks>
 public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>
 {
+    private readonly LayoutXLMOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -126,9 +132,13 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         int visualBackboneChannels = 256,
         int numLanguages = 53,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        LayoutXLMOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new LayoutXLMOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -180,9 +190,13 @@ public class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         int visualBackboneChannels = 256,
         int numLanguages = 53,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        LayoutXLMOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new LayoutXLMOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _numClasses = numClasses;
         _hiddenDim = hiddenDim;

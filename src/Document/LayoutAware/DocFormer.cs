@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -44,6 +45,11 @@ namespace AiDotNet.Document.LayoutAware;
 /// </remarks>
 public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentClassifier<T>
 {
+    private readonly DocFormerOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -137,9 +143,13 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         int vocabSize = 30522,
         int spatialDim = 128,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DocFormerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DocFormerOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -201,9 +211,13 @@ public class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, ID
         int vocabSize = 30522,
         int spatialDim = 128,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DocFormerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DocFormerOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _numClasses = numClasses;
         _hiddenDim = hiddenDim;

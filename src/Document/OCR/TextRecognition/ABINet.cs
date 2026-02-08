@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -46,6 +47,11 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 /// </remarks>
 public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
+    private readonly ABINetOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -119,9 +125,13 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int numIterations = 3,
         string? charset = null,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        ABINetOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new ABINetOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -169,9 +179,13 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int numIterations = 3,
         string? charset = null,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        ABINetOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new ABINetOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _visionDim = visionDim;
         _languageDim = languageDim;

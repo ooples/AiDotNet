@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -46,6 +47,11 @@ namespace AiDotNet.Document.PixelToSequence;
 /// </remarks>
 public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
 {
+    private readonly NougatOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private bool _useNativeMode;
@@ -114,9 +120,13 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numHeads = 16,
         int vocabSize = 50000,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        NougatOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new NougatOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -179,9 +189,13 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int numHeads = 16,
         int vocabSize = 50000,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        NougatOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new NougatOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _hiddenDim = hiddenDim;
         _numEncoderLayers = numEncoderLayers;

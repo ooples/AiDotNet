@@ -5,6 +5,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -46,6 +47,11 @@ namespace AiDotNet.Video.Denoising;
 /// </remarks>
 public class FastDVDNet<T> : NeuralNetworkBase<T>
 {
+    private readonly FastDVDNetOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -76,9 +82,13 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         int numFeatures = 32,
-        int numInputFrames = 5)
+        int numInputFrames = 5,
+        FastDVDNetOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new FastDVDNetOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _numFeatures = numFeatures;
         _numInputFrames = numInputFrames;
@@ -93,9 +103,13 @@ public class FastDVDNet<T> : NeuralNetworkBase<T>
 
     public FastDVDNet(
         NeuralNetworkArchitecture<T> architecture,
-        string onnxModelPath)
+        string onnxModelPath,
+        FastDVDNetOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new FastDVDNetOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

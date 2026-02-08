@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
 
@@ -36,6 +37,11 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// </remarks>
 public class FILM<T> : NeuralNetworkBase<T>
 {
+    private readonly FILMOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private int _height;
@@ -118,9 +124,13 @@ public class FILM<T> : NeuralNetworkBase<T>
     public FILM(
         NeuralNetworkArchitecture<T> architecture,
         int numScales = 7,
-        int numFeatures = 64)
+        int numFeatures = 64,
+        FILMOptions? options = null)
         : base(architecture, new CharbonnierLoss<T>())
     {
+        _options = options ?? new FILMOptions();
+        Options = _options;
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 256;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;

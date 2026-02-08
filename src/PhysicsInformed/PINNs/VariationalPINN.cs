@@ -7,6 +7,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
+using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PhysicsInformed.PINNs
@@ -69,6 +70,11 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// </remarks>
     public class VariationalPINN<T> : NeuralNetworkBase<T>
     {
+        private readonly VariationalPINNOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         private readonly Func<T[], T[], T[,], T[], T[,], T> _weakFormResidual;
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         private readonly bool _usesDefaultOptimizer;
@@ -102,9 +108,13 @@ namespace AiDotNet.PhysicsInformed.PINNs
             NeuralNetworkArchitecture<T> architecture,
             Func<T[], T[], T[,], T[], T[,], T> weakFormResidual,
             int numQuadraturePoints = 10000,
-            int numTestFunctions = 10)
+            int numTestFunctions = 10,
+            VariationalPINNOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
+            _options = options ?? new VariationalPINNOptions();
+            Options = _options;
+
             _weakFormResidual = weakFormResidual ?? throw new ArgumentNullException(nameof(weakFormResidual));
             _numTestFunctions = numTestFunctions;
             _numQuadraturePoints = numQuadraturePoints;

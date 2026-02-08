@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -44,6 +45,11 @@ namespace AiDotNet.Video.Segmentation;
 /// </remarks>
 public class SAM2<T> : NeuralNetworkBase<T>
 {
+    private readonly SAM2Options _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly int _height;
@@ -118,9 +124,12 @@ public class SAM2<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         SAM2ModelSize modelSize = SAM2ModelSize.Base,
-        int memoryBankSize = 7)
+        int memoryBankSize = 7,
+        SAM2Options? options = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>())
     {
+        _options = options ?? new SAM2Options();
+        Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -166,9 +175,12 @@ public class SAM2<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         SAM2ModelSize modelSize = SAM2ModelSize.Base,
-        int memoryBankSize = 7)
+        int memoryBankSize = 7,
+        SAM2Options? options = null)
         : base(architecture, new BinaryCrossEntropyLoss<T>())
     {
+        _options = options ?? new SAM2Options();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

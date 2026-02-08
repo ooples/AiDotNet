@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Inpainting;
 
@@ -32,6 +33,11 @@ namespace AiDotNet.Video.Inpainting;
 /// </remarks>
 public class E2FGVI<T> : NeuralNetworkBase<T>
 {
+    private readonly E2FGVIOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private int _height;
@@ -81,9 +87,13 @@ public class E2FGVI<T> : NeuralNetworkBase<T>
 
     public E2FGVI(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 128)
+        int numFeatures = 128,
+        E2FGVIOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new E2FGVIOptions();
+        Options = _options;
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 432;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 240;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;

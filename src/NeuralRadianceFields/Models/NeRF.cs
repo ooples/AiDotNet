@@ -112,6 +112,11 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// </remarks>
 public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
 {
+    private readonly NeRFOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Model Architecture Parameters
 
     /// <summary>
@@ -331,9 +336,12 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
         double renderNearBound = 2.0,
         double renderFarBound = 6.0,
         double learningRate = 5e-4,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        NeRFOptions? options = null)
         : base(CreateArchitecture(hiddenDim), lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new NeRFOptions();
+        Options = _options;
         // Validate parameters
         if (positionEncodingLevels <= 0)
         {

@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -49,6 +50,11 @@ namespace AiDotNet.Video.Matting;
 /// </remarks>
 public class RVM<T> : NeuralNetworkBase<T>
 {
+    private readonly RVMOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -81,9 +87,13 @@ public class RVM<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numFeatures = 32)
+        int numFeatures = 32,
+        RVMOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new RVMOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _numFeatures = numFeatures;
         _imageHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
@@ -97,9 +107,13 @@ public class RVM<T> : NeuralNetworkBase<T>
 
     public RVM(
         NeuralNetworkArchitecture<T> architecture,
-        string onnxModelPath)
+        string onnxModelPath,
+        RVMOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new RVMOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.FrameInterpolation;
 
@@ -36,6 +37,11 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// </remarks>
 public class RIFE<T> : NeuralNetworkBase<T>
 {
+    private readonly RIFEOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private int _height;
@@ -115,9 +121,13 @@ public class RIFE<T> : NeuralNetworkBase<T>
     public RIFE(
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = DefaultNumFeatures,
-        int numFlowBlocks = DefaultNumFlowBlocks)
+        int numFlowBlocks = DefaultNumFlowBlocks,
+        RIFEOptions? options = null)
         : base(architecture, new CharbonnierLoss<T>())
     {
+        _options = options ?? new RIFEOptions();
+        Options = _options;
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;

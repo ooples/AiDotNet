@@ -7,6 +7,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.PhysicsInformed.Options;
 
 namespace AiDotNet.PhysicsInformed.NeuralOperators
 {
@@ -107,6 +108,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// </remarks>
     public class DeepOperatorNetwork<T> : NeuralNetworkBase<T>
     {
+        private readonly DeepOperatorNetworkOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         private readonly NeuralNetworkBase<T> _branchNet;
         private readonly NeuralNetworkBase<T> _trunkNet;
         private readonly int _p; // Dimension of the latent space (number of basis functions)
@@ -157,10 +163,14 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             NeuralNetworkArchitecture<T> trunkArchitecture,
             int latentDimension = 128,
             int numSensors = 100,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+            DeepOperatorNetworkOptions? options = null)
             : base(architecture ?? throw new ArgumentNullException(nameof(architecture)),
                 NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
+            _options = options ?? new DeepOperatorNetworkOptions();
+            Options = _options;
+
             if (branchArchitecture == null)
             {
                 throw new ArgumentNullException(nameof(branchArchitecture));

@@ -9,6 +9,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
+using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PhysicsInformed.PINNs
@@ -54,14 +55,16 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// </remarks>
     public class MultiScalePINN<T> : NeuralNetworkBase<T>
     {
+        private readonly MultiScalePINNOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         private readonly IMultiScalePDE<T> _multiScalePDE;
         private readonly List<NeuralNetworkBase<T>> _scaleNetworks;
         private readonly IBoundaryCondition<T>[] _boundaryConditions;
         private readonly IInitialCondition<T>? _initialCondition;
         private readonly MultiScaleTrainingOptions<T> _trainingOptions;
-
-        /// <inheritdoc/>
-        public override ModelOptions GetOptions() => _trainingOptions;
 
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         private readonly bool _usesDefaultOptimizer;
@@ -109,15 +112,18 @@ namespace AiDotNet.PhysicsInformed.PINNs
             IInitialCondition<T>? initialCondition = null,
             int numCollocationPointsPerScale = 5000,
             MultiScaleTrainingOptions<T>? trainingOptions = null,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+            MultiScalePINNOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
+            _options = options ?? new MultiScalePINNOptions();
+            Options = _options;
+
             _multiScalePDE = multiScalePDE ?? throw new ArgumentNullException(nameof(multiScalePDE));
             _boundaryConditions = boundaryConditions ?? throw new ArgumentNullException(nameof(boundaryConditions));
             _initialCondition = initialCondition;
             _numCollocationPointsPerScale = numCollocationPointsPerScale;
             _trainingOptions = trainingOptions ?? new MultiScaleTrainingOptions<T>();
-            Options = _trainingOptions;
 
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = optimizer == null;

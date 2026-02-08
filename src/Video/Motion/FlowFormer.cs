@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.Video.Options;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -45,6 +46,11 @@ namespace AiDotNet.Video.Motion;
 /// </remarks>
 public class FlowFormer<T> : NeuralNetworkBase<T>
 {
+    private readonly FlowFormerOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -78,9 +84,13 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         int embedDim = 256,
         int numLayers = 6,
-        int numIterations = 12)
+        int numIterations = 12,
+        FlowFormerOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new FlowFormerOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _embedDim = embedDim;
         _numLayers = numLayers;
@@ -96,9 +106,13 @@ public class FlowFormer<T> : NeuralNetworkBase<T>
 
     public FlowFormer(
         NeuralNetworkArchitecture<T> architecture,
-        string onnxModelPath)
+        string onnxModelPath,
+        FlowFormerOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new FlowFormerOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

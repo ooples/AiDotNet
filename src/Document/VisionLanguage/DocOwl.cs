@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -47,6 +48,11 @@ namespace AiDotNet.Document.VisionLanguage;
 /// </remarks>
 public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDetector<T>
 {
+    private readonly DocOwlOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -124,9 +130,13 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         int numHeads = 32,
         int vocabSize = 32000,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DocOwlOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DocOwlOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -173,9 +183,13 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         int numHeads = 32,
         int vocabSize = 32000,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DocOwlOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DocOwlOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _visionDim = visionDim;
         _languageDim = languageDim;

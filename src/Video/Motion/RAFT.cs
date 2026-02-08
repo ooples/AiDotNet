@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Motion;
 
@@ -38,6 +39,11 @@ namespace AiDotNet.Video.Motion;
 /// </remarks>
 public class RAFT<T> : NeuralNetworkBase<T>
 {
+    private readonly RAFTOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly int _height;
@@ -120,9 +126,12 @@ public class RAFT<T> : NeuralNetworkBase<T>
         int numFeatures = DefaultNumFeatures,
         int correlationLevels = DefaultCorrelationLevels,
         int correlationRadius = DefaultCorrelationRadius,
-        int numIterations = DefaultNumIterations)
+        int numIterations = DefaultNumIterations,
+        RAFTOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new RAFTOptions();
+        Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;

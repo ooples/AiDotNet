@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -60,6 +61,11 @@ namespace AiDotNet.Video.ActionRecognition;
 /// </remarks>
 public class TimeSformer<T> : NeuralNetworkBase<T>
 {
+    private readonly TimeSformerOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     private readonly bool _useNativeMode;
@@ -147,9 +153,13 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
         int numLayers = 12,
         int numFrames = 8,
         int patchSize = 16,
-        AttentionType attentionType = AttentionType.DividedSpaceTime)
+        AttentionType attentionType = AttentionType.DividedSpaceTime,
+        TimeSformerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
     {
+        _options = options ?? new TimeSformerOptions();
+        Options = _options;
+
         if (embedDim < 1)
             throw new ArgumentOutOfRangeException(nameof(embedDim), "Embedding dimension must be at least 1.");
         if (numLayers < 1)
@@ -186,9 +196,13 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         int numClasses = 400,
-        int embedDim = 768)
+        int embedDim = 768,
+        TimeSformerOptions? options = null)
         : base(architecture, new CrossEntropyLoss<T>())
     {
+        _options = options ?? new TimeSformerOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

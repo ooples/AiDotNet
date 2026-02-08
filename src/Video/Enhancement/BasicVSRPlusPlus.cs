@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -53,6 +54,11 @@ namespace AiDotNet.Video.Enhancement;
 /// </remarks>
 public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
 {
+    private readonly BasicVSRPlusPlusOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -230,9 +236,13 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         int numFeatures = 64,
         int numResidualBlocks = 15,
         int numPropagations = 2,
-        double learningRate = 0.0001)
+        double learningRate = 0.0001,
+        BasicVSRPlusPlusOptions? options = null)
         : base(architecture, new CharbonnierLoss<T>())
     {
+        _options = options ?? new BasicVSRPlusPlusOptions();
+        Options = _options;
+
         if (scaleFactor != 2 && scaleFactor != 4)
             throw new ArgumentOutOfRangeException(nameof(scaleFactor), "Scale factor must be 2 or 4.");
         if (numFeatures < 1)
@@ -290,9 +300,13 @@ public class BasicVSRPlusPlus<T> : NeuralNetworkBase<T>
         int scaleFactor = 4,
         int numFeatures = 64,
         int numResidualBlocks = 15,
-        int numPropagations = 2)
+        int numPropagations = 2,
+        BasicVSRPlusPlusOptions? options = null)
         : base(architecture, new CharbonnierLoss<T>())
     {
+        _options = options ?? new BasicVSRPlusPlusOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

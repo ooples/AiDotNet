@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.PointCloud.Interfaces;
 using AiDotNet.PointCloud.Layers;
+using PointNetPlusPlusModelOptions = AiDotNet.PointCloud.Options.PointNetPlusPlusOptions;
 
 namespace AiDotNet.PointCloud.Models;
 
@@ -63,6 +64,11 @@ namespace AiDotNet.PointCloud.Models;
 /// </remarks>
 public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudClassification<T>, IPointCloudSegmentation<T>
 {
+    private readonly PointNetPlusPlusModelOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private int _numClasses;
     private int _inputFeatureDim;
     private int[] _samplingRates; // Number of points at each hierarchy level
@@ -95,9 +101,12 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
     /// </summary>
     /// <param name="options">Configuration options for the PointNet++ model.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
-    public PointNetPlusPlus(PointNetPlusPlusOptions options, ILossFunction<T>? lossFunction = null)
+    public PointNetPlusPlus(PointNetPlusPlusOptions options, ILossFunction<T>? lossFunction = null, PointNetPlusPlusModelOptions? modelOptions = null)
         : base(CreateArchitecture(options.NumClasses, options.InputFeatureDim), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification))
     {
+        _options = modelOptions ?? new PointNetPlusPlusModelOptions();
+        Options = _options;
+
         if (options == null)
         {
             throw new ArgumentNullException(nameof(options));
