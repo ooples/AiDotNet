@@ -40,32 +40,32 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Shared network weights.
     /// </summary>
-    private List<T[,]> _sharedWeights;
+    private List<Matrix<T>> _sharedWeights;
 
     /// <summary>
     /// Shared network biases.
     /// </summary>
-    private List<T[]> _sharedBiases;
+    private List<Vector<T>> _sharedBiases;
 
     /// <summary>
     /// Cause-specific network weights (one list per cause).
     /// </summary>
-    private List<List<T[,]>> _causeWeights;
+    private List<List<Matrix<T>>> _causeWeights;
 
     /// <summary>
     /// Cause-specific network biases (one list per cause).
     /// </summary>
-    private List<List<T[]>> _causeBiases;
+    private List<List<Vector<T>>> _causeBiases;
 
     /// <summary>
     /// Output layer weights (for each cause, maps to time bins).
     /// </summary>
-    private List<T[,]> _outputWeights;
+    private List<Matrix<T>> _outputWeights;
 
     /// <summary>
     /// Output layer biases (for each cause).
     /// </summary>
-    private List<T[]> _outputBiases;
+    private List<Vector<T>> _outputBiases;
 
     /// <summary>
     /// Number of features.
@@ -75,7 +75,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Time bin edges (discretization of time axis).
     /// </summary>
-    private T[]? _timeBinEdges;
+    private Vector<T>? _timeBinEdges;
 
     /// <summary>
     /// Configuration options.
@@ -236,7 +236,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <param name="input">Input feature matrix.</param>
     /// <param name="times">Times at which to evaluate survival probability.</param>
     /// <returns>Matrix where [i,j] is P(T > times[j] | X_i).</returns>
-    public Matrix<T> PredictSurvival(Matrix<T> input, T[] times)
+    public Matrix<T> PredictSurvival(Matrix<T> input, Vector<T> times)
     {
         var pmf = PredictPMF(input);
         var survivalProbs = new Matrix<T>(input.Rows, times.Length);
@@ -272,7 +272,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <param name="times">Times at which to evaluate CIF.</param>
     /// <param name="riskIndex">Index of the risk (0 to NumRisks-1).</param>
     /// <returns>Matrix where [i,j] is P(T ≤ times[j], event type = risk | X_i).</returns>
-    public Matrix<T> PredictCIF(Matrix<T> input, T[] times, int riskIndex = 0)
+    public Matrix<T> PredictCIF(Matrix<T> input, Vector<T> times, int riskIndex = 0)
     {
         if (riskIndex < 0 || riskIndex >= _options.NumRisks)
         {
@@ -428,8 +428,8 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <returns>AUC at the specified horizon.</returns>
     public double ComputeTimeDependentAUC(Matrix<T> x, Vector<T> times, Vector<T> events, T horizon)
     {
-        var horizonArray = new[] { horizon };
-        var survivalProbs = PredictSurvival(x, horizonArray);
+        var horizonVec = new Vector<T>(new[] { horizon });
+        var survivalProbs = PredictSurvival(x, horizonVec);
 
         double horizonValue = NumOps.ToDouble(horizon);
         var cases = new List<int>();
@@ -496,7 +496,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         double range = maxTime - minTime;
         maxTime += range * 0.01;
 
-        _timeBinEdges = new T[_options.NumTimeBins + 1];
+        _timeBinEdges = new Vector<T>(_options.NumTimeBins + 1);
         double binWidth = (maxTime - minTime) / _options.NumTimeBins;
 
         for (int i = 0; i <= _options.NumTimeBins; i++)
@@ -583,8 +583,8 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         // Cause-specific sub-networks
         for (int k = 0; k < _options.NumRisks; k++)
         {
-            var causeW = new List<T[,]>();
-            var causeB = new List<T[]>();
+            var causeW = new List<Matrix<T>>();
+            var causeB = new List<Vector<T>>();
 
             inputSize = sharedOutputSize;
             for (int layer = 0; layer < _options.NumCauseLayers; layer++)
@@ -607,10 +607,10 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Initializes weight matrix with He initialization.
     /// </summary>
-    private T[,] InitializeWeights(int inputSize, int outputSize)
+    private Matrix<T> InitializeWeights(int inputSize, int outputSize)
     {
         double scale = Math.Sqrt(2.0 / inputSize);
-        var w = new T[inputSize, outputSize];
+        var w = new Matrix<T>(inputSize, outputSize);
 
         for (int i = 0; i < inputSize; i++)
         {
@@ -624,25 +624,25 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Initializes bias array with zeros.
+    /// Initializes bias vector with zeros.
     /// </summary>
-    private T[] InitializeBiases(int size)
+    private Vector<T> InitializeBiases(int size)
     {
-        return new T[size];
+        return new Vector<T>(size);
     }
 
     /// <summary>
     /// Forward pass through the network.
     /// </summary>
-    private (T[][][], T[][], List<T[][]>) ForwardPass(Matrix<T> x, int[] indices)
+    private (Vector<T>[][], Vector<T>[], List<Vector<T>[]>) ForwardPass(Matrix<T> x, int[] indices)
     {
         int n = indices.Length;
 
         // Extract input for batch
-        var current = new T[n][];
+        var current = new Vector<T>[n];
         for (int i = 0; i < n; i++)
         {
-            current[i] = new T[_numFeatures];
+            current[i] = new Vector<T>(_numFeatures);
             for (int j = 0; j < _numFeatures; j++)
             {
                 current[i][j] = x[indices[i], j];
@@ -658,11 +658,11 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         var sharedOutput = current;
 
         // Cause-specific layers and outputs
-        var causeOutputs = new List<T[][]>();
-        var pmfs = new T[n][][];
+        var causeOutputs = new List<Vector<T>[]>();
+        var pmfs = new Vector<T>[n][];
         for (int i = 0; i < n; i++)
         {
-            pmfs[i] = new T[_options.NumRisks][];
+            pmfs[i] = new Vector<T>[_options.NumRisks];
         }
 
         for (int k = 0; k < _options.NumRisks; k++)
@@ -695,15 +695,15 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Applies a single layer.
     /// </summary>
-    private T[][] ApplyLayer(T[][] input, T[,] weights, T[] biases, bool applyActivation)
+    private Vector<T>[] ApplyLayer(Vector<T>[] input, Matrix<T> weights, Vector<T> biases, bool applyActivation)
     {
         int n = input.Length;
-        int outputSize = weights.GetLength(1);
+        int outputSize = weights.Columns;
 
-        var output = new T[n][];
+        var output = new Vector<T>[n];
         for (int i = 0; i < n; i++)
         {
-            output[i] = new T[outputSize];
+            output[i] = new Vector<T>(outputSize);
             for (int j = 0; j < outputSize; j++)
             {
                 double sum = NumOps.ToDouble(biases[j]);
@@ -744,7 +744,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Applies softmax across all causes and time bins.
     /// </summary>
-    private void ApplySoftmaxAcrossAll(T[][][] pmfs)
+    private void ApplySoftmaxAcrossAll(Vector<T>[][] pmfs)
     {
         int n = pmfs.Length;
 
@@ -787,20 +787,20 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes loss and gradients.
     /// </summary>
-    private (double loss, T[][][]) ComputeLossAndGradients(
-        T[][][] pmfs, int[] timeBinIndices, Vector<T> events, int[] batchIndices)
+    private (double loss, Vector<T>[][]) ComputeLossAndGradients(
+        Vector<T>[][] pmfs, int[] timeBinIndices, Vector<T> events, int[] batchIndices)
     {
         int n = batchIndices.Length;
         double logLikeLoss = 0;
         double rankingLoss = 0;
 
-        var gradients = new T[n][][];
+        var gradients = new Vector<T>[n][];
         for (int i = 0; i < n; i++)
         {
-            gradients[i] = new T[_options.NumRisks][];
+            gradients[i] = new Vector<T>[_options.NumRisks];
             for (int k = 0; k < _options.NumRisks; k++)
             {
-                gradients[i][k] = new T[_options.NumTimeBins];
+                gradients[i][k] = new Vector<T>(_options.NumTimeBins);
             }
         }
 
@@ -926,8 +926,8 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// Backward pass to update weights.
     /// </summary>
     private void BackwardPass(
-        Matrix<T> x, int[] batchIndices, T[][] sharedOutputs,
-        List<T[][]> causeOutputs, T[][][] gradients)
+        Matrix<T> x, int[] batchIndices, Vector<T>[] sharedOutputs,
+        List<Vector<T>[]> causeOutputs, Vector<T>[][] gradients)
     {
         int n = batchIndices.Length;
         double lr = _options.LearningRate / n;
@@ -937,10 +937,10 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         for (int k = 0; k < _options.NumRisks; k++)
         {
             // Gradient from PMF to cause output
-            var causeGrad = new T[n][];
+            var causeGrad = new Vector<T>[n];
             for (int i = 0; i < n; i++)
             {
-                causeGrad[i] = new T[_options.HiddenLayerSize];
+                causeGrad[i] = new Vector<T>(_options.HiddenLayerSize);
             }
 
             // Output layer gradients
@@ -980,15 +980,15 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             {
                 var w = _causeWeights[k][layer];
                 var b = _causeBiases[k][layer];
-                int inputSize = w.GetLength(0);
-                int outputSize = w.GetLength(1);
+                int inputSize = w.Rows;
+                int outputSize = w.Columns;
 
-                var nextGrad = layer > 0 ? new T[n][] : null;
+                var nextGrad = layer > 0 ? new Vector<T>[n] : null;
                 if (nextGrad != null)
                 {
                     for (int i = 0; i < n; i++)
                     {
-                        nextGrad[i] = new T[inputSize];
+                        nextGrad[i] = new Vector<T>(inputSize);
                     }
                 }
 
@@ -1073,12 +1073,18 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
-    private T[][] CloneArray(T[][] arr)
+    private Vector<T>[] CloneArray(Vector<T>[] arr)
     {
-        var result = new T[arr.Length][];
+        var result = new Vector<T>[arr.Length];
         for (int i = 0; i < arr.Length; i++)
         {
-            result[i] = (T[])arr[i].Clone();
+            var src = arr[i];
+            var dst = new Vector<T>(src.Length);
+            for (int j = 0; j < src.Length; j++)
+            {
+                dst[j] = src[j];
+            }
+            result[i] = dst;
         }
         return result;
     }
@@ -1093,19 +1099,19 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         return array;
     }
 
-    private (List<T[,]>, List<T[]>, List<List<T[,]>>, List<List<T[]>>, List<T[,]>, List<T[]>) SaveWeights()
+    private (List<Matrix<T>>, List<Vector<T>>, List<List<Matrix<T>>>, List<List<Vector<T>>>, List<Matrix<T>>, List<Vector<T>>) SaveWeights()
     {
         return (
-            _sharedWeights.Select(w => (T[,])w.Clone()).ToList(),
-            _sharedBiases.Select(b => (T[])b.Clone()).ToList(),
-            _causeWeights.Select(cw => cw.Select(w => (T[,])w.Clone()).ToList()).ToList(),
-            _causeBiases.Select(cb => cb.Select(b => (T[])b.Clone()).ToList()).ToList(),
-            _outputWeights.Select(w => (T[,])w.Clone()).ToList(),
-            _outputBiases.Select(b => (T[])b.Clone()).ToList()
+            _sharedWeights.Select(CloneMatrix).ToList(),
+            _sharedBiases.Select(CloneVector).ToList(),
+            _causeWeights.Select(cw => cw.Select(CloneMatrix).ToList()).ToList(),
+            _causeBiases.Select(cb => cb.Select(CloneVector).ToList()).ToList(),
+            _outputWeights.Select(CloneMatrix).ToList(),
+            _outputBiases.Select(CloneVector).ToList()
         );
     }
 
-    private void RestoreWeights((List<T[,]>, List<T[]>, List<List<T[,]>>, List<List<T[]>>, List<T[,]>, List<T[]>) weights)
+    private void RestoreWeights((List<Matrix<T>>, List<Vector<T>>, List<List<Matrix<T>>>, List<List<Vector<T>>>, List<Matrix<T>>, List<Vector<T>>) weights)
     {
         _sharedWeights = weights.Item1;
         _sharedBiases = weights.Item2;
@@ -1115,10 +1121,27 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         _outputBiases = weights.Item6;
     }
 
+    private static Matrix<T> CloneMatrix(Matrix<T> src)
+    {
+        var dst = new Matrix<T>(src.Rows, src.Columns);
+        for (int i = 0; i < src.Rows; i++)
+            for (int j = 0; j < src.Columns; j++)
+                dst[i, j] = src[i, j];
+        return dst;
+    }
+
+    private static Vector<T> CloneVector(Vector<T> src)
+    {
+        var dst = new Vector<T>(src.Length);
+        for (int i = 0; i < src.Length; i++)
+            dst[i] = src[i];
+        return dst;
+    }
+
     /// <inheritdoc/>
     protected override Task CalculateFeatureImportancesAsync(int featureCount)
     {
-        var importances = new T[_numFeatures];
+        var importances = new Vector<T>(_numFeatures);
 
         if (_sharedWeights.Count > 0)
         {
@@ -1126,7 +1149,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             for (int f = 0; f < _numFeatures; f++)
             {
                 double sumAbsWeight = 0;
-                for (int j = 0; j < firstLayerWeights.GetLength(1); j++)
+                for (int j = 0; j < firstLayerWeights.Columns; j++)
                 {
                     sumAbsWeight += Math.Abs(NumOps.ToDouble(firstLayerWeights[f, j]));
                 }
@@ -1134,7 +1157,11 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        double sum = importances.Sum(x => NumOps.ToDouble(x));
+        double sum = 0;
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            sum += NumOps.ToDouble(importances[f]);
+        }
         if (sum > 0)
         {
             for (int f = 0; f < _numFeatures; f++)
@@ -1143,7 +1170,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        FeatureImportances = new Vector<T>(importances);
+        FeatureImportances = importances;
         return Task.CompletedTask;
     }
 
@@ -1214,7 +1241,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         return ms.ToArray();
     }
 
-    private void SerializeLayerList(BinaryWriter writer, List<T[,]> weights, List<T[]> biases)
+    private void SerializeLayerList(BinaryWriter writer, List<Matrix<T>> weights, List<Vector<T>> biases)
     {
         writer.Write(weights.Count);
         for (int i = 0; i < weights.Count; i++)
@@ -1224,25 +1251,25 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         }
     }
 
-    private void SerializeWeights(BinaryWriter writer, T[,] w)
+    private void SerializeWeights(BinaryWriter writer, Matrix<T> w)
     {
-        writer.Write(w.GetLength(0));
-        writer.Write(w.GetLength(1));
-        for (int i = 0; i < w.GetLength(0); i++)
+        writer.Write(w.Rows);
+        writer.Write(w.Columns);
+        for (int i = 0; i < w.Rows; i++)
         {
-            for (int j = 0; j < w.GetLength(1); j++)
+            for (int j = 0; j < w.Columns; j++)
             {
                 writer.Write(NumOps.ToDouble(w[i, j]));
             }
         }
     }
 
-    private void SerializeBiases(BinaryWriter writer, T[] b)
+    private void SerializeBiases(BinaryWriter writer, Vector<T> b)
     {
         writer.Write(b.Length);
-        foreach (var bi in b)
+        for (int i = 0; i < b.Length; i++)
         {
-            writer.Write(NumOps.ToDouble(bi));
+            writer.Write(NumOps.ToDouble(b[i]));
         }
     }
 
@@ -1266,7 +1293,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         int timeBinLen = reader.ReadInt32();
         if (timeBinLen > 0)
         {
-            _timeBinEdges = new T[timeBinLen];
+            _timeBinEdges = new Vector<T>(timeBinLen);
             for (int i = 0; i < timeBinLen; i++)
             {
                 _timeBinEdges[i] = NumOps.FromDouble(reader.ReadDouble());
@@ -1296,11 +1323,11 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         }
     }
 
-    private (List<T[,]>, List<T[]>) DeserializeLayerList(BinaryReader reader)
+    private (List<Matrix<T>>, List<Vector<T>>) DeserializeLayerList(BinaryReader reader)
     {
         int count = reader.ReadInt32();
-        var weights = new List<T[,]>();
-        var biases = new List<T[]>();
+        var weights = new List<Matrix<T>>();
+        var biases = new List<Vector<T>>();
 
         for (int i = 0; i < count; i++)
         {
@@ -1311,11 +1338,11 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         return (weights, biases);
     }
 
-    private T[,] DeserializeWeights(BinaryReader reader)
+    private Matrix<T> DeserializeWeights(BinaryReader reader)
     {
         int rows = reader.ReadInt32();
         int cols = reader.ReadInt32();
-        var w = new T[rows, cols];
+        var w = new Matrix<T>(rows, cols);
 
         for (int i = 0; i < rows; i++)
         {
@@ -1328,10 +1355,10 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         return w;
     }
 
-    private T[] DeserializeBiases(BinaryReader reader)
+    private Vector<T> DeserializeBiases(BinaryReader reader)
     {
         int len = reader.ReadInt32();
-        var b = new T[len];
+        var b = new Vector<T>(len);
 
         for (int i = 0; i < len; i++)
         {
