@@ -135,15 +135,15 @@ internal class ShardedStreamingDataset : IDisposable
     }
 
     /// <summary>
-    /// Reads all records from a single shard file.
-    /// </summary>
-    /// <param name="shardPath">Path to the shard file.</param>
-    /// <returns>An enumerable of byte records.</returns>
-    /// <summary>
     /// Maximum allowed record length (1 GB) to guard against corrupted files causing OOM.
     /// </summary>
     private const int MaxRecordLength = 1 << 30;
 
+    /// <summary>
+    /// Reads all records from a single shard file.
+    /// </summary>
+    /// <param name="shardPath">Path to the shard file.</param>
+    /// <returns>An enumerable of byte records.</returns>
     public static IEnumerable<byte[]> ReadShard(string shardPath)
     {
         using var stream = new FileStream(shardPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536);

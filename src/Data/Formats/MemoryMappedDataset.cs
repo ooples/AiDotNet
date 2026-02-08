@@ -70,24 +70,39 @@ public class MemoryMappedDataset<T> : IDisposable
             throw new FileNotFoundException("Dataset file not found.", filePath);
 
         _mmf = MemoryMappedFile.CreateFromFile(filePath, FileMode.Open, null, 0, MemoryMappedFileAccess.Read);
-        _accessor = _mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
-
-        _numSamples = _accessor.ReadInt32(0);
-        _elementsPerSample = _accessor.ReadInt32(4);
-
-        if (_numSamples <= 0)
-            throw new InvalidDataException($"Invalid number of samples: {_numSamples}");
-        if (_elementsPerSample <= 0)
-            throw new InvalidDataException($"Invalid elements per sample: {_elementsPerSample}");
-
-        // Validate file size
-        long expectedDataSize = HeaderSize + (long)_numSamples * _elementsPerSample * ElementSize;
-        long actualSize = _accessor.Capacity;
-        if (actualSize < expectedDataSize)
+        try
         {
-            throw new InvalidDataException(
-                $"File is too small. Expected at least {expectedDataSize} bytes for {_numSamples} samples " +
-                $"with {_elementsPerSample} elements each, but file is only {actualSize} bytes.");
+            _accessor = _mmf.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+            try
+            {
+                _numSamples = _accessor.ReadInt32(0);
+                _elementsPerSample = _accessor.ReadInt32(4);
+
+                if (_numSamples <= 0)
+                    throw new InvalidDataException($"Invalid number of samples: {_numSamples}");
+                if (_elementsPerSample <= 0)
+                    throw new InvalidDataException($"Invalid elements per sample: {_elementsPerSample}");
+
+                // Validate file size
+                long expectedDataSize = HeaderSize + (long)_numSamples * _elementsPerSample * ElementSize;
+                long actualSize = _accessor.Capacity;
+                if (actualSize < expectedDataSize)
+                {
+                    throw new InvalidDataException(
+                        $"File is too small. Expected at least {expectedDataSize} bytes for {_numSamples} samples " +
+                        $"with {_elementsPerSample} elements each, but file is only {actualSize} bytes.");
+                }
+            }
+            catch
+            {
+                _accessor.Dispose();
+                throw;
+            }
+        }
+        catch (InvalidDataException)
+        {
+            _mmf.Dispose();
+            throw;
         }
     }
 
@@ -98,6 +113,8 @@ public class MemoryMappedDataset<T> : IDisposable
     /// <returns>An array containing the sample's elements.</returns>
     public T[] ReadSample(int index)
     {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(MemoryMappedDataset<T>));
         if (index < 0 || index >= _numSamples)
             throw new ArgumentOutOfRangeException(nameof(index), $"Index must be in [0, {_numSamples - 1}].");
 
@@ -154,6 +171,14 @@ public class MemoryMappedDataset<T> : IDisposable
         int[] batchShape;
         if (sampleShape is not null)
         {
+            int shapeProduct = 1;
+            for (int d = 0; d < sampleShape.Length; d++)
+                shapeProduct *= sampleShape[d];
+            if (shapeProduct != _elementsPerSample)
+                throw new ArgumentException(
+                    $"sampleShape product ({shapeProduct}) must equal ElementsPerSample ({_elementsPerSample}).",
+                    nameof(sampleShape));
+
             batchShape = new int[sampleShape.Length + 1];
             batchShape[0] = indices.Length;
             Array.Copy(sampleShape, 0, batchShape, 1, sampleShape.Length);
@@ -205,11 +230,15 @@ public class MemoryMappedDataset<T> : IDisposable
             throw new ArgumentException("Data tensor must have at least 2 dimensions [numSamples, ...].");
 
         int numSamples = data.Shape[0];
+        if (numSamples <= 0)
+            throw new ArgumentException("Data tensor must have at least one sample.", nameof(data));
         int elementsPerSample = 1;
         for (int d = 1; d < data.Shape.Length; d++)
         {
             elementsPerSample *= data.Shape[d];
         }
+        if (elementsPerSample <= 0)
+            throw new ArgumentException("Data tensor must have at least one element per sample.", nameof(data));
 
         string? dir = Path.GetDirectoryName(filePath);
         if (!string.IsNullOrEmpty(dir))
