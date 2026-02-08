@@ -75,7 +75,7 @@ namespace AiDotNetTests.UnitTests.Data.Sampling
         #region Token Budget Batching Tests
 
         [Fact]
-        public void GetBatchIndices_RespectesTokenBudget()
+        public void GetBatchIndices_RespectsTokenBudget()
         {
             // 5 samples of 30 tokens each, budget of 100
             // Should fit 3 per batch (90 <= 100), then 2 in the last batch

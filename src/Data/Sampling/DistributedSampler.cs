@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Sampling;
 
@@ -79,7 +80,7 @@ public class DistributedSampler : DataSamplerBase
             int epochSeed = _baseSeed.HasValue
                 ? _baseSeed.Value + CurrentEpoch
                 : CurrentEpoch;
-            var epochRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(epochSeed);
+            var epochRandom = RandomHelper.CreateSeededRandom(epochSeed);
             for (int i = indices.Length - 1; i > 0; i--)
             {
                 int j = epochRandom.Next(i + 1);

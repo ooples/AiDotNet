@@ -23,7 +23,7 @@ public sealed class VideoFrameDatasetOptions
     /// </summary>
     public string[] FrameExtensions { get; set; } =
 #if NET6_0_OR_GREATER
-        new[] { ".png", ".jpg", ".jpeg", ".bmp", ".ppm", ".pgm", ".gif", ".tiff" };
+        new[] { ".png", ".jpg", ".jpeg", ".bmp", ".ppm", ".pgm", ".gif", ".tiff", ".tif" };
 #else
         new[] { ".bmp", ".ppm", ".pgm" };
 #endif

@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using AiDotNet.Data.Geometry;
 using AiDotNet.Data.Loaders;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Text.Benchmarks;
 
@@ -78,7 +79,7 @@ public class Imdb50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         {
             // Shuffle before truncating to avoid single-class bias (positive reviews loaded first)
             int[] shuffleIndices = Enumerable.Range(0, reviews.Count).ToArray();
-            var shuffleRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+            var shuffleRandom = RandomHelper.CreateSeededRandom(42);
             for (int i = shuffleIndices.Length - 1; i > 0; i--)
             {
                 int j = shuffleRandom.Next(i + 1);
@@ -155,8 +156,8 @@ public class Imdb50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         ValidateSplitRatios(trainRatio, validationRatio);
         var (trainSize, valSize, _) = ComputeSplitSizes(_sampleCount, trainRatio, validationRatio);
         var random = seed.HasValue
-            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value)
-            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
         return (
             new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(

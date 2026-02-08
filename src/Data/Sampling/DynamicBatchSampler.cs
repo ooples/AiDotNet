@@ -113,8 +113,9 @@ public class DynamicBatchSampler : DataSamplerBase, IBatchSampler
             currentTokens += sampleLen;
         }
 
-        // Handle remaining samples
-        if (currentBatch.Count > 0 && !DropLast)
+        // Handle remaining samples - yield if not dropping last, or if the batch is full
+        if (currentBatch.Count > 0 &&
+            (!DropLast || currentBatch.Count >= BatchSize || currentTokens >= _maxTokensPerBatch))
         {
             yield return currentBatch.ToArray();
         }

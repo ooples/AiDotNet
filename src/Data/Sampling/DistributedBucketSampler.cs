@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Sampling;
 
@@ -128,7 +129,7 @@ public class DistributedBucketSampler : DataSamplerBase, IBatchSampler
             int bucketSeed = _baseSeed.HasValue
                 ? unchecked(_baseSeed.Value * 31 + CurrentEpoch)
                 : CurrentEpoch;
-            var bucketRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(bucketSeed);
+            var bucketRandom = RandomHelper.CreateSeededRandom(bucketSeed);
 
             foreach (var bucket in buckets)
             {
@@ -189,7 +190,7 @@ public class DistributedBucketSampler : DataSamplerBase, IBatchSampler
             int epochSeed = _baseSeed.HasValue
                 ? _baseSeed.Value + CurrentEpoch
                 : CurrentEpoch;
-            var epochRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(epochSeed);
+            var epochRandom = RandomHelper.CreateSeededRandom(epochSeed);
             for (int i = allIndices.Length - 1; i > 0; i--)
             {
                 int j = epochRandom.Next(i + 1);

@@ -1,5 +1,6 @@
 using AiDotNet.Data.Geometry;
 using AiDotNet.Data.Loaders;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Vision.Benchmarks;
 
@@ -177,8 +178,8 @@ public class FashionMnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
         ValidateSplitRatios(trainRatio, validationRatio);
         var (trainSize, valSize, _) = ComputeSplitSizes(_sampleCount, trainRatio, validationRatio);
         var random = seed.HasValue
-            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value)
-            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
 
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded. Call LoadAsync() first.");
