@@ -186,7 +186,7 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public async Task<Vector<T>> PredictZeroProbabilityAsync(Matrix<T> input)
     {
         var (_, pis) = await Task.Run(() => ComputePredictions(input));
-        return new Vector<T>(pis);
+        return pis;
     }
 
     /// <summary>
@@ -197,7 +197,7 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public async Task<Vector<T>> PredictConditionalCountAsync(Matrix<T> input)
     {
         var (lambdas, _) = await Task.Run(() => ComputePredictions(input));
-        return new Vector<T>(lambdas);
+        return lambdas;
     }
 
     /// <summary>
@@ -286,11 +286,11 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes predictions for all samples.
     /// </summary>
-    private (T[] lambdas, T[] pis) ComputePredictions(Matrix<T> x)
+    private (Vector<T> lambdas, Vector<T> pis) ComputePredictions(Matrix<T> x)
     {
         int n = x.Rows;
-        var lambdas = new T[n];
-        var pis = new T[n];
+        var lambdas = new Vector<T>(n);
+        var pis = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -341,7 +341,7 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes posterior probability of being a structural zero.
     /// </summary>
-    private double[] ComputePosteriorZero(Vector<T> y, T[] lambdas, T[] pis)
+    private double[] ComputePosteriorZero(Vector<T> y, Vector<T> lambdas, Vector<T> pis)
     {
         var posterior = new double[y.Length];
 
@@ -471,7 +471,7 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates dispersion parameter for Negative Binomial.
     /// </summary>
-    private void UpdateDispersion(Vector<T> y, T[] lambdas, double[] posteriorZero)
+    private void UpdateDispersion(Vector<T> y, Vector<T> lambdas, double[] posteriorZero)
     {
         // Method of moments estimate
         double sumSqDev = 0;
@@ -562,7 +562,7 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes the log-likelihood.
     /// </summary>
-    private double ComputeLogLikelihood(Vector<T> y, T[] lambdas, T[] pis)
+    private double ComputeLogLikelihood(Vector<T> y, Vector<T> lambdas, Vector<T> pis)
     {
         double ll = 0;
         for (int i = 0; i < y.Length; i++)
@@ -657,7 +657,7 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <inheritdoc/>
     protected override Task CalculateFeatureImportancesAsync(int featureCount)
     {
-        var importances = new T[_numFeatures];
+        var importances = new Vector<T>(_numFeatures);
 
         for (int f = 0; f < _numFeatures; f++)
         {
@@ -669,14 +669,18 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
             importances[f] = NumOps.FromDouble(imp);
         }
 
-        double sum = importances.Sum(x => NumOps.ToDouble(x));
+        double sum = 0;
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            sum += NumOps.ToDouble(importances[f]);
+        }
         if (sum > 0)
         {
             for (int f = 0; f < _numFeatures; f++)
                 importances[f] = NumOps.Divide(importances[f], NumOps.FromDouble(sum));
         }
 
-        FeatureImportances = new Vector<T>(importances);
+        FeatureImportances = importances;
         return Task.CompletedTask;
     }
 
