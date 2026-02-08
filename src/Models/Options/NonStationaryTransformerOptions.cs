@@ -30,7 +30,7 @@ namespace AiDotNet.Models.Options;
 /// in Time Series Forecasting", NeurIPS 2022. https://arxiv.org/abs/2205.14415
 /// </para>
 /// </remarks>
-public class NonStationaryTransformerOptions<T>
+public class NonStationaryTransformerOptions<T> : ModelOptions
 {
     #region Model Architecture
 

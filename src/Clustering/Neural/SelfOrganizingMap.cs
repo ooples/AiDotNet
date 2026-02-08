@@ -48,6 +48,9 @@ namespace AiDotNet.Clustering.Neural;
 public class SelfOrganizingMap<T> : ClusteringBase<T>
 {
     private readonly SOMOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double[,][]? _weights;
     private int[]? _neuronLabels;
 

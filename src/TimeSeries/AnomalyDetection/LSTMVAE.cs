@@ -33,6 +33,9 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 public class LSTMVAE<T> : TimeSeriesModelBase<T>
 {
     private readonly LSTMVAEOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     // Encoder (Tensor-based)

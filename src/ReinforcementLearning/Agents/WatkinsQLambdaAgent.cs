@@ -9,6 +9,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.EligibilityTraces;
 public class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private WatkinsQLambdaOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, T>> _eligibilityTraces;
     private double _epsilon;

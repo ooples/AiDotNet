@@ -20,7 +20,7 @@ namespace AiDotNet.Models.Options;
 /// patterns without getting distracted by random noise in the data.
 /// </para>
 /// </remarks>
-public class BayesianFitDetectorOptions
+public class BayesianFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for determining a good model fit.

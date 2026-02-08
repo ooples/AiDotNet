@@ -13,6 +13,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private LSTDOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Matrix<T> _weights;  // Weight matrix: [ActionSize x FeatureSize]
     private Matrix<T> _A;  // A matrix for least-squares: [FeatureSize x FeatureSize]
     private Vector<T> _b;  // b vector for least-squares: [FeatureSize]

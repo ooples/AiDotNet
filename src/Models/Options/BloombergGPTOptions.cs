@@ -40,7 +40,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Reference:</b> Wu et al., "BloombergGPT: A Large Language Model for Finance", 2023.
 /// </para>
 /// </remarks>
-public class BloombergGPTOptions<T>
+public class BloombergGPTOptions<T> : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default configuration.

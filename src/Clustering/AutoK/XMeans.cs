@@ -43,6 +43,9 @@ namespace AiDotNet.Clustering.AutoK;
 public class XMeans<T> : ClusteringBase<T>
 {
     private readonly XMeansOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double _bic;
 
     /// <summary>

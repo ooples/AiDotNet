@@ -29,7 +29,7 @@ namespace AiDotNet.Models.Options;
 /// ICML 2022. https://arxiv.org/abs/2201.12740
 /// </para>
 /// </remarks>
-public class FEDformerOptions<T>
+public class FEDformerOptions<T> : ModelOptions
 {
     #region Model Architecture
 

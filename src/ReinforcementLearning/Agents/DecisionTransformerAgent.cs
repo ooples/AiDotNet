@@ -40,6 +40,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
 public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DecisionTransformerOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private NeuralNetwork<T> _transformerNetwork;

@@ -40,7 +40,7 @@ namespace AiDotNet.Models.Options;
 /// This class lets you configure different aspects of this testing process.
 /// </para>
 /// </remarks>
-public class PermutationTestFitDetectorOptions
+public class PermutationTestFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the number of random permutations to perform during the test.

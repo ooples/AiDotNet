@@ -28,7 +28,7 @@ namespace AiDotNet.Models.Options;
 /// Time-series Forecasting", 2022. https://arxiv.org/abs/2202.01381
 /// </para>
 /// </remarks>
-public class ETSformerOptions<T>
+public class ETSformerOptions<T> : ModelOptions
 {
     #region Model Architecture
 

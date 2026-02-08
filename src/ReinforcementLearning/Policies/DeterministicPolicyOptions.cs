@@ -1,4 +1,5 @@
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
 
 namespace AiDotNet.ReinforcementLearning.Policies
@@ -7,7 +8,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Configuration options for deterministic policies.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    public class DeterministicPolicyOptions<T>
+    public class DeterministicPolicyOptions<T> : ModelOptions
     {
         public int StateSize { get; set; } = 0;
         public int ActionSize { get; set; } = 0;
@@ -15,6 +16,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
         public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
         public IExplorationStrategy<T> ExplorationStrategy { get; set; } = new OrnsteinUhlenbeckNoise<T>(actionSize: 1);
         public bool UseTanhSquashing { get; set; } = true;
-        public int? Seed { get; set; } = null;
+        public new int? Seed { get; set; } = null;
     }
 }

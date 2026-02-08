@@ -28,7 +28,7 @@ namespace AiDotNet.Models.Options;
 /// Time Series Analysis", ICLR 2023. https://arxiv.org/abs/2210.02186
 /// </para>
 /// </remarks>
-public class TimesNetOptions<T>
+public class TimesNetOptions<T> : ModelOptions
 {
     #region Model Architecture
 

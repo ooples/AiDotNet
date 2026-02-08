@@ -52,7 +52,7 @@ namespace AiDotNet.Regression;
 /// </code>
 /// </para>
 /// </remarks>
-public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector<T>>
+public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector<T>>, IConfigurableModel<T>
 {
     #region Fields
 
@@ -72,6 +72,9 @@ public class HistGradientBoostingRegression<T> : IFullModel<T, Matrix<T>, Vector
     /// Configuration options for the histogram gradient boosting algorithm.
     /// </summary>
     private readonly HistGradientBoostingOptions _options;
+
+    /// <inheritdoc/>
+    public ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Bin thresholds for each feature (jagged array).

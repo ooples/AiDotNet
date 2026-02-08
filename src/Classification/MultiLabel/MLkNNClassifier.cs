@@ -32,6 +32,9 @@ namespace AiDotNet.Classification.MultiLabel;
 public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
 {
     private readonly MLkNNOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly Random _random;
     private Matrix<T>? _trainFeatures;
     private Matrix<T>? _trainLabels;

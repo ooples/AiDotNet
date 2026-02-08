@@ -999,7 +999,7 @@ public class EnsembleNeuralClusteringIntegrationTests
         {
             NumBaseClusterings = 5,
             NumClusters = 2,
-            RandomSeed = 42
+            Seed = 42
         };
 
         var consensus = new ConsensusClustering<double>(options);

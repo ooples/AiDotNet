@@ -83,6 +83,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MetaSGDOptions<T, TInput, TOutput> _metaSGDOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _metaSGDOptions;
     private readonly PerParameterOptimizer<T, TInput, TOutput> _optimizer;
 
     /// <summary>

@@ -31,7 +31,7 @@ namespace AiDotNet.Models.Options;
 /// - VariancePenalty: How much to penalize risky behavior
 /// </para>
 /// </remarks>
-public class TradingAgentOptions<T>
+public class TradingAgentOptions<T> : ModelOptions
 {
     #region RL Parameters
 
@@ -67,7 +67,7 @@ public class TradingAgentOptions<T>
     /// <summary>
     /// Random seed for reproducibility.
     /// </summary>
-    public int? Seed { get; set; }
+    public new int? Seed { get; set; }
 
     /// <summary>
     /// Batch size for training updates.

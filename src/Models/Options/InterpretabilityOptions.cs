@@ -35,7 +35,7 @@ namespace AiDotNet.Models.Options;
 /// - <b>GradCAM</b>: Visual heatmaps for CNN explanations
 /// </para>
 /// </remarks>
-public class InterpretabilityOptions
+public class InterpretabilityOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets whether SHAP explanations are enabled.

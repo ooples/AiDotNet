@@ -46,6 +46,9 @@ namespace AiDotNet.Clustering.Density;
 public class HDBSCAN<T> : ClusteringBase<T>
 {
     private readonly HDBSCANOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double[]? _outlierScores;
     private double[]? _probabilities;
     private List<CondensedTreeNode>? _condensedTree;

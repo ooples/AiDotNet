@@ -12,6 +12,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private TabularActorCriticOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _policy;  // Actor: π(a|s)
     private Dictionary<string, T> _valueTable;  // Critic: V(s)
 

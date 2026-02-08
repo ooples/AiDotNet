@@ -1,9 +1,11 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Audio.MusicAnalysis;
 
 /// <summary>
 /// Configuration options for key detection.
 /// </summary>
-public class KeyDetectorOptions
+public class KeyDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the sample rate.

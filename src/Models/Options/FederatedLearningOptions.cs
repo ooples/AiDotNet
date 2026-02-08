@@ -24,7 +24,7 @@ namespace AiDotNet.Models.Options;
 /// - Use privacy budget ε=1.0, δ=1e-5
 /// - Run for maximum 100 rounds or until convergence
 /// </remarks>
-public class FederatedLearningOptions
+public class FederatedLearningOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the total number of clients participating in federated learning.

@@ -42,6 +42,9 @@ namespace AiDotNet.Clustering.Hierarchical;
 public class BisectingKMeans<T> : ClusteringBase<T>
 {
     private readonly BisectingKMeansOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly IDistanceMetric<T> _distanceMetric;
     private Random _random;
     private List<BisectionNode>? _hierarchy;

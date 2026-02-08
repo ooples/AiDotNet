@@ -41,6 +41,9 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private WorldModelsOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     // V: VAE for spatial compression
     private NeuralNetwork<T> _vaeEncoder;
     private NeuralNetwork<T> _vaeDecoder;

@@ -92,6 +92,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 public class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly MANNOptions<T, TInput, TOutput> _mannOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _mannOptions;
     private readonly ExternalMemory<T> _memory;
     private readonly MANNMemoryStatistics _memoryStats;
 

@@ -37,6 +37,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.A2C;
 public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private A2COptions<T> _a2cOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _a2cOptions;
     private readonly Trajectory<T> _trajectory;
 
     private NeuralNetwork<T> _policyNetwork;

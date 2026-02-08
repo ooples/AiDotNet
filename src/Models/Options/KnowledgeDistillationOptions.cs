@@ -29,7 +29,7 @@ namespace AiDotNet.Models.Options;
 /// </code>
 /// </para>
 /// </remarks>
-public class KnowledgeDistillationOptions<T, TInput, TOutput>
+public class KnowledgeDistillationOptions<T, TInput, TOutput> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the type of teacher model to use.

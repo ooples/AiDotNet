@@ -42,6 +42,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.SAC;
 public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private SACOptions<T> _sacOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _sacOptions;
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
     private NeuralNetwork<T> _policyNetwork;      // Actor (stochastic policy)

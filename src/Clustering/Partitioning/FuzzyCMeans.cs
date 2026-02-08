@@ -41,6 +41,9 @@ namespace AiDotNet.Clustering.Partitioning;
 public class FuzzyCMeans<T> : ClusteringBase<T>
 {
     private readonly FuzzyCMeansOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double[,]? _membershipMatrix;
 
     /// <summary>

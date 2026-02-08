@@ -42,6 +42,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
 public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DreamerOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // World model components

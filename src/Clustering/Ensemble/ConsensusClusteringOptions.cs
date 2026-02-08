@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Clustering.Ensemble;
 
 /// <summary>
@@ -27,7 +29,7 @@ namespace AiDotNet.Clustering.Ensemble;
 /// - Voting: Which cluster assignment is most popular?
 /// </para>
 /// </remarks>
-public class ConsensusClusteringOptions<T>
+public class ConsensusClusteringOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the number of base clusterings to generate.
@@ -53,11 +55,6 @@ public class ConsensusClusteringOptions<T>
     /// <value>Target clusters, or null for automatic.</value>
     public int? NumClusters { get; set; }
 
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <value>Random seed, or null for random.</value>
-    public int? RandomSeed { get; set; }
 }
 
 /// <summary>

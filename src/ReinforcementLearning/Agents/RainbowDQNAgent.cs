@@ -37,6 +37,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
 public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private RainbowDQNOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private NeuralNetwork<T> _onlineNetwork;

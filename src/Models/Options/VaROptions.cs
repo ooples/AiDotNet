@@ -11,7 +11,7 @@ namespace AiDotNet.Models.Options;
 /// "input size" settings.
 /// </para>
 /// </remarks>
-public class VaROptions<T>
+public class VaROptions<T> : ModelOptions
 {
     /// <summary>
     /// The confidence level for VaR calculation (e.g., 0.95 or 0.99).

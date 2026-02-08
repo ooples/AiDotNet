@@ -15,7 +15,7 @@ namespace AiDotNet.Classification.MultiLabel;
 /// traditional classification which assigns exactly one label.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>
+public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IConfigurableModel<T>
 {
     /// <summary>
     /// Gets the numeric operations provider for type T.
@@ -26,6 +26,9 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>
     /// Gets the classifier options.
     /// </summary>
     protected ClassifierOptions<T> Options { get; }
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => Options;
 
     /// <summary>
     /// Gets the regularization method used to prevent overfitting.

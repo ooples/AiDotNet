@@ -32,7 +32,7 @@ namespace AiDotNet.Models.Options;
 /// your model. This class lets you configure how sensitive the detector should be to different types
 /// of problems.</para>
 /// </remarks>
-public class KFoldCrossValidationFitDetectorOptions
+public class KFoldCrossValidationFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for detecting overfitting based on the difference between training

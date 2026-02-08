@@ -45,6 +45,9 @@ namespace AiDotNet.Clustering.Ensemble;
 public class ConsensusClustering<T> : ClusteringBase<T>
 {
     private readonly ConsensusClusteringOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double[,]? _coAssociationMatrix;
     private readonly INumericOperations<T> _numOps;
 
@@ -76,7 +79,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
             Method = _options.Method,
             FinalAlgorithm = _options.FinalAlgorithm,
             NumClusters = _options.NumClusters,
-            RandomSeed = _options.RandomSeed
+            Seed = _options.Seed
         });
     }
 
@@ -95,8 +98,8 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         int d = x.Columns;
         NumFeatures = d;
 
-        var rand = _options.RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
+        var rand = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
         // Generate base clusterings

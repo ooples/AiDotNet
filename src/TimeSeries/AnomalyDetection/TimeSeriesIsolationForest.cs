@@ -47,6 +47,9 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 public class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
 {
     private readonly TimeSeriesIsolationForestOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private readonly Random _random;
 

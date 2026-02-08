@@ -35,6 +35,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.SARSA;
 public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private SARSAOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private double _epsilon;
     private Random _random;

@@ -43,6 +43,9 @@ namespace AiDotNet.Clustering.SemiSupervised;
 public class COPKMeans<T> : ClusteringBase<T>
 {
     private readonly COPKMeansOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private HashSet<(int, int)>? _mustLinkClosure;
     private HashSet<(int, int)>? _cannotLinkClosure;
 

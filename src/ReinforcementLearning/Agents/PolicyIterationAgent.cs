@@ -17,6 +17,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private PolicyIterationOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, T> _valueTable;
     private Dictionary<string, int> _policy;
     private Dictionary<string, Dictionary<int, List<(string nextState, T reward, T probability)>>> _model;

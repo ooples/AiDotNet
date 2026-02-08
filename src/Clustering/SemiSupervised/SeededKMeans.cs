@@ -47,6 +47,9 @@ public class SeededKMeans<T> : ClusteringBase<T>
 {
     private readonly SeededKMeansOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Initializes a new Seeded K-Means instance.
     /// </summary>

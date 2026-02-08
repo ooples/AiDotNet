@@ -34,6 +34,9 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// </summary>
     private readonly ExtremelyRandomizedTreesRegressionOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Collection of individual decision trees that make up the ensemble.
     /// </summary>

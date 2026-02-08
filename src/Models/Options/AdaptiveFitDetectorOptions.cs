@@ -15,7 +15,7 @@ namespace AiDotNet.Models.Options;
 /// if your model is learning too much detail from your data (overfitting) or not learning enough (underfitting).
 /// It automatically picks the best testing approach based on how complex your model is and how well it's performing.</para>
 /// </remarks>
-public class AdaptiveFitDetectorOptions
+public class AdaptiveFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the configuration options for the Residual Analysis method of fit detection.

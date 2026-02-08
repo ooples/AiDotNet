@@ -16,7 +16,7 @@ namespace AiDotNet.Models.Options;
 /// to be right about 90% of the time. This detector helps identify if your model is overconfident (saying it's very sure 
 /// when it shouldn't be) or underconfident (not expressing enough confidence when it should).</para>
 /// </remarks>
-public class CalibratedProbabilityFitDetectorOptions
+public class CalibratedProbabilityFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the number of bins used to group predictions for calibration assessment.

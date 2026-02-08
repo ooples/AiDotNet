@@ -1,9 +1,11 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Audio.Speaker;
 
 /// <summary>
 /// Configuration options for speaker verification.
 /// </summary>
-public class SpeakerVerifierOptions
+public class SpeakerVerifierOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for verification (0-1).

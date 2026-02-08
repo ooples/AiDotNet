@@ -12,7 +12,7 @@ namespace AiDotNet.Models.Options;
 /// - Detection thresholds (how confident the model must be)
 /// </para>
 /// </remarks>
-public class ObjectDetectionOptions<T>
+public class ObjectDetectionOptions<T> : ModelOptions
 {
     /// <summary>
     /// The detection architecture to use.

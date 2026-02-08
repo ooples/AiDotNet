@@ -48,6 +48,9 @@ namespace AiDotNet.Classification.Online;
 public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
 {
     private readonly AdaptiveRandomForestOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly Random _random;
     private readonly List<T> _knownClasses;
     private readonly List<TreeMember> _ensemble;

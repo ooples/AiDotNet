@@ -30,7 +30,7 @@ namespace AiDotNet.Models.Options;
 /// 
 /// By detecting these issues early, you can adjust your model or training approach to get better results.</para>
 /// </remarks>
-public class HoldoutValidationFitDetectorOptions
+public class HoldoutValidationFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for detecting overfitting based on the relative difference between

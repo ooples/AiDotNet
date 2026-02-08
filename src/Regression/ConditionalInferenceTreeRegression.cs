@@ -49,6 +49,9 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     /// </remarks>
     private readonly ConditionalInferenceTreeOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The root node of the decision tree.
     /// </summary>

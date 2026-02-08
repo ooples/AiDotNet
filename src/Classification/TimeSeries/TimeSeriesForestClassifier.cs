@@ -38,6 +38,9 @@ namespace AiDotNet.Classification.TimeSeries;
 public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
 {
     private readonly TimeSeriesForestOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly Random _random;
     private List<IntervalTree>? _trees;
     private bool _isFitted;

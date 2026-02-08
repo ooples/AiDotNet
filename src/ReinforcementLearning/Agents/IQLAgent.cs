@@ -44,6 +44,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.IQL;
 public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private IQLOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly INumericOperations<T> _numOps;
 
     private NeuralNetwork<T> _policyNetwork;

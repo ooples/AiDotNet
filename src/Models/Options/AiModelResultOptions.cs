@@ -80,7 +80,7 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T&gt;, Vector&lt;T&gt;).</typeparam>
 /// <typeparam name="TOutput">The type of output predictions (e.g., Vector&lt;T&gt;).</typeparam>
-public class AiModelResultOptions<T, TInput, TOutput>
+public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
 {
     // ============================================================================
     // Core Model Properties

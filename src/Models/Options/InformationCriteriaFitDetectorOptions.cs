@@ -26,7 +26,7 @@ namespace AiDotNet.Models.Options;
 /// The Information Criteria Fit Detector uses these scores to help you find the "sweet spot" - a model that's
 /// just complex enough to capture the important patterns in your data, but no more complex than necessary.</para>
 /// </remarks>
-public class InformationCriteriaFitDetectorOptions
+public class InformationCriteriaFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for significant differences in AIC (Akaike Information Criterion) values

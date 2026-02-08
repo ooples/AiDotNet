@@ -38,6 +38,9 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// </summary>
     private readonly KNearestNeighborsOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Matrix containing the feature vectors of the training samples.
     /// </summary>

@@ -33,7 +33,7 @@ namespace AiDotNet.Models.Options;
 /// identify potential fitting problems in your models.
 /// </para>
 /// </remarks>
-public class PartialDependencePlotFitDetectorOptions
+public class PartialDependencePlotFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for detecting overfitting based on the variability in partial dependence plots.

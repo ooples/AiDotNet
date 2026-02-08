@@ -41,6 +41,9 @@ namespace AiDotNet.Clustering.Partitioning;
 public class AffinityPropagation<T> : ClusteringBase<T>
 {
     private readonly AffinityPropagationOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private int[]? _exemplarIndices;
     private double[,]? _similarityMatrix;
 

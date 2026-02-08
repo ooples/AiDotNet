@@ -44,6 +44,9 @@ namespace AiDotNet.Clustering.Partitioning;
 public class MiniBatchKMeans<T> : ClusteringBase<T>
 {
     private readonly MiniBatchKMeansOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private int _numIterations;
     private int[] _centerCounts;

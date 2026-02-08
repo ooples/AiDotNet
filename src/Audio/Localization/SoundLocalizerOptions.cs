@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.Localization;
@@ -5,7 +6,7 @@ namespace AiDotNet.Audio.Localization;
 /// <summary>
 /// Options for sound source localization.
 /// </summary>
-public class SoundLocalizerOptions
+public class SoundLocalizerOptions : ModelOptions
 {
     /// <summary>Audio sample rate. Default: 16000.</summary>
     public int SampleRate { get; set; } = 16000;

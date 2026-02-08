@@ -30,7 +30,7 @@ namespace AiDotNet.Models.Options;
 /// ICLR 2024. https://arxiv.org/abs/2310.06625
 /// </para>
 /// </remarks>
-public class ITransformerOptions<T>
+public class ITransformerOptions<T> : ModelOptions
 {
     #region Model Architecture
 

@@ -35,7 +35,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Reference:</b> Huang et al., "FinancialBERT: A Pre-trained Language Model for Financial Text Mining", 2023.
 /// </para>
 /// </remarks>
-public class FinancialBERTOptions<T>
+public class FinancialBERTOptions<T> : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default FinancialBERT configuration.

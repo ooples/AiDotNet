@@ -45,6 +45,9 @@ namespace AiDotNet.Clustering.Density;
 public class Denclue<T> : ClusteringBase<T>
 {
     private readonly DenclueOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double[][]? _attractors;
     private double[]? _attractorDensities;
 

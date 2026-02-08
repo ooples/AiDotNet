@@ -29,7 +29,7 @@ namespace AiDotNet.Models.Options;
 /// https://openreview.net/forum?id=vSVLM2j9eie
 /// </para>
 /// </remarks>
-public class CrossformerOptions<T>
+public class CrossformerOptions<T> : ModelOptions
 {
     #region Model Architecture
 

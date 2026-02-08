@@ -52,6 +52,9 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// </remarks>
     private readonly StepwiseRegressionOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The calculator used to evaluate the fitness or quality of models during feature selection.
     /// </summary>

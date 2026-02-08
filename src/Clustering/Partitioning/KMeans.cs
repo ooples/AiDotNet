@@ -40,6 +40,9 @@ namespace AiDotNet.Clustering.Partitioning;
 public class KMeans<T> : ClusteringBase<T>
 {
     private readonly KMeansOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private int _numIterations;
 

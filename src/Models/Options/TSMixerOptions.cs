@@ -29,7 +29,7 @@ namespace AiDotNet.Models.Options;
 /// Forecasting", TMLR 2023. https://arxiv.org/abs/2303.06053
 /// </para>
 /// </remarks>
-public class TSMixerOptions<T>
+public class TSMixerOptions<T> : ModelOptions
 {
     #region Model Architecture
 

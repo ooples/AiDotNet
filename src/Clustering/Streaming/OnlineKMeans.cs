@@ -48,6 +48,9 @@ namespace AiDotNet.Clustering.Streaming;
 public class OnlineKMeans<T> : ClusteringBase<T>
 {
     private readonly OnlineKMeansOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double[,]? _centers;
     private int[]? _clusterCounts;
     private long _totalPointsSeen;

@@ -15,7 +15,7 @@ namespace AiDotNet.Models.Options;
 /// or learn just right (good fit). These thresholds help determine which category your model falls into by comparing
 /// how it performs on data it has seen before (training data) versus new data (validation data).</para>
 /// </remarks>
-public class CrossValidationFitDetectorOptions
+public class CrossValidationFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for detecting overfitting in a model.

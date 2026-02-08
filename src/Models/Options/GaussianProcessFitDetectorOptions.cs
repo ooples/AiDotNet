@@ -20,7 +20,7 @@ namespace AiDotNet.Models.Options;
 /// important patterns (underfitting). It can also identify areas where your model is particularly
 /// uncertain about its predictions.</para>
 /// </remarks>
-public class GaussianProcessFitDetectorOptions
+public class GaussianProcessFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for considering model fit as good based on normalized residual patterns.

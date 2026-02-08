@@ -38,6 +38,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.A3C;
 public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private readonly A3COptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private INeuralNetwork<T> _globalPolicyNetwork;

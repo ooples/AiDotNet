@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.Classification;
@@ -5,7 +6,7 @@ namespace AiDotNet.Audio.Classification;
 /// <summary>
 /// Options for acoustic scene classification.
 /// </summary>
-public class SceneClassifierOptions
+public class SceneClassifierOptions : ModelOptions
 {
     /// <summary>Audio sample rate. Default: 22050.</summary>
     public int SampleRate { get; set; } = 22050;

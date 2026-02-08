@@ -7,7 +7,7 @@ namespace AiDotNet.Models.Options;
 /// <b>For Beginners:</b> Compression reduces the size of client updates sent to the server to save bandwidth.
 /// This can speed up training in distributed settings, especially on slow or expensive networks.
 /// </remarks>
-public class FederatedCompressionOptions
+public class FederatedCompressionOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the compression strategy name.

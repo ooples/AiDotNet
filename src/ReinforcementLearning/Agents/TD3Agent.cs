@@ -40,6 +40,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.TD3;
 public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private TD3Options<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly INumericOperations<T> _numOps;
 
     private NeuralNetwork<T> _actorNetwork;

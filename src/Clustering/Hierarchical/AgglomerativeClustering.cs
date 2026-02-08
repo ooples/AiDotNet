@@ -39,6 +39,9 @@ namespace AiDotNet.Clustering.Hierarchical;
 public class AgglomerativeClustering<T> : ClusteringBase<T>
 {
     private readonly HierarchicalOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private List<(int Cluster1, int Cluster2, double Distance, int Size)>? _dendrogram;
 
     /// <summary>

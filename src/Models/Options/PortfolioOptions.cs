@@ -4,7 +4,7 @@ namespace AiDotNet.Models.Options;
 /// Configuration options for portfolio optimization models.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public class PortfolioOptions<T>
+public class PortfolioOptions<T> : ModelOptions
 {
     /// <summary>
     /// The number of assets in the portfolio.

@@ -43,7 +43,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Reference:</b> Huang et al., "FinBERT: A Pretrained Language Model for Financial Communications", 2020.
 /// </para>
 /// </remarks>
-public class FinBERTToneOptions<T>
+public class FinBERTToneOptions<T> : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default FinBERT-Tone configuration.

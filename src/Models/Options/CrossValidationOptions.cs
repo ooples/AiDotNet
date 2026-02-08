@@ -22,7 +22,7 @@ namespace AiDotNet.Models.Options;
 /// information about how well your model performs.
 /// </para>
 /// </remarks>
-public class CrossValidationOptions
+public class CrossValidationOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the number of folds to use in cross-validation.

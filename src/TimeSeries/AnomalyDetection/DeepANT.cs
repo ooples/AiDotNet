@@ -32,6 +32,9 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 public class DeepANT<T> : TimeSeriesModelBase<T>
 {
     private readonly DeepANTOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     // CNN layers (Tensor-based)

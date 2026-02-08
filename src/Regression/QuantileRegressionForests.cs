@@ -34,6 +34,9 @@ public class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionBase<T>
     /// </value>
     private readonly QuantileRegressionForestsOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The collection of decision trees that make up the forest.
     /// </summary>

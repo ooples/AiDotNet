@@ -8,7 +8,7 @@ namespace AiDotNet.Models.Options;
 /// can only see the final combined result. These options let you pick how secure aggregation should
 /// behave, including whether the protocol can handle clients dropping out mid-round.
 /// </remarks>
-public class SecureAggregationOptions
+public class SecureAggregationOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets whether secure aggregation is enabled.

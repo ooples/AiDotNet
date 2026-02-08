@@ -19,7 +19,7 @@ namespace AiDotNet.Models.Options;
 /// and what guarantees you want about model predictions.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
-public class AdversarialRobustnessOptions<T>
+public class AdversarialRobustnessOptions<T> : ModelOptions
 {
     // ========================================================================
     // SAFETY FILTERING OPTIONS

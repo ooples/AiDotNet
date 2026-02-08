@@ -41,6 +41,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private MADDPGOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     // Networks for each agent

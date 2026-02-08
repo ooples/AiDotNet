@@ -13,6 +13,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DynaQOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, (string nextState, T reward)>> _model;
     private List<(string state, int action)> _visitedStateActions;

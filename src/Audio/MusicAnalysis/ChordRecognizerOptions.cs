@@ -1,9 +1,11 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Audio.MusicAnalysis;
 
 /// <summary>
 /// Configuration options for chord recognition.
 /// </summary>
-public class ChordRecognizerOptions
+public class ChordRecognizerOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the sample rate.

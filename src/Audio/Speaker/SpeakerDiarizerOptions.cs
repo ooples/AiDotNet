@@ -1,9 +1,11 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Audio.Speaker;
 
 /// <summary>
 /// Configuration options for speaker diarization.
 /// </summary>
-public class SpeakerDiarizerOptions
+public class SpeakerDiarizerOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the sample rate.

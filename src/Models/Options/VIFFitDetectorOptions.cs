@@ -32,7 +32,7 @@ namespace AiDotNet.Models.Options;
 /// removing or combining variables.
 /// </para>
 /// </remarks>
-public class VIFFitDetectorOptions
+public class VIFFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for detecting severe multicollinearity.

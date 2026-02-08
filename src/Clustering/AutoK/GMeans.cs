@@ -45,6 +45,9 @@ public class GMeans<T> : ClusteringBase<T>
 {
     private readonly GMeansOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Initializes a new GMeans instance.
     /// </summary>

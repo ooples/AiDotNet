@@ -40,6 +40,9 @@ namespace AiDotNet.Clustering.Density;
 public class OPTICS<T> : ClusteringBase<T>
 {
     private readonly OPTICSOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double[]? _reachabilityDistances;
     private double[]? _coreDistances;
     private int[]? _ordering;

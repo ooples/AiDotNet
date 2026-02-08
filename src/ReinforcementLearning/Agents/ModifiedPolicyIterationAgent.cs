@@ -36,6 +36,9 @@ public class TransitionData<T>
 public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private ModifiedPolicyIterationOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, T> _valueTable;
     private Dictionary<string, int> _policy;
     private Dictionary<string, Dictionary<int, List<(string nextState, T reward, T probability)>>> _model;

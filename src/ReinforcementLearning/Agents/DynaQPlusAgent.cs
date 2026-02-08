@@ -13,6 +13,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DynaQPlusOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Dictionary<string, Dictionary<int, (string nextState, T reward)>> _model;
     private Dictionary<string, Dictionary<int, int>> _timeSteps;  // Track last visit time

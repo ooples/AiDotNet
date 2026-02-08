@@ -60,6 +60,9 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private readonly SymbolicRegressionOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The calculator used to evaluate the fitness or quality of symbolic models.
     /// </summary>

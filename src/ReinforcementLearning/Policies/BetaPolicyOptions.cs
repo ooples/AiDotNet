@@ -1,4 +1,5 @@
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
 
 namespace AiDotNet.ReinforcementLearning.Policies
@@ -7,7 +8,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Configuration options for Beta distribution policies.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    public class BetaPolicyOptions<T>
+    public class BetaPolicyOptions<T> : ModelOptions
     {
         public int StateSize { get; set; } = 0;
         public int ActionSize { get; set; } = 0;
@@ -16,6 +17,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
         public IExplorationStrategy<T> ExplorationStrategy { get; set; } = new NoExploration<T>();
         public double ActionMin { get; set; } = 0.0;
         public double ActionMax { get; set; } = 1.0;
-        public int? Seed { get; set; } = null;
+        public new int? Seed { get; set; } = null;
     }
 }

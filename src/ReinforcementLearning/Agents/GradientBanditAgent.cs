@@ -13,6 +13,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private GradientBanditOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private Vector<T> _preferences;  // H(a)
     private T _averageReward;

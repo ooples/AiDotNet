@@ -39,6 +39,9 @@ namespace AiDotNet.Clustering.Subspace;
 public class CLIQUE<T> : ClusteringBase<T>
 {
     private readonly CLIQUEOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private List<SubspaceClusterInternal>? _subspaceClustersInternal;
     private double[] _minBounds = Array.Empty<double>();
     private double[] _maxBounds = Array.Empty<double>();

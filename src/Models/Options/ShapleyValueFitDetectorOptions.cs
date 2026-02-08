@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Models;
 
 /// <summary>
@@ -36,7 +38,7 @@ namespace AiDotNet.Models;
 /// to identify these potential issues.
 /// </para>
 /// </remarks>
-public class ShapleyValueFitDetectorOptions
+public class ShapleyValueFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for cumulative importance to determine significant features.

@@ -43,6 +43,9 @@ namespace AiDotNet.Clustering.Hierarchical;
 public class BIRCH<T> : ClusteringBase<T>
 {
     private readonly BIRCHOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private CFNode? _root;
     private List<CFEntry>? _leafEntries;
 

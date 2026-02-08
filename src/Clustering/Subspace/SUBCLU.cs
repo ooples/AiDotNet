@@ -41,6 +41,9 @@ namespace AiDotNet.Clustering.Subspace;
 public class SUBCLU<T> : ClusteringBase<T>
 {
     private readonly SUBCLUOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private List<SubspaceClusterInfo>? _subspaceClusterInfos;
     private Matrix<T>? _trainingData;
 

@@ -1,9 +1,11 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Audio.Fingerprinting;
 
 /// <summary>
 /// Configuration options for Chromaprint fingerprinting.
 /// </summary>
-public class ChromaprintOptions
+public class ChromaprintOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the sample rate (default 11025 Hz for efficiency).
