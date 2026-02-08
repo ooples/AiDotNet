@@ -114,6 +114,10 @@ public class TimesNet<T> : ForecastingModelBase<T>
     /// The loss function for training.
     /// </summary>
     private readonly ILossFunction<T> _lossFunction;
+    private readonly TimesNetOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// The input sequence length.
@@ -222,6 +226,8 @@ public class TimesNet<T> : ForecastingModelBase<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         options ??= new TimesNetOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = false;
         OnnxSession = new InferenceSession(onnxModelPath);
@@ -266,6 +272,8 @@ public class TimesNet<T> : ForecastingModelBase<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         options ??= new TimesNetOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = true;
         OnnxSession = null;

@@ -74,8 +74,8 @@ internal sealed class FinancialModelFactory<T>
                 new TemporalFusionTransformerOptions<T>(),
                 parameters),
             ModelType.NeuralVaR => CreateWithOptions(
-                (VaROptions<T> options) => new NeuralVaR<T>(_architecture, options),
-                new VaROptions<T>(),
+                (NeuralVaROptions<T> options) => new NeuralVaR<T>(_architecture, options),
+                new NeuralVaROptions<T>(),
                 parameters),
             ModelType.TabNet => CreateWithOptions(
                 (TabNetOptions<T> options) => new TabNet<T>(_architecture, options),

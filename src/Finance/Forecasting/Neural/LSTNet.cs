@@ -171,6 +171,10 @@ public class LSTNet<T> : ForecastingModelBase<T>
     /// </para>
     /// </remarks>
     private readonly ILossFunction<T> _lossFunction;
+    private readonly LSTNetOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// The lookback window size.
@@ -285,6 +289,8 @@ public class LSTNet<T> : ForecastingModelBase<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         options ??= new LSTNetOptions<T>();
+        _options = options;
+        Options = _options;
         ValidateOptions(options);
 
         _useNativeMode = false;
@@ -331,6 +337,8 @@ public class LSTNet<T> : ForecastingModelBase<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         options ??= new LSTNetOptions<T>();
+        _options = options;
+        Options = _options;
         ValidateOptions(options);
 
         _useNativeMode = true;

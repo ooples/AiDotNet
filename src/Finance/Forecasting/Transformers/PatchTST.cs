@@ -75,6 +75,10 @@ public class PatchTST<T> : ForecastingModelBase<T>
     /// The optimizer for training.
     /// </summary>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly PatchTSTOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// The patch size.
@@ -178,9 +182,14 @@ public class PatchTST<T> : ForecastingModelBase<T>
         int patchSize = 16,
         int stride = 8,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        PatchTSTOptions<T>? options = null)
         : base(architecture, onnxModelPath, sequenceLength, predictionHorizon, numFeatures)
     {
+        options ??= new PatchTSTOptions<T>();
+        _options = options;
+        Options = _options;
+
         _patchSize = patchSize;
         _stride = stride;
         _numLayers = 3;
@@ -257,10 +266,15 @@ public class PatchTST<T> : ForecastingModelBase<T>
         bool useInstanceNormalization = true,
         double dropout = 0.05,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        PatchTSTOptions<T>? options = null)
         : base(architecture, sequenceLength, predictionHorizon, numFeatures, lossFunction)
     {
         ValidateParameters(sequenceLength, predictionHorizon, numFeatures, patchSize, stride, numLayers, numHeads, modelDimension);
+
+        options ??= new PatchTSTOptions<T>();
+        _options = options;
+        Options = _options;
 
         _patchSize = patchSize;
         _stride = stride;

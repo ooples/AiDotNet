@@ -35,8 +35,12 @@ public class NeuralVaR<T> : RiskModelBase<T>
 {
     #region Shared Fields
 
+    private readonly NeuralVaROptions<T> _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     #endregion
 
@@ -54,13 +58,15 @@ public class NeuralVaR<T> : RiskModelBase<T>
     public NeuralVaR(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        VaROptions<T>? options = null,
+        NeuralVaROptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, onnxModelPath, options?.NumFeatures ?? 10, 
+        : base(architecture, onnxModelPath, options?.NumFeatures ?? 10,
                options?.ConfidenceLevel ?? 0.95, options?.TimeHorizon ?? 1)
     {
-        options ??= new VaROptions<T>();
+        options ??= new NeuralVaROptions<T>();
+        _options = options;
+        Options = _options;
         options.Validate();
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -80,14 +86,16 @@ public class NeuralVaR<T> : RiskModelBase<T>
     /// </remarks>
     public NeuralVaR(
         NeuralNetworkArchitecture<T> architecture,
-        VaROptions<T>? options = null,
+        NeuralVaROptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, options?.NumFeatures ?? 10, 
-               options?.ConfidenceLevel ?? 0.95, options?.TimeHorizon ?? 1, 
+        : base(architecture, options?.NumFeatures ?? 10,
+               options?.ConfidenceLevel ?? 0.95, options?.TimeHorizon ?? 1,
                lossFunction)
     {
-        options ??= new VaROptions<T>();
+        options ??= new NeuralVaROptions<T>();
+        _options = options;
+        Options = _options;
         options.Validate();
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
@@ -256,7 +264,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new VaROptions<T> { NumFeatures = NumFeatures, ConfidenceLevel = _confidenceLevel, TimeHorizon = _timeHorizon };
+        var options = new NeuralVaROptions<T> { NumFeatures = NumFeatures, ConfidenceLevel = _confidenceLevel, TimeHorizon = _timeHorizon };
         return new NeuralVaR<T>(Architecture, options, _optimizer, LossFunction);
     }
 

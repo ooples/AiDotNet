@@ -109,6 +109,10 @@ public class Crossformer<T> : ForecastingModelBase<T>
     /// The loss function for training.
     /// </summary>
     private readonly ILossFunction<T> _lossFunction;
+    private readonly CrossformerOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// The input sequence length.
@@ -212,6 +216,8 @@ public class Crossformer<T> : ForecastingModelBase<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         options ??= new CrossformerOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = false;
         OnnxSession = new InferenceSession(onnxModelPath);
@@ -255,6 +261,8 @@ public class Crossformer<T> : ForecastingModelBase<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         options ??= new CrossformerOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = true;
         OnnxSession = null;

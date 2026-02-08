@@ -121,6 +121,10 @@ public class TCN<T> : ForecastingModelBase<T>
     /// The loss function for training.
     /// </summary>
     private readonly ILossFunction<T> _lossFunction;
+    private readonly TCNOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// The lookback window size.
@@ -219,6 +223,8 @@ public class TCN<T> : ForecastingModelBase<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         options ??= new TCNOptions<T>();
+        _options = options;
+        Options = _options;
         ValidateOptions(options);
 
         _useNativeMode = false;
@@ -262,6 +268,8 @@ public class TCN<T> : ForecastingModelBase<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         options ??= new TCNOptions<T>();
+        _options = options;
+        Options = _options;
         ValidateOptions(options);
 
         _useNativeMode = true;

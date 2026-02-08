@@ -31,8 +31,12 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
 
     #region Shared Fields
 
+    private readonly ModelOptions.FinBERTToneOptions<T> _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private double _dropout;
+
+    /// <inheritdoc/>
+    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
 
     #endregion
 
@@ -64,6 +68,8 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
                options?.NumToneClasses ?? 5)
     {
         options ??= new ModelOptions.FinBERTToneOptions<T>();
+        _options = options;
+        Options = _options;
         options.Validate();
 
         _dropout = options.DropoutRate;
@@ -85,14 +91,16 @@ public class FinBERTTone<T> : FinancialNLPModelBase<T>
         ModelOptions.FinBERTToneOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, 
-               options?.MaxSequenceLength ?? 512, 
+        : base(architecture,
+               options?.MaxSequenceLength ?? 512,
                options?.VocabularySize ?? 30522,
                options?.HiddenDimension ?? 768,
                options?.NumToneClasses ?? 5,
                lossFunction)
     {
         options ??= new ModelOptions.FinBERTToneOptions<T>();
+        _options = options;
+        Options = _options;
         options.Validate();
 
         _dropout = options.DropoutRate;

@@ -20,9 +20,13 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
 {
     #region Fields
 
+    private readonly FinancialDQNAgentOptions<T> _options;
     private readonly NeuralNetwork<T> _qNetwork;
     private readonly NeuralNetwork<T> _targetNetwork;
     private readonly ReplayBuffer<T> ReplayBuffer;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     #endregion
 
@@ -51,6 +55,8 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
     public FinancialDQNAgent(NeuralNetworkArchitecture<T> architecture, TradingAgentOptions<T> options)
         : base(options)
     {
+        _options = options as FinancialDQNAgentOptions<T> ?? new FinancialDQNAgentOptions<T>();
+
         EnsureDefaultLayers(architecture, options.StateSize, options.ActionSize);
 
         _qNetwork = new NeuralNetwork<T>(architecture, TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());

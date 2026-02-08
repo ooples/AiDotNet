@@ -18,10 +18,14 @@ public class FinRLAgent<T> : TradingAgentBase<T>
 {
     #region Fields
 
+    private readonly FinRLAgentOptions<T> _options;
     private readonly TradingAgentBase<T> _innerAgent;
     private readonly FinRLAlgorithm _algorithm;
     private readonly NeuralNetworkArchitecture<T> _primaryArchitecture;
     private readonly NeuralNetworkArchitecture<T>? _secondaryArchitecture;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     #endregion
 
@@ -61,6 +65,8 @@ public class FinRLAgent<T> : TradingAgentBase<T>
         NeuralNetworkArchitecture<T>? secondaryArchitecture = null)
         : base(options)
     {
+        _options = options as FinRLAgentOptions<T> ?? new FinRLAgentOptions<T>();
+
         _algorithm = algorithm;
         _primaryArchitecture = primaryArchitecture ?? throw new ArgumentNullException(nameof(primaryArchitecture));
         _secondaryArchitecture = secondaryArchitecture;

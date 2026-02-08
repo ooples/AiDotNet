@@ -35,9 +35,13 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
 {
     #region Shared Fields
 
+    private readonly DeepPortfolioManagerOptions<T> _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly bool _allowShortSelling;
     private readonly double _maxWeight;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     #endregion
 
@@ -60,11 +64,13 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
     public DeepPortfolioManager(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        PortfolioOptions<T>? options = null,
+        DeepPortfolioManagerOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture, onnxModelPath, options?.NumAssets ?? 10, architecture.InputSize)
     {
-        options ??= new PortfolioOptions<T>();
+        options ??= new DeepPortfolioManagerOptions<T>();
+        _options = options;
+        Options = _options;
         options.Validate();
 
         _allowShortSelling = options.AllowShortSelling;
@@ -84,12 +90,14 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
     /// </remarks>
     public DeepPortfolioManager(
         NeuralNetworkArchitecture<T> architecture,
-        PortfolioOptions<T>? options = null,
+        DeepPortfolioManagerOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, options?.NumAssets ?? 10, architecture.InputSize, lossFunction)
     {
-        options ??= new PortfolioOptions<T>();
+        options ??= new DeepPortfolioManagerOptions<T>();
+        _options = options;
+        Options = _options;
         options.Validate();
 
         _allowShortSelling = options.AllowShortSelling;
@@ -249,7 +257,7 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new PortfolioOptions<T> { NumAssets = _numAssets, AllowShortSelling = _allowShortSelling, MaxWeight = _maxWeight };
+        var options = new DeepPortfolioManagerOptions<T> { NumAssets = _numAssets, AllowShortSelling = _allowShortSelling, MaxWeight = _maxWeight };
         return new DeepPortfolioManager<T>(Architecture, options, _optimizer, LossFunction);
     }
 

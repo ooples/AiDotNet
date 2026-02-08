@@ -124,6 +124,10 @@ public class DeepAR<T> : ForecastingModelBase<T>
     /// The optimizer for training.
     /// </summary>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly DeepAROptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// The hidden size of LSTM cells.
@@ -208,12 +212,14 @@ public class DeepAR<T> : ForecastingModelBase<T>
         DeepAROptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, onnxModelPath, 
-               options?.LookbackWindow ?? 96, 
-               options?.ForecastHorizon ?? 24, 
+        : base(architecture, onnxModelPath,
+               options?.LookbackWindow ?? 96,
+               options?.ForecastHorizon ?? 24,
                architecture.InputSize)
     {
         options ??= new DeepAROptions<T>();
+        _options = options;
+        Options = _options;
         ValidateOptions(options);
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -253,13 +259,15 @@ public class DeepAR<T> : ForecastingModelBase<T>
         DeepAROptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, 
-               options?.LookbackWindow ?? 96, 
-               options?.ForecastHorizon ?? 24, 
-               architecture.InputSize, 
+        : base(architecture,
+               options?.LookbackWindow ?? 96,
+               options?.ForecastHorizon ?? 24,
+               architecture.InputSize,
                lossFunction)
     {
         options ??= new DeepAROptions<T>();
+        _options = options;
+        Options = _options;
         ValidateOptions(options);
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

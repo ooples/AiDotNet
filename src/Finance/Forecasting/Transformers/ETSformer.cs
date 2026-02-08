@@ -103,6 +103,10 @@ public class ETSformer<T> : ForecastingModelBase<T>
     /// The loss function used for training.
     /// </summary>
     private readonly ILossFunction<T> _lossFunction;
+    private readonly ETSformerOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// The input sequence length.
@@ -214,6 +218,8 @@ public class ETSformer<T> : ForecastingModelBase<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         options ??= new ETSformerOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = false;
         OnnxSession = new InferenceSession(onnxModelPath);
@@ -256,6 +262,8 @@ public class ETSformer<T> : ForecastingModelBase<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         options ??= new ETSformerOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = true;
         OnnxSession = null;
