@@ -44,19 +44,19 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     /// Shape functions for each feature (additive terms).
     /// Indexed as: _shapeFunction[featureIndex][binIndex]
     /// </summary>
-    private T[][] _shapeFunctions;
+    private List<Vector<T>> _shapeFunctions;
 
     /// <summary>
     /// Bin edges for each feature.
     /// Indexed as: _binEdges[featureIndex][edgeIndex]
     /// </summary>
-    private T[][] _binEdges;
+    private List<Vector<T>> _binEdges;
 
     /// <summary>
     /// Interaction terms: pairs of features and their joint effect.
     /// Indexed as: _interactionTerms[(feat1, feat2)][(bin1, bin2)]
     /// </summary>
-    private Dictionary<(int, int), T[,]> _interactionTerms;
+    private Dictionary<(int, int), Matrix<T>> _interactionTerms;
 
     /// <summary>
     /// The intercept (baseline prediction).
@@ -81,17 +81,17 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     /// <summary>
     /// Gets the shape functions for each feature.
     /// </summary>
-    public IReadOnlyList<T[]> ShapeFunctions => _shapeFunctions;
+    public IReadOnlyList<Vector<T>> ShapeFunctions => _shapeFunctions;
 
     /// <summary>
     /// Gets the bin edges for each feature.
     /// </summary>
-    public IReadOnlyList<T[]> BinEdges => _binEdges;
+    public IReadOnlyList<Vector<T>> BinEdges => _binEdges;
 
     /// <summary>
     /// Gets the interaction terms.
     /// </summary>
-    public IReadOnlyDictionary<(int, int), T[,]> InteractionTerms => _interactionTerms;
+    public IReadOnlyDictionary<(int, int), Matrix<T>> InteractionTerms => _interactionTerms;
 
     /// <inheritdoc/>
     public override int NumberOfTrees => 1;  // EBM is not truly tree-based, but uses boosting
@@ -109,7 +109,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         _options = options ?? new ExplainableBoostingMachineOptions();
         _shapeFunctions = [];
         _binEdges = [];
-        _interactionTerms = [];
+        _interactionTerms = new Dictionary<(int, int), Matrix<T>>();
         _intercept = NumOps.Zero;
         _numFeatures = 0;
     }
@@ -133,18 +133,19 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         CreateBins(x);
 
         // Initialize shape functions to zero
-        _shapeFunctions = new T[_numFeatures][];
+        _shapeFunctions = new List<Vector<T>>(_numFeatures);
         for (int f = 0; f < _numFeatures; f++)
         {
-            _shapeFunctions[f] = new T[_binEdges[f].Length + 1];
+            var sf = new Vector<T>(_binEdges[f].Length + 1);
             for (int b = 0; b <= _binEdges[f].Length; b++)
             {
-                _shapeFunctions[f][b] = NumOps.Zero;
+                sf[b] = NumOps.Zero;
             }
+            _shapeFunctions.Add(sf);
         }
 
         // Initialize residuals
-        var residuals = new T[n];
+        var residuals = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
             residuals[i] = NumOps.Subtract(y[i], _intercept);
@@ -247,16 +248,16 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     /// This can be used to visualize how the model uses each feature.
     /// Plot the bin centers on the x-axis and shape values on the y-axis.
     /// </remarks>
-    public (T[] BinCenters, T[] ShapeValues) GetShapeFunctionForPlot(int featureIndex)
+    public (Vector<T> BinCenters, Vector<T> ShapeValues) GetShapeFunctionForPlot(int featureIndex)
     {
         if (featureIndex < 0 || featureIndex >= _numFeatures)
             throw new ArgumentOutOfRangeException(nameof(featureIndex));
 
         int numBins = _shapeFunctions[featureIndex].Length;
-        var centers = new T[numBins];
-        var values = new T[numBins];
+        var centers = new Vector<T>(numBins);
+        var values = new Vector<T>(numBins);
 
-        T[] edges = _binEdges[featureIndex];
+        var edges = _binEdges[featureIndex];
 
         for (int b = 0; b < numBins; b++)
         {
@@ -310,8 +311,8 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
             int bin2 = GetBinIndex(sample[f2], f2);
 
             // Clamp to interaction matrix bounds
-            bin1 = Math.Min(bin1, interactionMatrix.GetLength(0) - 1);
-            bin2 = Math.Min(bin2, interactionMatrix.GetLength(1) - 1);
+            bin1 = Math.Min(bin1, interactionMatrix.Rows - 1);
+            bin2 = Math.Min(bin2, interactionMatrix.Columns - 1);
 
             prediction = NumOps.Add(prediction, interactionMatrix[bin1, bin2]);
         }
@@ -324,7 +325,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     /// </summary>
     private void CreateBins(Matrix<T> x)
     {
-        _binEdges = new T[_numFeatures][];
+        _binEdges = new List<Vector<T>>(_numFeatures);
 
         for (int f = 0; f < _numFeatures; f++)
         {
@@ -342,7 +343,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
 
             if (numBins <= 1)
             {
-                _binEdges[f] = [];
+                _binEdges.Add(new Vector<T>(0));
                 continue;
             }
 
@@ -361,7 +362,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
                 }
             }
 
-            _binEdges[f] = [.. edges];
+            _binEdges.Add(new Vector<T>(edges));
         }
     }
 
@@ -370,7 +371,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     /// </summary>
     private int GetBinIndex(T value, int featureIndex)
     {
-        T[] edges = _binEdges[featureIndex];
+        var edges = _binEdges[featureIndex];
         if (edges.Length == 0) return 0;
 
         double v = NumOps.ToDouble(value);
@@ -388,7 +389,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     /// <summary>
     /// Updates the shape function for a single feature.
     /// </summary>
-    private void UpdateShapeFunction(Matrix<T> x, T[] residuals, int featureIndex, int[] sampleIndices)
+    private void UpdateShapeFunction(Matrix<T> x, Vector<T> residuals, int featureIndex, int[] sampleIndices)
     {
         int numBins = _shapeFunctions[featureIndex].Length;
 
@@ -430,9 +431,9 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     /// <summary>
     /// Detects and adds important pairwise interactions.
     /// </summary>
-    private void DetectAndAddInteractions(Matrix<T> x, Vector<T> y, T[] residuals)
+    private void DetectAndAddInteractions(Matrix<T> x, Vector<T> y, Vector<T> residuals)
     {
-        _interactionTerms = [];
+        _interactionTerms = new Dictionary<(int, int), Matrix<T>>();
 
         // Use FAST algorithm to detect interactions
         var interactionScores = new List<((int, int) pair, double score)>();
@@ -461,7 +462,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     /// <summary>
     /// Computes the interaction score for a pair of features.
     /// </summary>
-    private double ComputeInteractionScore(Matrix<T> x, T[] residuals, int f1, int f2)
+    private double ComputeInteractionScore(Matrix<T> x, Vector<T> residuals, int f1, int f2)
     {
         // Simple variance-based score for interaction detection
         int numBins1 = Math.Min(5, _shapeFunctions[f1].Length);
@@ -498,7 +499,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     /// <summary>
     /// Fits an interaction term for a pair of features.
     /// </summary>
-    private void FitInteraction(Matrix<T> x, T[] residuals, int f1, int f2)
+    private void FitInteraction(Matrix<T> x, Vector<T> residuals, int f1, int f2)
     {
         int numBins1 = _shapeFunctions[f1].Length;
         int numBins2 = _shapeFunctions[f2].Length;
@@ -507,7 +508,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         numBins1 = Math.Min(numBins1, 32);
         numBins2 = Math.Min(numBins2, 32);
 
-        var interactionMatrix = new T[numBins1, numBins2];
+        var interactionMatrix = new Matrix<T>(numBins1, numBins2);
         var binSums = new double[numBins1, numBins2];
         var binCounts = new int[numBins1, numBins2];
 
@@ -559,7 +560,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
             if (_shapeFunctions[f].Length <= 2) continue;
 
             // Apply simple moving average smoothing
-            var smoothed = new T[_shapeFunctions[f].Length];
+            var smoothed = new Vector<T>(_shapeFunctions[f].Length);
             for (int b = 0; b < _shapeFunctions[f].Length; b++)
             {
                 double sum = NumOps.ToDouble(_shapeFunctions[f][b]);
@@ -586,7 +587,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
     /// <inheritdoc/>
     protected override Task CalculateFeatureImportancesAsync(int featureCount)
     {
-        var importances = new T[_numFeatures];
+        var importances = new Vector<T>(_numFeatures);
 
         for (int f = 0; f < _numFeatures; f++)
         {
@@ -594,9 +595,9 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
             double min = double.MaxValue;
             double max = double.MinValue;
 
-            foreach (T val in _shapeFunctions[f])
+            for (int b = 0; b < _shapeFunctions[f].Length; b++)
             {
-                double v = NumOps.ToDouble(val);
+                double v = NumOps.ToDouble(_shapeFunctions[f][b]);
                 min = Math.Min(min, v);
                 max = Math.Max(max, v);
             }
@@ -605,7 +606,11 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         }
 
         // Normalize
-        double sum = importances.Sum(x => NumOps.ToDouble(x));
+        double sum = 0;
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            sum += NumOps.ToDouble(importances[f]);
+        }
         if (sum > 0)
         {
             for (int f = 0; f < _numFeatures; f++)
@@ -614,7 +619,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
             }
         }
 
-        FeatureImportances = new Vector<T>(importances);
+        FeatureImportances = importances;
         return Task.CompletedTask;
     }
 
@@ -680,15 +685,15 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
 
         // Model state
         writer.Write(_numFeatures);
-        writer.Write(Convert.ToDouble(_intercept));
+        writer.Write(NumOps.ToDouble(_intercept));
 
         // Bin edges
         for (int f = 0; f < _numFeatures; f++)
         {
             writer.Write(_binEdges[f].Length);
-            foreach (T edge in _binEdges[f])
+            for (int e = 0; e < _binEdges[f].Length; e++)
             {
-                writer.Write(Convert.ToDouble(edge));
+                writer.Write(NumOps.ToDouble(_binEdges[f][e]));
             }
         }
 
@@ -696,9 +701,9 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         for (int f = 0; f < _numFeatures; f++)
         {
             writer.Write(_shapeFunctions[f].Length);
-            foreach (T val in _shapeFunctions[f])
+            for (int b = 0; b < _shapeFunctions[f].Length; b++)
             {
-                writer.Write(Convert.ToDouble(val));
+                writer.Write(NumOps.ToDouble(_shapeFunctions[f][b]));
             }
         }
 
@@ -708,13 +713,13 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         {
             writer.Write(f1);
             writer.Write(f2);
-            writer.Write(matrix.GetLength(0));
-            writer.Write(matrix.GetLength(1));
-            for (int b1 = 0; b1 < matrix.GetLength(0); b1++)
+            writer.Write(matrix.Rows);
+            writer.Write(matrix.Columns);
+            for (int b1 = 0; b1 < matrix.Rows; b1++)
             {
-                for (int b2 = 0; b2 < matrix.GetLength(1); b2++)
+                for (int b2 = 0; b2 < matrix.Columns; b2++)
                 {
-                    writer.Write(Convert.ToDouble(matrix[b1, b2]));
+                    writer.Write(NumOps.ToDouble(matrix[b1, b2]));
                 }
             }
         }
@@ -743,31 +748,33 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
         _intercept = NumOps.FromDouble(reader.ReadDouble());
 
         // Bin edges
-        _binEdges = new T[_numFeatures][];
+        _binEdges = new List<Vector<T>>(_numFeatures);
         for (int f = 0; f < _numFeatures; f++)
         {
             int numEdges = reader.ReadInt32();
-            _binEdges[f] = new T[numEdges];
+            var edges = new Vector<T>(numEdges);
             for (int e = 0; e < numEdges; e++)
             {
-                _binEdges[f][e] = NumOps.FromDouble(reader.ReadDouble());
+                edges[e] = NumOps.FromDouble(reader.ReadDouble());
             }
+            _binEdges.Add(edges);
         }
 
         // Shape functions
-        _shapeFunctions = new T[_numFeatures][];
+        _shapeFunctions = new List<Vector<T>>(_numFeatures);
         for (int f = 0; f < _numFeatures; f++)
         {
             int numBins = reader.ReadInt32();
-            _shapeFunctions[f] = new T[numBins];
+            var sf = new Vector<T>(numBins);
             for (int b = 0; b < numBins; b++)
             {
-                _shapeFunctions[f][b] = NumOps.FromDouble(reader.ReadDouble());
+                sf[b] = NumOps.FromDouble(reader.ReadDouble());
             }
+            _shapeFunctions.Add(sf);
         }
 
         // Interactions
-        _interactionTerms = [];
+        _interactionTerms = new Dictionary<(int, int), Matrix<T>>();
         int numInteractions = reader.ReadInt32();
         for (int i = 0; i < numInteractions; i++)
         {
@@ -775,7 +782,7 @@ public class ExplainableBoostingMachineRegression<T> : AsyncDecisionTreeRegressi
             int f2 = reader.ReadInt32();
             int rows = reader.ReadInt32();
             int cols = reader.ReadInt32();
-            var matrix = new T[rows, cols];
+            var matrix = new Matrix<T>(rows, cols);
             for (int b1 = 0; b1 < rows; b1++)
             {
                 for (int b2 = 0; b2 < cols; b2++)
