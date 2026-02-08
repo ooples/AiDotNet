@@ -44,7 +44,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Initial parameter values (e.g., mean of y for location, initial scale).
     /// </summary>
-    private T[] _initialParameters;
+    private Vector<T> _initialParameters;
 
     /// <summary>
     /// The scoring rule used for optimization.
@@ -79,7 +79,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         _options = options ?? new NGBoostRegressionOptions();
         _trees = [];
-        _initialParameters = [];
+        _initialParameters = new Vector<T>(0);
         _numParams = 0;
 
         // Initialize scoring rule
@@ -104,10 +104,10 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _initialParameters = initialDist.Parameters;
 
         // Initialize current parameter predictions for all samples
-        var currentParams = new T[_numParams][];
+        var currentParams = new Vector<T>[_numParams];
         for (int p = 0; p < _numParams; p++)
         {
-            currentParams[p] = new T[n];
+            currentParams[p] = new Vector<T>(n);
             for (int i = 0; i < n; i++)
             {
                 currentParams[p][i] = _initialParameters[p];
@@ -127,15 +127,15 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             int sampleSize = sampleIndices.Length;
 
             // Compute scores and gradients for the sample
-            var scores = new T[sampleSize];
-            var gradients = new T[_numParams][];
+            var scores = new Vector<T>(sampleSize);
+            var gradients = new Vector<T>[_numParams];
             for (int p = 0; p < _numParams; p++)
             {
-                gradients[p] = new T[sampleSize];
+                gradients[p] = new Vector<T>(sampleSize);
             }
 
             // Accumulate Fisher Information Matrix
-            var fisherSum = new T[_numParams, _numParams];
+            var fisherSum = new Matrix<T>(_numParams, _numParams);
 
             for (int i = 0; i < sampleSize; i++)
             {
@@ -284,10 +284,10 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         var distributions = new IParametricDistribution<T>[n];
 
         // Initialize parameters
-        var currentParams = new T[_numParams][];
+        var currentParams = new Vector<T>[_numParams];
         for (int p = 0; p < _numParams; p++)
         {
-            currentParams[p] = new T[n];
+            currentParams[p] = new Vector<T>(n);
             for (int i = 0; i < n; i++)
             {
                 currentParams[p][i] = _initialParameters[p];
@@ -298,10 +298,10 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         var treePredictionTasks = _trees.Select(iterTrees =>
             Task.Run(() =>
             {
-                var treePreds = new T[_numParams][];
+                var treePreds = new Vector<T>[_numParams];
                 for (int p = 0; p < _numParams; p++)
                 {
-                    treePreds[p] = iterTrees[p].Predict(input).ToArray();
+                    treePreds[p] = iterTrees[p].Predict(input);
                 }
                 return treePreds;
             }));
@@ -426,9 +426,9 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Creates a distribution from the current parameter values for a specific sample.
     /// </summary>
-    private IParametricDistribution<T> CreateDistributionFromParams(T[][] currentParams, int sampleIndex)
+    private IParametricDistribution<T> CreateDistributionFromParams(Vector<T>[] currentParams, int sampleIndex)
     {
-        T[] params_ = new T[_numParams];
+        var params_ = new Vector<T>(_numParams);
         for (int p = 0; p < _numParams; p++)
         {
             params_[p] = currentParams[p][sampleIndex];
@@ -440,7 +440,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Creates a distribution with the specified parameters.
     /// </summary>
-    private IParametricDistribution<T> CreateDistributionWithParams(T[] parameters)
+    private IParametricDistribution<T> CreateDistributionWithParams(Vector<T> parameters)
     {
         return _options.DistributionType switch
         {
@@ -467,9 +467,9 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes natural gradients by preconditioning with Fisher Information.
     /// </summary>
-    private T[][] ComputeNaturalGradients(T[][] gradients, T[,] fisherSum, int sampleSize)
+    private Vector<T>[] ComputeNaturalGradients(Vector<T>[] gradients, Matrix<T> fisherSum, int sampleSize)
     {
-        var naturalGrads = new T[_numParams][];
+        var naturalGrads = new Vector<T>[_numParams];
 
         // Average Fisher Information Matrix
         var fisherAvg = new double[_numParams, _numParams];
@@ -487,7 +487,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         // Apply Fisher inverse to gradients
         for (int p = 0; p < _numParams; p++)
         {
-            naturalGrads[p] = new T[gradients[0].Length];
+            naturalGrads[p] = new Vector<T>(gradients[0].Length);
         }
 
         for (int i = 0; i < gradients[0].Length; i++)
@@ -626,7 +626,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes the mean score for the current parameter values.
     /// </summary>
-    private double ComputeMeanScore(T[][] currentParams, Vector<T> y)
+    private double ComputeMeanScore(Vector<T>[] currentParams, Vector<T> y)
     {
         double sum = 0;
         for (int i = 0; i < y.Length; i++)
@@ -640,13 +640,13 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <inheritdoc/>
     protected override async Task CalculateFeatureImportancesAsync(int featureCount)
     {
-        var importances = new T[featureCount];
+        var importances = new Vector<T>(featureCount);
 
         // Aggregate importances from all trees
         var importanceTasks = _trees.SelectMany(iterTrees =>
             iterTrees.Select(tree => Task.Run(() =>
             {
-                var treeImportances = new T[featureCount];
+                var treeImportances = new Vector<T>(featureCount);
                 var fi = tree.FeatureImportances;
                 int copyCount = Math.Min(featureCount, fi.Length);
                 for (int i = 0; i < copyCount; i++)
@@ -660,11 +660,18 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < featureCount; i++)
         {
-            importances[i] = allImportances.Aggregate(NumOps.Zero, (acc, ti) => NumOps.Add(acc, ti[i]));
+            foreach (var ti in allImportances)
+            {
+                importances[i] = NumOps.Add(importances[i], ti[i]);
+            }
         }
 
         // Normalize
-        T sum = importances.Aggregate(NumOps.Zero, NumOps.Add);
+        T sum = NumOps.Zero;
+        for (int i = 0; i < featureCount; i++)
+        {
+            sum = NumOps.Add(sum, importances[i]);
+        }
         if (NumOps.ToDouble(sum) > 0)
         {
             for (int i = 0; i < featureCount; i++)
@@ -673,7 +680,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        FeatureImportances = new Vector<T>(importances);
+        FeatureImportances = importances;
     }
 
     /// <inheritdoc/>
@@ -717,7 +724,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write(_numParams);
         for (int p = 0; p < _numParams; p++)
         {
-            writer.Write(Convert.ToDouble(_initialParameters[p]));
+            writer.Write(NumOps.ToDouble(_initialParameters[p]));
         }
 
         // Trees
@@ -755,7 +762,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         // Initial parameters
         _numParams = reader.ReadInt32();
-        _initialParameters = new T[_numParams];
+        _initialParameters = new Vector<T>(_numParams);
         for (int p = 0; p < _numParams; p++)
         {
             _initialParameters[p] = NumOps.FromDouble(reader.ReadDouble());
