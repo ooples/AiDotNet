@@ -102,6 +102,7 @@ public abstract class SAINTBase<T>
     protected SAINTBase(int numNumericalFeatures, SAINTOptions<T>? options = null)
     {
         Options = options ?? new SAINTOptions<T>();
+        Options.Validate();
         NumNumericalFeatures = numNumericalFeatures;
         NumCategoricalFeatures = Options.CategoricalCardinalities?.Length ?? 0;
         TotalEmbeddedFeatures = NumNumericalFeatures + NumCategoricalFeatures;

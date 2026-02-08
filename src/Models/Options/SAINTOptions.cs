@@ -196,4 +196,21 @@ public class SAINTOptions<T> : RiskModelOptions<T>
     /// </summary>
     /// <value>The vector activation function, or null to use scalar activation.</value>
     public IVectorActivationFunction<T>? HiddenVectorActivation { get; set; }
+
+    /// <summary>
+    /// Validates that the options are consistent (e.g., NumHeads evenly divides EmbeddingDimension).
+    /// </summary>
+    /// <exception cref="ArgumentException">Thrown when options are inconsistent.</exception>
+    public void Validate()
+    {
+        if (EmbeddingDimension <= 0)
+            throw new ArgumentException($"{nameof(EmbeddingDimension)} must be positive, got {EmbeddingDimension}.");
+        if (NumHeads <= 0)
+            throw new ArgumentException($"{nameof(NumHeads)} must be positive, got {NumHeads}.");
+        if (EmbeddingDimension % NumHeads != 0)
+            throw new ArgumentException(
+                $"{nameof(EmbeddingDimension)} ({EmbeddingDimension}) must be evenly divisible by {nameof(NumHeads)} ({NumHeads}).");
+        if (NumLayers <= 0)
+            throw new ArgumentException($"{nameof(NumLayers)} must be positive, got {NumLayers}.");
+    }
 }

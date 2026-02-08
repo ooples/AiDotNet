@@ -272,7 +272,7 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
         return new AutoIntNetwork<T>(
             Architecture,
             _options,
-            _optimizer,
+            null,
             _lossFunction);
     }
 }

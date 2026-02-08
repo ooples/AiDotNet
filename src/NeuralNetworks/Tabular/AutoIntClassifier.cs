@@ -142,6 +142,13 @@ public class AutoIntClassifier<T> : AutoIntBase<T>
     public T ComputeCrossEntropyLoss(Tensor<T> probabilities, Vector<int> targets)
     {
         int batchSize = probabilities.Shape[0];
+
+        if (targets.Length != batchSize)
+        {
+            throw new ArgumentException(
+                $"Targets length ({targets.Length}) must match batch size ({batchSize}).");
+        }
+
         var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15);
 
@@ -168,6 +175,12 @@ public class AutoIntClassifier<T> : AutoIntBase<T>
         }
 
         int batchSize = _probabilitiesCache.Shape[0];
+
+        if (targets.Length != batchSize)
+        {
+            throw new ArgumentException(
+                $"Targets length ({targets.Length}) must match batch size ({batchSize}).");
+        }
 
         var logitsGrad = new Tensor<T>(_logitsCache.Shape);
         var scale = NumOps.FromDouble(1.0 / batchSize);

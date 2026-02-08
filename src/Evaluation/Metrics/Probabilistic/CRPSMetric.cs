@@ -122,11 +122,11 @@ public class CRPSMetric<T> : IRegressionMetric<T>
         var values = new double[samples];
         var predArr = pred.ToArray();
         var actArr = actual.ToArray();
+        var sp = new T[n];
+        var sa = new T[n];
 
         for (int b = 0; b < samples; b++)
         {
-            var sp = new T[n];
-            var sa = new T[n];
             for (int i = 0; i < n; i++)
             {
                 int idx = random.Next(n);

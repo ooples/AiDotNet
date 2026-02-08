@@ -133,12 +133,12 @@ internal class PinballLossMetric<T> : IRegressionMetric<T>
         var actArr = actual.ToArray();
         double thetaHat = NumOps.ToDouble(Compute(predArr, actArr));
 
-        // Generate bootstrap samples
+        // Generate bootstrap samples (reuse buffers to reduce GC pressure)
         var bootstrapValues = new double[samples];
+        var sp = new T[n];
+        var sa = new T[n];
         for (int b = 0; b < samples; b++)
         {
-            var sp = new T[n];
-            var sa = new T[n];
             for (int i = 0; i < n; i++)
             {
                 int idx = random.Next(n);
