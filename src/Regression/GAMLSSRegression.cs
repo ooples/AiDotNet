@@ -117,9 +117,9 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         InitializeParameters(y);
 
         // Initialize linear predictors
-        var etaLocation = new T[n];
-        var etaScale = new T[n];
-        var etaShape = new T[n];
+        var etaLocation = new Vector<T>(n);
+        var etaScale = new Vector<T>(n);
+        var etaShape = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -281,15 +281,15 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Fits the location parameter using IRLS (Iteratively Reweighted Least Squares).
     /// </summary>
-    private void FitLocationParameter(Matrix<T> x, Vector<T> y, T[] etaLocation, T[] etaScale, T[] etaShape)
+    private void FitLocationParameter(Matrix<T> x, Vector<T> y, Vector<T> etaLocation, Vector<T> etaScale, Vector<T> etaShape)
     {
         int n = x.Rows;
 
         for (int iter = 0; iter < _options.MaxInnerIterations; iter++)
         {
             // Compute working weights and adjusted dependent variable
-            var weights = new T[n];
-            var z = new T[n];
+            var weights = new Vector<T>(n);
+            var z = new Vector<T>(n);
 
             for (int i = 0; i < n; i++)
             {
@@ -314,14 +314,14 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Fits the scale parameter using IRLS.
     /// </summary>
-    private void FitScaleParameter(Matrix<T> x, Vector<T> y, T[] etaLocation, T[] etaScale, T[] etaShape)
+    private void FitScaleParameter(Matrix<T> x, Vector<T> y, Vector<T> etaLocation, Vector<T> etaScale, Vector<T> etaShape)
     {
         int n = x.Rows;
 
         for (int iter = 0; iter < _options.MaxInnerIterations; iter++)
         {
-            var weights = new T[n];
-            var z = new T[n];
+            var weights = new Vector<T>(n);
+            var z = new Vector<T>(n);
 
             for (int i = 0; i < n; i++)
             {
@@ -349,14 +349,14 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Fits the shape parameter using IRLS.
     /// </summary>
-    private void FitShapeParameter(Matrix<T> x, Vector<T> y, T[] etaLocation, T[] etaScale, T[] etaShape)
+    private void FitShapeParameter(Matrix<T> x, Vector<T> y, Vector<T> etaLocation, Vector<T> etaScale, Vector<T> etaShape)
     {
         int n = x.Rows;
 
         for (int iter = 0; iter < _options.MaxInnerIterations; iter++)
         {
-            var weights = new T[n];
-            var z = new T[n];
+            var weights = new Vector<T>(n);
+            var z = new Vector<T>(n);
 
             for (int i = 0; i < n; i++)
             {
@@ -381,7 +381,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates coefficients using weighted least squares.
     /// </summary>
-    private void UpdateCoefficients(Matrix<T> x, T[] z, T[] weights, ref Vector<T> coefficients, ref T intercept)
+    private void UpdateCoefficients(Matrix<T> x, Vector<T> z, Vector<T> weights, ref Vector<T> coefficients, ref T intercept)
     {
         int n = x.Rows;
         int p = _numFeatures;
@@ -442,7 +442,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates the linear predictor for all samples.
     /// </summary>
-    private void UpdateLinearPredictor(Matrix<T> x, T[] eta, Vector<T>? coefficients, T intercept, bool useExpLink = false)
+    private void UpdateLinearPredictor(Matrix<T> x, Vector<T> eta, Vector<T>? coefficients, T intercept, bool useExpLink = false)
     {
         for (int i = 0; i < x.Rows; i++)
         {
@@ -486,7 +486,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes the deviance (negative log-likelihood).
     /// </summary>
-    private double ComputeDeviance(Vector<T> y, T[] etaLocation, T[] etaScale, T[] etaShape)
+    private double ComputeDeviance(Vector<T> y, Vector<T> etaLocation, Vector<T> etaScale, Vector<T> etaShape)
     {
         double deviance = 0;
 
@@ -587,7 +587,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <inheritdoc/>
     protected override Task CalculateFeatureImportancesAsync(int featureCount)
     {
-        var importances = new T[_numFeatures];
+        var importances = new Vector<T>(_numFeatures);
 
         // Combine importances from all parameter models
         for (int f = 0; f < _numFeatures; f++)
@@ -611,7 +611,11 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         // Normalize
-        double sum = importances.Sum(x => NumOps.ToDouble(x));
+        double sum = 0;
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            sum += NumOps.ToDouble(importances[f]);
+        }
         if (sum > 0)
         {
             for (int f = 0; f < _numFeatures; f++)
@@ -620,7 +624,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        FeatureImportances = new Vector<T>(importances);
+        FeatureImportances = importances;
         return Task.CompletedTask;
     }
 
