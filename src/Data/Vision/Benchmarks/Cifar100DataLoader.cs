@@ -67,6 +67,9 @@ public class Cifar100DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
 
         // Each sample: 1 byte coarse label + 1 byte fine label + 3072 pixels
         const int bytesPerSample = 2 + 3072;
+        if (data.Length % bytesPerSample != 0)
+            throw new InvalidDataException(
+                $"CIFAR-100 file size ({data.Length} bytes) is not a multiple of sample size ({bytesPerSample} bytes). File may be corrupt.");
         int totalSamples = data.Length / bytesPerSample;
 
         if (_options.MaxSamples.HasValue && _options.MaxSamples.Value < totalSamples)

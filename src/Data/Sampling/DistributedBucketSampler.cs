@@ -24,7 +24,18 @@ public class DistributedBucketSampler : DataSamplerBase, IBatchSampler
     private int _samplesPerRank;
 
     /// <inheritdoc/>
-    public int BatchSize { get; set; }
+    private int _batchSize;
+
+    public int BatchSize
+    {
+        get => _batchSize;
+        set
+        {
+            if (value < 1)
+                throw new ArgumentOutOfRangeException(nameof(value), "Batch size must be at least 1.");
+            _batchSize = value;
+        }
+    }
 
     /// <inheritdoc/>
     public bool DropLast { get; set; }

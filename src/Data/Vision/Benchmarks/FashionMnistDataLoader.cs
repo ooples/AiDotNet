@@ -88,6 +88,14 @@ public class FashionMnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
         if (labelBytes.Length < 8)
             throw new InvalidDataException("Label file is truncated or corrupt (missing header).");
 
+        // Validate IDX magic numbers
+        int imageMagic = ReadBigEndianInt32(imageBytes, 0);
+        if (imageMagic != 0x00000803)
+            throw new InvalidDataException($"Invalid IDX image magic number: 0x{imageMagic:X8} (expected 0x00000803).");
+        int labelMagic = ReadBigEndianInt32(labelBytes, 0);
+        if (labelMagic != 0x00000801)
+            throw new InvalidDataException($"Invalid IDX label magic number: 0x{labelMagic:X8} (expected 0x00000801).");
+
         int imageCount = ReadBigEndianInt32(imageBytes, 4);
         int rows = ReadBigEndianInt32(imageBytes, 8);
         int cols = ReadBigEndianInt32(imageBytes, 12);

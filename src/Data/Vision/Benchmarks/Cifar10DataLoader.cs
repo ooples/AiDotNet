@@ -176,7 +176,8 @@ public class Cifar10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
     private static void LoadBatchFile(string dataDir, string fileName, List<byte[]> samples)
     {
         string filePath = Path.Combine(dataDir, fileName);
-        if (!File.Exists(filePath)) return;
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException($"CIFAR-10 batch file not found: {filePath}", filePath);
 
         byte[] data = File.ReadAllBytes(filePath);
         const int bytesPerSample = 1 + 3072; // 1 label + 3072 pixels
