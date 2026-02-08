@@ -104,9 +104,10 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     /// </summary>
     public T ComputeMSELoss(Tensor<T> predictions, Tensor<T> targets)
     {
-        if (predictions.Length != targets.Length)
+        if (!predictions.Shape.SequenceEqual(targets.Shape))
         {
-            throw new ArgumentException("Predictions and targets must have the same size");
+            throw new ArgumentException(
+                $"Predictions shape [{string.Join(", ", predictions.Shape)}] must match targets shape [{string.Join(", ", targets.Shape)}].");
         }
 
         var totalLoss = NumOps.Zero;
@@ -125,9 +126,10 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     /// </summary>
     public T ComputeMAELoss(Tensor<T> predictions, Tensor<T> targets)
     {
-        if (predictions.Length != targets.Length)
+        if (!predictions.Shape.SequenceEqual(targets.Shape))
         {
-            throw new ArgumentException("Predictions and targets must have the same size");
+            throw new ArgumentException(
+                $"Predictions shape [{string.Join(", ", predictions.Shape)}] must match targets shape [{string.Join(", ", targets.Shape)}].");
         }
 
         var totalLoss = NumOps.Zero;
@@ -142,8 +144,15 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass for MSE loss.
+    /// Performs the backward pass using MSE loss gradients (2 * (prediction - target) / N).
     /// </summary>
+    /// <remarks>
+    /// This method computes gradients for <see cref="ComputeMSELoss"/> only.
+    /// Do not use after computing <see cref="ComputeMAELoss"/>; the MAE loss is provided
+    /// for evaluation purposes and does not have a corresponding backward pass.
+    /// </remarks>
+    /// <param name="targets">Target values with the same shape as the cached predictions.</param>
+    /// <returns>Gradient with respect to the input features.</returns>
     public Tensor<T> Backward(Tensor<T> targets)
     {
         if (_predictionsCache == null || _backboneOutputCache == null)
@@ -187,11 +196,19 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     }
 
     /// <summary>
-    /// Computes the R² score (coefficient of determination).
+    /// Computes the R² score (coefficient of determination) from precomputed predictions.
     /// </summary>
-    public T ComputeR2Score(Tensor<T> numericalFeatures, Tensor<T> targets, Matrix<int>? categoricalIndices = null)
+    /// <remarks>
+    /// This overload does not call <see cref="Predict"/> and therefore does not
+    /// overwrite internal caches, making it safe to use during a training loop.
+    /// </remarks>
+    public T ComputeR2Score(Tensor<T> predictions, Tensor<T> targets)
     {
-        var predictions = Predict(numericalFeatures, categoricalIndices);
+        if (!predictions.Shape.SequenceEqual(targets.Shape))
+        {
+            throw new ArgumentException(
+                $"Predictions shape [{string.Join(", ", predictions.Shape)}] must match targets shape [{string.Join(", ", targets.Shape)}].");
+        }
 
         var targetMean = NumOps.Zero;
         for (int i = 0; i < targets.Length; i++)
@@ -221,13 +238,46 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     }
 
     /// <summary>
-    /// Computes the Root Mean Squared Error.
+    /// Computes the R² score by running a forward pass on the given features.
     /// </summary>
+    /// <remarks>
+    /// This overload calls <see cref="Predict"/>, which overwrites internal caches
+    /// (<c>_backboneOutputCache</c>, <c>_predictionsCache</c>). Do not call this
+    /// between <see cref="Forward"/> and <see cref="Backward"/> in a training loop.
+    /// Use the <see cref="ComputeR2Score(Tensor{T}, Tensor{T})"/> overload with
+    /// precomputed predictions instead.
+    /// </remarks>
+    public T ComputeR2Score(Tensor<T> numericalFeatures, Tensor<T> targets, Matrix<int>? categoricalIndices = null)
+    {
+        var predictions = Predict(numericalFeatures, categoricalIndices);
+        return ComputeR2Score(predictions, targets);
+    }
+
+    /// <summary>
+    /// Computes the Root Mean Squared Error from precomputed predictions.
+    /// </summary>
+    /// <remarks>
+    /// This overload does not call <see cref="Predict"/> and therefore does not
+    /// overwrite internal caches, making it safe to use during a training loop.
+    /// </remarks>
+    public T ComputeRMSE(Tensor<T> predictions, Tensor<T> targets)
+    {
+        var mse = ComputeMSELoss(predictions, targets);
+        return NumOps.Sqrt(mse);
+    }
+
+    /// <summary>
+    /// Computes the Root Mean Squared Error by running a forward pass on the given features.
+    /// </summary>
+    /// <remarks>
+    /// This overload calls <see cref="Predict"/>, which overwrites internal caches.
+    /// Use the <see cref="ComputeRMSE(Tensor{T}, Tensor{T})"/> overload with
+    /// precomputed predictions to avoid side effects during training.
+    /// </remarks>
     public T ComputeRMSE(Tensor<T> numericalFeatures, Tensor<T> targets, Matrix<int>? categoricalIndices = null)
     {
         var predictions = Predict(numericalFeatures, categoricalIndices);
-        var mse = ComputeMSELoss(predictions, targets);
-        return NumOps.Sqrt(mse);
+        return ComputeRMSE(predictions, targets);
     }
 
     /// <summary>

@@ -178,9 +178,9 @@ public class ColumnEmbedding<T>
     /// Computes gradients for column embeddings by summing upstream gradients across the batch dimension.
     /// </summary>
     /// <remarks>
-    /// Each call overwrites the stored gradients (does not accumulate across calls).
-    /// Call <see cref="ResetGradients"/> before the next backward pass if gradients from a previous
-    /// pass should not persist, though this method already overwrites them.
+    /// Each call accumulates into the stored gradients. Call <see cref="ResetGradients"/>
+    /// before starting a new accumulation window (e.g., before the next optimizer step)
+    /// to avoid stale gradients from previous passes.
     /// </remarks>
     /// <param name="gradient">Gradient from upstream [batchSize, numColumns, embeddingDim].</param>
     public void Backward(Tensor<T> gradient)
