@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -23,7 +24,7 @@ namespace AiDotNet.Agents;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
-public class AgentHyperparameterApplicator<T>
+internal class AgentHyperparameterApplicator<T>
 {
     private readonly HyperparameterRegistry _registry;
 
@@ -48,6 +49,9 @@ public class AgentHyperparameterApplicator<T>
         ModelType modelType,
         Dictionary<string, object> hyperparameters)
     {
+        if (model is null) throw new ArgumentNullException(nameof(model));
+        if (hyperparameters is null) throw new ArgumentNullException(nameof(hyperparameters));
+
         var result = new HyperparameterApplicationResult();
         var options = model.GetOptions();
 
@@ -60,7 +64,11 @@ public class AgentHyperparameterApplicator<T>
             {
                 ApplyParameter(options, modelType, paramName, paramValue, result);
             }
-            catch (Exception ex)
+            catch (TargetInvocationException ex)
+            {
+                result.Failed[paramName] = $"Unexpected error: {ex.InnerException?.Message ?? ex.Message}";
+            }
+            catch (InvalidOperationException ex)
             {
                 result.Failed[paramName] = $"Unexpected error: {ex.Message}";
             }
@@ -112,9 +120,13 @@ public class AgentHyperparameterApplicator<T>
         try
         {
             property.SetValue(options, convertedValue);
-            result.Applied[paramName] = paramValue;
+            result.Applied[paramName] = convertedValue;
         }
-        catch (Exception ex)
+        catch (TargetInvocationException ex)
+        {
+            result.Failed[paramName] = $"Failed to set property: {ex.InnerException?.Message ?? ex.Message}";
+        }
+        catch (ArgumentException ex)
         {
             result.Failed[paramName] = $"Failed to set property: {ex.Message}";
         }
@@ -133,15 +145,9 @@ public class AgentHyperparameterApplicator<T>
 
         // Try normalized match (remove underscores, case-insensitive)
         var normalized = HyperparameterDefinition.NormalizeName(propertyName);
-        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-        {
-            if (prop.CanWrite && HyperparameterDefinition.NormalizeName(prop.Name) == normalized)
-            {
-                return prop;
-            }
-        }
-
-        return null;
+        return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanWrite && HyperparameterDefinition.NormalizeName(p.Name) == normalized)
+            .FirstOrDefault();
     }
 
     /// <summary>
@@ -170,28 +176,46 @@ public class AgentHyperparameterApplicator<T>
             return ConvertValue(value, underlyingType);
         }
 
+        // Handle enum types
+        if (targetType.IsEnum)
+        {
+            if (value is string strVal)
+            {
+                try
+                {
+                    return Enum.Parse(targetType, strVal, ignoreCase: true);
+                }
+                catch (ArgumentException)
+                {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
         try
         {
-            // Handle numeric conversions
+            // Handle numeric conversions with InvariantCulture
             if (targetType == typeof(double))
             {
-                return Convert.ToDouble(value);
+                return Convert.ToDouble(value, CultureInfo.InvariantCulture);
             }
             if (targetType == typeof(float))
             {
-                return Convert.ToSingle(value);
+                return Convert.ToSingle(value, CultureInfo.InvariantCulture);
             }
             if (targetType == typeof(int))
             {
-                return Convert.ToInt32(value);
+                return Convert.ToInt32(value, CultureInfo.InvariantCulture);
             }
             if (targetType == typeof(long))
             {
-                return Convert.ToInt64(value);
+                return Convert.ToInt64(value, CultureInfo.InvariantCulture);
             }
             if (targetType == typeof(bool))
             {
-                return Convert.ToBoolean(value);
+                return Convert.ToBoolean(value, CultureInfo.InvariantCulture);
             }
             if (targetType == typeof(string))
             {
@@ -199,9 +223,17 @@ public class AgentHyperparameterApplicator<T>
             }
 
             // Try using Convert.ChangeType as a last resort
-            return Convert.ChangeType(value, targetType);
+            return Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
         }
-        catch
+        catch (InvalidCastException)
+        {
+            return null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+        catch (OverflowException)
         {
             return null;
         }

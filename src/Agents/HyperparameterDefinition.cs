@@ -16,7 +16,7 @@ namespace AiDotNet.Agents;
 /// valid values look like (e.g., learning rate should be between 0.00001 and 1.0).
 /// </para>
 /// </remarks>
-public class HyperparameterDefinition
+internal class HyperparameterDefinition
 {
     /// <summary>
     /// Gets or sets the C# property name on the options class.
@@ -46,27 +46,29 @@ public class HyperparameterDefinition
     /// </summary>
     public double? MaxValue { get; set; }
 
+    private HashSet<string> _normalizedAliases = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
-    /// Gets the pre-computed set of normalized aliases for fast lookup.
+    /// Checks whether the given normalized name matches any alias of this definition.
     /// </summary>
-    /// <remarks>
-    /// Aliases are normalized to lowercase with underscores, hyphens, and spaces removed.
-    /// </remarks>
-    public HashSet<string> NormalizedAliases { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+    internal bool MatchesAlias(string normalizedName)
+    {
+        return _normalizedAliases.Contains(normalizedName);
+    }
 
     /// <summary>
     /// Initializes the normalized aliases from the Aliases list. Call after setting Aliases.
     /// </summary>
     public void BuildNormalizedAliases()
     {
-        NormalizedAliases.Clear();
+        _normalizedAliases.Clear();
 
         // Always include the property name itself (normalized)
-        NormalizedAliases.Add(NormalizeName(PropertyName));
+        _normalizedAliases.Add(NormalizeName(PropertyName));
 
         foreach (var alias in Aliases)
         {
-            NormalizedAliases.Add(NormalizeName(alias));
+            _normalizedAliases.Add(NormalizeName(alias));
         }
     }
 

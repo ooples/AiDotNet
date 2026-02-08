@@ -1,3 +1,4 @@
+using System.Globalization;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Agents;
@@ -17,7 +18,7 @@ namespace AiDotNet.Agents;
 /// on a RandomForest model. It also knows that valid values are between 1 and 10000.
 /// </para>
 /// </remarks>
-public class HyperparameterRegistry
+internal class HyperparameterRegistry
 {
     private readonly Dictionary<ModelType, List<HyperparameterDefinition>> _registry = new();
     private readonly List<HyperparameterDefinition> _sharedDefinitions = new();
@@ -43,25 +44,16 @@ public class HyperparameterRegistry
         // Check model-specific definitions first
         if (_registry.TryGetValue(modelType, out var definitions))
         {
-            foreach (var def in definitions)
+            var match = definitions.FirstOrDefault(def => def.MatchesAlias(normalized));
+            if (match != null)
             {
-                if (def.NormalizedAliases.Contains(normalized))
-                {
-                    return def.PropertyName;
-                }
+                return match.PropertyName;
             }
         }
 
         // Fall back to shared definitions
-        foreach (var def in _sharedDefinitions)
-        {
-            if (def.NormalizedAliases.Contains(normalized))
-            {
-                return def.PropertyName;
-            }
-        }
-
-        return null;
+        var sharedMatch = _sharedDefinitions.FirstOrDefault(def => def.MatchesAlias(normalized));
+        return sharedMatch?.PropertyName;
     }
 
     /// <summary>
@@ -73,24 +65,14 @@ public class HyperparameterRegistry
 
         if (_registry.TryGetValue(modelType, out var definitions))
         {
-            foreach (var def in definitions)
+            var match = definitions.FirstOrDefault(def => def.MatchesAlias(normalized));
+            if (match != null)
             {
-                if (def.NormalizedAliases.Contains(normalized))
-                {
-                    return def;
-                }
+                return match;
             }
         }
 
-        foreach (var def in _sharedDefinitions)
-        {
-            if (def.NormalizedAliases.Contains(normalized))
-            {
-                return def;
-            }
-        }
-
-        return null;
+        return _sharedDefinitions.FirstOrDefault(def => def.MatchesAlias(normalized));
     }
 
     /// <summary>
@@ -144,10 +126,20 @@ public class HyperparameterRegistry
     {
         try
         {
-            result = Convert.ToDouble(value);
+            result = Convert.ToDouble(value, CultureInfo.InvariantCulture);
             return true;
         }
-        catch
+        catch (InvalidCastException)
+        {
+            result = 0;
+            return false;
+        }
+        catch (FormatException)
+        {
+            result = 0;
+            return false;
+        }
+        catch (OverflowException)
         {
             result = 0;
             return false;

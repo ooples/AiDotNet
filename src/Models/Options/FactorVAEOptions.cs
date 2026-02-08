@@ -120,16 +120,6 @@ public class FactorVAEOptions<T> : ModelOptions
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Gets or sets an optional random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Setting a seed makes training repeatable.
-    /// </para>
-    /// </remarks>
-    public new int? Seed { get; set; }
-
-    /// <summary>
     /// Validates the options and throws if any value is invalid.
     /// </summary>
     /// <remarks>

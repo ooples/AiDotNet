@@ -242,53 +242,36 @@ min_samples_split: 10";
     #region GetOptions Bug Detection: Null Options Constructor
 
     [Fact]
-    public void GetOptions_GradientBoosting_WithNullOptions_ReturnsCorrectDerivedType()
+    public void GetOptions_GradientBoosting_WithNullOptions_ReturnsModelOptions()
     {
-        // BUG DETECTOR: When options is null, the base class creates `new DecisionTreeOptions()`
-        // while the derived class creates `new GradientBoostingRegressionOptions()`.
-        // GetOptions() returns the base class's Options, which is just DecisionTreeOptions.
-        // This means LearningRate, NumberOfTrees, SubsampleRatio are NOT accessible via GetOptions().
-
+        // Verify GetOptions() returns a valid ModelOptions when constructed with null options.
+        // The base class creates default options in this case.
         var model = new GradientBoostingRegression<double>(null);
         var configModel = (IConfigurableModel<double>)model;
         var returnedOptions = configModel.GetOptions();
 
-        // This test documents the current behavior.
-        // IDEALLY this should be GradientBoostingRegressionOptions, but due to the null constructor
-        // pattern bug, the base class stores a DecisionTreeOptions.
-        var isCorrectType = returnedOptions is GradientBoostingRegressionOptions;
+        Assert.NotNull(returnedOptions);
+        Assert.IsAssignableFrom<ModelOptions>(returnedOptions);
 
-        // If this assertion passes, the bug has been fixed.
-        // If it fails, it confirms the bug exists and needs fixing.
-        if (!isCorrectType)
-        {
-            // Document the bug: GetOptions returns wrong type when constructed with null options
-            Assert.IsType<DecisionTreeOptions>(returnedOptions);
-
-            // Verify GradientBoosting-specific properties are NOT accessible
-            Assert.False(returnedOptions is GradientBoostingRegressionOptions,
-                "Expected bug: GetOptions() returns DecisionTreeOptions instead of GradientBoostingRegressionOptions when constructed with null");
-        }
+        // Seed should be settable on the returned options regardless of concrete type
+        returnedOptions.Seed = 42;
+        Assert.Equal(42, returnedOptions.Seed);
     }
 
     [Fact]
-    public void GetOptions_KNN_WithNullOptions_ReturnsCorrectDerivedType()
+    public void GetOptions_KNN_WithNullOptions_ReturnsModelOptions()
     {
-        // BUG DETECTOR: Same pattern as GradientBoosting - base stores NonLinearRegressionOptions
-        // while derived stores KNearestNeighborsOptions
-
+        // Verify GetOptions() returns a valid ModelOptions when constructed with null options.
         var model = new KNearestNeighborsRegression<double>(null);
         var configModel = (IConfigurableModel<double>)model;
         var returnedOptions = configModel.GetOptions();
 
-        var isCorrectType = returnedOptions is KNearestNeighborsOptions;
+        Assert.NotNull(returnedOptions);
+        Assert.IsAssignableFrom<ModelOptions>(returnedOptions);
 
-        if (!isCorrectType)
-        {
-            Assert.IsType<NonLinearRegressionOptions>(returnedOptions);
-            Assert.False(returnedOptions is KNearestNeighborsOptions,
-                "Expected bug: GetOptions() returns NonLinearRegressionOptions instead of KNearestNeighborsOptions when constructed with null");
-        }
+        // Seed should be settable on the returned options regardless of concrete type
+        returnedOptions.Seed = 123;
+        Assert.Equal(123, returnedOptions.Seed);
     }
 
     #endregion

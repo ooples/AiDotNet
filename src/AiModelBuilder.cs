@@ -5869,7 +5869,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             var registry = new HyperparameterRegistry();
             var applicator = new AgentHyperparameterApplicator<T>(registry);
-            var modelType = recommendation.SuggestedModelType ?? ModelType.SimpleRegression;
+            var modelType = recommendation.SuggestedModelType ?? DeriveModelTypeFromModel(_model);
 
             var applicationResult = applicator.Apply(configurableModel, modelType, recommendation.SuggestedHyperparameters);
             recommendation.HyperparameterApplicationResult = applicationResult;
@@ -5881,6 +5881,44 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 Console.WriteLine("========================================\n");
             }
         }
+    }
+
+    /// <summary>
+    /// Derives the ModelType from the actual model instance by examining its class name.
+    /// </summary>
+    private static ModelType DeriveModelTypeFromModel(IFullModel<T, TInput, TOutput>? model)
+    {
+        if (model == null) return ModelType.None;
+
+        var modelTypeName = model.GetType().Name;
+
+        // Try direct enum parse first (handles cases like "RandomForest", "GradientBoosting")
+        if (Enum.TryParse<ModelType>(modelTypeName, true, out var parsedType))
+        {
+            return parsedType;
+        }
+
+        // Try common suffixes removal
+        var suffixes = new[] { "Regression", "Model", "Classifier", "Network" };
+        foreach (var suffix in suffixes)
+        {
+            if (modelTypeName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                var baseName = modelTypeName.Substring(0, modelTypeName.Length - suffix.Length);
+                if (Enum.TryParse<ModelType>(baseName, true, out var strippedType))
+                {
+                    return strippedType;
+                }
+            }
+        }
+
+        // Heuristic fallback based on common patterns
+        if (modelTypeName.Contains("Neural", StringComparison.OrdinalIgnoreCase))
+        {
+            return ModelType.NeuralNetworkRegression;
+        }
+
+        return ModelType.None;
     }
 
     /// <summary>

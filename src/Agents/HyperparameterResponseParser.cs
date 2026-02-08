@@ -18,7 +18,7 @@ namespace AiDotNet.Agents;
 /// Values are automatically type-inferred: int, double, bool, or string.
 /// </para>
 /// </remarks>
-public class HyperparameterResponseParser
+internal class HyperparameterResponseParser
 {
     /// <summary>
     /// Parses LLM response text and extracts hyperparameter key-value pairs.
@@ -61,9 +61,7 @@ public class HyperparameterResponseParser
 
         // Try ```json ... ``` blocks first
         var jsonBlockPattern = new Regex(@"```(?:json)?\s*\n?([\s\S]*?)\n?\s*```", RegexOptions.Compiled);
-        var matches = jsonBlockPattern.Matches(text);
-
-        foreach (Match match in matches)
+        foreach (Match match in jsonBlockPattern.Matches(text).Cast<Match>().Where(m => m.Success))
         {
             if (TryParseJsonObject(match.Groups[1].Value.Trim(), result))
             {
@@ -73,9 +71,7 @@ public class HyperparameterResponseParser
 
         // Try raw { ... } objects
         var rawJsonPattern = new Regex(@"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", RegexOptions.Compiled);
-        matches = rawJsonPattern.Matches(text);
-
-        foreach (Match match in matches)
+        foreach (Match match in rawJsonPattern.Matches(text).Cast<Match>().Where(m => m.Success))
         {
             if (TryParseJsonObject(match.Value.Trim(), result))
             {
@@ -101,7 +97,7 @@ public class HyperparameterResponseParser
             }
             return result.Count > 0;
         }
-        catch
+        catch (Newtonsoft.Json.JsonReaderException)
         {
             return false;
         }

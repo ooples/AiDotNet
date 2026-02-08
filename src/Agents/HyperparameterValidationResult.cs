@@ -3,7 +3,7 @@ namespace AiDotNet.Agents;
 /// <summary>
 /// Result of validating a hyperparameter value against its definition's constraints.
 /// </summary>
-public class HyperparameterValidationResult
+internal class HyperparameterValidationResult
 {
     /// <summary>
     /// Gets or sets whether the value is valid (correct type, within range).

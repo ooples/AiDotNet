@@ -19,7 +19,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for model parameters and calculations.</typeparam>
-public interface IConfigurableModel<T>
+internal interface IConfigurableModel<T>
 {
     /// <summary>
     /// Returns the live options instance for this model, allowing hyperparameter mutation before training.
