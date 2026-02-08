@@ -125,7 +125,8 @@ internal class AgentHyperparameterApplicator<T>
 
         // Step 6: Skip if user already set a non-default value (don't clobber user config)
         var currentValue = property.GetValue(options);
-        if (currentValue != null && !currentValue.Equals(GetDefaultValue(property.PropertyType)))
+        var defaultValue = GetDefaultPropertyValue(options, property);
+        if (!Equals(currentValue, defaultValue))
         {
             result.Skipped[paramName] = paramValue;
             result.Warnings.Add($"Skipping '{paramName}': user-configured value '{currentValue}' preserved.");
@@ -253,8 +254,19 @@ internal class AgentHyperparameterApplicator<T>
         }
     }
 
-    private static object? GetDefaultValue(Type type)
+    private static object? GetDefaultPropertyValue(ModelOptions options, PropertyInfo property)
     {
-        return type.IsValueType ? Activator.CreateInstance(type) : null;
+        try
+        {
+            var defaultOptions = Activator.CreateInstance(options.GetType());
+            return defaultOptions is null ? null : property.GetValue(defaultOptions);
+        }
+        catch
+        {
+            // Fallback to type default if options type lacks a parameterless ctor
+            return property.PropertyType.IsValueType
+                ? Activator.CreateInstance(property.PropertyType)
+                : null;
+        }
     }
 }
