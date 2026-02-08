@@ -3,20 +3,22 @@ using System.IO.MemoryMappedFiles;
 namespace AiDotNet.Data.Formats;
 
 /// <summary>
-/// Zero-copy dataset access via memory-mapped files for maximum I/O throughput.
+/// Memory-mapped dataset access for efficient I/O on large binary datasets.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <remarks>
 /// <para>
 /// Memory-mapped files allow the operating system to map file data directly into virtual memory,
-/// enabling zero-copy access to large datasets without loading them entirely into RAM.
+/// enabling efficient access to large datasets without loading them entirely into RAM.
 /// The OS handles paging data in and out as needed.
 /// </para>
 /// <para>
 /// The dataset file uses a simple binary format:
 /// - First 4 bytes: number of samples (int32 little-endian)
 /// - Next 4 bytes: elements per sample (int32 little-endian)
-/// - Remaining bytes: raw double-precision (8-byte) values, converted to/from T at read/write time
+/// - Remaining bytes: raw double-precision (8-byte) values, converted to/from T at read/write time.
+///   When reading, this class materializes samples into managed arrays/tensors (not zero-copy),
+///   but the OS-level memory mapping avoids reading the entire file into RAM upfront.
 /// </para>
 /// <para><b>For Beginners:</b> Use this for very large datasets that don't fit in RAM.
 /// The operating system will transparently page data in and out as needed.
@@ -24,7 +26,7 @@ namespace AiDotNet.Data.Formats;
 /// // Write a dataset to disk
 /// MemoryMappedDataset&lt;float&gt;.WriteDatasetFile("data.bin", myTensor);
 ///
-/// // Read samples on demand (zero-copy)
+/// // Read samples on demand
 /// using var dataset = new MemoryMappedDataset&lt;float&gt;("data.bin");
 /// var sample = dataset.ReadSample(42);
 /// var batch = dataset.ReadBatch(new[] { 0, 10, 20 });

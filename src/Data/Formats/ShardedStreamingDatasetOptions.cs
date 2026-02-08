@@ -13,6 +13,9 @@ public sealed class ShardedStreamingDatasetOptions
     public int? MaxSamples { get; set; }
     /// <summary>Optional random seed for reproducible shuffling.</summary>
     public int? Seed { get; set; }
-    /// <summary>Number of worker threads for parallel shard reading. Default is 1.</summary>
+    /// <summary>
+    /// Reserved for future support of parallel shard reading. Currently not used by
+    /// <c>ShardedStreamingDataset</c>, and callers should leave this at the default of 1.
+    /// </summary>
     public int NumWorkers { get; set; } = 1;
 }

@@ -139,6 +139,11 @@ internal class ShardedStreamingDataset : IDisposable
     /// </summary>
     /// <param name="shardPath">Path to the shard file.</param>
     /// <returns>An enumerable of byte records.</returns>
+    /// <summary>
+    /// Maximum allowed record length (1 GB) to guard against corrupted files causing OOM.
+    /// </summary>
+    private const int MaxRecordLength = 1 << 30;
+
     public static IEnumerable<byte[]> ReadShard(string shardPath)
     {
         using var stream = new FileStream(shardPath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536);
@@ -150,9 +155,10 @@ internal class ShardedStreamingDataset : IDisposable
             if (read < 4) yield break;
 
             int recordLength = BitConverter.ToInt32(lengthBuf, 0);
-            if (recordLength <= 0)
+            if (recordLength <= 0 || recordLength > MaxRecordLength)
                 throw new InvalidDataException(
-                    $"Invalid record length {recordLength} in shard '{shardPath}'. The shard file may be corrupted.");
+                    $"Invalid record length {recordLength} in shard '{shardPath}'. " +
+                    $"Must be between 1 and {MaxRecordLength} bytes. The shard file may be corrupted.");
 
             byte[] record = new byte[recordLength];
             read = ReadFull(stream, record, recordLength);
