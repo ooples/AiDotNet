@@ -121,10 +121,20 @@ public class TransformedDataLoader<T> :
     {
         // Split the inner loader, then wrap each part with the same transform
         var (train, val, test) = _inner.Split(trainRatio, validationRatio, seed);
+
+        if (train is not InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>> trainBase ||
+            val is not InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>> valBase ||
+            test is not InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>> testBase)
+        {
+            throw new InvalidOperationException(
+                "Inner loader's Split returned types that cannot be wrapped with TransformedDataLoader. " +
+                "Expected InputOutputDataLoaderBase instances.");
+        }
+
         return (
-            new TransformedDataLoader<T>((InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>)train, _transform),
-            new TransformedDataLoader<T>((InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>)val, _transform),
-            new TransformedDataLoader<T>((InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>>)test, _transform)
+            new TransformedDataLoader<T>(trainBase, _transform),
+            new TransformedDataLoader<T>(valBase, _transform),
+            new TransformedDataLoader<T>(testBase, _transform)
         );
     }
 
@@ -180,6 +190,14 @@ public class TransformedDataLoader<T> :
             var data = new T[tensor.Data.Length];
             tensor.Data.Span.CopyTo(data.AsSpan());
             var transformed = _transform.Apply(data);
+
+            if (transformed.Length != data.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Transform returned {transformed.Length} elements, expected {data.Length}. " +
+                    "Transform must preserve sample element count.");
+            }
+
             return new Tensor<T>(transformed, tensor.Shape);
         }
 

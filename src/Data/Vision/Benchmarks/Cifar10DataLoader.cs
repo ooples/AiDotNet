@@ -117,7 +117,8 @@ public class Cifar10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
                 }
             }
 
-            labelsData[i * 10 + label] = NumOps.One;
+            if (label >= 0 && label < 10)
+                labelsData[i * 10 + label] = NumOps.One;
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, 32, 32, 3 });

@@ -37,7 +37,6 @@ public class StatefulDataLoader<T, TInput, TOutput> :
 {
     private readonly InputOutputDataLoaderBase<T, TInput, TOutput> _inner;
     private int _epoch;
-    private int[]? _currentShuffledIndices;
     private int? _lastShuffleSeed;
 
     /// <summary>
@@ -89,9 +88,6 @@ public class StatefulDataLoader<T, TInput, TOutput> :
             CurrentIndex = _inner.CurrentIndex,
             CurrentBatchIndex = _inner.CurrentBatchIndex,
             Epoch = _epoch,
-            ShuffledIndices = _currentShuffledIndices is not null
-                ? (int[])_currentShuffledIndices.Clone()
-                : null,
             RandomSeed = _lastShuffleSeed,
             TotalCount = TotalCount,
             BatchSize = _inner.BatchSize
@@ -106,6 +102,12 @@ public class StatefulDataLoader<T, TInput, TOutput> :
             throw new ArgumentNullException(nameof(state));
         }
 
+        if (state.TotalCount != TotalCount)
+        {
+            throw new InvalidOperationException(
+                $"Checkpoint total count ({state.TotalCount}) does not match current loader ({TotalCount}).");
+        }
+
         _epoch = state.Epoch;
         _lastShuffleSeed = state.RandomSeed;
 
@@ -115,15 +117,10 @@ public class StatefulDataLoader<T, TInput, TOutput> :
         // Reset and reload to the saved position
         _inner.Reset();
 
-        // Restore the shuffle order so batches are replayed in the same sequence
-        if (state.ShuffledIndices is not null && state.ShuffledIndices.Length > 0)
+        // Restore the shuffle order deterministically from the saved seed
+        if (state.RandomSeed.HasValue)
         {
-            _currentShuffledIndices = (int[])state.ShuffledIndices.Clone();
-            // Reapply the same shuffle seed so the inner loader uses the same ordering
-            if (state.RandomSeed.HasValue)
-            {
-                _inner.Shuffle(state.RandomSeed.Value);
-            }
+            _inner.Shuffle(state.RandomSeed.Value);
         }
 
         // Advance to the saved position by consuming batches
@@ -170,7 +167,6 @@ public class StatefulDataLoader<T, TInput, TOutput> :
     public void Unshuffle()
     {
         _lastShuffleSeed = null;
-        _currentShuffledIndices = null;
         _inner.Unshuffle();
     }
 
@@ -227,7 +223,6 @@ public class StatefulDataLoader<T, TInput, TOutput> :
     {
         _inner.Unload();
         _epoch = 0;
-        _currentShuffledIndices = null;
         _lastShuffleSeed = null;
     }
 }

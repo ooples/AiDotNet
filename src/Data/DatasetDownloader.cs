@@ -321,8 +321,9 @@ internal static class DatasetDownloader
             }
 
             // Decompress gzip
+            using (var inputStream = new FileStream(tempGz, FileMode.Open, FileAccess.Read))
             using (var gzStream = new System.IO.Compression.GZipStream(
-                new FileStream(tempGz, FileMode.Open, FileAccess.Read), System.IO.Compression.CompressionMode.Decompress))
+                inputStream, System.IO.Compression.CompressionMode.Decompress))
             using (var outputStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None))
             {
                 await gzStream.CopyToAsync(outputStream);

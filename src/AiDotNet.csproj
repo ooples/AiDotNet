@@ -75,7 +75,7 @@
 	</ItemGroup>
 
 	<!-- ImageSharp for PNG/JPEG/GIF/TIFF support (requires .NET 6+) -->
-	<ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+	<ItemGroup Condition="'$(TargetFramework)' != 'net471'">
 	  <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
 	  <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
 	</ItemGroup>

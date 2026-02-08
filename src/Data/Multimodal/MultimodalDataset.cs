@@ -210,7 +210,9 @@ public class MultimodalDataset<T>
         for (int i = 0; i < actualBatchSize; i++)
         {
             var sample = this[startIndex + i];
-            if (sample.Label is null) continue;
+            if (sample.Label is null)
+                throw new InvalidOperationException(
+                    $"Sample at index {startIndex + i} has null label but batch expects labels.");
 
             var srcSpan = sample.Label.Data.Span;
             int dstOffset = i * elementsPerLabel;

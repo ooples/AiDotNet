@@ -304,7 +304,7 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         for (int i = 0; i < framesToRead; i++)
         {
             int frameOffset = dataOffset + i * bytesPerFrame;
-            if (frameOffset + bytesPerSample > rawBytes.Length) break;
+            if (frameOffset + bytesPerFrame > rawBytes.Length) break;
 
             double value;
             if (bitsPerSample == 8)

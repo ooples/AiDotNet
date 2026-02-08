@@ -505,7 +505,23 @@ public static class ImageHelper<T>
     /// <returns>Tensor with shape [1, channels, height, width].</returns>
     private static Tensor<T> LoadImageWithImageSharp(string filePath, bool normalize)
     {
-        using var image = Image.Load<Rgba32>(filePath);
+        SixLabors.ImageSharp.Image<Rgba32> image;
+        try
+        {
+            image = Image.Load<Rgba32>(filePath);
+        }
+        catch (SixLabors.ImageSharp.UnknownImageFormatException ex)
+        {
+            throw new NotSupportedException(
+                $"Unsupported or unrecognized image format for file: {filePath}", ex);
+        }
+        catch (SixLabors.ImageSharp.InvalidImageContentException ex)
+        {
+            throw new InvalidDataException(
+                $"Image file is corrupted or has invalid content: {filePath}", ex);
+        }
+
+        using var _ = image;
         int width = image.Width;
         int height = image.Height;
 

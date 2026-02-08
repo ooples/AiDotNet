@@ -187,7 +187,12 @@ internal class WebDataset : IDisposable
 
                 // Regular file - read contents
                 byte[] fileData = new byte[(int)size];
-                ReadFull(stream, fileData, (int)size);
+                int entryBytesRead = ReadFull(stream, fileData, (int)size);
+                if (entryBytesRead < (int)size)
+                {
+                    throw new InvalidDataException(
+                        $"TAR entry '{name}' is truncated: expected {size} bytes but only read {entryBytesRead}.");
+                }
 
                 // Skip padding
                 long remainder = size % 512;
@@ -202,9 +207,9 @@ internal class WebDataset : IDisposable
                 string ext = Path.GetExtension(fileName);
                 string baseName = Path.GetFileNameWithoutExtension(fileName);
 
-                // Filter by extension if configured
+                // Filter by extension if configured (case-insensitive)
                 if (_options.IncludeExtensions is not null &&
-                    !_options.IncludeExtensions.Contains(ext))
+                    !_options.IncludeExtensions.Contains(ext.ToLowerInvariant()))
                 {
                     continue;
                 }

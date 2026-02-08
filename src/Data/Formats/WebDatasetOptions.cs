@@ -13,6 +13,9 @@ public sealed class WebDatasetOptions
     public int? MaxSamples { get; set; }
     /// <summary>Optional random seed for reproducible shuffling.</summary>
     public int? Seed { get; set; }
-    /// <summary>File extensions to include as data fields (e.g., ".jpg", ".txt", ".json"). Null means all.</summary>
+    /// <summary>
+    /// File extensions to include as data fields (e.g., ".jpg", ".txt", ".json"). Null means all.
+    /// Uses case-insensitive comparison by default.
+    /// </summary>
     public HashSet<string>? IncludeExtensions { get; set; }
 }

@@ -106,16 +106,53 @@ public class MnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         }
 
         // Parse IDX file format
+#if NET6_0_OR_GREATER
+        byte[] imageBytes = await File.ReadAllBytesAsync(imagesPath, cancellationToken);
+        byte[] labelBytes = await File.ReadAllBytesAsync(labelsPath, cancellationToken);
+#else
         byte[] imageBytes = File.ReadAllBytes(imagesPath);
         byte[] labelBytes = File.ReadAllBytes(labelsPath);
+#endif
+
+        // Validate minimum header sizes
+        const int imageHeaderSize = 16;
+        const int labelHeaderSize = 8;
+
+        if (imageBytes.Length < imageHeaderSize)
+        {
+            throw new InvalidDataException(
+                $"MNIST images file is corrupted or truncated: expected at least {imageHeaderSize} bytes, got {imageBytes.Length}.");
+        }
+
+        if (labelBytes.Length < labelHeaderSize)
+        {
+            throw new InvalidDataException(
+                $"MNIST labels file is corrupted or truncated: expected at least {labelHeaderSize} bytes, got {labelBytes.Length}.");
+        }
 
         // Images: [magic(4)] [count(4)] [rows(4)] [cols(4)] [pixel data...]
         int imageCount = ReadBigEndianInt32(imageBytes, 4);
         int rows = ReadBigEndianInt32(imageBytes, 8);
         int cols = ReadBigEndianInt32(imageBytes, 12);
 
+        // Validate image data fits within file
+        long expectedImageSize = imageHeaderSize + (long)imageCount * rows * cols;
+        if (imageBytes.Length < expectedImageSize)
+        {
+            throw new InvalidDataException(
+                $"MNIST images file is truncated: expected {expectedImageSize} bytes for {imageCount} images, got {imageBytes.Length}.");
+        }
+
         // Labels: [magic(4)] [count(4)] [label data...]
         int labelCount = ReadBigEndianInt32(labelBytes, 4);
+
+        // Validate label data fits within file
+        long expectedLabelSize = labelHeaderSize + (long)labelCount;
+        if (labelBytes.Length < expectedLabelSize)
+        {
+            throw new InvalidDataException(
+                $"MNIST labels file is truncated: expected {expectedLabelSize} bytes for {labelCount} labels, got {labelBytes.Length}.");
+        }
 
         if (imageCount != labelCount)
         {

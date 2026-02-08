@@ -74,8 +74,13 @@ public class FashionMnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
         if (!File.Exists(labelsPath))
             throw new FileNotFoundException($"Fashion-MNIST labels file not found: {labelsPath}");
 
+#if NET6_0_OR_GREATER
+        byte[] imageBytes = await File.ReadAllBytesAsync(imagesPath, cancellationToken);
+        byte[] labelBytes = await File.ReadAllBytesAsync(labelsPath, cancellationToken);
+#else
         byte[] imageBytes = File.ReadAllBytes(imagesPath);
         byte[] labelBytes = File.ReadAllBytes(labelsPath);
+#endif
 
         if (imageBytes.Length < 16)
             throw new InvalidDataException("Image file is truncated or corrupt (missing header).");
