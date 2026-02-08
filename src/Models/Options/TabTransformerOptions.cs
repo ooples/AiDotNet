@@ -56,7 +56,20 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     /// Set this to null if you only have numerical features.
     /// </para>
     /// </remarks>
-    public int[]? CategoricalCardinalities { get; set; }
+    private int[]? _categoricalCardinalities;
+
+    public int[]? CategoricalCardinalities
+    {
+        get => _categoricalCardinalities;
+        set
+        {
+            if (value != null && _numCategoricalFeatures.HasValue && value.Length != _numCategoricalFeatures.Value)
+                throw new ArgumentException(
+                    $"CategoricalCardinalities.Length ({value.Length}) must match NumCategoricalFeatures ({_numCategoricalFeatures.Value}).",
+                    nameof(value));
+            _categoricalCardinalities = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the embedding dimension for categorical features.

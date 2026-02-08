@@ -73,9 +73,9 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <param name="regularization">Optional regularization strategy.</param>
     public NGBoostClassifier(NGBoostClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new NGBoostClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ??= new NGBoostClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
     {
-        _options = options ?? new NGBoostClassifierOptions<T>();
+        _options = options;
         _trees = [];
         _initialLogOdds = new Vector<T>(0);
         _numClasses = 0;
@@ -482,7 +482,7 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
             return Enumerable.Range(0, n).ToArray();
         }
 
-        int sampleSize = (int)(n * _options.SubsampleRatio);
+        int sampleSize = Math.Max(1, Math.Min(n, (int)(n * _options.SubsampleRatio)));
         return SamplingHelper.SampleWithoutReplacement(n, sampleSize);
     }
 
@@ -612,10 +612,14 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
         _options.SplitCriterion = (Enums.SplitCriterion)reader.ReadInt32();
         if (reader.ReadBoolean())
             _options.EarlyStoppingRounds = reader.ReadInt32();
+        else
+            _options.EarlyStoppingRounds = null;
         _options.Verbose = reader.ReadBoolean();
         _options.VerboseEval = reader.ReadInt32();
         if (reader.ReadBoolean())
             _options.Seed = reader.ReadInt32();
+        else
+            _options.Seed = null;
 
         // Class info
         _numClasses = reader.ReadInt32();

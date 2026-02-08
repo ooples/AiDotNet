@@ -215,17 +215,37 @@ internal class NegativeBinomialDistribution<T> : DistributionBase<T>
         double r = NumOps.ToDouble(_r);
         double p = NumOps.ToDouble(_prob);
 
-        // Fisher Information Matrix
-        double iR = Trigamma(r) - Trigamma(r + r * (1 - p) / p);
+        // Fisher Information Matrix for NegBinom(r, p)
+        // I_rr = ψ₁(r) - E[ψ₁(X + r)] where X ~ NegBinom(r, p)
+        // Compute E[ψ₁(X + r)] by summing over the PMF until tail is negligible
+        double expectedTrigamma = 0;
+        double cumProb = 0;
+        double logP = Math.Log(p);
+        double log1MinusP = Math.Log(1 - p);
+        for (int k = 0; k < 10000; k++)
+        {
+            // log PMF: log(Gamma(k+r)) - log(Gamma(r)) - log(k!) + r*log(p) + k*log(1-p)
+            double logPmf = LogGamma(k + r) - LogGamma(r) - LogGamma(k + 1) + r * logP + k * log1MinusP;
+            double pmf = Math.Exp(logPmf);
+            expectedTrigamma += pmf * Trigamma(k + r);
+            cumProb += pmf;
+            if (cumProb > 1 - 1e-12) break;
+        }
+
+        double iR = Trigamma(r) - expectedTrigamma;
         double iP = r / (p * p * (1 - p));
-        double iRP = 1 / p;
+        double iRP = -1.0 / p;
+
+        // Ensure I_rr is positive for numerical stability
+        if (iR < 1e-10) iR = 1e-10;
 
         return new Matrix<T>(new T[,]
         {
-            { NumOps.FromDouble(Math.Max(iR, 1e-10)), NumOps.FromDouble(iRP) },
+            { NumOps.FromDouble(iR), NumOps.FromDouble(iRP) },
             { NumOps.FromDouble(iRP), NumOps.FromDouble(iP) }
         });
     }
+
 
     /// <inheritdoc/>
     public override IParametricDistribution<T> Clone()

@@ -271,19 +271,9 @@ internal class StudentTDistribution<T> : DistributionBase<T>
         // Generate t-distributed sample using ratio of Normal and Chi-squared
         double z = BoxMullerNormal(random);
 
-        // Generate Chi-squared with nu degrees of freedom
-        double chi2 = 0;
-        for (int i = 0; i < (int)nu; i++)
-        {
-            double normal = BoxMullerNormal(random);
-            chi2 += normal * normal;
-        }
-
-        // For non-integer nu, use gamma distribution approximation
-        if (Math.Abs(nu - Math.Round(nu)) > 1e-10)
-        {
-            chi2 = SampleGamma(random, nu / 2, 0.5);
-        }
+        // Generate Chi-squared with nu degrees of freedom via Gamma(nu/2, 1/2)
+        // This works correctly for both integer and non-integer degrees of freedom
+        double chi2 = SampleGamma(random, nu / 2, 0.5);
 
         double t = z / Math.Sqrt(chi2 / nu);
         return NumOps.FromDouble(locVal + scaleVal * t);
