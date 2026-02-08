@@ -96,7 +96,7 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     public int HiddenDimension { get; set; } = 128;
 
     /// <summary>
-    /// Number of attention heads.
+    /// Number of attention heads. Must evenly divide <see cref="EmbeddingDimension"/>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -104,7 +104,22 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     /// relationships at the same time. Must evenly divide EmbeddingDimension.
     /// </para>
     /// </remarks>
-    public int NumHeads { get; set; } = 8;
+    private int _numHeads = 8;
+
+    public int NumHeads
+    {
+        get => _numHeads;
+        set
+        {
+            if (value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(value), "NumHeads must be positive.");
+            if (EmbeddingDimension % value != 0)
+                throw new ArgumentException(
+                    $"NumHeads ({value}) must evenly divide EmbeddingDimension ({EmbeddingDimension}).",
+                    nameof(value));
+            _numHeads = value;
+        }
+    }
 
     /// <summary>
     /// Number of transformer layers.
@@ -182,10 +197,12 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     /// </value>
     /// <remarks>
     /// <para>
-    /// When CategoricalCardinalities is set, this property returns its length.
-    /// Can also be set directly to override the inferred value.
-    /// Setting to 0 resets to inference mode (infer from CategoricalCardinalities).
-    /// A positive value permanently overrides inference.
+    /// When <see cref="CategoricalCardinalities"/> is set, the getter returns its length
+    /// unless explicitly overridden. Setting to 0 clears the override so the value is
+    /// inferred from <see cref="CategoricalCardinalities"/> again (it does NOT disable
+    /// categorical features if <see cref="CategoricalCardinalities"/> is still set).
+    /// To truly disable categorical features, set <see cref="CategoricalCardinalities"/>
+    /// to null.
     /// </para>
     /// </remarks>
     public int NumCategoricalFeatures

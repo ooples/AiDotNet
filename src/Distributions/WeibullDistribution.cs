@@ -109,9 +109,8 @@ internal class WeibullDistribution<T> : DistributionBase<T>
         if (NumOps.Compare(x, Zero) == 0)
         {
             double k = NumOps.ToDouble(_shape);
-            // For k < 1, the theoretical PDF at x = 0 is infinite;
-            // use a large finite approximation for numeric backend compatibility.
-            if (k < 1) return NumOps.FromDouble(double.MaxValue);
+            // For k < 1, the theoretical PDF at x = 0 is +∞.
+            if (k < 1) return NumOps.FromDouble(double.PositiveInfinity);
             if (k == 1) return NumOps.Divide(_shape, _scale);
             return Zero;
         }
@@ -135,9 +134,8 @@ internal class WeibullDistribution<T> : DistributionBase<T>
         if (NumOps.Compare(x, Zero) == 0)
         {
             double k = NumOps.ToDouble(_shape);
-            // For k < 1, log(PDF) at x = 0 is theoretically +infinity;
-            // use a large finite approximation for numeric backend compatibility.
-            if (k < 1) return NumOps.FromDouble(double.MaxValue);
+            // For k < 1, log(PDF) at x = 0 is +∞ (since PDF is +∞).
+            if (k < 1) return NumOps.FromDouble(double.PositiveInfinity);
             if (k == 1) return NumOps.FromDouble(Math.Log(NumOps.ToDouble(_shape)) - Math.Log(NumOps.ToDouble(_scale)));
             return NumOps.FromDouble(double.NegativeInfinity);
         }

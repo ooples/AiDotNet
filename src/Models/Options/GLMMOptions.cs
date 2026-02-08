@@ -1,3 +1,6 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
