@@ -20,7 +20,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class ExponentialDistribution<T> : DistributionBase<T>
+internal class ExponentialDistribution<T> : DistributionBase<T>
 {
     private T _rate;  // λ (lambda)
 
@@ -165,6 +165,8 @@ public class ExponentialDistribution<T> : DistributionBase<T>
     /// </summary>
     public static ExponentialDistribution<T> FromMean(T mean)
     {
+        if (NumOps.Compare(mean, Zero) <= 0)
+            throw new ArgumentOutOfRangeException(nameof(mean), "Mean must be positive for Exponential distribution.");
         T rate = NumOps.Divide(NumOps.One, mean);
         return new ExponentialDistribution<T>(rate);
     }

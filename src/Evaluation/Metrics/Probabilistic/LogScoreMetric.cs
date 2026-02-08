@@ -82,11 +82,13 @@ public class LogScoreMetric<T> : IRegressionMetric<T>
             sumSqErr += diff * diff;
         }
 
-        double variance = sumSqErr / predictions.Length;
+        int n = predictions.Length;
+        double variance = sumSqErr / n;
         if (variance < 1e-15) variance = 1e-15;
 
-        // Mean NLL under Gaussian with estimated variance
-        double meanNll = 0.5 * Math.Log(2 * Math.PI * variance) + 0.5;
+        // Full mean NLL under Gaussian with estimated variance:
+        // mean_NLL = 0.5 * log(2π * σ²) + sumSqErr / (2 * n * σ²)
+        double meanNll = 0.5 * Math.Log(2 * Math.PI * variance) + sumSqErr / (2.0 * n * variance);
 
         return NumOps.FromDouble(meanNll);
     }

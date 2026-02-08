@@ -41,7 +41,7 @@ namespace AiDotNet.Classification.Calibration;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
+internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
 {
     /// <summary>
     /// The base classifier being calibrated.
@@ -155,6 +155,10 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     {
         int n = x.Rows;
         int numFolds = _options.CrossValidationFolds;
+        if (numFolds > n)
+            throw new ArgumentException(
+                $"CrossValidationFolds ({numFolds}) exceeds the number of samples ({n}). " +
+                "Reduce folds or provide more data.");
 
         // Create fold assignments
         var foldAssignments = new int[n];

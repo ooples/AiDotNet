@@ -123,10 +123,19 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        Tensor<T> prediction = Predict(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        Vector<T> lossGrad = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        Tensor<T> error = Tensor<T>.FromVector(lossGrad, prediction.Shape);
+        // Always use layer-by-layer forward pass during training to ensure
+        // each layer's forward cache is populated for Backward().
+        // Do NOT call Predict() here as it may take a GPU-optimized path
+        // that skips per-layer cache population.
+        Tensor<T> currentOutput = input;
+        foreach (var layer in Layers)
+        {
+            currentOutput = layer.Forward(currentOutput);
+        }
+
+        LastLoss = _lossFunction.CalculateLoss(currentOutput.ToVector(), expectedOutput.ToVector());
+        Vector<T> lossGrad = _lossFunction.CalculateDerivative(currentOutput.ToVector(), expectedOutput.ToVector());
+        Tensor<T> error = Tensor<T>.FromVector(lossGrad, currentOutput.Shape);
         BackpropagateError(error);
         UpdateNetworkParameters();
     }

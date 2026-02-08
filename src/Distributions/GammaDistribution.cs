@@ -19,7 +19,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class GammaDistribution<T> : DistributionBase<T>
+internal class GammaDistribution<T> : DistributionBase<T>
 {
     private T _shape;  // α (alpha)
     private T _rate;   // β (beta)
@@ -163,6 +163,9 @@ public class GammaDistribution<T> : DistributionBase<T>
     /// <inheritdoc/>
     public override Vector<T> GradLogPdf(T x)
     {
+        if (NumOps.Compare(x, Zero) <= 0)
+            return new Vector<T>(new[] { NumOps.FromDouble(double.NaN), NumOps.FromDouble(double.NaN) });
+
         double xVal = NumOps.ToDouble(x);
         double alpha = NumOps.ToDouble(_shape);
         double beta = NumOps.ToDouble(_rate);

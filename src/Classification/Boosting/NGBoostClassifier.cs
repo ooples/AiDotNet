@@ -122,6 +122,10 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
                     break;
                 }
             }
+            if (labelIndex < 0)
+                throw new InvalidOperationException(
+                    $"Label value at index {i} does not match any known class label. " +
+                    "Ensure all training labels are present in ClassLabels.");
             yIndices[i] = labelIndex;
         }
 
@@ -293,6 +297,10 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <returns>Matrix of shape [n_samples, n_classes] with probability estimates.</returns>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {
+        if (_numClasses == 0 || _initialLogOdds.Length == 0)
+            throw new InvalidOperationException(
+                "Model has not been trained. Call Train() before PredictProbabilities().");
+
         int n = input.Rows;
         var probs = new Matrix<T>(n, _numClasses);
 
@@ -548,6 +556,18 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
         writer.Write(_options.LearningRate);
         writer.Write(_options.SubsampleRatio);
         writer.Write(_options.UseNaturalGradient);
+        writer.Write(_options.MaxDepth);
+        writer.Write(_options.MinSamplesSplit);
+        writer.Write(_options.MaxFeatures);
+        writer.Write((int)_options.SplitCriterion);
+        writer.Write(_options.EarlyStoppingRounds.HasValue);
+        if (_options.EarlyStoppingRounds.HasValue)
+            writer.Write(_options.EarlyStoppingRounds.Value);
+        writer.Write(_options.Verbose);
+        writer.Write(_options.VerboseEval);
+        writer.Write(_options.Seed.HasValue);
+        if (_options.Seed.HasValue)
+            writer.Write(_options.Seed.Value);
 
         // Class info
         writer.Write(_numClasses);
@@ -586,6 +606,16 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
         _options.LearningRate = reader.ReadDouble();
         _options.SubsampleRatio = reader.ReadDouble();
         _options.UseNaturalGradient = reader.ReadBoolean();
+        _options.MaxDepth = reader.ReadInt32();
+        _options.MinSamplesSplit = reader.ReadInt32();
+        _options.MaxFeatures = reader.ReadDouble();
+        _options.SplitCriterion = (Enums.SplitCriterion)reader.ReadInt32();
+        if (reader.ReadBoolean())
+            _options.EarlyStoppingRounds = reader.ReadInt32();
+        _options.Verbose = reader.ReadBoolean();
+        _options.VerboseEval = reader.ReadInt32();
+        if (reader.ReadBoolean())
+            _options.Seed = reader.ReadInt32();
 
         // Class info
         _numClasses = reader.ReadInt32();

@@ -24,7 +24,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class NegativeBinomialDistribution<T> : DistributionBase<T>
+internal class NegativeBinomialDistribution<T> : DistributionBase<T>
 {
     private T _r;      // Number of successes (dispersion parameter)
     private T _prob;   // Probability of success
@@ -194,6 +194,9 @@ public class NegativeBinomialDistribution<T> : DistributionBase<T>
     public override Vector<T> GradLogPdf(T x)
     {
         int k = (int)Math.Round(NumOps.ToDouble(x));
+        if (k < 0)
+            return new Vector<T>(new[] { NumOps.FromDouble(double.NaN), NumOps.FromDouble(double.NaN) });
+
         double r = NumOps.ToDouble(_r);
         double p = NumOps.ToDouble(_prob);
 

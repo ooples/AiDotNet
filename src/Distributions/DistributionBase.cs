@@ -18,7 +18,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class DistributionBase<T> : ISamplingDistribution<T>
+internal abstract class DistributionBase<T> : ISamplingDistribution<T>
 {
     /// <summary>
     /// Numeric operations for type T.

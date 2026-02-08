@@ -21,7 +21,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class PoissonDistribution<T> : DistributionBase<T>
+internal class PoissonDistribution<T> : DistributionBase<T>
 {
     private T _lambda;
 

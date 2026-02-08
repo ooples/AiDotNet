@@ -19,7 +19,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class NormalDistribution<T> : DistributionBase<T>
+internal class NormalDistribution<T> : DistributionBase<T>
 {
     private T _mean;
     private T _variance;

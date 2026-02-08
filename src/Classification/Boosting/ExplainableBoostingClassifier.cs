@@ -38,7 +38,7 @@ namespace AiDotNet.Classification.Boosting;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
+internal class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
 {
     /// <summary>
     /// Shape functions for each feature (additive terms).
@@ -800,6 +800,10 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         using var reader = new BinaryReader(ms);
 
         int baseLen = reader.ReadInt32();
+        long remaining = ms.Length - ms.Position;
+        if (baseLen < 0 || baseLen > remaining)
+            throw new InvalidOperationException(
+                $"Deserialized base payload length ({baseLen}) exceeds remaining data ({remaining} bytes). Data may be corrupted.");
         byte[] baseData = reader.ReadBytes(baseLen);
         base.Deserialize(baseData);
 

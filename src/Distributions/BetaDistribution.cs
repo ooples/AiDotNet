@@ -23,7 +23,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class BetaDistribution<T> : DistributionBase<T>
+internal class BetaDistribution<T> : DistributionBase<T>
 {
     private T _alpha;
     private T _beta;
@@ -117,18 +117,18 @@ public class BetaDistribution<T> : DistributionBase<T>
         double a = NumOps.ToDouble(_alpha);
         double b = NumOps.ToDouble(_beta);
 
-        // Handle edge cases
+        // Handle edge cases at x=0 and x=1
         if (xVal == 0)
         {
             if (a < 1) return NumOps.FromDouble(double.PositiveInfinity);
-            if (a == 1) return NumOps.FromDouble(Math.Exp(LogBeta(a, b)));
-            return Zero;
+            if (a == 1) return NumOps.FromDouble(b); // pdf(0) = b/Beta(1,b) = b
+            return Zero; // a > 1
         }
         if (xVal == 1)
         {
             if (b < 1) return NumOps.FromDouble(double.PositiveInfinity);
-            if (b == 1) return NumOps.FromDouble(Math.Exp(LogBeta(a, b)));
-            return Zero;
+            if (b == 1) return NumOps.FromDouble(a); // pdf(1) = a/Beta(a,1) = a
+            return Zero; // b > 1
         }
 
         double logPdf = (a - 1) * Math.Log(xVal) + (b - 1) * Math.Log(1 - xVal) - LogBeta(a, b);
@@ -139,11 +139,25 @@ public class BetaDistribution<T> : DistributionBase<T>
     public override T LogPdf(T x)
     {
         double xVal = NumOps.ToDouble(x);
-        if (xVal <= 0 || xVal >= 1)
+        if (xVal < 0 || xVal > 1)
             return NumOps.FromDouble(double.NegativeInfinity);
 
         double a = NumOps.ToDouble(_alpha);
         double b = NumOps.ToDouble(_beta);
+
+        // Handle boundary cases
+        if (xVal == 0)
+        {
+            if (a < 1) return NumOps.FromDouble(double.PositiveInfinity);
+            if (a == 1) return NumOps.FromDouble(Math.Log(b));
+            return NumOps.FromDouble(double.NegativeInfinity); // a > 1
+        }
+        if (xVal == 1)
+        {
+            if (b < 1) return NumOps.FromDouble(double.PositiveInfinity);
+            if (b == 1) return NumOps.FromDouble(Math.Log(a));
+            return NumOps.FromDouble(double.NegativeInfinity); // b > 1
+        }
 
         return NumOps.FromDouble((a - 1) * Math.Log(xVal) + (b - 1) * Math.Log(1 - xVal) - LogBeta(a, b));
     }

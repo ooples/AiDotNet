@@ -20,7 +20,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class LogNormalDistribution<T> : DistributionBase<T>
+internal class LogNormalDistribution<T> : DistributionBase<T>
 {
     private T _mu;      // μ - mean of log(X)
     private T _sigma;   // σ - std dev of log(X)
@@ -169,6 +169,9 @@ public class LogNormalDistribution<T> : DistributionBase<T>
     /// <inheritdoc/>
     public override Vector<T> GradLogPdf(T x)
     {
+        if (NumOps.Compare(x, Zero) <= 0)
+            return new Vector<T>(new[] { NumOps.FromDouble(double.NaN), NumOps.FromDouble(double.NaN) });
+
         double xVal = NumOps.ToDouble(x);
         double mu = NumOps.ToDouble(_mu);
         double sigma = NumOps.ToDouble(_sigma);

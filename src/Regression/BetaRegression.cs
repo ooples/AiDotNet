@@ -168,10 +168,10 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     /// <param name="input">Input feature matrix.</param>
     /// <returns>Array of predicted Beta distributions.</returns>
-    public async Task<BetaDistribution<T>[]> PredictDistributionsAsync(Matrix<T> input)
+    public async Task<IParametricDistribution<T>[]> PredictDistributionsAsync(Matrix<T> input)
     {
         var (mus, phis) = await Task.Run(() => ComputePredictions(input));
-        var distributions = new BetaDistribution<T>[input.Rows];
+        var distributions = new IParametricDistribution<T>[input.Rows];
 
         for (int i = 0; i < input.Rows; i++)
         {
