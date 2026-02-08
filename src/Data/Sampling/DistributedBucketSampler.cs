@@ -121,25 +121,28 @@ public class DistributedBucketSampler : DataSamplerBase, IBatchSampler
             buckets.Add(bucket);
         }
 
-        // Shuffle within buckets
-        foreach (var bucket in buckets)
+        // Shuffle within buckets and bucket order only when shuffle is enabled
+        if (_shuffle)
         {
-            for (int i = bucket.Count - 1; i > 0; i--)
+            foreach (var bucket in buckets)
+            {
+                for (int i = bucket.Count - 1; i > 0; i--)
+                {
+                    int j = Random.Next(i + 1);
+                    int temp = bucket[i];
+                    bucket[i] = bucket[j];
+                    bucket[j] = temp;
+                }
+            }
+
+            // Shuffle bucket order
+            for (int i = buckets.Count - 1; i > 0; i--)
             {
                 int j = Random.Next(i + 1);
-                int temp = bucket[i];
-                bucket[i] = bucket[j];
-                bucket[j] = temp;
+                var temp = buckets[i];
+                buckets[i] = buckets[j];
+                buckets[j] = temp;
             }
-        }
-
-        // Shuffle bucket order
-        for (int i = buckets.Count - 1; i > 0; i--)
-        {
-            int j = Random.Next(i + 1);
-            var temp = buckets[i];
-            buckets[i] = buckets[j];
-            buckets[j] = temp;
         }
 
         // Yield batches

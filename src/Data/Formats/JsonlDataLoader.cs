@@ -85,10 +85,20 @@ public class JsonlDataLoader<T> : StreamingDataLoaderBase<T, Tensor<T>, Tensor<T
         _jsonlLoader = new JsonlStreamingLoader(_filePaths, _textField, _labelField, _shuffleBufferSize);
         _cachedRecords = new List<JObject>();
 
-        foreach (var obj in _jsonlLoader.ReadObjects())
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            _cachedRecords.Add(obj);
+            foreach (var obj in _jsonlLoader.ReadObjects())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                _cachedRecords.Add(obj);
+            }
+        }
+        catch
+        {
+            _cachedRecords.Clear();
+            _jsonlLoader?.Dispose();
+            _jsonlLoader = null;
+            throw;
         }
 
         return Task.CompletedTask;

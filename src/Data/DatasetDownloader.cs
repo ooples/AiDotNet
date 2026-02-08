@@ -180,11 +180,9 @@ internal static class DatasetDownloader
 
             // Validate path to prevent path traversal
             string fullPath = Path.GetFullPath(Path.Combine(extractDirectory, name));
-            string normalizedExtractDir = Path.GetFullPath(extractDirectory);
-            if (!normalizedExtractDir.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
-            {
-                normalizedExtractDir += Path.DirectorySeparatorChar;
-            }
+            string normalizedExtractDir = Path.GetFullPath(extractDirectory)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
             if (!fullPath.StartsWith(normalizedExtractDir, StringComparison.OrdinalIgnoreCase))
             {
                 // Skip entries that would escape the extract directory

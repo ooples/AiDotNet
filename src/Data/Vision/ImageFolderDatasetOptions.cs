@@ -13,9 +13,15 @@ public sealed class ImageFolderDatasetOptions
     public string RootDirectory { get; set; } = string.Empty;
 
     /// <summary>
-    /// File extensions to include. Default includes formats supported by ImageHelper (PNG, JPEG, BMP, PPM, PGM, GIF, TIFF).
+    /// File extensions to include. On .NET 6+ defaults include PNG, JPEG, BMP, PPM, PGM, GIF, TIFF.
+    /// On .NET Framework (net471) only BMP, PPM, PGM are supported natively.
     /// </summary>
-    public string[] Extensions { get; set; } = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".ppm", ".pgm", ".gif", ".tiff" };
+    public string[] Extensions { get; set; } =
+#if NET6_0_OR_GREATER
+        new[] { ".png", ".jpg", ".jpeg", ".bmp", ".ppm", ".pgm", ".gif", ".tiff" };
+#else
+        new[] { ".bmp", ".ppm", ".pgm" };
+#endif
 
     /// <summary>
     /// Target image width in pixels. Images will be resized to this width.

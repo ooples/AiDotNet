@@ -76,10 +76,20 @@ public class ShardedStreamingDataLoader<T> : StreamingDataLoaderBase<T, Tensor<T
         _shardedDataset = new ShardedStreamingDataset(_shardPaths, _options);
         _cachedRecords = new List<byte[]>();
 
-        foreach (var record in _shardedDataset.ReadRecords())
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            _cachedRecords.Add(record);
+            foreach (var record in _shardedDataset.ReadRecords())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                _cachedRecords.Add(record);
+            }
+        }
+        catch
+        {
+            _cachedRecords.Clear();
+            _shardedDataset?.Dispose();
+            _shardedDataset = null;
+            throw;
         }
 
         return Task.CompletedTask;

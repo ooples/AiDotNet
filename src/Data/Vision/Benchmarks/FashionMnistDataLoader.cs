@@ -77,9 +77,23 @@ public class FashionMnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
         byte[] imageBytes = File.ReadAllBytes(imagesPath);
         byte[] labelBytes = File.ReadAllBytes(labelsPath);
 
+        if (imageBytes.Length < 16)
+            throw new InvalidDataException("Image file is truncated or corrupt (missing header).");
+        if (labelBytes.Length < 8)
+            throw new InvalidDataException("Label file is truncated or corrupt (missing header).");
+
         int imageCount = ReadBigEndianInt32(imageBytes, 4);
         int rows = ReadBigEndianInt32(imageBytes, 8);
         int cols = ReadBigEndianInt32(imageBytes, 12);
+
+        if (imageBytes.Length < 16 + (long)imageCount * rows * cols)
+            throw new InvalidDataException("Image file is truncated or corrupt.");
+
+        int labelCount = ReadBigEndianInt32(labelBytes, 4);
+        if (labelBytes.Length < 8 + labelCount)
+            throw new InvalidDataException("Label file is truncated or corrupt.");
+        if (labelCount != imageCount)
+            throw new InvalidDataException($"Label count ({labelCount}) does not match image count ({imageCount}).");
 
         int samplesToLoad = imageCount;
         if (_options.MaxSamples.HasValue && _options.MaxSamples.Value < samplesToLoad)

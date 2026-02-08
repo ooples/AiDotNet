@@ -249,6 +249,8 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         {
             string chunkId = System.Text.Encoding.ASCII.GetString(rawBytes, pos, 4);
             int chunkSize = BitConverter.ToInt32(rawBytes, pos + 4);
+            if (chunkSize < 0 || pos + 8 + chunkSize > rawBytes.Length)
+                throw new InvalidDataException("Invalid WAV chunk size.");
 
             if (chunkId == "fmt ")
             {
@@ -291,6 +293,10 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         int bytesPerFrame = bytesPerSample * numChannels;
 
         if (bytesPerFrame == 0) return;
+        if (numChannels > 1 && !_options.Mono)
+            throw new InvalidOperationException(
+                $"Multi-channel audio ({numChannels} channels) requires Mono=true. " +
+                "Set AudioFileDatasetOptions.Mono = true to average channels, or provide mono audio files.");
 
         int totalFrames = dataSize / bytesPerFrame;
         int framesToRead = Math.Min(totalFrames, _samplesPerFile);

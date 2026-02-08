@@ -1318,6 +1318,11 @@ public static class DataLoaders
             throw new ArgumentNullException(nameof(sampleParser));
         }
 
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
         return new WebDatasetDataLoader<T>(tarPaths, sampleParser, batchSize, options);
     }
 
@@ -1344,6 +1349,11 @@ public static class DataLoaders
         if (sampleParser is null)
         {
             throw new ArgumentNullException(nameof(sampleParser));
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
         }
 
         return new WebDatasetDataLoader<T>(new[] { tarPath }, sampleParser, batchSize, options);
@@ -1393,6 +1403,16 @@ public static class DataLoaders
             throw new ArgumentNullException(nameof(recordParser));
         }
 
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (shuffleBufferSize < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(shuffleBufferSize), "Shuffle buffer size cannot be negative.");
+        }
+
         return new JsonlDataLoader<T>(
             new[] { filePath }, recordParser, batchSize, textField, labelField, shuffleBufferSize);
     }
@@ -1424,6 +1444,16 @@ public static class DataLoaders
         if (recordParser is null)
         {
             throw new ArgumentNullException(nameof(recordParser));
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
+        }
+
+        if (shuffleBufferSize < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(shuffleBufferSize), "Shuffle buffer size cannot be negative.");
         }
 
         return new JsonlDataLoader<T>(
@@ -1469,6 +1499,11 @@ public static class DataLoaders
         if (recordParser is null)
         {
             throw new ArgumentNullException(nameof(recordParser));
+        }
+
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be greater than 0.");
         }
 
         return new ShardedStreamingDataLoader<T>(shardPaths, recordParser, batchSize, options);

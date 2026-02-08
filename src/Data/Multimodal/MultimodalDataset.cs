@@ -149,7 +149,22 @@ public class MultimodalDataset<T>
                     $"Modality key '{modalityKey}' not found in sample at index {startIndex + i}.");
             }
 
-            var modalityData = sample[modalityKey].Data;
+            var modalitySample = sample[modalityKey];
+            if (!modalitySample.Shape.SequenceEqual(sampleShape))
+            {
+                throw new InvalidOperationException(
+                    $"Modality '{modalityKey}' shape mismatch at index {startIndex + i}. " +
+                    $"Expected [{string.Join(", ", sampleShape)}] but got [{string.Join(", ", modalitySample.Shape)}].");
+            }
+
+            var modalityData = modalitySample.Data;
+            if (modalityData.Data.Length != elementsPerSample)
+            {
+                throw new InvalidOperationException(
+                    $"Modality '{modalityKey}' data length mismatch at index {startIndex + i}. " +
+                    $"Expected {elementsPerSample} elements but got {modalityData.Data.Length}.");
+            }
+
             var srcSpan = modalityData.Data.Span;
 
             int dstOffset = i * elementsPerSample;
@@ -167,6 +182,11 @@ public class MultimodalDataset<T>
     /// <returns>A tensor of labels for the batch.</returns>
     public Tensor<T>? GetLabelBatch(int startIndex, int batchSize)
     {
+        if (batchSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be at least 1.");
+        if (startIndex < 0 || startIndex >= _samples.Count)
+            throw new ArgumentOutOfRangeException(nameof(startIndex));
+
         int endIndex = Math.Min(startIndex + batchSize, _samples.Count);
         int actualBatchSize = endIndex - startIndex;
 

@@ -76,10 +76,20 @@ public class WebDatasetDataLoader<T> : StreamingDataLoaderBase<T, Tensor<T>, Ten
         _webDataset = new WebDataset(_tarPaths, _options);
         _cachedSamples = new List<Dictionary<string, byte[]>>();
 
-        foreach (var sample in _webDataset.ReadSamples())
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            _cachedSamples.Add(sample);
+            foreach (var sample in _webDataset.ReadSamples())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                _cachedSamples.Add(sample);
+            }
+        }
+        catch
+        {
+            _cachedSamples.Clear();
+            _webDataset?.Dispose();
+            _webDataset = null;
+            throw;
         }
 
         return Task.CompletedTask;
