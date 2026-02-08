@@ -203,9 +203,17 @@ public class MultimodalDataset<T>
 
         int[] labelShape = firstSample.Label.Shape;
         int elementsPerLabel = 1;
-        for (int d = 0; d < labelShape.Length; d++)
+        try
         {
-            elementsPerLabel *= labelShape[d];
+            for (int d = 0; d < labelShape.Length; d++)
+            {
+                elementsPerLabel = checked(elementsPerLabel * labelShape[d]);
+            }
+        }
+        catch (OverflowException)
+        {
+            throw new InvalidOperationException(
+                "Label shape dimensions overflow int range.");
         }
 
         int[] batchShape = new int[labelShape.Length + 1];
@@ -229,7 +237,7 @@ public class MultimodalDataset<T>
                     $"Label at index {startIndex + i} has {srcSpan.Length} elements, expected {elementsPerLabel}.");
             }
 
-            int dstOffset = i * elementsPerLabel;
+            int dstOffset = checked(i * elementsPerLabel);
             srcSpan.CopyTo(resultSpan.Slice(dstOffset, elementsPerLabel));
         }
 

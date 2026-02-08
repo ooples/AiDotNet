@@ -122,6 +122,10 @@ public class StatefulDataLoader<T, TInput, TOutput> :
         {
             _inner.Shuffle(state.RandomSeed.Value);
         }
+        else
+        {
+            _inner.Unshuffle();
+        }
 
         // Advance to the saved position by consuming batches
         int batchesToSkip = state.CurrentBatchIndex;
