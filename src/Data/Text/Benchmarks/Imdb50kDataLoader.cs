@@ -75,7 +75,28 @@ public class Imdb50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
 
         int totalSamples = reviews.Count;
         if (_options.MaxSamples.HasValue && _options.MaxSamples.Value < totalSamples)
+        {
+            // Shuffle before truncating to avoid single-class bias (positive reviews loaded first)
+            int[] shuffleIndices = Enumerable.Range(0, reviews.Count).ToArray();
+            var shuffleRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+            for (int i = shuffleIndices.Length - 1; i > 0; i--)
+            {
+                int j = shuffleRandom.Next(i + 1);
+                (shuffleIndices[i], shuffleIndices[j]) = (shuffleIndices[j], shuffleIndices[i]);
+            }
+
+            var shuffledReviews = new List<string>(reviews.Count);
+            var shuffledLabels = new List<int>(labels.Count);
+            foreach (int idx in shuffleIndices)
+            {
+                shuffledReviews.Add(reviews[idx]);
+                shuffledLabels.Add(labels[idx]);
+            }
+            reviews = shuffledReviews;
+            labels = shuffledLabels;
+
             totalSamples = _options.MaxSamples.Value;
+        }
 
         _sampleCount = totalSamples;
 

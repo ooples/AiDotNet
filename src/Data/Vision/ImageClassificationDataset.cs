@@ -153,7 +153,7 @@ public class ImageClassificationDataset<T> : InputOutputDataLoaderBase<T, Tensor
     /// <summary>
     /// Creates an in-memory image classification dataset from tensors.
     /// </summary>
-    /// <param name="imageTensors">Individual image tensors, each of shape [H, W, C] or [C, H, W].</param>
+    /// <param name="imageTensors">Individual image tensors, each of shape [H, W, C] (2D images are treated as single-channel).</param>
     /// <param name="labels">Class label for each image (0-based).</param>
     /// <param name="transform">Optional transform pipeline applied to pixel data.</param>
     public ImageClassificationDataset(

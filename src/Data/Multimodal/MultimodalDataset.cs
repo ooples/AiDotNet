@@ -106,6 +106,8 @@ public class MultimodalDataset<T>
     /// </remarks>
     public Tensor<T> GetModalityBatch(int startIndex, int batchSize, string modalityKey)
     {
+        if (batchSize < 1)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be at least 1.");
         if (startIndex < 0 || startIndex >= _samples.Count)
             throw new ArgumentOutOfRangeException(nameof(startIndex));
 

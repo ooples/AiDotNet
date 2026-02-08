@@ -399,9 +399,9 @@ public class SnapshotPipeline<T>
 
     private string ComputePipelineHash()
     {
-        // Hash based on pipeline type and timestamp for uniqueness
-        // In practice, users should provide a meaningful pipelineId
-        string input = $"{typeof(T).FullName}_{_sourcePipeline.GetType().FullName}_{DateTime.UtcNow.Ticks}";
+        // Deterministic hash based on pipeline type info so the same pipeline
+        // configuration produces the same cache key across runs.
+        string input = $"{typeof(T).FullName}_{_sourcePipeline.GetType().FullName}_{_options.CacheDirectory}";
         using var sha = SHA256.Create();
         byte[] hash = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(input));
         return Convert.ToBase64String(hash).Replace("/", "_").Replace("+", "-").Substring(0, 16);
@@ -509,32 +509,3 @@ public class SnapshotPipeline<T>
     }
 }
 
-/// <summary>
-/// Information about the current state of a pipeline cache.
-/// </summary>
-public class CacheInfo
-{
-    /// <summary>Whether the cache is valid and usable.</summary>
-    public bool IsValid { get; set; }
-
-    /// <summary>Number of cached entries (tensors).</summary>
-    public int EntryCount { get; set; }
-
-    /// <summary>Total cache size in bytes.</summary>
-    public long TotalSizeBytes { get; set; }
-
-    /// <summary>Path to the cache directory.</summary>
-    public string CacheDirectory { get; set; } = string.Empty;
-
-    /// <summary>Human-readable cache size.</summary>
-    public string FormattedSize
-    {
-        get
-        {
-            if (TotalSizeBytes < 1024) return $"{TotalSizeBytes} B";
-            if (TotalSizeBytes < 1024 * 1024) return $"{TotalSizeBytes / 1024.0:F1} KB";
-            if (TotalSizeBytes < 1024 * 1024 * 1024) return $"{TotalSizeBytes / (1024.0 * 1024):F1} MB";
-            return $"{TotalSizeBytes / (1024.0 * 1024 * 1024):F2} GB";
-        }
-    }
-}
