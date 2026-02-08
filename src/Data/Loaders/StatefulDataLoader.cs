@@ -188,19 +188,40 @@ public class StatefulDataLoader<T, TInput, TOutput> :
         bool dropLast = false,
         int? seed = null)
     {
-        return _inner.GetBatches(batchSize, shuffle, dropLast, seed);
+        if (shuffle && seed.HasValue)
+        {
+            _lastShuffleSeed = seed;
+        }
+
+        foreach (var batch in _inner.GetBatches(batchSize, shuffle, dropLast, seed))
+        {
+            CurrentIndex = _inner.CurrentIndex;
+            CurrentBatchIndex = _inner.CurrentBatchIndex;
+            yield return batch;
+        }
     }
 
     /// <inheritdoc/>
-    public IAsyncEnumerable<(TInput Features, TOutput Labels)> GetBatchesAsync(
+    public async IAsyncEnumerable<(TInput Features, TOutput Labels)> GetBatchesAsync(
         int? batchSize = null,
         bool shuffle = true,
         bool dropLast = false,
         int? seed = null,
         int prefetchCount = 2,
-        CancellationToken cancellationToken = default)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        return _inner.GetBatchesAsync(batchSize, shuffle, dropLast, seed, prefetchCount, cancellationToken);
+        if (shuffle && seed.HasValue)
+        {
+            _lastShuffleSeed = seed;
+        }
+
+        await foreach (var batch in _inner.GetBatchesAsync(
+            batchSize, shuffle, dropLast, seed, prefetchCount, cancellationToken))
+        {
+            CurrentIndex = _inner.CurrentIndex;
+            CurrentBatchIndex = _inner.CurrentBatchIndex;
+            yield return batch;
+        }
     }
 
     /// <summary>

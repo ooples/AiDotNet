@@ -207,6 +207,12 @@ public class MnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
 
             // Read label (offset: 8 bytes header + i)
             int label = labelBytes[8 + i];
+            if (label < 0 || label >= 10)
+            {
+                throw new InvalidDataException(
+                    $"Invalid MNIST label {label} at sample {i}. Expected 0-9.");
+            }
+
             int labelOffset = i * 10;
             labelsData[labelOffset + label] = NumOps.One;
         }

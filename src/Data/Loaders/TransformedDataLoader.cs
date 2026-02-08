@@ -203,9 +203,17 @@ public class TransformedDataLoader<T> :
 
         int sampleCount = tensor.Shape[0];
         int elementsPerSample = 1;
-        for (int d = 1; d < tensor.Shape.Length; d++)
+        try
         {
-            elementsPerSample *= tensor.Shape[d];
+            for (int d = 1; d < tensor.Shape.Length; d++)
+            {
+                elementsPerSample = checked(elementsPerSample * tensor.Shape[d]);
+            }
+        }
+        catch (OverflowException)
+        {
+            throw new InvalidOperationException(
+                "Tensor shape dimensions overflow int range. Shape is too large for transform.");
         }
 
         var resultData = new T[sampleCount * elementsPerSample];

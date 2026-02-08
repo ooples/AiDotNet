@@ -56,7 +56,28 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             throw new ArgumentException("Root directory cannot be empty.", nameof(options));
         }
 
+        if (options.SampleRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "SampleRate must be greater than zero.");
+        }
+
+        if (options.DurationSeconds <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "DurationSeconds must be greater than zero.");
+        }
+
+        if (options.Extensions is null || options.Extensions.Length == 0)
+        {
+            throw new ArgumentException("At least one file extension must be specified.", nameof(options));
+        }
+
         _samplesPerFile = (int)(options.SampleRate * options.DurationSeconds);
+
+        if (_samplesPerFile <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options),
+                $"SampleRate ({options.SampleRate}) * DurationSeconds ({options.DurationSeconds}) must produce a positive sample count.");
+        }
     }
 
     /// <inheritdoc/>
@@ -292,7 +313,11 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         int bytesPerSample = bitsPerSample / 8;
         int bytesPerFrame = bytesPerSample * numChannels;
 
-        if (bytesPerFrame == 0) return;
+        if (numChannels <= 0 || bytesPerSample == 0)
+        {
+            throw new InvalidDataException(
+                $"Invalid WAV header: channels={numChannels}, bitsPerSample={bitsPerSample}.");
+        }
         if (numChannels > 1 && !_options.Mono)
             throw new InvalidOperationException(
                 $"Multi-channel audio ({numChannels} channels) requires Mono=true. " +

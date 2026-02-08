@@ -215,9 +215,14 @@ public class MultimodalDataset<T>
                     $"Sample at index {startIndex + i} has null label but batch expects labels.");
 
             var srcSpan = sample.Label.Data.Span;
+            if (srcSpan.Length != elementsPerLabel)
+            {
+                throw new InvalidOperationException(
+                    $"Label at index {startIndex + i} has {srcSpan.Length} elements, expected {elementsPerLabel}.");
+            }
+
             int dstOffset = i * elementsPerLabel;
-            int copyLen = Math.Min(srcSpan.Length, elementsPerLabel);
-            srcSpan.Slice(0, copyLen).CopyTo(resultSpan.Slice(dstOffset, copyLen));
+            srcSpan.CopyTo(resultSpan.Slice(dstOffset, elementsPerLabel));
         }
 
         return result;
