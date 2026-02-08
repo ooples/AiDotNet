@@ -47,9 +47,9 @@ public class ExponentialDistribution<T> : DistributionBase<T>
     public override int NumParameters => 1;
 
     /// <inheritdoc/>
-    public override T[] Parameters
+    public override Vector<T> Parameters
     {
-        get => [_rate];
+        get => new Vector<T>(new[] { _rate });
         set
         {
             if (value.Length != 1)
@@ -127,23 +127,23 @@ public class ExponentialDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override T[] GradLogPdf(T x)
+    public override Vector<T> GradLogPdf(T x)
     {
         // d/d(rate) log(pdf) = 1/λ - x
         T gradRate = NumOps.Subtract(NumOps.Divide(One, _rate), x);
-        return [gradRate];
+        return new Vector<T>(new[] { gradRate });
     }
 
     /// <inheritdoc/>
-    public override T[,] FisherInformation()
+    public override Matrix<T> FisherInformation()
     {
         // Fisher Information for Exponential(λ):
         // I = 1/λ²
         T rateSquared = NumOps.Multiply(_rate, _rate);
-        return new T[,]
+        return new Matrix<T>(new T[,]
         {
             { NumOps.Divide(One, rateSquared) }
-        };
+        });
     }
 
     /// <inheritdoc/>

@@ -44,9 +44,9 @@ public class GammaDistribution<T> : DistributionBase<T>
     public override int NumParameters => 2;
 
     /// <inheritdoc/>
-    public override T[] Parameters
+    public override Vector<T> Parameters
     {
-        get => [_shape, _rate];
+        get => new Vector<T>(new[] { _shape, _rate });
         set
         {
             if (value.Length != 2)
@@ -161,7 +161,7 @@ public class GammaDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override T[] GradLogPdf(T x)
+    public override Vector<T> GradLogPdf(T x)
     {
         double xVal = NumOps.ToDouble(x);
         double alpha = NumOps.ToDouble(_shape);
@@ -173,11 +173,11 @@ public class GammaDistribution<T> : DistributionBase<T>
         // d/d(rate) log(pdf) = alpha/beta - x
         double gradRate = alpha / beta - xVal;
 
-        return [NumOps.FromDouble(gradShape), NumOps.FromDouble(gradRate)];
+        return new Vector<T>(new[] { NumOps.FromDouble(gradShape), NumOps.FromDouble(gradRate) });
     }
 
     /// <inheritdoc/>
-    public override T[,] FisherInformation()
+    public override Matrix<T> FisherInformation()
     {
         double alpha = NumOps.ToDouble(_shape);
         double beta = NumOps.ToDouble(_rate);
@@ -189,11 +189,11 @@ public class GammaDistribution<T> : DistributionBase<T>
         double iAlphaBeta = -1.0 / beta;
         double iBeta = alpha / (beta * beta);
 
-        return new T[,]
+        return new Matrix<T>(new T[,]
         {
             { NumOps.FromDouble(iAlpha), NumOps.FromDouble(iAlphaBeta) },
             { NumOps.FromDouble(iAlphaBeta), NumOps.FromDouble(iBeta) }
-        };
+        });
     }
 
     /// <inheritdoc/>

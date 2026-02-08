@@ -41,9 +41,9 @@ public class PoissonDistribution<T> : DistributionBase<T>
     public override int NumParameters => 1;
 
     /// <inheritdoc/>
-    public override T[] Parameters
+    public override Vector<T> Parameters
     {
-        get => [_lambda];
+        get => new Vector<T>(new[] { _lambda });
         set
         {
             if (value.Length != 1)
@@ -182,28 +182,28 @@ public class PoissonDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override T[] GradLogPdf(T x)
+    public override Vector<T> GradLogPdf(T x)
     {
         int k = (int)Math.Round(NumOps.ToDouble(x));
         if (k < 0)
-            return [NumOps.FromDouble(double.NaN)];
+            return new Vector<T>(new[] { NumOps.FromDouble(double.NaN) });
 
         double lambda = NumOps.ToDouble(_lambda);
 
         // d/d(lambda) log(pmf) = k/λ - 1
         double gradLambda = k / lambda - 1;
-        return [NumOps.FromDouble(gradLambda)];
+        return new Vector<T>(new[] { NumOps.FromDouble(gradLambda) });
     }
 
     /// <inheritdoc/>
-    public override T[,] FisherInformation()
+    public override Matrix<T> FisherInformation()
     {
         // Fisher Information for Poisson(λ):
         // I = 1/λ
-        return new T[,]
+        return new Matrix<T>(new T[,]
         {
             { NumOps.Divide(One, _lambda) }
-        };
+        });
     }
 
     /// <inheritdoc/>

@@ -133,7 +133,7 @@ public class CRPSScore<T> : ScoringRuleBase<T>
     }
 
     /// <inheritdoc/>
-    public override T[] ScoreGradient(IParametricDistribution<T> distribution, T observation)
+    public override Vector<T> ScoreGradient(IParametricDistribution<T> distribution, T observation)
     {
         // For Normal distribution, use analytical gradients
         if (distribution is NormalDistribution<T> normal)
@@ -148,7 +148,7 @@ public class CRPSScore<T> : ScoringRuleBase<T>
     /// <summary>
     /// Analytical CRPS gradient for Normal distribution.
     /// </summary>
-    private T[] ScoreGradientNormal(NormalDistribution<T> distribution, T observation)
+    private Vector<T> ScoreGradientNormal(NormalDistribution<T> distribution, T observation)
     {
         double y = NumOps.ToDouble(observation);
         double mu = NumOps.ToDouble(distribution.Mean);
@@ -165,24 +165,28 @@ public class CRPSScore<T> : ScoringRuleBase<T>
         // d(CRPS)/d(σ²) = [z * (2Φ(z) - 1) + 2φ(z) - 1/√π] / (2σ)
         double gradVariance = (z * (2 * Phi - 1) + 2 * phi - 1 / Math.Sqrt(Math.PI)) / (2 * sigma);
 
-        return [NumOps.FromDouble(gradMean), NumOps.FromDouble(gradVariance)];
+        return new Vector<T>(new[] { NumOps.FromDouble(gradMean), NumOps.FromDouble(gradVariance) });
     }
 
     /// <summary>
     /// Numerical CRPS gradient computation.
     /// </summary>
-    private T[] ScoreGradientNumerical(IParametricDistribution<T> distribution, T observation)
+    private Vector<T> ScoreGradientNumerical(IParametricDistribution<T> distribution, T observation)
     {
         const double epsilon = 1e-6;
-        T[] parameters = distribution.Parameters;
-        T[] gradients = new T[parameters.Length];
+        var parameters = distribution.Parameters;
+        var gradients = new Vector<T>(parameters.Length);
 
         T baseScore = Score(distribution, observation);
 
         for (int i = 0; i < parameters.Length; i++)
         {
             // Perturb parameter
-            T[] perturbedParams = (T[])parameters.Clone();
+            var perturbedParams = new Vector<T>(parameters.Length);
+            for (int j = 0; j < parameters.Length; j++)
+            {
+                perturbedParams[j] = parameters[j];
+            }
             double paramVal = NumOps.ToDouble(perturbedParams[i]);
             double perturbedVal = paramVal + epsilon;
             perturbedParams[i] = NumOps.FromDouble(perturbedVal);

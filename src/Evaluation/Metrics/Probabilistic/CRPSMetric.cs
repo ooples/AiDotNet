@@ -59,7 +59,7 @@ public class CRPSMetric<T> : IRegressionMetric<T>
     /// <param name="distributions">The predicted distributions.</param>
     /// <param name="observations">The observed values.</param>
     /// <returns>The mean CRPS.</returns>
-    public T ComputeFromDistributions(IParametricDistribution<T>[] distributions, T[] observations)
+    public T ComputeFromDistributions(IParametricDistribution<T>[] distributions, Vector<T> observations)
     {
         if (distributions.Length != observations.Length)
             throw new ArgumentException("Distributions and observations must have the same length.");

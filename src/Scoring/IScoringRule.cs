@@ -53,7 +53,7 @@ public interface IScoringRule<T>
     /// <remarks>
     /// These gradients are used in gradient-based optimization like NGBoost.
     /// </remarks>
-    T[] ScoreGradient(IParametricDistribution<T> distribution, T observation);
+    Vector<T> ScoreGradient(IParametricDistribution<T> distribution, T observation);
 
     /// <summary>
     /// Computes the mean score over multiple prediction-observation pairs.
@@ -61,7 +61,7 @@ public interface IScoringRule<T>
     /// <param name="distributions">Array of predicted distributions.</param>
     /// <param name="observations">Array of observed values.</param>
     /// <returns>The mean score.</returns>
-    T MeanScore(IParametricDistribution<T>[] distributions, T[] observations);
+    T MeanScore(IParametricDistribution<T>[] distributions, Vector<T> observations);
 }
 
 /// <summary>
@@ -85,10 +85,10 @@ public abstract class ScoringRuleBase<T> : IScoringRule<T>
     public abstract T Score(IParametricDistribution<T> distribution, T observation);
 
     /// <inheritdoc/>
-    public abstract T[] ScoreGradient(IParametricDistribution<T> distribution, T observation);
+    public abstract Vector<T> ScoreGradient(IParametricDistribution<T> distribution, T observation);
 
     /// <inheritdoc/>
-    public virtual T MeanScore(IParametricDistribution<T>[] distributions, T[] observations)
+    public virtual T MeanScore(IParametricDistribution<T>[] distributions, Vector<T> observations)
     {
         if (distributions.Length != observations.Length)
             throw new ArgumentException("Distributions and observations must have the same length.");

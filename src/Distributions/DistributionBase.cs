@@ -46,7 +46,7 @@ public abstract class DistributionBase<T> : ISamplingDistribution<T>
     public abstract int NumParameters { get; }
 
     /// <inheritdoc/>
-    public abstract T[] Parameters { get; set; }
+    public abstract Vector<T> Parameters { get; set; }
 
     /// <inheritdoc/>
     public abstract string[] ParameterNames { get; }
@@ -73,10 +73,10 @@ public abstract class DistributionBase<T> : ISamplingDistribution<T>
     public abstract T InverseCdf(T p);
 
     /// <inheritdoc/>
-    public abstract T[] GradLogPdf(T x);
+    public abstract Vector<T> GradLogPdf(T x);
 
     /// <inheritdoc/>
-    public abstract T[,] FisherInformation();
+    public abstract Matrix<T> FisherInformation();
 
     /// <inheritdoc/>
     public abstract IParametricDistribution<T> Clone();
@@ -85,12 +85,12 @@ public abstract class DistributionBase<T> : ISamplingDistribution<T>
     public abstract T Sample(Random random);
 
     /// <inheritdoc/>
-    public virtual T[] Sample(Random random, int count)
+    public virtual Vector<T> Sample(Random random, int count)
     {
         if (count <= 0)
             throw new ArgumentOutOfRangeException(nameof(count), "Count must be positive.");
 
-        var samples = new T[count];
+        var samples = new Vector<T>(count);
         for (int i = 0; i < count; i++)
         {
             samples[i] = Sample(random);
@@ -102,7 +102,7 @@ public abstract class DistributionBase<T> : ISamplingDistribution<T>
     public T Sample() => Sample(DefaultRandom.Value!);
 
     /// <inheritdoc/>
-    public T[] Sample(int count) => Sample(DefaultRandom.Value!, count);
+    public Vector<T> Sample(int count) => Sample(DefaultRandom.Value!, count);
 
     /// <summary>
     /// Generates a standard normal random variate using the Box-Muller transform.

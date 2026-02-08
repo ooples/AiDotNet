@@ -47,9 +47,9 @@ public class WeibullDistribution<T> : DistributionBase<T>
     public override int NumParameters => 2;
 
     /// <inheritdoc/>
-    public override T[] Parameters
+    public override Vector<T> Parameters
     {
-        get => [_shape, _scale];
+        get => new Vector<T>(new[] { _shape, _scale });
         set
         {
             if (value.Length != 2)
@@ -184,11 +184,11 @@ public class WeibullDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override T[] GradLogPdf(T x)
+    public override Vector<T> GradLogPdf(T x)
     {
         double xVal = NumOps.ToDouble(x);
         if (xVal <= 0)
-            return [NumOps.FromDouble(double.NaN), NumOps.FromDouble(double.NaN)];
+            return new Vector<T>(new[] { NumOps.FromDouble(double.NaN), NumOps.FromDouble(double.NaN) });
 
         double k = NumOps.ToDouble(_shape);
         double lambda = NumOps.ToDouble(_scale);
@@ -202,11 +202,11 @@ public class WeibullDistribution<T> : DistributionBase<T>
         // d/d(scale) log(pdf)
         double gradScale = -k / lambda + k * Math.Pow(xVal, k) / Math.Pow(lambda, k + 1);
 
-        return [NumOps.FromDouble(gradShape), NumOps.FromDouble(gradScale)];
+        return new Vector<T>(new[] { NumOps.FromDouble(gradShape), NumOps.FromDouble(gradScale) });
     }
 
     /// <inheritdoc/>
-    public override T[,] FisherInformation()
+    public override Matrix<T> FisherInformation()
     {
         double k = NumOps.ToDouble(_shape);
         double lambda = NumOps.ToDouble(_scale);
@@ -218,11 +218,11 @@ public class WeibullDistribution<T> : DistributionBase<T>
         double iScale = k * k / (lambda * lambda);
         double iShapeScale = -(1 - gamma) / lambda;
 
-        return new T[,]
+        return new Matrix<T>(new T[,]
         {
             { NumOps.FromDouble(iShape), NumOps.FromDouble(iShapeScale) },
             { NumOps.FromDouble(iShapeScale), NumOps.FromDouble(iScale) }
-        };
+        });
     }
 
     /// <inheritdoc/>

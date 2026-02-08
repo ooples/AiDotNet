@@ -50,9 +50,9 @@ public class LaplaceDistribution<T> : DistributionBase<T>
     public override int NumParameters => 2;
 
     /// <inheritdoc/>
-    public override T[] Parameters
+    public override Vector<T> Parameters
     {
-        get => [_location, _scale];
+        get => new Vector<T>(new[] { _location, _scale });
         set
         {
             if (value.Length != 2)
@@ -146,7 +146,7 @@ public class LaplaceDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override T[] GradLogPdf(T x)
+    public override Vector<T> GradLogPdf(T x)
     {
         // d/d(location) log(pdf) = sign(x - location) / scale
         // d/d(scale) log(pdf) = -1/scale + |x - location| / scale²
@@ -162,11 +162,11 @@ public class LaplaceDistribution<T> : DistributionBase<T>
             NumOps.Divide(absDiff, scaleSquared),
             NumOps.Divide(One, _scale));
 
-        return [gradLocation, gradScale];
+        return new Vector<T>(new[] { gradLocation, gradScale });
     }
 
     /// <inheritdoc/>
-    public override T[,] FisherInformation()
+    public override Matrix<T> FisherInformation()
     {
         // Fisher Information Matrix for Laplace(μ, b):
         // I = [[1/b², 0], [0, 1/b²]]
@@ -174,11 +174,11 @@ public class LaplaceDistribution<T> : DistributionBase<T>
         T scaleSquared = NumOps.Multiply(_scale, _scale);
         T oneOverScaleSquared = NumOps.Divide(One, scaleSquared);
 
-        return new T[,]
+        return new Matrix<T>(new T[,]
         {
             { oneOverScaleSquared, Zero },
             { Zero, oneOverScaleSquared }
-        };
+        });
     }
 
     /// <inheritdoc/>

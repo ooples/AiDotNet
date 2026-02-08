@@ -145,7 +145,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 var dist = CreateDistributionFromParams(currentParams, idx);
 
                 // Compute score gradient
-                T[] scoreGrad = _scoringRule.ScoreGradient(dist, y[idx]);
+                var scoreGrad = _scoringRule.ScoreGradient(dist, y[idx]);
 
                 for (int p = 0; p < _numParams; p++)
                 {
@@ -155,7 +155,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 // Accumulate Fisher Information if using natural gradients
                 if (_options.UseNaturalGradient)
                 {
-                    T[,] fisher = dist.FisherInformation();
+                    var fisher = dist.FisherInformation();
                     for (int p1 = 0; p1 < _numParams; p1++)
                     {
                         for (int p2 = 0; p2 < _numParams; p2++)

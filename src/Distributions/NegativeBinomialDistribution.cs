@@ -49,9 +49,9 @@ public class NegativeBinomialDistribution<T> : DistributionBase<T>
     public override int NumParameters => 2;
 
     /// <inheritdoc/>
-    public override T[] Parameters
+    public override Vector<T> Parameters
     {
-        get => [_r, _prob];
+        get => new Vector<T>(new[] { _r, _prob });
         set
         {
             if (value.Length != 2)
@@ -191,7 +191,7 @@ public class NegativeBinomialDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override T[] GradLogPdf(T x)
+    public override Vector<T> GradLogPdf(T x)
     {
         int k = (int)Math.Round(NumOps.ToDouble(x));
         double r = NumOps.ToDouble(_r);
@@ -203,11 +203,11 @@ public class NegativeBinomialDistribution<T> : DistributionBase<T>
         // d/d(p) log(pmf) = r/p - k/(1-p)
         double gradP = r / p - k / (1 - p);
 
-        return [NumOps.FromDouble(gradR), NumOps.FromDouble(gradP)];
+        return new Vector<T>(new[] { NumOps.FromDouble(gradR), NumOps.FromDouble(gradP) });
     }
 
     /// <inheritdoc/>
-    public override T[,] FisherInformation()
+    public override Matrix<T> FisherInformation()
     {
         double r = NumOps.ToDouble(_r);
         double p = NumOps.ToDouble(_prob);
@@ -217,11 +217,11 @@ public class NegativeBinomialDistribution<T> : DistributionBase<T>
         double iP = r / (p * p * (1 - p));
         double iRP = 1 / p;
 
-        return new T[,]
+        return new Matrix<T>(new T[,]
         {
             { NumOps.FromDouble(Math.Max(iR, 1e-10)), NumOps.FromDouble(iRP) },
             { NumOps.FromDouble(iRP), NumOps.FromDouble(iP) }
-        };
+        });
     }
 
     /// <inheritdoc/>

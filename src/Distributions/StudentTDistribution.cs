@@ -56,9 +56,9 @@ public class StudentTDistribution<T> : DistributionBase<T>
     public override int NumParameters => 3;
 
     /// <inheritdoc/>
-    public override T[] Parameters
+    public override Vector<T> Parameters
     {
-        get => [_location, _scale, _degreesOfFreedom];
+        get => new Vector<T>(new[] { _location, _scale, _degreesOfFreedom });
         set
         {
             if (value.Length != 3)
@@ -213,7 +213,7 @@ public class StudentTDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override T[] GradLogPdf(T x)
+    public override Vector<T> GradLogPdf(T x)
     {
         double xVal = NumOps.ToDouble(x);
         double locVal = NumOps.ToDouble(_location);
@@ -233,11 +233,11 @@ public class StudentTDistribution<T> : DistributionBase<T>
         // d/d(nu) log(pdf) - more complex involving digamma
         double gradNu = 0.5 * (Digamma((nu + 1) / 2) - Digamma(nu / 2) - 1 / nu - Math.Log(factor) + (nu + 1) * zSquared / (nu * nu * factor));
 
-        return [NumOps.FromDouble(gradLocation), NumOps.FromDouble(gradScale), NumOps.FromDouble(gradNu)];
+        return new Vector<T>(new[] { NumOps.FromDouble(gradLocation), NumOps.FromDouble(gradScale), NumOps.FromDouble(gradNu) });
     }
 
     /// <inheritdoc/>
-    public override T[,] FisherInformation()
+    public override Matrix<T> FisherInformation()
     {
         double scaleVal = NumOps.ToDouble(_scale);
         double nu = NumOps.ToDouble(_degreesOfFreedom);
@@ -247,12 +247,12 @@ public class StudentTDistribution<T> : DistributionBase<T>
         double iScale = 2 * nu / ((nu + 3) * scaleVal * scaleVal);
         double iNu = 0.5 * (Trigamma((nu + 1) / 2) - Trigamma(nu / 2) - 2 * (nu + 5) / (nu * (nu + 1) * (nu + 3)));
 
-        return new T[,]
+        return new Matrix<T>(new T[,]
         {
             { NumOps.FromDouble(iLoc), Zero, Zero },
             { Zero, NumOps.FromDouble(iScale), Zero },
             { Zero, Zero, NumOps.FromDouble(Math.Max(iNu, 1e-10)) }
-        };
+        });
     }
 
     /// <inheritdoc/>

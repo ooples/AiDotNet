@@ -43,11 +43,11 @@ public class LogScore<T> : ScoringRuleBase<T>
     }
 
     /// <inheritdoc/>
-    public override T[] ScoreGradient(IParametricDistribution<T> distribution, T observation)
+    public override Vector<T> ScoreGradient(IParametricDistribution<T> distribution, T observation)
     {
         // Gradient of -log(pdf) = -gradient of log(pdf)
-        T[] gradLogPdf = distribution.GradLogPdf(observation);
-        T[] gradients = new T[gradLogPdf.Length];
+        var gradLogPdf = distribution.GradLogPdf(observation);
+        var gradients = new Vector<T>(gradLogPdf.Length);
 
         for (int i = 0; i < gradients.Length; i++)
         {

@@ -49,9 +49,9 @@ public class NormalDistribution<T> : DistributionBase<T>
     public override int NumParameters => 2;
 
     /// <inheritdoc/>
-    public override T[] Parameters
+    public override Vector<T> Parameters
     {
-        get => [_mean, _variance];
+        get => new Vector<T>(new[] { _mean, _variance });
         set
         {
             if (value.Length != 2)
@@ -126,7 +126,7 @@ public class NormalDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override T[] GradLogPdf(T x)
+    public override Vector<T> GradLogPdf(T x)
     {
         // d/d(mean) log(pdf) = (x - mean) / variance
         // d/d(variance) log(pdf) = -1/(2*variance) + (x-mean)²/(2*variance²)
@@ -140,11 +140,11 @@ public class NormalDistribution<T> : DistributionBase<T>
             NumOps.Divide(diffSquared, NumOps.Multiply(Two, varianceSquared)),
             NumOps.Divide(One, NumOps.Multiply(Two, _variance)));
 
-        return [gradMean, gradVariance];
+        return new Vector<T>(new[] { gradMean, gradVariance });
     }
 
     /// <inheritdoc/>
-    public override T[,] FisherInformation()
+    public override Matrix<T> FisherInformation()
     {
         // Fisher Information Matrix for Normal(μ, σ²):
         // I = [[1/σ², 0], [0, 1/(2σ⁴)]]
@@ -153,11 +153,11 @@ public class NormalDistribution<T> : DistributionBase<T>
         T varianceSquared = NumOps.Multiply(_variance, _variance);
         T oneOverTwoVarianceSquared = NumOps.Divide(One, NumOps.Multiply(Two, varianceSquared));
 
-        return new T[,]
+        return new Matrix<T>(new T[,]
         {
             { oneOverVariance, Zero },
             { Zero, oneOverTwoVarianceSquared }
-        };
+        });
     }
 
     /// <inheritdoc/>

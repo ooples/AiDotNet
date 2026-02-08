@@ -38,7 +38,7 @@ public interface IParametricDistribution<T>
     /// - Laplace: [location, scale]
     /// - Gamma: [shape, rate]
     /// </remarks>
-    T[] Parameters { get; set; }
+    Vector<T> Parameters { get; set; }
 
     /// <summary>
     /// Gets the parameter names for this distribution.
@@ -101,7 +101,7 @@ public interface IParametricDistribution<T>
     /// These gradients are essential for gradient-based optimization
     /// in probabilistic models like NGBoost.
     /// </remarks>
-    T[] GradLogPdf(T x);
+    Vector<T> GradLogPdf(T x);
 
     /// <summary>
     /// Computes the Fisher Information Matrix for the distribution.
@@ -112,7 +112,7 @@ public interface IParametricDistribution<T>
     /// that an observable random variable carries about an unknown parameter.
     /// It's used in natural gradient descent.
     /// </remarks>
-    T[,] FisherInformation();
+    Matrix<T> FisherInformation();
 
     /// <summary>
     /// Creates a copy of this distribution with the same parameters.

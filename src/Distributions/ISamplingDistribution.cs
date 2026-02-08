@@ -31,7 +31,7 @@ public interface ISamplingDistribution<T> : IParametricDistribution<T>
     /// <param name="random">The random number generator to use.</param>
     /// <param name="count">The number of samples to generate.</param>
     /// <returns>An array of random samples.</returns>
-    T[] Sample(Random random, int count);
+    Vector<T> Sample(Random random, int count);
 
     /// <summary>
     /// Generates a single random sample using a default random number generator.
@@ -44,5 +44,5 @@ public interface ISamplingDistribution<T> : IParametricDistribution<T>
     /// </summary>
     /// <param name="count">The number of samples to generate.</param>
     /// <returns>An array of random samples.</returns>
-    T[] Sample(int count);
+    Vector<T> Sample(int count);
 }

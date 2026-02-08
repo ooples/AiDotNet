@@ -50,9 +50,9 @@ public class LogNormalDistribution<T> : DistributionBase<T>
     public override int NumParameters => 2;
 
     /// <inheritdoc/>
-    public override T[] Parameters
+    public override Vector<T> Parameters
     {
-        get => [_mu, _sigma];
+        get => new Vector<T>(new[] { _mu, _sigma });
         set
         {
             if (value.Length != 2)
@@ -167,7 +167,7 @@ public class LogNormalDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override T[] GradLogPdf(T x)
+    public override Vector<T> GradLogPdf(T x)
     {
         double xVal = NumOps.ToDouble(x);
         double mu = NumOps.ToDouble(_mu);
@@ -182,11 +182,11 @@ public class LogNormalDistribution<T> : DistributionBase<T>
         // d/d(sigma) log(pdf) = -1/σ + (log(x) - μ)² / σ³
         double gradSigma = -1 / sigma + z * z / sigma;
 
-        return [NumOps.FromDouble(gradMu), NumOps.FromDouble(gradSigma)];
+        return new Vector<T>(new[] { NumOps.FromDouble(gradMu), NumOps.FromDouble(gradSigma) });
     }
 
     /// <inheritdoc/>
-    public override T[,] FisherInformation()
+    public override Matrix<T> FisherInformation()
     {
         double sigma = NumOps.ToDouble(_sigma);
 
@@ -196,11 +196,11 @@ public class LogNormalDistribution<T> : DistributionBase<T>
         double iMu = 1.0 / (sigma * sigma);
         double iSigma = 2.0 / (sigma * sigma);
 
-        return new T[,]
+        return new Matrix<T>(new T[,]
         {
             { NumOps.FromDouble(iMu), Zero },
             { Zero, NumOps.FromDouble(iSigma) }
-        };
+        });
     }
 
     /// <inheritdoc/>
