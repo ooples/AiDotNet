@@ -275,7 +275,9 @@ internal static class DatasetDownloader
         {
             int toRead = (int)Math.Min(skipBuf.Length, remaining);
             int read = stream.Read(skipBuf, 0, toRead);
-            if (read == 0) break;
+            if (read == 0)
+                throw new InvalidDataException(
+                    $"Unexpected end of stream while skipping {count} bytes ({remaining} bytes remaining).");
             remaining -= read;
         }
     }
@@ -288,7 +290,9 @@ internal static class DatasetDownloader
         {
             int toRead = (int)Math.Min(buf.Length, remaining);
             int read = input.Read(buf, 0, toRead);
-            if (read == 0) break;
+            if (read == 0)
+                throw new InvalidDataException(
+                    $"Unexpected end of stream while copying {count} bytes ({remaining} bytes remaining).");
             output.Write(buf, 0, read);
             remaining -= read;
         }

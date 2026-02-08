@@ -265,7 +265,7 @@ internal class WebDataset : IDisposable
             {
                 // Skip unknown entry types
                 long paddedSize = ((size + 511) / 512) * 512;
-                byte[] skip = new byte[Math.Min(4096, paddedSize)];
+                byte[] skip = new byte[(int)Math.Min(4096L, paddedSize)];
                 long remaining = paddedSize;
                 while (remaining > 0)
                 {

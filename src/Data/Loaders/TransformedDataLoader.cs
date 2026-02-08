@@ -1,3 +1,4 @@
+using System.Buffers;
 using AiDotNet.Data.Transforms;
 using AiDotNet.Interfaces;
 
@@ -217,24 +218,32 @@ public class TransformedDataLoader<T> :
         var resultData = new T[sampleCount * elementsPerSample];
         var sourceSpan = tensor.Data.Span;
 
-        for (int i = 0; i < sampleCount; i++)
+        var pool = ArrayPool<T>.Shared;
+        T[] sampleBuffer = pool.Rent(elementsPerSample);
+        try
         {
-            // Extract sample as flat array
-            var sampleData = new T[elementsPerSample];
-            sourceSpan.Slice(i * elementsPerSample, elementsPerSample).CopyTo(sampleData.AsSpan());
-
-            // Apply transform
-            var transformedSample = _transform.Apply(sampleData);
-
-            if (transformedSample.Length != elementsPerSample)
+            for (int i = 0; i < sampleCount; i++)
             {
-                throw new InvalidOperationException(
-                    $"Transform returned {transformedSample.Length} elements, expected {elementsPerSample}. " +
-                    "Transform must preserve sample element count.");
-            }
+                // Extract sample into rented buffer
+                sourceSpan.Slice(i * elementsPerSample, elementsPerSample).CopyTo(sampleBuffer.AsSpan());
 
-            // Copy back
-            Array.Copy(transformedSample, 0, resultData, i * elementsPerSample, elementsPerSample);
+                // Apply transform
+                var transformedSample = _transform.Apply(sampleBuffer.AsSpan(0, elementsPerSample).ToArray());
+
+                if (transformedSample.Length != elementsPerSample)
+                {
+                    throw new InvalidOperationException(
+                        $"Transform returned {transformedSample.Length} elements, expected {elementsPerSample}. " +
+                        "Transform must preserve sample element count.");
+                }
+
+                // Copy back
+                Array.Copy(transformedSample, 0, resultData, i * elementsPerSample, elementsPerSample);
+            }
+        }
+        finally
+        {
+            pool.Return(sampleBuffer);
         }
 
         return new Tensor<T>(resultData, tensor.Shape);
