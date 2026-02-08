@@ -1,6 +1,5 @@
 using AiDotNet.Data.Transforms;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -31,7 +30,6 @@ public class TransformedDataLoader<T> :
     DataLoaderBase<T>,
     IInputOutputDataLoader<T, Tensor<T>, Tensor<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>> _inner;
     private readonly ITransform<T[], T[]> _transform;
 

@@ -43,7 +43,14 @@ internal class WebDataset : IDisposable
             _normalizedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var ext in _options.IncludeExtensions)
             {
-                _normalizedExtensions.Add(ext);
+                if (string.IsNullOrWhiteSpace(ext))
+                    continue;
+
+                var normalizedExt = ext.Trim();
+                if (!normalizedExt.StartsWith("."))
+                    normalizedExt = "." + normalizedExt;
+
+                _normalizedExtensions.Add(normalizedExt);
             }
         }
     }

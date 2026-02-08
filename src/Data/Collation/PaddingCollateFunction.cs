@@ -27,9 +27,19 @@ public class PaddingCollateFunction<T> : ICollateFunction<Tensor<T>, Tensor<T>>
     /// </summary>
     /// <param name="padValue">The value to use for padding. Default is zero.</param>
     /// <param name="maxLength">Optional maximum sequence length. If null, uses the longest sample in the batch.</param>
-    public PaddingCollateFunction(T? padValue = default, int? maxLength = null)
+    public PaddingCollateFunction(int? maxLength = null)
+        : this(MathHelper.GetNumericOperations<T>().Zero, maxLength)
     {
-        _padValue = padValue ?? NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Creates a new padding collate function with an explicit pad value.
+    /// </summary>
+    /// <param name="padValue">The value to use for padding.</param>
+    /// <param name="maxLength">Optional maximum sequence length. If null, uses the longest sample in the batch.</param>
+    public PaddingCollateFunction(T padValue, int? maxLength = null)
+    {
+        _padValue = padValue;
         _maxLength = maxLength;
     }
 

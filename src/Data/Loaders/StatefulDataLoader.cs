@@ -164,7 +164,7 @@ public class StatefulDataLoader<T, TInput, TOutput> :
     public void Shuffle(int? seed = null)
     {
         // Always store a seed so checkpoints can reproduce the shuffle.
-        // If no seed is provided, generate one deterministically.
+        // If no seed is provided, generate one automatically from the system tick count.
         if (!seed.HasValue)
         {
             seed = Environment.TickCount;

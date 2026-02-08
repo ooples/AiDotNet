@@ -1,3 +1,4 @@
+using System.IO;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Formats;
@@ -146,11 +147,15 @@ internal class ShardedStreamingDataset : IDisposable
             if (read < 4) yield break;
 
             int recordLength = BitConverter.ToInt32(lengthBuf, 0);
-            if (recordLength <= 0) yield break;
+            if (recordLength <= 0)
+                throw new InvalidDataException(
+                    $"Invalid record length {recordLength} in shard '{shardPath}'. The shard file may be corrupted.");
 
             byte[] record = new byte[recordLength];
             read = ReadFull(stream, record, recordLength);
-            if (read < recordLength) yield break;
+            if (read < recordLength)
+                throw new InvalidDataException(
+                    $"Truncated record in shard '{shardPath}': expected {recordLength} bytes but only read {read}. The shard file may be corrupted.");
 
             yield return record;
         }
