@@ -79,7 +79,7 @@ public class SUBCLU<T> : ClusteringBase<T>
         {
             MaxIterations = _options.MaxIterations,
             Tolerance = _options.Tolerance,
-            RandomState = _options.RandomState,
+            Seed = _options.Seed,
             Epsilon = _options.Epsilon,
             MinPoints = _options.MinPoints,
             MaxSubspaceDimensions = _options.MaxSubspaceDimensions,

@@ -58,8 +58,8 @@ public class BisectingKMeans<T> : ClusteringBase<T>
     {
         _options = options ?? new BisectingKMeansOptions<T>();
         _distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-        _random = _options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.RandomState.Value)
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);
         NumClusters = _options.NumClusters;
     }
@@ -80,7 +80,7 @@ public class BisectingKMeans<T> : ClusteringBase<T>
             NumClusters = _options.NumClusters,
             MaxIterations = _options.MaxIterations,
             Tolerance = _options.Tolerance,
-            RandomState = _options.RandomState,
+            Seed = _options.Seed,
             NumBisectionTrials = _options.NumBisectionTrials,
             ClusterSelection = _options.ClusterSelection,
             MinClusterSizeForBisection = _options.MinClusterSizeForBisection,

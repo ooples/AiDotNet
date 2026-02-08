@@ -188,14 +188,6 @@ public class RandomForestClassifierOptions<T> : ClassifierOptions<T>
     public int NJobs { get; set; } = 1;
 
     /// <summary>
-    /// Gets or sets the random state for reproducibility.
-    /// </summary>
-    /// <value>
-    /// The random seed, or null for non-deterministic behavior. Default is null.
-    /// </value>
-    public int? RandomState { get; set; } = null;
-
-    /// <summary>
     /// Gets or sets the minimum impurity decrease required for a split.
     /// </summary>
     /// <value>

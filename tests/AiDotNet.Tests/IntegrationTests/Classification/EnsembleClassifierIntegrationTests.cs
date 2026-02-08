@@ -36,14 +36,14 @@ public class EnsembleClassifierIntegrationTests
         {
             NEstimators = 1,
             MaxDepth = 5,
-            RandomState = 42
+            Seed = 42
         };
 
         var optionsManyTrees = new RandomForestClassifierOptions<double>
         {
             NEstimators = 10,
             MaxDepth = 5,
-            RandomState = 42
+            Seed = 42
         };
 
         var singleTreeRF = new RandomForestClassifier<double>(optionsSingleTree);
@@ -86,7 +86,7 @@ public class EnsembleClassifierIntegrationTests
             NEstimators = 5,
             Bootstrap = true,
             MaxDepth = 3,
-            RandomState = 42
+            Seed = 42
         };
         var rf = new RandomForestClassifier<double>(options);
 
@@ -127,7 +127,7 @@ public class EnsembleClassifierIntegrationTests
             NEstimators = 10,
             MaxFeatures = "sqrt",  // Only consider sqrt(10) ~ 3 features at each split
             MaxDepth = 5,
-            RandomState = 42
+            Seed = 42
         };
         var rf = new RandomForestClassifier<double>(options);
 
@@ -163,7 +163,7 @@ public class EnsembleClassifierIntegrationTests
             NEstimators = 10,
             Bootstrap = true,
             OobScore = true,
-            RandomState = 42
+            Seed = 42
         };
         var rf = new RandomForestClassifier<double>(options);
 
@@ -193,7 +193,7 @@ public class EnsembleClassifierIntegrationTests
         var options = new RandomForestClassifierOptions<double>
         {
             NEstimators = 5,
-            RandomState = 42
+            Seed = 42
         };
         var rf = new RandomForestClassifier<double>(options);
         rf.Train(x, y);
@@ -231,7 +231,7 @@ public class EnsembleClassifierIntegrationTests
         {
             NEstimators = 10,
             LearningRate = 1.0,
-            RandomState = 42
+            Seed = 42
         };
         var adaboost = new AdaBoostClassifier<double>(options);
 
@@ -266,14 +266,14 @@ public class EnsembleClassifierIntegrationTests
         {
             NEstimators = 20,
             LearningRate = 0.1,
-            RandomState = 42
+            Seed = 42
         };
 
         var optionsHigh = new AdaBoostClassifierOptions<double>
         {
             NEstimators = 20,
             LearningRate = 1.0,
-            RandomState = 42
+            Seed = 42
         };
 
         var adaLow = new AdaBoostClassifier<double>(optionsLow);
@@ -314,7 +314,7 @@ public class EnsembleClassifierIntegrationTests
         var options = new AdaBoostClassifierOptions<double>
         {
             NEstimators = 5,
-            RandomState = 42
+            Seed = 42
         };
         var adaboost = new AdaBoostClassifier<double>(options);
         adaboost.Train(x, y);
@@ -359,7 +359,7 @@ public class EnsembleClassifierIntegrationTests
         {
             NEstimators = 20,
             LearningRate = 1.0,
-            RandomState = 42
+            Seed = 42
         };
         var adaboost = new AdaBoostClassifier<double>(options);
 
@@ -402,7 +402,7 @@ public class EnsembleClassifierIntegrationTests
         {
             NEstimators = 10,
             MaxDepth = 5,
-            RandomState = 42
+            Seed = 42
         };
         var et = new ExtraTreesClassifier<double>(options);
 
@@ -437,14 +437,14 @@ public class EnsembleClassifierIntegrationTests
         {
             NEstimators = 5,
             MaxDepth = 3,
-            RandomState = 42
+            Seed = 42
         };
 
         var rfOptions = new RandomForestClassifierOptions<double>
         {
             NEstimators = 5,
             MaxDepth = 3,
-            RandomState = 42
+            Seed = 42
         };
 
         var et = new ExtraTreesClassifier<double>(etOptions);
@@ -491,7 +491,7 @@ public class EnsembleClassifierIntegrationTests
             NEstimators = 10,
             LearningRate = 0.1,
             MaxDepth = 3,
-            RandomState = 42
+            Seed = 42
         };
         var gb = new GradientBoostingClassifier<double>(options);
 
@@ -528,7 +528,7 @@ public class EnsembleClassifierIntegrationTests
             LearningRate = 0.05,
             Subsample = 0.8,
             MaxDepth = 3,
-            RandomState = 42
+            Seed = 42
         };
         var gb = new GradientBoostingClassifier<double>(options);
 
@@ -566,7 +566,7 @@ public class EnsembleClassifierIntegrationTests
         var options = new RandomForestClassifierOptions<double>
         {
             NEstimators = 5,
-            RandomState = 42
+            Seed = 42
         };
         var rf = new RandomForestClassifier<double>(options);
         rf.Train(x, y);
@@ -600,7 +600,7 @@ public class EnsembleClassifierIntegrationTests
         var options = new AdaBoostClassifierOptions<double>
         {
             NEstimators = 5,
-            RandomState = 42
+            Seed = 42
         };
         var ada = new AdaBoostClassifier<double>(options);
         ada.Train(x, y);
@@ -691,7 +691,7 @@ public class EnsembleClassifierIntegrationTests
         var options = new RandomForestClassifierOptions<double>
         {
             NEstimators = 10,
-            RandomState = 42
+            Seed = 42
         };
         var rf = new RandomForestClassifier<double>(options);
 
@@ -732,7 +732,7 @@ public class EnsembleClassifierIntegrationTests
         var options = new AdaBoostClassifierOptions<double>
         {
             NEstimators = 20,
-            RandomState = 42
+            Seed = 42
         };
         var ada = new AdaBoostClassifier<double>(options);
 
@@ -774,7 +774,7 @@ public class EnsembleClassifierIntegrationTests
         var options = new RandomForestClassifierOptions<double>
         {
             NEstimators = 5,
-            RandomState = 42
+            Seed = 42
         };
         var rf = new RandomForestClassifier<double>(options);
 

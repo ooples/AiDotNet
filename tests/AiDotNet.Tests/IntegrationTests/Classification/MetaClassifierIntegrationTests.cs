@@ -609,7 +609,7 @@ public class MetaClassifierIntegrationTests
             new BaggingClassifierOptions<double>
             {
                 NumEstimators = 10,
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Act
@@ -637,7 +637,7 @@ public class MetaClassifierIntegrationTests
             new BaggingClassifierOptions<double>
             {
                 NumEstimators = 5,
-                RandomState = 42
+                Seed = 42
             });
 
         var classifier2 = new BaggingClassifier<double>(
@@ -645,7 +645,7 @@ public class MetaClassifierIntegrationTests
             new BaggingClassifierOptions<double>
             {
                 NumEstimators = 5,
-                RandomState = 123
+                Seed = 123
             });
 
         // Act
@@ -685,7 +685,7 @@ public class MetaClassifierIntegrationTests
             {
                 NumEstimators = 5,
                 MaxSamples = 0.5, // Use 50% of samples per estimator
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Act
@@ -721,7 +721,7 @@ public class MetaClassifierIntegrationTests
             {
                 NumEstimators = 5,
                 MaxFeatures = 0.5, // Use 50% of features per estimator
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Act
@@ -743,7 +743,7 @@ public class MetaClassifierIntegrationTests
             new BaggingClassifierOptions<double>
             {
                 NumEstimators = 10,
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
         classifier.Train(x, y);
 
@@ -775,7 +775,7 @@ public class MetaClassifierIntegrationTests
             new BaggingClassifierOptions<double>
             {
                 NumEstimators = 5,
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
         classifier.Train(x, y);
 
@@ -840,7 +840,7 @@ public class MetaClassifierIntegrationTests
             {
                 CrossValidationFolds = 3,
                 UseProbabilities = true,
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Act
@@ -875,7 +875,7 @@ public class MetaClassifierIntegrationTests
             {
                 CrossValidationFolds = 5,
                 UseProbabilities = true,
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Without CV (fold=1)
@@ -886,7 +886,7 @@ public class MetaClassifierIntegrationTests
             {
                 CrossValidationFolds = 1,
                 UseProbabilities = true,
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Act
@@ -921,7 +921,7 @@ public class MetaClassifierIntegrationTests
                 CrossValidationFolds = 3,
                 Passthrough = true, // Include original features
                 UseProbabilities = true,
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Act
@@ -951,7 +951,7 @@ public class MetaClassifierIntegrationTests
             {
                 CrossValidationFolds = 3,
                 UseProbabilities = true, // 3 features per estimator (one per class)
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         var usePreds = new StackingClassifier<double>(
@@ -961,7 +961,7 @@ public class MetaClassifierIntegrationTests
             {
                 CrossValidationFolds = 3,
                 UseProbabilities = false, // 1 feature per estimator (predicted class)
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Act
@@ -994,7 +994,7 @@ public class MetaClassifierIntegrationTests
             new StackingClassifierOptions<double>
             {
                 CrossValidationFolds = 3,
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
         classifier.Train(x, y);
 
@@ -1060,7 +1060,7 @@ public class MetaClassifierIntegrationTests
             new ClassifierChainOptions<double>
             {
                 RandomOrder = false, // Use default order
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Act
@@ -1090,7 +1090,7 @@ public class MetaClassifierIntegrationTests
             new ClassifierChainOptions<double>
             {
                 Order = new[] { 0, 1, 2 }, // Explicit order
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Act
@@ -1113,7 +1113,7 @@ public class MetaClassifierIntegrationTests
             new ClassifierChainOptions<double>
             {
                 RandomOrder = true,
-                RandomState = 42
+                Seed = 42
             });
 
         var classifier2 = new ClassifierChain<double>(
@@ -1121,7 +1121,7 @@ public class MetaClassifierIntegrationTests
             new ClassifierChainOptions<double>
             {
                 RandomOrder = true,
-                RandomState = 123
+                Seed = 123
             });
 
         // Act
@@ -1160,7 +1160,7 @@ public class MetaClassifierIntegrationTests
             new ClassifierChainOptions<double>
             {
                 Order = new[] { 2, 0, 1 }, // Custom order
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Act
@@ -1182,7 +1182,7 @@ public class MetaClassifierIntegrationTests
             () => new GaussianNaiveBayes<double>(),
             new ClassifierChainOptions<double>
             {
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Act
@@ -1205,7 +1205,7 @@ public class MetaClassifierIntegrationTests
 
         var classifier = new ClassifierChain<double>(
             () => new GaussianNaiveBayes<double>(),
-            new ClassifierChainOptions<double> { RandomState = RandomSeed });
+            new ClassifierChainOptions<double> { Seed = RandomSeed });
         classifier.TrainMultiLabel(x, yMultiLabel);
 
         // Act
@@ -1580,7 +1580,7 @@ public class MetaClassifierIntegrationTests
 
         var chain = new ClassifierChain<double>(
             () => new GaussianNaiveBayes<double>(),
-            new ClassifierChainOptions<double> { RandomState = RandomSeed });
+            new ClassifierChainOptions<double> { Seed = RandomSeed });
 
         var multiOutput = new MultiOutputClassifier<double>(
             () => new GaussianNaiveBayes<double>());
@@ -1613,7 +1613,7 @@ public class MetaClassifierIntegrationTests
             new BaggingClassifierOptions<double>
             {
                 NumEstimators = 10,
-                RandomState = RandomSeed
+                Seed = RandomSeed
             });
 
         // Act

@@ -28,7 +28,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 3,
             MaxIterations = 50,
             NumInitializations = 1,
-            RandomState = 42,
+            Seed = 42,
             InitMethod = KMeansInitMethod.KMeansPlusPlus
         };
 
@@ -50,7 +50,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 2,
             MaxIterations = 50,
             NumInitializations = 1,
-            RandomState = 42
+            Seed = 42
         };
 
         var kmeans = new KMeans<double>(options);
@@ -81,7 +81,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 2,
             MaxIterations = 50,
             NumInitializations = 1,
-            RandomState = 123
+            Seed = 123
         };
 
         var first = new KMeans<double>(options);
@@ -106,7 +106,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 2,
             MaxIterations = 20,
             NumInitializations = 1,
-            RandomState = 7
+            Seed = 7
         });
 
         kmeans.Train(dataset.Data);
@@ -159,7 +159,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 2,
             MaxIterations = 20,
             NumInitializations = 1,
-            RandomState = 21,
+            Seed = 21,
             InitMethod = KMeansInitMethod.Random
         };
 
@@ -168,7 +168,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 2,
             MaxIterations = 20,
             NumInitializations = 1,
-            RandomState = 21,
+            Seed = 21,
             InitMethod = KMeansInitMethod.KMeansPlusPlus
         };
 
@@ -192,7 +192,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 1,
             MaxIterations = 30,
             NumInitializations = 1,
-            RandomState = 42
+            Seed = 42
         });
 
         var k2 = new KMeans<double>(new KMeansOptions<double>
@@ -200,7 +200,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 2,
             MaxIterations = 30,
             NumInitializations = 1,
-            RandomState = 42
+            Seed = 42
         });
 
         k1.Train(dataset.Data);
@@ -226,7 +226,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 2,
             MaxIterations = 30,
             NumInitializations = 1,
-            RandomState = 42
+            Seed = 42
         };
 
         var kmeans = new KMeans<double>(options);
@@ -247,7 +247,7 @@ public class PartitioningClusteringIntegrationTests
             BatchSize = 4,
             MaxIterations = 20,
             NumInitializations = 1,
-            RandomState = 42
+            Seed = 42
         };
 
         var miniBatch = new MiniBatchKMeans<double>(options);
@@ -268,7 +268,7 @@ public class PartitioningClusteringIntegrationTests
             BatchSize = 4,
             MaxIterations = 5,
             NumInitializations = 1,
-            RandomState = 11
+            Seed = 11
         };
 
         var miniBatch = new MiniBatchKMeans<double>(options);
@@ -287,7 +287,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 2,
             LearningRate = 0.2,
             MaxIterations = 1,
-            RandomState = 99
+            Seed = 99
         };
 
         var online = new AiDotNet.Clustering.Streaming.OnlineKMeans<double>(options);
@@ -306,7 +306,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 2,
             LearningRate = 0.3,
             MaxIterations = 1,
-            RandomState = 15
+            Seed = 15
         };
 
         var online = new AiDotNet.Clustering.Streaming.OnlineKMeans<double>(options);
@@ -353,7 +353,7 @@ public class PartitioningClusteringIntegrationTests
         {
             NumClusters = 2,
             MaxIterations = 50,
-            RandomState = 42
+            Seed = 42
         };
 
         var fcm = new FuzzyCMeans<double>(options);
@@ -428,7 +428,7 @@ public class PartitioningClusteringIntegrationTests
         {
             MinClusters = 1,
             MaxClusters = 4,
-            RandomState = 42,
+            Seed = 42,
             SignificanceLevel = 0.05
         };
 
@@ -446,7 +446,7 @@ public class PartitioningClusteringIntegrationTests
         {
             MinClusters = 2,
             MaxClusters = 2,
-            RandomState = 42
+            Seed = 42
         };
 
         var xmeans = new XMeans<double>(options);
@@ -463,7 +463,7 @@ public class PartitioningClusteringIntegrationTests
         {
             NumClusters = 3,
             BuildHierarchy = true,
-            RandomState = 42,
+            Seed = 42,
             MaxIterations = 50
         };
 
@@ -503,7 +503,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 2,
             MaxIterations = 50,
             NumInitializations = 1,
-            RandomState = 21
+            Seed = 21
         };
 
         var model = new KMeans<double>(options);
@@ -532,7 +532,7 @@ public class PartitioningClusteringIntegrationTests
             NumClusters = 2,
             MaxIterations = 50,
             NumInitializations = 1,
-            RandomState = 21
+            Seed = 21
         };
 
         var model = new KMeans<double>(options);
@@ -809,7 +809,7 @@ public class HierarchicalClusteringIntegrationTests
         {
             NumClusters = 2,
             NumRepresentatives = 2,
-            RandomState = 42,
+            Seed = 42,
             MaxIterations = 10
         };
 
@@ -835,7 +835,7 @@ public class SpectralSubspaceClusteringIntegrationTests
             EigenSolver = EigenSolver.Full,
             Normalization = LaplacianNormalization.Normalized,
             AssignLabels = SpectralAssignment.KMeans,
-            RandomState = 42
+            Seed = 42
         };
 
         var spectral = new SpectralClustering<double>(options);
@@ -867,7 +867,7 @@ public class SpectralSubspaceClusteringIntegrationTests
             Affinity = AffinityType.Precomputed,
             EigenSolver = EigenSolver.Full,
             AssignLabels = SpectralAssignment.KMeans,
-            RandomState = 5
+            Seed = 5
         };
 
         var spectral = new SpectralClustering<double>(options);
@@ -926,7 +926,7 @@ public class ProbabilisticClusteringIntegrationTests
             NumComponents = 2,
             MaxIterations = 50,
             NumInitializations = 1,
-            RandomState = 42
+            Seed = 42
         };
 
         var gmm = new GaussianMixtureModel<double>(options);
@@ -953,7 +953,7 @@ public class ProbabilisticClusteringIntegrationTests
             NumComponents = 2,
             MaxIterations = 50,
             NumInitializations = 1,
-            RandomState = 42
+            Seed = 42
         };
 
         var gmm = new GaussianMixtureModel<double>(options);
@@ -1018,7 +1018,7 @@ public class EnsembleNeuralClusteringIntegrationTests
             GridWidth = 3,
             GridHeight = 3,
             MaxIterations = 100,
-            RandomState = 7
+            Seed = 7
         };
 
         var som = new SelfOrganizingMap<double>(options);
@@ -1062,7 +1062,7 @@ public class ClusteringEdgeCaseIntegrationTests
             NumClusters = 2,
             MaxIterations = 30,
             NumInitializations = 1,
-            RandomState = 10
+            Seed = 10
         };
 
         var kmeans = new KMeans<double>(options);
@@ -1081,7 +1081,7 @@ public class ClusteringEdgeCaseIntegrationTests
             NumClusters = 2,
             MaxIterations = 30,
             NumInitializations = 1,
-            RandomState = 19
+            Seed = 19
         };
 
         var kmeans = new KMeans<double>(options);
@@ -1105,7 +1105,7 @@ public class ClusteringEdgeCaseIntegrationTests
             NumClusters = 2,
             MaxIterations = 20,
             NumInitializations = 1,
-            RandomState = 3
+            Seed = 3
         };
 
         var kmeans = new KMeans<double>(options);

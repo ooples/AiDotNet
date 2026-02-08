@@ -515,14 +515,14 @@ public class DecisionTreeIntegrationTests
 
         var dt1 = new DecisionTreeClassifier<double>(new DecisionTreeClassifierOptions<double>
         {
-            RandomState = 123,
+            Seed = 123,
             MaxFeatures = 2
         });
         dt1.Train(x, y);
 
         var dt2 = new DecisionTreeClassifier<double>(new DecisionTreeClassifierOptions<double>
         {
-            RandomState = 123,
+            Seed = 123,
             MaxFeatures = 2
         });
         dt2.Train(x, y);

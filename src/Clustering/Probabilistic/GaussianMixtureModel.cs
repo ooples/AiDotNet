@@ -259,7 +259,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         {
             NumClusters = k,
             MaxIterations = 10,
-            RandomState = _options.RandomState
+            Seed = _options.Seed
         });
         kmeans.Train(dataMatrix);
 

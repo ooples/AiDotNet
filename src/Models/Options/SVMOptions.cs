@@ -190,14 +190,6 @@ public class SVMOptions<T> : ClassifierOptions<T>
     public bool Probability { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the random state for probability estimation.
-    /// </summary>
-    /// <value>
-    /// The random seed, or null for non-deterministic. Default is null.
-    /// </value>
-    public int? RandomState { get; set; } = null;
-
-    /// <summary>
     /// Gets or sets whether to use one-vs-rest or one-vs-one for multi-class.
     /// </summary>
     /// <value>

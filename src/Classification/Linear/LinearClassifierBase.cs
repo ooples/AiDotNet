@@ -78,8 +78,8 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
         }
         Intercept = NumOps.Zero;
 
-        Random = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        Random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
     }
 

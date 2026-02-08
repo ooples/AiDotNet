@@ -106,7 +106,7 @@ public class ClusteringEvaluationIntegrationTests
             NumClusters = 2,
             MaxIterations = 50,
             NumInitializations = 1,
-            RandomState = 5
+            Seed = 5
         });
 
         var labels = kmeans.FitPredict(dataset.Data);
@@ -132,7 +132,7 @@ public class ClusteringEvaluationIntegrationTests
             NumClusters = 2,
             MaxIterations = 50,
             NumInitializations = 1,
-            RandomState = 5
+            Seed = 5
         });
 
         var k3 = new KMeans<double>(new KMeansOptions<double>
@@ -140,7 +140,7 @@ public class ClusteringEvaluationIntegrationTests
             NumClusters = 3,
             MaxIterations = 50,
             NumInitializations = 1,
-            RandomState = 5
+            Seed = 5
         });
 
         var labels2 = k2.FitPredict(dataset.Data);
@@ -179,7 +179,7 @@ public class ClusteringEvaluationIntegrationTests
                     NumClusters = k,
                     MaxIterations = 30,
                     NumInitializations = 1,
-                    RandomState = 8
+                    Seed = 8
                 });
 
                 return model.FitPredict(dataset.Data);
@@ -237,7 +237,7 @@ public class ClusteringEvaluationIntegrationTests
                     InitMethod = (KMeansInitMethod)parameters["InitMethod"],
                     MaxIterations = 30,
                     NumInitializations = 1,
-                    RandomState = 42
+                    Seed = 42
                 };
 
                 return new KMeans<double>(options);
@@ -271,7 +271,7 @@ public class ClusteringEvaluationIntegrationTests
                     InitMethod = (KMeansInitMethod)parameters["InitMethod"],
                     MaxIterations = 30,
                     NumInitializations = 1,
-                    RandomState = 42
+                    Seed = 42
                 };
 
                 return new KMeans<double>(options);

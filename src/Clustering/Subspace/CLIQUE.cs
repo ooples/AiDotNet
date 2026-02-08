@@ -90,7 +90,7 @@ public class CLIQUE<T> : ClusteringBase<T>
         {
             MaxIterations = _options.MaxIterations,
             Tolerance = _options.Tolerance,
-            RandomState = _options.RandomState,
+            Seed = _options.Seed,
             NumIntervals = _options.NumIntervals,
             DensityThreshold = _options.DensityThreshold,
             MinPoints = _options.MinPoints,

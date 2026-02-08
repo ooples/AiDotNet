@@ -96,7 +96,7 @@ public class GMeans<T> : ClusteringBase<T>
         {
             NumClusters = currentK,
             MaxIterations = Options.MaxIterations,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         });
 
         kmeans.Train(x);
@@ -166,7 +166,7 @@ public class GMeans<T> : ClusteringBase<T>
                     {
                         NumClusters = 2,
                         MaxIterations = Options.MaxIterations,
-                        RandomState = Options.RandomState
+                        Seed = Options.Seed
                     });
 
                     subKMeans.Train(subMatrix);

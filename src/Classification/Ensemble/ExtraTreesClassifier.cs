@@ -85,8 +85,8 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
-        _random = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        _random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);
 
         // Clear existing estimators
@@ -123,7 +123,7 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
                 MinSamplesLeaf = Options.MinSamplesLeaf,
                 MaxFeatures = maxFeatures,
                 Criterion = Options.Criterion,
-                RandomState = _random.Next(),
+                Seed = _random.Next(),
                 MinImpurityDecrease = Options.MinImpurityDecrease
             };
 
@@ -244,7 +244,7 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
             MaxFeatures = Options.MaxFeatures,
             Criterion = Options.Criterion,
             Bootstrap = Options.Bootstrap,
-            RandomState = Options.RandomState,
+            Seed = Options.Seed,
             MinImpurityDecrease = Options.MinImpurityDecrease
         });
     }
@@ -261,7 +261,7 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
             MaxFeatures = Options.MaxFeatures,
             Criterion = Options.Criterion,
             Bootstrap = Options.Bootstrap,
-            RandomState = Options.RandomState,
+            Seed = Options.Seed,
             MinImpurityDecrease = Options.MinImpurityDecrease
         });
 

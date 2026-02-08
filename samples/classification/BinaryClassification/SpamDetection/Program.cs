@@ -82,7 +82,7 @@ try
         Gamma = 0.1,
         Tolerance = 1e-3,
         MaxIterations = 1000,
-        RandomState = 42
+        Seed = 42
     };
     var classifier = new SupportVectorClassifier<double>(svmOptions);
 

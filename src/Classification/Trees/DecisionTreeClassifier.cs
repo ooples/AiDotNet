@@ -87,8 +87,8 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
         TaskType = InferTaskType(y);
 
         // Initialize random number generator
-        _random = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        _random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);
 
         // Initialize feature importances
@@ -532,7 +532,7 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
             MinSamplesLeaf = Options.MinSamplesLeaf,
             MaxFeatures = Options.MaxFeatures,
             Criterion = Options.Criterion,
-            RandomState = Options.RandomState,
+            Seed = Options.Seed,
             MinImpurityDecrease = Options.MinImpurityDecrease
         });
     }
@@ -547,7 +547,7 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
             MinSamplesLeaf = Options.MinSamplesLeaf,
             MaxFeatures = Options.MaxFeatures,
             Criterion = Options.Criterion,
-            RandomState = Options.RandomState,
+            Seed = Options.Seed,
             MinImpurityDecrease = Options.MinImpurityDecrease
         });
 

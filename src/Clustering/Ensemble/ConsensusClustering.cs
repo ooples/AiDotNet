@@ -142,7 +142,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
             NumClusters = k,
             MaxIterations = 100,
             NumInitializations = 1,
-            RandomState = rand.Next()
+            Seed = rand.Next()
         });
 
         kmeans.Train(x);

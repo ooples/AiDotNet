@@ -448,7 +448,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
             {
                 NumClusters = k,
                 MaxIterations = Options.MaxIterations,
-                RandomState = Options.RandomState
+                Seed = Options.Seed
             });
             kmeans.Train(embeddingMatrix);
             return kmeans.Labels!;

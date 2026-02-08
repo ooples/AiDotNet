@@ -97,8 +97,8 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options ?? new ClusteringOptions<T>();
         _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        Random = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        Random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
     }
 

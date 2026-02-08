@@ -44,7 +44,7 @@ public class SVMIntegrationTests
             Kernel = KernelType.Linear,
             C = 1.0,
             MaxIterations = 1000,
-            RandomState = 42
+            Seed = 42
         };
         var svc = new SupportVectorClassifier<double>(options);
 
@@ -98,7 +98,7 @@ public class SVMIntegrationTests
             Kernel = KernelType.Linear,
             C = 1.0,
             MaxIterations = 500,
-            RandomState = 42
+            Seed = 42
         };
 
         var optionsRBF = new SVMOptions<double>
@@ -107,7 +107,7 @@ public class SVMIntegrationTests
             C = 10.0,
             Gamma = 1.0,
             MaxIterations = 500,
-            RandomState = 42
+            Seed = 42
         };
 
         var svcLinear = new SupportVectorClassifier<double>(optionsLinear);
@@ -150,7 +150,7 @@ public class SVMIntegrationTests
         {
             Kernel = KernelType.Linear,
             C = 1.0,
-            RandomState = 42
+            Seed = 42
         };
         var svc = new SupportVectorClassifier<double>(options);
         svc.Train(x, y);
@@ -192,7 +192,7 @@ public class SVMIntegrationTests
         {
             Kernel = KernelType.Linear,
             C = 1.0,
-            RandomState = 42
+            Seed = 42
         };
         var svc = new SupportVectorClassifier<double>(options);
         svc.Train(x, y);
@@ -236,8 +236,8 @@ public class SVMIntegrationTests
         x[10, 0] = 0.5; x[10, 1] = 0; y[10] = 1;  // Near boundary
         x[11, 0] = 0.3; x[11, 1] = 0; y[11] = 1;  // Near boundary
 
-        var optionsLowC = new SVMOptions<double> { Kernel = KernelType.Linear, C = 0.1, RandomState = 42 };
-        var optionsHighC = new SVMOptions<double> { Kernel = KernelType.Linear, C = 100.0, RandomState = 42 };
+        var optionsLowC = new SVMOptions<double> { Kernel = KernelType.Linear, C = 0.1, Seed = 42 };
+        var optionsHighC = new SVMOptions<double> { Kernel = KernelType.Linear, C = 100.0, Seed = 42 };
 
         var svcLow = new SupportVectorClassifier<double>(optionsLowC);
         var svcHigh = new SupportVectorClassifier<double>(optionsHighC);
@@ -281,7 +281,7 @@ public class SVMIntegrationTests
             C = 1.0,
             Degree = 3,
             Coef0 = 0,
-            RandomState = 42
+            Seed = 42
         };
         var svc = new SupportVectorClassifier<double>(options);
 
@@ -326,7 +326,7 @@ public class SVMIntegrationTests
         {
             C = 1.0,
             MaxIterations = 500,
-            RandomState = 42
+            Seed = 42
         };
         var linearSvc = new LinearSupportVectorClassifier<double>(options);
 
@@ -362,7 +362,7 @@ public class SVMIntegrationTests
         {
             C = 1.0,
             MaxIterations = 500,
-            RandomState = 42
+            Seed = 42
         };
         var linearSvc = new LinearSupportVectorClassifier<double>(options);
         linearSvc.Train(x, y);
@@ -408,7 +408,7 @@ public class SVMIntegrationTests
         {
             C = 1.0,
             MaxIterations = 500,
-            RandomState = 42
+            Seed = 42
         };
         var linearSvc = new LinearSupportVectorClassifier<double>(options);
         linearSvc.Train(x, y);
@@ -442,8 +442,8 @@ public class SVMIntegrationTests
             x[5 + i, 0] = 0.5 + 0.1 * i; x[5 + i, 1] = 0; y[5 + i] = 1;
         }
 
-        var optionsLow = new SVMOptions<double> { C = 0.01, MaxIterations = 300, RandomState = 42 };
-        var optionsHigh = new SVMOptions<double> { C = 100.0, MaxIterations = 300, RandomState = 42 };
+        var optionsLow = new SVMOptions<double> { C = 0.01, MaxIterations = 300, Seed = 42 };
+        var optionsHigh = new SVMOptions<double> { C = 100.0, MaxIterations = 300, Seed = 42 };
 
         var svcLow = new LinearSupportVectorClassifier<double>(optionsLow);
         var svcHigh = new LinearSupportVectorClassifier<double>(optionsHigh);
@@ -488,7 +488,7 @@ public class SVMIntegrationTests
         {
             Kernel = KernelType.Linear,
             C = 1.0,
-            RandomState = 42
+            Seed = 42
         };
         var svc = new SupportVectorClassifier<double>(options);
 
@@ -533,7 +533,7 @@ public class SVMIntegrationTests
             Kernel = KernelType.RBF,
             C = 10.0,
             Gamma = 0.01,  // Low gamma: smooth boundary
-            RandomState = 42
+            Seed = 42
         };
 
         var optionsHighGamma = new SVMOptions<double>
@@ -541,7 +541,7 @@ public class SVMIntegrationTests
             Kernel = KernelType.RBF,
             C = 10.0,
             Gamma = 10.0,  // High gamma: complex boundary
-            RandomState = 42
+            Seed = 42
         };
 
         var svcLow = new SupportVectorClassifier<double>(optionsLowGamma);
@@ -589,7 +589,7 @@ public class SVMIntegrationTests
         {
             Kernel = KernelType.Linear,
             C = 1.0,
-            RandomState = 42
+            Seed = 42
         };
         var svc = new SupportVectorClassifier<double>(options);
         svc.Train(x, y);
@@ -625,7 +625,7 @@ public class SVMIntegrationTests
         {
             C = 1.0,
             MaxIterations = 300,
-            RandomState = 42
+            Seed = 42
         };
         var svc = new LinearSupportVectorClassifier<double>(options);
         svc.Train(x, y);
@@ -719,7 +719,7 @@ public class SVMIntegrationTests
         {
             Kernel = KernelType.Linear,
             C = 1.0,
-            RandomState = 42
+            Seed = 42
         };
         var svc = new SupportVectorClassifier<double>(options);
 
@@ -753,7 +753,7 @@ public class SVMIntegrationTests
         {
             C = 1.0,
             MaxIterations = 500,
-            RandomState = 42
+            Seed = 42
         };
         var svc = new LinearSupportVectorClassifier<double>(options);
 
@@ -789,7 +789,7 @@ public class SVMIntegrationTests
         {
             Kernel = KernelType.Linear,
             MaxIterations = 500,
-            RandomState = 42
+            Seed = 42
         };
         var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
 
@@ -855,8 +855,8 @@ public class SVMIntegrationTests
             x[10 + i, 0] = 1 + 0.1 * i; x[10 + i, 1] = 0.05 * i; y[10 + i] = 1;
         }
 
-        var optionsLowNu = new SVMOptions<double> { Kernel = KernelType.Linear, MaxIterations = 300, RandomState = 42 };
-        var optionsHighNu = new SVMOptions<double> { Kernel = KernelType.Linear, MaxIterations = 300, RandomState = 42 };
+        var optionsLowNu = new SVMOptions<double> { Kernel = KernelType.Linear, MaxIterations = 300, Seed = 42 };
+        var optionsHighNu = new SVMOptions<double> { Kernel = KernelType.Linear, MaxIterations = 300, Seed = 42 };
 
         var svcLowNu = new NuSupportVectorClassifier<double>(optionsLowNu, null, nu: 0.1);
         var svcHighNu = new NuSupportVectorClassifier<double>(optionsHighNu, null, nu: 0.9);
@@ -890,7 +890,7 @@ public class SVMIntegrationTests
         {
             Kernel = KernelType.Linear,
             MaxIterations = 300,
-            RandomState = 42
+            Seed = 42
         };
         var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
         nuSvc.Train(x, y);
@@ -926,7 +926,7 @@ public class SVMIntegrationTests
         {
             Kernel = KernelType.Linear,
             MaxIterations = 300,
-            RandomState = 42
+            Seed = 42
         };
         var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
         nuSvc.Train(x, y);
@@ -965,7 +965,7 @@ public class SVMIntegrationTests
             Kernel = KernelType.RBF,
             Gamma = 1.0,
             MaxIterations = 500,
-            RandomState = 42
+            Seed = 42
         };
         var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
 
@@ -1003,7 +1003,7 @@ public class SVMIntegrationTests
         {
             Kernel = KernelType.Linear,
             MaxIterations = 300,
-            RandomState = 42
+            Seed = 42
         };
         var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
         nuSvc.Train(x, y);
@@ -1064,7 +1064,7 @@ public class SVMIntegrationTests
         {
             Kernel = KernelType.Linear,
             MaxIterations = 200,
-            RandomState = 42
+            Seed = 42
         };
         var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.3);
         nuSvc.Train(x, y);
@@ -1097,7 +1097,7 @@ public class SVMIntegrationTests
             Degree = 2,
             Coef0 = 1,
             MaxIterations = 500,
-            RandomState = 42
+            Seed = 42
         };
         var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
 
@@ -1135,7 +1135,7 @@ public class SVMIntegrationTests
         {
             Kernel = KernelType.Linear,
             MaxIterations = 300,
-            RandomState = 42
+            Seed = 42
         };
         var nuSvc = new NuSupportVectorClassifier<double>(options, null, nu: 0.5);
 
@@ -1166,7 +1166,7 @@ public class SVMIntegrationTests
         x[2, 0] = 1; x[2, 1] = 0; y[2] = 1;
         x[3, 0] = 2; x[3, 1] = 0; y[3] = 1;
 
-        var options = new SVMOptions<double> { C = 1.0, RandomState = 42 };
+        var options = new SVMOptions<double> { C = 1.0, Seed = 42 };
         var svc = new LinearSupportVectorClassifier<double>(options);
         svc.Train(x, y);
 

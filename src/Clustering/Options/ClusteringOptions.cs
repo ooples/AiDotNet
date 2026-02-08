@@ -50,23 +50,6 @@ public class ClusteringOptions<T> : ModelOptions
     public double Tolerance { get; set; } = 1e-4;
 
     /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// This property delegates to the inherited Seed property from ModelOptions.
-    /// </summary>
-    /// <value>The random seed, or null for non-deterministic behavior.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Many clustering algorithms involve randomness
-    /// (like choosing initial centers). Setting this ensures you get the same
-    /// results every time you run with the same data.
-    /// </para>
-    /// </remarks>
-    public int? RandomState
-    {
-        get => Seed;
-        set => Seed = value;
-    }
-
-    /// <summary>
     /// Gets or sets the number of times to run with different random initializations.
     /// </summary>
     /// <value>Number of initializations. Default is 10.</value>

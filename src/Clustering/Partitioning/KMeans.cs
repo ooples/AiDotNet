@@ -54,8 +54,8 @@ public class KMeans<T> : ClusteringBase<T>
         : base(options ?? new KMeansOptions<T>())
     {
         _options = options ?? new KMeansOptions<T>();
-        _random = _options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.RandomState.Value)
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);
 
         // Set distance metric if not specified
@@ -84,7 +84,7 @@ public class KMeans<T> : ClusteringBase<T>
             NumClusters = _options.NumClusters,
             MaxIterations = _options.MaxIterations,
             Tolerance = _options.Tolerance,
-            RandomState = _options.RandomState,
+            Seed = _options.Seed,
             NumInitializations = _options.NumInitializations,
             InitMethod = _options.InitMethod,
             DistanceMetric = _options.DistanceMetric

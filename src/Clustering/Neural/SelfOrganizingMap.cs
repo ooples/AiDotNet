@@ -111,8 +111,8 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         int width = _options.GridWidth;
         int height = _options.GridHeight;
 
-        var rand = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        var rand = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
         // Initialize weights randomly
@@ -289,8 +289,8 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         // Simple K-Means clustering of neurons
         _neuronLabels = new int[numNeurons];
         var centers = new double[k][];
-        var rand = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        var rand = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
         // Initialize centers randomly from neurons

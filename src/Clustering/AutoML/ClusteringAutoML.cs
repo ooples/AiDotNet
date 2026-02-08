@@ -125,7 +125,7 @@ public class ClusteringAutoML<T>
                 {
                     NumClusters = k,
                     MaxIterations = _options.MaxIterationsPerTrial,
-                    RandomState = _options.RandomSeed
+                    Seed = _options.RandomSeed
                 };
 
                 var kmeans = new KMeans<T>(options);
@@ -213,7 +213,7 @@ public class ClusteringAutoML<T>
                 {
                     NumComponents = k,
                     MaxIterations = _options.MaxIterationsPerTrial,
-                    RandomState = _options.RandomSeed
+                    Seed = _options.RandomSeed
                 };
 
                 var gmm = new GaussianMixtureModel<T>(options);
@@ -253,7 +253,7 @@ public class ClusteringAutoML<T>
                         NumClusters = k,
                         Fuzziness = m,
                         MaxIterations = _options.MaxIterationsPerTrial,
-                        RandomState = _options.RandomSeed
+                        Seed = _options.RandomSeed
                     };
 
                     var fcm = new FuzzyCMeans<T>(options);
@@ -293,7 +293,7 @@ public class ClusteringAutoML<T>
             var xmeansOptions = new XMeansOptions<T>
             {
                 MaxClusters = _options.KRange.Max(),
-                RandomState = _options.RandomSeed
+                Seed = _options.RandomSeed
             };
 
             var xmeans = new XMeans<T>(xmeansOptions);
@@ -324,7 +324,7 @@ public class ClusteringAutoML<T>
             var gmeansOptions = new GMeansOptions<T>
             {
                 MaxClusters = _options.KRange.Max(),
-                RandomState = _options.RandomSeed
+                Seed = _options.RandomSeed
             };
 
             var gmeans = new GMeans<T>(gmeansOptions);
