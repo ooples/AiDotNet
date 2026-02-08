@@ -45,6 +45,11 @@ namespace AiDotNet.Audio.Enhancement;
 /// </remarks>
 public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    private readonly DCCRNOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Model Architecture Parameters
 
     /// <summary>
@@ -220,9 +225,12 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int sampleRate = 16000,
         int fftSize = 512,
         int hopSize = 256,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        DCCRNOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new DCCRNOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -291,9 +299,12 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int hopSize = 256,
         bool useComplexMask = true,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DCCRNOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new DCCRNOptions();
+        Options = _options;
         // Validate parameters
         if (sampleRate <= 0)
             throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");

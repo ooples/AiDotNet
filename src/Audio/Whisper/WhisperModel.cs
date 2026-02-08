@@ -62,6 +62,11 @@ namespace AiDotNet.Audio.Whisper;
 /// </remarks>
 public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    private readonly WhisperOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -279,9 +284,12 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         int maxTokens = 448,
         int beamSize = 5,
         double temperature = 0.0,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        WhisperOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new WhisperOptions();
+        Options = _options;
         if (encoderPath is null)
             throw new ArgumentNullException(nameof(encoderPath));
         if (decoderPath is null)
@@ -322,13 +330,13 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         MelSpec = _melSpectrogram;
 
         // Load ONNX models with proper cleanup on failure
-        var options = onnxOptions ?? new OnnxModelOptions();
+        var onnxOpts = onnxOptions ?? new OnnxModelOptions();
         OnnxModel<T>? encoder = null;
 
         try
         {
-            encoder = new OnnxModel<T>(encoderPath, options);
-            var decoder = new OnnxModel<T>(decoderPath, options);
+            encoder = new OnnxModel<T>(encoderPath, onnxOpts);
+            var decoder = new OnnxModel<T>(decoderPath, onnxOpts);
 
             // Assign to properties only after both succeed
             OnnxEncoder = encoder;
@@ -411,9 +419,12 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         int beamSize = 5,
         double temperature = 0.0,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        WhisperOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new WhisperOptions();
+        Options = _options;
         _useNativeMode = true;
         _modelSize = modelSize;
         _language = language;

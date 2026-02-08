@@ -50,6 +50,11 @@ namespace AiDotNet.Audio.Enhancement;
 /// </remarks>
 public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    private readonly ConvTasNetOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly INumericOperations<T> _numOps;
 
     // Encoder parameters
@@ -134,9 +139,12 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int encoderDim = 512,
         int kernelSize = 16,
         int numSources = 2,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        ConvTasNetOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new ConvTasNetOptions();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         if (string.IsNullOrWhiteSpace(modelPath))
@@ -209,9 +217,12 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int tcnKernelSize = 3,
         int numSources = 2,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        ConvTasNetOptions? options = null)
         : base(architecture, lossFunction)
     {
+        _options = options ?? new ConvTasNetOptions();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         SampleRate = sampleRate;

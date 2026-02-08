@@ -59,6 +59,11 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// </remarks>
 public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
+    private readonly Tacotron2ModelOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -332,9 +337,12 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int fftSize = 1024,
         int hopLength = 256,
         int griffinLimIterations = 60,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        Tacotron2ModelOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new Tacotron2ModelOptions();
+        Options = _options;
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
         if (acousticModelPath is null)
@@ -371,12 +379,12 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _preprocessor = new TtsPreprocessor();
 
         // Load ONNX models
-        var options = onnxOptions ?? new OnnxModelOptions();
-        _acousticModel = new OnnxModel<T>(acousticModelPath, options);
+        var onnxOpts = onnxOptions ?? new OnnxModelOptions();
+        _acousticModel = new OnnxModel<T>(acousticModelPath, onnxOpts);
 
         if (vocoderPath is not null && vocoderPath.Length > 0)
         {
-            _vocoder = new OnnxModel<T>(vocoderPath, options);
+            _vocoder = new OnnxModel<T>(vocoderPath, onnxOpts);
         }
         else
         {
@@ -463,9 +471,12 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int hopLength = 256,
         int griffinLimIterations = 60,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        Tacotron2ModelOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new Tacotron2ModelOptions();
+        Options = _options;
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
 

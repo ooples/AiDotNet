@@ -60,6 +60,11 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// </remarks>
 public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
+    private readonly Wav2Vec2ModelOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -229,9 +234,12 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         int sampleRate = 16000,
         int maxAudioLengthSeconds = 30,
         string[]? vocabulary = null,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        Wav2Vec2ModelOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new Wav2Vec2ModelOptions();
+        Options = _options;
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
         if (modelPath is null)
@@ -257,8 +265,8 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         _vocabSize = _vocabulary.Length;
 
         // Load ONNX model
-        var options = onnxOptions ?? new OnnxModelOptions();
-        OnnxModel = new OnnxModel<T>(modelPath, options);
+        var onnxOpts = onnxOptions ?? new OnnxModelOptions();
+        OnnxModel = new OnnxModel<T>(modelPath, onnxOpts);
 
         // Initialize supported languages
         SupportedLanguages = new[] { language ?? "en" };
@@ -321,9 +329,12 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         int ffDim = 3072,
         string[]? vocabulary = null,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        Wav2Vec2ModelOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new Wav2Vec2ModelOptions();
+        Options = _options;
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
 

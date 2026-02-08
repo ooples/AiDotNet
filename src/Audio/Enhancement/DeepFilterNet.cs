@@ -49,6 +49,11 @@ namespace AiDotNet.Audio.Enhancement;
 /// </remarks>
 public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    private readonly DeepFilterNetOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Model Architecture Parameters
 
     /// <summary>
@@ -224,9 +229,12 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int sampleRate = 48000,
         int fftSize = 960,
         int hopSize = 480,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        DeepFilterNetOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new DeepFilterNetOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -300,9 +308,12 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int hopSize = 480,
         int lookahead = 2,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DeepFilterNetOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new DeepFilterNetOptions();
+        Options = _options;
         SampleRate = sampleRate;
         _numErbBands = numErbBands;
         _hiddenDim = hiddenDim;

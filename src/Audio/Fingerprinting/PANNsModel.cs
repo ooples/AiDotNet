@@ -48,6 +48,11 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// </remarks>
 public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
+    private readonly PANNsModelOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly INumericOperations<T> _numOps;
 
     // Model configuration (non-readonly for deserialization support)
@@ -112,9 +117,12 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         int sampleRate = 32000,
         int numClasses = 527,
         int embeddingDim = 2048,
-        OnnxModelOptions? onnxOptions = null)
+        OnnxModelOptions? onnxOptions = null,
+        PANNsModelOptions? options = null)
         : base(architecture)
     {
+        _options = options ?? new PANNsModelOptions();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         if (string.IsNullOrWhiteSpace(modelPath))
@@ -175,9 +183,12 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         int hopSize = 320,
         double dropout = 0.2,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        PANNsModelOptions? options = null)
         : base(architecture, lossFunction)
     {
+        _options = options ?? new PANNsModelOptions();
+        Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
         SampleRate = sampleRate;
