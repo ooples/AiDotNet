@@ -160,7 +160,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
         var (mus, _) = await Task.Run(() => ComputePredictions(input));
-        return new Vector<T>(mus);
+        return mus;
     }
 
     /// <summary>
@@ -241,11 +241,11 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes mean (μ) and precision (φ) predictions for all samples.
     /// </summary>
-    private (T[] mus, T[] phis) ComputePredictions(Matrix<T> x)
+    private (Vector<T> mus, Vector<T> phis) ComputePredictions(Matrix<T> x)
     {
         int n = x.Rows;
-        var mus = new T[n];
-        var phis = new T[n];
+        var mus = new Vector<T>(n);
+        var phis = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -285,7 +285,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates the mean model using Fisher scoring.
     /// </summary>
-    private void UpdateMeanModel(Matrix<T> x, Vector<T> y, T[] mus, T[] phis)
+    private void UpdateMeanModel(Matrix<T> x, Vector<T> y, Vector<T> mus, Vector<T> phis)
     {
         int n = x.Rows;
         int p = _numFeatures;
@@ -321,7 +321,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Updates the precision model using Fisher scoring.
     /// </summary>
-    private void UpdatePrecisionModel(Matrix<T> x, Vector<T> y, T[] mus, T[] phis)
+    private void UpdatePrecisionModel(Matrix<T> x, Vector<T> y, Vector<T> mus, Vector<T> phis)
     {
         int n = x.Rows;
 
@@ -417,7 +417,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes the log-likelihood.
     /// </summary>
-    private double ComputeLogLikelihood(Vector<T> y, T[] mus, T[] phis)
+    private double ComputeLogLikelihood(Vector<T> y, Vector<T> mus, Vector<T> phis)
     {
         double ll = 0;
         for (int i = 0; i < y.Length; i++)
@@ -596,7 +596,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <inheritdoc/>
     protected override Task CalculateFeatureImportancesAsync(int featureCount)
     {
-        var importances = new T[_numFeatures];
+        var importances = new Vector<T>(_numFeatures);
 
         for (int f = 0; f < _numFeatures; f++)
         {
@@ -608,14 +608,16 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
             importances[f] = NumOps.FromDouble(imp);
         }
 
-        double sum = importances.Sum(x => NumOps.ToDouble(x));
+        double sum = 0;
+        for (int f = 0; f < _numFeatures; f++)
+            sum += NumOps.ToDouble(importances[f]);
         if (sum > 0)
         {
             for (int f = 0; f < _numFeatures; f++)
                 importances[f] = NumOps.Divide(importances[f], NumOps.FromDouble(sum));
         }
 
-        FeatureImportances = new Vector<T>(importances);
+        FeatureImportances = importances;
         return Task.CompletedTask;
     }
 
