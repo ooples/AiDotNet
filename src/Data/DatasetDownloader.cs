@@ -13,6 +13,15 @@ namespace AiDotNet.Data;
 /// </remarks>
 internal static class DatasetDownloader
 {
+    private static readonly HttpClient SharedHttpClient = CreateHttpClient();
+
+    private static HttpClient CreateHttpClient()
+    {
+        var client = new HttpClient();
+        client.Timeout = TimeSpan.FromMinutes(30);
+        return client;
+    }
+
     /// <summary>
     /// Gets the default cache directory for downloaded datasets.
     /// </summary>
@@ -53,14 +62,15 @@ internal static class DatasetDownloader
         string tempPath = destinationPath + ".tmp";
         try
         {
-            using var httpClient = new HttpClient();
-            httpClient.Timeout = TimeSpan.FromMinutes(30);
-
-            using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var response = await SharedHttpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             response.EnsureSuccessStatusCode();
 
             using var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None);
+#if NET6_0_OR_GREATER
+            await response.Content.CopyToAsync(fileStream, cancellationToken);
+#else
             await response.Content.CopyToAsync(fileStream);
+#endif
 
             // Move temp file to final location
             if (File.Exists(destinationPath))
@@ -309,15 +319,16 @@ internal static class DatasetDownloader
         string tempGz = destinationPath + ".gz.tmp";
         try
         {
-            using var httpClient = new HttpClient();
-            httpClient.Timeout = TimeSpan.FromMinutes(30);
-
-            using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            using var response = await SharedHttpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             response.EnsureSuccessStatusCode();
 
             using (var fileStream = new FileStream(tempGz, FileMode.Create, FileAccess.Write, FileShare.None))
             {
+#if NET6_0_OR_GREATER
+                await response.Content.CopyToAsync(fileStream, cancellationToken);
+#else
                 await response.Content.CopyToAsync(fileStream);
+#endif
             }
 
             // Decompress gzip

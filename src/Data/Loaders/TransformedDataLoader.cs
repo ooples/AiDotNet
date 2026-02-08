@@ -45,7 +45,7 @@ public class TransformedDataLoader<T> :
     public override int TotalCount => _inner.TotalCount;
 
     /// <inheritdoc/>
-    public Tensor<T> Features => ApplyTransformToTensor(_inner.Features);
+    public Tensor<T> Features => _inner.Features;
 
     /// <inheritdoc/>
     public Tensor<T> Labels => _inner.Labels;

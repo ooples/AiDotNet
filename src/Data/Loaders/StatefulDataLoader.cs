@@ -159,6 +159,13 @@ public class StatefulDataLoader<T, TInput, TOutput> :
     /// <inheritdoc/>
     public void Shuffle(int? seed = null)
     {
+        // Always store a seed so checkpoints can reproduce the shuffle.
+        // If no seed is provided, generate one deterministically.
+        if (!seed.HasValue)
+        {
+            seed = Environment.TickCount;
+        }
+
         _lastShuffleSeed = seed;
         _inner.Shuffle(seed);
     }
@@ -188,8 +195,13 @@ public class StatefulDataLoader<T, TInput, TOutput> :
         bool dropLast = false,
         int? seed = null)
     {
-        if (shuffle && seed.HasValue)
+        if (shuffle)
         {
+            if (!seed.HasValue)
+            {
+                seed = Environment.TickCount;
+            }
+
             _lastShuffleSeed = seed;
         }
 
@@ -210,8 +222,13 @@ public class StatefulDataLoader<T, TInput, TOutput> :
         int prefetchCount = 2,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        if (shuffle && seed.HasValue)
+        if (shuffle)
         {
+            if (!seed.HasValue)
+            {
+                seed = Environment.TickCount;
+            }
+
             _lastShuffleSeed = seed;
         }
 

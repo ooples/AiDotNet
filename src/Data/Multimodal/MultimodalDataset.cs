@@ -127,9 +127,17 @@ public class MultimodalDataset<T>
 
         int[] sampleShape = firstSample[modalityKey].Shape;
         int elementsPerSample = 1;
-        for (int d = 0; d < sampleShape.Length; d++)
+        try
         {
-            elementsPerSample *= sampleShape[d];
+            for (int d = 0; d < sampleShape.Length; d++)
+            {
+                elementsPerSample = checked(elementsPerSample * sampleShape[d]);
+            }
+        }
+        catch (OverflowException)
+        {
+            throw new InvalidOperationException(
+                $"Modality '{modalityKey}' shape dimensions overflow int range.");
         }
 
         // Build batch shape: [batchSize, ...sampleShape]

@@ -21,6 +21,7 @@ internal class WebDataset : IDisposable
 {
     private readonly string[] _tarPaths;
     private readonly WebDatasetOptions _options;
+    private readonly HashSet<string>? _normalizedExtensions;
     private bool _disposed;
 
     /// <summary>
@@ -35,6 +36,16 @@ internal class WebDataset : IDisposable
 
         _tarPaths = tarPaths;
         _options = options ?? new WebDatasetOptions();
+
+        // Normalize extensions once for case-insensitive comparison
+        if (_options.IncludeExtensions is not null)
+        {
+            _normalizedExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ext in _options.IncludeExtensions)
+            {
+                _normalizedExtensions.Add(ext);
+            }
+        }
     }
 
     /// <summary>
@@ -203,19 +214,21 @@ internal class WebDataset : IDisposable
                     ReadFull(stream, pad, padSize);
                 }
 
-                string fileName = Path.GetFileName(name);
-                string ext = Path.GetExtension(fileName);
-                string baseName = Path.GetFileNameWithoutExtension(fileName);
+                string ext = Path.GetExtension(name);
+                // Use directory-qualified basename to avoid collisions across directories
+                string nameWithoutExt = name.Length > ext.Length
+                    ? name.Substring(0, name.Length - ext.Length)
+                    : name;
 
-                // Filter by extension if configured (case-insensitive)
-                if (_options.IncludeExtensions is not null &&
-                    !_options.IncludeExtensions.Contains(ext.ToLowerInvariant()))
+                // Filter by extension if configured (case-insensitive via normalized set)
+                if (_normalizedExtensions is not null &&
+                    !_normalizedExtensions.Contains(ext))
                 {
                     continue;
                 }
 
-                // Group files by basename into samples
-                if (currentBaseName is not null && baseName != currentBaseName)
+                // Group files by directory-qualified basename into samples
+                if (currentBaseName is not null && nameWithoutExt != currentBaseName)
                 {
                     // New sample - yield the previous one
                     if (currentSample.Count > 0)
@@ -225,7 +238,7 @@ internal class WebDataset : IDisposable
                     }
                 }
 
-                currentBaseName = baseName;
+                currentBaseName = nameWithoutExt;
                 currentSample[ext] = fileData;
             }
             else if (typeFlag == '5' || name.EndsWith("/", StringComparison.Ordinal))
