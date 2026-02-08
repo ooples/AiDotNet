@@ -186,15 +186,16 @@ internal class WebDataset : IDisposable
                 }
 
                 // Regular file - read contents
-                byte[] fileData = new byte[size];
+                byte[] fileData = new byte[(int)size];
                 ReadFull(stream, fileData, (int)size);
 
                 // Skip padding
                 long remainder = size % 512;
                 if (remainder > 0)
                 {
-                    byte[] pad = new byte[512 - remainder];
-                    ReadFull(stream, pad, pad.Length);
+                    int padSize = (int)(512 - remainder);
+                    byte[] pad = new byte[padSize];
+                    ReadFull(stream, pad, padSize);
                 }
 
                 string fileName = Path.GetFileName(name);

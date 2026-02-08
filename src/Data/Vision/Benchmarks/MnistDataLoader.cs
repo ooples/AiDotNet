@@ -46,7 +46,7 @@ public class MnistDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     public override int TotalCount => _sampleCount;
 
     /// <inheritdoc/>
-    public override int FeatureCount => _options.Flatten ? 784 : 28;
+    public override int FeatureCount => 784;
 
     /// <inheritdoc/>
     public override int OutputDimension => 10;

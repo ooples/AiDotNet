@@ -86,7 +86,7 @@ public class StatefulDataLoader<T, TInput, TOutput> :
     {
         return new DataLoaderCheckpoint
         {
-            CurrentIndex = CurrentIndex,
+            CurrentIndex = _inner.CurrentIndex,
             CurrentBatchIndex = _inner.CurrentBatchIndex,
             Epoch = _epoch,
             ShuffledIndices = _currentShuffledIndices is not null
@@ -132,18 +132,31 @@ public class StatefulDataLoader<T, TInput, TOutput> :
         {
             _inner.GetNextBatch();
         }
+
+        // Sync wrapper progress with inner loader
+        CurrentIndex = _inner.CurrentIndex;
+        CurrentBatchIndex = _inner.CurrentBatchIndex;
     }
 
     /// <inheritdoc/>
     public (TInput Features, TOutput Labels) GetNextBatch()
     {
-        return _inner.GetNextBatch();
+        var result = _inner.GetNextBatch();
+        CurrentIndex = _inner.CurrentIndex;
+        CurrentBatchIndex = _inner.CurrentBatchIndex;
+        return result;
     }
 
     /// <inheritdoc/>
     public bool TryGetNextBatch(out (TInput Features, TOutput Labels) batch)
     {
-        return _inner.TryGetNextBatch(out batch);
+        bool hasNext = _inner.TryGetNextBatch(out batch);
+        if (hasNext)
+        {
+            CurrentIndex = _inner.CurrentIndex;
+            CurrentBatchIndex = _inner.CurrentBatchIndex;
+        }
+        return hasNext;
     }
 
     /// <inheritdoc/>

@@ -509,22 +509,25 @@ public static class ImageHelper<T>
         int width = image.Width;
         int height = image.Height;
 
-        var tensor = new Tensor<T>(new[] { 1, 3, height, width });
-        var span = tensor.AsWritableSpan();
         var normFactor = normalize ? 255.0 : 1.0;
+        var pixelData = new T[3 * height * width];
 
-        for (int y = 0; y < height; y++)
+        image.ProcessPixelRows(accessor =>
         {
-            for (int x = 0; x < width; x++)
+            for (int y = 0; y < height; y++)
             {
-                var pixel = image[x, y];
-                span[0 * height * width + y * width + x] = NumOps.FromDouble(pixel.R / normFactor);
-                span[1 * height * width + y * width + x] = NumOps.FromDouble(pixel.G / normFactor);
-                span[2 * height * width + y * width + x] = NumOps.FromDouble(pixel.B / normFactor);
+                var row = accessor.GetRowSpan(y);
+                for (int x = 0; x < width; x++)
+                {
+                    var pixel = row[x];
+                    pixelData[0 * height * width + y * width + x] = NumOps.FromDouble(pixel.R / normFactor);
+                    pixelData[1 * height * width + y * width + x] = NumOps.FromDouble(pixel.G / normFactor);
+                    pixelData[2 * height * width + y * width + x] = NumOps.FromDouble(pixel.B / normFactor);
+                }
             }
-        }
+        });
 
-        return tensor;
+        return new Tensor<T>(pixelData, new[] { 1, 3, height, width });
     }
 #endif
 

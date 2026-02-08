@@ -35,7 +35,7 @@ public class Cifar10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
     /// <inheritdoc/>
     public override int TotalCount => _sampleCount;
     /// <inheritdoc/>
-    public override int FeatureCount => 32;
+    public override int FeatureCount => 32 * 32 * 3;
     /// <inheritdoc/>
     public override int OutputDimension => 10;
     /// <summary>Gets the class names.</summary>
@@ -56,7 +56,7 @@ public class Cifar10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
 
         if (dataDir.Length == 0 && _options.AutoDownload)
         {
-            await DatasetDownloader.DownloadAndExtractZipAsync(DownloadUrl, _dataPath, cancellationToken);
+            await DatasetDownloader.DownloadAndExtractTarGzAsync(DownloadUrl, _dataPath, cancellationToken);
             dataDir = FindDataDirectory(_dataPath);
         }
 

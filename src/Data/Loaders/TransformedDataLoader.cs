@@ -79,6 +79,8 @@ public class TransformedDataLoader<T> :
     public (Tensor<T> Features, Tensor<T> Labels) GetNextBatch()
     {
         var (features, labels) = _inner.GetNextBatch();
+        CurrentIndex = _inner.CurrentIndex;
+        CurrentBatchIndex = _inner.CurrentBatchIndex;
         return (ApplyTransformToTensor(features), labels);
     }
 
@@ -87,6 +89,8 @@ public class TransformedDataLoader<T> :
     {
         if (_inner.TryGetNextBatch(out var innerBatch))
         {
+            CurrentIndex = _inner.CurrentIndex;
+            CurrentBatchIndex = _inner.CurrentBatchIndex;
             batch = (ApplyTransformToTensor(innerBatch.Features), innerBatch.Labels);
             return true;
         }
@@ -198,9 +202,15 @@ public class TransformedDataLoader<T> :
             // Apply transform
             var transformedSample = _transform.Apply(sampleData);
 
+            if (transformedSample.Length != elementsPerSample)
+            {
+                throw new InvalidOperationException(
+                    $"Transform returned {transformedSample.Length} elements, expected {elementsPerSample}. " +
+                    "Transform must preserve sample element count.");
+            }
+
             // Copy back
-            int copyLen = Math.Min(transformedSample.Length, elementsPerSample);
-            Array.Copy(transformedSample, 0, resultData, i * elementsPerSample, copyLen);
+            Array.Copy(transformedSample, 0, resultData, i * elementsPerSample, elementsPerSample);
         }
 
         return new Tensor<T>(resultData, tensor.Shape);
