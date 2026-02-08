@@ -67,7 +67,7 @@ public class CLogLogLink<T> : ILinkFunction<T>
     public T InverseLinkDerivative(T eta)
     {
         double e = NumOps.ToDouble(eta);
-        if (e > 700 || e < -700) return NumOps.FromDouble(1e-10);
+        if (e > 700 || e < -700) return NumOps.FromDouble(0.0);
         double expE = Math.Exp(e);
         return NumOps.FromDouble(expE * Math.Exp(-expE));
     }

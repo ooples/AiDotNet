@@ -77,7 +77,8 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
         _options = options ?? new AutoIntOptions<T>();
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        // Reuse the same resolved instance that was passed to base(...)
+        _lossFunction = LossFunction;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
