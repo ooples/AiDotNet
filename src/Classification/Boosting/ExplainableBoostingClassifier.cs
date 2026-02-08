@@ -625,7 +625,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Computes interaction score (variance reduction).
     /// </summary>
-    private static double ComputeInteractionScore(int[] bins1, int[] bins2, double[] residuals)
+    private static double ComputeInteractionScore(int[] bins1, int[] bins2, Vector<double> residuals)
     {
         // Group residuals by bin pair and compute variance reduction
         var groups = new Dictionary<(int, int), List<double>>();
@@ -642,7 +642,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
         double totalVar = ComputeVariance(residuals);
         double withinVar = groups.Values
             .Where(g => g.Count > 1)
-            .Sum(g => ComputeVariance([.. g]) * g.Count / residuals.Length);
+            .Sum(g => ComputeVariance(new Vector<double>(g)) * g.Count / residuals.Length);
 
         return totalVar - withinVar;
     }
@@ -650,11 +650,15 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Computes variance.
     /// </summary>
-    private static double ComputeVariance(double[] values)
+    private static double ComputeVariance(Vector<double> values)
     {
         if (values.Length < 2) return 0;
-        double mean = values.Average();
-        return values.Sum(v => (v - mean) * (v - mean)) / values.Length;
+        double sum = 0;
+        for (int i = 0; i < values.Length; i++) sum += values[i];
+        double mean = sum / values.Length;
+        double sqSum = 0;
+        for (int i = 0; i < values.Length; i++) sqSum += (values[i] - mean) * (values[i] - mean);
+        return sqSum / values.Length;
     }
 
     /// <summary>
