@@ -44,12 +44,12 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Network weights for each layer.
     /// </summary>
-    private List<T[,]> _weights;
+    private List<Matrix<T>> _weights;
 
     /// <summary>
     /// Network biases for each layer.
     /// </summary>
-    private List<T[]> _biases;
+    private List<Vector<T>> _biases;
 
     /// <summary>
     /// Number of features.
@@ -59,12 +59,12 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Baseline cumulative hazard function times.
     /// </summary>
-    private T[]? _baselineHazardTimes;
+    private Vector<T>? _baselineHazardTimes;
 
     /// <summary>
     /// Baseline cumulative hazard function values.
     /// </summary>
-    private T[]? _baselineHazardValues;
+    private Vector<T>? _baselineHazardValues;
 
     /// <summary>
     /// Configuration options.
@@ -212,7 +212,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// <param name="input">Input feature matrix.</param>
     /// <param name="times">Times at which to evaluate survival probability.</param>
     /// <returns>Matrix where [i,j] is P(T > times[j] | X_i).</returns>
-    public Matrix<T> PredictSurvival(Matrix<T> input, T[] times)
+    public Matrix<T> PredictSurvival(Matrix<T> input, Vector<T> times)
     {
         var riskScores = PredictRiskScores(input);
         var survivalProbs = new Matrix<T>(input.Rows, times.Length);
@@ -337,8 +337,8 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
 
             // Xavier/He initialization
             double scale = Math.Sqrt(2.0 / inputSize);
-            var w = new T[inputSize, outputSize];
-            var b = new T[outputSize];
+            var w = new Matrix<T>(inputSize, outputSize);
+            var b = new Vector<T>(outputSize);
 
             for (int i = 0; i < inputSize; i++)
             {
@@ -356,8 +356,8 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
 
         // Output layer (single risk score)
         double outputScale = Math.Sqrt(2.0 / inputSize);
-        var wOutput = new T[inputSize, 1];
-        var bOutput = new T[1];
+        var wOutput = new Matrix<T>(inputSize, 1);
+        var bOutput = new Vector<T>(1);
 
         for (int i = 0; i < inputSize; i++)
         {
@@ -371,16 +371,16 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Forward pass through the network.
     /// </summary>
-    private (T[], List<T[][]>) ForwardPass(Matrix<T> x, int[] indices)
+    private (Vector<T>, List<Vector<T>[]>) ForwardPass(Matrix<T> x, int[] indices)
     {
         int n = indices.Length;
-        var hiddenOutputs = new List<T[][]>();
+        var hiddenOutputs = new List<Vector<T>[]>();
 
         // Current layer input
-        var current = new T[n][];
+        var current = new Vector<T>[n];
         for (int i = 0; i < n; i++)
         {
-            current[i] = new T[_numFeatures];
+            current[i] = new Vector<T>(_numFeatures);
             for (int j = 0; j < _numFeatures; j++)
             {
                 current[i][j] = x[indices[i], j];
@@ -392,12 +392,12 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         {
             var w = _weights[layer];
             var b = _biases[layer];
-            int outputSize = w.GetLength(1);
+            int outputSize = w.Columns;
 
-            var next = new T[n][];
+            var next = new Vector<T>[n];
             for (int i = 0; i < n; i++)
             {
-                next[i] = new T[outputSize];
+                next[i] = new Vector<T>(outputSize);
                 for (int j = 0; j < outputSize; j++)
                 {
                     double sum = NumOps.ToDouble(b[j]);
@@ -418,7 +418,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         // Output layer (no activation - linear risk score)
         var wOut = _weights[^1];
         var bOut = _biases[^1];
-        var riskScores = new T[n];
+        var riskScores = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
@@ -437,12 +437,12 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Computes Cox partial log-likelihood loss and gradients.
     /// </summary>
-    private (double loss, T[] gradients) ComputeCoxLossAndGradients(
-        T[] riskScores, Vector<T> times, Vector<T> events,
+    private (double loss, Vector<T> gradients) ComputeCoxLossAndGradients(
+        Vector<T> riskScores, Vector<T> times, Vector<T> events,
         int[] batchIndices, int[] sortedIndices)
     {
         int n = batchIndices.Length;
-        var gradients = new T[n];
+        var gradients = new Vector<T>(n);
 
         // Create mapping from global to batch index
         var batchSet = new HashSet<int>(batchIndices);
@@ -490,17 +490,17 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Backward pass to update weights.
     /// </summary>
-    private void BackwardPass(Matrix<T> x, int[] batchIndices, List<T[][]> hiddenOutputs, T[] gradients)
+    private void BackwardPass(Matrix<T> x, int[] batchIndices, List<Vector<T>[]> hiddenOutputs, Vector<T> gradients)
     {
         int n = batchIndices.Length;
         double lr = _options.LearningRate / n;
         double l2 = _options.L2Regularization;
 
         // Start from output layer
-        var currentGrad = new T[n][];
+        var currentGrad = new Vector<T>[n];
         for (int i = 0; i < n; i++)
         {
-            currentGrad[i] = [gradients[i]];
+            currentGrad[i] = new Vector<T>(new[] { gradients[i] });
         }
 
         // Backpropagate through layers
@@ -510,8 +510,8 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             var b = _biases[layer];
             var input = layer > 0 ? hiddenOutputs[layer - 1] : null;
 
-            int inputSize = w.GetLength(0);
-            int outputSize = w.GetLength(1);
+            int inputSize = w.Rows;
+            int outputSize = w.Columns;
 
             // Gradient w.r.t. weights and biases
             for (int j = 0; j < outputSize; j++)
@@ -550,10 +550,10 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             // Gradient w.r.t. input (for previous layer)
             if (layer > 0)
             {
-                var nextGrad = new T[n][];
+                var nextGrad = new Vector<T>[n];
                 for (int i = 0; i < n; i++)
                 {
-                    nextGrad[i] = new T[inputSize];
+                    nextGrad[i] = new Vector<T>(inputSize);
                     for (int k = 0; k < inputSize; k++)
                     {
                         double sum = 0;
@@ -612,8 +612,10 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             riskSum -= Math.Exp(NumOps.ToDouble(riskScores[idx]));
         }
 
-        _baselineHazardTimes = uniqueTimes.Select(t => NumOps.FromDouble(t)).ToArray();
-        _baselineHazardValues = hazardValues.Select(h => NumOps.FromDouble(h)).ToArray();
+        var timesArr = uniqueTimes.Select(t => NumOps.FromDouble(t)).ToArray();
+        _baselineHazardTimes = new Vector<T>(timesArr);
+        var hazardArr = hazardValues.Select(h => NumOps.FromDouble(h)).ToArray();
+        _baselineHazardValues = new Vector<T>(hazardArr);
     }
 
     /// <summary>
@@ -707,7 +709,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     protected override Task CalculateFeatureImportancesAsync(int featureCount)
     {
         // Use first layer weights as importance proxy
-        var importances = new T[_numFeatures];
+        var importances = new Vector<T>(_numFeatures);
 
         if (_weights.Count > 0)
         {
@@ -715,7 +717,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             for (int f = 0; f < _numFeatures; f++)
             {
                 double sumAbsWeight = 0;
-                for (int j = 0; j < firstLayerWeights.GetLength(1); j++)
+                for (int j = 0; j < firstLayerWeights.Columns; j++)
                 {
                     sumAbsWeight += Math.Abs(NumOps.ToDouble(firstLayerWeights[f, j]));
                 }
@@ -723,7 +725,11 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        double sum = importances.Sum(x => NumOps.ToDouble(x));
+        double sum = 0;
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            sum += NumOps.ToDouble(importances[f]);
+        }
         if (sum > 0)
         {
             for (int f = 0; f < _numFeatures; f++)
@@ -732,7 +738,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
-        FeatureImportances = new Vector<T>(importances);
+        FeatureImportances = importances;
         return Task.CompletedTask;
     }
 
@@ -772,11 +778,11 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write(_weights.Count);
         foreach (var w in _weights)
         {
-            writer.Write(w.GetLength(0));
-            writer.Write(w.GetLength(1));
-            for (int i = 0; i < w.GetLength(0); i++)
+            writer.Write(w.Rows);
+            writer.Write(w.Columns);
+            for (int i = 0; i < w.Rows; i++)
             {
-                for (int j = 0; j < w.GetLength(1); j++)
+                for (int j = 0; j < w.Columns; j++)
                 {
                     writer.Write(NumOps.ToDouble(w[i, j]));
                 }
@@ -786,9 +792,9 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         foreach (var b in _biases)
         {
             writer.Write(b.Length);
-            foreach (var bi in b)
+            for (int i = 0; i < b.Length; i++)
             {
-                writer.Write(NumOps.ToDouble(bi));
+                writer.Write(NumOps.ToDouble(b[i]));
             }
         }
 
@@ -832,7 +838,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         {
             int rows = reader.ReadInt32();
             int cols = reader.ReadInt32();
-            var w = new T[rows, cols];
+            var w = new Matrix<T>(rows, cols);
             for (int i = 0; i < rows; i++)
             {
                 for (int j = 0; j < cols; j++)
@@ -846,7 +852,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         for (int l = 0; l < numLayers; l++)
         {
             int len = reader.ReadInt32();
-            var b = new T[len];
+            var b = new Vector<T>(len);
             for (int i = 0; i < len; i++)
             {
                 b[i] = NumOps.FromDouble(reader.ReadDouble());
@@ -858,8 +864,8 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         if (hasBaseline)
         {
             int len = reader.ReadInt32();
-            _baselineHazardTimes = new T[len];
-            _baselineHazardValues = new T[len];
+            _baselineHazardTimes = new Vector<T>(len);
+            _baselineHazardValues = new Vector<T>(len);
             for (int i = 0; i < len; i++)
             {
                 _baselineHazardTimes[i] = NumOps.FromDouble(reader.ReadDouble());
