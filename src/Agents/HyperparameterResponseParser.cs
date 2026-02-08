@@ -20,6 +20,18 @@ namespace AiDotNet.Agents;
 /// </remarks>
 internal class HyperparameterResponseParser
 {
+    private static readonly Regex JsonBlockPattern = new(@"```(?:json)?\s*\n?([\s\S]*?)\n?\s*```", RegexOptions.Compiled);
+    private static readonly Regex RawJsonPattern = new(@"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", RegexOptions.Compiled);
+    private static readonly Regex MarkdownBoldPattern = new(@"\*\*(\w[\w_]*?):\*\*\s*([^\s(]+)", RegexOptions.Compiled);
+    private static readonly Regex ColonSeparatedPattern = new(@"^\s*[-\*\s]*(\w[\w_]*?)\s*[:=][^\S\n]*([^\s(,]+)", RegexOptions.Multiline | RegexOptions.Compiled);
+
+    private static readonly HashSet<string> NonParameterNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "step", "note", "example", "reason", "because", "since",
+        "model", "algorithm", "method", "approach", "result",
+        "summary", "recommendation", "suggestion", "tip"
+    };
+
     /// <summary>
     /// Parses LLM response text and extracts hyperparameter key-value pairs.
     /// </summary>
@@ -60,8 +72,7 @@ internal class HyperparameterResponseParser
         var result = new Dictionary<string, object>();
 
         // Try ```json ... ``` blocks first
-        var jsonBlockPattern = new Regex(@"```(?:json)?\s*\n?([\s\S]*?)\n?\s*```", RegexOptions.Compiled);
-        foreach (Match match in jsonBlockPattern.Matches(text).Cast<Match>().Where(m => m.Success))
+        foreach (Match match in JsonBlockPattern.Matches(text))
         {
             if (TryParseJsonObject(match.Groups[1].Value.Trim(), result))
             {
@@ -70,8 +81,7 @@ internal class HyperparameterResponseParser
         }
 
         // Try raw { ... } objects
-        var rawJsonPattern = new Regex(@"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", RegexOptions.Compiled);
-        foreach (Match match in rawJsonPattern.Matches(text).Cast<Match>().Where(m => m.Success))
+        foreach (Match match in RawJsonPattern.Matches(text))
         {
             if (TryParseJsonObject(match.Value.Trim(), result))
             {
@@ -109,9 +119,8 @@ internal class HyperparameterResponseParser
     internal Dictionary<string, object> TryParseMarkdownBold(string text)
     {
         var result = new Dictionary<string, object>();
-        var pattern = new Regex(@"\*\*(\w[\w_]*?):\*\*\s*([^\s(]+)", RegexOptions.Compiled);
 
-        foreach (Match match in pattern.Matches(text))
+        foreach (Match match in MarkdownBoldPattern.Matches(text))
         {
             var name = match.Groups[1].Value;
             var rawValue = match.Groups[2].Value.TrimEnd(',', '.', ';');
@@ -131,19 +140,18 @@ internal class HyperparameterResponseParser
     internal Dictionary<string, object> TryParseColonSeparated(string text)
     {
         var result = new Dictionary<string, object>();
-        var pattern = new Regex(@"^\s*[-\*\s]*(\w[\w_]*?)\s*[:=][^\S\n]*([^\s(,]+)", RegexOptions.Multiline | RegexOptions.Compiled);
 
-        foreach (Match match in pattern.Matches(text))
+        foreach (Match match in ColonSeparatedPattern.Matches(text))
         {
             var name = match.Groups[1].Value;
-            var rawValue = match.Groups[2].Value.TrimEnd(',', '.', ';');
 
             // Skip common non-hyperparameter patterns
-            if (IsCommonNonParameter(name))
+            if (NonParameterNames.Contains(name))
             {
                 continue;
             }
 
+            var rawValue = match.Groups[2].Value.TrimEnd(',', '.', ';');
             var value = InferTypedValue(rawValue);
             if (value != null)
             {
@@ -201,16 +209,5 @@ internal class HyperparameterResponseParser
 
         // Keep as string
         return str;
-    }
-
-    private static bool IsCommonNonParameter(string name)
-    {
-        var nonParams = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "step", "note", "example", "reason", "because", "since",
-            "model", "algorithm", "method", "approach", "result",
-            "summary", "recommendation", "suggestion", "tip"
-        };
-        return nonParams.Contains(name);
     }
 }

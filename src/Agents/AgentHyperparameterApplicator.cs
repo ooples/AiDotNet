@@ -34,7 +34,7 @@ internal class AgentHyperparameterApplicator<T>
     /// <param name="registry">The registry that maps LLM parameter names to C# property names.</param>
     public AgentHyperparameterApplicator(HyperparameterRegistry registry)
     {
-        _registry = registry;
+        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
     }
 
     /// <summary>

@@ -5876,9 +5876,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
             if (applicationResult.HasAppliedParameters)
             {
-                Console.WriteLine("\n=== AGENT HYPERPARAMETER APPLICATION ===");
-                Console.WriteLine(applicationResult.GetSummary());
-                Console.WriteLine("========================================\n");
+                System.Diagnostics.Trace.WriteLine("=== AGENT HYPERPARAMETER APPLICATION ===");
+                System.Diagnostics.Trace.WriteLine(applicationResult.GetSummary());
+                System.Diagnostics.Trace.WriteLine("========================================");
             }
         }
     }

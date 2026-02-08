@@ -6,19 +6,19 @@ namespace AiDotNet.Agents;
 internal class HyperparameterValidationResult
 {
     /// <summary>
-    /// Gets or sets whether the value is valid (correct type, within range).
+    /// Gets whether the value is valid (correct type, within range).
     /// </summary>
-    public bool IsValid { get; set; } = true;
+    public bool IsValid { get; init; } = true;
 
     /// <summary>
-    /// Gets or sets whether the value triggered a warning (e.g., at the edge of valid range).
+    /// Gets whether the value triggered a warning (e.g., at the edge of valid range).
     /// </summary>
-    public bool HasWarning { get; set; }
+    public bool HasWarning { get; init; }
 
     /// <summary>
-    /// Gets or sets the warning message, if any.
+    /// Gets the warning message, if any.
     /// </summary>
-    public string? Warning { get; set; }
+    public string? Warning { get; init; }
 
     /// <summary>
     /// Creates a successful validation result with no warnings.
