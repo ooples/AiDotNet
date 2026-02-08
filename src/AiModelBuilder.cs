@@ -5431,8 +5431,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             reasoningTrace.AppendLine($"Hyperparameter Recommendations:\n{hyperparameterResult}\n");
 
             // Parse structured hyperparameters from the LLM response
-            var hyperparameterParser = new HyperparameterResponseParser();
-            recommendation.SuggestedHyperparameters = hyperparameterParser.Parse(hyperparameterResult);
+            try
+            {
+                var hyperparameterParser = new HyperparameterResponseParser();
+                recommendation.SuggestedHyperparameters = hyperparameterParser.Parse(hyperparameterResult);
+            }
+            catch (Exception ex)
+            {
+                recommendation.SuggestedHyperparameters = new Dictionary<string, object>();
+                reasoningTrace.AppendLine($"Warning: Failed to parse hyperparameter response: {ex.Message}");
+            }
         }
 
         // 4. FEATURE ANALYSIS

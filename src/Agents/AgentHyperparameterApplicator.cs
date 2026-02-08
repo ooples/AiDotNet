@@ -123,6 +123,15 @@ internal class AgentHyperparameterApplicator<T>
             return;
         }
 
+        // Step 6: Skip if user already set a non-default value (don't clobber user config)
+        var currentValue = property.GetValue(options);
+        if (currentValue != null && !currentValue.Equals(GetDefaultValue(property.PropertyType)))
+        {
+            result.Skipped[paramName] = paramValue;
+            result.Warnings.Add($"Skipping '{paramName}': user-configured value '{currentValue}' preserved.");
+            return;
+        }
+
         try
         {
             property.SetValue(options, convertedValue);
@@ -242,5 +251,10 @@ internal class AgentHyperparameterApplicator<T>
         {
             return null;
         }
+    }
+
+    private static object? GetDefaultValue(Type type)
+    {
+        return type.IsValueType ? Activator.CreateInstance(type) : null;
     }
 }
