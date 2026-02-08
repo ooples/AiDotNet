@@ -336,8 +336,8 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         }
 
         // For binary classification, use probability of positive class (last column)
-        var probs = new double[n];
-        var targets = new double[n];
+        var probs = new Vector<double>(n);
+        var targets = new Vector<double>(n);
 
         // Use last class as the "positive" class for calibration
         int positiveClassIdx = NumClasses - 1;
@@ -374,7 +374,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Fits Platt scaling (sigmoid calibration).
     /// </summary>
-    private void FitPlattScaling(double[] probs, double[] targets)
+    private void FitPlattScaling(Vector<double> probs, Vector<double> targets)
     {
         // Fit sigmoid: P_calibrated = 1 / (1 + exp(-(A * logit(P) + B)))
         double a = 0.0, b = 0.0;
@@ -425,7 +425,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Fits isotonic regression calibration using PAVA.
     /// </summary>
-    private void FitIsotonicRegression(double[] probs, double[] targets)
+    private void FitIsotonicRegression(Vector<double> probs, Vector<double> targets)
     {
         int n = probs.Length;
 
@@ -439,8 +439,8 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
 
         // Pool Adjacent Violators Algorithm (PAVA) - block-based implementation
         // Each block tracks: weighted sum, weight, and start/end indices
-        var blockValues = new double[n];
-        var blockWeights = new double[n];
+        var blockValues = new Vector<double>(n);
+        var blockWeights = new Vector<double>(n);
         var blockEnds = new int[n]; // blockEnds[i] = last index in block starting at i
         int numBlocks = n;
 
@@ -498,7 +498,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         }
 
         // Expand blocks to per-element calibrated values
-        var calibrated = new double[n];
+        var calibrated = new Vector<double>(n);
         foreach (int start in blockStarts)
         {
             int end = blockEnds[start];
@@ -525,7 +525,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Fits beta calibration.
     /// </summary>
-    private void FitBetaCalibration(double[] probs, double[] targets)
+    private void FitBetaCalibration(Vector<double> probs, Vector<double> targets)
     {
         // Beta calibration: P_calibrated = sigmoid(a * log(P) - b * log(1-P) + c)
         double a = 1.0, b = 1.0, c = 0.0;
@@ -580,7 +580,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Fits temperature scaling.
     /// </summary>
-    private void FitTemperatureScaling(double[] probs, double[] targets)
+    private void FitTemperatureScaling(Vector<double> probs, Vector<double> targets)
     {
         // Find temperature T that minimizes NLL
         double bestTemp = 1.0;

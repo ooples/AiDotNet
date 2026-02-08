@@ -44,7 +44,7 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Initial log-odds values for each class.
     /// </summary>
-    private T[] _initialLogOdds;
+    private Vector<T> _initialLogOdds;
 
     /// <summary>
     /// Configuration options.
@@ -77,7 +77,7 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     {
         _options = options ?? new NGBoostClassifierOptions<T>();
         _trees = [];
-        _initialLogOdds = [];
+        _initialLogOdds = new Vector<T>(0);
         _numClasses = 0;
         _random = RandomHelper.CreateSecureRandom();
     }
@@ -126,7 +126,7 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
         }
 
         // Initialize log-odds based on class frequencies
-        _initialLogOdds = new T[_numClasses];
+        _initialLogOdds = new Vector<T>(_numClasses);
         var classCounts = new int[_numClasses];
         for (int i = 0; i < n; i++)
         {
@@ -139,10 +139,10 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
         }
 
         // Initialize current log-odds for all samples
-        var currentLogOdds = new T[_numClasses][];
+        var currentLogOdds = new Vector<T>[_numClasses];
         for (int c = 0; c < _numClasses; c++)
         {
-            currentLogOdds[c] = new T[n];
+            currentLogOdds[c] = new Vector<T>(n);
             for (int i = 0; i < n; i++)
             {
                 currentLogOdds[c][i] = _initialLogOdds[c];
@@ -165,10 +165,10 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
             var probs = ComputeProbabilities(currentLogOdds, sampleIndices);
 
             // Compute gradients for each class
-            var gradients = new T[_numClasses][];
+            var gradients = new Vector<T>[_numClasses];
             for (int c = 0; c < _numClasses; c++)
             {
-                gradients[c] = new T[sampleSize];
+                gradients[c] = new Vector<T>(sampleSize);
             }
 
             // For cross-entropy loss, gradient = p - y
@@ -297,10 +297,10 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
         var probs = new Matrix<T>(n, _numClasses);
 
         // Initialize log-odds
-        var currentLogOdds = new T[_numClasses][];
+        var currentLogOdds = new Vector<T>[_numClasses];
         for (int c = 0; c < _numClasses; c++)
         {
-            currentLogOdds[c] = new T[n];
+            currentLogOdds[c] = new Vector<T>(n);
             for (int i = 0; i < n; i++)
             {
                 currentLogOdds[c][i] = _initialLogOdds[c];
@@ -372,13 +372,13 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Computes probabilities from log-odds using softmax.
     /// </summary>
-    private T[][] ComputeProbabilities(T[][] logOdds, int[] indices)
+    private Vector<T>[] ComputeProbabilities(Vector<T>[] logOdds, int[] indices)
     {
         int sampleSize = indices.Length;
-        var probs = new T[_numClasses][];
+        var probs = new Vector<T>[_numClasses];
         for (int c = 0; c < _numClasses; c++)
         {
-            probs[c] = new T[sampleSize];
+            probs[c] = new Vector<T>(sampleSize);
         }
 
         for (int i = 0; i < sampleSize; i++)
@@ -412,15 +412,15 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Computes natural gradients using Fisher Information approximation.
     /// </summary>
-    private T[][] ComputeNaturalGradients(T[][] gradients, T[][] probs, int sampleSize)
+    private Vector<T>[] ComputeNaturalGradients(Vector<T>[] gradients, Vector<T>[] probs, int sampleSize)
     {
-        var naturalGrads = new T[_numClasses][];
+        var naturalGrads = new Vector<T>[_numClasses];
 
         // For softmax, Fisher Information diagonal approximation: F_cc = p(1-p)
         // Natural gradient = gradient / F
         for (int c = 0; c < _numClasses; c++)
         {
-            naturalGrads[c] = new T[sampleSize];
+            naturalGrads[c] = new Vector<T>(sampleSize);
             for (int i = 0; i < sampleSize; i++)
             {
                 double p = NumOps.ToDouble(probs[c][i]);
@@ -437,7 +437,7 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Computes cross-entropy loss for current predictions.
     /// </summary>
-    private double ComputeCrossEntropyLoss(T[][] logOdds, int[] yIndices)
+    private double ComputeCrossEntropyLoss(Vector<T>[] logOdds, int[] yIndices)
     {
         int n = yIndices.Length;
         double totalLoss = 0;
@@ -483,7 +483,7 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     /// </summary>
     private void CalculateFeatureImportances(int featureCount)
     {
-        var importances = new T[featureCount];
+        var importances = new Vector<T>(featureCount);
 
         // Aggregate importances from all trees
         foreach (var iterTrees in _trees)
@@ -500,7 +500,11 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
         }
 
         // Normalize
-        T sum = importances.Aggregate(NumOps.Zero, NumOps.Add);
+        T sum = NumOps.Zero;
+        for (int i = 0; i < featureCount; i++)
+        {
+            sum = NumOps.Add(sum, importances[i]);
+        }
         if (NumOps.ToDouble(sum) > 0)
         {
             for (int i = 0; i < featureCount; i++)
@@ -509,7 +513,7 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
             }
         }
 
-        FeatureImportances = new Vector<T>(importances);
+        FeatureImportances = importances;
     }
 
     /// <inheritdoc/>
@@ -549,7 +553,7 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
         writer.Write(_numClasses);
         for (int c = 0; c < _numClasses; c++)
         {
-            writer.Write(Convert.ToDouble(_initialLogOdds[c]));
+            writer.Write(NumOps.ToDouble(_initialLogOdds[c]));
         }
 
         // Trees
@@ -585,7 +589,7 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
 
         // Class info
         _numClasses = reader.ReadInt32();
-        _initialLogOdds = new T[_numClasses];
+        _initialLogOdds = new Vector<T>(_numClasses);
         for (int c = 0; c < _numClasses; c++)
         {
             _initialLogOdds[c] = NumOps.FromDouble(reader.ReadDouble());
