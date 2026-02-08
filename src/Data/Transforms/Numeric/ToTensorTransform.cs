@@ -35,7 +35,7 @@ public class ToTensorTransform<T> : ITransform<T[], Tensor<T>>
             throw new ArgumentException("Shape must have at least one dimension.", nameof(shape));
         }
 
-        int total = 1;
+        long total = 1;
         for (int i = 0; i < shape.Length; i++)
         {
             if (shape[i] <= 0)
@@ -44,10 +44,16 @@ public class ToTensorTransform<T> : ITransform<T[], Tensor<T>>
             }
 
             total *= shape[i];
+            if (total > int.MaxValue)
+            {
+                throw new ArgumentException(
+                    $"Shape product overflows int.MaxValue at dimension {i}. Total so far: {total}.",
+                    nameof(shape));
+            }
         }
 
         _shape = (int[])shape.Clone();
-        _expectedLength = total;
+        _expectedLength = (int)total;
     }
 
     /// <inheritdoc/>

@@ -74,6 +74,11 @@ public class MultimodalSample<T>
 
         for (int i = 0; i < modalities.Length; i++)
         {
+            if (modalities[i] is null)
+            {
+                throw new ArgumentException($"Modality at index {i} is null.", nameof(modalities));
+            }
+
             string key = modalities[i].Key;
             if (_keyIndex.ContainsKey(key))
             {

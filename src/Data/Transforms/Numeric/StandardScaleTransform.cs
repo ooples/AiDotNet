@@ -37,6 +37,21 @@ public class StandardScaleTransform<T> : ITransform<T[], T[]>
         }
 
         int featureCount = referenceData[0].Length;
+        for (int i = 0; i < referenceData.Length; i++)
+        {
+            if (referenceData[i] is null)
+            {
+                throw new ArgumentException($"Reference data row {i} is null.", nameof(referenceData));
+            }
+
+            if (referenceData[i].Length != featureCount)
+            {
+                throw new ArgumentException(
+                    $"Reference data row {i} has {referenceData[i].Length} elements, expected {featureCount}.",
+                    nameof(referenceData));
+            }
+        }
+
         _mean = new double[featureCount];
         _std = new double[featureCount];
 

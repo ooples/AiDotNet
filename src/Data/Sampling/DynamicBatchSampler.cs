@@ -55,6 +55,8 @@ public class DynamicBatchSampler : DataSamplerBase, IBatchSampler
             throw new ArgumentException("Sample lengths cannot be null or empty.", nameof(sampleLengths));
         if (maxTokensPerBatch < 1)
             throw new ArgumentOutOfRangeException(nameof(maxTokensPerBatch), "Max tokens per batch must be at least 1.");
+        if (maxSamplesPerBatch < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxSamplesPerBatch), "Max samples per batch must be at least 1.");
 
         _sampleLengths = sampleLengths;
         _maxTokensPerBatch = maxTokensPerBatch;

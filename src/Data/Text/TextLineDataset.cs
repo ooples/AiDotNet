@@ -50,6 +50,11 @@ public class TextLineDataset<T> : DataLoaderBase<T>
             throw new ArgumentNullException(nameof(filePath));
         }
 
+        if (batchSize < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be at least 1.");
+        }
+
         _filePath = filePath;
         _skipEmptyLines = skipEmptyLines;
     }

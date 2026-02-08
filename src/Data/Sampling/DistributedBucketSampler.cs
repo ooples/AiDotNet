@@ -61,6 +61,8 @@ public class DistributedBucketSampler : DataSamplerBase, IBatchSampler
             throw new ArgumentOutOfRangeException(nameof(rank), $"Rank must be in [0, {numReplicas - 1}].");
         if (batchSize < 1)
             throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be at least 1.");
+        if (numBuckets < 1)
+            throw new ArgumentOutOfRangeException(nameof(numBuckets), "Number of buckets must be at least 1.");
 
         _sampleLengths = sampleLengths;
         _numReplicas = numReplicas;

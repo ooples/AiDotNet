@@ -77,10 +77,16 @@ public class NormalizeTransform<T> : ITransform<T[], T[]>
             throw new ArgumentNullException(nameof(input));
         }
 
-        int len = Math.Min(input.Length, _mean.Length);
+        if (input.Length != _mean.Length)
+        {
+            throw new ArgumentException(
+                $"Input length ({input.Length}) does not match expected length ({_mean.Length}).",
+                nameof(input));
+        }
+
         var result = new T[input.Length];
 
-        for (int i = 0; i < len; i++)
+        for (int i = 0; i < input.Length; i++)
         {
             T diff = NumOps.Subtract(input[i], _mean[i]);
             double stdVal = NumOps.ToDouble(_std[i]);
@@ -92,12 +98,6 @@ public class NormalizeTransform<T> : ITransform<T[], T[]>
             {
                 result[i] = NumOps.Divide(diff, _std[i]);
             }
-        }
-
-        // Copy remaining elements unchanged if input is longer than mean/std
-        for (int i = len; i < input.Length; i++)
-        {
-            result[i] = input[i];
         }
 
         return result;

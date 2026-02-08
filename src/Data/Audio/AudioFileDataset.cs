@@ -353,6 +353,21 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
                         if (_options.Normalize) chVal /= 128.0;
                         sum += chVal;
                     }
+                    else if (bitsPerSample == 24)
+                    {
+                        int pcm24 = rawBytes[chOffset] | (rawBytes[chOffset + 1] << 8) | (rawBytes[chOffset + 2] << 16);
+                        if ((pcm24 & 0x800000) != 0) pcm24 |= unchecked((int)0xFF000000);
+                        double chVal = pcm24;
+                        if (_options.Normalize) chVal /= 8388608.0;
+                        sum += chVal;
+                    }
+                    else if (bitsPerSample == 32)
+                    {
+                        int pcm32 = BitConverter.ToInt32(rawBytes, chOffset);
+                        double chVal = pcm32;
+                        if (_options.Normalize) chVal /= 2147483648.0;
+                        sum += chVal;
+                    }
                 }
                 value = sum / numChannels;
             }

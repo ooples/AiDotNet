@@ -48,6 +48,21 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
         _targetMax = targetMax;
 
         int featureCount = referenceData[0].Length;
+        for (int i = 0; i < referenceData.Length; i++)
+        {
+            if (referenceData[i] is null)
+            {
+                throw new ArgumentException($"Reference data row {i} is null.", nameof(referenceData));
+            }
+
+            if (referenceData[i].Length != featureCount)
+            {
+                throw new ArgumentException(
+                    $"Reference data row {i} has {referenceData[i].Length} elements, expected {featureCount}.",
+                    nameof(referenceData));
+            }
+        }
+
         _min = new double[featureCount];
         _max = new double[featureCount];
 
