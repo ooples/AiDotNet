@@ -112,6 +112,11 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// </remarks>
     private List<Vector<T>> _attentionBlockParams;
 
+    /// <summary>
+    /// Whether the model is in training mode (affects dropout behavior).
+    /// </summary>
+    private bool _isTraining;
+
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.SNAIL;
 
@@ -224,6 +229,8 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         var losses = new List<T>();
 
         var initParams = MetaModel.GetParameters();
+
+        _isTraining = true;
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -386,6 +393,7 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        _isTraining = false;
         var currentParams = MetaModel.GetParameters();
 
         // Extract support features
@@ -439,13 +447,28 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// </remarks>
     private Vector<T> ProcessSNAILBlocks(TOutput supportFeatures, TOutput? queryFeatures)
     {
-        var features = ConvertToVector(supportFeatures);
-        if (features == null)
+        var supportVec = ConvertToVector(supportFeatures);
+        if (supportVec == null)
         {
             return new Vector<T>(0);
         }
 
-        var current = features;
+        // Build the full sequence: support features followed by query features
+        // SNAIL processes support+query as a single sequence for causal attention
+        Vector<T> current;
+        var queryVec = queryFeatures != null ? ConvertToVector(queryFeatures) : null;
+        if (queryVec != null && queryVec.Length > 0)
+        {
+            current = new Vector<T>(supportVec.Length + queryVec.Length);
+            for (int i = 0; i < supportVec.Length; i++)
+                current[i] = supportVec[i];
+            for (int i = 0; i < queryVec.Length; i++)
+                current[supportVec.Length + i] = queryVec[i];
+        }
+        else
+        {
+            current = supportVec;
+        }
 
         for (int block = 0; block < _snailOptions.NumBlocks; block++)
         {
@@ -513,8 +536,8 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             }
         }
 
-        // Apply dropout during training
-        if (_snailOptions.DropoutRate > 0)
+        // Apply dropout only during training (disabled at inference)
+        if (_snailOptions.DropoutRate > 0 && _isTraining)
         {
             double keepProb = 1.0 - _snailOptions.DropoutRate;
             for (int i = 0; i < output.Length; i++)
@@ -566,65 +589,84 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         int numHeads = _snailOptions.NumAttentionHeads;
         int inputDim = input.Length;
 
+        // Treat input as a sequence of positions (each position = 1 element)
+        // For a proper sequence, seqLen = inputDim, positionDim = 1
+        int seqLen = inputDim;
         var output = new Vector<T>(inputDim);
 
-        int paramIdx = 0;
+        // Param layout per head: W_Q[keyDim], W_K[keyDim], W_V[valueDim]
+        // (each is a scalar projection per position since positionDim = 1)
+        int paramsPerHead = keyDim + keyDim + valueDim;
 
         for (int head = 0; head < numHeads; head++)
         {
-            // Compute query projection
-            var query = new Vector<T>(keyDim);
-            for (int k = 0; k < keyDim; k++)
+            int headOffset = head * paramsPerHead;
+
+            // Project each position to query, key, value spaces
+            var queries = new double[seqLen, keyDim];
+            var keys = new double[seqLen, keyDim];
+            var values = new double[seqLen, valueDim];
+
+            for (int pos = 0; pos < seqLen; pos++)
             {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < inputDim && paramIdx < attParams.Length; i++)
+                double posVal = NumOps.ToDouble(input[pos]);
+                for (int k = 0; k < keyDim; k++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(input[i], attParams[paramIdx % attParams.Length]));
-                    paramIdx++;
+                    int qIdx = (headOffset + k) % attParams.Length;
+                    queries[pos, k] = posVal * NumOps.ToDouble(attParams[qIdx]);
                 }
-                query[k] = sum;
-            }
-
-            // Compute key projection
-            var key = new Vector<T>(keyDim);
-            for (int k = 0; k < keyDim; k++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < inputDim && paramIdx < attParams.Length; i++)
+                for (int k = 0; k < keyDim; k++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(input[i], attParams[paramIdx % attParams.Length]));
-                    paramIdx++;
+                    int kIdx = (headOffset + keyDim + k) % attParams.Length;
+                    keys[pos, k] = posVal * NumOps.ToDouble(attParams[kIdx]);
                 }
-                key[k] = sum;
-            }
-
-            // Compute value projection
-            var value = new Vector<T>(valueDim);
-            for (int k = 0; k < valueDim; k++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < inputDim && paramIdx < attParams.Length; i++)
+                for (int k = 0; k < valueDim; k++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(input[i], attParams[paramIdx % attParams.Length]));
-                    paramIdx++;
+                    int vIdx = (headOffset + 2 * keyDim + k) % attParams.Length;
+                    values[pos, k] = posVal * NumOps.ToDouble(attParams[vIdx]);
                 }
-                value[k] = sum;
             }
 
-            // Compute attention score: dot(query, key) / sqrt(keyDim)
-            T score = NumOps.Zero;
-            for (int k = 0; k < keyDim; k++)
+            // Compute causal attention: each position attends to itself and all previous positions
+            double scaleFactor = 1.0 / Math.Sqrt(keyDim);
+            for (int q = 0; q < seqLen; q++)
             {
-                score = NumOps.Add(score, NumOps.Multiply(query[k], key[k]));
-            }
-            double scoreVal = NumOps.ToDouble(score) / Math.Sqrt(keyDim);
-            double attWeight = 1.0 / (1.0 + Math.Exp(-scoreVal)); // Sigmoid for single position
+                // Compute scores for positions 0..q (causal mask)
+                var scores = new double[q + 1];
+                double maxScore = double.NegativeInfinity;
+                for (int s = 0; s <= q; s++)
+                {
+                    double dot = 0;
+                    for (int k = 0; k < keyDim; k++)
+                        dot += queries[q, k] * keys[s, k];
+                    scores[s] = dot * scaleFactor;
+                    if (scores[s] > maxScore) maxScore = scores[s];
+                }
 
-            // Apply attention weight to value and add to output
-            for (int i = 0; i < Math.Min(valueDim, inputDim); i++)
-            {
-                output[i] = NumOps.Add(output[i],
-                    NumOps.Multiply(value[i], NumOps.FromDouble(attWeight / numHeads)));
+                // Softmax over causal positions
+                double sumExp = 0;
+                for (int s = 0; s <= q; s++)
+                {
+                    scores[s] = Math.Exp(scores[s] - maxScore);
+                    sumExp += scores[s];
+                }
+                if (sumExp > 0)
+                {
+                    for (int s = 0; s <= q; s++)
+                        scores[s] /= sumExp;
+                }
+
+                // Weighted sum of values
+                double attOut = 0;
+                for (int s = 0; s <= q; s++)
+                {
+                    double vSum = 0;
+                    for (int k = 0; k < valueDim; k++)
+                        vSum += values[s, k];
+                    attOut += scores[s] * vSum;
+                }
+
+                output[q] = NumOps.Add(output[q], NumOps.FromDouble(attOut / numHeads));
             }
         }
 
