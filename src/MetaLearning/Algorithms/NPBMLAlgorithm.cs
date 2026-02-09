@@ -111,7 +111,7 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <summary>Initializes encoder and decoder parameters.</summary>
     private void InitializeEncoderDecoder()
     {
-        int latentDim = _npbmlOptions.LatentDim;
+        int latentDim = Math.Max(_npbmlOptions.LatentDim, 1);
         int hiddenDim = latentDim * 2;
 
         // Encoder: features -> hidden -> (mu, log_sigma)
@@ -279,24 +279,18 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         for (int i = 0; i < latentDim; i++)
         {
             // Hidden layer
-            double wh = paramIdx < _encoderParams.Length
-                ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0.01;
-            double bh = paramIdx < _encoderParams.Length
-                ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0;
+            double wh = NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]);
+            double bh = NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]);
             double hidden = Math.Tanh(wh * aggregated + bh);
 
             // Mu output
-            double wMu = paramIdx < _encoderParams.Length
-                ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0.01;
-            double bMu = paramIdx < _encoderParams.Length
-                ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0;
+            double wMu = NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]);
+            double bMu = NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]);
             mu[i] = wMu * hidden + bMu;
 
             // Log-sigma output (clamped for numerical stability)
-            double wSig = paramIdx < _encoderParams.Length
-                ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0.01;
-            double bSig = paramIdx < _encoderParams.Length
-                ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0;
+            double wSig = NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]);
+            double bSig = NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]);
             logSigma[i] = Math.Max(-10.0, Math.Min(10.0, wSig * hidden + bSig));
         }
 
@@ -361,19 +355,14 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             double queryVal = NumOps.ToDouble(queryFeatures[i]);
 
             // Layer 1: hidden = tanh(w1 * latent + w2 * query + b1)
-            double w1 = paramIdx < _decoderParams.Length
-                ? NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]) : 0.01;
-            double w2 = paramIdx < _decoderParams.Length
-                ? NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]) : 0.01;
-            double b1 = paramIdx < _decoderParams.Length
-                ? NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]) : 0;
+            double w1 = NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]);
+            double w2 = NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]);
+            double b1 = NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]);
             double hidden = Math.Tanh(w1 * latentVal + w2 * queryVal + b1);
 
             // Layer 2: output = w3 * hidden + b2
-            double w3 = paramIdx < _decoderParams.Length
-                ? NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]) : 0.01;
-            double b2 = paramIdx < _decoderParams.Length
-                ? NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]) : 0;
+            double w3 = NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]);
+            double b2 = NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]);
             double output = w3 * hidden + b2;
 
             // Residual connection: query + scaled decoder output

@@ -101,8 +101,10 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     {
         // [log_length_scale, log_noise_variance]
         _kernelParams = new Vector<T>(2);
-        _kernelParams[0] = NumOps.FromDouble(Math.Log(_dktOptions.KernelLengthScale));
-        _kernelParams[1] = NumOps.FromDouble(Math.Log(_dktOptions.NoiseVariance));
+        double kernelLengthScale = Math.Max(_dktOptions.KernelLengthScale, 1e-10);
+        double noiseVariance = Math.Max(_dktOptions.NoiseVariance, 1e-10);
+        _kernelParams[0] = NumOps.FromDouble(Math.Log(kernelLengthScale));
+        _kernelParams[1] = NumOps.FromDouble(Math.Log(noiseVariance));
     }
 
     /// <summary>Computes the RBF kernel value between two feature vectors.</summary>

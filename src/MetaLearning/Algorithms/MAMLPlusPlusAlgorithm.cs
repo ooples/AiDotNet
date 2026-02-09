@@ -209,24 +209,24 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             MetaModel.SetParameters(taskParams);
 
-            T multiStepLoss = NumOps.Zero;
             double[] stepWeights = GetMultiStepWeights();
+            var innerStepGradients = new List<Vector<T>>();
 
             // Inner loop: adapt with per-step learning rates
             for (int step = 0; step < _mamlOptions.AdaptationSteps; step++)
             {
-                // Compute loss at this step (for multi-step loss)
-                if (_mamlOptions.UseMultiStepLoss)
-                {
-                    var stepLoss = ComputeLossFromOutput(
-                        MetaModel.Predict(task.SupportInput), task.SupportOutput);
-                    multiStepLoss = NumOps.Add(multiStepLoss,
-                        NumOps.Multiply(NumOps.FromDouble(stepWeights[step]), stepLoss));
-                }
-
-                // Compute gradients (first-order or second-order based on annealing)
+                // Compute gradients for inner-loop update
                 var gradients = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 gradients = ClipGradients(gradients);
+
+                // Accumulate weighted inner-step gradients for multi-step loss
+                if (_mamlOptions.UseMultiStepLoss && !useFirstOrder)
+                {
+                    var weightedGrad = new Vector<T>(gradients.Length);
+                    for (int i = 0; i < gradients.Length; i++)
+                        weightedGrad[i] = NumOps.Multiply(gradients[i], NumOps.FromDouble(stepWeights[step]));
+                    innerStepGradients.Add(weightedGrad);
+                }
 
                 // Apply per-step learning rate
                 double stepLR = _mamlOptions.UsePerStepLearningRates
@@ -240,22 +240,31 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             // Evaluate on query set
             var queryLoss = ComputeLossFromOutput(
                 MetaModel.Predict(task.QueryInput), task.QueryOutput);
+            losses.Add(queryLoss);
 
-            // Add final query loss to multi-step loss
-            if (_mamlOptions.UseMultiStepLoss)
+            // Compute meta-gradients at adapted parameters (final query gradient)
+            var metaGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
+            metaGrad = ClipGradients(metaGrad);
+
+            // When multi-step loss is active and NOT first-order, blend inner-step
+            // gradients into the meta-gradient to approximate second-order information
+            if (_mamlOptions.UseMultiStepLoss && !useFirstOrder && innerStepGradients.Count > 0)
             {
-                multiStepLoss = NumOps.Add(multiStepLoss,
-                    NumOps.Multiply(NumOps.FromDouble(stepWeights[^1]), queryLoss));
-                losses.Add(multiStepLoss);
+                double queryWeight = stepWeights[^1];
+                var blended = new Vector<T>(metaGrad.Length);
+                for (int i = 0; i < metaGrad.Length; i++)
+                    blended[i] = NumOps.Multiply(metaGrad[i], NumOps.FromDouble(queryWeight));
+                foreach (var stepGrad in innerStepGradients)
+                {
+                    for (int i = 0; i < blended.Length; i++)
+                        blended[i] = NumOps.Add(blended[i], stepGrad[i]);
+                }
+                metaGradients.Add(blended);
             }
             else
             {
-                losses.Add(queryLoss);
+                metaGradients.Add(metaGrad);
             }
-
-            // Compute meta-gradients
-            var metaGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
-            metaGradients.Add(ClipGradients(metaGrad));
         }
 
         // Restore and apply averaged meta-gradients
@@ -349,7 +358,9 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             MetaModel.SetParameters(taskParams);
         }
 
-        return ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
+        var loss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
+        MetaModel.SetParameters(initParams); // Restore base parameters
+        return loss;
     }
 
     /// <summary>
@@ -372,8 +383,8 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var adaptedParams = new Vector<T>(MetaModel.GetParameters().Length);
         var initParams = MetaModel.GetParameters();
+        var adaptedParams = new Vector<T>(initParams.Length);
         for (int i = 0; i < initParams.Length; i++)
         {
             adaptedParams[i] = initParams[i];
@@ -395,6 +406,7 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             MetaModel.SetParameters(adaptedParams);
         }
 
+        MetaModel.SetParameters(initParams); // Restore base parameters
         return new MAMLPlusPlusModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 

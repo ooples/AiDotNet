@@ -217,8 +217,7 @@ public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         }
 
         return new SimpleShotModel<T, TInput, TOutput>(
-            MetaModel, currentParams, normalizedFeatures, _featureMean,
-            _simpleShotOptions.NormalizationType, _simpleShotOptions.DistanceMetric, modulationFactors);
+            MetaModel, currentParams, normalizedFeatures, modulationFactors);
     }
 
     /// <summary>
@@ -343,9 +342,6 @@ internal class SimpleShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _supportFeatures;
-    private readonly Vector<T>? _featureMean;
-    private readonly string _normalizationType;
-    private readonly string _distanceMetric;
     private readonly double[]? _modulationFactors;
 
     /// <inheritdoc/>
@@ -361,17 +357,11 @@ internal class SimpleShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
         IFullModel<T, TInput, TOutput> model,
         Vector<T> backboneParams,
         Vector<T>? supportFeatures,
-        Vector<T>? featureMean,
-        string normalizationType,
-        string distanceMetric,
         double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
         _supportFeatures = supportFeatures;
-        _featureMean = featureMean;
-        _normalizationType = normalizationType;
-        _distanceMetric = distanceMetric;
         _modulationFactors = modulationFactors;
     }
 

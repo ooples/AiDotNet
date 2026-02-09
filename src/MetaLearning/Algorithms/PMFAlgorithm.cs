@@ -121,7 +121,10 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var adaptedParams = MetaModel.GetParameters();
+        var initParams = MetaModel.GetParameters();
+        var adaptedParams = new Vector<T>(initParams.Length);
+        for (int i = 0; i < initParams.Length; i++)
+            adaptedParams[i] = initParams[i];
 
         // Inner-loop adaptation
         for (int step = 0; step < _pmfOptions.AdaptationSteps; step++)
@@ -142,6 +145,7 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             }
         }
 
+        MetaModel.SetParameters(initParams); // Restore base parameters
         return new PMFModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
