@@ -412,18 +412,27 @@ internal class VERSAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        // Apply classifier weights as per-parameter modulation to the backbone.
+        // The amortized classifier weights encode task-specific adaptations learned
+        // from the support set, providing a richer signal than scalar modulation.
+        var modulated = new Vector<T>(_backboneParams.Length);
+        if (_classifierWeights.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
             for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
-                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            _model.SetParameters(modulated);
+            {
+                // Use classifier weights cyclically as per-parameter scaling
+                double cwScale = NumOps.ToDouble(_classifierWeights[i % _classifierWeights.Length]);
+                // Sigmoid to keep modulation in a stable range around 1.0
+                double modFactor = 0.5 + 0.5 / (1.0 + Math.Exp(-cwScale));
+                modulated[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(modFactor));
+            }
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            for (int i = 0; i < _backboneParams.Length; i++)
+                modulated[i] = _backboneParams[i];
         }
+        _model.SetParameters(modulated);
         return _model.Predict(input);
     }
 

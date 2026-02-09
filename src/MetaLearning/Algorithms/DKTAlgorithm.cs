@@ -292,11 +292,13 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         for (int i = 0; i < supportVecs.Count; i++)
             Kss[i, i] += noiseVar;
 
-        // Construct simple support labels: assume uniform class distribution
-        // In a K-way N-shot task, support labels cycle through classes
+        // Construct support labels: assume uniform class distribution
+        // In a K-way N-shot task, assign class labels 0, 1, 2, ... cyclically
+        int numClasses = Math.Max(_dktOptions.EvaluationTasks > 0 ? (int)Math.Sqrt(_dktOptions.EvaluationTasks) : 5, 2);
+        int shotsPerClass = Math.Max(supportVecs.Count / numClasses, 1);
         var supportLabels = new double[supportVecs.Count];
         for (int i = 0; i < supportVecs.Count; i++)
-            supportLabels[i] = NumOps.ToDouble(supportFeatures[i * Math.Max(featureDim, 1)]);
+            supportLabels[i] = (i / shotsPerClass) % numClasses;
 
         // For each query, compute GP predictive mean
         var result = new Vector<T>(nQuery);
