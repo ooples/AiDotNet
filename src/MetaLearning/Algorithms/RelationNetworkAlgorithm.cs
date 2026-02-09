@@ -512,6 +512,14 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         var relationParams = _relationModule.GetParameters();
         if (relationParams.Length == 0) return;
 
+        // Compute baseline loss with CURRENT (post-update) feature encoder
+        var baseSupportFeatures = EncodeExamples(task.SupportInput);
+        var baseQueryFeatures = EncodeExamples(task.QueryInput);
+        var baseClassFeatures = GroupFeaturesByClass(baseSupportFeatures, task.SupportOutput);
+        var baseScores = ComputeRelationScores(baseQueryFeatures, baseClassFeatures);
+        var baseProbabilities = ApplySoftmaxToScores(baseScores);
+        T baseLoss = ComputeCrossEntropyLoss(baseProbabilities, task.QueryOutput);
+
         double epsilon = 1e-4;
         int sampleCount = Math.Min(50, relationParams.Length);
         double scaleFactor = sampleCount > 0 ? (double)relationParams.Length / sampleCount : 1.0;
@@ -534,7 +542,7 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             var probabilities = ApplySoftmaxToScores(scores);
             T perturbedLoss = ComputeCrossEntropyLoss(probabilities, task.QueryOutput);
 
-            double grad = (NumOps.ToDouble(perturbedLoss) - NumOps.ToDouble(loss)) / epsilon;
+            double grad = (NumOps.ToDouble(perturbedLoss) - NumOps.ToDouble(baseLoss)) / epsilon;
             relationGradients[i] = NumOps.FromDouble(grad * scaleFactor);
 
             // Restore original parameter

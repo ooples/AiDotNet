@@ -235,8 +235,7 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             for (int i = 0; i < n; i++)
             {
                 double fi = NumOps.ToDouble(features[i]);
-                double w = paramIdx < _partDetectorParams.Length
-                    ? NumOps.ToDouble(_partDetectorParams[paramIdx++ % _partDetectorParams.Length]) : 0.01;
+                double w = NumOps.ToDouble(_partDetectorParams[paramIdx++ % _partDetectorParams.Length]);
                 scores[i] = fi * w;
                 maxScore = Math.Max(maxScore, scores[i]);
             }
@@ -258,8 +257,7 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             }
 
             // Part bias
-            double bias = paramIdx < _partDetectorParams.Length
-                ? NumOps.ToDouble(_partDetectorParams[paramIdx++ % _partDetectorParams.Length]) : 0;
+            double bias = NumOps.ToDouble(_partDetectorParams[paramIdx++ % _partDetectorParams.Length]);
             partFeatures[k] = NumOps.FromDouble(partVal + bias);
         }
 
@@ -291,15 +289,13 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             {
                 if (i == j) continue;
                 double pj = NumOps.ToDouble(parts[j]);
-                double w = paramIdx < _relationParams.Length
-                    ? NumOps.ToDouble(_relationParams[paramIdx++ % _relationParams.Length]) : 0.01;
+                double w = NumOps.ToDouble(_relationParams[paramIdx++ % _relationParams.Length]);
                 double diff = pi - pj;
                 relSum += w * diff * diff; // Learned distance-like relation
             }
 
             // Combine part feature with its relational context via tanh gate
-            double bias = paramIdx < _relationParams.Length
-                ? NumOps.ToDouble(_relationParams[paramIdx++ % _relationParams.Length]) : 0;
+            double bias = NumOps.ToDouble(_relationParams[paramIdx++ % _relationParams.Length]);
             constellation[i] = NumOps.Add(parts[i], NumOps.FromDouble(Math.Tanh(relSum + bias)));
         }
 
