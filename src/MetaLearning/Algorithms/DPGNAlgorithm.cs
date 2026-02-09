@@ -205,18 +205,19 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 edgeWeights[i * n + j] /= Math.Max(sumExp, 1e-10);
         }
 
-        // Message passing: aggregate neighbors, project through MLP, add residual
+        // Message passing: aggregate neighbors, project through shared MLP, add residual
+        // Standard GNN pattern: shared weights applied identically to each node's aggregated message
         var updated = new Vector<T>(n);
         int projOffset = (offset + n * n) % Math.Max(graphParams.Length, 1);
+        double wProj = NumOps.ToDouble(graphParams[projOffset % graphParams.Length]);
+        double bProj = NumOps.ToDouble(graphParams[(projOffset + 1) % graphParams.Length]);
         for (int i = 0; i < n; i++)
         {
             double aggregated = 0;
             for (int j = 0; j < n; j++)
                 aggregated += edgeWeights[i * n + j] * NumOps.ToDouble(nodes[j]);
 
-            // Per-node projection: ReLU(w * aggregated + b)
-            double wProj = NumOps.ToDouble(graphParams[(projOffset + i * 2) % graphParams.Length]);
-            double bProj = NumOps.ToDouble(graphParams[(projOffset + i * 2 + 1) % graphParams.Length]);
+            // Shared projection: ReLU(w * aggregated + b) — same weights for all nodes
             double projected = Math.Max(0, wProj * aggregated + bProj);
 
             // Residual connection

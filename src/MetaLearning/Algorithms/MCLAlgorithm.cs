@@ -166,6 +166,8 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
     /// <summary>
     /// Projects features through the contrastive projection head (2-layer MLP with L2 normalization).
+    /// Uses proper matrix multiplication where each output element depends on ALL input elements
+    /// within each ProjectionDim-sized chunk, with shared weight matrices across chunks.
     /// </summary>
     /// <param name="features">Raw features from the backbone.</param>
     /// <returns>Projected and L2-normalized features for contrastive comparison.</returns>
@@ -174,30 +176,55 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         if (features == null || features.Length == 0)
             return features;
 
+        int projDim = _mclOptions.ProjectionDim;
         var projected = new Vector<T>(features.Length);
-        int paramIdx = 0;
 
-        // Two-layer MLP projection
-        for (int i = 0; i < features.Length; i++)
+        // Parameter layout: W1[projDim, projDim], b1[projDim], W2[projDim, projDim], b2[projDim]
+        int w1Size = projDim * projDim;
+        int b1Start = w1Size;
+        int w2Start = b1Start + projDim;
+        int b2Start = w2Start + projDim * projDim;
+
+        // Process features in projDim-sized chunks with matrix multiplication
+        // Each chunk: h = ReLU(W1 @ chunk + b1), out = W2 @ h + b2
+        int numChunks = (features.Length + projDim - 1) / projDim;
+
+        for (int c = 0; c < numChunks; c++)
         {
-            double x = NumOps.ToDouble(features[i]);
+            int chunkStart = c * projDim;
+            int chunkSize = Math.Min(projDim, features.Length - chunkStart);
 
-            // Layer 1: ReLU
-            double w1 = paramIdx < _projectionParams.Length
-                ? NumOps.ToDouble(_projectionParams[paramIdx++ % _projectionParams.Length]) : 0.01;
-            double b1 = paramIdx < _projectionParams.Length
-                ? NumOps.ToDouble(_projectionParams[paramIdx++ % _projectionParams.Length]) : 0;
-            double h = Math.Max(0, w1 * x + b1);
+            // Layer 1: h[j] = ReLU(sum_i(W1[j,i] * input[i]) + b1[j])
+            var hidden = new double[chunkSize];
+            for (int j = 0; j < chunkSize; j++)
+            {
+                double sum = 0;
+                for (int i = 0; i < chunkSize; i++)
+                {
+                    int wIdx = (j * projDim + i) % w1Size;
+                    double w = NumOps.ToDouble(_projectionParams[wIdx]);
+                    sum += w * NumOps.ToDouble(features[chunkStart + i]);
+                }
+                double b = NumOps.ToDouble(_projectionParams[b1Start + (j % projDim)]);
+                hidden[j] = Math.Max(0, sum + b); // ReLU
+            }
 
-            // Layer 2: linear
-            double w2 = paramIdx < _projectionParams.Length
-                ? NumOps.ToDouble(_projectionParams[paramIdx++ % _projectionParams.Length]) : 0.01;
-            double b2 = paramIdx < _projectionParams.Length
-                ? NumOps.ToDouble(_projectionParams[paramIdx++ % _projectionParams.Length]) : 0;
-            projected[i] = NumOps.FromDouble(w2 * h + b2);
+            // Layer 2: out[j] = sum_i(W2[j,i] * h[i]) + b2[j]
+            for (int j = 0; j < chunkSize; j++)
+            {
+                double sum = 0;
+                for (int i = 0; i < chunkSize; i++)
+                {
+                    int wIdx = (j * projDim + i) % (projDim * projDim);
+                    double w = NumOps.ToDouble(_projectionParams[w2Start + wIdx]);
+                    sum += w * hidden[i];
+                }
+                double b = NumOps.ToDouble(_projectionParams[b2Start + (j % projDim)]);
+                projected[chunkStart + j] = NumOps.FromDouble(sum + b);
+            }
         }
 
-        // L2 normalization
+        // L2 normalization over entire output vector
         double norm = 0;
         for (int i = 0; i < projected.Length; i++)
         {

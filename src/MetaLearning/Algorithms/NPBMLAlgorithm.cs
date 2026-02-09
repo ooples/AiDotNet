@@ -161,18 +161,12 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             // Classification loss (backbone)
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
-            // KL divergence regularization
-            int latentDim = _npbmlOptions.LatentDim;
-            var mu = new double[latentDim];
-            var logSigma = new double[latentDim];
-            for (int i = 0; i < latentDim; i++)
-            {
-                mu[i] = i < _encoderParams.Length ? NumOps.ToDouble(_encoderParams[i]) * 0.01 : 0;
-                logSigma[i] = i + latentDim < _encoderParams.Length
-                    ? NumOps.ToDouble(_encoderParams[i + latentDim]) * 0.01
-                    : 0;
-            }
-            double klLoss = ComputeKLDivergence(mu, logSigma);
+            // KL divergence: encode support features into latent distribution, then compute KL(q||p)
+            var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
+            var dist = EncodeToDistribution(supportFeatures);
+            double klLoss = 0;
+            if (dist != null)
+                klLoss = ComputeKLDivergence(dist.Value.mu, dist.Value.logSigma);
 
             // Combined loss
             double totalLoss = NumOps.ToDouble(queryLoss) + _npbmlOptions.KLWeight * klLoss;
@@ -198,19 +192,19 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     }
 
     /// <summary>
-    /// Encodes the support set into a latent distribution (mu, sigma) using the encoder.
-    /// Then samples from this distribution using the reparameterization trick.
+    /// Encodes support features into a latent distribution (mu, log_sigma) using the encoder network.
+    /// Aggregates all support features, then passes through a per-latent-dim encoder.
     /// </summary>
     /// <param name="supportFeatures">Support set features.</param>
-    /// <returns>Sampled latent vector for task-level representation.</returns>
-    private Vector<T>? EncodeAndSample(Vector<T>? supportFeatures)
+    /// <returns>Tuple of (mu, logSigma) arrays, or null if input is empty.</returns>
+    private (double[] mu, double[] logSigma)? EncodeToDistribution(Vector<T>? supportFeatures)
     {
         if (supportFeatures == null || supportFeatures.Length == 0)
-            return supportFeatures;
+            return null;
 
         int latentDim = _npbmlOptions.LatentDim;
 
-        // Aggregate support features
+        // Aggregate support features (cross-element: mean over all support examples)
         T supportMean = NumOps.Zero;
         for (int i = 0; i < supportFeatures.Length; i++)
             supportMean = NumOps.Add(supportMean, supportFeatures[i]);
@@ -238,13 +232,32 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0;
             mu[i] = wMu * hidden + bMu;
 
-            // Log-sigma output
+            // Log-sigma output (clamped for numerical stability)
             double wSig = paramIdx < _encoderParams.Length
                 ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0.01;
             double bSig = paramIdx < _encoderParams.Length
                 ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0;
-            logSigma[i] = wSig * hidden + bSig;
+            logSigma[i] = Math.Max(-10.0, Math.Min(10.0, wSig * hidden + bSig));
         }
+
+        return (mu, logSigma);
+    }
+
+    /// <summary>
+    /// Encodes the support set into a latent distribution and samples from it using
+    /// the reparameterization trick. The sampled latent modulates support features
+    /// via a sigmoid gate.
+    /// </summary>
+    /// <param name="supportFeatures">Support set features.</param>
+    /// <returns>Sampled latent-modulated feature vector.</returns>
+    private Vector<T>? EncodeAndSample(Vector<T>? supportFeatures)
+    {
+        var dist = EncodeToDistribution(supportFeatures);
+        if (dist == null || supportFeatures == null)
+            return supportFeatures;
+
+        var (mu, logSigma) = dist.Value;
+        int latentDim = _npbmlOptions.LatentDim;
 
         // Reparameterization trick: z = mu + sigma * epsilon, epsilon ~ N(0,1)
         var sampled = new Vector<T>(supportFeatures.Length);
