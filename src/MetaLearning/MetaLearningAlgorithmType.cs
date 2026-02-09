@@ -283,5 +283,23 @@ public enum MetaLearningAlgorithmType
     /// task-specific classifiers.
     /// </para>
     /// </remarks>
-    BOIL
+    BOIL,
+
+    /// <summary>
+    /// Fast Context Adaptation via Meta-Learning (Zintgraf et al., ICML 2019).
+    /// Separates model parameters into shared body and task-specific context, adapting only context in the inner loop.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Divide parameters into shared body parameters (updated in outer loop)
+    /// and a small context vector (adapted per task in inner loop). Much faster than MAML
+    /// because only the context vector is differentiated through.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want MAML-like adaptation speed with reduced meta-overfitting
+    /// and lower computational cost. Especially effective when tasks share common structure
+    /// but differ in specific aspects.
+    /// </para>
+    /// </remarks>
+    CAVIA
 }
