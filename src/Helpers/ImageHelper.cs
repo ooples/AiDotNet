@@ -2,6 +2,10 @@ using System;
 using System.IO;
 using System.Text;
 using AiDotNet.LinearAlgebra;
+#if NET6_0_OR_GREATER
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+#endif
 
 namespace AiDotNet.Helpers;
 
@@ -47,7 +51,11 @@ public static class ImageHelper<T>
             ".ppm" => LoadPpm(filePath, normalize),
             ".pgm" => LoadPgm(filePath, normalize),
             ".raw" => throw new NotSupportedException("RAW format requires explicit dimensions. Use LoadRaw method."),
-            _ => throw new NotSupportedException($"Unsupported image format: {extension}. Supported: .bmp, .ppm, .pgm")
+#if NET6_0_OR_GREATER
+            _ => LoadImageWithImageSharp(filePath, normalize)
+#else
+            _ => throw new NotSupportedException($"Unsupported image format: {extension}. On .NET Framework only .bmp, .ppm, .pgm are supported. Use .NET 6+ for PNG/JPEG/GIF/TIFF support.")
+#endif
         };
     }
 
@@ -487,6 +495,57 @@ public static class ImageHelper<T>
             }
         }
     }
+
+#if NET6_0_OR_GREATER
+    /// <summary>
+    /// Loads an image using SixLabors.ImageSharp for formats not natively supported (PNG, JPEG, GIF, TIFF, WebP, etc.).
+    /// </summary>
+    /// <param name="filePath">Path to the image file.</param>
+    /// <param name="normalize">Whether to normalize pixel values to [0, 1] range.</param>
+    /// <returns>Tensor with shape [1, channels, height, width].</returns>
+    private static Tensor<T> LoadImageWithImageSharp(string filePath, bool normalize)
+    {
+        SixLabors.ImageSharp.Image<Rgba32> image;
+        try
+        {
+            image = Image.Load<Rgba32>(filePath);
+        }
+        catch (SixLabors.ImageSharp.UnknownImageFormatException ex)
+        {
+            throw new NotSupportedException(
+                $"Unsupported or unrecognized image format for file: {filePath}", ex);
+        }
+        catch (SixLabors.ImageSharp.InvalidImageContentException ex)
+        {
+            throw new InvalidDataException(
+                $"Image file is corrupted or has invalid content: {filePath}", ex);
+        }
+
+        using var _ = image;
+        int width = image.Width;
+        int height = image.Height;
+
+        var normFactor = normalize ? 255.0 : 1.0;
+        var pixelData = new T[3 * height * width];
+
+        image.ProcessPixelRows(accessor =>
+        {
+            for (int y = 0; y < height; y++)
+            {
+                var row = accessor.GetRowSpan(y);
+                for (int x = 0; x < width; x++)
+                {
+                    var pixel = row[x];
+                    pixelData[0 * height * width + y * width + x] = NumOps.FromDouble(pixel.R / normFactor);
+                    pixelData[1 * height * width + y * width + x] = NumOps.FromDouble(pixel.G / normFactor);
+                    pixelData[2 * height * width + y * width + x] = NumOps.FromDouble(pixel.B / normFactor);
+                }
+            }
+        });
+
+        return new Tensor<T>(pixelData, new[] { 1, 3, height, width });
+    }
+#endif
 
     /// <summary>
     /// Reads a token from a PNM file (skipping comments and whitespace).

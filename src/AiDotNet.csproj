@@ -71,9 +71,15 @@
 	  <PackageReference Include="System.ValueTuple" Version="4.6.1" />
 	  <PackageReference Include="TreeSitter.DotNet" Version="1.2.0" />
 	  <PackageReference Include="FftSharp" Version="2.2.0" />
+	  <PackageReference Include="Parquet.Net" Version="4.24.0" />
 	</ItemGroup>
 
-	<!-- PostgreSQL package only for .NET 10.0+ -->
+	<!-- ImageSharp for PNG/JPEG/GIF/TIFF support (requires .NET 6+) -->
+	<ItemGroup Condition="'$(TargetFramework)' != 'net471'">
+	  <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+	</ItemGroup>
+
+	<!-- Npgsql EF Core requires .NET 10+ -->
 	<ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
 	  <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
 	</ItemGroup>
