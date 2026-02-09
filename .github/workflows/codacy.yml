@@ -61,7 +61,7 @@ jobs:
       - name: Upload Trivy SARIF to GitHub Code Scanning
         # Must match checkout/Trivy conditions - only run if both checkout and Trivy scan happened
         if: (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 150) && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork != true)
-        uses: github/codeql-action/upload-sarif@b20883b0cd1f46c72ae0ba6d1090936928f9fa30 # v3
+        uses: github/codeql-action/upload-sarif@45cbd0c69e560cd9e7cd7f8c32362050c9b7ded2 # v3
         with:
           sarif_file: trivy-results.sarif
           category: trivy-fs
