@@ -167,13 +167,21 @@ public class ExtendedLSTMLayerTests
     {
         var layer = new ExtendedLSTMLayer<float>(4, 32, 4);
         var input = CreateRandomTensor(new[] { 1, 4, 32 });
-        layer.Forward(input);
+        var output1 = layer.Forward(input);
 
         layer.ResetState();
 
-        var output = layer.Forward(input);
-        Assert.NotNull(output);
-        Assert.False(ContainsNaN(output));
+        var output2 = layer.Forward(input);
+        Assert.NotNull(output2);
+        Assert.False(ContainsNaN(output2));
+
+        var arr1 = output1.ToArray();
+        var arr2 = output2.ToArray();
+        for (int i = 0; i < arr1.Length; i++)
+        {
+            Assert.True(MathF.Abs(arr1[i] - arr2[i]) < 1e-5f,
+                $"ResetState mismatch at {i}: {arr1[i]:G6} vs {arr2[i]:G6}");
+        }
     }
 
     [Fact]

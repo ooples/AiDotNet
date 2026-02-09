@@ -218,12 +218,20 @@ public class HybridBlockSchedulerTests
             seqLen, blocks, isAttention, HybridSchedulePattern.JambaStyle, modelDim);
 
         var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
-        scheduler.Forward(input);
+        var output1 = scheduler.Forward(input);
         scheduler.ResetState();
 
-        var output = scheduler.Forward(input);
-        Assert.NotNull(output);
-        Assert.False(ContainsNaN(output));
+        var output2 = scheduler.Forward(input);
+        Assert.NotNull(output2);
+        Assert.False(ContainsNaN(output2));
+
+        var arr1 = output1.ToArray();
+        var arr2 = output2.ToArray();
+        for (int i = 0; i < arr1.Length; i++)
+        {
+            Assert.True(MathF.Abs(arr1[i] - arr2[i]) < 1e-5f,
+                $"ResetState mismatch at {i}: {arr1[i]:G6} vs {arr2[i]:G6}");
+        }
     }
 
     [Theory]

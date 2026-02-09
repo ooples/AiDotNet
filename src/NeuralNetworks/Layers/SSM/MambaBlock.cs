@@ -859,8 +859,8 @@ public class MambaBlock<T> : LayerBase<T>
     /// Gets whether this layer supports JIT compilation for optimized inference.
     /// </summary>
     /// <value>
-    /// True for MambaBlock, as single-timestep JIT compilation is supported.
-    /// The computation graph represents one step of the selective scan recurrence.
+    /// False. The selective scan recurrence requires sequential state updates that
+    /// cannot be efficiently represented as a static computation graph for JIT compilation.
     /// </value>
     public override bool SupportsJitCompilation => false;
 
@@ -1011,8 +1011,22 @@ public class MambaBlock<T> : LayerBase<T>
     /// starting fresh each time.</para>
     /// </remarks>
     /// <param name="state">The hidden state tensor [batch, innerDim, stateDim].</param>
+    /// <exception cref="ArgumentNullException">Thrown when state is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when state has wrong rank or dimensions.</exception>
     public void SetHiddenState(Tensor<T> state)
     {
+        if (state == null)
+            throw new ArgumentNullException(nameof(state));
+        if (state.Rank != 3)
+            throw new ArgumentException(
+                $"Hidden state must be rank 3 [batch, innerDim, stateDim], but got rank {state.Rank}.", nameof(state));
+        if (state.Shape[1] != _innerDimension)
+            throw new ArgumentException(
+                $"Hidden state dimension 1 must be {_innerDimension} (innerDim), but got {state.Shape[1]}.", nameof(state));
+        if (state.Shape[2] != _stateDimension)
+            throw new ArgumentException(
+                $"Hidden state dimension 2 must be {_stateDimension} (stateDim), but got {state.Shape[2]}.", nameof(state));
+
         _initialHiddenState = state;
     }
 }

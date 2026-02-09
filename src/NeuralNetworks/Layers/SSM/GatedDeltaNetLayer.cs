@@ -182,6 +182,8 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        if (sequenceLength <= 0)
+            throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
         if (modelDimension <= 0)
             throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
         if (numHeads <= 0)

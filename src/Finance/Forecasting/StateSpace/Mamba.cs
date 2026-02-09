@@ -820,12 +820,14 @@ public class Mamba<T> : ForecastingModelBase<T>
             return input.Reshape(new[] { 1, seqLen, features });
         }
 
-        // Higher rank: flatten to [batch, seqLen, features]
-        int total = input.Length;
-        if (_contextLength <= 0 || total % _contextLength != 0)
-            throw new ArgumentException(
-                $"Cannot reshape input of length {total} with contextLength {_contextLength}. Input length must be divisible by contextLength.");
-        return input.Reshape(new[] { 1, _contextLength, total / _contextLength });
+        // Higher rank (4D+): preserve leading batch dimensions, flatten to [batch, seqLen, features]
+        // e.g. [batch, channels, seqLen, features] -> [batch, seqLen, channels * features]
+        int batchDims = 1;
+        for (int i = 0; i < input.Rank - 2; i++)
+            batchDims *= input.Shape[i];
+        int seqDim = input.Shape[input.Rank - 2];
+        int featureDim = input.Shape[input.Rank - 1];
+        return input.Reshape(new[] { batchDims, seqDim, featureDim });
     }
 
     /// <summary>
