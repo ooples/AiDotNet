@@ -1,7 +1,6 @@
 using AiDotNet.Deployment.Optimization.Quantization;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -83,21 +82,25 @@ public static class SSMQuantizationHelper<T>
     }
 
     /// <summary>
-    /// Quantizes the hidden states in an SSM state cache to reduce memory during inference.
+    /// Creates a new SSM state cache with precision-reduced states migrated from the source cache.
     /// </summary>
     /// <remarks>
     /// <para>
     /// During autoregressive generation, the state cache can grow large for deep models.
-    /// This method creates a new cache with quantized states, reducing memory usage at the
-    /// cost of some precision in the hidden state values.
+    /// This method creates a new cache configured for quantized storage and migrates all
+    /// existing SSM states and conv buffers from the source cache into it. The states are
+    /// stored with reduced precision (quantize-then-dequantize), which reduces the effective
+    /// precision of cached values but does not yet reduce in-memory footprint since values
+    /// are still stored as Tensor&lt;T&gt;. Future implementations may use packed byte storage
+    /// for true memory compression.
     /// </para>
     /// <para><b>For Beginners:</b> When generating long text, the model's memory (hidden states)
-    /// can use a lot of RAM. This compresses those states to use less memory, which is useful
-    /// on devices with limited RAM (phones, edge devices).</para>
+    /// can use a lot of RAM. This creates a new cache that stores states with reduced precision,
+    /// which is useful on devices with limited RAM (phones, edge devices).</para>
     /// </remarks>
-    /// <param name="cache">The state cache to quantize.</param>
+    /// <param name="cache">The source state cache whose states will be migrated to the new cache.</param>
     /// <param name="bitWidth">Target bit width for state values. Default: 8.</param>
-    /// <returns>A new SSMStateCache with compressed states.</returns>
+    /// <returns>A new <see cref="SSMStateCache{T}"/> with precision-reduced states.</returns>
     public static SSMStateCache<T> QuantizeStateCache(SSMStateCache<T> cache, int bitWidth = 8)
     {
         if (cache == null) throw new ArgumentNullException(nameof(cache));
@@ -212,7 +215,7 @@ public static class SSMQuantizationHelper<T>
             return result;
         }
 
-        int levels = (1 << bitWidth) - 1;
+        long levels = bitWidth >= 32 ? (1L << 31) - 1 : (1L << bitWidth) - 1;
         var quantized = new Vector<T>(parameters.Length);
 
         for (int i = 0; i < parameters.Length; i++)

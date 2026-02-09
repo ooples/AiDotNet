@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 
@@ -66,12 +67,14 @@ public class SSMStateCache<T>
     public int CachedLayerCount => _ssmStates.Count;
 
     /// <summary>
-    /// Gets whether state compression is enabled.
+    /// Gets whether state precision reduction is enabled.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> State compression reduces memory usage by storing the cached states
-    /// with lower precision (e.g., 8-bit instead of 32-bit). This trades a small amount of accuracy
-    /// for significant memory savings, which is useful when generating very long sequences.</para>
+    /// <para><b>For Beginners:</b> When enabled, cached states are quantized and dequantized on storage,
+    /// reducing their effective precision (e.g., to 8-bit resolution). This simulates lower-precision
+    /// storage for accuracy-aware deployment testing. Note: the current implementation still stores
+    /// values as Tensor&lt;T&gt;, so actual memory usage is unchanged. Future versions may use packed
+    /// byte storage for true memory savings.</para>
     /// </remarks>
     public bool CompressionEnabled => _enableCompression;
 
@@ -230,6 +233,13 @@ public class SSMStateCache<T>
     /// Gets the approximate memory usage of the cache in bytes.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// This reports actual in-memory usage based on element size of T. Note that when compression
+    /// is enabled, states are stored with reduced precision but still as Tensor&lt;T&gt;, so the
+    /// actual memory footprint is the same as uncompressed. The precision reduction benefits
+    /// accuracy-aware deployment, not memory reduction. Future implementations may use packed
+    /// byte storage for true memory compression.
+    /// </para>
     /// <para><b>For Beginners:</b> Reports how much memory the cache is using. Useful for monitoring
     /// memory during long sequence generation to decide when to trim or compress.</para>
     /// </remarks>
@@ -237,9 +247,7 @@ public class SSMStateCache<T>
     public long GetMemoryUsageBytes()
     {
         long bytes = 0;
-        int elementSize = _enableCompression
-            ? Math.Max(1, _compressionBitWidth / 8)
-            : sizeof(float); // Approximate for generic T
+        int elementSize = Unsafe.SizeOf<T>();
 
         foreach (var state in _ssmStates.Values)
         {
@@ -248,7 +256,7 @@ public class SSMStateCache<T>
 
         foreach (var buffer in _convBuffers.Values)
         {
-            bytes += buffer.Length * sizeof(float); // Conv buffers are not compressed
+            bytes += buffer.Length * elementSize;
         }
 
         return bytes;
@@ -299,7 +307,7 @@ public class SSMStateCache<T>
 
     private Tensor<T> CompressState(Tensor<T> state)
     {
-        // Simple min-max quantization for state compression
+        // Quantize-then-dequantize: reduces effective precision while keeping Tensor<T> storage
         T minVal = state[0];
         T maxVal = state[0];
 
@@ -317,7 +325,7 @@ public class SSMStateCache<T>
         }
 
         // Store quantized values (still as T, but with reduced effective precision)
-        int levels = (1 << _compressionBitWidth) - 1;
+        long levels = _compressionBitWidth >= 32 ? (1L << 31) - 1 : (1L << _compressionBitWidth) - 1;
         T levelsT = NumOps.FromDouble(levels);
         var compressed = new Tensor<T>(state.Shape);
 

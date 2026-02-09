@@ -124,6 +124,16 @@ public class Mamba<T> : ForecastingModelBase<T>
     private int _contextLength;
 
     /// <summary>
+    /// Stores the actual sequence length from the last forward pass for use in backward.
+    /// </summary>
+    private int _lastForwardSeqLen;
+
+    /// <summary>
+    /// Stores the batch size from the last forward pass for use in backward.
+    /// </summary>
+    private int _lastForwardBatchSize;
+
+    /// <summary>
     /// Forecast horizon for predictions.
     /// </summary>
     private int _forecastHorizon;
@@ -727,6 +737,16 @@ public class Mamba<T> : ForecastingModelBase<T>
         int batchSize = current.Shape[0];
         int seqLen = current.Shape[1];
 
+        // Validate seqLen matches expected context length for output projection
+        if (seqLen != _contextLength)
+            throw new ArgumentException(
+                $"Input sequence length ({seqLen}) does not match expected context length ({_contextLength}). " +
+                "The output Dense layers are constructed for contextLength * modelDimension.");
+
+        // Store forward pass dimensions for backward
+        _lastForwardSeqLen = seqLen;
+        _lastForwardBatchSize = batchSize;
+
         // === Phase 1: Input Embedding ===
         // Apply input DenseLayer per-timestep: reshape [batch, seqLen, numFeatures] -> [batch*seqLen, numFeatures]
         // DenseLayer projects numFeatures -> modelDim, then reshape back to [batch, seqLen, modelDim]
@@ -827,7 +847,7 @@ public class Mamba<T> : ForecastingModelBase<T>
 
         // === Phase 2 backward: MambaBlock layers ===
         // Reshape from [batch, seqLen * modelDim] to [batch, seqLen, modelDim]
-        current = current.Reshape(new[] { batchSize, _contextLength, _modelDimension });
+        current = current.Reshape(new[] { batchSize, _lastForwardSeqLen, _modelDimension });
 
         if (_mambaBlocks is not null)
         {

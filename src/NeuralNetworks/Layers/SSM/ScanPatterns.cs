@@ -355,8 +355,15 @@ public static class ScanPatterns<T>
                     $"All scan outputs must have the same shape. Output {i} has shape [{string.Join(",", scannedOutputs[i].Shape)}] but expected [{string.Join(",", referenceShape)}].");
         }
 
-        // Sum all outputs
-        var result = scannedOutputs[0];
+        // Clone the first output to avoid mutating the input
+        var referenceLen = scannedOutputs[0].Length;
+        var result = new Tensor<T>(referenceShape);
+        for (int j = 0; j < referenceLen; j++)
+        {
+            result[j] = scannedOutputs[0][j];
+        }
+
+        // Sum remaining outputs
         for (int i = 1; i < scannedOutputs.Count; i++)
         {
             result = Engine.TensorAdd(result, scannedOutputs[i]);
