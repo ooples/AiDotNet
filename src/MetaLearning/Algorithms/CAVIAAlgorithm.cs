@@ -284,6 +284,18 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// </summary>
     /// <returns>A context vector of dimension ContextDimension * NumContextVectors,
     /// initialized to the configured initial value (default: zeros).</returns>
+    /// <remarks>
+    /// <para>
+    /// The initial context is the starting point for task-specific adaptation. In the original
+    /// CAVIA paper, context is initialized to zeros so the model starts from a neutral state.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Think of the context as a blank notepad before starting a new task.
+    /// Each task fills in the notepad differently during adaptation. Starting from zeros means
+    /// no assumptions about the task. If you set a non-zero initial value, the model starts
+    /// with some prior belief about the task (useful when tasks share a common baseline).
+    /// </para>
+    /// </remarks>
     private Vector<T> CreateInitialContext()
     {
         int totalContextSize = _caviaOptions.ContextDimension * _caviaOptions.NumContextVectors;
@@ -310,13 +322,31 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <returns>The adapted context vector after K gradient steps.</returns>
     /// <remarks>
     /// <para>
-    /// For each adaptation step:
-    /// 1. Augment support inputs with current context
-    /// 2. Forward pass through the frozen model
-    /// 3. Compute loss
-    /// 4. Compute gradient of loss w.r.t. context parameters (not body parameters)
-    /// 5. Update context using gradient descent
+    /// This is CAVIA's inner loop - the core of task-specific adaptation. Unlike MAML which
+    /// updates all model parameters, CAVIA only updates the small context vector:
+    /// </para>
+    /// <para>
+    /// <b>For each adaptation step:</b>
+    /// 1. Augment support inputs with current context (inject task information)
+    /// 2. Forward pass through the frozen body model (body params don't change)
+    /// 3. Compute loss between predictions and support labels
+    /// 4. Compute gradient of loss w.r.t. context parameters only (not body parameters)
+    /// 5. Update context using gradient descent: psi = psi - alpha * grad
     /// 6. Optionally apply L2 regularization to prevent context from growing too large
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like fine-tuning a dial instead of rebuilding the whole machine.
+    /// The model's core abilities (body) stay frozen - only the task-specific "dial" (context) turns.
+    ///
+    /// **Example with 5 adaptation steps:**
+    /// - Step 1: Context = [0, 0, 0] -> Loss = 2.3 (random guessing)
+    /// - Step 2: Context = [0.1, -0.2, 0.05] -> Loss = 1.8 (starting to learn task)
+    /// - Step 3: Context = [0.15, -0.3, 0.1] -> Loss = 1.2 (getting better)
+    /// - Step 4: Context = [0.2, -0.35, 0.12] -> Loss = 0.8 (good adaptation)
+    /// - Step 5: Context = [0.22, -0.38, 0.13] -> Loss = 0.6 (well adapted!)
+    ///
+    /// Because the context vector is small (e.g., 100 dimensions vs. millions of body params),
+    /// this adaptation is extremely fast.
     /// </para>
     /// </remarks>
     private Vector<T> AdaptContext(Vector<T> context, TInput supportInput, TOutput supportOutput)
@@ -362,8 +392,29 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <remarks>
     /// <para>
     /// Since context parameters are separate from the model's internal parameters,
-    /// we compute their gradients using finite differences: d(loss)/d(psi_i) = (L(psi+eps_i) - L(psi)) / eps.
-    /// This is efficient because the context vector is small (typically 32-256 dimensions).
+    /// we compute their gradients using finite differences:
+    /// <c>d(loss)/d(psi_i) = (L(psi + eps_i) - L(psi)) / eps</c>
+    /// where eps_i is a small perturbation in the i-th context dimension.
+    /// </para>
+    /// <para>
+    /// This is efficient because the context vector is small (typically 32-256 dimensions),
+    /// so we only need (context_dim + 1) forward passes per gradient computation.
+    /// For a context of size 100, that's 101 forward passes - much cheaper than backpropagating
+    /// through the entire model.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> To figure out how to adjust each context dimension, we use a simple trick:
+    ///
+    /// 1. Measure the loss with the current context (baseline)
+    /// 2. For each context dimension:
+    ///    a. Slightly increase that dimension (by a tiny amount epsilon)
+    ///    b. Measure the loss again
+    ///    c. If loss went up, this dimension should decrease (positive gradient)
+    ///    d. If loss went down, this dimension should increase (negative gradient)
+    /// 3. The gradient tells us which direction to move each dimension to reduce loss
+    ///
+    /// This is called "finite differences" and works like experimentally nudging each dial
+    /// to see which way makes things better.
     /// </para>
     /// </remarks>
     private Vector<T> ComputeContextGradients(Vector<T> context, TInput input, TOutput expectedOutput)
@@ -408,14 +459,35 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <returns>The augmented input with context information.</returns>
     /// <remarks>
     /// <para>
+    /// This is the mechanism that makes CAVIA work: the context vector is injected into the input
+    /// so the body model receives both the original features and the task-specific context.
     /// The injection mode determines how context is combined with input:
-    /// - <b>Concatenation:</b> Appends context to each input sample's features
-    /// - <b>Addition:</b> Adds context element-wise to input features
-    /// - <b>Multiplication:</b> Multiplies context element-wise with input features
     /// </para>
     /// <para>
-    /// For Concatenation mode, the model's input layer must accept (input_dim + context_dim) features.
-    /// For Addition/Multiplication, context_dim must equal input_dim.
+    /// <b>Injection Modes:</b>
+    /// <list type="bullet">
+    /// <item><b>Concatenation (default):</b> Appends context to each input sample's features.
+    /// Input [batch, D] becomes [batch, D + C]. Model's first layer must accept D + C inputs.</item>
+    /// <item><b>Addition:</b> Adds context element-wise to input features.
+    /// Requires context_dim = input_dim. Acts as a learned bias per task.</item>
+    /// <item><b>Multiplication:</b> Multiplies context element-wise with input features (FiLM-style).
+    /// Requires context_dim = input_dim. Acts as a learned scaling per task.</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The context vector needs to reach the model somehow. There are three ways:
+    ///
+    /// 1. **Concatenation** (recommended): Glue the context to the end of each input.
+    ///    Like adding extra columns to a spreadsheet. Most flexible and commonly used.
+    ///    Example: input=[1.0, 2.0, 3.0] + context=[0.5, -0.3] = [1.0, 2.0, 3.0, 0.5, -0.3]
+    ///
+    /// 2. **Addition**: Add context values to matching input values.
+    ///    Like adjusting each feature by a task-specific offset.
+    ///    Example: input=[1.0, 2.0, 3.0] + context=[0.5, -0.3, 0.1] = [1.5, 1.7, 3.1]
+    ///
+    /// 3. **Multiplication**: Scale each feature by a task-specific factor (FiLM-style gating).
+    ///    Like adjusting the importance of each feature per task.
+    ///    Example: input=[1.0, 2.0, 3.0] * context=[1.5, 0.5, 1.0] = [1.5, 1.0, 3.0]
     /// </para>
     /// </remarks>
     private TInput AugmentInput(TInput input, Vector<T> context)
@@ -432,6 +504,17 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <summary>
     /// Concatenates the context vector with each sample in the input.
     /// </summary>
+    /// <param name="input">The original input (Tensor, Matrix, or Vector).</param>
+    /// <param name="context">The context vector to append.</param>
+    /// <returns>A new input with context appended to the feature dimension of each sample.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This dispatches to the appropriate concatenation method based on
+    /// the input type. Each sample in the input gets the same context vector appended to its
+    /// feature dimension. This is the most common injection mode because it doesn't require
+    /// the context dimension to match the input dimension.
+    /// </para>
+    /// </remarks>
     private TInput ConcatenateContext(TInput input, Vector<T> context)
     {
         if (input is Tensor<T> tensor)
@@ -456,9 +539,25 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
     /// <summary>
     /// Concatenates context with a tensor input.
-    /// For 1D tensor [features]: creates [features + context_dim].
-    /// For 2D tensor [batch, features]: creates [batch, features + context_dim].
     /// </summary>
+    /// <param name="tensor">The input tensor (1D or 2D).</param>
+    /// <param name="context">The context vector to append.</param>
+    /// <returns>A new tensor with context appended to the feature dimension.</returns>
+    /// <remarks>
+    /// <para>
+    /// Handles two tensor shapes:
+    /// <list type="bullet">
+    /// <item><b>1D [features]:</b> Creates [features + context_dim] - single sample.</item>
+    /// <item><b>2D [batch, features]:</b> Creates [batch, features + context_dim] - batch of samples.
+    /// The same context is appended to every sample in the batch.</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> If your input is a tensor of shape [32, 10] (32 samples, 10 features)
+    /// and context has 100 dimensions, the output will be [32, 110] - each sample now has
+    /// its original 10 features plus the 100 context values appended.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ConcatenateTensorWithContext(Tensor<T> tensor, Vector<T> context)
     {
         if (tensor.Shape.Length == 1)
@@ -510,8 +609,17 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
     /// <summary>
     /// Concatenates context with a matrix input. Each row gets the context appended.
-    /// [batch, features] -> [batch, features + context_dim].
     /// </summary>
+    /// <param name="matrix">The input matrix [batch, features].</param>
+    /// <param name="context">The context vector to append to each row.</param>
+    /// <returns>A new matrix [batch, features + context_dim] with context appended to each row.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Each row in the matrix represents one sample's features. This method
+    /// adds the context as extra columns to every row. If your data has 10 features and context
+    /// has 100 dimensions, each row grows from 10 columns to 110 columns.
+    /// </para>
+    /// </remarks>
     private Matrix<T> ConcatenateMatrixWithContext(Matrix<T> matrix, Vector<T> context)
     {
         int newCols = matrix.Columns + context.Length;
@@ -535,9 +643,17 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     }
 
     /// <summary>
-    /// Concatenates context with a vector input.
-    /// [features] -> [features + context_dim].
+    /// Concatenates context with a vector input (single sample).
     /// </summary>
+    /// <param name="vector">The input feature vector [features].</param>
+    /// <param name="context">The context vector to append.</param>
+    /// <returns>A new vector [features + context_dim] with context appended after the features.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> For a single sample, this simply glues the context to the end of the
+    /// feature vector. Example: features=[1.0, 2.0] + context=[0.5, -0.3, 0.1] = [1.0, 2.0, 0.5, -0.3, 0.1].
+    /// </para>
+    /// </remarks>
     private Vector<T> ConcatenateVectorWithContext(Vector<T> vector, Vector<T> context)
     {
         var result = new Vector<T>(vector.Length + context.Length);
@@ -556,8 +672,23 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
     /// <summary>
     /// Adds the context vector element-wise to each sample in the input.
-    /// Requires context dimension to match input feature dimension.
     /// </summary>
+    /// <param name="input">The original input (Tensor, Matrix, or Vector).</param>
+    /// <param name="context">The context vector to add (must match input feature dimension).</param>
+    /// <returns>A new input with context added element-wise to each sample's features.</returns>
+    /// <exception cref="ArgumentException">Thrown when context dimension doesn't match input feature dimension.</exception>
+    /// <remarks>
+    /// <para>
+    /// Addition injection mode treats context as a per-task bias. Each context value is added to
+    /// the corresponding feature value, shifting the input in feature space based on the task.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like adding a task-specific offset to each feature.
+    /// If feature 3 tends to be higher for task A vs task B, the context can learn to
+    /// compensate by adding or subtracting from that feature. Unlike concatenation, this
+    /// doesn't change the input dimension, but it requires context_dim = input_dim.
+    /// </para>
+    /// </remarks>
     private TInput AddContext(TInput input, Vector<T> context)
     {
         if (input is Tensor<T> tensor)
@@ -585,8 +716,19 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     }
 
     /// <summary>
-    /// Adds context element-wise to a tensor.
+    /// Adds context element-wise to a tensor input.
     /// </summary>
+    /// <param name="tensor">The input tensor (1D or 2D).</param>
+    /// <param name="context">The context vector to add (must match feature dimension).</param>
+    /// <returns>A new tensor with context added element-wise to the feature dimension.</returns>
+    /// <exception cref="ArgumentException">Thrown when context dimension doesn't match tensor feature dimension.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> For a 2D tensor [batch, features], each sample gets the same context
+    /// vector added to its features. For a 1D tensor [features], context is added directly.
+    /// The tensor shape is preserved (no dimension change).
+    /// </para>
+    /// </remarks>
     private Tensor<T> AddContextToTensor(Tensor<T> tensor, Vector<T> context)
     {
         if (tensor.Shape.Length == 1)
@@ -630,8 +772,18 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     }
 
     /// <summary>
-    /// Adds context element-wise to each row of a matrix.
+    /// Adds context element-wise to each row of a matrix input.
     /// </summary>
+    /// <param name="matrix">The input matrix [batch, features].</param>
+    /// <param name="context">The context vector to add to each row (must match column count).</param>
+    /// <returns>A new matrix with context added to each row's features.</returns>
+    /// <exception cref="ArgumentException">Thrown when context dimension doesn't match matrix column count.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Each row (sample) in the matrix gets the context values added to
+    /// its corresponding columns. The matrix shape stays the same - only the values change.
+    /// </para>
+    /// </remarks>
     private Matrix<T> AddContextToMatrix(Matrix<T> matrix, Vector<T> context)
     {
         if (matrix.Columns != context.Length)
@@ -654,8 +806,25 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
     /// <summary>
     /// Multiplies the context vector element-wise with each sample in the input (FiLM-style gating).
-    /// Requires context dimension to match input feature dimension.
     /// </summary>
+    /// <param name="input">The original input (Tensor, Matrix, or Vector).</param>
+    /// <param name="context">The context vector to multiply (must match input feature dimension).</param>
+    /// <returns>A new input with context multiplied element-wise with each sample's features.</returns>
+    /// <exception cref="ArgumentException">Thrown when context dimension doesn't match input feature dimension.</exception>
+    /// <remarks>
+    /// <para>
+    /// Multiplication injection mode treats context as a per-task feature scaling (similar to
+    /// Feature-wise Linear Modulation / FiLM). Each context value scales the corresponding
+    /// feature, allowing the model to emphasize or suppress features based on the task.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This is like adjusting the volume of each feature per task.
+    /// A context value of 2.0 doubles that feature's importance, while 0.5 halves it,
+    /// and 0.0 completely silences it. This is powerful when different tasks rely on
+    /// different subsets of features. Unlike concatenation, this doesn't change the input
+    /// dimension, but it requires context_dim = input_dim.
+    /// </para>
+    /// </remarks>
     private TInput MultiplyContext(TInput input, Vector<T> context)
     {
         if (input is Tensor<T> tensor)
@@ -683,8 +852,19 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     }
 
     /// <summary>
-    /// Multiplies context element-wise with a tensor.
+    /// Multiplies context element-wise with a tensor input.
     /// </summary>
+    /// <param name="tensor">The input tensor (1D or 2D).</param>
+    /// <param name="context">The context vector to multiply (must match feature dimension).</param>
+    /// <returns>A new tensor with context multiplied element-wise with the feature dimension.</returns>
+    /// <exception cref="ArgumentException">Thrown when context dimension doesn't match tensor feature dimension.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> For a 2D tensor [batch, features], each sample gets its features
+    /// scaled by the context values. For a 1D tensor [features], context is multiplied directly.
+    /// The tensor shape is preserved (no dimension change).
+    /// </para>
+    /// </remarks>
     private Tensor<T> MultiplyContextWithTensor(Tensor<T> tensor, Vector<T> context)
     {
         if (tensor.Shape.Length == 1)
@@ -728,8 +908,19 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     }
 
     /// <summary>
-    /// Multiplies context element-wise with each row of a matrix.
+    /// Multiplies context element-wise with each row of a matrix input.
     /// </summary>
+    /// <param name="matrix">The input matrix [batch, features].</param>
+    /// <param name="context">The context vector to multiply with each row (must match column count).</param>
+    /// <returns>A new matrix with context multiplied with each row's features.</returns>
+    /// <exception cref="ArgumentException">Thrown when context dimension doesn't match matrix column count.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Each row (sample) in the matrix gets its feature values scaled
+    /// by the corresponding context values. The matrix shape stays the same - only the values change.
+    /// A context value of 1.0 leaves a feature unchanged, while values above/below 1.0 amplify/reduce it.
+    /// </para>
+    /// </remarks>
     private Matrix<T> MultiplyContextWithMatrix(Matrix<T> matrix, Vector<T> context)
     {
         if (matrix.Columns != context.Length)
@@ -776,12 +967,27 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
-    /// Initializes a new instance of the CAVIAModel.
+    /// Initializes a new instance of the CAVIAModel with adapted context.
     /// </summary>
     /// <param name="bodyModel">The meta-learned body model (frozen during inference).</param>
     /// <param name="adaptedContext">The task-adapted context vector.</param>
     /// <param name="options">CAVIA configuration options.</param>
     /// <param name="numOps">Numeric operations for type T.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any required parameter is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This model is created by <see cref="CAVIAAlgorithm{T, TInput, TOutput}.Adapt"/>
+    /// after learning a task-specific context from the support set. You don't create this directly -
+    /// instead, call Adapt() with your few-shot examples and use the returned CAVIAModel for predictions.
+    ///
+    /// The model combines:
+    /// - The shared body model (learned across all tasks during meta-training)
+    /// - The adapted context (learned specifically for this task during adaptation)
+    ///
+    /// When you call Predict(), the context is automatically injected into the input before
+    /// passing it through the body model, so you use it like any normal model.
+    /// </para>
+    /// </remarks>
     public CAVIAModel(
         IFullModel<T, TInput, TOutput> bodyModel,
         Vector<T> adaptedContext,
@@ -816,8 +1022,31 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// <summary>
     /// Makes predictions by augmenting input with the adapted context and running through the body model.
     /// </summary>
-    /// <param name="input">The input to classify.</param>
+    /// <param name="input">The input to classify or regress.</param>
     /// <returns>Model predictions (class probabilities, regression values, etc.).</returns>
+    /// <remarks>
+    /// <para>
+    /// The prediction process is:
+    /// 1. Inject the adapted context into the input (using the configured injection mode)
+    /// 2. Pass the augmented input through the frozen body model
+    /// 3. Return the model's output
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This works just like any other model's Predict() method. The only
+    /// difference is that behind the scenes, your input is augmented with the task-specific context
+    /// before being processed. You don't need to worry about the context injection - it happens
+    /// automatically based on the configuration.
+    ///
+    /// Example usage:
+    /// <code>
+    /// // Adapt to a new task
+    /// var adaptedModel = caviaAlgorithm.Adapt(fewShotTask);
+    ///
+    /// // Use like any model - context injection is automatic
+    /// var predictions = adaptedModel.Predict(newInput);
+    /// </code>
+    /// </para>
+    /// </remarks>
     public TOutput Predict(TInput input)
     {
         // Augment input with adapted context
@@ -830,6 +1059,16 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// <summary>
     /// Trains the model (not applicable for CAVIA inference models).
     /// </summary>
+    /// <param name="inputs">Training inputs (unused).</param>
+    /// <param name="targets">Training targets (unused).</param>
+    /// <exception cref="NotSupportedException">Always thrown - CAVIA inference models are frozen.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> CAVIA inference models are "frozen" after adaptation - they can't be
+    /// trained further. If you need to adapt to a different task, call
+    /// <see cref="CAVIAAlgorithm{T, TInput, TOutput}.Adapt"/> again with the new task's support set.
+    /// </para>
+    /// </remarks>
     public void Train(TInput inputs, TOutput targets)
     {
         throw new NotSupportedException(
@@ -840,6 +1079,14 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// <summary>
     /// Updates model parameters (not applicable for CAVIA inference models).
     /// </summary>
+    /// <param name="parameters">Parameters to set (unused).</param>
+    /// <exception cref="NotSupportedException">Always thrown - CAVIA inference models are frozen.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The adapted model's parameters (body + context) are fixed after
+    /// adaptation. To get a model with different parameters, create a new one via Adapt().
+    /// </para>
+    /// </remarks>
     public void UpdateParameters(Vector<T> parameters)
     {
         throw new NotSupportedException("CAVIA inference models don't have directly trainable parameters.");
@@ -848,15 +1095,29 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// <summary>
     /// Gets model parameters (not applicable for CAVIA inference models).
     /// </summary>
+    /// <returns>This method always throws.</returns>
+    /// <exception cref="NotSupportedException">Always thrown - use <see cref="AdaptedContext"/> to inspect the context.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The adapted context can be inspected via the <see cref="AdaptedContext"/>
+    /// property. The body model's parameters are managed by the meta-learning algorithm.
+    /// </para>
+    /// </remarks>
     public Vector<T> GetParameters()
     {
         throw new NotSupportedException("CAVIA inference models don't expose parameters directly.");
     }
 
     /// <summary>
-    /// Gets metadata about the model.
+    /// Gets metadata about this CAVIA inference model.
     /// </summary>
-    /// <returns>Model metadata.</returns>
+    /// <returns>Model metadata describing this adapted CAVIA model.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Returns descriptive information about the model, including
+    /// the fact that it's a CAVIA-adapted model with a specific context vector.
+    /// </para>
+    /// </remarks>
     public ModelMetadata<T> GetModelMetadata()
     {
         return Metadata;
@@ -865,6 +1126,16 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// <summary>
     /// Augments input by injecting context according to the configured injection mode.
     /// </summary>
+    /// <param name="input">The original input to augment.</param>
+    /// <param name="context">The adapted context vector to inject.</param>
+    /// <returns>The augmented input with context information included.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is the same context injection used during adaptation, now applied
+    /// at inference time. The context is injected into every input before the model sees it,
+    /// so the model always processes inputs with the task-specific context information.
+    /// </para>
+    /// </remarks>
     private TInput AugmentInput(TInput input, Vector<T> context)
     {
         return _options.ContextInjectionMode switch
@@ -876,6 +1147,9 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         };
     }
 
+    /// <summary>
+    /// Dispatches context concatenation to the appropriate type-specific implementation.
+    /// </summary>
     private TInput ConcatenateContext(TInput input, Vector<T> context)
     {
         if (input is Tensor<T> tensor)
@@ -893,6 +1167,15 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported for context concatenation.");
     }
 
+    /// <summary>
+    /// Concatenates context with a tensor input for the inference model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Mirrors the same concatenation logic used in <see cref="CAVIAAlgorithm{T, TInput, TOutput}"/>
+    /// to ensure consistent input augmentation between training and inference.
+    /// </para>
+    /// </remarks>
     private Tensor<T> ConcatenateTensorWithContext(Tensor<T> tensor, Vector<T> context)
     {
         if (tensor.Shape.Length == 1)
@@ -931,6 +1214,9 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         throw new NotSupportedException($"Tensor with {tensor.Shape.Length} dimensions is not supported.");
     }
 
+    /// <summary>
+    /// Concatenates context with a matrix input for the inference model.
+    /// </summary>
     private Matrix<T> ConcatenateMatrixWithContext(Matrix<T> matrix, Vector<T> context)
     {
         int newCols = matrix.Columns + context.Length;
@@ -949,6 +1235,9 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         return result;
     }
 
+    /// <summary>
+    /// Concatenates context with a vector input for the inference model.
+    /// </summary>
     private Vector<T> ConcatenateVectorWithContext(Vector<T> vector, Vector<T> context)
     {
         var result = new Vector<T>(vector.Length + context.Length);
@@ -963,6 +1252,9 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         return result;
     }
 
+    /// <summary>
+    /// Adds context element-wise to the input for the inference model.
+    /// </summary>
     private TInput AddContext(TInput input, Vector<T> context)
     {
         if (input is Tensor<T> tensor)
@@ -1013,6 +1305,9 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported for context addition.");
     }
 
+    /// <summary>
+    /// Multiplies context element-wise with the input for the inference model (FiLM-style gating).
+    /// </summary>
     private TInput MultiplyContext(TInput input, Vector<T> context)
     {
         if (input is Tensor<T> tensor)
