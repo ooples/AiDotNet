@@ -88,11 +88,11 @@ public class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
                 MetaModel.SetParameters(taskParams);
             }
 
-            // Outer loop loss on query set
+            // Outer loop loss on query set (at adapted parameters)
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
 
-            MetaModel.SetParameters(initParams);
+            // Compute meta-gradient at adapted parameters (FOMAML-style)
             var metaGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
             metaGradients.Add(ClipGradients(metaGrad));
         }
