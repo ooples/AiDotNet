@@ -8,6 +8,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.NeuralNetworks
@@ -32,6 +33,11 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     public class InstructorEmbedding<T> : TransformerEmbeddingNetwork<T>
     {
+        private readonly InstructorEmbeddingOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         #region Fields
 
         private string _defaultInstruction = "Represent this text for retrieval: ";
@@ -60,9 +66,12 @@ namespace AiDotNet.NeuralNetworks
             int feedForwardDim = 3072,
             PoolingStrategy poolingStrategy = PoolingStrategy.Mean,
             ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0)
+            double maxGradNorm = 1.0,
+            InstructorEmbeddingOptions? options = null)
             : base(architecture, tokenizer, optimizer, vocabSize, embeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, poolingStrategy, lossFunction, maxGradNorm)
         {
+            _options = options ?? new InstructorEmbeddingOptions();
+            Options = _options;
             _vocabSize = vocabSize;
             _numLayers = numLayers;
             _numHeads = numHeads;

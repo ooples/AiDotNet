@@ -35,7 +35,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Reference:</b> Yang et al., "FinGPT: Open-Source Financial Large Language Models", 2023.
 /// </para>
 /// </remarks>
-public class FinGPTOptions<T>
+public class FinGPTOptions<T> : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default FinGPT configuration.

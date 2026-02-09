@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
@@ -41,6 +42,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type.</typeparam>
 public class CycleGAN<T> : NeuralNetworkBase<T>
 {
+    private readonly CycleGANOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The optimizer used for training generator A→B.
     /// </summary>
@@ -230,10 +236,14 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorBOptimizer = null,
         ILossFunction<T>? lossFunction = null,
         double cycleConsistencyLambda = 10.0,
-        double identityLambda = 5.0)
+        double identityLambda = 5.0,
+        CycleGANOptions? options = null)
         : base(CreateCycleGANArchitecture(generatorAtoB, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
+        _options = options ?? new CycleGANOptions();
+        Options = _options;
+
         // Validate constructor inputs
         if (generatorAtoB is null)
         {

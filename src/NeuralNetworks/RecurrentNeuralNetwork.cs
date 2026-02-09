@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -32,6 +34,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly RecurrentNeuralNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The learning rate used for updating the network parameters during training.
     /// </summary>
@@ -77,9 +84,11 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     /// determines what kind of calculations it can perform and how it will process information.
     /// </para>
     /// </remarks>
-    public RecurrentNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double learningRate = 0.01, ILossFunction<T>? lossFunction = null) :
+    public RecurrentNeuralNetwork(NeuralNetworkArchitecture<T> architecture, double learningRate = 0.01, ILossFunction<T>? lossFunction = null, RecurrentNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new RecurrentNeuralNetworkOptions();
+        Options = _options;
         _learningRate = NumOps.FromDouble(learningRate);
         InitializeRecurrentLayers();
     }

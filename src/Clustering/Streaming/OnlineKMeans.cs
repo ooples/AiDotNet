@@ -48,6 +48,9 @@ namespace AiDotNet.Clustering.Streaming;
 public class OnlineKMeans<T> : ClusteringBase<T>
 {
     private readonly OnlineKMeansOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double[,]? _centers;
     private int[]? _clusterCounts;
     private long _totalPointsSeen;
@@ -106,8 +109,8 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         NumFeatures = d;
         NumClusters = k;
 
-        var rand = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        var rand = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
         // Initialize centers if not already initialized
@@ -271,8 +274,8 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         _centers = new double[k, d];
         _clusterCounts = new int[k];
 
-        var rand = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        var rand = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
         for (int c = 0; c < k; c++)

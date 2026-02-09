@@ -15,7 +15,7 @@ using AiDotNet.Interfaces;
 /// the defaults and adjust as needed.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
-public class FineTuningOptions<T>
+public class FineTuningOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the fine-tuning method type.

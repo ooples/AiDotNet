@@ -69,6 +69,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         : base(options ?? new DeepAROptions<T>())
     {
         _options = options ?? new DeepAROptions<T>();
+        Options = _options;
         _random = RandomHelper.CreateSeededRandom(42);
         _lstmLayers = new List<DeepARLstmCellTensor<T>>();
         _meanWeights = new Tensor<T>([1, 1]);

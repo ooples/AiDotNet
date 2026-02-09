@@ -13,6 +13,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 public class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private EpsilonGreedyBanditOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private Vector<T> _qValues;
     private Vector<int> _actionCounts;

@@ -44,6 +44,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.DDPG;
 public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DDPGOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private readonly OrnsteinUhlenbeckNoise<T> _noise;
 

@@ -40,6 +40,10 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly NeuralGARCHOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly int _numAssets;
     private readonly int _lookbackWindow;
     private readonly int _hiddenSize;
@@ -71,6 +75,7 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
             options?.NumAssets ?? 1)
     {
         _options = options ?? new NeuralGARCHOptions<T>();
+        Options = _options;
         _options.Validate();
 
         _numAssets = _options.NumAssets;
@@ -105,6 +110,7 @@ public class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
             lossFunction)
     {
         _options = options ?? new NeuralGARCHOptions<T>();
+        Options = _options;
         _options.Validate();
 
         _numAssets = _options.NumAssets;

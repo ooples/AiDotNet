@@ -111,6 +111,10 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     /// The loss function used for training.
     /// </summary>
     private readonly ILossFunction<T> _lossFunction;
+    private readonly TimeGPTOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Context length for the input sequence.
@@ -248,6 +252,8 @@ public class TimeGPT<T> : ForecastingModelBase<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         options ??= new TimeGPTOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
@@ -294,6 +300,8 @@ public class TimeGPT<T> : ForecastingModelBase<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         options ??= new TimeGPTOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = true;
 

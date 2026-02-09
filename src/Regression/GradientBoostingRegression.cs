@@ -48,6 +48,9 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private readonly GradientBoostingRegressionOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the number of trees in the ensemble model.
     /// </summary>

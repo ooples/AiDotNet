@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.Video.Options;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -37,6 +38,11 @@ namespace AiDotNet.Video.Motion;
 /// </remarks>
 public class GMFlow<T> : NeuralNetworkBase<T>
 {
+    private readonly GMFlowOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly int _height;
@@ -92,9 +98,13 @@ public class GMFlow<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         int numFeatures = 128,
         int numTransformerLayers = 6,
-        int numHeads = 8)
+        int numHeads = 8,
+        GMFlowOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new GMFlowOptions();
+        Options = _options;
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;

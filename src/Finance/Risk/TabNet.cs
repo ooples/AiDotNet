@@ -26,6 +26,10 @@ public class TabNet<T> : RiskModelBase<T>
     #region Shared Fields
 
     private readonly TabNetOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
 
@@ -71,6 +75,7 @@ public class TabNet<T> : RiskModelBase<T>
             lossFunction)
     {
         _options = options ?? new TabNetOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -114,6 +119,7 @@ public class TabNet<T> : RiskModelBase<T>
             options?.TimeHorizon ?? 1)
     {
         _options = options ?? new TabNetOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

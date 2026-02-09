@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -26,6 +28,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    private readonly CapsuleNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private ILossFunction<T> _lossFunction { get; set; }
 
     /// <summary>
@@ -82,9 +89,12 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// you're just getting everything ready to use.
     /// </para>
     /// </remarks>
-    public CapsuleNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) :
+    public CapsuleNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, CapsuleNetworkOptions? options = null) :
         base(architecture, lossFunction ?? new MarginLoss<T>())
     {
+        _options = options ?? new CapsuleNetworkOptions();
+        Options = _options;
+
         AuxiliaryLossWeight = NumOps.FromDouble(0.0005);
         _lastReconstructionLoss = NumOps.Zero;
         _lastMarginLoss = NumOps.Zero;

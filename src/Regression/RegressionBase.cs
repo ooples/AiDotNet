@@ -28,7 +28,7 @@ namespace AiDotNet.Regression;
 /// functionality.
 /// </para>
 /// </remarks>
-public abstract class RegressionBase<T> : IRegression<T>
+public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.
@@ -63,6 +63,9 @@ public abstract class RegressionBase<T> : IRegression<T>
     /// Configuration options for the regression model.
     /// </value>
     protected RegressionOptions<T> Options { get; private set; }
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => Options;
 
     /// <summary>
     /// Gets the regularization method used to prevent overfitting.

@@ -43,6 +43,9 @@ namespace AiDotNet.Clustering.Probabilistic;
 public class GaussianMixtureModel<T> : ClusteringBase<T>
 {
     private readonly GMMOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private double[]? _weights;
     private double[,]? _means;
     private double[,,]? _covariances;
@@ -256,7 +259,7 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
         {
             NumClusters = k,
             MaxIterations = 10,
-            RandomState = _options.RandomState
+            Seed = _options.Seed
         });
         kmeans.Train(dataMatrix);
 

@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -20,6 +22,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly ConvolutionalNeuralNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
@@ -68,8 +75,11 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        double maxGradNorm = 1.0,
+        ConvolutionalNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
+        _options = options ?? new ConvolutionalNeuralNetworkOptions();
+        Options = _options;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 

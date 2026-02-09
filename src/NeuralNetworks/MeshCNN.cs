@@ -53,6 +53,9 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
     /// </summary>
     private readonly MeshCNNOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Cached edge adjacency for the current mesh being processed.
     /// </summary>
@@ -116,6 +119,7 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         ValidateOptions(options);
 
         _options = options;
+        Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

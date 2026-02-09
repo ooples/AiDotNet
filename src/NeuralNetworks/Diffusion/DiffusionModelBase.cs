@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Diffusion;
 /// Specific diffusion models (like DDPM, Latent Diffusion) extend this base to implement
 /// their unique noise prediction architectures.</para>
 /// </remarks>
-public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
+public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>
 {
     /// <summary>
     /// Provides numeric operations for the specific type T.
@@ -58,6 +58,14 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>
     /// The configuration options for this diffusion model.
     /// </summary>
     private readonly DiffusionModelOptions<T> _options;
+
+    /// <summary>
+    /// Gets the configuration options for this model.
+    /// </summary>
+    protected ModelOptions Options => _options;
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Active feature indices used by the model.

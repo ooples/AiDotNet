@@ -16,7 +16,7 @@ public class ClusteringStreamingIntegrationTests
             BatchSize = 4,
             MaxIterations = 20,
             MaxNoImprovement = 3,
-            RandomState = 42
+            Seed = 42
         };
 
         var model = new MiniBatchKMeans<double>(options);
@@ -45,7 +45,7 @@ public class ClusteringStreamingIntegrationTests
             BatchSize = 4,
             MaxIterations = 10,
             MaxNoImprovement = 2,
-            RandomState = 7
+            Seed = 7
         };
 
         var model = new MiniBatchKMeans<double>(options);
@@ -73,7 +73,7 @@ public class ClusteringStreamingIntegrationTests
             BatchSize = 3,
             MaxIterations = 10,
             MaxNoImprovement = 2,
-            RandomState = 5
+            Seed = 5
         });
 
         var labels = model.FitPredict(dataset.Data);

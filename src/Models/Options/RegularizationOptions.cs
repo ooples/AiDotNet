@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Models;
 
 /// <summary>
@@ -32,7 +34,7 @@ namespace AiDotNet.Models;
 /// This class lets you configure what type of regularization to use and how strongly to apply it.
 /// </para>
 /// </remarks>
-public class RegularizationOptions
+public class RegularizationOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the type of regularization to apply to the model.

@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -47,6 +48,11 @@ namespace AiDotNet.Video.Depth;
 /// </remarks>
 public class MiDaS<T> : NeuralNetworkBase<T>
 {
+    private readonly MiDaSOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     private readonly bool _useNativeMode;
@@ -92,9 +98,13 @@ public class MiDaS<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         int embedDim = 768,
         int numLayers = 12,
-        MiDaSVariant variant = MiDaSVariant.DPTLarge)
+        MiDaSVariant variant = MiDaSVariant.DPTLarge,
+        MiDaSOptions? options = null)
         : base(architecture, lossFunction ?? new ScaleInvariantDepthLoss<T>())
     {
+        _options = options ?? new MiDaSOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _embedDim = embedDim;
         _numLayers = numLayers;
@@ -113,9 +123,13 @@ public class MiDaS<T> : NeuralNetworkBase<T>
     public MiDaS(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        MiDaSVariant variant = MiDaSVariant.DPTLarge)
+        MiDaSVariant variant = MiDaSVariant.DPTLarge,
+        MiDaSOptions? options = null)
         : base(architecture, new ScaleInvariantDepthLoss<T>())
     {
+        _options = options ?? new MiDaSOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

@@ -54,6 +54,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private readonly IBoundaryCondition<T>[] _boundaryConditions;
         private readonly IInitialCondition<T>? _initialCondition;
         private readonly InverseProblemOptions<T> _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         private readonly bool _usesDefaultOptimizer;
 
@@ -124,6 +128,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _initialCondition = initialCondition;
             _numCollocationPoints = numCollocationPoints;
             _options = options ?? new InverseProblemOptions<T>();
+            Options = _options;
 
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = optimizer == null;

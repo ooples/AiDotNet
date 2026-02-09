@@ -39,6 +39,9 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// </summary>
     private readonly GeneralizedAdditiveModelOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Matrix of basis functions applied to the input features.
     /// </summary>

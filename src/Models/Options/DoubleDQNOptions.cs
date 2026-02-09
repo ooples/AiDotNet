@@ -6,7 +6,7 @@ namespace AiDotNet.Models.Options;
 /// Configuration options for Double DQN agent.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class DoubleDQNOptions<T>
+public class DoubleDQNOptions<T> : ModelOptions
 {
     public int StateSize { get; set; }
     public int ActionSize { get; set; }
@@ -21,7 +21,6 @@ public class DoubleDQNOptions<T>
     public int TargetUpdateFrequency { get; set; } = 1000;
     public int WarmupSteps { get; set; } = 1000;
     public List<int> HiddenLayers { get; set; } = new List<int> { 64, 64 };
-    public int? Seed { get; set; }
 
     public DoubleDQNOptions()
     {

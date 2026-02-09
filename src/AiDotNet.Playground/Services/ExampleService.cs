@@ -779,7 +779,7 @@ var options = new KMeansOptions<double>
     MaxIterations = 100,
     Tolerance = 1e-4,
     NumInitializations = 10,
-    RandomState = 42  // For reproducibility
+    Seed = 42  // For reproducibility
 };
 var kmeans = new KMeans<double>(options);
 
@@ -835,7 +835,7 @@ var dataLoader = DataLoaders.FromMatrix(data);
 
 for (int k = 2; k <= 4; k++)
 {
-    var options = new KMeansOptions<double> { NumClusters = k, RandomState = 42 };
+    var options = new KMeansOptions<double> { NumClusters = k, Seed = 42 };
     var kmeans = new KMeans<double>(options);
 
     // Use AiModelBuilder pattern

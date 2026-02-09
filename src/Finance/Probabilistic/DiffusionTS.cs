@@ -88,6 +88,10 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly DiffusionTSOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private int _sequenceLength;
     private int _forecastHorizon;
     private int _numFeatures;
@@ -228,6 +232,7 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new DiffusionTSOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -274,6 +279,7 @@ public class DiffusionTS<T> : ForecastingModelBase<T>
     {
         _useNativeMode = true;
         _options = options ?? new DiffusionTSOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

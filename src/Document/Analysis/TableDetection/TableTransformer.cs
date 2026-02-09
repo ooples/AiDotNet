@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -47,6 +48,11 @@ namespace AiDotNet.Document.Analysis.TableDetection;
 /// </remarks>
 public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor<T>
 {
+    private readonly TableTransformerOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private bool _useNativeMode;
@@ -136,9 +142,13 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         int numHeads = 8,
         int numQueries = 100,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        TableTransformerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new TableTransformerOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(detectionModelPath))
             throw new ArgumentNullException(nameof(detectionModelPath));
         if (string.IsNullOrWhiteSpace(structureModelPath))
@@ -197,9 +207,13 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         int numHeads = 8,
         int numQueries = 100,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        TableTransformerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new TableTransformerOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _hiddenDim = hiddenDim;
         _numEncoderLayers = numEncoderLayers;

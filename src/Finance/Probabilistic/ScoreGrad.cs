@@ -87,6 +87,10 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly ScoreGradOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private int _sequenceLength;
     private int _forecastHorizon;
     private int _numFeatures;
@@ -218,6 +222,7 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new ScoreGradOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -263,6 +268,7 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
     {
         _useNativeMode = true;
         _options = options ?? new ScoreGradOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

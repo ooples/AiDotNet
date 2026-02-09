@@ -77,8 +77,8 @@ public class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
-        _random = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        _random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);
 
         // Clear existing estimators
@@ -101,7 +101,7 @@ public class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
             var stumpOptions = new DecisionTreeClassifierOptions<T>
             {
                 MaxDepth = 1, // Decision stump
-                RandomState = _random.Next()
+                Seed = _random.Next()
             };
 
             var stump = new DecisionTreeClassifier<T>(stumpOptions);
@@ -354,7 +354,7 @@ public class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
             NEstimators = Options.NEstimators,
             LearningRate = Options.LearningRate,
             Algorithm = Options.Algorithm,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         });
     }
 
@@ -366,7 +366,7 @@ public class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
             NEstimators = Options.NEstimators,
             LearningRate = Options.LearningRate,
             Algorithm = Options.Algorithm,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         });
 
         clone.NumFeatures = NumFeatures;

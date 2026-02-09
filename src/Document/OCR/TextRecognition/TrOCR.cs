@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -42,6 +43,11 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 /// </remarks>
 public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
+    private readonly TrOCROptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -138,9 +144,13 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int patchSize = 16,
         int vocabSize = 50265,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        TrOCROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new TrOCROptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(encoderPath))
             throw new ArgumentNullException(nameof(encoderPath));
         if (string.IsNullOrWhiteSpace(decoderPath))
@@ -215,9 +225,13 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int patchSize = 16,
         int vocabSize = 50265,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        TrOCROptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new TrOCROptions();
+        Options = _options;
+
         _useNativeMode = true;
         _encoderHiddenDim = encoderHiddenDim;
         _decoderHiddenDim = decoderHiddenDim;

@@ -42,7 +42,7 @@ public class LinearClassifierIntegrationTests
         {
             MaxIterations = 1000,
             LearningRate = 1.0,
-            RandomState = 42
+            Seed = 42
         };
         var perceptron = new PerceptronClassifier<double>(options);
 
@@ -77,7 +77,7 @@ public class LinearClassifierIntegrationTests
         {
             MaxIterations = 100,
             LearningRate = 1.0,
-            RandomState = 42
+            Seed = 42
         };
         var perceptron = new PerceptronClassifier<double>(options);
 
@@ -134,7 +134,7 @@ public class LinearClassifierIntegrationTests
             LearningRate = 0.5,
             Alpha = 0,
             Penalty = LinearPenalty.None,
-            RandomState = 42
+            Seed = 42
         };
 
         var optionsWithReg = new LinearClassifierOptions<double>
@@ -143,7 +143,7 @@ public class LinearClassifierIntegrationTests
             LearningRate = 0.5,
             Alpha = 0.1,
             Penalty = LinearPenalty.L2,
-            RandomState = 42
+            Seed = 42
         };
 
         var perceptronNoReg = new PerceptronClassifier<double>(optionsNoReg);
@@ -336,7 +336,7 @@ public class LinearClassifierIntegrationTests
             MaxIterations = 500,
             Alpha = 0.001,
             Penalty = LinearPenalty.L2,
-            RandomState = 42
+            Seed = 42
         };
         var sgd = new SGDClassifier<double>(options);
 
@@ -374,7 +374,7 @@ public class LinearClassifierIntegrationTests
             MaxIterations = 500,
             Alpha = 0.001,
             Penalty = LinearPenalty.L2,
-            RandomState = 42
+            Seed = 42
         };
         var sgd = new SGDClassifier<double>(options);
 
@@ -410,7 +410,7 @@ public class LinearClassifierIntegrationTests
             Loss = LinearLoss.SquaredHinge,
             LearningRate = 0.05,
             MaxIterations = 200,
-            RandomState = 42
+            Seed = 42
         };
         var sgd = new SGDClassifier<double>(options);
 
@@ -457,7 +457,7 @@ public class LinearClassifierIntegrationTests
             MaxIterations = 500,
             Alpha = 0.1,
             Penalty = LinearPenalty.L1,
-            RandomState = 42
+            Seed = 42
         };
         var sgd = new SGDClassifier<double>(options);
 
@@ -499,7 +499,7 @@ public class LinearClassifierIntegrationTests
             LearningRate = 0.1,
             MaxIterations = 10000,  // High max, but should stop early
             Tolerance = 1e-3,
-            RandomState = 42
+            Seed = 42
         };
         var sgd = new SGDClassifier<double>(options);
 
@@ -538,7 +538,7 @@ public class LinearClassifierIntegrationTests
         {
             PAType = PassiveAggressiveType.PA,
             MaxIterations = 100,
-            RandomState = 42
+            Seed = 42
         };
         var pa = new PassiveAggressiveClassifier<double>(options);
 
@@ -574,7 +574,7 @@ public class LinearClassifierIntegrationTests
             PAType = PassiveAggressiveType.PA_I,
             C = 1.0,
             MaxIterations = 100,
-            RandomState = 42
+            Seed = 42
         };
         var pa = new PassiveAggressiveClassifier<double>(options);
 
@@ -610,7 +610,7 @@ public class LinearClassifierIntegrationTests
             PAType = PassiveAggressiveType.PA_II,
             C = 1.0,
             MaxIterations = 100,
-            RandomState = 42
+            Seed = 42
         };
         var pa = new PassiveAggressiveClassifier<double>(options);
 
@@ -646,14 +646,14 @@ public class LinearClassifierIntegrationTests
             PAType = PassiveAggressiveType.PA_I,
             C = 0.01,
             MaxIterations = 50,
-            RandomState = 42
+            Seed = 42
         };
         var optionsHighC = new PassiveAggressiveOptions<double>
         {
             PAType = PassiveAggressiveType.PA_I,
             C = 10.0,
             MaxIterations = 50,
-            RandomState = 42
+            Seed = 42
         };
 
         var paLow = new PassiveAggressiveClassifier<double>(optionsLowC);
@@ -719,7 +719,7 @@ public class LinearClassifierIntegrationTests
         x[4, 0] = 1; x[4, 1] = 0; y[4] = 1;
         x[5, 0] = 0.5; x[5, 1] = 0; y[5] = 1;
 
-        var options = new LinearClassifierOptions<double> { MaxIterations = 100, RandomState = 42 };
+        var options = new LinearClassifierOptions<double> { MaxIterations = 100, Seed = 42 };
         var perceptron = new PerceptronClassifier<double>(options);
         perceptron.Train(x, y);
 
@@ -780,7 +780,7 @@ public class LinearClassifierIntegrationTests
         x[4, 0] = 1; x[4, 1] = 0; y[4] = 1;
         x[5, 0] = 0.5; x[5, 1] = 0; y[5] = 1;
 
-        var options = new LinearClassifierOptions<double> { MaxIterations = 200, RandomState = 42 };
+        var options = new LinearClassifierOptions<double> { MaxIterations = 200, Seed = 42 };
         var sgd = new SGDClassifier<double>(options);
         sgd.Train(x, y);
 
@@ -811,7 +811,7 @@ public class LinearClassifierIntegrationTests
         x[4, 0] = 1; x[4, 1] = 0; y[4] = 1;
         x[5, 0] = 0.5; x[5, 1] = 0; y[5] = 1;
 
-        var options = new PassiveAggressiveOptions<double> { MaxIterations = 100, RandomState = 42 };
+        var options = new PassiveAggressiveOptions<double> { MaxIterations = 100, Seed = 42 };
         var pa = new PassiveAggressiveClassifier<double>(options);
         pa.Train(x, y);
 
@@ -892,7 +892,7 @@ public class LinearClassifierIntegrationTests
         {
             LearningRate = 1e-8,  // Small learning rate for large features
             MaxIterations = 100,
-            RandomState = 42
+            Seed = 42
         };
         var sgd = new SGDClassifier<double>(options);
 

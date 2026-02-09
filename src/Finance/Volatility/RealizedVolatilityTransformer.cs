@@ -38,6 +38,10 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly RealizedVolatilityTransformerOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly int _numAssets;
     private readonly int _lookbackWindow;
     private readonly int _hiddenSize;
@@ -69,6 +73,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
             options?.NumAssets ?? 1)
     {
         _options = options ?? new RealizedVolatilityTransformerOptions<T>();
+        Options = _options;
         _options.Validate();
 
         _numAssets = _options.NumAssets;
@@ -103,6 +108,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
             lossFunction)
     {
         _options = options ?? new RealizedVolatilityTransformerOptions<T>();
+        Options = _options;
         _options.Validate();
 
         _numAssets = _options.NumAssets;

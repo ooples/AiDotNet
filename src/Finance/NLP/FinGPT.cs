@@ -30,8 +30,12 @@ public class FinGPT<T> : FinancialNLPModelBase<T>
 
     #region Shared Fields
 
+    private readonly ModelOptions.FinGPTOptions<T> _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private double _dropout;
+
+    /// <inheritdoc/>
+    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
 
     #endregion
 
@@ -62,6 +66,8 @@ public class FinGPT<T> : FinancialNLPModelBase<T>
                options?.HiddenDimension ?? 768)
     {
         options ??= new ModelOptions.FinGPTOptions<T>();
+        _options = options;
+        Options = _options;
         options.Validate();
 
         _dropout = options.DropoutRate;
@@ -83,14 +89,16 @@ public class FinGPT<T> : FinancialNLPModelBase<T>
         ModelOptions.FinGPTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, 
-               options?.MaxSequenceLength ?? 1024, 
+        : base(architecture,
+               options?.MaxSequenceLength ?? 1024,
                options?.VocabularySize ?? 50257,
                options?.HiddenDimension ?? 768,
                3,
                lossFunction)
     {
         options ??= new ModelOptions.FinGPTOptions<T>();
+        _options = options;
+        Options = _options;
         options.Validate();
 
         _dropout = options.DropoutRate;

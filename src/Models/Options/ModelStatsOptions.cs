@@ -27,7 +27,7 @@ namespace AiDotNet.Models.Options;
 /// on your specific data and model.
 /// </para>
 /// </remarks>
-public class ModelStatsOptions
+public class ModelStatsOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the method used to calculate the condition number, which measures how numerically

@@ -85,6 +85,10 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
     private readonly INumericOperations<T> _numOps;
     private readonly VoxLingua107Options _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly MfccExtractor<T> _mfccExtractor;
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -149,6 +153,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new VoxLingua107Options();
+        Options = _options;
         _options.ModelPath = modelPath;
 
         SampleRate = _options.SampleRate;
@@ -193,6 +198,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new VoxLingua107Options();
+        Options = _options;
 
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMels;

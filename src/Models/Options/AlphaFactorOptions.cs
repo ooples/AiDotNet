@@ -16,7 +16,7 @@ namespace AiDotNet.Models.Options;
 /// - How large the internal layers should be
 /// </para>
 /// </remarks>
-public class AlphaFactorOptions<T>
+public class AlphaFactorOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the number of latent factors to learn.

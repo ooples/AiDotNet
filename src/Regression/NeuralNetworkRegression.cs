@@ -34,6 +34,9 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </value>
     private readonly NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The weight matrices for each layer of the neural network.
     /// </summary>

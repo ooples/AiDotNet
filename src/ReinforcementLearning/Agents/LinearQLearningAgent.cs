@@ -12,6 +12,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private LinearQLearningOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Matrix<T> _weights;  // Weight matrix: [ActionSize x FeatureSize]
     private double _epsilon;
 

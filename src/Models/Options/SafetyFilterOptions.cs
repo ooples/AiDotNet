@@ -13,7 +13,7 @@ namespace AiDotNet.Models.Options;
 /// to check for problems.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public class SafetyFilterOptions<T>
+public class SafetyFilterOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the safety threshold for content filtering.

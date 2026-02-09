@@ -6,7 +6,7 @@ namespace AiDotNet.Models.Options;
 /// Configuration options for Dueling DQN agent.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class DuelingDQNOptions<T>
+public class DuelingDQNOptions<T> : ModelOptions
 {
     public int StateSize { get; set; }
     public int ActionSize { get; set; }
@@ -23,7 +23,6 @@ public class DuelingDQNOptions<T>
     public List<int> SharedLayers { get; set; } = new List<int> { 128 };
     public List<int> ValueStreamLayers { get; set; } = new List<int> { 128 };
     public List<int> AdvantageStreamLayers { get; set; } = new List<int> { 128 };
-    public int? Seed { get; set; }
 
     public DuelingDQNOptions()
     {

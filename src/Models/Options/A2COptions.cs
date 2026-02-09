@@ -22,7 +22,7 @@ namespace AiDotNet.Models.Options;
 /// A2C is the foundation for many modern RL algorithms including PPO.
 /// </para>
 /// </remarks>
-public class A2COptions<T>
+public class A2COptions<T> : ModelOptions
 {
     public int StateSize { get; set; }
     public int ActionSize { get; set; }
@@ -36,7 +36,6 @@ public class A2COptions<T>
     public ILossFunction<T> ValueLossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
     public List<int> PolicyHiddenLayers { get; set; } = new List<int> { 64, 64 };
     public List<int> ValueHiddenLayers { get; set; } = new List<int> { 64, 64 };
-    public int? Seed { get; set; }
 
     public A2COptions()
     {

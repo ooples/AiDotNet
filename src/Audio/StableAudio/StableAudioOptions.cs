@@ -25,7 +25,7 @@ namespace AiDotNet.Audio.StableAudio;
 /// - Include style references when appropriate
 /// </para>
 /// </remarks>
-public class StableAudioOptions
+public class StableAudioOptions : AiDotNet.Models.Options.ModelOptions
 {
     /// <summary>
     /// Gets or sets the model size variant.
@@ -86,15 +86,6 @@ public class StableAudioOptions
     /// </para>
     /// </remarks>
     public double GuidanceScale { get; set; } = 7.0;
-
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// Set to a specific value to generate the same audio each time.
-    /// Null for random generation.
-    /// </remarks>
-    public int? Seed { get; set; }
 
     /// <summary>
     /// Gets or sets whether to generate stereo audio.

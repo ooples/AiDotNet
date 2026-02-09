@@ -1,9 +1,11 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Audio.Fingerprinting;
 
 /// <summary>
 /// Configuration options for spectrogram fingerprinting.
 /// </summary>
-public class SpectrogramFingerprintOptions
+public class SpectrogramFingerprintOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the sample rate.

@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -35,6 +37,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class HopfieldNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly HopfieldNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets the weight matrix that stores the connection strengths between neurons.
     /// </summary>
@@ -122,13 +129,15 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// you would set the size to 64 (8x8=64).
     /// </para>
     /// </remarks>
-    public HopfieldNetwork(NeuralNetworkArchitecture<T> architecture, int size, ILossFunction<T>? lossFunction = null) : base(new NeuralNetworkArchitecture<T>(
+    public HopfieldNetwork(NeuralNetworkArchitecture<T> architecture, int size, ILossFunction<T>? lossFunction = null, HopfieldNetworkOptions? options = null) : base(new NeuralNetworkArchitecture<T>(
         architecture.InputType,
         taskType: architecture.TaskType,
         complexity: architecture.Complexity,
         inputSize: size,
         outputSize: size), lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new HopfieldNetworkOptions();
+        Options = _options;
         _size = size;
         _weights = new Matrix<T>(size, size);
         _activationFunction = new SignActivation<T>();

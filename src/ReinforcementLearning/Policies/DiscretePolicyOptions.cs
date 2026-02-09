@@ -1,4 +1,5 @@
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
 
 namespace AiDotNet.ReinforcementLearning.Policies
@@ -45,7 +46,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The numeric type used for calculations (float, double, etc.).</typeparam>
-    public class DiscretePolicyOptions<T>
+    public class DiscretePolicyOptions<T> : ModelOptions
     {
         /// <summary>
         /// Gets or sets the size of the observation/state space.
@@ -229,6 +230,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// Common practice: Use seed=42 during development, null in production.
         /// </para>
         /// </remarks>
-        public int? Seed { get; set; } = null;
+        public new int? Seed { get; set; } = null;
     }
 }

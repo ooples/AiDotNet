@@ -166,6 +166,10 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// The loss function for training.
     /// </summary>
     private readonly ILossFunction<T> _lossFunction;
+    private readonly NonStationaryTransformerOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// The input sequence length (lookback window).
@@ -319,6 +323,9 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
         if (errors.Count > 0)
             throw new ArgumentException($"Invalid options: {string.Join(", ", errors)}");
 
+        _options = opts;
+        Options = _options;
+
         _useNativeMode = false;
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
@@ -366,6 +373,9 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
         var errors = opts.Validate();
         if (errors.Count > 0)
             throw new ArgumentException($"Invalid options: {string.Join(", ", errors)}");
+
+        _options = opts;
+        Options = _options;
 
         _useNativeMode = true;
 

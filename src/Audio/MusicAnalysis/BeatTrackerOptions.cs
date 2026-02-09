@@ -1,9 +1,11 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Audio.MusicAnalysis;
 
 /// <summary>
 /// Configuration options for beat tracking.
 /// </summary>
-public class BeatTrackerOptions
+public class BeatTrackerOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the sample rate of the audio.

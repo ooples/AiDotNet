@@ -113,6 +113,10 @@ public class Timer<T> : ForecastingModelBase<T>
     /// The loss function used for training.
     /// </summary>
     private readonly ILossFunction<T> _lossFunction;
+    private readonly TimerOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Context length for the input sequence.
@@ -264,6 +268,8 @@ public class Timer<T> : ForecastingModelBase<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         options ??= new TimerOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
@@ -333,6 +339,8 @@ public class Timer<T> : ForecastingModelBase<T>
         }
 
         options ??= new TimerOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = true;
 

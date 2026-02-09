@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.Classification;
@@ -5,7 +6,7 @@ namespace AiDotNet.Audio.Classification;
 /// <summary>
 /// Options for audio event detection.
 /// </summary>
-public class AudioEventDetectorOptions
+public class AudioEventDetectorOptions : ModelOptions
 {
     /// <summary>Audio sample rate. Default: 16000.</summary>
     public int SampleRate { get; set; } = 16000;

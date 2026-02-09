@@ -7,7 +7,7 @@ namespace AiDotNet.Models.Options;
 /// <b>For Beginners:</b> These optimizers run on the server after aggregation to update the global model.
 /// If <see cref="Optimizer"/> is <see cref="FederatedServerOptimizer.None"/>, the server uses the aggregated parameters directly (FedAvg-style).
 /// </remarks>
-public class FederatedServerOptimizerOptions
+public class FederatedServerOptimizerOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the server optimizer.

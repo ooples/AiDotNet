@@ -44,6 +44,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.DuelingDQN;
 public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DuelingDQNOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
     private DuelingNetwork<T> _qNetwork;

@@ -13,7 +13,7 @@ namespace AiDotNet.Models.Options;
 /// and what type of changes they're allowed to make to inputs.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public class AdversarialAttackOptions<T>
+public class AdversarialAttackOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the maximum perturbation budget (epsilon).

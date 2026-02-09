@@ -6,6 +6,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Models;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Understanding;
 
@@ -44,6 +45,11 @@ namespace AiDotNet.Video.Understanding;
 /// </remarks>
 public class VideoCLIP<T> : NeuralNetworkBase<T>
 {
+    private readonly VideoCLIPVideoOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly int _height;
@@ -145,9 +151,12 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int vocabSize = 49408,
         double temperature = 0.07,
         string? vocabPath = null,
-        string? mergesPath = null)
+        string? mergesPath = null,
+        VideoCLIPVideoOptions? options = null)
         : base(architecture, new ContrastiveLoss<T>())
     {
+        _options = options ?? new VideoCLIPVideoOptions();
+        Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;

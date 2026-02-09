@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -44,6 +45,11 @@ namespace AiDotNet.Video.Enhancement;
 /// </remarks>
 public class EDVR<T> : NeuralNetworkBase<T>
 {
+    private readonly EDVROptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     private readonly bool _useNativeMode;
@@ -88,9 +94,13 @@ public class EDVR<T> : NeuralNetworkBase<T>
         int numFeatures = 64,
         int numFrames = 5,
         int numBlocks = 5,
-        int scaleFactor = 4)
+        int scaleFactor = 4,
+        EDVROptions? options = null)
         : base(architecture, lossFunction ?? new CharbonnierLoss<T>())
     {
+        _options = options ?? new EDVROptions();
+        Options = _options;
+
         _useNativeMode = true;
         _numFeatures = numFeatures;
         _numFrames = numFrames;
@@ -107,9 +117,13 @@ public class EDVR<T> : NeuralNetworkBase<T>
     public EDVR(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int scaleFactor = 4)
+        int scaleFactor = 4,
+        EDVROptions? options = null)
         : base(architecture, new CharbonnierLoss<T>())
     {
+        _options = options ?? new EDVROptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

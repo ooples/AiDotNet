@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -34,6 +36,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
 {
+    private readonly RestrictedBoltzmannMachineOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets the bias values for the visible layer neurons.
     /// </summary>
@@ -274,9 +281,12 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1,
-        IActivationFunction<T>? scalarActivation = null, ILossFunction<T>? lossFunction = null) :
+        IActivationFunction<T>? scalarActivation = null, ILossFunction<T>? lossFunction = null,
+        RestrictedBoltzmannMachineOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new RestrictedBoltzmannMachineOptions();
+        Options = _options;
         VisibleSize = visibleSize;
         HiddenSize = hiddenSize;
         _weights = Matrix<T>.CreateRandom(hiddenSize, visibleSize);
@@ -318,9 +328,12 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </para>
     /// </remarks>
     public RestrictedBoltzmannMachine(NeuralNetworkArchitecture<T> architecture, int visibleSize, int hiddenSize, double learningRate = 0.01, int cdSteps = 1,
-        IVectorActivationFunction<T>? vectorActivation = null, ILossFunction<T>? lossFunction = null) :
+        IVectorActivationFunction<T>? vectorActivation = null, ILossFunction<T>? lossFunction = null,
+        RestrictedBoltzmannMachineOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new RestrictedBoltzmannMachineOptions();
+        Options = _options;
         VisibleSize = visibleSize;
         HiddenSize = hiddenSize;
         _weights = Matrix<T>.CreateRandom(hiddenSize, visibleSize);

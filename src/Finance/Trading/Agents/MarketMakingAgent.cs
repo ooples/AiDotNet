@@ -22,6 +22,10 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
 
     private readonly NeuralNetwork<T> _policyNetwork;
     private readonly MarketMakingOptions<T> _mmOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _mmOptions;
+
     private readonly ReplayBuffer<T> ReplayBuffer;
 
     #endregion

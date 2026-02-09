@@ -77,6 +77,9 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 {
     private readonly MatchingNetworksOptions<T, TInput, TOutput> _matchingOptions;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _matchingOptions;
+
     /// <summary>
     /// Initializes a new instance of the MatchingNetworksAlgorithm class.
     /// </summary>

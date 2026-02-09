@@ -33,6 +33,9 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// </summary>
     private readonly DecisionTreeOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Random number generator used for feature selection and other randomized operations.
     /// </summary>

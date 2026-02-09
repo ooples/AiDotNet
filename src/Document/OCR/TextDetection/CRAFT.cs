@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -48,6 +49,11 @@ namespace AiDotNet.Document.OCR.TextDetection;
 /// </remarks>
 public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
+    private readonly CRAFTOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -119,9 +125,13 @@ public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int backboneChannels = 512,
         int upscaleChannels = 256,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        CRAFTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
+        _options = options ?? new CRAFTOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
@@ -158,9 +168,13 @@ public class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int backboneChannels = 512,
         int upscaleChannels = 256,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        CRAFTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
+        _options = options ?? new CRAFTOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _backboneChannels = backboneChannels;
         _upscaleChannels = upscaleChannels;

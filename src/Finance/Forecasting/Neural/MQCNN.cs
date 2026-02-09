@@ -143,6 +143,11 @@ public class MQCNN<T> : ForecastingModelBase<T>
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
+    private readonly MQCNNOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private int _lookbackWindow;
     private int _forecastHorizon;
     private int _numFeatures;
@@ -234,6 +239,8 @@ public class MQCNN<T> : ForecastingModelBase<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         options ??= new MQCNNOptions<T>();
+        _options = options;
+        Options = _options;
         ValidateOptions(options);
 
         _useNativeMode = false;
@@ -278,6 +285,8 @@ public class MQCNN<T> : ForecastingModelBase<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         options ??= new MQCNNOptions<T>();
+        _options = options;
+        Options = _options;
         ValidateOptions(options);
 
         _useNativeMode = true;

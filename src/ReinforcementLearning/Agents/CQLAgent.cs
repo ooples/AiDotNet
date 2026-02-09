@@ -39,6 +39,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.CQL;
 public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private CQLOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly INumericOperations<T> _numOps;
 
     private NeuralNetwork<T> _policyNetwork;

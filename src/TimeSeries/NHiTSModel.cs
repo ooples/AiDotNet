@@ -53,6 +53,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         : base(options ?? new NHiTSOptions<T>())
     {
         _options = options ?? new NHiTSOptions<T>();
+        Options = _options;
         _stacks = new List<NHiTSStackTensor<T>>();
         _random = RandomHelper.CreateSeededRandom(42);
 

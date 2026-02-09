@@ -84,6 +84,9 @@ public class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 {
     private readonly ProtoNetsOptions<T, TInput, TOutput> _protoNetsOptions;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _protoNetsOptions;
+
     /// <summary>
     /// Attention weights for prototype enhancement (if enabled).
     /// </summary>

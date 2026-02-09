@@ -86,8 +86,8 @@ public class LinearSupportVectorClassifier<T> : SVMBase<T>
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
-        _random = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        _random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);
 
         // Convert labels to +1/-1 for binary classification
@@ -316,7 +316,7 @@ public class LinearSupportVectorClassifier<T> : SVMBase<T>
             Kernel = KernelType.Linear,
             Tolerance = Options.Tolerance,
             MaxIterations = Options.MaxIterations,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         });
     }
 
@@ -329,7 +329,7 @@ public class LinearSupportVectorClassifier<T> : SVMBase<T>
             Kernel = KernelType.Linear,
             Tolerance = Options.Tolerance,
             MaxIterations = Options.MaxIterations,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         });
 
         clone.NumFeatures = NumFeatures;

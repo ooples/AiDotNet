@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -30,6 +32,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class NeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly NeuralNetworkDefaultOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Indicates whether this network supports training (learning from data).
     /// </summary>
@@ -70,9 +77,11 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// - 10 outputs (one for each digit 0-9)
     /// </para>
     /// </remarks>
-    public NeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null) :
+    public NeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, NeuralNetworkDefaultOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new NeuralNetworkDefaultOptions();
+        Options = _options;
         InitializeLayers();
     }
 

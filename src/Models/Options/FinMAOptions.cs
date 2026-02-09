@@ -35,7 +35,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Reference:</b> Zhang et al., "FinMA: A Multi-Agent Financial LLM System", 2024.
 /// </para>
 /// </remarks>
-public class FinMAOptions<T>
+public class FinMAOptions<T> : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default FinMA configuration.

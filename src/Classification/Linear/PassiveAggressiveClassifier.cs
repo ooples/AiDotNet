@@ -199,7 +199,7 @@ public class PassiveAggressiveClassifier<T> : LinearClassifierBase<T>
             MaxIterations = Options.MaxIterations,
             FitIntercept = Options.FitIntercept,
             Shuffle = Options.Shuffle,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         });
     }
 

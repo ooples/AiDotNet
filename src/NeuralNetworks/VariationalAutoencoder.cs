@@ -1,4 +1,5 @@
 using AiDotNet.Extensions;
+using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -38,6 +39,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
 public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    private readonly VariationalAutoencoderOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the size of the latent space dimension in the Variational Autoencoder.
     /// </summary>
@@ -166,9 +172,13 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         int latentSize,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0) :
+        double maxGradNorm = 1.0,
+        VariationalAutoencoderOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
+        _options = options ?? new VariationalAutoencoderOptions();
+        Options = _options;
+
         LatentSize = latentSize;
 
         // Initialize NumOps-based fields

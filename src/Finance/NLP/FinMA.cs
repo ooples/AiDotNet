@@ -30,9 +30,13 @@ public class FinMA<T> : FinancialNLPModelBase<T>
 
     #region Shared Fields
 
+    private readonly ModelOptions.FinMAOptions<T> _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private double _dropout;
     private int _numAgents;
+
+    /// <inheritdoc/>
+    public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
 
     #endregion
 
@@ -63,6 +67,8 @@ public class FinMA<T> : FinancialNLPModelBase<T>
                options?.HiddenDimension ?? 768)
     {
         options ??= new ModelOptions.FinMAOptions<T>();
+        _options = options;
+        Options = _options;
         options.Validate();
 
         _dropout = options.DropoutRate;
@@ -85,14 +91,16 @@ public class FinMA<T> : FinancialNLPModelBase<T>
         ModelOptions.FinMAOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, 
-               options?.MaxSequenceLength ?? 512, 
+        : base(architecture,
+               options?.MaxSequenceLength ?? 512,
                options?.VocabularySize ?? 32000,
                options?.HiddenDimension ?? 768,
                3,
                lossFunction)
     {
         options ??= new ModelOptions.FinMAOptions<T>();
+        _options = options;
+        Options = _options;
         options.Validate();
 
         _dropout = options.DropoutRate;

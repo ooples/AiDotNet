@@ -89,8 +89,8 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
-        _random = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        _random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
         int n = x.Rows;
@@ -340,7 +340,7 @@ public class BaggingClassifier<T> : MetaClassifierBase<T>
             MaxSamples = Options.MaxSamples,
             MaxFeatures = Options.MaxFeatures,
             Bootstrap = Options.Bootstrap,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         });
     }
 
@@ -431,8 +431,4 @@ public class BaggingClassifierOptions<T> : MetaClassifierOptions<T>
     /// <value>True for bootstrap sampling. Default is true.</value>
     public bool Bootstrap { get; set; } = true;
 
-    /// <summary>
-    /// Gets or sets the random state for reproducibility.
-    /// </summary>
-    public int? RandomState { get; set; }
 }

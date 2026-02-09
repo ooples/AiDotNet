@@ -15,7 +15,7 @@ namespace AiDotNet.Models.Options;
 /// - More layers allow deeper reasoning but cost more compute
 /// </para>
 /// </remarks>
-public class FactorTransformerOptions<T>
+public class FactorTransformerOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the number of latent factors to learn.

@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.TextToSpeech;
@@ -17,7 +18,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 /// and the vocoder makes it actually sound like speech.
 /// </para>
 /// </remarks>
-public class TtsOptions
+public class TtsOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the output sample rate.

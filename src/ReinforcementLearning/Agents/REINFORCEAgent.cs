@@ -44,6 +44,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.REINFORCE;
 public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private REINFORCEOptions<T> _reinforceOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _reinforceOptions;
     private readonly Trajectory<T> _trajectory;
 
     private NeuralNetwork<T> _policyNetwork;

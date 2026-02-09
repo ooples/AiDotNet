@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -26,6 +28,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
 {
+    private readonly ExtremeLearningMachineOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the size of the hidden layer (number of neurons).
     /// </summary>
@@ -72,9 +79,11 @@ public class ExtremeLearningMachine<T> : NeuralNetworkBase<T>
     /// where each team member will be randomly assigned what to look for.
     /// </para>
     /// </remarks>
-    public ExtremeLearningMachine(NeuralNetworkArchitecture<T> architecture, int hiddenLayerSize, ILossFunction<T>? lossFunction = null)
+    public ExtremeLearningMachine(NeuralNetworkArchitecture<T> architecture, int hiddenLayerSize, ILossFunction<T>? lossFunction = null, ExtremeLearningMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new ExtremeLearningMachineOptions();
+        Options = _options;
         _hiddenLayerSize = hiddenLayerSize;
 
         InitializeLayers();

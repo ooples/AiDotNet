@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -50,6 +51,11 @@ namespace AiDotNet.Video.Restoration;
 /// </remarks>
 public class VRT<T> : NeuralNetworkBase<T>
 {
+    private readonly VRTOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -171,9 +177,12 @@ public class VRT<T> : NeuralNetworkBase<T>
         int embedDim = 120,
         int numFrames = 6,
         int numBlocks = 8,
-        int scaleFactor = 4)
+        int scaleFactor = 4,
+        VRTOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new VRTOptions();
+        Options = _options;
         if (embedDim < 1)
             throw new ArgumentOutOfRangeException(nameof(embedDim), embedDim, "Embedding dimension must be at least 1.");
         if (numFrames < 1)
@@ -218,9 +227,12 @@ public class VRT<T> : NeuralNetworkBase<T>
     public VRT(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int scaleFactor = 4)
+        int scaleFactor = 4,
+        VRTOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new VRTOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

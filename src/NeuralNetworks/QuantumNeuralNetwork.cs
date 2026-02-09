@@ -1,3 +1,4 @@
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Preprocessing;
 
 namespace AiDotNet.NeuralNetworks;
@@ -29,6 +30,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly QuantumNeuralNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets the number of qubits used in the quantum neural network.
     /// </summary>
@@ -83,9 +89,12 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
 
     public QuantumNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numQubits,
-        PreprocessingPipeline<T, Tensor<T>, Tensor<T>>? preprocessingPipeline = null, ILossFunction<T>? lossFunction = null) :
+        PreprocessingPipeline<T, Tensor<T>, Tensor<T>>? preprocessingPipeline = null, ILossFunction<T>? lossFunction = null,
+        QuantumNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new QuantumNeuralNetworkOptions();
+        Options = _options;
         _numQubits = numQubits;
         _preprocessingPipeline = preprocessingPipeline;
 

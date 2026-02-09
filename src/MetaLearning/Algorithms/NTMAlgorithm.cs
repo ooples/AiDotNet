@@ -97,6 +97,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly NTMOptions<T, TInput, TOutput> _ntmOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _ntmOptions;
     private readonly INTMController<T> _controller;
     private readonly NTMMemory<T> _memory;
     private readonly List<NTMReadHead<T>> _readHeads;

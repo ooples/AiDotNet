@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
@@ -40,7 +41,7 @@ namespace AiDotNet.MetaLearning;
 /// 5. All shared functionality (metrics, saving, evaluation) is handled automatically
 /// </para>
 /// </remarks>
-public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInput, TOutput>
+public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInput, TOutput>, IConfigurableModel<T>
 {
     #region Fields
 
@@ -119,6 +120,9 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
 
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Options => _options;
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => (ModelOptions)_options;
 
     /// <inheritdoc/>
     public int CurrentIteration => _currentIteration;

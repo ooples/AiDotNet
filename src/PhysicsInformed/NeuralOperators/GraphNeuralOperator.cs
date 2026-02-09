@@ -10,6 +10,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PhysicsInformed.NeuralOperators
@@ -54,6 +55,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// </remarks>
     public class GraphNeuralOperator<T> : NeuralNetworkBase<T>
     {
+        private readonly GraphNeuralOperatorOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         private readonly int _numMessagePassingLayers;
         private readonly int _hiddenDim;
         private readonly int _inputDim;
@@ -68,9 +74,13 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             int hiddenDim = 64,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
             int inputDim = 0,
-            bool normalizeAdjacency = true)
+            bool normalizeAdjacency = true,
+            GraphNeuralOperatorOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
+            _options = options ?? new GraphNeuralOperatorOptions();
+            Options = _options;
+
             if (architecture == null)
             {
                 throw new ArgumentNullException(nameof(architecture));

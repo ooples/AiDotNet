@@ -25,6 +25,10 @@ public class TabTransformer<T> : RiskModelBase<T>
     #region Shared Fields
 
     private readonly TabTransformerOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
 
@@ -60,6 +64,7 @@ public class TabTransformer<T> : RiskModelBase<T>
             lossFunction)
     {
         _options = options ?? new TabTransformerOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -94,6 +99,7 @@ public class TabTransformer<T> : RiskModelBase<T>
             options?.TimeHorizon ?? 1)
     {
         _options = options ?? new TabTransformerOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

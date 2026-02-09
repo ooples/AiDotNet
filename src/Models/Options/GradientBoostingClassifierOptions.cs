@@ -111,14 +111,6 @@ public class GradientBoostingClassifierOptions<T> : ClassifierOptions<T>
     public GradientBoostingLoss Loss { get; set; } = GradientBoostingLoss.Deviance;
 
     /// <summary>
-    /// Gets or sets the random state for reproducibility.
-    /// </summary>
-    /// <value>
-    /// The random seed, or null for non-deterministic. Default is null.
-    /// </value>
-    public int? RandomState { get; set; } = null;
-
-    /// <summary>
     /// Gets or sets the minimum impurity decrease for splitting.
     /// </summary>
     /// <value>

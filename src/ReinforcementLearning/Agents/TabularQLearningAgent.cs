@@ -32,6 +32,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.TabularQLearning;
 public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private TabularQLearningOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private Random _random;
     private double _epsilon;

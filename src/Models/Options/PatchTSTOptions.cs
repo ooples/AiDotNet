@@ -30,7 +30,7 @@ namespace AiDotNet.Models.Options;
 /// with Transformers", ICLR 2023. https://arxiv.org/abs/2211.14730
 /// </para>
 /// </remarks>
-public class PatchTSTOptions<T>
+public class PatchTSTOptions<T> : ModelOptions
 {
     #region Model Architecture
 

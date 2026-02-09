@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -34,6 +36,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
 {
+    private readonly SelfOrganizingMapNNOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets the weight matrix representing the connection strengths between input dimensions and map neurons.
     /// </summary>
@@ -148,9 +155,12 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// These weights are initially random and will be adjusted during training.
     /// </para>
     /// </remarks>
-    public SelfOrganizingMap(NeuralNetworkArchitecture<T> architecture, int totalEpochs = 1000, ILossFunction<T>? lossFunction = null) :
+    public SelfOrganizingMap(NeuralNetworkArchitecture<T> architecture, int totalEpochs = 1000, ILossFunction<T>? lossFunction = null,
+        SelfOrganizingMapNNOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new SelfOrganizingMapNNOptions();
+        Options = _options;
         // Get input dimension from the architecture
         _inputDimension = architecture.InputSize;
 

@@ -32,6 +32,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.ExpectedSARSA;
 public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private ExpectedSARSAOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable;
     private double _epsilon;
     private Random _random;

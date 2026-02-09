@@ -1,6 +1,7 @@
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 
@@ -96,6 +97,7 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>
         double maxGradNorm = 1.0)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
     {
+        Options = new AudioNeuralNetworkOptions();
     }
 
     /// <summary>

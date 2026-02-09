@@ -6,7 +6,7 @@ namespace AiDotNet.Models.Options;
 /// Base options for risk models.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class RiskModelOptions<T> : ModelOptions
+public class RiskModelOptions<T> : FinancialNeuralNetworkOptions
 {
     /// <summary>
     /// Number of input features used for risk calculation.

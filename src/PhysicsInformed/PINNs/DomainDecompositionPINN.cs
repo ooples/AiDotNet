@@ -8,6 +8,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
+using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PhysicsInformed.PINNs;
@@ -60,6 +61,11 @@ namespace AiDotNet.PhysicsInformed.PINNs;
 /// </remarks>
 public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
 {
+    private readonly DomainDecompositionPINNOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly List<PhysicsInformedNeuralNetwork<T>> _subdomainNetworks;
     private readonly List<SubdomainDefinition<T>> _subdomains;
     private readonly List<InterfaceDefinition<T>> _interfaces;
@@ -113,10 +119,14 @@ public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
         double boundaryWeight = 1.0,
         double interfaceWeight = 10.0,
         double interfaceGradientWeight = 1.0,
-        int schwarzIterations = 1)
+        int schwarzIterations = 1,
+        DomainDecompositionPINNOptions? options = null)
         : base(architecture, pdeSpecification, boundaryConditions, initialCondition,
                numCollocationPointsPerSubdomain, optimizer, null, pdeWeight, boundaryWeight, null)
     {
+        _options = options ?? new DomainDecompositionPINNOptions();
+        Options = _options;
+
         if (subdomains == null || subdomains.Count == 0)
         {
             throw new ArgumentException("At least one subdomain must be specified.", nameof(subdomains));

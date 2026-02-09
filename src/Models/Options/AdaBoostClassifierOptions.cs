@@ -76,13 +76,6 @@ public class AdaBoostClassifierOptions<T> : ClassifierOptions<T>
     /// </remarks>
     public AdaBoostAlgorithm Algorithm { get; set; } = AdaBoostAlgorithm.SAMME_R;
 
-    /// <summary>
-    /// Gets or sets the random state for reproducibility.
-    /// </summary>
-    /// <value>
-    /// The random seed, or null for non-deterministic. Default is null.
-    /// </value>
-    public int? RandomState { get; set; } = null;
 }
 
 /// <summary>

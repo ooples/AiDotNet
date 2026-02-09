@@ -43,6 +43,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.PPO;
 public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private PPOOptions<T> _ppoOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _ppoOptions;
     private readonly Trajectory<T> _trajectory;
 
     private NeuralNetwork<T> _policyNetwork;

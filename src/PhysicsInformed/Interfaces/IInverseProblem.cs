@@ -259,7 +259,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// Configuration options for inverse problem PINN training.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
-    public class InverseProblemOptions<T>
+    public class InverseProblemOptions<T> : AiDotNet.Models.Options.ModelOptions
     {
         /// <summary>
         /// The type of regularization to apply.

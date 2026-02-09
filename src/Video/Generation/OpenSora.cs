@@ -5,6 +5,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Generation;
 
@@ -39,6 +40,11 @@ namespace AiDotNet.Video.Generation;
 /// </remarks>
 public class OpenSora<T> : NeuralNetworkBase<T>
 {
+    private readonly OpenSoraOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private int _height;
@@ -148,9 +154,13 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         int hiddenDim = 1152,
         int numLayers = 28,
         int numInferenceSteps = 50,
-        double guidanceScale = 7.5)
+        double guidanceScale = 7.5,
+        OpenSoraOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new OpenSoraOptions();
+        Options = _options;
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 256;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;

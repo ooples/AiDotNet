@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.AudioGen;
@@ -20,7 +21,7 @@ namespace AiDotNet.Audio.AudioGen;
 /// - "Crowd cheering at a sports event"
 /// </para>
 /// </remarks>
-public class AudioGenOptions
+public class AudioGenOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the model size to use.
@@ -69,7 +70,7 @@ public class AudioGenOptions
     /// Gets or sets the random seed for reproducibility.
     /// Null for random generation.
     /// </summary>
-    public int? Seed { get; set; }
+    public new int? Seed { get; set; }
 
     /// <summary>
     /// Gets or sets the number of audio channels (1=mono, 2=stereo).

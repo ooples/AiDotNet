@@ -8,6 +8,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.NeuralNetworks
@@ -36,6 +37,11 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     public class SPLADE<T> : TransformerEmbeddingNetwork<T>
     {
+        private readonly SPLADEOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         #region Fields
 
         private int _vocabSize;
@@ -62,9 +68,13 @@ namespace AiDotNet.NeuralNetworks
             int numHeads = 12,
             int feedForwardDim = 3072,
             ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0)
+            double maxGradNorm = 1.0,
+            SPLADEOptions? options = null)
             : base(architecture, tokenizer, optimizer, vocabSize, embeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, PoolingStrategy.Max, lossFunction, maxGradNorm)
         {
+            _options = options ?? new SPLADEOptions();
+            Options = _options;
+
             _vocabSize = vocabSize;
             _numLayers = numLayers;
             _numHeads = numHeads;

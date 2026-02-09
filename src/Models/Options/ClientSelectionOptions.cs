@@ -7,7 +7,7 @@ namespace AiDotNet.Models.Options;
 /// <b>For Beginners:</b> Client selection controls which devices/organizations participate in each round.
 /// In real deployments, many clients may be offline or slow, so selecting a subset per round is common.
 /// </remarks>
-public class ClientSelectionOptions
+public class ClientSelectionOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the selection strategy.

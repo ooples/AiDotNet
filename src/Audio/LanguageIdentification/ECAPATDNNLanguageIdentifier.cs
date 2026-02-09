@@ -58,6 +58,10 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
 
     private readonly INumericOperations<T> _numOps;
     private readonly ECAPATDNNOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly MfccExtractor<T> _mfccExtractor;
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -117,6 +121,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
 
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new ECAPATDNNOptions();
+        Options = _options;
         _options.ModelPath = modelPath;
 
         SampleRate = _options.SampleRate;
@@ -168,6 +173,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
 
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new ECAPATDNNOptions();
+        Options = _options;
 
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMels;

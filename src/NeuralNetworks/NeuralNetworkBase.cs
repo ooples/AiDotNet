@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
+using AiDotNet.Models.Options;
 using AiDotNet.Interpretability.Explainers;
 using AiDotNet.MixedPrecision;
 using AiDotNet.NeuralNetworks.Layers;
@@ -21,7 +22,7 @@ namespace AiDotNet.NeuralNetworks;
 /// This class provides the foundation for building different types of neural networks.
 /// </para>
 /// </remarks>
-public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IDisposable
+public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpretableModel<T>, IInputGradientComputable<T>, IConfigurableModel<T>, IDisposable
 {
     /// <summary>
     /// The internal collection of layers that make up this neural network.
@@ -101,6 +102,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </para>
     /// </remarks>
     private HashSet<int>? _explicitlySetActiveFeatures;
+
+    /// <summary>
+    /// Configuration options for this neural network model.
+    /// </summary>
+    /// <remarks>
+    /// Derived classes should set this to their specific options type in their constructor.
+    /// </remarks>
+    protected ModelOptions Options { get; set; } = new NeuralNetworkOptions();
+
+    /// <inheritdoc/>
+    public virtual ModelOptions GetOptions() => Options;
 
     /// <summary>
     /// Mathematical operations for the numeric type T.

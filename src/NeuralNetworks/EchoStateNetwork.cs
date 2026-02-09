@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -28,6 +30,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class EchoStateNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly EchoStateNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the size of the reservoir (number of neurons in the hidden layer).
     /// </summary>
@@ -433,9 +440,12 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         IVectorActivationFunction<T>? reservoirInputVectorActivation = null,
         IVectorActivationFunction<T>? reservoirOutputVectorActivation = null,
         IVectorActivationFunction<T>? reservoirVectorActivation = null,
-        IVectorActivationFunction<T>? outputVectorActivation = null)
+        IVectorActivationFunction<T>? outputVectorActivation = null,
+        EchoStateNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new EchoStateNetworkOptions();
+        Options = _options;
         _reservoirSize = reservoirSize;
         _spectralRadius = spectralRadius;
         _sparsity = sparsity;
@@ -514,9 +524,12 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         IActivationFunction<T>? reservoirInputScalarActivation = null,
         IActivationFunction<T>? reservoirOutputScalarActivation = null,
         IActivationFunction<T>? reservoirScalarActivation = null,
-        IActivationFunction<T>? outputScalarActivation = null)
+        IActivationFunction<T>? outputScalarActivation = null,
+        EchoStateNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new EchoStateNetworkOptions();
+        Options = _options;
         _reservoirSize = reservoirSize;
         _spectralRadius = spectralRadius;
         _sparsity = sparsity;

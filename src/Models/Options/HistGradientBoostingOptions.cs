@@ -29,7 +29,7 @@ namespace AiDotNet.Models.Options;
 /// - You want state-of-the-art performance on tabular data
 /// </para>
 /// </remarks>
-public class HistGradientBoostingOptions
+public class HistGradientBoostingOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the maximum number of bins for discretizing feature values.
@@ -292,22 +292,4 @@ public class HistGradientBoostingOptions
     /// </remarks>
     public int EarlyStoppingRounds { get; set; } = 10;
 
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <value>The random seed, or null for random initialization.</value>
-    /// <remarks>
-    /// <para>
-    /// Setting a seed ensures the same results each time with the same data.
-    /// Leave null for different results each run.
-    /// </para>
-    /// <para><b>For Beginners:</b> The seed controls randomness in the algorithm (used for
-    /// subsampling, feature selection, etc.). Setting a seed number ensures you get the
-    /// same results every time you run the training.
-    ///
-    /// - Set a seed (e.g., 42) for reproducible experiments
-    /// - Leave null for production where you want variability
-    /// </para>
-    /// </remarks>
-    public int? Seed { get; set; }
 }

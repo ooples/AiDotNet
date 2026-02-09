@@ -1,6 +1,7 @@
 using System.IO;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -34,6 +35,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class WGAN<T> : NeuralNetworkBase<T>
 {
+    private readonly WGANOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly List<T> _criticLosses = new List<T>();
     private readonly List<T> _generatorLosses = new List<T>();
 
@@ -214,10 +220,14 @@ public class WGAN<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? criticOptimizer = null,
         ILossFunction<T>? lossFunction = null,
         double weightClipValue = 0.01,
-        int criticIterations = 5)
+        int criticIterations = 5,
+        WGANOptions? options = null)
         : base(CreateWGANArchitecture(generatorArchitecture, criticArchitecture, inputType),
                lossFunction ?? new WassersteinLoss<T>())
     {
+        _options = options ?? new WGANOptions();
+        Options = _options;
+
         if (generatorArchitecture is null)
         {
             throw new ArgumentNullException(nameof(generatorArchitecture), "Generator architecture cannot be null.");

@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.Speaker;
@@ -5,7 +6,7 @@ namespace AiDotNet.Audio.Speaker;
 /// <summary>
 /// Configuration options for speaker embedding extraction.
 /// </summary>
-public class SpeakerEmbeddingOptions
+public class SpeakerEmbeddingOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the sample rate.

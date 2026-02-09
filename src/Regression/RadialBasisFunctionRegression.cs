@@ -33,6 +33,9 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// </value>
     private readonly RadialBasisFunctionOptions _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// The centers of the radial basis functions.
     /// </summary>

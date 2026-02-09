@@ -50,6 +50,9 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </summary>
     private readonly OrdinalRegressionOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Feature coefficients (β). Shared across all thresholds (proportional odds assumption).
     /// </summary>

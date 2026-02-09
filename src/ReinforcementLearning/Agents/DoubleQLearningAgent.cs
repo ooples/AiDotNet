@@ -30,6 +30,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.DoubleQLearning;
 public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DoubleQLearningOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, Dictionary<int, T>> _qTable1;
     private Dictionary<string, Dictionary<int, T>> _qTable2;
     private double _epsilon;

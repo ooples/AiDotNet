@@ -59,6 +59,10 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     #region Fields
 
     private readonly MusicGenOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly ITokenizer _tokenizer;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -156,6 +160,7 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw new FileNotFoundException($"EnCodec decoder not found: {encodecDecoderPath}");
 
         _options = options ?? new MusicGenOptions();
+        Options = _options;
         _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
             "Tokenizer is required. Use T5Tokenizer or compatible tokenizer.");
         _useNativeMode = false;
@@ -226,6 +231,7 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
         _options = options ?? new MusicGenOptions();
+        Options = _options;
         _useNativeMode = true;
 
         // Set dimensions based on model size

@@ -32,6 +32,9 @@ public class OrthogonalRegression<T> : RegressionBase<T>
     /// </value>
     private readonly OrthogonalRegressionOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Initializes a new instance of the OrthogonalRegression class with the specified options and regularization.
     /// </summary>

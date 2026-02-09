@@ -123,7 +123,7 @@ public enum ReplayBufferStrategy
 /// <item><description><b>VCL:</b> Principled Bayesian approach with uncertainty quantification.</description></item>
 /// </list>
 /// </remarks>
-public class ContinualLearningOptions
+public class ContinualLearningOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the continual learning strategy to use.

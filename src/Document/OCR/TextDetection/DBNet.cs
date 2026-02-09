@@ -1,4 +1,5 @@
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -46,6 +47,11 @@ namespace AiDotNet.Document.OCR.TextDetection;
 /// </remarks>
 public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
+    private readonly DBNetOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -119,9 +125,13 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         double thresholdK = 50,
         int minTextArea = 16,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DBNetOptions? options = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DBNetOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
 
@@ -173,9 +183,13 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         double thresholdK = 50,
         int minTextArea = 16,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        DBNetOptions? options = null)
         : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new DBNetOptions();
+        Options = _options;
+
         _useNativeMode = true;
         _backboneChannels = backboneChannels;
         _innerChannels = innerChannels;

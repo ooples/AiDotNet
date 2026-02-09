@@ -115,6 +115,10 @@ public class FEDformer<T> : ForecastingModelBase<T>
     /// The loss function for training.
     /// </summary>
     private readonly ILossFunction<T> _lossFunction;
+    private readonly FEDformerOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// The input sequence length.
@@ -240,7 +244,8 @@ public class FEDformer<T> : ForecastingModelBase<T>
         int predictionHorizon = 96,
         int numFeatures = 7,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        FEDformerOptions<T>? options = null)
         : base(architecture,
                lossFunction ?? new MeanSquaredErrorLoss<T>(),
                1.0)
@@ -249,6 +254,10 @@ public class FEDformer<T> : ForecastingModelBase<T>
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
+
+        options ??= new FEDformerOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
@@ -323,12 +332,17 @@ public class FEDformer<T> : ForecastingModelBase<T>
         bool useInstanceNormalization = true,
         double dropout = 0.05,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        FEDformerOptions<T>? options = null)
         : base(architecture,
                lossFunction ?? new MeanSquaredErrorLoss<T>(),
                1.0)
     {
         ValidateParameters(sequenceLength, predictionHorizon, numFeatures, numEncoderLayers, numDecoderLayers, numHeads, modelDimension);
+
+        options ??= new FEDformerOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = true;
         _sequenceLength = sequenceLength;

@@ -44,6 +44,9 @@ namespace AiDotNet.Classification.Online;
 public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
 {
     private readonly OnlineNaiveBayesOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private readonly Random _random;
     private readonly List<T> _knownClasses;
     private readonly Dictionary<int, ClassStatistics> _classStats;

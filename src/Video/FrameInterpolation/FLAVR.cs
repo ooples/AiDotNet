@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -43,6 +44,11 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// </remarks>
 public class FLAVR<T> : NeuralNetworkBase<T>
 {
+    private readonly FLAVROptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -75,9 +81,13 @@ public class FLAVR<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         int numFeatures = 64,
         int numInputFrames = 4,
-        int numOutputFrames = 1)
+        int numOutputFrames = 1,
+        FLAVROptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new FLAVROptions();
+        Options = _options;
+
         _useNativeMode = true;
         _numFeatures = numFeatures;
         _numInputFrames = numInputFrames;
@@ -93,9 +103,13 @@ public class FLAVR<T> : NeuralNetworkBase<T>
     public FLAVR(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numOutputFrames = 1)
+        int numOutputFrames = 1,
+        FLAVROptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new FLAVROptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

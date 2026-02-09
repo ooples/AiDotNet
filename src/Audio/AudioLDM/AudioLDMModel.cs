@@ -62,6 +62,10 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     #region Fields
 
     private readonly AudioLDMOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly ITokenizer _tokenizer;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -173,6 +177,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw new FileNotFoundException($"Vocoder not found: {vocoderPath}");
 
         _options = options ?? new AudioLDMOptions();
+        Options = _options;
         _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
             "Tokenizer is required. Use CLAP tokenizer or compatible tokenizer.");
         _useNativeMode = false;
@@ -247,6 +252,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         _options = options ?? new AudioLDMOptions();
+        Options = _options;
         _useNativeMode = true;
 
         // Set dimensions based on model size

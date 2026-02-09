@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -50,6 +51,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly GraphAttentionNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private static new readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
@@ -127,11 +133,14 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         double dropoutRate = 0.6,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
+        double maxGradNorm = 1.0,
+        GraphAttentionNetworkOptions? options = null)
         : base(architecture,
                lossFunction ?? new CrossEntropyLoss<T>(),
                maxGradNorm)
     {
+        _options = options ?? new GraphAttentionNetworkOptions();
+        Options = _options;
         NumHeads = numHeads;
         DropoutRate = dropoutRate;
         HiddenDim = 64; // Default hidden dimension

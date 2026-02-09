@@ -4,6 +4,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -51,6 +52,11 @@ namespace AiDotNet.Video.Generation;
 /// </remarks>
 public class AnimateDiff<T> : NeuralNetworkBase<T>
 {
+    private readonly AnimateDiffOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -165,9 +171,13 @@ public class AnimateDiff<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         int inputChannels = 320,
         int numLayers = 8,
-        int numFrames = 16)
+        int numFrames = 16,
+        AnimateDiffOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new AnimateDiffOptions();
+        Options = _options;
+
         if (inputChannels < 1)
             throw new ArgumentOutOfRangeException(nameof(inputChannels), inputChannels, "Input channels must be at least 1.");
         if (numLayers < 1)
@@ -211,9 +221,13 @@ public class AnimateDiff<T> : NeuralNetworkBase<T>
     public AnimateDiff(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numFrames = 16)
+        int numFrames = 16,
+        AnimateDiffOptions? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new AnimateDiffOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks;
@@ -51,6 +52,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class StyleGAN<T> : NeuralNetworkBase<T>
 {
+    private readonly StyleGANOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     // MappingNetwork optimizer state
     private Vector<T> _mappingMomentum;
     private Vector<T> _mappingSecondMoment;
@@ -218,10 +224,14 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         double initialLearningRate = 0.001,
         bool enableStyleMixing = true,
-        double styleMixingProbability = 0.9)
+        double styleMixingProbability = 0.9,
+        StyleGANOptions? options = null)
         : base(CreateStyleGANArchitecture(latentSize, discriminatorArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
+        _options = options ?? new StyleGANOptions();
+        Options = _options;
+
         // Input validation
         if (mappingNetworkArchitecture is null)
         {

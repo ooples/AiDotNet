@@ -11,6 +11,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Interfaces;
 using AiDotNet.ProgramSynthesis.Models;
+using AiDotNet.ProgramSynthesis.Options;
 using Microsoft.Data.Sqlite;
 using TreeSitter;
 
@@ -42,6 +43,11 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 /// </remarks>
 public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthesizer<T>
 {
+    private readonly NeuralProgramSynthesizerOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly CodeSynthesisArchitecture<T> _architecture;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ICodeModel<T> _codeModel;
@@ -78,9 +84,12 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
         ICodeModel<T> codeModel,
         ILossFunction<T>? lossFunction = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        IProgramExecutionEngine? executionEngine = null)
+        IProgramExecutionEngine? executionEngine = null,
+        NeuralProgramSynthesizerOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
     {
+        _options = options ?? new NeuralProgramSynthesizerOptions();
+        Options = _options;
         _architecture = architecture;
         _codeModel = codeModel;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

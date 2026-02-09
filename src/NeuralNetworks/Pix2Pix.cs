@@ -1,5 +1,6 @@
 using System.IO;
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -37,6 +38,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class Pix2Pix<T> : NeuralNetworkBase<T>
 {
+    private readonly Pix2PixOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly List<T> _discriminatorLosses = new List<T>();
     private readonly List<T> _generatorLosses = new List<T>();
 
@@ -164,10 +170,13 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double l1Lambda = 100.0)
+        double l1Lambda = 100.0,
+        Pix2PixOptions? options = null)
         : base(CreatePix2PixArchitecture(generatorArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
+        _options = options ?? new Pix2PixOptions();
+        Options = _options;
         if (generatorArchitecture is null)
         {
             throw new ArgumentNullException(nameof(generatorArchitecture), "Generator architecture cannot be null.");

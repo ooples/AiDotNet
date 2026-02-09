@@ -6,7 +6,7 @@ namespace AiDotNet.Models.Options;
 /// Configuration options for Deep Q-Network (DQN) agents.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class DQNOptions<T>
+public class DQNOptions<T> : ModelOptions
 {
     public int StateSize { get; set; }
     public int ActionSize { get; set; }
@@ -21,7 +21,6 @@ public class DQNOptions<T>
     public int WarmupSteps { get; set; } = 1000;
     public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
     public List<int> HiddenLayers { get; set; } = new List<int> { 128, 128 };
-    public int? Seed { get; set; }
 
     public DQNOptions()
     {

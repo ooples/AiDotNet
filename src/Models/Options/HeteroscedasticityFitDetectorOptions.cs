@@ -29,7 +29,7 @@ namespace AiDotNet.Models.Options;
 /// - You might need a different type of model altogether
 /// - You should be more cautious about the model's predictions in certain ranges</para>
 /// </remarks>
-public class HeteroscedasticityFitDetectorOptions
+public class HeteroscedasticityFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the p-value threshold for detecting heteroscedasticity in model residuals.

@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -40,6 +41,11 @@ namespace AiDotNet.Video.ActionRecognition;
 /// </remarks>
 public class VideoMAE<T> : NeuralNetworkBase<T>
 {
+    private readonly VideoMAEOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Fields
 
     private int _height;
@@ -125,9 +131,13 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         int numClasses = 400,
         int numFrames = 16,
         int numFeatures = 768,
-        double maskRatio = 0.9)
+        double maskRatio = 0.9,
+        VideoMAEOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
     {
+        _options = options ?? new VideoMAEOptions();
+        Options = _options;
+
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
@@ -161,9 +171,13 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         int numClasses = 400,
-        int numFrames = 16)
+        int numFrames = 16,
+        VideoMAEOptions? options = null)
         : base(architecture, new CrossEntropyLoss<T>())
     {
+        _options = options ?? new VideoMAEOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

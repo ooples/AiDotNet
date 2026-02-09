@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -53,6 +54,11 @@ namespace AiDotNet.Video.Understanding;
 /// </remarks>
 public class InternVideo2<T> : NeuralNetworkBase<T>
 {
+    private readonly InternVideo2Options _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -176,9 +182,12 @@ public class InternVideo2<T> : NeuralNetworkBase<T>
         int numHeads = 12,
         int numEncoderLayers = 12,
         int numFrames = 8,
-        int patchSize = 14)
+        int patchSize = 14,
+        InternVideo2Options? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new InternVideo2Options();
+        Options = _options;
         if (embedDim < 1)
             throw new ArgumentOutOfRangeException(nameof(embedDim), embedDim, "Embedding dimension must be at least 1.");
         if (numEncoderLayers < 1)
@@ -223,9 +232,12 @@ public class InternVideo2<T> : NeuralNetworkBase<T>
     public InternVideo2(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int embedDim = 768)
+        int embedDim = 768,
+        InternVideo2Options? options = null)
         : base(architecture, new MeanSquaredErrorLoss<T>())
     {
+        _options = options ?? new InternVideo2Options();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

@@ -9,6 +9,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.NeuralNetworks
@@ -33,6 +34,11 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     public class SGPT<T> : TransformerEmbeddingNetwork<T>
     {
+        private readonly SGPTOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         #region Fields
 
         private int _vocabSize;
@@ -71,9 +77,12 @@ namespace AiDotNet.NeuralNetworks
             int feedForwardDim = 3072,
             PoolingStrategy poolingStrategy = PoolingStrategy.Mean,
             ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0)
+            double maxGradNorm = 1.0,
+            SGPTOptions? options = null)
             : base(architecture, tokenizer, optimizer, vocabSize, embeddingDimension, maxSequenceLength, numLayers, numHeads, feedForwardDim, poolingStrategy, lossFunction, maxGradNorm)
         {
+            _options = options ?? new SGPTOptions();
+            Options = _options;
             _vocabSize = vocabSize;
             _numLayers = numLayers;
             _numHeads = numHeads;

@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Video.Options;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -47,6 +48,11 @@ namespace AiDotNet.Video.ActionRecognition;
 /// </remarks>
 public class SlowFast<T> : NeuralNetworkBase<T>
 {
+    private readonly SlowFastOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     private readonly bool _useNativeMode;
@@ -138,9 +144,13 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         int slowFrames = 4,
         int slowChannels = 64,
         int fastChannels = 8,
-        int alpha = 8)
+        int alpha = 8,
+        SlowFastOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
     {
+        _options = options ?? new SlowFastOptions();
+        Options = _options;
+
         if (numClasses < 1)
             throw new ArgumentOutOfRangeException(nameof(numClasses), "Number of classes must be at least 1.");
         if (slowFrames < 1)
@@ -205,9 +215,13 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         int slowFrames = 4,
         int slowChannels = 64,
         int fastChannels = 8,
-        int alpha = 8)
+        int alpha = 8,
+        SlowFastOptions? options = null)
         : base(architecture, new CrossEntropyLoss<T>())
     {
+        _options = options ?? new SlowFastOptions();
+        Options = _options;
+
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))

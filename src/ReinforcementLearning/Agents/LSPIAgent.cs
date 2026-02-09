@@ -14,6 +14,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private LSPIOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Matrix<T> _weights;  // Weight matrix: [ActionSize x FeatureSize]
     private List<(Vector<T> state, int action, T reward, Vector<T> nextState, bool done)> _samples;
     private int _iterations;

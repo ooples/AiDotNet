@@ -69,6 +69,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         : base(options ?? new TemporalFusionTransformerOptions<T>())
     {
         _options = options ?? new TemporalFusionTransformerOptions<T>();
+        Options = _options;
         _random = RandomHelper.CreateSeededRandom(42);
         _layerWeights = new List<Tensor<T>>();
         _layerBiases = new List<Tensor<T>>();

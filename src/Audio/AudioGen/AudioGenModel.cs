@@ -60,6 +60,11 @@ namespace AiDotNet.Audio.AudioGen;
 /// </remarks>
 public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
+    private readonly AudioGenOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -316,9 +321,12 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         int channels = 1,
         int? seed = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        AudioGenOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new AudioGenOptions();
+        Options = _options;
         // Validate ONNX model paths
         if (string.IsNullOrWhiteSpace(textEncoderPath))
             throw new ArgumentException("Text encoder path cannot be null or empty.", nameof(textEncoderPath));
@@ -473,9 +481,12 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         int? seed = null,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        AudioGenOptions? options = null)
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
     {
+        _options = options ?? new AudioGenOptions();
+        Options = _options;
         // Validate parameters
         if (temperature <= 0)
             throw new ArgumentOutOfRangeException(nameof(temperature), "Temperature must be positive.");

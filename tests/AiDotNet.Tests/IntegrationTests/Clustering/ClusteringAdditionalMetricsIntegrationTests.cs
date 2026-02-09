@@ -112,7 +112,7 @@ public class ClusteringAdditionalMetricsIntegrationTests
             NumClusters = 2,
             MaxIterations = 30,
             NumInitializations = 1,
-            RandomState = 12
+            Seed = 12
         });
 
         var labels = kmeans.FitPredict(dataset.Data);

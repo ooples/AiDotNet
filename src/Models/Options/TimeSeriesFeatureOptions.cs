@@ -16,7 +16,7 @@ namespace AiDotNet.Models.Options;
 /// - What lag and lead features to create
 /// </para>
 /// </remarks>
-public class TimeSeriesFeatureOptions
+public class TimeSeriesFeatureOptions : ModelOptions
 {
     #region Window Configuration
 

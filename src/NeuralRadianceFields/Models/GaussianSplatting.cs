@@ -171,6 +171,11 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// </remarks>
 public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
 {
+    private readonly GaussianSplattingOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Represents a single 3D Gaussian in the scene.
     /// </summary>
@@ -428,6 +433,8 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         {
             throw new ArgumentNullException(nameof(options));
         }
+        _options = options;
+        Options = _options;
         if (options.ShDegree < 0 || options.ShDegree > 3)
         {
             throw new ArgumentOutOfRangeException(nameof(options.ShDegree), "shDegree must be between 0 and 3.");

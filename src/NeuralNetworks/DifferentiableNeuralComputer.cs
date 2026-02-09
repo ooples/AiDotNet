@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -28,6 +30,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    private readonly DifferentiableNeuralComputerOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets whether auxiliary loss (memory addressing regularization) should be used during training.
     /// </summary>
@@ -381,9 +388,12 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         int controllerSize,
         int readHeads,
         ILossFunction<T>? lossFunction = null,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        DifferentiableNeuralComputerOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new DifferentiableNeuralComputerOptions();
+        Options = _options;
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastMemoryAddressingLoss = NumOps.Zero;
 
@@ -455,9 +465,12 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         int controllerSize,
         int readHeads,
         ILossFunction<T>? lossFunction = null,
-        IVectorActivationFunction<T>? vectorActivationFunction = null)
+        IVectorActivationFunction<T>? vectorActivationFunction = null,
+        DifferentiableNeuralComputerOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new DifferentiableNeuralComputerOptions();
+        Options = _options;
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastMemoryAddressingLoss = NumOps.Zero;
 

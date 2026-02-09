@@ -1,3 +1,5 @@
+using AiDotNet.NeuralNetworks.Options;
+
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
@@ -31,6 +33,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
 {
+    private readonly RadialBasisFunctionNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets the size of the input layer (number of input features).
     /// </summary>
@@ -146,9 +153,12 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     /// Then it initializes the layers of the network accordingly.
     /// </para>
     /// </remarks>
-    public RadialBasisFunctionNetwork(NeuralNetworkArchitecture<T> architecture, IRadialBasisFunction<T>? radialBasisFunction = null, ILossFunction<T>? lossFunction = null) :
+    public RadialBasisFunctionNetwork(NeuralNetworkArchitecture<T> architecture, IRadialBasisFunction<T>? radialBasisFunction = null, ILossFunction<T>? lossFunction = null,
+        RadialBasisFunctionNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new RadialBasisFunctionNetworkOptions();
+        Options = _options;
         // Get the input shape and output size from the architecture
         var inputShape = architecture.GetInputShape();
         int outputSize = architecture.OutputSize;

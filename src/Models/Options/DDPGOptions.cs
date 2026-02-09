@@ -6,7 +6,7 @@ namespace AiDotNet.Models.Options;
 /// Configuration options for DDPG agent.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class DDPGOptions<T>
+public class DDPGOptions<T> : ModelOptions
 {
     public int StateSize { get; set; }
     public int ActionSize { get; set; }
@@ -21,7 +21,6 @@ public class DDPGOptions<T>
     public double ExplorationNoise { get; set; } = 0.1;
     public List<int> ActorHiddenLayers { get; set; } = new List<int> { 400, 300 };
     public List<int> CriticHiddenLayers { get; set; } = new List<int> { 400, 300 };
-    public int? Seed { get; set; }
 
     public DDPGOptions()
     {

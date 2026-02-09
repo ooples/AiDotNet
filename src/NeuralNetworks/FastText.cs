@@ -8,6 +8,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.NeuralNetworks
@@ -32,6 +33,11 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     public class FastText<T> : NeuralNetworkBase<T>, IEmbeddingModel<T>
     {
+        private readonly FastTextOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         #region Fields
 
         /// <summary>
@@ -104,9 +110,12 @@ namespace AiDotNet.NeuralNetworks
             int embeddingDimension = 100,
             int maxTokens = 512,
             ILossFunction<T>? lossFunction = null,
-            double maxGradNorm = 1.0)
+            double maxGradNorm = 1.0,
+            FastTextOptions? options = null)
             : base(architecture, lossFunction ?? new BinaryCrossEntropyLoss<T>(), maxGradNorm)
         {
+            _options = options ?? new FastTextOptions();
+            Options = _options;
             _tokenizer = tokenizer;
             _vocabSize = vocabSize;
             _bucketSize = bucketSize;

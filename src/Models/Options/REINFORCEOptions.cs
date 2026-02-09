@@ -22,7 +22,7 @@ namespace AiDotNet.Models.Options;
 /// Modern algorithms like PPO improve on REINFORCE's ideas.
 /// </para>
 /// </remarks>
-public class REINFORCEOptions<T>
+public class REINFORCEOptions<T> : ModelOptions
 {
     public int StateSize { get; set; }
     public int ActionSize { get; set; }
@@ -30,7 +30,6 @@ public class REINFORCEOptions<T>
     public T LearningRate { get; set; }
     public T DiscountFactor { get; set; }
     public List<int> HiddenLayers { get; set; } = new List<int> { 32, 32 };
-    public int? Seed { get; set; }
 
     public REINFORCEOptions()
     {

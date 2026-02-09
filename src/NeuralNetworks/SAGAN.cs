@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks;
@@ -38,6 +39,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
 public class SAGAN<T> : NeuralNetworkBase<T>
 {
+    private readonly SAGANOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private Vector<T> _momentum;
     private Vector<T> _secondMoment;
     private T _beta1Power;
@@ -169,10 +175,13 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         int[]? attentionLayers = null,
         InputType inputType = InputType.TwoDimensional,
         ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.0001)
+        double initialLearningRate = 0.0001,
+        SAGANOptions? options = null)
         : base(CreateSAGANArchitecture(latentSize, numClasses, imageChannels, imageHeight, imageWidth, inputType),
                lossFunction ?? new HingeLoss<T>())
     {
+        _options = options ?? new SAGANOptions();
+        Options = _options;
         LatentSize = latentSize;
         NumClasses = numClasses;
         _isConditional = numClasses > 0;

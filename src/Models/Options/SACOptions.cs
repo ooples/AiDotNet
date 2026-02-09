@@ -27,7 +27,7 @@ namespace AiDotNet.Models.Options;
 /// Used by: Robotic manipulation, dexterous control, autonomous systems
 /// </para>
 /// </remarks>
-public class SACOptions<T>
+public class SACOptions<T> : ModelOptions
 {
     /// <summary>
     /// Size of the state observation space.
@@ -152,11 +152,6 @@ public class SACOptions<T>
     /// Hidden layer sizes for Q-networks.
     /// </summary>
     public List<int> QHiddenLayers { get; set; } = new List<int> { 256, 256 };
-
-    /// <summary>
-    /// Random seed for reproducibility (optional).
-    /// </summary>
-    public int? Seed { get; set; }
 
     public SACOptions()
     {

@@ -62,6 +62,10 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     #region Fields
 
     private readonly StableAudioOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly ITokenizer _tokenizer;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
@@ -159,6 +163,7 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw new FileNotFoundException($"DiT not found: {ditPath}");
 
         _options = options ?? new StableAudioOptions();
+        Options = _options;
         _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
             "Tokenizer is required. Use T5 tokenizer or compatible tokenizer.");
         _useNativeMode = false;
@@ -229,6 +234,7 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         _options = options ?? new StableAudioOptions();
+        Options = _options;
         _useNativeMode = true;
 
         // Set dimensions based on model size

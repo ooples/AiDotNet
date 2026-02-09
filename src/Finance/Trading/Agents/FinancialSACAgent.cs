@@ -20,12 +20,16 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
 {
     #region Fields
 
+    private readonly FinancialSACAgentOptions<T> _options;
     private readonly NeuralNetwork<T> _actor;
     private readonly NeuralNetwork<T> _critic1;
     private readonly NeuralNetwork<T> _critic2;
     private readonly NeuralNetwork<T> _targetCritic1;
     private readonly NeuralNetwork<T> _targetCritic2;
     private readonly ReplayBuffer<T> ReplayBuffer;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     #endregion
 
@@ -58,6 +62,8 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
         TradingAgentOptions<T> options)
         : base(options)
     {
+        _options = options as FinancialSACAgentOptions<T> ?? new FinancialSACAgentOptions<T>();
+
         EnsureDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
         EnsureDefaultLayers(criticArchitecture, options.StateSize + options.ActionSize, 1);
 

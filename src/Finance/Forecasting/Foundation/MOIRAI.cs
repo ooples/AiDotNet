@@ -114,6 +114,10 @@ public class MOIRAI<T> : ForecastingModelBase<T>
     /// The loss function used for training.
     /// </summary>
     private readonly ILossFunction<T> _lossFunction;
+    private readonly MOIRAIOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Context length for the input sequence.
@@ -258,6 +262,8 @@ public class MOIRAI<T> : ForecastingModelBase<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         options ??= new MOIRAIOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
@@ -312,6 +318,8 @@ public class MOIRAI<T> : ForecastingModelBase<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         options ??= new MOIRAIOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = true;
 

@@ -17,6 +17,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private ValueIterationOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Dictionary<string, T> _valueTable;
     private Dictionary<string, Dictionary<int, List<(string nextState, T reward, T probability)>>> _model;
     private Random _random;

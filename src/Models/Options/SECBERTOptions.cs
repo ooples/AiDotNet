@@ -36,7 +36,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Reference:</b> Loukas et al., "SEC-BERT: A Domain-Specific Language Model for SEC Filings", 2022.
 /// </para>
 /// </remarks>
-public class SECBERTOptions<T>
+public class SECBERTOptions<T> : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default SEC-BERT configuration.

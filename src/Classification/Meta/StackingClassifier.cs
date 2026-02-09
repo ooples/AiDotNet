@@ -155,8 +155,8 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
         int numEstimators = _estimators!.Count;
         int metaFeaturesPerEstimator = Options.UseProbabilities ? NumClasses : 1;
 
-        var random = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        var random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
         // Create fold assignments
@@ -478,7 +478,7 @@ public class StackingClassifier<T> : MetaClassifierBase<T>
             CrossValidationFolds = Options.CrossValidationFolds,
             UseProbabilities = Options.UseProbabilities,
             Passthrough = Options.Passthrough,
-            RandomState = Options.RandomState
+            Seed = Options.Seed
         });
     }
 
@@ -562,8 +562,4 @@ public class StackingClassifierOptions<T> : MetaClassifierOptions<T>
     /// <value>True to include original features. Default is false.</value>
     public bool Passthrough { get; set; } = false;
 
-    /// <summary>
-    /// Gets or sets the random state for reproducibility.
-    /// </summary>
-    public int? RandomState { get; set; }
 }

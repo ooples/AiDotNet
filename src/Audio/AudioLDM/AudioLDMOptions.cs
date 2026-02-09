@@ -25,7 +25,7 @@ namespace AiDotNet.Audio.AudioLDM;
 /// - Mention acoustic properties (loud, soft, distant, echoing)
 /// </para>
 /// </remarks>
-public class AudioLDMOptions
+public class AudioLDMOptions : AiDotNet.Models.Options.ModelOptions
 {
     /// <summary>
     /// Gets or sets the model size variant.
@@ -84,15 +84,6 @@ public class AudioLDMOptions
     /// </para>
     /// </remarks>
     public double GuidanceScale { get; set; } = 2.5;
-
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// Set to a specific value to generate the same audio each time.
-    /// Null for random generation.
-    /// </remarks>
-    public int? Seed { get; set; }
 
     /// <summary>
     /// Gets or sets the number of mel spectrogram bins.

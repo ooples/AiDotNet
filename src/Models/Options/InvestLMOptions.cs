@@ -36,7 +36,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Reference:</b> Yang et al., "InvestLM: A Large Language Model for Investment", 2023.
 /// </para>
 /// </remarks>
-public class InvestLMOptions<T>
+public class InvestLMOptions<T> : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default InvestLM configuration.

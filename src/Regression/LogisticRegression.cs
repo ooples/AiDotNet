@@ -46,6 +46,9 @@ public class LogisticRegression<T> : RegressionBase<T>
     /// </remarks>
     private readonly LogisticRegressionOptions<T> _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="LogisticRegression{T}"/> class with optional custom options
     /// and regularization.

@@ -14,7 +14,7 @@ namespace AiDotNet.Models.Options;
 /// You can decide how many hidden factors to discover and how strongly to enforce disentanglement.
 /// </para>
 /// </remarks>
-public class FactorVAEOptions<T>
+public class FactorVAEOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the number of latent factors to learn.
@@ -118,16 +118,6 @@ public class FactorVAEOptions<T>
     /// </para>
     /// </remarks>
     public double DropoutRate { get; set; } = 0.1;
-
-    /// <summary>
-    /// Gets or sets an optional random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Setting a seed makes training repeatable.
-    /// </para>
-    /// </remarks>
-    public int? Seed { get; set; }
 
     /// <summary>
     /// Validates the options and throws if any value is invalid.

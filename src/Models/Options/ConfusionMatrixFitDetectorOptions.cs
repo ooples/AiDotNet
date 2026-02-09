@@ -16,7 +16,7 @@ namespace AiDotNet.Models.Options;
 /// well overall, if it's struggling with certain categories, or if your data is unbalanced (having way more 
 /// examples of one category than others). Think of it like an automated grading system for your AI model.</para>
 /// </remarks>
-public class ConfusionMatrixFitDetectorOptions
+public class ConfusionMatrixFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold above which a model's performance is considered good.

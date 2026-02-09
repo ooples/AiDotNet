@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -31,7 +32,7 @@ namespace AiDotNet.MetaLearning.Options;
 /// - <b>Graph Aggregation:</b> Combine node information for predictions
 /// </para>
 /// </remarks>
-public class GNNMetaOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
+public class GNNMetaOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
     #region Required Properties
 
@@ -114,7 +115,7 @@ public class GNNMetaOptions<T, TInput, TOutput> : IMetaLearnerOptions<T>
     /// Gets or sets the random seed for reproducibility.
     /// </summary>
     /// <value>Default: null (non-deterministic).</value>
-    public int? RandomSeed { get; set; }
+    public int? RandomSeed { get => Seed; set => Seed = value; }
 
     /// <summary>
     /// Gets or sets the number of tasks to use for evaluation.

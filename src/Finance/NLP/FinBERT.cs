@@ -102,6 +102,10 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly FinBERTOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private int _maxSequenceLength;
     private int _vocabularySize;
     private int _hiddenDimension;
@@ -187,6 +191,7 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new FinBERTOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -229,6 +234,7 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
     {
         _useNativeMode = true;
         _options = options ?? new FinBERTOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

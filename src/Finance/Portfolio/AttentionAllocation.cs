@@ -27,6 +27,10 @@ public class AttentionAllocation<T> : PortfolioOptimizerBase<T>
     #region Shared Fields
 
     private readonly AttentionAllocationOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly int _hiddenDimension;
@@ -52,6 +56,7 @@ public class AttentionAllocation<T> : PortfolioOptimizerBase<T>
         : base(architecture, options?.NumAssets ?? 10, architecture.CalculatedInputSize, lossFunction)
     {
         _options = options ?? new AttentionAllocationOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -80,6 +85,7 @@ public class AttentionAllocation<T> : PortfolioOptimizerBase<T>
         : base(architecture, onnxModelPath, options?.NumAssets ?? 10, architecture.CalculatedInputSize)
     {
         _options = options ?? new AttentionAllocationOptions<T>();
+        Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

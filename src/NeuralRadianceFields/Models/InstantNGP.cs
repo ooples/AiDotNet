@@ -129,6 +129,11 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// </remarks>
 public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
 {
+    private readonly InstantNGPOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private readonly int _hashTableSize;
     private readonly int _numLevels;
     private readonly int _featuresPerLevel;
@@ -188,6 +193,8 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         {
             throw new ArgumentNullException(nameof(options));
         }
+        _options = options;
+        Options = _options;
 
         if (options.HashTableSize <= 0)
         {

@@ -98,8 +98,8 @@ public class SupportVectorClassifier<T> : SVMBase<T>
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
-        _random = Options.RandomState.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomState.Value)
+        _random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSeededRandom(42);
 
         // Store training data
@@ -468,7 +468,7 @@ public class SupportVectorClassifier<T> : SVMBase<T>
             MaxIterations = Options.MaxIterations,
             Shrinking = Options.Shrinking,
             Probability = Options.Probability,
-            RandomState = Options.RandomState,
+            Seed = Options.Seed,
             OneVsRest = Options.OneVsRest,
             CacheSize = Options.CacheSize
         });

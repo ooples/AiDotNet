@@ -13,6 +13,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private ThompsonSamplingOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private Random _random;
     private Vector<int> _successCounts;
     private Vector<int> _failureCounts;

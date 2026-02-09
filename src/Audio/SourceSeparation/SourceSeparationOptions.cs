@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.SourceSeparation;
@@ -5,7 +6,7 @@ namespace AiDotNet.Audio.SourceSeparation;
 /// <summary>
 /// Options for music source separation.
 /// </summary>
-public class SourceSeparationOptions
+public class SourceSeparationOptions : ModelOptions
 {
     /// <summary>Audio sample rate. Default: 44100.</summary>
     public int SampleRate { get; set; } = 44100;

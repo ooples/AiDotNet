@@ -1,4 +1,5 @@
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -31,6 +32,11 @@ namespace AiDotNet.NeuralNetworks;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
+    private readonly GraphNeuralNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets or sets whether auxiliary loss (graph smoothness regularization) should be used during training.
     /// </summary>
@@ -248,9 +254,12 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
         IVectorActivationFunction<T>? graphConvolutionalVectorActivation = null,
         IVectorActivationFunction<T>? activationLayerVectorActivation = null, IVectorActivationFunction<T>? finalDenseLayerVectorActivation = null,
-        IVectorActivationFunction<T>? finalActivationLayerVectorActivation = null) :
+        IVectorActivationFunction<T>? finalActivationLayerVectorActivation = null,
+        GraphNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new GraphNeuralNetworkOptions();
+        Options = _options;
         AuxiliaryLossWeight = NumOps.FromDouble(0.05);
         _lastGraphSmoothnessLoss = NumOps.Zero;
 
@@ -289,9 +298,12 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     public GraphNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? graphConvolutionalActivation = null,
         IActivationFunction<T>? activationLayerActivation = null, IActivationFunction<T>? finalDenseLayerActivation = null,
-        IActivationFunction<T>? finalActivationLayerActivation = null) :
+        IActivationFunction<T>? finalActivationLayerActivation = null,
+        GraphNeuralNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _options = options ?? new GraphNeuralNetworkOptions();
+        Options = _options;
         AuxiliaryLossWeight = NumOps.FromDouble(0.05);
         _lastGraphSmoothnessLoss = NumOps.Zero;
 

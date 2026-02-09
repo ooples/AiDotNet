@@ -40,6 +40,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.TRPO;
 public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private TRPOOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private INeuralNetwork<T> _policyNetwork;

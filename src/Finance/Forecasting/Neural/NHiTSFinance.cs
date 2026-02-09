@@ -84,6 +84,10 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     /// The loss function for training.
     /// </summary>
     private readonly ILossFunction<T> _lossFunction;
+    private readonly NHiTSOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// The lookback window size.
@@ -191,6 +195,8 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         options ??= new NHiTSOptions<T>();
+        _options = options;
+        Options = _options;
         ValidateOptions(options);
 
         _useNativeMode = false;
@@ -236,6 +242,8 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         options ??= new NHiTSOptions<T>();
+        _options = options;
+        Options = _options;
         ValidateOptions(options);
 
         _useNativeMode = true;

@@ -40,6 +40,9 @@ namespace AiDotNet.ReinforcementLearning.Agents.DQN;
 public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
     private DQNOptions<T> _dqnOptions;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _dqnOptions;
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
     private NeuralNetwork<T> _qNetwork;

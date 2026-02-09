@@ -112,6 +112,10 @@ public class Autoformer<T> : ForecastingModelBase<T>
     /// The loss function for computing prediction errors.
     /// </summary>
     private readonly ILossFunction<T> _lossFunction;
+    private readonly AutoformerOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     private int _sequenceLength;
     private int _predictionHorizon;
@@ -182,6 +186,8 @@ public class Autoformer<T> : ForecastingModelBase<T>
             throw new FileNotFoundException($"ONNX model file not found: {onnxModelPath}", onnxModelPath);
 
         options ??= new AutoformerOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = false;
         OnnxSession = new InferenceSession(onnxModelPath);
@@ -224,6 +230,8 @@ public class Autoformer<T> : ForecastingModelBase<T>
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         options ??= new AutoformerOptions<T>();
+        _options = options;
+        Options = _options;
 
         _useNativeMode = true;
         OnnxSession = null;

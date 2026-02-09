@@ -66,6 +66,11 @@ namespace AiDotNet.Audio.VoiceActivity;
 /// </remarks>
 public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
 {
+    private readonly SileroVadOptions _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     #region Execution Mode
 
     /// <summary>
@@ -218,9 +223,12 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         int frameSize = 512,
         double threshold = 0.5,
         int minSpeechDurationMs = 250,
-        int minSilenceDurationMs = 100)
+        int minSilenceDurationMs = 100,
+        SileroVadOptions? options = null)
         : base(architecture, new BinaryCrossEntropyLoss<T>())
     {
+        _options = options ?? new SileroVadOptions();
+        Options = _options;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
 
@@ -266,9 +274,12 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         int minSilenceDurationMs = 100,
         int convFilters = 64,
         int lstmHiddenDim = 64,
-        int numLstmLayers = 2)
+        int numLstmLayers = 2,
+        SileroVadOptions? options = null)
         : base(architecture, new BinaryCrossEntropyLoss<T>())
     {
+        _options = options ?? new SileroVadOptions();
+        Options = _options;
         _useNativeMode = true;
         _modelPath = null;
         _lossFunction = new BinaryCrossEntropyLoss<T>();

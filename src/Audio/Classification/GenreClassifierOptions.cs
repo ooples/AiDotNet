@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.Classification;
@@ -5,7 +6,7 @@ namespace AiDotNet.Audio.Classification;
 /// <summary>
 /// Options for genre classification.
 /// </summary>
-public class GenreClassifierOptions
+public class GenreClassifierOptions : ModelOptions
 {
     /// <summary>Audio sample rate. Default: 22050.</summary>
     public int SampleRate { get; set; } = 22050;

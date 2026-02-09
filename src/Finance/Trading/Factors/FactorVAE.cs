@@ -52,6 +52,10 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly FactorVAEOptions<T> _options;
+
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     private int _numFactors;
     private int _numAssets;
     private int _numFeatures;
@@ -184,6 +188,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         OnnxSession = new InferenceSession(onnxModelPath);
 
         _options = options ?? new FactorVAEOptions<T>();
+        Options = _options;
         _options.Validate();
 
         _numFactors = _options.NumFactors;
@@ -231,6 +236,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         OnnxSession = null;
 
         _options = options ?? new FactorVAEOptions<T>();
+        Options = _options;
         _options.Validate();
 
         _numFactors = _options.NumFactors;

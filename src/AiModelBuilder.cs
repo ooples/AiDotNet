@@ -5430,11 +5430,17 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             recommendation.TuningReasoning = hyperparameterResult;
             reasoningTrace.AppendLine($"Hyperparameter Recommendations:\n{hyperparameterResult}\n");
 
-            // Try to extract hyperparameters (simplified - could be enhanced)
-            recommendation.SuggestedHyperparameters = new Dictionary<string, object>
+            // Parse structured hyperparameters from the LLM response
+            try
             {
-                ["info"] = "See TuningReasoning for detailed hyperparameter recommendations"
-            };
+                var hyperparameterParser = new HyperparameterResponseParser();
+                recommendation.SuggestedHyperparameters = hyperparameterParser.Parse(hyperparameterResult);
+            }
+            catch (Exception ex)
+            {
+                recommendation.SuggestedHyperparameters = new Dictionary<string, object>();
+                reasoningTrace.AppendLine($"Warning: Failed to parse hyperparameter response: {ex.Message}");
+            }
         }
 
         // 4. FEATURE ANALYSIS
@@ -5864,8 +5870,57 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             Console.WriteLine("===========================\n");
         }
 
-        // Note: Hyperparameter recommendations are currently stored in recommendation.SuggestedHyperparameters
-        // but not auto-applied. Future enhancement: Apply hyperparameters to compatible models.
+        // Auto-apply hyperparameters if enabled
+        if (_agentOptions.EnableAutoApplyHyperparameters
+            && _model is IConfigurableModel<T> configurableModel
+            && recommendation.SuggestedHyperparameters is { Count: > 0 })
+        {
+            var registry = new HyperparameterRegistry();
+            var applicator = new AgentHyperparameterApplicator<T>(registry);
+            var modelType = recommendation.SuggestedModelType ?? DeriveModelTypeFromModel(_model);
+
+            var applicationResult = applicator.Apply(configurableModel, modelType, recommendation.SuggestedHyperparameters);
+            recommendation.HyperparameterApplicationResult = applicationResult;
+
+            if (applicationResult.HasAppliedParameters)
+            {
+                System.Diagnostics.Trace.WriteLine("=== AGENT HYPERPARAMETER APPLICATION ===");
+                System.Diagnostics.Trace.WriteLine(applicationResult.GetSummary());
+                System.Diagnostics.Trace.WriteLine("========================================");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Derives the ModelType from the actual model instance by examining its class name.
+    /// </summary>
+    private static ModelType DeriveModelTypeFromModel(IFullModel<T, TInput, TOutput>? model)
+    {
+        if (model == null) return ModelType.None;
+
+        var modelTypeName = model.GetType().Name;
+
+        // Try direct enum parse first (handles cases like "RandomForest", "GradientBoosting")
+        if (Enum.TryParse<ModelType>(modelTypeName, true, out var parsedType))
+        {
+            return parsedType;
+        }
+
+        // Try common suffixes removal
+        var suffixes = new[] { "Regression", "Model", "Classifier", "Network" };
+        foreach (var suffix in suffixes)
+        {
+            if (modelTypeName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                var baseName = modelTypeName.Substring(0, modelTypeName.Length - suffix.Length);
+                if (Enum.TryParse<ModelType>(baseName, true, out var strippedType))
+                {
+                    return strippedType;
+                }
+            }
+        }
+
+        return ModelType.None;
     }
 
     /// <summary>

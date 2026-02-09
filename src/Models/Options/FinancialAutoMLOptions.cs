@@ -19,7 +19,7 @@ namespace AiDotNet.Models.Options;
 /// "I want AutoML for risk." Then provide your architecture and budget.
 /// </para>
 /// </remarks>
-public class FinancialAutoMLOptions<T>
+public class FinancialAutoMLOptions<T> : ModelOptions
 {
     /// <summary>
     /// Gets or sets the finance domain to search.

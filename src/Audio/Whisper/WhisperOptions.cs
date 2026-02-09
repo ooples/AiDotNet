@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Audio.Whisper;
@@ -21,7 +22,7 @@ namespace AiDotNet.Audio.Whisper;
 /// </list>
 /// </para>
 /// </remarks>
-public class WhisperOptions
+public class WhisperOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the model size to use.

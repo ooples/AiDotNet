@@ -18,7 +18,7 @@ namespace AiDotNet.Models.Options;
 /// (each value tends to be opposite to previous values). Understanding autocorrelation helps choose the right 
 /// prediction model for your data.</para>
 /// </remarks>
-public class AutocorrelationFitDetectorOptions
+public class AutocorrelationFitDetectorOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the threshold for detecting strong positive autocorrelation.

@@ -7,6 +7,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
+using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.PhysicsInformed.PINNs
@@ -55,6 +56,11 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// </remarks>
     public class DeepRitzMethod<T> : NeuralNetworkBase<T>
     {
+        private readonly DeepRitzMethodOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         private readonly Func<T[], T[], T[,], T> _energyFunctional;
         private readonly Func<T[], bool>? _boundaryCheck;
         private readonly Func<T[], T[]>? _boundaryValue;
@@ -91,9 +97,13 @@ namespace AiDotNet.PhysicsInformed.PINNs
             Func<T[], T[], T[,], T> energyFunctional,
             Func<T[], bool>? boundaryCheck = null,
             Func<T[], T[]>? boundaryValue = null,
-            int numQuadraturePoints = 10000)
+            int numQuadraturePoints = 10000,
+            DeepRitzMethodOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
+            _options = options ?? new DeepRitzMethodOptions();
+            Options = _options;
+
             _energyFunctional = energyFunctional ?? throw new ArgumentNullException(nameof(energyFunctional));
             _boundaryCheck = boundaryCheck;
             _boundaryValue = boundaryValue;

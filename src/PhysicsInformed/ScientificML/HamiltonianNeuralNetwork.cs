@@ -7,6 +7,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.PhysicsInformed.Options;
 
 namespace AiDotNet.PhysicsInformed.ScientificML
 {
@@ -69,16 +70,25 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// </remarks>
     public class HamiltonianNeuralNetwork<T> : NeuralNetworkBase<T>
     {
+        private readonly HamiltonianNeuralNetworkOptions _options;
+
+        /// <inheritdoc/>
+        public override ModelOptions GetOptions() => _options;
+
         private readonly int _stateDim; // Dimension of state space (q and p together)
         private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
         public HamiltonianNeuralNetwork(
             NeuralNetworkArchitecture<T> architecture,
             int stateDim,
-            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+            HamiltonianNeuralNetworkOptions? options = null)
             : base(architecture ?? throw new ArgumentNullException(nameof(architecture)),
                 NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
+            _options = options ?? new HamiltonianNeuralNetworkOptions();
+            Options = _options;
+
             if (stateDim <= 0 || stateDim % 2 != 0)
             {
                 throw new ArgumentException("stateDim must be a positive even number (equal parts q and p).", nameof(stateDim));
