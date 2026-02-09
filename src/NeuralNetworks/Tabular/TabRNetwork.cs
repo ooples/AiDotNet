@@ -47,10 +47,8 @@ public class TabRNetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private ILossFunction<T> _lossFunction;
 
-    /// <summary>
-    /// Gets the TabR-specific options.
-    /// </summary>
-    public TabROptions<T> Options => _options;
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Gets the number of neighbors to retrieve.

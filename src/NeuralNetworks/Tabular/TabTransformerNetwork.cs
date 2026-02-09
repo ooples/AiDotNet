@@ -51,10 +51,8 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private ILossFunction<T> _lossFunction;
 
-    /// <summary>
-    /// Gets the TabTransformer-specific options.
-    /// </summary>
-    public TabTransformerOptions<T> Options => _options;
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Gets the embedding dimension.

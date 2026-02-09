@@ -53,10 +53,8 @@ public class SAINTNetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private ILossFunction<T> _lossFunction;
 
-    /// <summary>
-    /// Gets the SAINT-specific options.
-    /// </summary>
-    public SAINTOptions<T> Options => _options;
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Gets the embedding dimension.

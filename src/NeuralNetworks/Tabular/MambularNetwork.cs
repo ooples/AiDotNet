@@ -42,10 +42,8 @@ public class MambularNetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private ILossFunction<T> _lossFunction;
 
-    /// <summary>
-    /// Gets the Mambular-specific options.
-    /// </summary>
-    public MambularOptions<T> Options => _options;
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Gets the embedding dimension.
