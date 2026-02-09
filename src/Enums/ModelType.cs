@@ -2890,7 +2890,196 @@ public enum ModelType
     /// This focuses synthetic data generation on the decision boundary where it matters most.
     /// </para>
     /// </remarks>
-    SvmSMOTE
+    SvmSMOTE,
+
+    // ==================== Probabilistic Boosting Classifiers ====================
+
+    /// <summary>
+    /// NGBoost classifier for probabilistic classification with calibrated probabilities.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> NGBoost classifier produces well-calibrated probability estimates.
+    /// When it says 70% probability for a class, approximately 70% of similar predictions will
+    /// actually be that class. Uses natural gradients for stable training.
+    /// </para>
+    /// </remarks>
+    NGBoostClassifier,
+
+    /// <summary>
+    /// DART classifier with dropout regularization for boosting.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DART classifier applies dropout regularization to gradient boosting.
+    /// During training, random trees are temporarily dropped when fitting new trees. This prevents
+    /// overfitting and produces more robust models, especially on smaller datasets.
+    /// </para>
+    /// </remarks>
+    DARTClassifier,
+
+    /// <summary>
+    /// Explainable Boosting Machine classifier - a glass-box interpretable model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> EBM classifier provides both high accuracy and full interpretability.
+    /// You can see exactly how each feature contributes to predictions through visual shape functions.
+    /// Crucial for domains requiring explainable AI like healthcare and finance.
+    /// </para>
+    /// </remarks>
+    ExplainableBoostingClassifier,
+
+    /// <summary>
+    /// Natural Gradient Boosting for probabilistic regression.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> NGBoost predicts not just a single value but a full probability distribution.
+    /// Instead of saying "the house price will be $300,000", it says "the price is most likely $300,000
+    /// but could reasonably be anywhere from $250,000 to $350,000". This uncertainty information is
+    /// valuable for decision-making. NGBoost uses natural gradients for more stable training and
+    /// supports different distributions for different types of data.
+    /// </para>
+    /// </remarks>
+    NGBoost,
+
+    /// <summary>
+    /// Explainable Boosting Machine - a glass-box interpretable model.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> EBM is special because it gives you both high accuracy AND full explainability.
+    /// Unlike "black box" models, EBM shows you exactly how each feature affects predictions through
+    /// interpretable graphs called "shape functions." This is crucial for healthcare, finance, and
+    /// other domains where you need to explain and justify predictions.
+    /// </para>
+    /// </remarks>
+    ExplainableBoostingMachine,
+
+    /// <summary>
+    /// Generalized Additive Models for Location, Scale, and Shape.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GAMLSS extends regression by modeling not just the mean but all parameters
+    /// of a probability distribution. This allows uncertainty (variance) to depend on features, giving
+    /// you proper prediction intervals that vary with input conditions. Useful for financial forecasting,
+    /// medical studies, and any scenario where uncertainty varies.
+    /// </para>
+    /// </remarks>
+    GAMLSS,
+
+    /// <summary>
+    /// Beta Regression for modeling proportions and rates in (0,1).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Beta Regression is used when predicting proportions (percentages, rates)
+    /// that must be between 0 and 1. Unlike regular regression, it always produces valid predictions
+    /// and properly handles the bounded nature of proportion data.
+    /// </para>
+    /// </remarks>
+    BetaRegression,
+
+    /// <summary>
+    /// Zero-Inflated regression for count data with excess zeros.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Zero-Inflated models are for counting things when there are lots of zeros.
+    /// They distinguish between "structural zeros" (people who never do something) and "sampling zeros"
+    /// (people who could but happened not to). Examples: insurance claims, store visits, disease counts.
+    /// </para>
+    /// </remarks>
+    ZeroInflatedRegression,
+
+    /// <summary>
+    /// DeepSurv - deep learning for survival analysis.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepSurv predicts "time until an event" using neural networks.
+    /// Examples: patient survival, customer churn timing, equipment failure. It handles
+    /// censored data (when we don't know the exact event time) and outputs risk scores
+    /// and survival probabilities.
+    /// </para>
+    /// </remarks>
+    DeepSurv,
+
+    /// <summary>
+    /// DeepHit - deep learning for survival analysis with competing risks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DeepHit directly predicts the probability of an event at each time point
+    /// without assuming proportional hazards. Unlike DeepSurv, it can handle multiple competing risks
+    /// (e.g., patient could die from disease OR treatment side effects). It outputs probability
+    /// distributions over discrete time bins.
+    /// </para>
+    /// </remarks>
+    DeepHit,
+
+    /// <summary>
+    /// DART - Dropouts meet Multiple Additive Regression Trees.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DART applies dropout regularization to gradient boosting. During training,
+    /// random trees are "dropped out" (temporarily removed) when fitting new trees. This prevents
+    /// overfitting and improves generalization, similar to dropout in neural networks.
+    /// </para>
+    /// </remarks>
+    DART,
+
+    /// <summary>
+    /// Mixed-Effects Model (Hierarchical/Multilevel) for clustered data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Mixed-effects models handle data with natural grouping (students in schools,
+    /// patients in hospitals, measurements over time). They estimate both population-level patterns
+    /// (fixed effects) and group-level variations (random effects), properly accounting for the
+    /// correlation structure in hierarchical data.
+    /// </para>
+    /// </remarks>
+    MixedEffectsModel,
+
+    /// <summary>
+    /// Generalized Linear Mixed-Effects Model (GLMM) for non-Gaussian hierarchical data.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> GLMMs extend mixed models to non-continuous outcomes like
+    /// binary (yes/no), count (0,1,2,...), or positive continuous data. Use logistic GLMM
+    /// for pass/fail outcomes, Poisson GLMM for count data with clustering.
+    /// </para>
+    /// </remarks>
+    GeneralizedLinearMixedModel,
+
+    /// <summary>
+    /// Super Learner (Stacking) ensemble for optimal model combination.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Super Learner combines multiple models using cross-validation to learn
+    /// optimal combination weights. It's mathematically proven to perform at least as well as the
+    /// best individual model and often outperforms all of them.
+    /// </para>
+    /// </remarks>
+    SuperLearner,
+
+    /// <summary>
+    /// Calibrated classifier wrapper for improved probability estimates.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Wraps any classifier and improves its probability predictions
+    /// using calibration methods like Platt scaling, isotonic regression, or beta calibration.
+    /// Essential when you need reliable probability estimates for decision making.
+    /// </para>
+    /// </remarks>
+    CalibratedClassifier
 }
 
 
