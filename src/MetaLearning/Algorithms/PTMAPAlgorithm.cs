@@ -166,7 +166,6 @@ public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _ptmapOptions.OuterLearningRate));
         }
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

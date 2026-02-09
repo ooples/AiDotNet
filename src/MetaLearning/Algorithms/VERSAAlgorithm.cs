@@ -221,7 +221,6 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         // Update amortization network parameters using finite differences
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _amortizationParams, _versaOptions.OuterLearningRate);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

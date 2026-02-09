@@ -181,7 +181,6 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         // Update kernel hyperparameters via SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _kernelParams, _dktOptions.OuterLearningRate);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

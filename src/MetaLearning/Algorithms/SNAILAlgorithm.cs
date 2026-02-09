@@ -300,7 +300,6 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             _attentionBlockParams[block] = attParams;
         }
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

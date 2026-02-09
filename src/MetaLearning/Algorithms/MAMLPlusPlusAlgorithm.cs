@@ -275,8 +275,6 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             UpdatePerStepLearningRates(taskBatch, initParams, effectiveOuterLR);
         }
 
-        _currentIteration++;
-
         return ComputeMean(losses);
     }
 

@@ -117,7 +117,6 @@ public class OpenMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _openMAMLOptions.OuterLearningRate));
         }
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

@@ -204,7 +204,6 @@ public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         // Update hypernetwork via SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _hypernetParams, _hyperMAMLOptions.OuterLearningRate);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

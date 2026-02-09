@@ -139,7 +139,6 @@ public class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         // Update context module via SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _contextParams, _camlOptions.OuterLearningRate);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

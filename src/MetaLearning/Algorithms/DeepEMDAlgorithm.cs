@@ -169,7 +169,6 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             MetaModel.SetParameters(updatedParams);
         }
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

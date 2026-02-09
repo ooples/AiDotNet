@@ -155,7 +155,6 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         if (_constellationOptions.UseSpatialRelations)
             UpdateAuxiliaryParamsSPSA(taskBatch, ref _relationParams, _constellationOptions.OuterLearningRate);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

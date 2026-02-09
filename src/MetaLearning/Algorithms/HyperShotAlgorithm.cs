@@ -127,7 +127,6 @@ public class HyperShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         // Update hypernetwork via SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _hypernetParams, _hyperShotOptions.OuterLearningRate);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

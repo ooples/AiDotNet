@@ -281,7 +281,6 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         // Update projection head via multi-sample SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionParams, _mclOptions.OuterLearningRate);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

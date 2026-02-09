@@ -248,8 +248,8 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
 
         // Perform meta-training
         var metaLoss = MetaTrain(taskBatch);
-
         _currentIteration++;
+
         stopwatch.Stop();
 
         // MetaTrainingStepResult constructor: metaLoss, taskLoss, accuracy, numTasks, iteration, timeMs
@@ -1081,24 +1081,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
             return (IFullModel<T, TInput, TOutput>)cloneable.Clone();
         }
 
-        // Fallback: Create a shallow copy by copying parameters
-        // This preserves the original model structure while creating independent parameters
-        var parameters = MetaModel.GetParameters();
-        if (parameters.Length > 0)
-        {
-            // Create a copy of parameters to avoid shared state
-            var clonedParams = new Vector<T>(parameters.Length);
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                clonedParams[i] = parameters[i];
-            }
-
-            // Set the cloned parameters back (creates a new parameter vector internally)
-            MetaModel.SetParameters(clonedParams);
-        }
-
-        // If model doesn't implement ICloneable and can't be parameter-cloned,
-        // throw to prevent silent parameter corruption
+        // If model doesn't implement ICloneable, throw to prevent silent parameter corruption
         throw new InvalidOperationException(
             $"Cannot clone model of type {MetaModel.GetType().Name}. " +
             $"Meta-learning algorithms require models that implement ICloneable " +

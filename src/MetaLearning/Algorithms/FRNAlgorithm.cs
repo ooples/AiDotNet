@@ -234,7 +234,6 @@ public class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _frnOptions.OuterLearningRate));
         }
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

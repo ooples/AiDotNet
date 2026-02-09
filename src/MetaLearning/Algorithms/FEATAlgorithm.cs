@@ -229,7 +229,6 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         // Update transformer parameters via multi-sample SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _transformerParams, _featOptions.OuterLearningRate);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

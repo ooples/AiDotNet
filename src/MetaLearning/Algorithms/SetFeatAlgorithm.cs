@@ -148,7 +148,6 @@ public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         if (_setFeatOptions.UseCrossAttention)
             UpdateAuxiliaryParamsSPSA(taskBatch, ref _crossAttentionParams, _setFeatOptions.OuterLearningRate);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

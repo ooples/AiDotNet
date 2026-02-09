@@ -244,8 +244,6 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             UpdateLambda(taskBatch);
         }
 
-        _currentIteration++;
-
         return ComputeMean(losses);
     }
 

@@ -64,7 +64,6 @@ public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             var avgGrad = AverageVectors(metaGradients);
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _metaBaselineOptions.OuterLearningRate));
         }
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

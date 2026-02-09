@@ -158,7 +158,6 @@ public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         // Update feature mean for CL2N normalization
         UpdateFeatureMean(taskBatch);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

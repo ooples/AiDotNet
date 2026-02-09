@@ -187,7 +187,6 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _npbmlOptions.OuterLearningRate);
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _decoderParams, _npbmlOptions.OuterLearningRate);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

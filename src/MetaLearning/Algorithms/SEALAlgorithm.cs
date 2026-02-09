@@ -163,9 +163,6 @@ public class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             throw new ArgumentException("Task batch cannot be null or empty.", nameof(taskBatch));
         }
 
-        // Track current iteration for temperature annealing
-        _currentIteration++;
-
         // Compute current temperature (with optional annealing)
         double currentTemperature = ComputeCurrentTemperature();
 

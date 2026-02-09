@@ -155,7 +155,6 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _pointGraphParams, _dpgnOptions.OuterLearningRate);
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _distGraphParams, _dpgnOptions.OuterLearningRate);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

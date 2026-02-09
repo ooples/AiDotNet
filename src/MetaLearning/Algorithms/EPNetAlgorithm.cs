@@ -228,7 +228,6 @@ public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _epnetOptions.OuterLearningRate));
         }
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

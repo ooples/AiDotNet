@@ -138,7 +138,6 @@ public class SIBAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             MetaModel.SetParameters(updatedParams);
         }
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

@@ -121,7 +121,6 @@ public class LaplacianShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             MetaModel.SetParameters(updatedParams);
         }
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 

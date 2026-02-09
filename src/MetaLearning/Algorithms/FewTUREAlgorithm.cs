@@ -182,7 +182,6 @@ public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         // Update uncertainty module via SPSA
         UpdateAuxiliaryParamsSPSA(taskBatch, ref _uncertaintyParams, _fewTUREOptions.OuterLearningRate);
 
-        _currentIteration++;
         return ComputeMean(losses);
     }
 
