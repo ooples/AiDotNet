@@ -544,10 +544,6 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             }
         }
     }
-
-    /// <summary>
-    /// Computes the element-wise average of a list of vectors.
-    /// </summary>
 }
 
 /// <summary>

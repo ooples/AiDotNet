@@ -135,14 +135,26 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             var supportFeatures = ConvertToVector(supportPred);
             var queryFeatures = ConvertToVector(queryPred);
 
-            // Compute EMD score as proxy for classification
+            // Compute EMD score and use it to modulate backbone for query loss
+            // Per paper: EMD-based similarity drives classification, so it must affect training loss
             if (supportFeatures != null && queryFeatures != null)
             {
                 double emdScore = ComputeEMDScore(supportFeatures, queryFeatures);
-                // Use standard loss as meta-objective (EMD guides feature learning)
+
+                // EMD-derived modulation: low EMD (similar) → modulation near 1.0,
+                // high EMD (dissimilar) → modulation < 1.0 (shrink features)
+                double modFactor = 1.0 / (1.0 + emdScore * _deepEmdOptions.Temperature);
+                modFactor = Math.Max(0.5, Math.Min(2.0, 0.5 + modFactor));
+
+                var currentParams = MetaModel.GetParameters();
+                var modulatedParams = new Vector<T>(currentParams.Length);
+                for (int i = 0; i < currentParams.Length; i++)
+                    modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor));
+                MetaModel.SetParameters(modulatedParams);
             }
 
-            var queryLoss = ComputeLossFromOutput(queryPred, task.QueryOutput);
+            var queryPred2 = MetaModel.Predict(task.QueryInput);
+            var queryLoss = ComputeLossFromOutput(queryPred2, task.QueryOutput);
             losses.Add(queryLoss);
 
             var metaGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
