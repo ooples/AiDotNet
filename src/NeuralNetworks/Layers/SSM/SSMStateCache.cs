@@ -82,14 +82,16 @@ public class SSMStateCache<T>
     /// Creates a new SSM state cache.
     /// </summary>
     /// <param name="enableCompression">
-    /// Whether to quantize cached states to reduce memory. Default: false.
-    /// <para><b>For Beginners:</b> Enable this for long sequences to reduce memory usage.
-    /// The cached states will be stored with reduced precision, saving ~4x memory at 8-bit.</para>
+    /// Whether to quantize cached states to reduced precision on storage. Default: false.
+    /// <para><b>For Beginners:</b> Enable this to simulate lower-precision cached states (for example,
+    /// 8-bit resolution). This helps test how the model behaves with reduced precision, but the current
+    /// implementation still stores values in Tensor&lt;T&gt;, so actual memory usage is unchanged.</para>
     /// </param>
     /// <param name="compressionBitWidth">
-    /// Bit width for compressed states. Default: 8.
-    /// <para><b>For Beginners:</b> Lower values save more memory but lose more precision.
-    /// 8-bit is usually a good balance.</para>
+    /// Bit width used when quantizing cached states. Default: 8.
+    /// <para><b>For Beginners:</b> Lower values use fewer distinct levels and can increase quantization
+    /// error; 8-bit is usually a good balance. This controls precision only, not the in-memory size of
+    /// the underlying Tensor&lt;T&gt;.</para>
     /// </param>
     public SSMStateCache(bool enableCompression = false, int compressionBitWidth = 8)
     {
@@ -324,8 +326,14 @@ public class SSMStateCache<T>
             return CloneTensor(state);
         }
 
+        // 32-bit is a no-op: the quantize-dequantize round-trip would not meaningfully change values
+        if (_compressionBitWidth >= 32)
+        {
+            return CloneTensor(state);
+        }
+
         // Store quantized values (still as T, but with reduced effective precision)
-        long levels = _compressionBitWidth >= 32 ? (1L << 31) - 1 : (1L << _compressionBitWidth) - 1;
+        long levels = (1L << _compressionBitWidth) - 1;
         T levelsT = NumOps.FromDouble(levels);
         var compressed = new Tensor<T>(state.Shape);
 

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using AiDotNet.Deployment.Optimization.Quantization;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -150,7 +151,7 @@ public static class SSMQuantizationHelper<T>
         if (layer == null) throw new ArgumentNullException(nameof(layer));
 
         int paramCount = layer.ParameterCount;
-        long originalBytes = paramCount * 4L; // Assume 32-bit (4 bytes) per parameter
+        long originalBytes = paramCount * (long)Unsafe.SizeOf<T>();
         long quantizedBytes = (long)Math.Ceiling(paramCount * targetBitWidth / 8.0);
 
         // Add overhead for scale/zero-point per group (if per-channel)
@@ -215,7 +216,16 @@ public static class SSMQuantizationHelper<T>
             return result;
         }
 
-        long levels = bitWidth >= 32 ? (1L << 31) - 1 : (1L << bitWidth) - 1;
+        // 32-bit is a no-op: quantize-dequantize would not meaningfully change values
+        if (bitWidth >= 32)
+        {
+            var copy = new Vector<T>(parameters.Length);
+            for (int i = 0; i < parameters.Length; i++)
+                copy[i] = parameters[i];
+            return copy;
+        }
+
+        long levels = (1L << bitWidth) - 1;
         var quantized = new Vector<T>(parameters.Length);
 
         for (int i = 0; i < parameters.Length; i++)
