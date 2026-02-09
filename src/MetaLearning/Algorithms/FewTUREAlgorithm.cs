@@ -117,43 +117,35 @@ public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     /// <returns>Uncertainty score (higher = more uncertain).</returns>
     private double EstimateUncertainty(Vector<T> features)
     {
-        if (_fewTUREOptions.UncertaintyMethod == "entropy")
-        {
-            // Compute entropy of softmax distribution
-            double maxVal = double.MinValue;
-            for (int i = 0; i < features.Length; i++)
-            {
-                double v = NumOps.ToDouble(features[i]);
-                if (v > maxVal) maxVal = v;
-            }
+        if (features.Length == 0)
+            return 0;
 
-            double sumExp = 0;
-            for (int i = 0; i < features.Length; i++)
-                sumExp += Math.Exp(NumOps.ToDouble(features[i]) - maxVal);
+        // Process features through the learned uncertainty MLP (_uncertaintyParams).
+        // For each feature element: hidden = ReLU(w1 * val + b1), score = sigmoid(w2 * hidden + b2).
+        // Average all per-element scores for the overall uncertainty estimate.
+        int paramIdx = 0;
+        double totalScore = 0;
 
-            double entropy = 0;
-            for (int i = 0; i < features.Length; i++)
-            {
-                double p = Math.Exp(NumOps.ToDouble(features[i]) - maxVal) / sumExp;
-                if (p > 1e-10)
-                    entropy -= p * Math.Log(p);
-            }
-            return entropy;
-        }
-
-        // Default: variance-based uncertainty
-        T mean = NumOps.Zero;
-        for (int i = 0; i < features.Length; i++)
-            mean = NumOps.Add(mean, features[i]);
-        mean = NumOps.Divide(mean, NumOps.FromDouble(Math.Max(1, features.Length)));
-
-        double variance = 0;
         for (int i = 0; i < features.Length; i++)
         {
-            double diff = NumOps.ToDouble(NumOps.Subtract(features[i], mean));
-            variance += diff * diff;
+            double val = NumOps.ToDouble(features[i]);
+
+            // Layer 1: ReLU activation
+            double w1 = paramIdx < _uncertaintyParams.Length
+                ? NumOps.ToDouble(_uncertaintyParams[paramIdx++ % _uncertaintyParams.Length]) : 0.01;
+            double b1 = paramIdx < _uncertaintyParams.Length
+                ? NumOps.ToDouble(_uncertaintyParams[paramIdx++ % _uncertaintyParams.Length]) : 0;
+            double hidden = Math.Max(0, w1 * val + b1);
+
+            // Layer 2: sigmoid output -> [0, 1] uncertainty score
+            double w2 = paramIdx < _uncertaintyParams.Length
+                ? NumOps.ToDouble(_uncertaintyParams[paramIdx++ % _uncertaintyParams.Length]) : 0.01;
+            double b2 = paramIdx < _uncertaintyParams.Length
+                ? NumOps.ToDouble(_uncertaintyParams[paramIdx++ % _uncertaintyParams.Length]) : 0;
+            totalScore += 1.0 / (1.0 + Math.Exp(-(w2 * hidden + b2)));
         }
-        return variance / Math.Max(1, features.Length);
+
+        return totalScore / Math.Max(features.Length, 1);
     }
 
     /// <inheritdoc/>

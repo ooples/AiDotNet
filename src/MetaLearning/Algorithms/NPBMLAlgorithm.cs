@@ -204,26 +204,31 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             MetaModel.SetParameters(initParams);
 
             var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
+            var queryFeatures = ConvertToVector(MetaModel.Predict(task.QueryInput));
 
-            // Encode support features and compute KL divergence
+            // Encode support features and compute KL divergence (uses _encoderParams)
             var dist = EncodeToDistribution(supportFeatures);
             double klLoss = 0;
             if (dist != null)
                 klLoss = ComputeKLDivergence(dist.Value.mu, dist.Value.logSigma);
 
-            // Encode and sample to get modulated features
+            // Encode and sample latent from support features (uses _encoderParams)
             var sampledLatent = EncodeAndSample(supportFeatures);
-            if (sampledLatent != null && supportFeatures != null && supportFeatures.Length > 0)
+
+            // Decode: latent + query -> decoded features (uses _decoderParams)
+            var decodedQuery = DecodeLatent(sampledLatent, queryFeatures);
+
+            if (decodedQuery != null && queryFeatures != null && queryFeatures.Length > 0)
             {
                 double sumRatio = 0;
                 int count = 0;
-                for (int i = 0; i < Math.Min(supportFeatures.Length, sampledLatent.Length); i++)
+                for (int i = 0; i < Math.Min(queryFeatures.Length, decodedQuery.Length); i++)
                 {
-                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                    double sampledVal = NumOps.ToDouble(sampledLatent[i]);
+                    double rawVal = NumOps.ToDouble(queryFeatures[i]);
+                    double decodedVal = NumOps.ToDouble(decodedQuery[i]);
                     if (Math.Abs(rawVal) > 1e-10)
                     {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, sampledVal / rawVal));
+                        sumRatio += Math.Max(0.5, Math.Min(2.0, decodedVal / rawVal));
                         count++;
                     }
                 }
@@ -335,6 +340,49 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         return sampled;
     }
 
+    /// <summary>
+    /// Decodes the sampled latent combined with query features through the decoder network.
+    /// Maps (latent, query) -> decoded features using _decoderParams (2-layer MLP with tanh activation).
+    /// </summary>
+    /// <param name="sampledLatent">Sampled latent vector from the encoder.</param>
+    /// <param name="queryFeatures">Query set features.</param>
+    /// <returns>Decoded feature vector, or raw queryFeatures if inputs are null.</returns>
+    private Vector<T>? DecodeLatent(Vector<T>? sampledLatent, Vector<T>? queryFeatures)
+    {
+        if (sampledLatent == null || queryFeatures == null || queryFeatures.Length == 0)
+            return queryFeatures;
+
+        var decoded = new Vector<T>(queryFeatures.Length);
+        int paramIdx = 0;
+
+        for (int i = 0; i < queryFeatures.Length; i++)
+        {
+            double latentVal = NumOps.ToDouble(sampledLatent[i % sampledLatent.Length]);
+            double queryVal = NumOps.ToDouble(queryFeatures[i]);
+
+            // Layer 1: hidden = tanh(w1 * latent + w2 * query + b1)
+            double w1 = paramIdx < _decoderParams.Length
+                ? NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]) : 0.01;
+            double w2 = paramIdx < _decoderParams.Length
+                ? NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]) : 0.01;
+            double b1 = paramIdx < _decoderParams.Length
+                ? NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]) : 0;
+            double hidden = Math.Tanh(w1 * latentVal + w2 * queryVal + b1);
+
+            // Layer 2: output = w3 * hidden + b2
+            double w3 = paramIdx < _decoderParams.Length
+                ? NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]) : 0.01;
+            double b2 = paramIdx < _decoderParams.Length
+                ? NumOps.ToDouble(_decoderParams[paramIdx++ % _decoderParams.Length]) : 0;
+            double output = w3 * hidden + b2;
+
+            // Residual connection: query + scaled decoder output
+            decoded[i] = NumOps.FromDouble(queryVal + output * 0.1);
+        }
+
+        return decoded;
+    }
+
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
@@ -344,31 +392,34 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         var supportPred = MetaModel.Predict(task.SupportInput);
         var supportFeatures = ConvertToVector(supportPred);
 
-        // Encode support set into latent distribution and sample
+        // Encode support set into latent distribution and sample (uses _encoderParams)
         var sampledLatent = EncodeAndSample(supportFeatures);
 
-        // Compute raw modulation factors from the latent sample
-        // These sigmoid(z) values will be used to modulate backbone parameters in Predict()
+        // Decode: latent + support features -> decoded features (uses _decoderParams)
+        var decodedFeatures = DecodeLatent(sampledLatent, supportFeatures);
+
+        // Compute modulation factors from decoded vs raw support features
         double[]? modulationFactors = null;
-        var dist = EncodeToDistribution(supportFeatures);
-        if (dist != null)
+        if (decodedFeatures != null && supportFeatures != null && supportFeatures.Length > 0)
         {
-            var (mu, logSigma) = dist.Value;
-            int latentDim = _npbmlOptions.LatentDim;
-            modulationFactors = new double[latentDim];
-            for (int i = 0; i < latentDim; i++)
+            double sumRatio = 0;
+            int count = 0;
+            for (int i = 0; i < Math.Min(supportFeatures.Length, decodedFeatures.Length); i++)
             {
-                double sigma = Math.Exp(logSigma[i]);
-                double u1 = Math.Max(RandomGenerator.NextDouble(), 1e-10);
-                double u2 = RandomGenerator.NextDouble();
-                double eps = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                double z = mu[i] + sigma * eps;
-                modulationFactors[i] = 1.0 / (1.0 + Math.Exp(-z)); // Sigmoid gate
+                double rawVal = NumOps.ToDouble(supportFeatures[i]);
+                double decodedVal = NumOps.ToDouble(decodedFeatures[i]);
+                if (Math.Abs(rawVal) > 1e-10)
+                {
+                    sumRatio += Math.Max(0.5, Math.Min(2.0, decodedVal / rawVal));
+                    count++;
+                }
             }
+            if (count > 0)
+                modulationFactors = [sumRatio / count];
         }
 
         return new NPBMLModel<T, TInput, TOutput>(
-            MetaModel, currentParams, sampledLatent, _npbmlOptions.NumSamples, modulationFactors);
+            MetaModel, currentParams, decodedFeatures, _npbmlOptions.NumSamples, modulationFactors);
     }
 
 }
