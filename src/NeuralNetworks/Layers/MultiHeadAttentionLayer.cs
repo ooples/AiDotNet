@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -86,6 +87,15 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private T _lastEntropyLoss;
     private T _lastDiversityLoss;
     private List<Tensor<T>>? _lastHeadOutputs = null;
+
+    // Positional encoding support
+    private RotaryPositionalEncodingLayer<T>? _ropeLayer;
+    private ALiBiPositionalBiasLayer<T>? _alibiLayer;
+
+    /// <summary>
+    /// Gets the positional encoding type used by this attention layer.
+    /// </summary>
+    public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
 
     // Cached projected Q, K, V for backward pass (4D: [batch, heads, seq, head_dim])
     private Tensor<T>? _lastProjectedQueries = null;
@@ -334,6 +344,33 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
+    /// Configures positional encoding for this attention layer.
+    /// </summary>
+    /// <param name="encodingType">The type of positional encoding to use.</param>
+    /// <param name="ropeTheta">Base frequency for RoPE (default: 10000.0).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length for pre-computation (default: 2048).</param>
+    public void ConfigurePositionalEncoding(
+        PositionalEncodingType encodingType,
+        double ropeTheta = 10000.0,
+        int maxSequenceLength = 2048)
+    {
+        PositionalEncoding = encodingType;
+        _ropeLayer = null;
+        _alibiLayer = null;
+
+        switch (encodingType)
+        {
+            case PositionalEncodingType.Rotary:
+                _ropeLayer = new RotaryPositionalEncodingLayer<T>(
+                    maxSequenceLength, _headDimension, ropeTheta);
+                break;
+            case PositionalEncodingType.ALiBi:
+                _alibiLayer = new ALiBiPositionalBiasLayer<T>(_headCount, maxSequenceLength);
+                break;
+        }
+    }
+
+    /// <summary>
     /// Initializes the weights and biases of the layer.
     /// </summary>
     private void InitializeParameters()
@@ -370,6 +407,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         var metadata = base.GetMetadata();
         metadata["HeadCount"] = _headCount.ToString();
+        metadata["PositionalEncoding"] = PositionalEncoding.ToString();
         return metadata;
     }
 
@@ -698,6 +736,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var keys = K_flat.Reshape(batchSize, seqLengthKV, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
         var values = V_flat.Reshape(batchSize, seqLengthKV, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
 
+        // Apply RoPE to Q and K if configured
+        if (_ropeLayer != null)
+        {
+            (queries, keys) = _ropeLayer.ApplyRoPE(queries, keys, startPosition: 0);
+        }
+
         // Cache projected Q, K, V for backward pass (4D: [batch, heads, seq, head_dim])
         _lastProjectedQueries = queries;
         _lastProjectedKeys = keys;
@@ -707,11 +751,25 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // ScaledDotProductAttention computes: softmax(Q @ K^T / scale) @ V
         // Input shapes: [batch, heads, seq, head_dim]
         // Output shape: [batch, heads, seq_q, head_dim]
-        var context_4D = Engine.ScaledDotProductAttention(
-            queries, keys, values,
-            mask: null,
-            scale: 1.0 / Math.Sqrt(_headDimension),
-            out var attentionWeights4D);
+
+        // For ALiBi, compute attention manually with bias injection
+        Tensor<T> context_4D;
+        Tensor<T> attentionWeights4D;
+
+        if (_alibiLayer != null)
+        {
+            // Manual attention with ALiBi bias injection before softmax
+            double scale = 1.0 / Math.Sqrt(_headDimension);
+            context_4D = ComputeAttentionWithALiBi(queries, keys, values, scale, out attentionWeights4D);
+        }
+        else
+        {
+            context_4D = Engine.ScaledDotProductAttention(
+                queries, keys, values,
+                mask: null,
+                scale: 1.0 / Math.Sqrt(_headDimension),
+                out attentionWeights4D);
+        }
 
         // Cache attention weights for backward pass
         _lastAttentionScores = attentionWeights4D;
@@ -758,6 +816,117 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         outputShape[^1] = embeddingDimension;
 
         return result.Reshape(outputShape);
+    }
+
+    /// <summary>
+    /// Computes scaled dot-product attention with ALiBi bias injection before softmax.
+    /// </summary>
+    private Tensor<T> ComputeAttentionWithALiBi(
+        Tensor<T> queries, Tensor<T> keys, Tensor<T> values,
+        double scale, out Tensor<T> attentionWeights)
+    {
+        int batchSize = queries.Shape[0];
+        int numHeads = queries.Shape[1];
+        int seqLenQ = queries.Shape[2];
+        int seqLenKV = keys.Shape[2];
+        int headDim = queries.Shape[3];
+
+        T scaleT = NumOps.FromDouble(scale);
+        T negInf = NumOps.FromDouble(double.NegativeInfinity);
+
+        // Compute Q @ K^T / scale -> [batch, heads, seqQ, seqKV]
+        var scores = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, seqLenKV });
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < numHeads; h++)
+            {
+                for (int i = 0; i < seqLenQ; i++)
+                {
+                    for (int j = 0; j < seqLenKV; j++)
+                    {
+                        T dot = NumOps.Zero;
+                        for (int d = 0; d < headDim; d++)
+                        {
+                            T qVal = queries[new[] { b, h, i, d }];
+                            T kVal = keys[new[] { b, h, j, d }];
+                            dot = NumOps.Add(dot, NumOps.Multiply(qVal, kVal));
+                        }
+                        scores[new[] { b, h, i, j }] = NumOps.Multiply(dot, scaleT);
+                    }
+                }
+            }
+        }
+
+        // Add ALiBi bias
+        var aliBiBias = _alibiLayer!.ComputeBias(seqLenQ, seqLenKV);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < numHeads; h++)
+            {
+                for (int i = 0; i < seqLenQ; i++)
+                {
+                    for (int j = 0; j < seqLenKV; j++)
+                    {
+                        scores[new[] { b, h, i, j }] = NumOps.Add(
+                            scores[new[] { b, h, i, j }],
+                            aliBiBias[new[] { h, i, j }]);
+                    }
+                }
+            }
+        }
+
+        // Softmax and weighted sum
+        attentionWeights = new Tensor<T>(scores.Shape);
+        var output = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, headDim });
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int h = 0; h < numHeads; h++)
+            {
+                for (int i = 0; i < seqLenQ; i++)
+                {
+                    // Find max for numerical stability
+                    T maxScore = negInf;
+                    for (int j = 0; j < seqLenKV; j++)
+                    {
+                        T s = scores[new[] { b, h, i, j }];
+                        if (NumOps.GreaterThan(s, maxScore))
+                            maxScore = s;
+                    }
+
+                    // Compute exp and sum
+                    T sumExp = NumOps.Zero;
+                    var weights = new T[seqLenKV];
+                    for (int j = 0; j < seqLenKV; j++)
+                    {
+                        weights[j] = NumOps.Exp(NumOps.Subtract(scores[new[] { b, h, i, j }], maxScore));
+                        sumExp = NumOps.Add(sumExp, weights[j]);
+                    }
+
+                    // Normalize and compute output
+                    for (int j = 0; j < seqLenKV; j++)
+                    {
+                        T w = NumericalStabilityHelper.SafeDiv(weights[j], sumExp);
+                        attentionWeights[new[] { b, h, i, j }] = w;
+                    }
+
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        T sum = NumOps.Zero;
+                        for (int j = 0; j < seqLenKV; j++)
+                        {
+                            sum = NumOps.Add(sum, NumOps.Multiply(
+                                attentionWeights[new[] { b, h, i, j }],
+                                values[new[] { b, h, j, d }]));
+                        }
+                        output[new[] { b, h, i, d }] = sum;
+                    }
+                }
+            }
+        }
+
+        return output;
     }
 
     /// <summary>

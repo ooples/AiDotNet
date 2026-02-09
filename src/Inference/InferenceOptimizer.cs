@@ -1,5 +1,6 @@
 using System.Threading;
 using AiDotNet.Configuration;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Inference.PagedAttention;
 using AiDotNet.Inference.Quantization;
@@ -190,11 +191,18 @@ internal class InferenceOptimizer<T>
     {
         // Find all cached attention layers or layers that support caching
         var attentionLayers = new List<CachedMultiHeadAttention<T>>();
+        var gqaLayers = new List<CachedGroupedQueryAttention<T>>();
         int layerIndex = 0;
 
         foreach (var layer in model.Layers)
         {
-            if (layer is CachedMultiHeadAttention<T> cachedAttention)
+            if (layer is CachedGroupedQueryAttention<T> cachedGqa)
+            {
+                cachedGqa.LayerIndex = layerIndex;
+                gqaLayers.Add(cachedGqa);
+                layerIndex++;
+            }
+            else if (layer is CachedMultiHeadAttention<T> cachedAttention)
             {
                 cachedAttention.LayerIndex = layerIndex;
                 attentionLayers.Add(cachedAttention);
@@ -202,10 +210,16 @@ internal class InferenceOptimizer<T>
             }
         }
 
-        if (attentionLayers.Count == 0)
+        if (attentionLayers.Count == 0 && gqaLayers.Count == 0)
         {
             // No attention layers found - KV cache not applicable
             return false;
+        }
+
+        // Handle GQA layers
+        if (gqaLayers.Count > 0)
+        {
+            return InitializeGQAKVCache(gqaLayers);
         }
 
         // Determine cache parameters from the first attention layer
@@ -236,6 +250,44 @@ internal class InferenceOptimizer<T>
 
         // Attach cache to all attention layers and enable inference mode
         foreach (var layer in attentionLayers)
+        {
+            layer.Cache = _kvCache;
+            layer.InferenceMode = true;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Initializes KV cache for GQA layers using numKVHeads instead of numHeads.
+    /// </summary>
+    private bool InitializeGQAKVCache(List<CachedGroupedQueryAttention<T>> gqaLayers)
+    {
+        var firstLayer = gqaLayers[0];
+        // Use KV head count for cache (the key memory saving of GQA)
+        int numKVHeads = firstLayer.KVHeadCount;
+        int headDim = firstLayer.HeadDimension;
+        int numLayers = gqaLayers.Count;
+        int maxSeqLen = EstimateMaxSequenceLength(numLayers, numKVHeads, headDim);
+
+        var cacheConfig = new KVCacheConfig
+        {
+            NumLayers = numLayers,
+            NumHeads = numKVHeads, // Key: cache uses KV heads, not full heads
+            HeadDimension = headDim,
+            MaxSequenceLength = maxSeqLen,
+            MaxBatchSize = _config.MaxBatchSize,
+            PreAllocate = true,
+            UseSlidingWindow = _config.UseSlidingWindowKVCache,
+            WindowSize = _config.UseSlidingWindowKVCache
+                ? Math.Min(_config.KVCacheWindowSize, maxSeqLen)
+                : 1024,
+            DataType = ResolveKVCacheDataType()
+        };
+
+        _kvCache = new KVCache<T>(cacheConfig);
+
+        foreach (var layer in gqaLayers)
         {
             layer.Cache = _kvCache;
             layer.InferenceMode = true;
@@ -374,7 +426,8 @@ internal class InferenceOptimizer<T>
     {
         foreach (var layer in model.Layers)
         {
-            if (layer is MultiHeadAttentionLayer<T> || layer is FlashAttentionLayer<T> || layer is SelfAttentionLayer<T>)
+            if (layer is MultiHeadAttentionLayer<T> || layer is FlashAttentionLayer<T> ||
+                layer is SelfAttentionLayer<T> || layer is GroupedQueryAttentionLayer<T>)
                 return true;
 
             if (_config.EnableWeightOnlyQuantization &&
@@ -467,6 +520,24 @@ internal class InferenceOptimizer<T>
                             useCausalMask: useCausalMask,
                             activationFunction: activation);
                         cached.SetParameters(mha.GetParameters());
+
+                        // Preserve positional encoding configuration from source MHA layer
+                        if (mha.PositionalEncoding != PositionalEncodingType.None)
+                        {
+                            cached.ConfigurePositionalEncoding(
+                                mha.PositionalEncoding,
+                                ropeTheta: _config.RoPETheta,
+                                maxSequenceLength: seqLen);
+                        }
+                        else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
+                                 _config.PositionalEncoding == PositionalEncodingType.ALiBi)
+                        {
+                            cached.ConfigurePositionalEncoding(
+                                _config.PositionalEncoding,
+                                ropeTheta: _config.RoPETheta,
+                                maxSequenceLength: seqLen);
+                        }
+
                         model.Layers[i] = cached;
                     }
                     anyRewritten = true;
@@ -532,6 +603,48 @@ internal class InferenceOptimizer<T>
                 }
                 anyRewritten = true;
             }
+
+            // Handle Grouped-Query Attention -> CachedGroupedQueryAttention
+            if (layer is GroupedQueryAttentionLayer<T> gqa && enableKVCache && !enablePagedKVCache)
+            {
+                var inputShape = gqa.GetInputShape();
+                if (inputShape.Length < 2)
+                    continue;
+
+                int seqLen = inputShape[0];
+                int embDim = inputShape[1];
+                var activation = gqa.ScalarActivation;
+
+                var cachedGqa = new CachedGroupedQueryAttention<T>(
+                    sequenceLength: seqLen,
+                    embeddingDimension: embDim,
+                    numHeads: gqa.NumHeads,
+                    numKVHeads: gqa.NumKVHeads,
+                    useFlashAttention: enableFlashAttention,
+                    layerIndex: 0,
+                    useCausalMask: useCausalMask,
+                    activationFunction: activation);
+                cachedGqa.SetParameters(gqa.GetParameters());
+
+                // Preserve positional encoding
+                if (gqa.PositionalEncoding != PositionalEncodingType.None)
+                {
+                    cachedGqa.ConfigurePositionalEncoding(
+                        gqa.PositionalEncoding,
+                        ropeTheta: _config.RoPETheta,
+                        maxSequenceLength: seqLen);
+                }
+                else if (_config.PositionalEncoding == PositionalEncodingType.Rotary)
+                {
+                    cachedGqa.ConfigurePositionalEncoding(
+                        _config.PositionalEncoding,
+                        ropeTheta: _config.RoPETheta,
+                        maxSequenceLength: seqLen);
+                }
+
+                model.Layers[i] = cachedGqa;
+                anyRewritten = true;
+            }
         }
 
         return anyRewritten;
@@ -551,9 +664,11 @@ internal class InferenceOptimizer<T>
             return false;
         }
 
+        var mode = _config.InferenceQuantization;
         bool any = false;
         for (int i = 0; i < model.Layers.Count; i++)
         {
+            // Quantize DenseLayer (existing)
             if (model.Layers[i] is DenseLayer<float> dense)
             {
                 try
@@ -570,9 +685,38 @@ internal class InferenceOptimizer<T>
                     InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "DenseLayerQuantizationFailed;FallbackToFP");
                 }
             }
+            // Quantize MultiHeadAttentionLayer (supports INT8, FP8, NF4)
+            else if (model.Layers[i] is MultiHeadAttentionLayer<float> mha)
+            {
+                try
+                {
+                    var replacement = new QuantizedAttentionLayer(mha, mode);
+                    model.Layers[i] = (AiDotNet.Interfaces.ILayer<T>)(object)replacement;
+                    any = true;
+                }
+                catch (Exception ex)
+                {
+                    InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "MHAQuantizationFailed;FallbackToFP");
+                }
+            }
+            // Quantize GroupedQueryAttentionLayer (supports INT8, FP8, NF4)
+            else if (model.Layers[i] is GroupedQueryAttentionLayer<float> gqa)
+            {
+                try
+                {
+                    var replacement = new QuantizedAttentionLayer(gqa, mode);
+                    model.Layers[i] = (AiDotNet.Interfaces.ILayer<T>)(object)replacement;
+                    any = true;
+                }
+                catch (Exception ex)
+                {
+                    InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "GQAQuantizationFailed;FallbackToFP");
+                }
+            }
         }
 
-        InferenceDiagnostics.RecordDecision("InferenceOptimizer", "WeightOnlyQuantization", enabled: any, reason: any ? "Applied(DenseLayer)" : "NoApplicableLayers");
+        string appliedTypes = any ? $"Applied({mode})" : "NoApplicableLayers";
+        InferenceDiagnostics.RecordDecision("InferenceOptimizer", "WeightOnlyQuantization", enabled: any, reason: appliedTypes);
         return any;
     }
 
@@ -823,6 +967,10 @@ internal class InferenceOptimizer<T>
             {
                 cachedAttention.InferenceMode = true;
             }
+            else if (layer is CachedGroupedQueryAttention<T> cachedGqa)
+            {
+                cachedGqa.InferenceMode = true;
+            }
         }
     }
 
@@ -844,6 +992,10 @@ internal class InferenceOptimizer<T>
             else if (layer is PagedCachedMultiHeadAttention<T> pagedAttention)
             {
                 pagedAttention.InferenceMode = false;
+            }
+            else if (layer is CachedGroupedQueryAttention<T> cachedGqa)
+            {
+                cachedGqa.InferenceMode = false;
             }
         }
     }
@@ -918,7 +1070,9 @@ internal class InferenceOptimizer<T>
             ["BatchingEnabled"] = _config.EnableBatching,
             ["PagedKVCacheInitialized"] = _pagedKVCache != null,
             ["PagedAttentionLayerCount"] = _pagedAttentionLayers?.Count ?? 0,
-            ["PagedAttentionWeightOnlyQuantizationEnabled"] = _pagedAttentionLayers?.Any(l => l.EnableWeightOnlyQuantization) ?? false
+            ["PagedAttentionWeightOnlyQuantizationEnabled"] = _pagedAttentionLayers?.Any(l => l.EnableWeightOnlyQuantization) ?? false,
+            ["InferenceQuantizationMode"] = _config.InferenceQuantization.ToString(),
+            ["PositionalEncoding"] = _config.PositionalEncoding.ToString()
         };
 
         if (_kvCache != null)
