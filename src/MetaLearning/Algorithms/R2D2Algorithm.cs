@@ -290,22 +290,79 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     }
 
     /// <summary>
+    /// Estimates the per-example feature dimensionality from flattened vector lengths.
+    /// Uses the configurable EmbeddingDimension if set, otherwise uses a GCD-based heuristic.
+    /// </summary>
+    /// <param name="supportLen">Length of flattened support features.</param>
+    /// <param name="queryLen">Length of flattened query features.</param>
+    /// <returns>Estimated per-example feature dimension.</returns>
+    private int EstimateFeatureDim(int supportLen, int queryLen)
+    {
+        // If user specified embedding dimension, use it as feature dim
+        if (_r2d2Options.EmbeddingDimension > 0)
+            return _r2d2Options.EmbeddingDimension;
+
+        if (supportLen <= 0 || queryLen <= 0) return 1;
+
+        // GCD gives the largest common factor between both lengths
+        int gcd = GCD(supportLen, queryLen);
+
+        // If GCD is too small, the lengths likely aren't cleanly divisible
+        if (gcd < 2)
+            return Math.Min(supportLen, queryLen);
+
+        // Choose the factor that gives a reasonable number of examples (at least 2 support)
+        if (supportLen / gcd >= 2)
+            return gcd;
+
+        // Fallback: each vector is the full length (single example per set)
+        return Math.Min(supportLen, queryLen);
+    }
+
+    private static int GCD(int a, int b)
+    {
+        while (b != 0)
+        {
+            int temp = b;
+            b = a % b;
+            a = temp;
+        }
+        return Math.Abs(a);
+    }
+
+    /// <summary>Splits a flat feature vector into a list of per-example multi-dimensional vectors.</summary>
+    private static List<Vector<T>> SplitIntoVectors(Vector<T> flat, int numExamples, int featureDim)
+    {
+        var result = new List<Vector<T>>();
+        for (int i = 0; i < numExamples; i++)
+        {
+            int start = i * featureDim;
+            int len = Math.Min(featureDim, flat.Length - start);
+            if (len <= 0) break;
+            var vec = new Vector<T>(len);
+            for (int d = 0; d < len; d++)
+                vec[d] = flat[start + d];
+            result.Add(vec);
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Solves ridge regression and returns predictions for query features.
+    /// Splits flattened vectors into per-example multi-dimensional feature vectors,
+    /// computes the closed-form ridge regression weights w = (X^T X + lambda I)^-1 X^T y,
+    /// then applies those weights to query features for predictions.
     /// </summary>
     /// <param name="supportFeatures">Support set feature vector (flattened).</param>
     /// <param name="supportLabels">Support set labels (flattened).</param>
     /// <param name="queryFeatures">Query set feature vector (flattened).</param>
     /// <returns>Ridge regression predictions for the query set.</returns>
     /// <remarks>
-    /// <para>
-    /// Computes w = (X^T X + lambda I)^-1 X^T y on support features, then applies
-    /// the learned weights to query features: predictions = query_features * w.
-    /// </para>
     /// <para><b>For Beginners:</b> This is the core of R2-D2:
     /// 1. Takes the support examples' features and labels
-    /// 2. Finds the best linear relationship using ridge regression
+    /// 2. Finds the best linear relationship using matrix ridge regression
     /// 3. Applies that relationship to query features to make predictions
-    /// It's like fitting a line through the support data and using it to predict.
+    /// It's like fitting a hyperplane through the support data and using it to predict.
     /// </para>
     /// </remarks>
     private Vector<T> SolveRidgeRegression(
@@ -313,75 +370,155 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         Vector<T> supportLabels,
         Vector<T> queryFeatures)
     {
-        var weights = ComputeRidgeWeights(supportFeatures, supportLabels);
+        // Determine per-example feature dimension
+        int featureDim = EstimateFeatureDim(supportFeatures.Length, queryFeatures.Length);
+        int nSupport = Math.Max(supportFeatures.Length / Math.Max(featureDim, 1), 1);
+        int nQuery = Math.Max(queryFeatures.Length / Math.Max(featureDim, 1), 1);
 
-        if (weights == null)
-        {
+        // Split into per-example vectors
+        var X = SplitIntoVectors(supportFeatures, nSupport, featureDim);
+        var queryVecs = SplitIntoVectors(queryFeatures, nQuery, featureDim);
+
+        if (X.Count < 2 || featureDim < 1)
             return queryFeatures;
+
+        // Build Gram matrix: G = X^T X + lambda I (featureDim x featureDim)
+        var gram = new double[featureDim, featureDim];
+        for (int i = 0; i < featureDim; i++)
+        {
+            for (int j = i; j < featureDim; j++)
+            {
+                double dot = 0;
+                for (int s = 0; s < X.Count; s++)
+                {
+                    if (i < X[s].Length && j < X[s].Length)
+                        dot += NumOps.ToDouble(X[s][i]) * NumOps.ToDouble(X[s][j]);
+                }
+                gram[i, j] = dot;
+                gram[j, i] = dot;
+            }
+            gram[i, i] += _lambda; // Regularization
         }
 
-        // Simple dot product prediction: prediction = sum(query * weights)
-        int predLength = queryFeatures.Length;
-        var predictions = new Vector<T>(predLength);
-
-        for (int i = 0; i < predLength; i++)
+        // Build X^T y: support labels assigned per example
+        var xty = new double[featureDim];
+        for (int d = 0; d < featureDim; d++)
         {
-            T sum = NumOps.Zero;
-            int wIdx = i % weights.Length;
-            sum = NumOps.Multiply(queryFeatures[i], weights[wIdx]);
-            predictions[i] = sum;
+            double sum = 0;
+            for (int s = 0; s < X.Count; s++)
+            {
+                double x_sd = d < X[s].Length ? NumOps.ToDouble(X[s][d]) : 0;
+                // Use s-th label (scalar label per support example)
+                double y_s = s < supportLabels.Length ? NumOps.ToDouble(supportLabels[s]) : 0;
+                sum += x_sd * y_s;
+            }
+            xty[d] = sum;
+        }
+
+        // Solve (X^T X + lambda I) w = X^T y using Gaussian elimination
+        var w = FRNAlgorithm<T, TInput, TOutput>.SolveLinearSystemStatic(gram, xty, featureDim);
+
+        // For each query, compute prediction = x_q^T w (dot product)
+        var predictions = new Vector<T>(nQuery);
+        for (int q = 0; q < queryVecs.Count; q++)
+        {
+            double pred = 0;
+            for (int d = 0; d < Math.Min(featureDim, queryVecs[q].Length); d++)
+                pred += NumOps.ToDouble(queryVecs[q][d]) * w[d];
+            predictions[q] = NumOps.FromDouble(pred);
         }
 
         return predictions;
     }
 
     /// <summary>
-    /// Computes ridge regression weights from support features and labels.
+    /// Computes ridge regression weights from support features and labels using proper
+    /// matrix ridge regression: w = (X^T X + lambda I)^-1 X^T y.
     /// </summary>
-    /// <param name="supportFeatures">Support features (flattened).</param>
-    /// <param name="supportLabels">Support labels (flattened).</param>
+    /// <param name="supportFeatures">Support features (flattened: n_support * feature_dim).</param>
+    /// <param name="supportLabels">Support labels (flattened: n_support values).</param>
     /// <returns>The ridge regression weight vector, or null if computation fails.</returns>
     /// <remarks>
-    /// <para>
-    /// Implements the closed-form ridge regression solution:
-    /// w = (X^T X + lambda I)^-1 X^T y
-    ///
-    /// For the flattened vector case, this simplifies to element-wise regularized scaling.
-    /// </para>
     /// <para><b>For Beginners:</b> This computes the "best fit" linear weights that map
-    /// features to labels, with a smoothness penalty (lambda). The formula ensures the
-    /// weights don't become too large (overfitting), especially important with few examples.
+    /// features to labels. It splits the flat vectors into per-example multi-dimensional
+    /// feature vectors, builds the Gram matrix, and solves the ridge regression system.
+    /// The lambda regularization prevents overfitting with few examples.
     /// </para>
     /// </remarks>
     private Vector<T>? ComputeRidgeWeights(Vector<T> supportFeatures, Vector<T> supportLabels)
     {
         if (supportFeatures.Length == 0 || supportLabels.Length == 0)
-        {
             return null;
-        }
 
-        int dim = Math.Min(supportFeatures.Length, supportLabels.Length);
-        var weights = new Vector<T>(dim);
-
-        T lambdaT = NumOps.FromDouble(_lambda);
-
-        for (int i = 0; i < dim; i++)
+        // Determine per-example feature dimension using GCD heuristic
+        // For Adapt(), we don't have query features, so use labels to estimate
+        int featureDim;
+        if (_r2d2Options.EmbeddingDimension > 0)
         {
-            // Simplified ridge: w_i = (x_i * y_i) / (x_i^2 + lambda)
-            T xi = supportFeatures[i];
-            T yi = supportLabels[i];
-            T xiSquared = NumOps.Multiply(xi, xi);
-            T denominator = NumOps.Add(xiSquared, lambdaT);
-
-            if (NumOps.ToDouble(denominator) > 1e-10)
+            featureDim = _r2d2Options.EmbeddingDimension;
+        }
+        else
+        {
+            // Heuristic: if labels are shorter, each label is one scalar per example
+            // so nSupport = supportLabels.Length, featureDim = supportFeatures.Length / nSupport
+            if (supportLabels.Length < supportFeatures.Length &&
+                supportFeatures.Length % supportLabels.Length == 0)
             {
-                weights[i] = NumOps.Divide(NumOps.Multiply(xi, yi), denominator);
+                featureDim = supportFeatures.Length / supportLabels.Length;
             }
             else
             {
-                weights[i] = NumOps.Zero;
+                // GCD heuristic between features and labels
+                int gcd = GCD(supportFeatures.Length, supportLabels.Length);
+                featureDim = gcd >= 2 ? supportFeatures.Length / gcd : supportFeatures.Length;
             }
         }
+
+        featureDim = Math.Max(featureDim, 1);
+        int nSupport = Math.Max(supportFeatures.Length / featureDim, 1);
+
+        var X = SplitIntoVectors(supportFeatures, nSupport, featureDim);
+        if (X.Count < 2)
+            return null;
+
+        // Build Gram matrix: G = X^T X + lambda I
+        var gram = new double[featureDim, featureDim];
+        for (int i = 0; i < featureDim; i++)
+        {
+            for (int j = i; j < featureDim; j++)
+            {
+                double dot = 0;
+                for (int s = 0; s < X.Count; s++)
+                {
+                    if (i < X[s].Length && j < X[s].Length)
+                        dot += NumOps.ToDouble(X[s][i]) * NumOps.ToDouble(X[s][j]);
+                }
+                gram[i, j] = dot;
+                gram[j, i] = dot;
+            }
+            gram[i, i] += _lambda;
+        }
+
+        // Build X^T y
+        var xty = new double[featureDim];
+        for (int d = 0; d < featureDim; d++)
+        {
+            double sum = 0;
+            for (int s = 0; s < X.Count; s++)
+            {
+                double x_sd = d < X[s].Length ? NumOps.ToDouble(X[s][d]) : 0;
+                double y_s = s < supportLabels.Length ? NumOps.ToDouble(supportLabels[s]) : 0;
+                sum += x_sd * y_s;
+            }
+            xty[d] = sum;
+        }
+
+        // Solve (X^T X + lambda I) w = X^T y
+        var w = FRNAlgorithm<T, TInput, TOutput>.SolveLinearSystemStatic(gram, xty, featureDim);
+
+        var weights = new Vector<T>(featureDim);
+        for (int i = 0; i < featureDim; i++)
+            weights[i] = NumOps.FromDouble(w[i]);
 
         return weights;
     }

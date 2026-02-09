@@ -81,6 +81,21 @@ public class DKTOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     /// <summary>Gets or sets the noise variance for the GP likelihood.</summary>
     /// <value>Default is 0.1.</value>
     public double NoiseVariance { get; set; } = 0.1;
+    /// <summary>Gets or sets the per-example feature dimension for splitting flattened vectors.</summary>
+    /// <remarks>
+    /// <para>When set to 0 (default), the algorithm uses a GCD-based heuristic to estimate
+    /// the per-example feature dimension from the flattened support and query vector lengths.
+    /// Set this to a positive value to explicitly specify the feature dimension when the
+    /// heuristic may be inaccurate (e.g., when support and query counts share common factors
+    /// with the feature dimension).</para>
+    /// <para><b>For Beginners:</b> This tells the GP kernel how many numbers describe each
+    /// example's features. If your model outputs 64-dimensional features and you have 5
+    /// support examples, the flattened vector has length 320. Setting FeatureDim = 64
+    /// ensures the algorithm correctly splits it into 5 vectors of 64 dimensions each.
+    /// Leave at 0 for automatic detection.</para>
+    /// </remarks>
+    /// <value>Default is 0 (auto-detect via GCD heuristic).</value>
+    public int FeatureDim { get; set; } = 0;
     #endregion
 
     #region Constructors
@@ -101,7 +116,8 @@ public class DKTOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
         GradientClipThreshold = GradientClipThreshold, RandomSeed = RandomSeed, EvaluationTasks = EvaluationTasks,
         EvaluationFrequency = EvaluationFrequency, EnableCheckpointing = EnableCheckpointing,
         CheckpointFrequency = CheckpointFrequency, UseFirstOrder = UseFirstOrder,
-        KernelType = KernelType, KernelLengthScale = KernelLengthScale, NoiseVariance = NoiseVariance
+        KernelType = KernelType, KernelLengthScale = KernelLengthScale, NoiseVariance = NoiseVariance,
+        FeatureDim = FeatureDim
     };
     #endregion
 }

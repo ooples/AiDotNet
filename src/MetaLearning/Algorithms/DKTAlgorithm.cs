@@ -242,10 +242,14 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
     /// <summary>
     /// Estimates the per-example feature dimensionality from total support and query lengths.
-    /// Uses the greatest common divisor to find a shared factor.
+    /// Uses the configurable FeatureDim option if set, otherwise uses a GCD-based heuristic.
     /// </summary>
-    private static int EstimateFeatureDim(int supportLen, int queryLen)
+    private int EstimateFeatureDim(int supportLen, int queryLen)
     {
+        // Use configurable option if set
+        if (_dktOptions.FeatureDim > 0)
+            return _dktOptions.FeatureDim;
+
         if (supportLen <= 0 || queryLen <= 0) return 1;
 
         // GCD gives the largest common factor between both lengths

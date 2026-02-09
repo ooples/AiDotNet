@@ -243,9 +243,41 @@ public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         var queryPred = MetaModel.Predict(task.QueryInput);
         var queryFeatures = ConvertToVector(queryPred);
 
-        // Apply embedding propagation to smooth features across the kNN graph
-        var propagatedSupport = supportFeatures != null ? PropagateEmbeddings(supportFeatures) : null;
-        var propagatedQuery = queryFeatures != null ? PropagateEmbeddings(queryFeatures) : null;
+        // Transductive propagation: concatenate support + query onto a single graph,
+        // propagate features jointly, then split back. This is the core EPNet insight:
+        // query features benefit from support features and vice versa.
+        Vector<T>? propagatedSupport = null;
+        Vector<T>? propagatedQuery = null;
+
+        int supportLen = supportFeatures?.Length ?? 0;
+        int queryLen = queryFeatures?.Length ?? 0;
+
+        if (supportLen > 0 || queryLen > 0)
+        {
+            // Concatenate support + query into a single feature vector
+            var combined = new Vector<T>(supportLen + queryLen);
+            for (int i = 0; i < supportLen; i++)
+                combined[i] = supportFeatures is not null ? supportFeatures[i] : NumOps.Zero;
+            for (int i = 0; i < queryLen; i++)
+                combined[supportLen + i] = queryFeatures is not null ? queryFeatures[i] : NumOps.Zero;
+
+            // Propagate on the joint graph
+            var propagated = PropagateEmbeddings(combined);
+
+            // Split back into support and query portions
+            if (supportLen > 0)
+            {
+                propagatedSupport = new Vector<T>(supportLen);
+                for (int i = 0; i < supportLen; i++)
+                    propagatedSupport[i] = propagated[i];
+            }
+            if (queryLen > 0)
+            {
+                propagatedQuery = new Vector<T>(queryLen);
+                for (int i = 0; i < queryLen; i++)
+                    propagatedQuery[i] = propagated[supportLen + i];
+            }
+        }
 
         return new EPNetModel<T, TInput, TOutput>(MetaModel, currentParams, propagatedSupport, propagatedQuery);
     }
