@@ -301,5 +301,56 @@ public enum MetaLearningAlgorithmType
     /// but differ in specific aspects.
     /// </para>
     /// </remarks>
-    CAVIA
+    CAVIA,
+
+    /// <summary>
+    /// Warped Gradient Descent meta-learning (Flennerhag et al., ICLR 2020).
+    /// Learns preconditioning warp-layers that transform gradients for more efficient inner-loop adaptation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Instead of just learning a good initialization (like MAML), learn a
+    /// gradient preconditioning transformation that makes gradient descent more effective.
+    /// Warp-layers reshape the optimization landscape without requiring second-order gradients.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want efficient adaptation without second-order gradient cost,
+    /// or when tasks benefit from learning both initialization and optimization geometry.
+    /// </para>
+    /// </remarks>
+    WarpGrad,
+
+    /// <summary>
+    /// MAML++ - How to Train Your MAML (Antoniou et al., ICLR 2019).
+    /// Production-hardened MAML with multi-step loss, per-step learning rates,
+    /// derivative-order annealing, and batch normalization fixes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Addresses training instabilities in MAML through engineering improvements:
+    /// multi-step loss optimization (MSL), learned step-size learning rates (LSLR),
+    /// derivative-order annealing, and per-step batch normalization.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want MAML's approach but with production-grade stability and performance.
+    /// </para>
+    /// </remarks>
+    MAMLPlusPlus,
+
+    /// <summary>
+    /// R2-D2 - Meta-learning with Differentiable Closed-form Solvers (Bertinetto et al., ICLR 2019).
+    /// Uses differentiable ridge regression as a closed-form inner-loop solver.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Replace iterative inner-loop gradient descent with a closed-form
+    /// ridge regression solver. The exact solution w = (X^T X + lambda I)^-1 X^T y is
+    /// differentiable, enabling efficient meta-gradient computation.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want extremely fast inner-loop adaptation with a mathematically
+    /// optimal classifier, especially when tasks have linearly separable features.
+    /// </para>
+    /// </remarks>
+    R2D2
 }
