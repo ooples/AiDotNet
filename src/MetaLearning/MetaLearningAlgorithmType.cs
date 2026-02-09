@@ -660,5 +660,107 @@ public enum MetaLearningAlgorithmType
     /// classification AND produce well-structured embedding spaces.
     /// </para>
     /// </remarks>
-    MCL
+    MCL,
+
+    /// <summary>
+    /// DKT - Deep Kernel Transfer (Patacchiola et al., ICLR 2020).
+    /// Combines deep feature extractors with Gaussian processes for Bayesian few-shot classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Use a neural network to learn a feature space where a GP classifier
+    /// provides principled Bayesian predictions with uncertainty estimates. The deep kernel
+    /// is trained end-to-end.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You need uncertainty estimates for predictions, or when
+    /// principled Bayesian reasoning is important for your application.
+    /// </para>
+    /// </remarks>
+    DKT,
+
+    /// <summary>
+    /// DPGN - Distribution Propagation Graph Network (Yang et al., CVPR 2020).
+    /// Dual graph structure propagating both point estimates and distribution information.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Use two complementary graphs - a point graph for feature propagation
+    /// and a distribution graph for uncertainty propagation. Both refine each other
+    /// through multi-layer message passing.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want to model both feature similarity and confidence
+    /// explicitly in a graph-based framework.
+    /// </para>
+    /// </remarks>
+    DPGN,
+
+    /// <summary>
+    /// EPNet - Embedding Propagation Network (Rodriguez et al., CVPR 2020).
+    /// Refines embeddings through label propagation on a nearest-neighbor graph.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Build a kNN graph over all examples and propagate features
+    /// through diffusion. This smooths the feature manifold, making features more
+    /// discriminative and robust to noise.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want a simple transductive method that improves features
+    /// through manifold smoothing.
+    /// </para>
+    /// </remarks>
+    EPNet,
+
+    /// <summary>
+    /// PT+MAP - Power Transform + Maximum A Posteriori (Hu et al., ICLR 2021).
+    /// Simple power transform normalization with Bayesian MAP classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Apply a power transform to make features Gaussian, then use
+    /// MAP estimation for optimal Bayesian classification. Surprisingly effective
+    /// despite its simplicity.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want a strong transductive baseline with minimal complexity,
+    /// or when feature distributions are highly non-Gaussian.
+    /// </para>
+    /// </remarks>
+    PTMAP,
+
+    /// <summary>
+    /// FRN - Few-shot Classification via Feature Map Reconstruction (Wertheimer et al., CVPR 2021).
+    /// Classifies by reconstruction error from class-specific support features.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Instead of comparing features by distance, try to reconstruct
+    /// the query features using each class's support features via ridge regression.
+    /// The class with lowest reconstruction error is chosen.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> Simple distance metrics are insufficient and you want
+    /// reconstruction-based classification that can combine multiple support examples.
+    /// </para>
+    /// </remarks>
+    FRN,
+
+    /// <summary>
+    /// ConstellationNet - Structured part-based few-shot learning (Xu et al., ICLR 2021).
+    /// Detects discriminative parts and models their spatial relationships.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Detect K discriminative parts per example and model their
+    /// spatial arrangement as a "constellation." Classification matches both
+    /// individual parts and their structural arrangement.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> Discriminative information lies in the arrangement of parts,
+    /// such as fine-grained recognition where spatial structure matters.
+    /// </para>
+    /// </remarks>
+    ConstellationNet
 }
