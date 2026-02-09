@@ -57,7 +57,7 @@ public class InterpretabilityDashboard : IDisposable
         _sessions = new Dictionary<string, ExplanationSession>();
         OutputDirectory = outputDirectory;
 
-        if (!string.IsNullOrEmpty(outputDirectory))
+        if (outputDirectory is { Length: > 0 })
         {
             _exporter = new ExplanationExporter(outputDirectory);
         }

@@ -1,6 +1,8 @@
+#nullable disable
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using AiDotNet.Data.Structures;
 using AiDotNet.Interfaces;
@@ -233,7 +235,7 @@ internal sealed class TestEpisodicDataLoader<T, TInput, TOutput> : IEpisodicData
         bool dropLast = false,
         int? seed = null,
         int prefetchCount = 2,
-        CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (_tasks.Count == 0)
         {

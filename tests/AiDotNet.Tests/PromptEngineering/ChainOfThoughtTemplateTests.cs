@@ -1,3 +1,4 @@
+#nullable disable
 using AiDotNet.PromptEngineering.Templates;
 using Xunit;
 

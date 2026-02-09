@@ -83,7 +83,7 @@ public class AttributionVisualizer
         }
 
         // Print title
-        if (!string.IsNullOrEmpty(title))
+        if (title is { Length: > 0 })
         {
             SysConsole.WriteLine();
             SysConsole.WriteLine(title);
@@ -187,7 +187,7 @@ public class AttributionVisualizer
         int width = attributions.GetLength(1);
 
         // Print title
-        if (!string.IsNullOrEmpty(title))
+        if (title is { Length: > 0 })
         {
             SysConsole.WriteLine();
             SysConsole.WriteLine(title);
@@ -299,7 +299,7 @@ public class AttributionVisualizer
             throw new ArgumentException("Feature names and attributions must have the same length.");
 
         // Print title
-        if (!string.IsNullOrEmpty(title))
+        if (title is { Length: > 0 })
         {
             SysConsole.WriteLine();
             SysConsole.WriteLine(title);

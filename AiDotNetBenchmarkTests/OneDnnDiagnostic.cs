@@ -1,3 +1,4 @@
+#nullable disable
 #if !NET471
 using System;
 using System.IO;
