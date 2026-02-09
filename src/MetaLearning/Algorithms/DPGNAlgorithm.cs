@@ -152,10 +152,55 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         }
 
         // Update dual graph params via multi-sample SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _pointGraphParams, _dpgnOptions.OuterLearningRate);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _distGraphParams, _dpgnOptions.OuterLearningRate);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _pointGraphParams, _dpgnOptions.OuterLearningRate, ComputeAuxLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _distGraphParams, _dpgnOptions.OuterLearningRate, ComputeAuxLoss);
 
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Computes the average loss over a task batch using dual graph propagation.
+    /// Called by SPSA to measure how perturbed graph params affect loss.
+    /// </summary>
+    private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var initParams = MetaModel.GetParameters();
+        double totalLoss = 0;
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+
+            var supportPred = MetaModel.Predict(task.SupportInput);
+            var supportFeatures = ConvertToVector(supportPred);
+
+            if (supportFeatures != null && supportFeatures.Length >= 2)
+            {
+                var (refinedFeatures, refinedDistributions) = DualGraphPropagate(supportFeatures);
+
+                if (refinedDistributions.Length > 0)
+                {
+                    double sumConf = 0;
+                    for (int i = 0; i < refinedDistributions.Length; i++)
+                    {
+                        double d = NumOps.ToDouble(refinedDistributions[i]);
+                        sumConf += 0.5 + 0.5 / (1.0 + Math.Exp(-d));
+                    }
+                    double avgConf = sumConf / refinedDistributions.Length;
+                    var currentParams = MetaModel.GetParameters();
+                    var modulatedParams = new Vector<T>(currentParams.Length);
+                    for (int i = 0; i < currentParams.Length; i++)
+                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgConf));
+                    MetaModel.SetParameters(modulatedParams);
+                }
+            }
+
+            var queryPred = MetaModel.Predict(task.QueryInput);
+            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(queryPred, task.QueryOutput));
+        }
+
+        MetaModel.SetParameters(initParams);
+        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <summary>

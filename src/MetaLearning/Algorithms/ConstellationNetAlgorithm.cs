@@ -151,11 +151,64 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         }
 
         // Update part detector and relation module via multi-sample SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _partDetectorParams, _constellationOptions.OuterLearningRate);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _partDetectorParams, _constellationOptions.OuterLearningRate, ComputeAuxLoss);
         if (_constellationOptions.UseSpatialRelations)
-            UpdateAuxiliaryParamsSPSA(taskBatch, ref _relationParams, _constellationOptions.OuterLearningRate);
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref _relationParams, _constellationOptions.OuterLearningRate, ComputeAuxLoss);
 
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Computes the average loss over a task batch using part detection and constellation scoring.
+    /// Called by SPSA to measure how perturbed part/relation params affect loss.
+    /// </summary>
+    private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var initParams = MetaModel.GetParameters();
+        double totalLoss = 0;
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+
+            var supportPred = MetaModel.Predict(task.SupportInput);
+            var supportFeatures = ConvertToVector(supportPred);
+            var detectedParts = DetectParts(supportFeatures);
+            var adaptedFeatures = _constellationOptions.UseSpatialRelations
+                ? ComputeConstellationScores(detectedParts) ?? detectedParts
+                : detectedParts;
+
+            if (adaptedFeatures != null && supportFeatures != null && supportFeatures.Length > 0)
+            {
+                double sumRatio = 0;
+                int count = 0;
+                for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedFeatures.Length); i++)
+                {
+                    double raw = NumOps.ToDouble(supportFeatures[i]);
+                    double adapted = NumOps.ToDouble(adaptedFeatures[i]);
+                    if (Math.Abs(raw) > 1e-10)
+                    {
+                        sumRatio += Math.Max(0.5, Math.Min(2.0, adapted / raw));
+                        count++;
+                    }
+                }
+                if (count > 0)
+                {
+                    double avgRatio = sumRatio / count;
+                    var currentParams = MetaModel.GetParameters();
+                    var modulatedParams = new Vector<T>(currentParams.Length);
+                    for (int i = 0; i < currentParams.Length; i++)
+                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
+                    MetaModel.SetParameters(modulatedParams);
+                }
+            }
+
+            var queryPred = MetaModel.Predict(task.QueryInput);
+            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(queryPred, task.QueryOutput));
+        }
+
+        MetaModel.SetParameters(initParams);
+        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <summary>

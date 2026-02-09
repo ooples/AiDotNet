@@ -279,9 +279,41 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         }
 
         // Update projection head via multi-sample SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionParams, _mclOptions.OuterLearningRate);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionParams, _mclOptions.OuterLearningRate, ComputeAuxLoss);
 
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Computes the average loss over a task batch using projection + contrastive loss.
+    /// Called by SPSA to measure how perturbed projection params affect loss.
+    /// </summary>
+    private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var initParams = MetaModel.GetParameters();
+        double totalLoss = 0;
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+
+            // Meta-learning loss component
+            var queryPred = MetaModel.Predict(task.QueryInput);
+            double metaLossVal = NumOps.ToDouble(ComputeLossFromOutput(queryPred, task.QueryOutput));
+
+            // Contrastive loss component through projection head
+            var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
+            var projectedFeatures = ProjectFeatures(supportFeatures);
+            int numWays = Math.Max(_mclOptions.NumWays, 1);
+            int nPerClass = projectedFeatures != null ? Math.Max(projectedFeatures.Length / numWays, 1) : 1;
+            double contrastLoss = projectedFeatures != null
+                ? ComputeContrastiveLoss(projectedFeatures, nPerClass) : 0;
+
+            totalLoss += metaLossVal + _mclOptions.ContrastiveWeight * contrastLoss;
+        }
+
+        MetaModel.SetParameters(initParams);
+        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <inheritdoc/>

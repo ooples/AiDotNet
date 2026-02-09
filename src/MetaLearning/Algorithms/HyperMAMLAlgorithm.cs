@@ -202,9 +202,40 @@ public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         }
 
         // Update hypernetwork via SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _hypernetParams, _hyperMAMLOptions.OuterLearningRate);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _hypernetParams, _hyperMAMLOptions.OuterLearningRate, ComputeAuxLoss);
 
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Computes the average loss over a task batch using the hypernetwork-generated initialization.
+    /// Called by SPSA to measure how perturbed hypernet params affect loss.
+    /// </summary>
+    private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var initParams = MetaModel.GetParameters();
+        double totalLoss = 0;
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+            var supportPred = MetaModel.Predict(task.SupportInput);
+            var supportFeatures = ConvertToVector(supportPred);
+            var taskInit = GenerateTaskInit(initParams, supportFeatures);
+            MetaModel.SetParameters(taskInit);
+
+            for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
+            {
+                var innerGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+                var adapted = ApplyGradients(MetaModel.GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
+                MetaModel.SetParameters(adapted);
+            }
+
+            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+        }
+
+        MetaModel.SetParameters(initParams);
+        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <inheritdoc/>

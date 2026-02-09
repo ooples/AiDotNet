@@ -184,10 +184,66 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Update encoder/decoder via multi-sample SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _npbmlOptions.OuterLearningRate);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _decoderParams, _npbmlOptions.OuterLearningRate);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _npbmlOptions.OuterLearningRate, ComputeAuxLoss);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _decoderParams, _npbmlOptions.OuterLearningRate, ComputeAuxLoss);
 
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Computes the average loss over a task batch using encoder/decoder + KL divergence.
+    /// Called by SPSA to measure how perturbed encoder/decoder params affect loss.
+    /// </summary>
+    private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var initParams = MetaModel.GetParameters();
+        double totalLoss = 0;
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+
+            var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
+
+            // Encode support features and compute KL divergence
+            var dist = EncodeToDistribution(supportFeatures);
+            double klLoss = 0;
+            if (dist != null)
+                klLoss = ComputeKLDivergence(dist.Value.mu, dist.Value.logSigma);
+
+            // Encode and sample to get modulated features
+            var sampledLatent = EncodeAndSample(supportFeatures);
+            if (sampledLatent != null && supportFeatures != null && supportFeatures.Length > 0)
+            {
+                double sumRatio = 0;
+                int count = 0;
+                for (int i = 0; i < Math.Min(supportFeatures.Length, sampledLatent.Length); i++)
+                {
+                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
+                    double sampledVal = NumOps.ToDouble(sampledLatent[i]);
+                    if (Math.Abs(rawVal) > 1e-10)
+                    {
+                        sumRatio += Math.Max(0.5, Math.Min(2.0, sampledVal / rawVal));
+                        count++;
+                    }
+                }
+                if (count > 0)
+                {
+                    double avgRatio = sumRatio / count;
+                    var currentParams = MetaModel.GetParameters();
+                    var modulatedParams = new Vector<T>(currentParams.Length);
+                    for (int i = 0; i < currentParams.Length; i++)
+                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
+                    MetaModel.SetParameters(modulatedParams);
+                }
+            }
+
+            double queryLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            totalLoss += queryLoss + _npbmlOptions.KLWeight * klLoss;
+        }
+
+        MetaModel.SetParameters(initParams);
+        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <summary>

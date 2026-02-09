@@ -179,9 +179,60 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         }
 
         // Update kernel hyperparameters via SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _kernelParams, _dktOptions.OuterLearningRate);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _kernelParams, _dktOptions.OuterLearningRate, ComputeAuxLoss);
 
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Computes the average loss over a task batch using the deep kernel GP.
+    /// Called by SPSA to measure how perturbed kernel params affect loss.
+    /// </summary>
+    private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var initParams = MetaModel.GetParameters();
+        double totalLoss = 0;
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+
+            var supportPred = MetaModel.Predict(task.SupportInput);
+            var supportFeatures = ConvertToVector(supportPred);
+            var queryPredRaw = MetaModel.Predict(task.QueryInput);
+            var queryFeatures = ConvertToVector(queryPredRaw);
+
+            var gpWeights = GPPredict(supportFeatures, queryFeatures);
+            if (gpWeights != null && supportFeatures != null && supportFeatures.Length > 0)
+            {
+                double sumRatio = 0;
+                int count = 0;
+                for (int i = 0; i < Math.Min(supportFeatures.Length, gpWeights.Length); i++)
+                {
+                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
+                    double gpVal = NumOps.ToDouble(gpWeights[i]);
+                    if (Math.Abs(rawVal) > 1e-10)
+                    {
+                        sumRatio += Math.Max(0.5, Math.Min(2.0, gpVal / rawVal));
+                        count++;
+                    }
+                }
+                if (count > 0)
+                {
+                    double avgRatio = sumRatio / count;
+                    var currentParams = MetaModel.GetParameters();
+                    var modulatedParams = new Vector<T>(currentParams.Length);
+                    for (int i = 0; i < currentParams.Length; i++)
+                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
+                    MetaModel.SetParameters(modulatedParams);
+                }
+            }
+
+            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+        }
+
+        MetaModel.SetParameters(initParams);
+        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <summary>

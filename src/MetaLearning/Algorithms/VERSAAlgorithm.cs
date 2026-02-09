@@ -219,9 +219,48 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Update amortization network parameters using finite differences
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _amortizationParams, _versaOptions.OuterLearningRate);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _amortizationParams, _versaOptions.OuterLearningRate, ComputeAuxLoss);
 
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Computes the average loss over a task batch using the amortization network.
+    /// Called by SPSA to measure how perturbed amortization params affect loss.
+    /// </summary>
+    private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var initParams = MetaModel.GetParameters();
+        double totalLoss = 0;
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+
+            var supportPred = MetaModel.Predict(task.SupportInput);
+            var classifierWeights = AmortizeClassifier(supportPred);
+
+            if (classifierWeights.Length > 0)
+            {
+                double sumAbs = 0;
+                for (int i = 0; i < classifierWeights.Length; i++)
+                    sumAbs += Math.Abs(NumOps.ToDouble(classifierWeights[i]));
+                double meanAbs = sumAbs / classifierWeights.Length;
+                double modFactor = 0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0));
+
+                var currentParams = MetaModel.GetParameters();
+                var modulatedParams = new Vector<T>(currentParams.Length);
+                for (int i = 0; i < currentParams.Length; i++)
+                    modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor));
+                MetaModel.SetParameters(modulatedParams);
+            }
+
+            var queryPred = MetaModel.Predict(task.QueryInput);
+            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(queryPred, task.QueryOutput));
+        }
+
+        MetaModel.SetParameters(initParams);
+        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <summary>

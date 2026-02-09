@@ -290,17 +290,71 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         for (int block = 0; block < _tcBlockParams.Count; block++)
         {
             var tcParams = _tcBlockParams[block];
-            UpdateAuxiliaryParamsSPSA(taskBatch, ref tcParams, _snailOptions.OuterLearningRate);
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref tcParams, _snailOptions.OuterLearningRate, ComputeAuxLoss);
             _tcBlockParams[block] = tcParams;
         }
         for (int block = 0; block < _attentionBlockParams.Count; block++)
         {
             var attParams = _attentionBlockParams[block];
-            UpdateAuxiliaryParamsSPSA(taskBatch, ref attParams, _snailOptions.OuterLearningRate);
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref attParams, _snailOptions.OuterLearningRate, ComputeAuxLoss);
             _attentionBlockParams[block] = attParams;
         }
 
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Computes the average loss over a task batch using SNAIL block processing.
+    /// Called by SPSA to measure how perturbed TC/attention params affect loss.
+    /// </summary>
+    private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var initParams = MetaModel.GetParameters();
+        double totalLoss = 0;
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+
+            var supportPred = MetaModel.Predict(task.SupportInput);
+            var queryPredRaw = MetaModel.Predict(task.QueryInput);
+            var snailOutput = ProcessSNAILBlocks(supportPred, queryPredRaw);
+
+            if (snailOutput != null && snailOutput.Length > 0)
+            {
+                var supportFeatures = ConvertToVector(supportPred);
+                if (supportFeatures != null && supportFeatures.Length > 0)
+                {
+                    double sumRatio = 0;
+                    int count = 0;
+                    for (int i = 0; i < Math.Min(supportFeatures.Length, snailOutput.Length); i++)
+                    {
+                        double rawVal = NumOps.ToDouble(supportFeatures[i]);
+                        double snailVal = NumOps.ToDouble(snailOutput[i]);
+                        if (Math.Abs(rawVal) > 1e-10)
+                        {
+                            sumRatio += Math.Max(0.5, Math.Min(2.0, snailVal / rawVal));
+                            count++;
+                        }
+                    }
+                    if (count > 0)
+                    {
+                        double avgRatio = sumRatio / count;
+                        var currentParams = MetaModel.GetParameters();
+                        var modulatedParams = new Vector<T>(currentParams.Length);
+                        for (int i = 0; i < currentParams.Length; i++)
+                            modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
+                        MetaModel.SetParameters(modulatedParams);
+                    }
+                }
+            }
+
+            var queryPred = MetaModel.Predict(task.QueryInput);
+            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(queryPred, task.QueryOutput));
+        }
+
+        MetaModel.SetParameters(initParams);
+        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <summary>

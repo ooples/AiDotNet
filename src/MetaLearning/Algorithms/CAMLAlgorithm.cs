@@ -137,9 +137,59 @@ public class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         }
 
         // Update context module via SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _contextParams, _camlOptions.OuterLearningRate);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _contextParams, _camlOptions.OuterLearningRate, ComputeAuxLoss);
 
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Computes the average loss over a task batch using the context module.
+    /// Called by SPSA to measure how perturbed context params affect loss.
+    /// </summary>
+    private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var initParams = MetaModel.GetParameters();
+        double totalLoss = 0;
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+
+            var supportPred = MetaModel.Predict(task.SupportInput);
+            var supportFeatures = ConvertToVector(supportPred);
+            var adaptedPrototypes = ApplyContextModule(supportFeatures);
+
+            if (supportFeatures != null && adaptedPrototypes != null)
+            {
+                double sumRatio = 0;
+                int count = 0;
+                for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedPrototypes.Length); i++)
+                {
+                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
+                    double adaptedVal = NumOps.ToDouble(adaptedPrototypes[i]);
+                    if (Math.Abs(rawVal) > 1e-10)
+                    {
+                        sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
+                        count++;
+                    }
+                }
+                if (count > 0)
+                {
+                    double avgRatio = sumRatio / count;
+                    var currentParams = MetaModel.GetParameters();
+                    var modulatedParams = new Vector<T>(currentParams.Length);
+                    for (int i = 0; i < currentParams.Length; i++)
+                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
+                    MetaModel.SetParameters(modulatedParams);
+                }
+            }
+
+            var queryPred = MetaModel.Predict(task.QueryInput);
+            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(queryPred, task.QueryOutput));
+        }
+
+        MetaModel.SetParameters(initParams);
+        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <summary>
