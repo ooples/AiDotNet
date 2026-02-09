@@ -490,5 +490,175 @@ public enum MetaLearningAlgorithmType
     /// theory with theoretical guarantees.
     /// </para>
     /// </remarks>
-    SIB
+    SIB,
+
+    /// <summary>
+    /// PMF - Pre-train, Meta-train, Fine-tune (Hu et al., ICLR 2022).
+    /// Three-stage pipeline combining standard pretraining, episodic meta-training,
+    /// and optional task-specific fine-tuning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> The best of all worlds: use pretraining for good features,
+    /// episodic training for few-shot adaptation, and optional fine-tuning for final refinement.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want a strong, well-studied pipeline that systematically
+    /// combines the best practices from both transfer learning and meta-learning.
+    /// </para>
+    /// </remarks>
+    PMF,
+
+    /// <summary>
+    /// Meta-Baseline - Simple pre-train then meta-train with cosine classifier (Chen et al., ICLR 2021).
+    /// Shows that simple methods with cosine classification are surprisingly strong baselines.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Pre-train a feature extractor with standard classification, then
+    /// fine-tune with episodic training using cosine-similarity nearest-centroid. Simplicity
+    /// is competitive with complex meta-learning.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want a strong, simple baseline or when complex methods
+    /// aren't clearly justified for your task.
+    /// </para>
+    /// </remarks>
+    MetaBaseline,
+
+    /// <summary>
+    /// CAML - Context-Aware Meta-Learning (Fifty et al., NeurIPS 2023).
+    /// Uses frozen pretrained backbones with lightweight context-aware adaptation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Modern pretrained models produce excellent features. Instead of
+    /// fine-tuning the backbone, learn a small context module that adapts classification
+    /// based on the support set structure.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You have access to a strong pretrained model and want efficient
+    /// adaptation without backbone fine-tuning.
+    /// </para>
+    /// </remarks>
+    CAML,
+
+    /// <summary>
+    /// Open-MAML - MAML extended for open-set recognition.
+    /// Handles scenarios where query examples may belong to unseen classes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Extend MAML with a confidence-based rejection mechanism.
+    /// The model learns to produce low confidence for out-of-distribution examples,
+    /// enabling it to say "I don't know" instead of forcing a wrong classification.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> Your application may encounter classes not seen during support
+    /// set construction, requiring robust unknown detection.
+    /// </para>
+    /// </remarks>
+    OpenMAML,
+
+    /// <summary>
+    /// HyperShot - Kernel hypernetwork for few-shot learning.
+    /// Generates task-specific kernel parameters from support set statistics.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Different tasks need different similarity functions. A hypernetwork
+    /// generates custom kernel parameters for each task based on support set statistics,
+    /// enabling adaptive distance computation.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You believe a fixed distance metric is suboptimal and want
+    /// task-adaptive similarity computation.
+    /// </para>
+    /// </remarks>
+    HyperShot,
+
+    /// <summary>
+    /// HyperMAML - Hypernetwork-based MAML initialization.
+    /// Generates task-specific initial parameters rather than using a shared initialization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Instead of one initialization for all tasks, use a hypernetwork
+    /// that looks at the support set and generates a task-specific starting point.
+    /// The custom initialization is already close to the task optimum.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> Tasks are highly diverse and a single MAML initialization
+    /// can't serve all tasks well, or you want faster adaptation with fewer inner steps.
+    /// </para>
+    /// </remarks>
+    HyperMAML,
+
+    /// <summary>
+    /// SetFeat - Matching Feature Sets for Few-Shot Classification (Afrasiyabi et al., CVPR 2022).
+    /// Learns set-level features that capture intra-class variation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Represent each class as a SET of features rather than a single
+    /// prototype. A set encoder captures how the class varies, and optional cross-attention
+    /// lets classes inform each other.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> Intra-class variation matters for your task and simple mean
+    /// prototypes lose important distributional information.
+    /// </para>
+    /// </remarks>
+    SetFeat,
+
+    /// <summary>
+    /// FewTURE - Few-shot Transformer with Uncertainty and Reliable Estimation (Hiller et al., ECCV 2022).
+    /// Token-level matching with uncertainty estimation for reliable prediction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Compare images at the patch/token level instead of globally.
+    /// Estimate uncertainty for each token comparison and weight reliable matches more.
+    /// This focuses on informative image regions automatically.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You need fine-grained comparison with uncertainty quantification,
+    /// especially for visual tasks where discriminative features are localized.
+    /// </para>
+    /// </remarks>
+    FewTURE,
+
+    /// <summary>
+    /// NPBML - Neural Process-Based Meta-Learning.
+    /// Probabilistic meta-learner that captures task-level uncertainty.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Encode support sets into a latent DISTRIBUTION (not just a point).
+    /// Multiple samples from this distribution give different predictions, and their
+    /// disagreement quantifies uncertainty about the task.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You need uncertainty estimates for your few-shot predictions,
+    /// such as safety-critical applications or active learning.
+    /// </para>
+    /// </remarks>
+    NPBML,
+
+    /// <summary>
+    /// MCL - Meta-learning with Contrastive Learning.
+    /// Combines episodic meta-learning with supervised contrastive learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Train features with two objectives: (1) meta-learning loss for
+    /// few-shot task performance, and (2) contrastive loss for well-clustered embeddings.
+    /// Features that are both task-adapted and well-organized transfer better.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want features that are simultaneously good for few-shot
+    /// classification AND produce well-structured embedding spaces.
+    /// </para>
+    /// </remarks>
+    MCL
 }

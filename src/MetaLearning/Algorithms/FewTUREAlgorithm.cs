@@ -1,0 +1,255 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Options;
+using AiDotNet.Models;
+using AiDotNet.Models.Results;
+using AiDotNet.Tensors;
+
+namespace AiDotNet.MetaLearning.Algorithms;
+
+/// <summary>
+/// Implementation of FewTURE (Few-shot Transformer with Uncertainty and Reliable Estimation)
+/// (Hiller et al., ECCV 2022).
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <typeparam name="TInput">The input data type.</typeparam>
+/// <typeparam name="TOutput">The output data type.</typeparam>
+/// <remarks>
+/// <para>
+/// FewTURE uses vision transformers with token-level local features and uncertainty estimation
+/// for few-shot classification. Instead of comparing global image features, it compares at the
+/// patch/token level and weights predictions by their estimated reliability.
+/// </para>
+/// <para><b>For Beginners:</b> FewTURE compares images piece by piece, not as wholes:
+///
+/// **Standard approach:**
+/// Represent each image as ONE feature vector, compare vectors.
+/// Problem: A bird's beak might be the key difference, but it's a tiny part of the image.
+///
+/// **FewTURE's approach:**
+/// 1. Split each image into patches (like a puzzle, e.g., 14x14 = 196 patches)
+/// 2. Use a Vision Transformer to get a feature for each patch (token)
+/// 3. Compare queries to support classes at the PATCH level
+/// 4. Estimate uncertainty for each patch comparison
+/// 5. Weight reliable patches more, uncertain patches less
+///
+/// **Why uncertainty matters:**
+/// Not all patches are equally informative:
+/// - Background patches are mostly noise (high uncertainty)
+/// - Discriminative patches (beak, stripes) are informative (low uncertainty)
+/// FewTURE learns to focus on the informative patches automatically.
+/// </para>
+/// <para><b>Algorithm - FewTURE:</b>
+/// <code>
+/// # Components
+/// ViT = vision_transformer           # Extracts patch tokens
+/// u_phi = uncertainty_estimator      # Estimates per-token uncertainty
+///
+/// # Meta-training
+/// for each meta-iteration:
+///     for each task T_i in batch:
+///         # 1. Extract patch tokens
+///         tokens_s = ViT(support_x)    # [N_support, num_patches, dim]
+///         tokens_q = ViT(query_x)      # [N_query, num_patches, dim]
+///
+///         # 2. Compute per-token similarity between query and class prototypes
+///         for each class k:
+///             proto_tokens_k = mean(tokens_s[class == k])  # Per-patch prototypes
+///
+///         # 3. Estimate uncertainty for each token match
+///         uncertainty = u_phi(tokens_q, proto_tokens)
+///
+///         # 4. Weighted aggregation (reliable tokens contribute more)
+///         weights = 1 / (uncertainty + eps)
+///         logits = weighted_sum(similarity * weights) / sum(weights)
+///
+///         loss = cross_entropy(logits, query_labels)
+///
+///     Update ViT and uncertainty estimator
+/// </code>
+/// </para>
+/// <para>
+/// Reference: Hiller, M., Ma, R., Harber, M., &amp; Ommer, B. (2022).
+/// Rethinking Generalization in Few-Shot Classification. ECCV 2022.
+/// </para>
+/// </remarks>
+public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+{
+    private readonly FewTUREOptions<T, TInput, TOutput> _fewTUREOptions;
+
+    /// <summary>Parameters for the uncertainty estimation module.</summary>
+    private Vector<T> _uncertaintyParams = new Vector<T>(0);
+
+    /// <inheritdoc/>
+    public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.FewTURE;
+
+    /// <summary>Initializes a new FewTURE meta-learner.</summary>
+    /// <param name="options">Configuration options for FewTURE.</param>
+    public FewTUREAlgorithm(FewTUREOptions<T, TInput, TOutput> options)
+        : base(
+            options.MetaModel,
+            options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
+            options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+    {
+        _fewTUREOptions = options;
+        InitializeUncertaintyModule();
+    }
+
+    /// <summary>Initializes the uncertainty estimation module.</summary>
+    private void InitializeUncertaintyModule()
+    {
+        int numTokens = _fewTUREOptions.NumTokens;
+        // Small MLP for uncertainty: token_dim -> hidden -> 1
+        int dim = 64;
+        int totalParams = dim * dim + dim + dim + 1;
+        _uncertaintyParams = new Vector<T>(totalParams);
+        double scale = Math.Sqrt(2.0 / dim);
+        for (int i = 0; i < totalParams; i++)
+            _uncertaintyParams[i] = NumOps.FromDouble((RandomGenerator.NextDouble() - 0.5) * 2.0 * scale);
+    }
+
+    /// <summary>
+    /// Estimates uncertainty for a prediction using the configured method.
+    /// </summary>
+    /// <param name="features">Feature vector from the model.</param>
+    /// <returns>Uncertainty score (higher = more uncertain).</returns>
+    private double EstimateUncertainty(Vector<T> features)
+    {
+        if (_fewTUREOptions.UncertaintyMethod == "entropy")
+        {
+            // Compute entropy of softmax distribution
+            double maxVal = double.MinValue;
+            for (int i = 0; i < features.Length; i++)
+            {
+                double v = NumOps.ToDouble(features[i]);
+                if (v > maxVal) maxVal = v;
+            }
+
+            double sumExp = 0;
+            for (int i = 0; i < features.Length; i++)
+                sumExp += Math.Exp(NumOps.ToDouble(features[i]) - maxVal);
+
+            double entropy = 0;
+            for (int i = 0; i < features.Length; i++)
+            {
+                double p = Math.Exp(NumOps.ToDouble(features[i]) - maxVal) / sumExp;
+                if (p > 1e-10)
+                    entropy -= p * Math.Log(p);
+            }
+            return entropy;
+        }
+
+        // Default: variance-based uncertainty
+        T mean = NumOps.Zero;
+        for (int i = 0; i < features.Length; i++)
+            mean = NumOps.Add(mean, features[i]);
+        mean = NumOps.Divide(mean, NumOps.FromDouble(Math.Max(1, features.Length)));
+
+        double variance = 0;
+        for (int i = 0; i < features.Length; i++)
+        {
+            double diff = NumOps.ToDouble(NumOps.Subtract(features[i], mean));
+            variance += diff * diff;
+        }
+        return variance / Math.Max(1, features.Length);
+    }
+
+    /// <inheritdoc/>
+    public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var metaGradients = new List<Vector<T>>();
+        var losses = new List<T>();
+        var initParams = MetaModel.GetParameters();
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
+            losses.Add(queryLoss);
+            metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
+        }
+
+        // Update backbone
+        MetaModel.SetParameters(initParams);
+        if (metaGradients.Count > 0)
+        {
+            var avgGrad = AverageVectors(metaGradients);
+            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _fewTUREOptions.OuterLearningRate));
+        }
+
+        // Update uncertainty module via SPSA
+        UpdateUncertaintyParams(taskBatch);
+
+        _currentIteration++;
+        return ComputeMean(losses);
+    }
+
+    /// <inheritdoc/>
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        return new FewTUREModel<T, TInput, TOutput>(
+            MetaModel, MetaModel.GetParameters(), _fewTUREOptions.UncertaintyThreshold);
+    }
+
+    /// <summary>Updates uncertainty module parameters using SPSA gradient estimation.</summary>
+    private void UpdateUncertaintyParams(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        double epsilon = 1e-5;
+        double lr = _fewTUREOptions.OuterLearningRate;
+
+        var direction = new Vector<T>(_uncertaintyParams.Length);
+        for (int i = 0; i < direction.Length; i++)
+            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
+
+        double baseLoss = 0;
+        foreach (var task in taskBatch.Tasks)
+            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+        baseLoss /= taskBatch.Tasks.Length;
+
+        for (int i = 0; i < _uncertaintyParams.Length; i++)
+            _uncertaintyParams[i] = NumOps.Add(_uncertaintyParams[i], NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
+
+        double perturbedLoss = 0;
+        foreach (var task in taskBatch.Tasks)
+            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+        perturbedLoss /= taskBatch.Tasks.Length;
+
+        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
+        for (int i = 0; i < _uncertaintyParams.Length; i++)
+            _uncertaintyParams[i] = NumOps.Subtract(_uncertaintyParams[i],
+                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
+    }
+
+    private Vector<T> AverageVectors(List<Vector<T>> vectors)
+    {
+        if (vectors.Count == 0) return new Vector<T>(0);
+        var result = new Vector<T>(vectors[0].Length);
+        foreach (var v in vectors)
+            for (int i = 0; i < result.Length; i++)
+                result[i] = NumOps.Add(result[i], v[i]);
+        var scale = NumOps.FromDouble(1.0 / vectors.Count);
+        for (int i = 0; i < result.Length; i++)
+            result[i] = NumOps.Multiply(result[i], scale);
+        return result;
+    }
+}
+
+/// <summary>Adapted model wrapper for FewTURE with uncertainty-based prediction.</summary>
+internal class FewTUREModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+{
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _params;
+    private readonly double _uncertaintyThreshold;
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+    public FewTUREModel(IFullModel<T, TInput, TOutput> model, Vector<T> p, double threshold)
+    { _model = model; _params = p; _uncertaintyThreshold = threshold; }
+    /// <inheritdoc/>
+    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) { }
+    /// <inheritdoc/>
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
+}

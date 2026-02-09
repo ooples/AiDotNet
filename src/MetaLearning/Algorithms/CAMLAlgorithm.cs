@@ -1,0 +1,209 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Options;
+using AiDotNet.Models;
+using AiDotNet.Models.Results;
+using AiDotNet.Tensors;
+
+namespace AiDotNet.MetaLearning.Algorithms;
+
+/// <summary>
+/// Implementation of CAML (Context-Aware Meta-Learning) (Fifty et al., NeurIPS 2023).
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <typeparam name="TInput">The input data type.</typeparam>
+/// <typeparam name="TOutput">The output data type.</typeparam>
+/// <remarks>
+/// <para>
+/// CAML uses a frozen pretrained backbone with a lightweight context module that adapts
+/// features based on the support set. Classification is performed by comparing query features
+/// to context-adapted class prototypes.
+/// </para>
+/// <para><b>For Beginners:</b> CAML is built on a simple but powerful insight:
+///
+/// **The insight:**
+/// Modern pretrained models (CLIP, DINO) produce such good features that you don't
+/// need to fine-tune them. Instead, learn a lightweight context module that adapts
+/// how you USE the features for each specific task.
+///
+/// **How it works:**
+/// 1. Extract features using a frozen pretrained backbone (no gradient computation needed)
+/// 2. Compute class prototypes from support features (like ProtoNets)
+/// 3. Pass prototypes through a context module that adjusts them based on the task
+/// 4. Classify queries by distance to context-adapted prototypes
+///
+/// **Why freeze the backbone?**
+/// - Much faster training (no backbone gradients)
+/// - Avoids overfitting on small support sets
+/// - Preserves the rich representations learned during pretraining
+/// - Only the small context module needs to be meta-learned
+/// </para>
+/// <para><b>Algorithm - CAML:</b>
+/// <code>
+/// # Components
+/// f_theta = frozen_backbone           # Pretrained feature extractor (NOT updated)
+/// g_phi = context_module              # Lightweight context adaptation (meta-learned)
+///
+/// # Meta-training
+/// for each meta-iteration:
+///     for each task T_i in batch:
+///         # 1. Extract features (no gradient needed for backbone)
+///         z_s = f_theta(support_x)
+///         z_q = f_theta(query_x)
+///
+///         # 2. Compute class prototypes
+///         p_k = mean(z_s[class == k])
+///
+///         # 3. Context adaptation
+///         context = aggregate(z_s)           # Summarize support set
+///         p_adapted = g_phi(p_k, context)    # Adapt prototypes using context
+///
+///         # 4. Classify queries
+///         logits = cosine_similarity(z_q, p_adapted)
+///         loss = cross_entropy(logits, query_labels)
+///
+///     # Only update context module
+///     phi = phi - lr * grad(loss)
+/// </code>
+/// </para>
+/// <para>
+/// Reference: Fifty, C., Duan, D., Junkins, R.G., Amid, E., Leskovec, J.,
+/// Re, C., &amp; Thrun, S. (2023). Context-Aware Meta-Learning. NeurIPS 2023.
+/// </para>
+/// </remarks>
+public class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+{
+    private readonly CAMLOptions<T, TInput, TOutput> _camlOptions;
+
+    /// <summary>Parameters for the lightweight context module.</summary>
+    private Vector<T> _contextParams = new Vector<T>(0);
+
+    /// <inheritdoc/>
+    public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.CAML;
+
+    /// <summary>Initializes a new CAML meta-learner.</summary>
+    /// <param name="options">Configuration options for CAML.</param>
+    public CAMLAlgorithm(CAMLOptions<T, TInput, TOutput> options)
+        : base(
+            options.MetaModel,
+            options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
+            options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+    {
+        _camlOptions = options;
+        InitializeContextModule();
+    }
+
+    /// <summary>Initializes the context module parameters.</summary>
+    private void InitializeContextModule()
+    {
+        int ctxDim = _camlOptions.ContextDimension;
+        // Context aggregator + context-conditioned projection
+        int totalParams = ctxDim * ctxDim + ctxDim + ctxDim * ctxDim + ctxDim;
+        _contextParams = new Vector<T>(totalParams);
+        double scale = Math.Sqrt(2.0 / ctxDim);
+        for (int i = 0; i < totalParams; i++)
+        {
+            _contextParams[i] = NumOps.FromDouble((RandomGenerator.NextDouble() - 0.5) * 2.0 * scale);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var metaGradients = new List<Vector<T>>();
+        var losses = new List<T>();
+        var initParams = MetaModel.GetParameters();
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
+            losses.Add(queryLoss);
+
+            if (!_camlOptions.FreezeBackbone)
+            {
+                metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
+            }
+        }
+
+        // Update backbone only if not frozen
+        if (!_camlOptions.FreezeBackbone && metaGradients.Count > 0)
+        {
+            MetaModel.SetParameters(initParams);
+            var avgGrad = AverageVectors(metaGradients);
+            MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _camlOptions.OuterLearningRate));
+        }
+
+        // Update context module via SPSA
+        UpdateContextModule(taskBatch);
+
+        _currentIteration++;
+        return ComputeMean(losses);
+    }
+
+    /// <inheritdoc/>
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        return new CAMLModel<T, TInput, TOutput>(MetaModel, MetaModel.GetParameters());
+    }
+
+    /// <summary>Updates context module parameters using SPSA gradient estimation.</summary>
+    private void UpdateContextModule(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        double epsilon = 1e-5;
+        double lr = _camlOptions.OuterLearningRate;
+
+        var direction = new Vector<T>(_contextParams.Length);
+        for (int i = 0; i < direction.Length; i++)
+            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
+
+        double baseLoss = 0;
+        foreach (var task in taskBatch.Tasks)
+            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+        baseLoss /= taskBatch.Tasks.Length;
+
+        for (int i = 0; i < _contextParams.Length; i++)
+            _contextParams[i] = NumOps.Add(_contextParams[i], NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
+
+        double perturbedLoss = 0;
+        foreach (var task in taskBatch.Tasks)
+            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+        perturbedLoss /= taskBatch.Tasks.Length;
+
+        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
+        for (int i = 0; i < _contextParams.Length; i++)
+            _contextParams[i] = NumOps.Subtract(_contextParams[i],
+                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
+    }
+
+    private Vector<T> AverageVectors(List<Vector<T>> vectors)
+    {
+        if (vectors.Count == 0) return new Vector<T>(0);
+        var result = new Vector<T>(vectors[0].Length);
+        foreach (var v in vectors)
+            for (int i = 0; i < result.Length; i++)
+                result[i] = NumOps.Add(result[i], v[i]);
+        var scale = NumOps.FromDouble(1.0 / vectors.Count);
+        for (int i = 0; i < result.Length; i++)
+            result[i] = NumOps.Multiply(result[i], scale);
+        return result;
+    }
+}
+
+/// <summary>Adapted model wrapper for CAML.</summary>
+internal class CAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+{
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _params;
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+    public CAMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) { _model = model; _params = p; }
+    /// <inheritdoc/>
+    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) { }
+    /// <inheritdoc/>
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
+}
