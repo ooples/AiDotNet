@@ -145,7 +145,7 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         }
 
         // Update kernel hyperparameters via SPSA
-        UpdateKernelParams(taskBatch);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _kernelParams, _dktOptions.OuterLearningRate);
 
         _currentIteration++;
         return ComputeMean(losses);
@@ -314,35 +314,6 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
         return new DKTModel<T, TInput, TOutput>(
             MetaModel, currentParams, gpWeights, lengthScale, noiseVar);
-    }
-
-    /// <summary>Updates kernel hyperparameters using SPSA gradient estimation.</summary>
-    private void UpdateKernelParams(TaskBatch<T, TInput, TOutput> taskBatch)
-    {
-        double epsilon = 1e-5;
-        double lr = _dktOptions.OuterLearningRate;
-
-        var direction = new Vector<T>(_kernelParams.Length);
-        for (int i = 0; i < direction.Length; i++)
-            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
-
-        double baseLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        baseLoss /= taskBatch.Tasks.Length;
-
-        for (int i = 0; i < _kernelParams.Length; i++)
-            _kernelParams[i] = NumOps.Add(_kernelParams[i], NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
-
-        double perturbedLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        perturbedLoss /= taskBatch.Tasks.Length;
-
-        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
-        for (int i = 0; i < _kernelParams.Length; i++)
-            _kernelParams[i] = NumOps.Subtract(_kernelParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
     }
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)

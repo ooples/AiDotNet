@@ -254,8 +254,19 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             MetaModel.SetParameters(updatedParams);
         }
 
-        // Update SNAIL block parameters
-        UpdateSNAILBlocks(taskBatch);
+        // Update SNAIL block parameters via multi-sample SPSA
+        for (int block = 0; block < _tcBlockParams.Count; block++)
+        {
+            var tcParams = _tcBlockParams[block];
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref tcParams, _snailOptions.OuterLearningRate);
+            _tcBlockParams[block] = tcParams;
+        }
+        for (int block = 0; block < _attentionBlockParams.Count; block++)
+        {
+            var attParams = _attentionBlockParams[block];
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref attParams, _snailOptions.OuterLearningRate);
+            _attentionBlockParams[block] = attParams;
+        }
 
         _currentIteration++;
         return ComputeMean(losses);
@@ -527,96 +538,6 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Updates SNAIL block parameters using gradient estimation.
-    /// </summary>
-    /// <param name="taskBatch">The task batch for gradient computation.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Improves the TC and attention blocks by slightly adjusting
-    /// their parameters in a random direction and checking if the result is better.
-    /// This is a simple gradient estimation technique (SPSA - Simultaneous Perturbation
-    /// Stochastic Approximation) that avoids computing exact gradients through the
-    /// complex SNAIL architecture.
-    /// </para>
-    /// </remarks>
-    private void UpdateSNAILBlocks(TaskBatch<T, TInput, TOutput> taskBatch)
-    {
-        double epsilon = 1e-5;
-        double lr = _snailOptions.OuterLearningRate;
-
-        // Update TC blocks
-        for (int block = 0; block < _tcBlockParams.Count; block++)
-        {
-            UpdateBlockParams(_tcBlockParams[block], taskBatch, epsilon, lr);
-        }
-
-        // Update attention blocks
-        for (int block = 0; block < _attentionBlockParams.Count; block++)
-        {
-            UpdateBlockParams(_attentionBlockParams[block], taskBatch, epsilon, lr);
-        }
-    }
-
-    /// <summary>
-    /// Updates a single block's parameters using random direction gradient estimation.
-    /// </summary>
-    /// <param name="blockParams">The parameter vector to update.</param>
-    /// <param name="taskBatch">Task batch for loss evaluation.</param>
-    /// <param name="epsilon">Perturbation size for gradient estimation.</param>
-    /// <param name="lr">Learning rate for the update.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This estimates the gradient by:
-    /// 1. Picking a random direction
-    /// 2. Measuring loss at the current position
-    /// 3. Moving slightly in the random direction and measuring loss again
-    /// 4. If loss went up, move in the opposite direction; if it went down, move with it
-    /// </para>
-    /// </remarks>
-    private void UpdateBlockParams(Vector<T> blockParams, TaskBatch<T, TInput, TOutput> taskBatch,
-        double epsilon, double lr)
-    {
-        // Random direction for SPSA
-        var direction = new Vector<T>(blockParams.Length);
-        for (int i = 0; i < direction.Length; i++)
-        {
-            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
-        }
-
-        // Compute base loss
-        double baseLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-        {
-            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(
-                MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        }
-        baseLoss /= taskBatch.Tasks.Length;
-
-        // Perturb
-        for (int i = 0; i < blockParams.Length; i++)
-        {
-            blockParams[i] = NumOps.Add(blockParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
-        }
-
-        // Compute perturbed loss
-        double perturbedLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-        {
-            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(
-                MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        }
-        perturbedLoss /= taskBatch.Tasks.Length;
-
-        // Estimate gradient and update
-        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
-        for (int i = 0; i < blockParams.Length; i++)
-        {
-            // Undo perturbation and apply gradient
-            blockParams[i] = NumOps.Subtract(blockParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
-        }
     }
 
     /// <summary>

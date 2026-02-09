@@ -183,9 +183,9 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _npbmlOptions.OuterLearningRate));
         }
 
-        // Update encoder/decoder via SPSA
-        UpdateAuxiliaryParams(taskBatch, ref _encoderParams);
-        UpdateAuxiliaryParams(taskBatch, ref _decoderParams);
+        // Update encoder/decoder via multi-sample SPSA
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _npbmlOptions.OuterLearningRate);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _decoderParams, _npbmlOptions.OuterLearningRate);
 
         _currentIteration++;
         return ComputeMean(losses);
@@ -292,36 +292,28 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         // Encode support set into latent distribution and sample
         var sampledLatent = EncodeAndSample(supportFeatures);
 
-        return new NPBMLModel<T, TInput, TOutput>(MetaModel, currentParams, sampledLatent, _npbmlOptions.NumSamples);
-    }
+        // Compute raw modulation factors from the latent sample
+        // These sigmoid(z) values will be used to modulate backbone parameters in Predict()
+        double[]? modulationFactors = null;
+        var dist = EncodeToDistribution(supportFeatures);
+        if (dist != null)
+        {
+            var (mu, logSigma) = dist.Value;
+            int latentDim = _npbmlOptions.LatentDim;
+            modulationFactors = new double[latentDim];
+            for (int i = 0; i < latentDim; i++)
+            {
+                double sigma = Math.Exp(logSigma[i]);
+                double u1 = Math.Max(RandomGenerator.NextDouble(), 1e-10);
+                double u2 = RandomGenerator.NextDouble();
+                double eps = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                double z = mu[i] + sigma * eps;
+                modulationFactors[i] = 1.0 / (1.0 + Math.Exp(-z)); // Sigmoid gate
+            }
+        }
 
-    /// <summary>Updates auxiliary parameters using SPSA gradient estimation.</summary>
-    private void UpdateAuxiliaryParams(TaskBatch<T, TInput, TOutput> taskBatch, ref Vector<T> auxParams)
-    {
-        double epsilon = 1e-5;
-        double lr = _npbmlOptions.OuterLearningRate;
-
-        var direction = new Vector<T>(auxParams.Length);
-        for (int i = 0; i < direction.Length; i++)
-            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
-
-        double baseLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        baseLoss /= taskBatch.Tasks.Length;
-
-        for (int i = 0; i < auxParams.Length; i++)
-            auxParams[i] = NumOps.Add(auxParams[i], NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
-
-        double perturbedLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        perturbedLoss /= taskBatch.Tasks.Length;
-
-        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
-        for (int i = 0; i < auxParams.Length; i++)
-            auxParams[i] = NumOps.Subtract(auxParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
+        return new NPBMLModel<T, TInput, TOutput>(
+            MetaModel, currentParams, sampledLatent, _npbmlOptions.NumSamples, modulationFactors);
     }
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)
@@ -340,34 +332,63 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
 /// <summary>Adapted model wrapper for NPBML with probabilistic prediction.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> This model makes predictions based on a latent variable
-/// sampled from the support set's encoded distribution. The reparameterization trick
-/// enables gradient flow through the sampling process, and multiple samples can
-/// be used to estimate uncertainty.
+/// <para><b>For Beginners:</b> This model uses a latent variable sampled from the support
+/// set's encoded distribution to modulate backbone parameters. The modulation makes
+/// the backbone's predictions task-specific: different tasks get different parameter
+/// scalings based on their support set characteristics.
 /// </para>
 /// </remarks>
-internal class NPBMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class NPBMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _sampledLatent;
     private readonly int _numSamples;
+    private readonly double[]? _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
-    public NPBMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams, Vector<T>? sampledLatent, int numSamples)
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _sampledLatent;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
+
+    public NPBMLModel(
+        IFullModel<T, TInput, TOutput> model,
+        Vector<T> backboneParams,
+        Vector<T>? sampledLatent,
+        int numSamples,
+        double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
         _sampledLatent = sampledLatent;
         _numSamples = numSamples;
+        _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        _model.SetParameters(_backboneParams);
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            // Apply task-specific parameter modulation: scale each backbone parameter
+            // by the sigmoid-gated latent sample, cycling through latent dimensions
+            var modulatedParams = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+            {
+                double mod = _modulationFactors[i % _modulationFactors.Length];
+                modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
+            }
+            _model.SetParameters(modulatedParams);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
         return _model.Predict(input);
     }
 

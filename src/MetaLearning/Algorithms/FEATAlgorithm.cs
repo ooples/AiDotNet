@@ -198,8 +198,8 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             MetaModel.SetParameters(updatedParams);
         }
 
-        // Update transformer parameters
-        UpdateTransformerParams(taskBatch);
+        // Update transformer parameters via multi-sample SPSA
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _transformerParams, _featOptions.OuterLearningRate);
 
         _currentIteration++;
         return ComputeMean(losses);
@@ -322,51 +322,6 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         }
 
         return adapted;
-    }
-
-    /// <summary>
-    /// Updates transformer parameters using gradient estimation.
-    /// </summary>
-    /// <param name="taskBatch">The task batch for loss evaluation.</param>
-    private void UpdateTransformerParams(TaskBatch<T, TInput, TOutput> taskBatch)
-    {
-        double epsilon = 1e-5;
-        double lr = _featOptions.OuterLearningRate;
-
-        var direction = new Vector<T>(_transformerParams.Length);
-        for (int i = 0; i < direction.Length; i++)
-        {
-            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
-        }
-
-        double baseLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-        {
-            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(
-                MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        }
-        baseLoss /= taskBatch.Tasks.Length;
-
-        for (int i = 0; i < _transformerParams.Length; i++)
-        {
-            _transformerParams[i] = NumOps.Add(_transformerParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
-        }
-
-        double perturbedLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-        {
-            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(
-                MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        }
-        perturbedLoss /= taskBatch.Tasks.Length;
-
-        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
-        for (int i = 0; i < _transformerParams.Length; i++)
-        {
-            _transformerParams[i] = NumOps.Subtract(_transformerParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
-        }
     }
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)

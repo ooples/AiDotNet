@@ -150,10 +150,10 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _constellationOptions.OuterLearningRate));
         }
 
-        // Update part detector and relation module via SPSA
-        UpdateAuxiliaryParams(taskBatch, ref _partDetectorParams);
+        // Update part detector and relation module via multi-sample SPSA
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _partDetectorParams, _constellationOptions.OuterLearningRate);
         if (_constellationOptions.UseSpatialRelations)
-            UpdateAuxiliaryParams(taskBatch, ref _relationParams);
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref _relationParams, _constellationOptions.OuterLearningRate);
 
         _currentIteration++;
         return ComputeMean(losses);
@@ -271,37 +271,29 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         if (_constellationOptions.UseSpatialRelations)
             constellation = ComputeConstellationScores(detectedParts);
 
+        // Compute feature-delta modulation from part detection + constellation
+        double[]? modulationFactors = null;
+        var adaptedFeatures = constellation ?? detectedParts;
+        if (adaptedFeatures != null && supportFeatures != null && supportFeatures.Length > 0)
+        {
+            double sumRatio = 0;
+            int count = 0;
+            for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedFeatures.Length); i++)
+            {
+                double raw = NumOps.ToDouble(supportFeatures[i]);
+                double adapted = NumOps.ToDouble(adaptedFeatures[i]);
+                if (Math.Abs(raw) > 1e-10)
+                {
+                    sumRatio += Math.Max(0.5, Math.Min(2.0, adapted / raw));
+                    count++;
+                }
+            }
+            double avgRatio = count > 0 ? sumRatio / count : 1.0;
+            modulationFactors = [avgRatio];
+        }
+
         return new ConstellationNetModel<T, TInput, TOutput>(
-            MetaModel, currentParams, detectedParts, constellation);
-    }
-
-    /// <summary>Updates auxiliary parameters using SPSA gradient estimation.</summary>
-    private void UpdateAuxiliaryParams(TaskBatch<T, TInput, TOutput> taskBatch, ref Vector<T> auxParams)
-    {
-        double epsilon = 1e-5;
-        double lr = _constellationOptions.OuterLearningRate;
-
-        var direction = new Vector<T>(auxParams.Length);
-        for (int i = 0; i < direction.Length; i++)
-            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
-
-        double baseLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        baseLoss /= taskBatch.Tasks.Length;
-
-        for (int i = 0; i < auxParams.Length; i++)
-            auxParams[i] = NumOps.Add(auxParams[i], NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
-
-        double perturbedLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        perturbedLoss /= taskBatch.Tasks.Length;
-
-        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
-        for (int i = 0; i < auxParams.Length; i++)
-            auxParams[i] = NumOps.Subtract(auxParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
+            MetaModel, currentParams, detectedParts, constellation, modulationFactors);
     }
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)
@@ -326,30 +318,58 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 /// and checking whether their spatial arrangement is consistent.
 /// </para>
 /// </remarks>
-internal class ConstellationNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class ConstellationNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _detectedParts;
     private readonly Vector<T>? _constellation;
+    private readonly double[]? _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _constellation ?? _detectedParts;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
 
     public ConstellationNetModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> backboneParams,
         Vector<T>? detectedParts,
-        Vector<T>? constellation)
+        Vector<T>? constellation,
+        double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
         _detectedParts = detectedParts;
         _constellation = constellation;
+        _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_backboneParams); return _model.Predict(input); }
+    public TOutput Predict(TInput input)
+    {
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            var modulatedParams = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+            {
+                double mod = _modulationFactors[i % _modulationFactors.Length];
+                modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
+            }
+            _model.SetParameters(modulatedParams);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
+        return _model.Predict(input);
+    }
+
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) { }
     /// <inheritdoc/>

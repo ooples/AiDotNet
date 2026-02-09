@@ -202,7 +202,7 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Update amortization network parameters using finite differences
-        UpdateAmortizationParams(taskBatch);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _amortizationParams, _versaOptions.OuterLearningRate);
 
         _currentIteration++;
         return ComputeMean(losses);
@@ -305,62 +305,6 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Updates amortization network parameters using gradient estimation.
-    /// </summary>
-    /// <param name="taskBatch">The task batch for gradient computation.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Improves the "classifier factory" by slightly adjusting
-    /// its parameters and seeing if the output classifiers get better.
-    /// </para>
-    /// </remarks>
-    private void UpdateAmortizationParams(TaskBatch<T, TInput, TOutput> taskBatch)
-    {
-        double epsilon = 1e-5;
-        double lr = _versaOptions.OuterLearningRate;
-
-        // Use simple random direction gradient estimation for amortization params
-        // (full finite differences would be too expensive)
-        var direction = new Vector<T>(_amortizationParams.Length);
-        for (int i = 0; i < direction.Length; i++)
-        {
-            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
-        }
-
-        // Compute loss at current params
-        double baseLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-        {
-            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(
-                MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        }
-        baseLoss /= taskBatch.Tasks.Length;
-
-        // Perturb in random direction
-        for (int i = 0; i < _amortizationParams.Length; i++)
-        {
-            _amortizationParams[i] = NumOps.Add(_amortizationParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
-        }
-
-        double perturbedLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-        {
-            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(
-                MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        }
-        perturbedLoss /= taskBatch.Tasks.Length;
-
-        // Estimate directional gradient and update
-        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
-        for (int i = 0; i < _amortizationParams.Length; i++)
-        {
-            // Undo perturbation and apply gradient
-            _amortizationParams[i] = NumOps.Subtract(_amortizationParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
-        }
     }
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)

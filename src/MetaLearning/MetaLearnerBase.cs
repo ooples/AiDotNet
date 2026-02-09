@@ -773,6 +773,84 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
         return Engine.Multiply(gradients, scale);
     }
 
+    /// <summary>
+    /// Updates auxiliary parameters using multi-sample SPSA (Simultaneous Perturbation Stochastic
+    /// Approximation). Averages gradient estimates over multiple random perturbation directions
+    /// for more stable and accurate updates than single-sample SPSA.
+    /// </summary>
+    /// <param name="taskBatch">The current task batch for loss evaluation.</param>
+    /// <param name="auxParams">The auxiliary parameters to update (modified in place).</param>
+    /// <param name="learningRate">Learning rate for the update step.</param>
+    /// <param name="numSamples">Number of perturbation directions to average (default 3).</param>
+    /// <param name="epsilon">Perturbation magnitude for finite differences (default 1e-5).</param>
+    /// <remarks>
+    /// <para>
+    /// SPSA (Spall, 1992) estimates gradients using only 2 function evaluations per sample,
+    /// regardless of the number of parameters. Multi-sample averaging reduces variance of the
+    /// gradient estimate at the cost of additional evaluations (2 * numSamples total).
+    /// </para>
+    /// <para><b>For Beginners:</b> When we can't compute exact gradients for auxiliary parameters
+    /// (because they're not part of the main neural network), we estimate them by:
+    /// 1. Randomly perturbing all parameters simultaneously
+    /// 2. Measuring how the loss changes
+    /// 3. Inferring the gradient direction from the change
+    /// Doing this multiple times and averaging gives a more reliable gradient estimate.
+    /// </para>
+    /// </remarks>
+    protected void UpdateAuxiliaryParamsSPSA(
+        TaskBatch<T, TInput, TOutput> taskBatch,
+        ref Vector<T> auxParams,
+        double learningRate,
+        int numSamples = 3,
+        double epsilon = 1e-5)
+    {
+        if (auxParams.Length == 0 || taskBatch.Tasks.Length == 0)
+            return;
+
+        // Compute base loss once (shared across all samples)
+        double baseLoss = 0;
+        foreach (var task in taskBatch.Tasks)
+            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(
+                MetaModel.Predict(task.QueryInput), task.QueryOutput));
+        baseLoss /= taskBatch.Tasks.Length;
+
+        // Accumulate gradient estimates across multiple perturbation directions
+        var gradientAccum = new double[auxParams.Length];
+
+        for (int s = 0; s < numSamples; s++)
+        {
+            // Generate random Rademacher direction (+1/-1 per component)
+            var direction = new double[auxParams.Length];
+            for (int i = 0; i < auxParams.Length; i++)
+                direction[i] = RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0;
+
+            // Perturb parameters: auxParams += epsilon * direction
+            for (int i = 0; i < auxParams.Length; i++)
+                auxParams[i] = NumOps.Add(auxParams[i], NumOps.FromDouble(epsilon * direction[i]));
+
+            // Compute perturbed loss
+            double perturbedLoss = 0;
+            foreach (var task in taskBatch.Tasks)
+                perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(
+                    MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            perturbedLoss /= taskBatch.Tasks.Length;
+
+            // Restore parameters: auxParams -= epsilon * direction
+            for (int i = 0; i < auxParams.Length; i++)
+                auxParams[i] = NumOps.Subtract(auxParams[i], NumOps.FromDouble(epsilon * direction[i]));
+
+            // Accumulate per-component gradient estimate: g_i = (loss+ - loss0) / (epsilon * direction_i)
+            double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
+            for (int i = 0; i < auxParams.Length; i++)
+                gradientAccum[i] += directionalGrad * direction[i];
+        }
+
+        // Average gradient estimates and apply update
+        double scale = learningRate / numSamples;
+        for (int i = 0; i < auxParams.Length; i++)
+            auxParams[i] = NumOps.Subtract(auxParams[i], NumOps.FromDouble(scale * gradientAccum[i]));
+    }
+
     #endregion
 
     #region Helper Methods

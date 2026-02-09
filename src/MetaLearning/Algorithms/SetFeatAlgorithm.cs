@@ -143,10 +143,10 @@ public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _setFeatOptions.OuterLearningRate));
         }
 
-        // Update set encoder and cross-attention via SPSA
-        UpdateAuxiliaryParams(taskBatch, ref _setEncoderParams);
+        // Update set encoder and cross-attention via multi-sample SPSA
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _setEncoderParams, _setFeatOptions.OuterLearningRate);
         if (_setFeatOptions.UseCrossAttention)
-            UpdateAuxiliaryParams(taskBatch, ref _crossAttentionParams);
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref _crossAttentionParams, _setFeatOptions.OuterLearningRate);
 
         _currentIteration++;
         return ComputeMean(losses);
@@ -266,36 +266,27 @@ public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         if (_setFeatOptions.UseCrossAttention)
             setEncoded = ApplyCrossAttention(setEncoded);
 
-        return new SetFeatModel<T, TInput, TOutput>(MetaModel, currentParams, setEncoded);
-    }
+        // Compute feature-delta modulation from set encoding
+        double[]? modulationFactors = null;
+        if (setEncoded != null && supportFeatures != null && supportFeatures.Length > 0)
+        {
+            double sumRatio = 0;
+            int count = 0;
+            for (int i = 0; i < Math.Min(supportFeatures.Length, setEncoded.Length); i++)
+            {
+                double raw = NumOps.ToDouble(supportFeatures[i]);
+                double enc = NumOps.ToDouble(setEncoded[i]);
+                if (Math.Abs(raw) > 1e-10)
+                {
+                    sumRatio += Math.Max(0.5, Math.Min(2.0, enc / raw));
+                    count++;
+                }
+            }
+            double avgRatio = count > 0 ? sumRatio / count : 1.0;
+            modulationFactors = [avgRatio];
+        }
 
-    /// <summary>Updates auxiliary parameters using SPSA gradient estimation.</summary>
-    private void UpdateAuxiliaryParams(TaskBatch<T, TInput, TOutput> taskBatch, ref Vector<T> auxParams)
-    {
-        double epsilon = 1e-5;
-        double lr = _setFeatOptions.OuterLearningRate;
-
-        var direction = new Vector<T>(auxParams.Length);
-        for (int i = 0; i < direction.Length; i++)
-            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
-
-        double baseLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        baseLoss /= taskBatch.Tasks.Length;
-
-        for (int i = 0; i < auxParams.Length; i++)
-            auxParams[i] = NumOps.Add(auxParams[i], NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
-
-        double perturbedLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        perturbedLoss /= taskBatch.Tasks.Length;
-
-        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
-        for (int i = 0; i < auxParams.Length; i++)
-            auxParams[i] = NumOps.Subtract(auxParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
+        return new SetFeatModel<T, TInput, TOutput>(MetaModel, currentParams, setEncoded, modulationFactors);
     }
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)
@@ -319,26 +310,52 @@ public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 /// cross-attention between classes for context-aware classification.
 /// </para>
 /// </remarks>
-internal class SetFeatModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class SetFeatModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _setEncodedFeatures;
+    private readonly double[]? _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
-    public SetFeatModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams, Vector<T>? setEncodedFeatures)
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _setEncodedFeatures;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
+
+    public SetFeatModel(
+        IFullModel<T, TInput, TOutput> model,
+        Vector<T> backboneParams,
+        Vector<T>? setEncodedFeatures,
+        double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
         _setEncodedFeatures = setEncodedFeatures;
+        _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        _model.SetParameters(_backboneParams);
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            var modulatedParams = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+            {
+                double mod = _modulationFactors[i % _modulationFactors.Length];
+                modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
+            }
+            _model.SetParameters(modulatedParams);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
         return _model.Predict(input);
     }
 

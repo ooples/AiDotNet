@@ -151,9 +151,9 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             MetaModel.SetParameters(ApplyGradients(initParams, avgGrad, _dpgnOptions.OuterLearningRate));
         }
 
-        // Update dual graph params via SPSA
-        UpdateAuxiliaryParams(taskBatch, ref _pointGraphParams);
-        UpdateAuxiliaryParams(taskBatch, ref _distGraphParams);
+        // Update dual graph params via multi-sample SPSA
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _pointGraphParams, _dpgnOptions.OuterLearningRate);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _distGraphParams, _dpgnOptions.OuterLearningRate);
 
         _currentIteration++;
         return ComputeMean(losses);
@@ -278,36 +278,22 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             (refinedFeatures, refinedDistributions) = DualGraphPropagate(supportFeatures);
         }
 
-        return new DPGNModel<T, TInput, TOutput>(MetaModel, currentParams, refinedFeatures, refinedDistributions);
-    }
+        // Compute modulation factors from distribution confidence estimates
+        // The distribution graph estimates per-node confidence — use as parameter modulation
+        double[]? modulationFactors = null;
+        if (refinedDistributions != null && refinedDistributions.Length > 0)
+        {
+            modulationFactors = new double[refinedDistributions.Length];
+            for (int i = 0; i < refinedDistributions.Length; i++)
+            {
+                // Convert distribution to confidence via sigmoid, centered around 1.0
+                double d = NumOps.ToDouble(refinedDistributions[i]);
+                modulationFactors[i] = 0.5 + 0.5 / (1.0 + Math.Exp(-d));
+            }
+        }
 
-    /// <summary>Updates auxiliary parameters using SPSA gradient estimation.</summary>
-    private void UpdateAuxiliaryParams(TaskBatch<T, TInput, TOutput> taskBatch, ref Vector<T> auxParams)
-    {
-        double epsilon = 1e-5;
-        double lr = _dpgnOptions.OuterLearningRate;
-
-        var direction = new Vector<T>(auxParams.Length);
-        for (int i = 0; i < direction.Length; i++)
-            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
-
-        double baseLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        baseLoss /= taskBatch.Tasks.Length;
-
-        for (int i = 0; i < auxParams.Length; i++)
-            auxParams[i] = NumOps.Add(auxParams[i], NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
-
-        double perturbedLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        perturbedLoss /= taskBatch.Tasks.Length;
-
-        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
-        for (int i = 0; i < auxParams.Length; i++)
-            auxParams[i] = NumOps.Subtract(auxParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
+        return new DPGNModel<T, TInput, TOutput>(
+            MetaModel, currentParams, refinedFeatures, refinedDistributions, modulationFactors);
     }
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)
@@ -326,36 +312,64 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
 /// <summary>Adapted model wrapper for DPGN with dual graph-propagated features.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> This model stores features that have been refined through
-/// dual graph propagation. The point graph refined the feature representations by sharing
-/// information between similar examples, while the distribution graph refined confidence
-/// estimates. Together they produce more discriminative, context-aware representations.
+/// <para><b>For Beginners:</b> This model uses features refined through dual graph propagation.
+/// The distribution graph's confidence estimates are used to modulate backbone parameters,
+/// making predictions task-specific based on the confidence structure of the support set.
 /// </para>
 /// </remarks>
-internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _refinedFeatures;
     private readonly Vector<T>? _refinedDistributions;
+    private readonly double[]? _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _refinedFeatures;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
 
     public DPGNModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> backboneParams,
         Vector<T>? refinedFeatures,
-        Vector<T>? refinedDistributions)
+        Vector<T>? refinedDistributions,
+        double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
         _refinedFeatures = refinedFeatures;
         _refinedDistributions = refinedDistributions;
+        _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_backboneParams); return _model.Predict(input); }
+    public TOutput Predict(TInput input)
+    {
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            // Apply distribution-confidence-based parameter modulation
+            var modulatedParams = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+            {
+                double mod = _modulationFactors[i % _modulationFactors.Length];
+                modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
+            }
+            _model.SetParameters(modulatedParams);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
+        return _model.Predict(input);
+    }
+
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) { }
     /// <inheritdoc/>

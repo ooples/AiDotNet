@@ -180,7 +180,7 @@ public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         }
 
         // Update uncertainty module via SPSA
-        UpdateUncertaintyParams(taskBatch);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _uncertaintyParams, _fewTUREOptions.OuterLearningRate);
 
         _currentIteration++;
         return ComputeMean(losses);
@@ -248,34 +248,6 @@ public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             MetaModel, currentParams, uncertaintyWeights, _fewTUREOptions.UncertaintyThreshold);
     }
 
-    /// <summary>Updates uncertainty module parameters using SPSA gradient estimation.</summary>
-    private void UpdateUncertaintyParams(TaskBatch<T, TInput, TOutput> taskBatch)
-    {
-        double epsilon = 1e-5;
-        double lr = _fewTUREOptions.OuterLearningRate;
-
-        var direction = new Vector<T>(_uncertaintyParams.Length);
-        for (int i = 0; i < direction.Length; i++)
-            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
-
-        double baseLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        baseLoss /= taskBatch.Tasks.Length;
-
-        for (int i = 0; i < _uncertaintyParams.Length; i++)
-            _uncertaintyParams[i] = NumOps.Add(_uncertaintyParams[i], NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
-
-        double perturbedLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        perturbedLoss /= taskBatch.Tasks.Length;
-
-        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
-        for (int i = 0; i < _uncertaintyParams.Length; i++)
-            _uncertaintyParams[i] = NumOps.Subtract(_uncertaintyParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
-    }
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)
     {

@@ -125,7 +125,7 @@ public class HyperShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         }
 
         // Update hypernetwork via SPSA
-        UpdateHypernetParams(taskBatch);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _hypernetParams, _hyperShotOptions.OuterLearningRate);
 
         _currentIteration++;
         return ComputeMean(losses);
@@ -202,35 +202,6 @@ public class HyperShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         var generatedKernel = GenerateKernelFromSupport(supportFeatures);
 
         return new HyperShotModel<T, TInput, TOutput>(MetaModel, currentParams, generatedKernel);
-    }
-
-    /// <summary>Updates hypernetwork parameters using SPSA gradient estimation.</summary>
-    private void UpdateHypernetParams(TaskBatch<T, TInput, TOutput> taskBatch)
-    {
-        double epsilon = 1e-5;
-        double lr = _hyperShotOptions.OuterLearningRate;
-
-        var direction = new Vector<T>(_hypernetParams.Length);
-        for (int i = 0; i < direction.Length; i++)
-            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
-
-        double baseLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        baseLoss /= taskBatch.Tasks.Length;
-
-        for (int i = 0; i < _hypernetParams.Length; i++)
-            _hypernetParams[i] = NumOps.Add(_hypernetParams[i], NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
-
-        double perturbedLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        perturbedLoss /= taskBatch.Tasks.Length;
-
-        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
-        for (int i = 0; i < _hypernetParams.Length; i++)
-            _hypernetParams[i] = NumOps.Subtract(_hypernetParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
     }
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)
