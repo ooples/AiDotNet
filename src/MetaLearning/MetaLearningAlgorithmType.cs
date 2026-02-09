@@ -352,5 +352,42 @@ public enum MetaLearningAlgorithmType
     /// optimal classifier, especially when tasks have linearly separable features.
     /// </para>
     /// </remarks>
-    R2D2
+    R2D2,
+
+    /// <summary>
+    /// VERSA - Versatile and Efficient Few-shot Learning (Gordon et al., ICLR 2019).
+    /// Uses an amortization network to produce task-specific classifier parameters
+    /// in a single forward pass, eliminating the need for inner-loop optimization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Train a separate "amortization network" that takes aggregated
+    /// support set features and directly outputs classifier weights. This replaces
+    /// iterative inner-loop optimization with a single forward pass.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You need the fastest possible adaptation (no inner-loop optimization)
+    /// and want to learn a general mapping from support sets to classifiers.
+    /// </para>
+    /// </remarks>
+    VERSA,
+
+    /// <summary>
+    /// SNAIL - Simple Neural Attentive Meta-Learner (Mishra et al., ICLR 2018).
+    /// Combines temporal convolutions with causal attention to perform
+    /// sequence-to-sequence meta-learning on few-shot tasks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Treat few-shot learning as a sequence modeling problem.
+    /// Feed support examples (with labels) as a sequence, then feed query examples.
+    /// Temporal convolutions capture local patterns, causal attention captures global patterns.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want to leverage powerful sequence modeling architectures
+    /// for few-shot learning, especially when the order of examples matters or when
+    /// you need both local and global pattern recognition.
+    /// </para>
+    /// </remarks>
+    SNAIL
 }
