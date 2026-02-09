@@ -233,13 +233,17 @@ public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             else
             {
                 AccumulateVectors(accumulatedEncoderMeanGrad, encMeanGrad);
-                AccumulateVectors(accumulatedEncoderVarGrad!, encVarGrad);
-                AccumulateVectors(accumulatedDecoderGrad!, decGrad);
-                AccumulateVectors(accumulatedFeatureGrad!, featGrad);
+                if (accumulatedEncoderVarGrad != null)
+                    AccumulateVectors(accumulatedEncoderVarGrad, encVarGrad);
+                if (accumulatedDecoderGrad != null)
+                    AccumulateVectors(accumulatedDecoderGrad, decGrad);
+                if (accumulatedFeatureGrad != null)
+                    AccumulateVectors(accumulatedFeatureGrad, featGrad);
             }
         }
 
-        if (accumulatedEncoderMeanGrad == null)
+        if (accumulatedEncoderMeanGrad == null || accumulatedEncoderVarGrad == null ||
+            accumulatedDecoderGrad == null || accumulatedFeatureGrad == null)
         {
             throw new InvalidOperationException("Failed to compute meta-gradients.");
         }
@@ -247,27 +251,27 @@ public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         // Average and apply gradients
         T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
         DivideVector(accumulatedEncoderMeanGrad, batchSizeT);
-        DivideVector(accumulatedEncoderVarGrad!, batchSizeT);
-        DivideVector(accumulatedDecoderGrad!, batchSizeT);
-        DivideVector(accumulatedFeatureGrad!, batchSizeT);
+        DivideVector(accumulatedEncoderVarGrad, batchSizeT);
+        DivideVector(accumulatedDecoderGrad, batchSizeT);
+        DivideVector(accumulatedFeatureGrad, batchSizeT);
 
         // Clip gradients if configured
         if (_leoOptions.GradientClipThreshold.HasValue && _leoOptions.GradientClipThreshold.Value > 0)
         {
             accumulatedEncoderMeanGrad = ClipGradients(accumulatedEncoderMeanGrad, _leoOptions.GradientClipThreshold.Value);
-            accumulatedEncoderVarGrad = ClipGradients(accumulatedEncoderVarGrad!, _leoOptions.GradientClipThreshold.Value);
-            accumulatedDecoderGrad = ClipGradients(accumulatedDecoderGrad!, _leoOptions.GradientClipThreshold.Value);
-            accumulatedFeatureGrad = ClipGradients(accumulatedFeatureGrad!, _leoOptions.GradientClipThreshold.Value);
+            accumulatedEncoderVarGrad = ClipGradients(accumulatedEncoderVarGrad, _leoOptions.GradientClipThreshold.Value);
+            accumulatedDecoderGrad = ClipGradients(accumulatedDecoderGrad, _leoOptions.GradientClipThreshold.Value);
+            accumulatedFeatureGrad = ClipGradients(accumulatedFeatureGrad, _leoOptions.GradientClipThreshold.Value);
         }
 
         // Update network weights
         _encoderWeightsMean = ApplyGradients(_encoderWeightsMean, accumulatedEncoderMeanGrad, _leoOptions.OuterLearningRate);
-        _encoderWeightsVar = ApplyGradients(_encoderWeightsVar, accumulatedEncoderVarGrad!, _leoOptions.OuterLearningRate);
-        _decoderWeights = ApplyGradients(_decoderWeights, accumulatedDecoderGrad!, _leoOptions.OuterLearningRate);
+        _encoderWeightsVar = ApplyGradients(_encoderWeightsVar, accumulatedEncoderVarGrad, _leoOptions.OuterLearningRate);
+        _decoderWeights = ApplyGradients(_decoderWeights, accumulatedDecoderGrad, _leoOptions.OuterLearningRate);
 
         // Update feature encoder
         var featureParams = MetaModel.GetParameters();
-        var updatedFeatureParams = ApplyGradients(featureParams, accumulatedFeatureGrad!, _leoOptions.OuterLearningRate);
+        var updatedFeatureParams = ApplyGradients(featureParams, accumulatedFeatureGrad, _leoOptions.OuterLearningRate);
         MetaModel.SetParameters(updatedFeatureParams);
 
         return NumOps.Divide(totalLoss, batchSizeT);

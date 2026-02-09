@@ -237,9 +237,12 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 {
                     accumulatedBodyGradients[i] = NumOps.Add(accumulatedBodyGradients[i], bodyGrads[i]);
                 }
-                for (int i = 0; i < accumulatedHeadGradients!.Length; i++)
+                if (accumulatedHeadGradients != null)
                 {
-                    accumulatedHeadGradients[i] = NumOps.Add(accumulatedHeadGradients[i], headGrads[i]);
+                    for (int i = 0; i < accumulatedHeadGradients.Length; i++)
+                    {
+                        accumulatedHeadGradients[i] = NumOps.Add(accumulatedHeadGradients[i], headGrads[i]);
+                    }
                 }
             }
         }
