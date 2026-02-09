@@ -214,17 +214,22 @@ public class TIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             return supportFeatures;
         }
 
-        // Initialize soft assignments using support-query similarity
+        // Infer number of classes from support features
+        // Treat each support feature element as one class prototype
+        int numClasses = Math.Max(supportFeatures.Length, 1);
         int numQuery = queryFeatures.Length;
-        var logits = new double[numQuery];
+
+        // Initialize logits as [numQuery x numClasses] with query-to-class similarity
+        double temperature = Math.Max(_timOptions.Temperature, 1e-10);
+        var logits = new double[numQuery, numClasses];
         for (int q = 0; q < numQuery; q++)
         {
-            double sim = 0;
-            for (int s = 0; s < supportFeatures.Length; s++)
+            for (int c = 0; c < numClasses; c++)
             {
-                sim += NumOps.ToDouble(NumOps.Multiply(queryFeatures[q], supportFeatures[s % supportFeatures.Length]));
+                double queryVal = NumOps.ToDouble(queryFeatures[q]);
+                double protoVal = NumOps.ToDouble(supportFeatures[c]);
+                logits[q, c] = queryVal * protoVal * temperature;
             }
-            logits[q] = sim * _timOptions.Temperature;
         }
 
         // Transductive refinement iterations
@@ -234,42 +239,66 @@ public class TIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
         for (int iter = 0; iter < _timOptions.TransductiveIterations; iter++)
         {
-            // Softmax to get probabilities
-            double maxLogit = double.MinValue;
+            // Per-query softmax across classes to get probabilities
+            var probs = new double[numQuery, numClasses];
             for (int q = 0; q < numQuery; q++)
             {
-                maxLogit = Math.Max(maxLogit, logits[q]);
+                double maxLogit = double.MinValue;
+                for (int c = 0; c < numClasses; c++)
+                    maxLogit = Math.Max(maxLogit, logits[q, c]);
+
+                double sumExp = 0;
+                for (int c = 0; c < numClasses; c++)
+                {
+                    probs[q, c] = Math.Exp(logits[q, c] - maxLogit);
+                    sumExp += probs[q, c];
+                }
+                for (int c = 0; c < numClasses; c++)
+                    probs[q, c] /= Math.Max(sumExp, 1e-10);
             }
 
-            double sumExp = 0;
-            var probs = new double[numQuery];
-            for (int q = 0; q < numQuery; q++)
+            // Compute marginal class distribution (average across queries)
+            var marginal = new double[numClasses];
+            for (int c = 0; c < numClasses; c++)
             {
-                probs[q] = Math.Exp(logits[q] - maxLogit);
-                sumExp += probs[q];
-            }
-            for (int q = 0; q < numQuery; q++)
-            {
-                probs[q] /= Math.Max(sumExp, 1e-10);
+                for (int q = 0; q < numQuery; q++)
+                    marginal[c] += probs[q, c];
+                marginal[c] /= Math.Max(numQuery, 1);
             }
 
-            // Conditional entropy gradient: -log(p) - 1
-            // Marginal entropy gradient: promotes balance
-            double marginalMean = 1.0 / Math.Max(numQuery, 1);
+            // Update logits using conditional and marginal entropy gradients
             for (int q = 0; q < numQuery; q++)
             {
-                double condGrad = condWeight * (Math.Log(Math.Max(probs[q], 1e-10)) + 1.0);
-                double margGrad = -margWeight * (Math.Log(Math.Max(marginalMean, 1e-10)) + 1.0);
-                logits[q] -= lr * (condGrad + margGrad);
+                for (int c = 0; c < numClasses; c++)
+                {
+                    // Conditional entropy grad: minimize H(Y|X) -> sharpen predictions
+                    double condGrad = condWeight * (Math.Log(Math.Max(probs[q, c], 1e-10)) + 1.0);
+                    // Marginal entropy grad: maximize H(Y) -> balance class assignments
+                    double margGrad = -margWeight * (Math.Log(Math.Max(marginal[c], 1e-10)) + 1.0);
+                    logits[q, c] -= lr * (condGrad + margGrad);
+                }
             }
         }
 
-        // Convert refined logits back to feature space
+        // Convert refined per-class confidence back to feature space
+        // Compute per-class confidence as average softmax probability across queries
         var refined = new Vector<T>(supportFeatures.Length);
-        for (int i = 0; i < supportFeatures.Length; i++)
+        for (int c = 0; c < numClasses; c++)
         {
-            double refineScale = i < logits.Length ? 1.0 / (1.0 + Math.Exp(-logits[i])) : 0.5;
-            refined[i] = NumOps.Multiply(supportFeatures[i], NumOps.FromDouble(refineScale));
+            double avgConf = 0;
+            for (int q = 0; q < numQuery; q++)
+            {
+                double maxL = double.MinValue;
+                for (int cc = 0; cc < numClasses; cc++)
+                    maxL = Math.Max(maxL, logits[q, cc]);
+                double sumE = 0;
+                double thisE = Math.Exp(logits[q, c] - maxL);
+                for (int cc = 0; cc < numClasses; cc++)
+                    sumE += Math.Exp(logits[q, cc] - maxL);
+                avgConf += thisE / Math.Max(sumE, 1e-10);
+            }
+            avgConf /= Math.Max(numQuery, 1);
+            refined[c] = NumOps.Multiply(supportFeatures[c], NumOps.FromDouble(0.5 + avgConf));
         }
 
         return refined;
