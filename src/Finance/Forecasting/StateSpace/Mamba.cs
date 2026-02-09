@@ -801,15 +801,30 @@ public class Mamba<T> : ForecastingModelBase<T>
         if (input.Rank == 1)
         {
             // [seqLen * numFeatures] -> [1, contextLength, numFeatures]
-            int seqLen = _numFeatures > 1 ? input.Length / _numFeatures : _contextLength;
-            int features = _numFeatures > 1 ? _numFeatures : input.Length / _contextLength;
-            if (features < 1) features = 1;
-            if (seqLen < 1) seqLen = input.Length;
+            int seqLen, features;
+            if (_numFeatures > 1 && input.Length % _numFeatures == 0)
+            {
+                seqLen = input.Length / _numFeatures;
+                features = _numFeatures;
+            }
+            else if (_contextLength > 0 && input.Length % _contextLength == 0)
+            {
+                seqLen = _contextLength;
+                features = input.Length / _contextLength;
+            }
+            else
+            {
+                seqLen = input.Length;
+                features = 1;
+            }
             return input.Reshape(new[] { 1, seqLen, features });
         }
 
         // Higher rank: flatten to [batch, seqLen, features]
         int total = input.Length;
+        if (_contextLength <= 0 || total % _contextLength != 0)
+            throw new ArgumentException(
+                $"Cannot reshape input of length {total} with contextLength {_contextLength}. Input length must be divisible by contextLength.");
         return input.Reshape(new[] { 1, _contextLength, total / _contextLength });
     }
 

@@ -643,30 +643,29 @@ public class HybridBlockScheduler<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Creates a Zamba-style hybrid schedule with shared attention weights interleaved with SSM blocks.
+    /// Creates a Zamba-style hybrid schedule with attention layers interleaved with SSM blocks.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The Zamba architecture (Zyphra, 2024) uses a single shared attention layer that is interleaved
-    /// between groups of Mamba blocks. Because the attention weights are shared (the same layer instance
-    /// is reused), this significantly reduces parameter count while retaining in-context learning ability.
+    /// The Zamba architecture (Zyphra, 2024) interleaves attention layers between groups of Mamba blocks.
+    /// Attention layers appear at regular intervals determined by the frequency parameter, with all
+    /// remaining positions filled by Mamba SSM blocks.
     /// </para>
-    /// <para><b>For Beginners:</b> Instead of having many different attention layers (expensive),
-    /// Zamba uses ONE attention layer and reuses it at multiple positions. It's like having one expert
-    /// consultant who visits different departments on a rotating schedule, rather than hiring separate
-    /// consultants for each department. This saves memory while keeping most of the capability.</para>
+    /// <para><b>For Beginners:</b> This creates a schedule that alternates between Mamba blocks
+    /// and attention layers. Mamba handles most of the sequence processing efficiently, while
+    /// attention layers appear periodically to capture global dependencies.</para>
     /// </remarks>
     /// <param name="sequenceLength">Maximum sequence length.</param>
     /// <param name="modelDimension">Model embedding dimension.</param>
     /// <param name="numLayers">Total number of layers in the schedule.</param>
     /// <param name="attentionFrequency">
-    /// Place the shared attention block every N layers. Default: 3.
-    /// <para><b>For Beginners:</b> How often the shared attention layer appears. A value of 3
-    /// means the same attention layer is used at positions 2, 5, 8, etc.</para>
+    /// Place an attention block every N layers. Default: 3.
+    /// <para><b>For Beginners:</b> How often attention layers appear. A value of 3
+    /// means attention layers are placed at positions 2, 5, 8, etc.</para>
     /// </param>
     /// <param name="stateDimension">SSM state dimension for Mamba blocks. Default: 16.</param>
-    /// <param name="numAttentionHeads">Number of attention heads for the shared attention layer. Default: 8.</param>
-    /// <returns>A configured HybridBlockScheduler with Zamba-style shared attention.</returns>
+    /// <param name="numAttentionHeads">Number of attention heads for attention layers. Default: 8.</param>
+    /// <returns>A configured HybridBlockScheduler with Zamba-style interleaved attention.</returns>
     public static HybridBlockScheduler<T> CreateZambaSchedule(
         int sequenceLength,
         int modelDimension,

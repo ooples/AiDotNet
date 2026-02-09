@@ -862,7 +862,7 @@ public class MambaBlock<T> : LayerBase<T>
     /// True for MambaBlock, as single-timestep JIT compilation is supported.
     /// The computation graph represents one step of the selective scan recurrence.
     /// </value>
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Exports the computation graph for a single timestep of the Mamba selective scan.

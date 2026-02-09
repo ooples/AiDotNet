@@ -214,12 +214,21 @@ public class VisionMambaModelTests
             16, 16, 4, 1, modelDimension: 16, numLayers: 2, numClasses: 3, stateDimension: 4);
 
         var input = CreateRandomTensor(new[] { 1, 1, 16, 16 });
-        model.Forward(input);
+        var output1 = model.Forward(input);
         model.ResetState();
 
-        var output = model.Forward(input);
-        Assert.NotNull(output);
-        Assert.False(ContainsNaN(output));
+        var output2 = model.Forward(input);
+        Assert.NotNull(output2);
+        Assert.False(ContainsNaN(output2));
+
+        // After reset, same input should produce same output
+        var arr1 = output1.ToArray();
+        var arr2 = output2.ToArray();
+        for (int i = 0; i < arr1.Length; i++)
+        {
+            Assert.True(MathF.Abs(arr1[i] - arr2[i]) < 1e-5f,
+                $"ResetState mismatch at {i}: {arr1[i]:G6} vs {arr2[i]:G6}");
+        }
     }
 
     [Fact]

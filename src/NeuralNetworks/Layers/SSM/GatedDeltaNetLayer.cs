@@ -97,6 +97,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
     private Tensor<T>? _lastBeta;
     private Tensor<T>? _lastAlpha;
     private Tensor<T>? _lastGate;
+    private Tensor<T>? _lastGateRaw;
     private Tensor<T>? _lastStates;
     private Tensor<T>? _lastSiluConv;
     private Tensor<T>? _lastDeltaRuleOutput;
@@ -293,6 +294,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
             _outputGateBias.Reshape(1, _modelDimension)).Reshape(batchSize, seqLen, _modelDimension);
         var gate = Engine.Swish(gateRaw);
         _lastGate = gate;
+        _lastGateRaw = gateRaw;
 
         // Step 4: Delta rule recurrence per head
         var output = DeltaRuleForward(q, k, v, alpha, beta, batchSize, seqLen);
@@ -458,7 +460,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null || _lastSiluConv == null ||
             _lastQuery == null || _lastKey == null || _lastValue == null ||
             _lastAlpha == null || _lastBeta == null || _lastGate == null ||
-            _lastDeltaRuleOutput == null || _lastConvOutput == null)
+            _lastGateRaw == null || _lastDeltaRuleOutput == null || _lastConvOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
@@ -499,7 +501,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
         var dGateSwish = Engine.TensorMultiply(dGated, _lastDeltaRuleOutput);
 
         // Gate uses Swish, derivative: swish(x) + sigmoid(x) * (1 - swish(x))
-        var dGateRaw = Engine.TensorMultiply(dGateSwish, ComputeSiLUDerivative(_lastConvOutput));
+        var dGateRaw = Engine.TensorMultiply(dGateSwish, ComputeSiLUDerivative(_lastGateRaw!));
 
         // Gate weight gradients
         var siluFlat = _lastSiluConv.Reshape(batchSize * seqLen, _modelDimension);
@@ -808,6 +810,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
         _lastBeta = null;
         _lastAlpha = null;
         _lastGate = null;
+        _lastGateRaw = null;
         _lastStates = null;
         _lastSiluConv = null;
         _lastDeltaRuleOutput = null;

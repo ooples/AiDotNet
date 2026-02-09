@@ -188,6 +188,10 @@ public class MambaLanguageModel<T> : LayerBase<T>
             throw new ArgumentException($"Number of layers ({numLayers}) must be positive.", nameof(numLayers));
         if (stateDimension <= 0)
             throw new ArgumentException($"State dimension ({stateDimension}) must be positive.", nameof(stateDimension));
+        if (expandFactor <= 0)
+            throw new ArgumentException($"Expand factor ({expandFactor}) must be positive.", nameof(expandFactor));
+        if (maxSeqLength <= 0)
+            throw new ArgumentException($"Max sequence length ({maxSeqLength}) must be positive.", nameof(maxSeqLength));
 
         _vocabSize = vocabSize;
         _modelDimension = modelDimension;
@@ -250,6 +254,12 @@ public class MambaLanguageModel<T> : LayerBase<T>
             : input.Reshape(batchSize, seqLen, inputDim);
 
         _lastInput = input3D;
+
+        // Validate input vocab dimension matches embedding
+        if (inputDim != _vocabSize)
+            throw new ArgumentException(
+                $"Input last dimension ({inputDim}) must match vocab size ({_vocabSize}).",
+                nameof(input));
 
         // Step 1: Token embedding (input is one-hot or soft indices -> dense projection)
         // input: [batch, seqLen, vocabSize], embedding: [vocabSize, modelDim]
@@ -563,6 +573,10 @@ public class MambaLanguageModel<T> : LayerBase<T>
     public SSMStateCache<T> InitializeStateCache(bool enableCompression = false, int compressionBitWidth = 8)
     {
         _stateCache = new SSMStateCache<T>(enableCompression, compressionBitWidth);
+        for (int i = 0; i < _numLayers; i++)
+        {
+            _blocks[i].ResetState();
+        }
         return _stateCache;
     }
 
@@ -612,6 +626,13 @@ public class MambaLanguageModel<T> : LayerBase<T>
         if (_stateCache == null)
             throw new InvalidOperationException(
                 "State cache must be initialized before generation. Call InitializeStateCache() first.");
+
+        // Validate input shape
+        int tokenDim = tokenOneHot.Shape[tokenOneHot.Rank - 1];
+        if (tokenDim != _vocabSize)
+            throw new ArgumentException(
+                $"Token one-hot last dimension ({tokenDim}) must match vocab size ({_vocabSize}).",
+                nameof(tokenOneHot));
 
         // Normalize input to [1, vocabSize]
         var input2D = tokenOneHot.Rank == 1
@@ -663,7 +684,8 @@ public class MambaLanguageModel<T> : LayerBase<T>
         var bias2D = _lmHeadBias.Reshape(1, _vocabSize);
         logits = Engine.TensorBroadcastAdd(logits, bias2D);
 
-        return logits.Reshape(_vocabSize);
+        var result = ApplyActivation(logits);
+        return result.Reshape(_vocabSize);
     }
 
     /// <inheritdoc />
@@ -703,8 +725,7 @@ public class MambaLanguageModel<T> : LayerBase<T>
         inputNodes.Add(lmWeightsNode);
         inputNodes.Add(lmBiasNode);
 
-        var lmWeightsT = TensorOperations<T>.Transpose(lmWeightsNode);
-        var logits = TensorOperations<T>.MatrixMultiply(current, lmWeightsT);
+        var logits = TensorOperations<T>.MatrixMultiply(current, lmWeightsNode);
         var output = TensorOperations<T>.Add(logits, lmBiasNode);
 
         return output;

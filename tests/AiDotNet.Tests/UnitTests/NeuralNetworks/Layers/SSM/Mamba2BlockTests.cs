@@ -208,13 +208,22 @@ public class Mamba2BlockTests
     {
         var block = new Mamba2Block<float>(4, 32, 8, numHeads: 4);
         var input = CreateRandomTensor(new[] { 1, 4, 32 });
-        block.Forward(input);
+        var output1 = block.Forward(input);
 
         block.ResetState();
 
-        var output = block.Forward(input);
-        Assert.NotNull(output);
-        Assert.False(ContainsNaN(output));
+        var output2 = block.Forward(input);
+        Assert.NotNull(output2);
+        Assert.False(ContainsNaN(output2));
+
+        // After reset, same input should produce same output
+        var arr1 = output1.ToArray();
+        var arr2 = output2.ToArray();
+        for (int i = 0; i < arr1.Length; i++)
+        {
+            Assert.True(MathF.Abs(arr1[i] - arr2[i]) < 1e-5f,
+                $"ResetState mismatch at {i}: {arr1[i]:G6} vs {arr2[i]:G6}");
+        }
     }
 
     [Fact]
@@ -268,6 +277,7 @@ public class Mamba2BlockTests
         Assert.Equal("16", metadata["StateDimension"]);
         Assert.Equal("128", metadata["InnerDimension"]);
         Assert.Equal("8", metadata["NumHeads"]);
+        Assert.Equal("16", metadata["HeadDimension"]); // 128 / 8 = 16
         Assert.Equal("32", metadata["ChunkSize"]);
     }
 

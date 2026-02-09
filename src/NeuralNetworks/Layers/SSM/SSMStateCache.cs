@@ -309,6 +309,11 @@ public class SSMStateCache<T>
 
     private Tensor<T> CompressState(Tensor<T> state)
     {
+        if (state.Length == 0)
+        {
+            return CloneTensor(state);
+        }
+
         // Quantize-then-dequantize: reduces effective precision while keeping Tensor<T> storage
         T minVal = state[0];
         T maxVal = state[0];

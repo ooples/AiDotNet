@@ -52,6 +52,7 @@ public static class ScanPatterns<T>
     /// <returns>Bidirectional tensor [batch, numPatches, dim * 2] with forward and reverse concatenated.</returns>
     public static Tensor<T> BidirectionalScan(Tensor<T> patches)
     {
+        if (patches == null) throw new ArgumentNullException(nameof(patches));
         if (patches.Shape.Length != 3)
             throw new ArgumentException("Input must be 3D [batch, numPatches, dim].", nameof(patches));
 
@@ -116,6 +117,9 @@ public static class ScanPatterns<T>
     /// <exception cref="ArgumentException">When height * width does not match numPatches.</exception>
     public static List<Tensor<T>> CrossScan(Tensor<T> patches, int height, int width)
     {
+        if (patches == null) throw new ArgumentNullException(nameof(patches));
+        if (height <= 0) throw new ArgumentException("Height must be positive.", nameof(height));
+        if (width <= 0) throw new ArgumentException("Width must be positive.", nameof(width));
         if (patches.Shape.Length != 3)
             throw new ArgumentException("Input must be 3D [batch, numPatches, dim].", nameof(patches));
 
@@ -211,6 +215,9 @@ public static class ScanPatterns<T>
     /// <returns>Reordered tensor [batch, numPatches, dim] with zigzag scan order.</returns>
     public static Tensor<T> ContinuousScan(Tensor<T> patches, int height, int width)
     {
+        if (patches == null) throw new ArgumentNullException(nameof(patches));
+        if (height <= 0) throw new ArgumentException("Height must be positive.", nameof(height));
+        if (width <= 0) throw new ArgumentException("Width must be positive.", nameof(width));
         if (patches.Shape.Length != 3)
             throw new ArgumentException("Input must be 3D [batch, numPatches, dim].", nameof(patches));
 
@@ -285,6 +292,10 @@ public static class ScanPatterns<T>
     /// <returns>List of 2 tensors: [spatial scan, temporal scan], each [batch, totalPatches, dim].</returns>
     public static List<Tensor<T>> SpatioTemporalScan(Tensor<T> frames, int height, int width, int numFrames)
     {
+        if (frames == null) throw new ArgumentNullException(nameof(frames));
+        if (height <= 0) throw new ArgumentException("Height must be positive.", nameof(height));
+        if (width <= 0) throw new ArgumentException("Width must be positive.", nameof(width));
+        if (numFrames <= 0) throw new ArgumentException("Number of frames must be positive.", nameof(numFrames));
         if (frames.Shape.Length != 3)
             throw new ArgumentException("Input must be 3D [batch, totalPatches, dim].", nameof(frames));
 

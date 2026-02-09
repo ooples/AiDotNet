@@ -118,6 +118,7 @@ public class ExtendedLSTMLayerTests
         var inputGrad = layer.Backward(grad);
 
         Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.False(ContainsNaN(inputGrad));
     }
 
     [Fact]

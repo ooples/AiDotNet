@@ -396,9 +396,10 @@ public class RWKVLayer<T> : LayerBase<T>
                         T kVal = k[new[] { bi, flatD }];
                         T bonusVal = _bonus[new[] { hi, di }];
 
-                        // Numerator and denominator update with decay
-                        T decayVal = NumOps.FromDouble(
-                            -Math.Exp(NumOps.ToDouble(decay[new[] { bi, flatD }])));
+                        // Numerator and denominator update with decay (clamped to prevent overflow)
+                        double rawDecay = NumOps.ToDouble(decay[new[] { bi, flatD }]);
+                        double clampedDecay = Math.Min(rawDecay, 80.0);
+                        T decayVal = NumOps.FromDouble(-Math.Exp(clampedDecay));
                         T decayFactor = NumOps.FromDouble(
                             Math.Exp(NumOps.ToDouble(decayVal)));
 
@@ -412,7 +413,8 @@ public class RWKVLayer<T> : LayerBase<T>
                             T vVal = v[new[] { bi, flatV }];
 
                             T prevNum = stateNum[new[] { bi, hi, di, vi }];
-                            T expK = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(kVal)));
+                            double kValD = Math.Min(NumOps.ToDouble(kVal), 80.0);
+                            T expK = NumOps.FromDouble(Math.Exp(kValD));
 
                             // Update: state = decay * state + exp(k) * v
                             T newNum = NumOps.Add(
@@ -420,10 +422,10 @@ public class RWKVLayer<T> : LayerBase<T>
                                 NumOps.Multiply(expK, vVal));
                             stateNum[new[] { bi, hi, di, vi }] = newNum;
 
-                            // Current token bonus
+                            // Current token bonus (clamped)
+                            double kBonusD = Math.Min(NumOps.ToDouble(NumOps.Add(kVal, bonusVal)), 80.0);
                             T bonusContrib = NumOps.Multiply(
-                                NumOps.FromDouble(Math.Exp(NumOps.ToDouble(
-                                    NumOps.Add(kVal, bonusVal)))), vVal);
+                                NumOps.FromDouble(Math.Exp(kBonusD)), vVal);
 
                             if (vi == di)  // Diagonal contribution for denominator
                             {

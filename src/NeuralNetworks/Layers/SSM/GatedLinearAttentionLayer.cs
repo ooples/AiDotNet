@@ -435,16 +435,14 @@ public class GatedLinearAttentionLayer<T> : LayerBase<T>
                     }
 
                     // Propagate dState backward through gate: dState_{t-1} = gate * dState_t
-                    var newDState = new Tensor<T>(new[] { batchSize, _headDimension, _keyDimension });
                     for (int di = 0; di < _headDimension; di++)
                     {
                         for (int ki = 0; ki < _keyDimension; ki++)
                         {
-                            newDState[new[] { bi, di, ki }] = NumOps.Multiply(
+                            dState[new[] { bi, di, ki }] = NumOps.Multiply(
                                 gateVal, dState[new[] { bi, di, ki }]);
                         }
                     }
-                    dState = newDState;
                 }
             }
         }
@@ -551,7 +549,7 @@ public class GatedLinearAttentionLayer<T> : LayerBase<T>
     #endregion
 
     /// <inheritdoc />
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc />
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

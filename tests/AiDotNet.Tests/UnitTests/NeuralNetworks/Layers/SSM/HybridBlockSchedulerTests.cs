@@ -271,7 +271,7 @@ public class HybridBlockSchedulerTests
     }
 
     [Fact]
-    public void CreateZambaSchedule_UsesSharedAttention()
+    public void CreateZambaSchedule_InterleavesAttentionWithMamba()
     {
         var scheduler = HybridBlockScheduler<float>.CreateZambaSchedule(
             sequenceLength: 8, modelDimension: 32, numLayers: 6,
