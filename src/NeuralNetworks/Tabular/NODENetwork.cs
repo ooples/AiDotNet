@@ -52,7 +52,7 @@ public class NODENetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the NODE-specific options.
     /// </summary>
-    public NODEOptions<T> Options => _options;
+    public new NODEOptions<T> Options => _options;
 
     /// <summary>
     /// Gets the number of trees in the ensemble.

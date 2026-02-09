@@ -109,6 +109,11 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Tracks whether the last forward pass input was rank-1, so backward can preserve rank.
+    /// </summary>
+    private bool _inputWas1D;
+
+    /// <summary>
     /// The output tensor from the last forward pass, saved for backpropagation.
     /// </summary>
     /// <remarks>
@@ -384,8 +389,14 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
+        // Auto-reshape 1D input to [1, N] for matmul compatibility
+        _inputWas1D = input.Shape.Length == 1;
+        if (_inputWas1D)
+        {
+            input = input.Reshape(1, input.Length);
+        }
 
+        _lastInput = input;
 
         // Compute output = input * weights^T + biases using Engine operations
         // input: [batchSize, inputSize]
@@ -409,8 +420,13 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             _lastOutput = result;
         }
 
-        return result;
+        // Preserve original rank: if input was 1D, output should be 1D
+        if (_inputWas1D)
+        {
+            result = result.Reshape(result.Length);
+        }
 
+        return result;
     }
 
     /// <summary>
@@ -463,7 +479,14 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        // Auto-reshape 1D gradient to match _lastOutput rank (2D) when needed
+        var grad = outputGradient;
+        if (grad.Rank == 1 && _lastOutput.Rank == 2)
+        {
+            grad = grad.Reshape(1, grad.Shape[0]);
+        }
+
+        var delta = ApplyActivationDerivative(_lastOutput, grad);
 
         // Calculate gradients using Engine operations
         // weightsGradient = delta^T * input
@@ -484,6 +507,11 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // weights is [output, input]
         var inputGradient = Engine.TensorMatMul(delta, _weights);
 
+        // Preserve original rank: if forward input was 1D, return 1D gradient
+        if (_inputWas1D && inputGradient.Shape.Length > 1)
+        {
+            inputGradient = inputGradient.Reshape(inputGradient.Length);
+        }
 
         return inputGradient;
     }
@@ -630,8 +658,15 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // biasNode.Gradient shape: [batchSize, outputSize] -> _biasesGradient shape: [outputSize]
         _biasesGradient = biasNode.Gradient.SumOverAxis(0);
 
+        var inputGrad = input.Gradient;
 
-        return input.Gradient;
+        // Preserve original rank: if forward input was 1D, return 1D gradient
+        if (_inputWas1D && inputGrad.Shape.Length > 1)
+        {
+            inputGrad = inputGrad.Reshape(inputGrad.Length);
+        }
+
+        return inputGrad;
     }
 
     /// <summary>
@@ -896,6 +931,12 @@ public class FullyConnectedLayer<T> : LayerBase<T>
 
         return addNode;
     }
+
+    /// <inheritdoc />
+    public override Tensor<T>? GetWeights() => _weights;
+
+    /// <inheritdoc />
+    public override Tensor<T>? GetBiases() => _biases;
 
     public override bool SupportsJitCompilation
     {

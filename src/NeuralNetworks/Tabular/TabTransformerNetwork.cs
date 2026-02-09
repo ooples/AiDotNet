@@ -54,7 +54,7 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the TabTransformer-specific options.
     /// </summary>
-    public TabTransformerOptions<T> Options => _options;
+    public new TabTransformerOptions<T> Options => _options;
 
     /// <summary>
     /// Gets the embedding dimension.

@@ -45,7 +45,7 @@ public class TabDPTNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the TabDPT-specific options.
     /// </summary>
-    public TabDPTOptions<T> Options => _options;
+    public new TabDPTOptions<T> Options => _options;
 
     /// <summary>
     /// Gets the embedding dimension.

@@ -47,7 +47,7 @@ public class TabMNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the TabM-specific options.
     /// </summary>
-    public TabMOptions<T> Options => _options;
+    public new TabMOptions<T> Options => _options;
 
     /// <summary>
     /// Gets the number of ensemble members.

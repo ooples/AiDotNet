@@ -48,7 +48,7 @@ public class TabNetNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the TabNet-specific options.
     /// </summary>
-    public TabNetOptions<T> Options => _options;
+    public new TabNetOptions<T> Options => _options;
 
     /// <summary>
     /// Gets the number of decision steps.
