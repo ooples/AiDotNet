@@ -175,58 +175,120 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
     /// <summary>
     /// Computes the GP predictive mean for query points given support data.
-    /// mean = K_qs @ (K_ss + sigma^2 I)^-1 @ y_s
+    /// Splits flat feature vectors into per-example multi-dimensional vectors,
+    /// builds the kernel matrix K_ss over support examples, then for each query
+    /// computes: mean = K_qs @ (K_ss + sigma^2 I)^-1 @ y_s
     /// </summary>
-    /// <param name="supportFeatures">Support set features as individual vectors.</param>
+    /// <param name="supportFeatures">Support set features (flattened).</param>
     /// <param name="queryFeatures">Query feature vector (flattened).</param>
-    /// <returns>GP predictive weights encoding the posterior mean.</returns>
+    /// <returns>GP predictive weights encoding the posterior mean per query.</returns>
     private Vector<T>? GPPredict(Vector<T>? supportFeatures, Vector<T>? queryFeatures)
     {
         if (supportFeatures == null || queryFeatures == null || supportFeatures.Length == 0)
             return supportFeatures;
 
         double noiseVar = Math.Exp(NumOps.ToDouble(_kernelParams[1]));
-        int nSupport = supportFeatures.Length;
 
-        // Build individual feature vectors for support
-        var supportVecs = new List<Vector<T>>();
-        for (int i = 0; i < nSupport; i++)
-        {
-            var v = new Vector<T>(1);
-            v[0] = supportFeatures[i];
-            supportVecs.Add(v);
-        }
+        // Estimate feature dimensionality: assume support and query have the same per-example dim.
+        // Use the GCD-based heuristic: if both lengths share a common factor, that's likely the dim.
+        // Fallback: treat each feature as a vector if lengths are equal, or use sqrt heuristic.
+        int featureDim = EstimateFeatureDim(supportFeatures.Length, queryFeatures.Length);
+        int nSupport = Math.Max(supportFeatures.Length / Math.Max(featureDim, 1), 1);
+        int nQuery = Math.Max(queryFeatures.Length / Math.Max(featureDim, 1), 1);
+
+        // Split into per-example multi-dimensional feature vectors
+        var supportVecs = SplitIntoVectors(supportFeatures, nSupport, featureDim);
+        var queryVecs = SplitIntoVectors(queryFeatures, nQuery, featureDim);
+
+        if (supportVecs.Count < 2)
+            return supportFeatures;
 
         // Build K_ss (support kernel matrix) + noise on diagonal
         var Kss = BuildKernelMatrix(supportVecs);
-        for (int i = 0; i < nSupport; i++)
+        for (int i = 0; i < supportVecs.Count; i++)
             Kss[i, i] += noiseVar;
 
-        // For each query, compute K_qs (query-support kernel) and GP prediction
-        int nQuery = queryFeatures.Length;
-        var result = new Vector<T>(nSupport);
+        // Construct simple support labels: assume uniform class distribution
+        // In a K-way N-shot task, support labels cycle through classes
+        var supportLabels = new double[supportVecs.Count];
+        for (int i = 0; i < supportVecs.Count; i++)
+            supportLabels[i] = NumOps.ToDouble(supportFeatures[i * Math.Max(featureDim, 1)]);
 
-        for (int q = 0; q < Math.Min(nQuery, nSupport); q++)
+        // For each query, compute GP predictive mean
+        var result = new Vector<T>(nQuery);
+        for (int q = 0; q < nQuery; q++)
         {
-            var queryVec = new Vector<T>(1);
-            queryVec[0] = queryFeatures[q];
+            if (q >= queryVecs.Count) break;
 
-            // Compute kernel between this query and all support
-            var kqs = new double[nSupport];
-            for (int s = 0; s < nSupport; s++)
-                kqs[s] = ComputeKernel(queryVec, supportVecs[s]);
+            // Compute kernel between this query and all support examples
+            var kqs = new double[supportVecs.Count];
+            for (int s = 0; s < supportVecs.Count; s++)
+                kqs[s] = ComputeKernel(queryVecs[q], supportVecs[s]);
 
-            // Solve (K_ss + sigma^2 I) alpha = k_qs for alpha
-            var alpha = FRNAlgorithm<T, TInput, TOutput>.SolveLinearSystemStatic(Kss, kqs, nSupport);
+            // Solve (K_ss + sigma^2 I) alpha = k_qs
+            var alphaVec = FRNAlgorithm<T, TInput, TOutput>.SolveLinearSystemStatic(
+                Kss, kqs, supportVecs.Count);
 
-            // GP predictive mean contribution
+            // GP predictive mean = alpha^T @ support_labels
             double predMean = 0;
-            for (int s = 0; s < nSupport; s++)
-                predMean += alpha[s] * NumOps.ToDouble(supportFeatures[s]);
+            for (int s = 0; s < supportVecs.Count; s++)
+                predMean += alphaVec[s] * supportLabels[s];
 
             result[q] = NumOps.FromDouble(predMean);
         }
 
+        return result;
+    }
+
+    /// <summary>
+    /// Estimates the per-example feature dimensionality from total support and query lengths.
+    /// Uses the greatest common divisor to find a shared factor.
+    /// </summary>
+    private static int EstimateFeatureDim(int supportLen, int queryLen)
+    {
+        if (supportLen <= 0 || queryLen <= 0) return 1;
+
+        // GCD gives the largest common factor between both lengths
+        int gcd = GCD(supportLen, queryLen);
+
+        // If GCD is too small (< 2), the lengths likely aren't cleanly divisible
+        // Use the smaller length as the feature dim (single example per set)
+        if (gcd < 2)
+            return Math.Min(supportLen, queryLen);
+
+        // Choose the factor that gives a reasonable number of examples (at least 2 support)
+        if (supportLen / gcd >= 2)
+            return gcd;
+
+        // Fallback: each vector is the full length (single example per set)
+        return Math.Min(supportLen, queryLen);
+    }
+
+    private static int GCD(int a, int b)
+    {
+        while (b != 0)
+        {
+            int temp = b;
+            b = a % b;
+            a = temp;
+        }
+        return Math.Abs(a);
+    }
+
+    /// <summary>Splits a flat feature vector into a list of per-example multi-dimensional vectors.</summary>
+    private static List<Vector<T>> SplitIntoVectors(Vector<T> flat, int numExamples, int featureDim)
+    {
+        var result = new List<Vector<T>>();
+        for (int i = 0; i < numExamples; i++)
+        {
+            int start = i * featureDim;
+            int len = Math.Min(featureDim, flat.Length - start);
+            if (len <= 0) break;
+            var vec = new Vector<T>(len);
+            for (int d = 0; d < len; d++)
+                vec[d] = flat[start + d];
+            result.Add(vec);
+        }
         return result;
     }
 

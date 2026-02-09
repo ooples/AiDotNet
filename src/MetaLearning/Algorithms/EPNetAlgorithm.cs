@@ -92,7 +92,9 @@ public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     }
 
     /// <summary>
-    /// Performs embedding propagation on a feature vector.
+    /// Performs embedding propagation on a feature vector using a proper kNN similarity graph.
+    /// Builds pairwise distance matrix, selects k-nearest neighbors by feature similarity,
+    /// constructs a normalized adjacency matrix, and iteratively diffuses features.
     /// </summary>
     /// <param name="features">Concatenated features for all examples.</param>
     /// <returns>Propagated (smoothed) features.</returns>
@@ -101,38 +103,102 @@ public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         int n = features.Length;
         if (n < 2) return features;
 
+        int k = Math.Min(_epnetOptions.NumNeighbors, n - 1);
+        double alpha = _epnetOptions.PropagationAlpha;
+
+        // Step 1: Compute pairwise squared distances between all feature elements
+        var distances = new double[n * n];
+        for (int i = 0; i < n; i++)
+        {
+            double fi = NumOps.ToDouble(features[i]);
+            for (int j = i + 1; j < n; j++)
+            {
+                double fj = NumOps.ToDouble(features[j]);
+                double diff = fi - fj;
+                double dist = diff * diff;
+                distances[i * n + j] = dist;
+                distances[j * n + i] = dist;
+            }
+        }
+
+        // Step 2: Build kNN adjacency matrix W using feature similarity
+        // For each node, find k nearest neighbors by distance and compute RBF weights
+        var W = new double[n * n];
+
+        // Compute median distance for adaptive RBF bandwidth
+        var allDists = new List<double>(n * (n - 1) / 2);
+        for (int i = 0; i < n; i++)
+            for (int j = i + 1; j < n; j++)
+                allDists.Add(distances[i * n + j]);
+        allDists.Sort();
+        double medianDist = allDists.Count > 0 ? allDists[allDists.Count / 2] : 1.0;
+        double sigma2 = Math.Max(medianDist, 1e-10); // RBF bandwidth = median distance
+
+        for (int i = 0; i < n; i++)
+        {
+            // Collect distances to all other nodes
+            var neighborDists = new (int idx, double dist)[n - 1];
+            int count = 0;
+            for (int j = 0; j < n; j++)
+            {
+                if (j == i) continue;
+                neighborDists[count++] = (j, distances[i * n + j]);
+            }
+
+            // Partial sort: find k smallest distances
+            Array.Sort(neighborDists, 0, count, Comparer<(int idx, double dist)>.Create(
+                (a, b) => a.dist.CompareTo(b.dist)));
+
+            // Set RBF weights for k nearest neighbors (symmetric)
+            int numNeighbors = Math.Min(k, count);
+            for (int ni = 0; ni < numNeighbors; ni++)
+            {
+                int j = neighborDists[ni].idx;
+                double rbfWeight = Math.Exp(-neighborDists[ni].dist / (2.0 * sigma2));
+                W[i * n + j] = rbfWeight;
+                W[j * n + i] = rbfWeight; // Symmetrize
+            }
+        }
+
+        // Step 3: Compute degree matrix D and normalized adjacency S = D^(-1/2) W D^(-1/2)
+        var degree = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            double d = 0;
+            for (int j = 0; j < n; j++)
+                d += W[i * n + j];
+            degree[i] = d;
+        }
+
+        var S = new double[n * n];
+        for (int i = 0; i < n; i++)
+        {
+            double di = degree[i] > 1e-10 ? 1.0 / Math.Sqrt(degree[i]) : 0;
+            for (int j = 0; j < n; j++)
+            {
+                double dj = degree[j] > 1e-10 ? 1.0 / Math.Sqrt(degree[j]) : 0;
+                S[i * n + j] = di * W[i * n + j] * dj;
+            }
+        }
+
+        // Step 4: Iterative feature propagation: z_prop = alpha * S @ z_prop + (1-alpha) * z_original
         var propagated = new Vector<T>(n);
         for (int i = 0; i < n; i++)
             propagated[i] = features[i];
-
-        double alpha = _epnetOptions.PropagationAlpha;
 
         for (int iter = 0; iter < _epnetOptions.PropagationIterations; iter++)
         {
             var next = new Vector<T>(n);
             for (int i = 0; i < n; i++)
             {
-                // Simple neighbor averaging (k-nearest approximation)
-                T sum = NumOps.Zero;
-                int neighborCount = 0;
-                int k = Math.Min(_epnetOptions.NumNeighbors, n - 1);
+                // Weighted neighbor aggregation: sum_j S[i,j] * z_prop[j]
+                double aggregated = 0;
+                for (int j = 0; j < n; j++)
+                    aggregated += S[i * n + j] * NumOps.ToDouble(propagated[j]);
 
-                // Find k closest neighbors by index distance (simplified)
-                for (int j = Math.Max(0, i - k); j <= Math.Min(n - 1, i + k); j++)
-                {
-                    if (j == i) continue;
-                    sum = NumOps.Add(sum, propagated[j]);
-                    neighborCount++;
-                }
-
-                T neighborAvg = neighborCount > 0
-                    ? NumOps.Divide(sum, NumOps.FromDouble(neighborCount))
-                    : propagated[i];
-
-                // Diffusion: alpha * neighbor_avg + (1-alpha) * original
-                next[i] = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(alpha), neighborAvg),
-                    NumOps.Multiply(NumOps.FromDouble(1.0 - alpha), features[i]));
+                // Diffusion with anchor to original features
+                next[i] = NumOps.FromDouble(
+                    alpha * aggregated + (1.0 - alpha) * NumOps.ToDouble(features[i]));
             }
             propagated = next;
         }

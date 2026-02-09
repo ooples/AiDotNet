@@ -75,6 +75,16 @@ public class MCLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     /// <summary>Gets or sets the projection dimension for contrastive head.</summary>
     /// <value>Default is 128.</value>
     public int ProjectionDim { get; set; } = 128;
+    /// <summary>Gets or sets the number of ways (classes) in the few-shot task.</summary>
+    /// <remarks>
+    /// <para>Used to determine how many support examples belong to each class when computing
+    /// supervised contrastive loss. For a 5-way 5-shot task, this would be 5.</para>
+    /// <para><b>For Beginners:</b> This tells MCL how many different classes are in each
+    /// training episode, so it can correctly identify which examples belong to the same
+    /// class (positive pairs) vs different classes (negative pairs).</para>
+    /// </remarks>
+    /// <value>Default is 5 (standard 5-way few-shot setting).</value>
+    public int NumWays { get; set; } = 5;
     #endregion
 
     #region Constructors
@@ -96,7 +106,7 @@ public class MCLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
         EvaluationFrequency = EvaluationFrequency, EnableCheckpointing = EnableCheckpointing,
         CheckpointFrequency = CheckpointFrequency, UseFirstOrder = UseFirstOrder,
         ContrastiveWeight = ContrastiveWeight, ContrastiveTemperature = ContrastiveTemperature,
-        ProjectionDim = ProjectionDim
+        ProjectionDim = ProjectionDim, NumWays = NumWays
     };
     #endregion
 }

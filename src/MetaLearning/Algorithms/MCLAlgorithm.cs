@@ -230,8 +230,9 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             // Project support features through contrastive head and compute SupCon loss
             var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
             var projectedFeatures = ProjectFeatures(supportFeatures);
-            // Estimate shots-per-class assuming standard 5-way episodic setup
-            int nPerClass = projectedFeatures != null ? Math.Max(projectedFeatures.Length / 5, 1) : 1;
+            // Compute shots-per-class using configurable NumWays
+            int numWays = Math.Max(_mclOptions.NumWays, 1);
+            int nPerClass = projectedFeatures != null ? Math.Max(projectedFeatures.Length / numWays, 1) : 1;
             double contrastLoss = projectedFeatures != null
                 ? ComputeContrastiveLoss(projectedFeatures, nPerClass) : 0;
 

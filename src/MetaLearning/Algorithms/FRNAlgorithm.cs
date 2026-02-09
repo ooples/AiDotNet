@@ -265,34 +265,63 @@ public class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
     /// <summary>
     /// Computes reconstruction-based classification weights for query features.
-    /// For each query, attempts to reconstruct it from support features using ridge regression.
-    /// Lower reconstruction error indicates a better match.
+    /// Splits the flat feature vectors into per-example multi-dimensional feature vectors
+    /// (using NumComponents to determine the number of support examples), then computes
+    /// ridge regression reconstruction error for each query example.
     /// </summary>
-    /// <param name="supportFeatures">Support set features.</param>
-    /// <param name="queryFeatures">Query set features.</param>
+    /// <param name="supportFeatures">Support set features (flattened: NumComponents * featureDim).</param>
+    /// <param name="queryFeatures">Query set features (flattened).</param>
     /// <returns>Reconstruction weights (sigmoid of negative errors) for classification.</returns>
     private Vector<T> ComputeReconstructionWeights(Vector<T> supportFeatures, Vector<T> queryFeatures)
     {
-        // Build list of support feature vectors (each element treated as a feature)
+        int numComponents = _frnOptions.NumComponents;
+
+        // Split support features into per-example multi-dimensional vectors
+        // Each support example has featureDim = supportFeatures.Length / numComponents dimensions
+        int featureDim = Math.Max(supportFeatures.Length / Math.Max(numComponents, 1), 1);
+        int actualComponents = Math.Min(numComponents, supportFeatures.Length / Math.Max(featureDim, 1));
+        actualComponents = Math.Max(actualComponents, 1);
+
         var supportList = new List<Vector<T>>();
-        for (int i = 0; i < supportFeatures.Length; i++)
+        for (int i = 0; i < actualComponents; i++)
         {
-            var singleFeature = new Vector<T>(1);
-            singleFeature[0] = supportFeatures[i];
-            supportList.Add(singleFeature);
+            int start = i * featureDim;
+            int len = Math.Min(featureDim, supportFeatures.Length - start);
+            if (len <= 0) break;
+            var vec = new Vector<T>(len);
+            for (int d = 0; d < len; d++)
+                vec[d] = supportFeatures[start + d];
+            supportList.Add(vec);
         }
 
-        var weights = new Vector<T>(queryFeatures.Length);
-        for (int q = 0; q < queryFeatures.Length; q++)
+        if (supportList.Count == 0)
         {
-            var queryVec = new Vector<T>(1);
-            queryVec[0] = queryFeatures[q];
+            var fallback = new Vector<T>(queryFeatures.Length);
+            for (int i = 0; i < fallback.Length; i++)
+                fallback[i] = NumOps.FromDouble(0.5);
+            return fallback;
+        }
 
-            // Compute reconstruction error (lower = better match)
+        // Split query features into per-example vectors using the same feature dimension
+        int numQueries = Math.Max(queryFeatures.Length / Math.Max(featureDim, 1), 1);
+        var weights = new Vector<T>(numQueries);
+
+        for (int q = 0; q < numQueries; q++)
+        {
+            int qStart = q * featureDim;
+            int qLen = Math.Min(featureDim, queryFeatures.Length - qStart);
+            if (qLen <= 0) break;
+
+            var queryVec = new Vector<T>(qLen);
+            for (int d = 0; d < qLen; d++)
+                queryVec[d] = queryFeatures[qStart + d];
+
+            // Compute reconstruction error using ridge regression (lower = better match)
             double error = ComputeReconstructionError(queryVec, supportList);
 
-            // Convert error to weight via sigmoid of negative error
-            double weight = 1.0 / (1.0 + Math.Exp(error * 0.1));
+            // Convert error to weight via sigmoid of negative error (scaled by feature dim)
+            double scaledError = error / Math.Max(featureDim, 1);
+            double weight = 1.0 / (1.0 + Math.Exp(scaledError));
             weights[q] = NumOps.FromDouble(weight);
         }
 
