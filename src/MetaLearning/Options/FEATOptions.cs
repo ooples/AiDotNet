@@ -160,7 +160,9 @@ public class FEATOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
                MetaBatchSize > 0 &&
                NumMetaIterations > 0 &&
                NumTransformerHeads > 0 &&
-               NumTransformerLayers > 0;
+               NumTransformerLayers > 0 &&
+               Temperature > 0 &&
+               ContrastiveWeight >= 0 && ContrastiveWeight <= 1;
     }
 
     /// <inheritdoc/>

@@ -159,7 +159,9 @@ public class SIBOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
                MetaBatchSize > 0 &&
                NumMetaIterations > 0 &&
                NumSIBIterations > 0 &&
-               Beta > 0;
+               Beta > 0 &&
+               Temperature > 0 &&
+               NumRestarts > 0;
     }
 
     /// <inheritdoc/>

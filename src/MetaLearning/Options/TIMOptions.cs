@@ -152,7 +152,8 @@ public class TIMOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
                OuterLearningRate > 0 &&
                MetaBatchSize > 0 &&
                NumMetaIterations > 0 &&
-               TransductiveIterations > 0;
+               TransductiveIterations > 0 &&
+               Temperature > 0;
     }
 
     /// <inheritdoc/>

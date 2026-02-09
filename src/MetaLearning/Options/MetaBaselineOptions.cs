@@ -92,7 +92,7 @@ public class MetaBaselineOptions<T, TInput, TOutput> : ModelOptions, IMetaLearne
 
     #region IMetaLearnerOptions Implementation
     /// <inheritdoc/>
-    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0;
+    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0 && Temperature > 0;
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new MetaBaselineOptions<T, TInput, TOutput>(MetaModel)
     {

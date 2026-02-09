@@ -114,8 +114,14 @@ public class RelationModule<T>
             throw new ArgumentNullException(nameof(parameters));
         }
 
-        int copyLen = Math.Min(parameters.Length, _weights.Length);
-        for (int i = 0; i < copyLen; i++)
+        if (parameters.Length != _weights.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match internal weights length ({_weights.Length}).",
+                nameof(parameters));
+        }
+
+        for (int i = 0; i < _weights.Length; i++)
         {
             _weights[i] = parameters[i];
         }

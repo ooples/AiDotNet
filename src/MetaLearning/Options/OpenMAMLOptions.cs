@@ -92,7 +92,7 @@ public class OpenMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpt
 
     #region IMetaLearnerOptions Implementation
     /// <inheritdoc/>
-    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0;
+    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0 && OpenSetThreshold >= 0 && OpenSetThreshold <= 1 && OpenSetTaskFraction >= 0 && OpenSetTaskFraction <= 1;
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new OpenMAMLOptions<T, TInput, TOutput>(MetaModel)
     {

@@ -279,7 +279,8 @@ public class R2D2Options<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
                MetaBatchSize > 0 &&
                NumMetaIterations > 0 &&
                EvaluationTasks > 0 &&
-               Lambda > 0;
+               Lambda > 0 &&
+               EmbeddingDimension >= 0;
     }
 
     /// <inheritdoc/>

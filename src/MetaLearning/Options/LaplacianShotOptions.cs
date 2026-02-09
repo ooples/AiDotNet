@@ -154,7 +154,8 @@ public class LaplacianShotOptions<T, TInput, TOutput> : ModelOptions, IMetaLearn
                MetaBatchSize > 0 &&
                NumMetaIterations > 0 &&
                KNearestNeighbors > 0 &&
-               LaplacianWeight > 0;
+               LaplacianWeight > 0 &&
+               PropagationIterations > 0;
     }
 
     /// <inheritdoc/>

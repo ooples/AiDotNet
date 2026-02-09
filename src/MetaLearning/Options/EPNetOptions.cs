@@ -89,7 +89,7 @@ public class EPNetOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
 
     #region IMetaLearnerOptions Implementation
     /// <inheritdoc/>
-    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0;
+    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0 && PropagationIterations > 0 && NumNeighbors > 0 && PropagationAlpha > 0;
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new EPNetOptions<T, TInput, TOutput>(MetaModel)
     {

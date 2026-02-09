@@ -814,6 +814,10 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
         if (auxParams.Length == 0 || taskBatch.Tasks.Length == 0)
             return;
 
+        // Guard hyperparameters to prevent divide-by-zero
+        numSamples = Math.Max(numSamples, 1);
+        epsilon = Math.Max(epsilon, 1e-10);
+
         // Compute base loss once (shared across all samples)
         // The delegate reads the current (unperturbed) aux params
         double baseLoss = computeLoss(taskBatch);

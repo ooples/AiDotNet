@@ -92,7 +92,7 @@ public class CAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
 
     #region IMetaLearnerOptions Implementation
     /// <inheritdoc/>
-    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0;
+    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0 && ContextDimension > 0;
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new CAMLOptions<T, TInput, TOutput>(MetaModel)
     {

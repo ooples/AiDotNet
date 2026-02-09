@@ -191,7 +191,8 @@ public class VERSAOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
                MetaBatchSize > 0 &&
                NumMetaIterations > 0 &&
                AmortizationHiddenDim > 0 &&
-               AmortizationNumLayers > 0;
+               AmortizationNumLayers > 0 &&
+               AmortizationDropout >= 0 && AmortizationDropout < 1;
     }
 
     /// <inheritdoc/>

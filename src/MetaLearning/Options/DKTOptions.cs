@@ -106,7 +106,7 @@ public class DKTOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
 
     #region IMetaLearnerOptions Implementation
     /// <inheritdoc/>
-    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0;
+    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0 && KernelLengthScale > 0 && NoiseVariance > 0;
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new DKTOptions<T, TInput, TOutput>(MetaModel)
     {

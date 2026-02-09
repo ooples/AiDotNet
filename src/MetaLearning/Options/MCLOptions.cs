@@ -95,7 +95,7 @@ public class MCLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
 
     #region IMetaLearnerOptions Implementation
     /// <inheritdoc/>
-    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0;
+    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0 && ProjectionDim > 0 && ContrastiveTemperature > 0;
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new MCLOptions<T, TInput, TOutput>(MetaModel)
     {

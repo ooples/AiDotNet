@@ -90,7 +90,7 @@ public class FewTUREOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
 
     #region IMetaLearnerOptions Implementation
     /// <inheritdoc/>
-    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0;
+    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0 && NumTokens > 0 && UncertaintyThreshold > 0;
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new FewTUREOptions<T, TInput, TOutput>(MetaModel)
     {

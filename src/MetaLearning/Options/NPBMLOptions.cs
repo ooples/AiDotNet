@@ -86,7 +86,7 @@ public class NPBMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
 
     #region IMetaLearnerOptions Implementation
     /// <inheritdoc/>
-    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0;
+    public bool IsValid() => MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0 && LatentDim > 0 && NumSamples > 0 && KLWeight >= 0;
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new NPBMLOptions<T, TInput, TOutput>(MetaModel)
     {

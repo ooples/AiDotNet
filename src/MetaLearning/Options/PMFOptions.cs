@@ -130,7 +130,7 @@ public class PMFOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     /// <inheritdoc/>
     public bool IsValid()
     {
-        return MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0;
+        return MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 && NumMetaIterations > 0 && InnerLearningRate > 0;
     }
 
     /// <inheritdoc/>
