@@ -394,7 +394,8 @@ internal class SimpleShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
     }
 
     /// <summary>Training not supported on adapted models.</summary>
-    public void Train(TInput inputs, TOutput targets) { }
+    public void Train(TInput inputs, TOutput targets) =>
+        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
 
     /// <inheritdoc/>
     public ModelMetadata<T> GetModelMetadata() => Metadata;

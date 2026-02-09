@@ -630,10 +630,8 @@ internal class WarpGradModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
     /// go back to the WarpGrad algorithm and run more meta-training iterations.
     /// </para>
     /// </remarks>
-    public void Train(TInput inputs, TOutput targets)
-    {
-        // Adapted models are frozen - use WarpGrad.MetaTrain for further training
-    }
+    public void Train(TInput inputs, TOutput targets) =>
+        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
 
     /// <summary>
     /// Gets metadata about the adapted WarpGrad model.
