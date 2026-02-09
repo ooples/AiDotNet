@@ -389,5 +389,106 @@ public enum MetaLearningAlgorithmType
     /// you need both local and global pattern recognition.
     /// </para>
     /// </remarks>
-    SNAIL
+    SNAIL,
+
+    /// <summary>
+    /// SimpleShot - Nearest-centroid classification with feature normalization (Wang et al., 2019).
+    /// Shows that simple methods with proper normalization match complex meta-learning algorithms.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> A well-trained feature extractor + L2 or centered L2 normalization +
+    /// nearest-centroid classification is a surprisingly strong few-shot baseline.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You need a strong baseline, want fast inference, or want to
+    /// evaluate whether complex meta-learning methods are truly adding value.
+    /// </para>
+    /// </remarks>
+    SimpleShot,
+
+    /// <summary>
+    /// DeepEMD - Earth Mover's Distance for few-shot learning (Zhang et al., CVPR 2020).
+    /// Uses optimal transport to compare local feature sets between examples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Compare examples by finding the optimal matching between their local
+    /// features using the Earth Mover's Distance. This captures fine-grained structural
+    /// similarity that global feature comparison misses.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> Tasks involve structured data where part-to-part correspondence
+    /// matters (e.g., fine-grained image classification, structural comparison).
+    /// </para>
+    /// </remarks>
+    DeepEMD,
+
+    /// <summary>
+    /// FEAT - Few-shot Embedding Adaptation with Transformer (Ye et al., CVPR 2020).
+    /// Uses a set-to-set transformer to adapt class prototypes based on inter-class relationships.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Prototypes should be task-aware. A transformer lets prototypes
+    /// "see" each other and adjust their positions in feature space for better discrimination
+    /// within each specific task.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want task-adaptive prototypes that capture inter-class
+    /// relationships, improving over standard ProtoNets.
+    /// </para>
+    /// </remarks>
+    FEAT,
+
+    /// <summary>
+    /// TIM - Transductive Information Maximization (Boudiaf et al., NeurIPS 2020).
+    /// Refines query predictions by maximizing mutual information across the query set.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Use ALL query examples jointly by maximizing mutual information:
+    /// each prediction should be confident (low conditional entropy) and class assignments
+    /// should be balanced (high marginal entropy).
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You have access to all query examples at once (transductive setting)
+    /// and want to exploit query set structure for better predictions.
+    /// </para>
+    /// </remarks>
+    TIM,
+
+    /// <summary>
+    /// LaplacianShot - Laplacian Regularized Few-Shot Learning (Ziko et al., ICML 2020).
+    /// Adds graph-based label propagation to nearest-centroid classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Build a kNN graph over query features and smooth predictions using
+    /// the graph Laplacian. Similar queries get similar predictions, propagating confident
+    /// labels to uncertain ones.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want a simple yet effective transductive method that improves
+    /// upon SimpleShot with graph-based refinement.
+    /// </para>
+    /// </remarks>
+    LaplacianShot,
+
+    /// <summary>
+    /// SIB - Sequential Information Bottleneck (Hu et al., 2020).
+    /// Uses the information bottleneck principle for transductive few-shot clustering.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Iteratively refine cluster assignments by balancing information
+    /// retention (useful for classification) with compression (removing noise).
+    /// Multiple random restarts avoid local optima.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want a principled transductive method based on information
+    /// theory with theoretical guarantees.
+    /// </para>
+    /// </remarks>
+    SIB
 }

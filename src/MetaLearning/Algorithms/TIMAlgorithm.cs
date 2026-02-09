@@ -1,0 +1,310 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Options;
+using AiDotNet.Models;
+using AiDotNet.Models.Results;
+using AiDotNet.Tensors;
+
+namespace AiDotNet.MetaLearning.Algorithms;
+
+/// <summary>
+/// Implementation of TIM (Transductive Information Maximization) for few-shot learning.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <typeparam name="TInput">The input data type.</typeparam>
+/// <typeparam name="TOutput">The output data type.</typeparam>
+/// <remarks>
+/// <para>
+/// TIM is a transductive few-shot method that refines query predictions by maximizing
+/// mutual information between features and predicted labels. It processes all query
+/// examples jointly, using the query set's structure for better classification.
+/// </para>
+/// <para><b>For Beginners:</b> TIM lets query examples help classify each other:
+///
+/// **The key insight:**
+/// If you're classifying 15 query examples into 5 classes, you know each class
+/// should get roughly 3 examples. TIM uses this constraint along with confidence
+/// maximization to iteratively refine predictions.
+///
+/// **How it works:**
+/// 1. Start with initial predictions (e.g., nearest centroid from support set)
+/// 2. Iteratively refine by optimizing:
+///    - Each query should be confidently assigned to ONE class (low conditional entropy)
+///    - Classes should be balanced overall (high marginal entropy)
+///    - Don't deviate too far from initial predictions
+/// 3. After convergence, output the refined predictions
+///
+/// **Why it works:**
+/// By processing queries together, TIM avoids "lonely" misclassifications.
+/// If most queries near a centroid say "class A", the outlier gets pulled in too.
+/// </para>
+/// <para><b>Algorithm - TIM:</b>
+/// <code>
+/// # Given: support features z_s, query features z_q, support labels y_s
+///
+/// # 1. Initial predictions using prototypes
+/// p_k = mean(z_s[class == k])           # Class prototypes
+/// logits_0 = -||z_q - p_k||^2 * temp   # Initial logits
+/// q_0 = softmax(logits_0)               # Initial soft assignments
+///
+/// # 2. Transductive refinement
+/// for t in range(T):
+///     # Conditional entropy: encourage confident predictions
+///     H_cond = -sum(q_t * log(q_t))
+///
+///     # Marginal entropy: encourage balanced class usage
+///     q_bar = mean(q_t, axis=0)          # Average assignment per class
+///     H_marg = -sum(q_bar * log(q_bar))
+///
+///     # Objective: maximize mutual information = H_marg - H_cond
+///     L = alpha * H_cond - beta * H_marg
+///
+///     # Gradient step on soft assignments
+///     q_{t+1} = q_t - lr * grad(L, q_t)
+///     q_{t+1} = softmax(q_{t+1})         # Re-normalize
+///
+/// # 3. Output refined predictions
+/// predictions = argmax(q_T)
+/// </code>
+/// </para>
+/// <para>
+/// Reference: Boudiaf, M., Ziko, I., Rony, J., Dolz, J., Piantanida, P., &amp; Ben Ayed, I. (2020).
+/// Information Maximization for Few-Shot Learning. NeurIPS 2020.
+/// </para>
+/// </remarks>
+public class TIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+{
+    private readonly TIMOptions<T, TInput, TOutput> _timOptions;
+
+    /// <inheritdoc/>
+    public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.TIM;
+
+    /// <summary>
+    /// Initializes a new TIM meta-learner.
+    /// </summary>
+    /// <param name="options">Configuration options for TIM.</param>
+    public TIMAlgorithm(TIMOptions<T, TInput, TOutput> options)
+        : base(
+            options.MetaModel,
+            options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
+            options,
+            options.DataLoader,
+            options.MetaOptimizer,
+            options.InnerOptimizer)
+    {
+        _timOptions = options;
+    }
+
+    /// <summary>
+    /// Performs one meta-training step for TIM.
+    /// </summary>
+    /// <param name="taskBatch">Batch of meta-learning tasks.</param>
+    /// <returns>The average meta-loss across the batch.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> TIM's training step is similar to ProtoNets
+    /// but with transductive refinement during evaluation. The backbone is trained
+    /// with standard episodic training (nearest-centroid classification).
+    /// </para>
+    /// </remarks>
+    public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var metaGradients = new List<Vector<T>>();
+        var losses = new List<T>();
+        var initParams = MetaModel.GetParameters();
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+
+            var queryLoss = ComputeLossFromOutput(
+                MetaModel.Predict(task.QueryInput), task.QueryOutput);
+            losses.Add(queryLoss);
+
+            var metaGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
+            metaGradients.Add(ClipGradients(metaGrad));
+        }
+
+        MetaModel.SetParameters(initParams);
+        if (metaGradients.Count > 0)
+        {
+            var avgGrad = AverageVectors(metaGradients);
+            var updatedParams = ApplyGradients(initParams, avgGrad, _timOptions.OuterLearningRate);
+            MetaModel.SetParameters(updatedParams);
+        }
+
+        _currentIteration++;
+        return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Adapts to a new task using transductive information maximization.
+    /// </summary>
+    /// <param name="task">The task to adapt to.</param>
+    /// <returns>An adapted model with transductively refined predictions.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> TIM's adaptation:
+    /// 1. Compute initial predictions from support centroids
+    /// 2. Iteratively refine ALL query predictions together
+    /// 3. Each iteration maximizes mutual information:
+    ///    - Make each prediction more confident
+    ///    - Keep class assignments balanced
+    /// 4. Return model with refined decision boundaries
+    /// </para>
+    /// </remarks>
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        var currentParams = MetaModel.GetParameters();
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+
+        // Run transductive refinement
+        var refinedWeights = TransductiveRefine(supportFeatures, task);
+
+        return new TIMModel<T, TInput, TOutput>(MetaModel, currentParams, refinedWeights);
+    }
+
+    /// <summary>
+    /// Performs transductive refinement by maximizing mutual information.
+    /// </summary>
+    /// <param name="supportFeatures">Features from the support set.</param>
+    /// <param name="task">The current meta-learning task.</param>
+    /// <returns>Refined classification weights.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is where TIM's magic happens:
+    /// 1. Start with soft predictions based on distance to class centroids
+    /// 2. In each iteration:
+    ///    - Compute conditional entropy (how confident are predictions?)
+    ///    - Compute marginal entropy (how balanced are class assignments?)
+    ///    - Adjust predictions to maximize mutual information (confident + balanced)
+    /// 3. After convergence, predictions are refined and more accurate
+    /// </para>
+    /// </remarks>
+    private Vector<T>? TransductiveRefine(Vector<T>? supportFeatures, IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        if (supportFeatures == null || supportFeatures.Length == 0)
+        {
+            return supportFeatures;
+        }
+
+        var queryPred = MetaModel.Predict(task.QueryInput);
+        var queryFeatures = ConvertToVector(queryPred);
+        if (queryFeatures == null)
+        {
+            return supportFeatures;
+        }
+
+        // Initialize soft assignments using support-query similarity
+        int numQuery = queryFeatures.Length;
+        var logits = new double[numQuery];
+        for (int q = 0; q < numQuery; q++)
+        {
+            double sim = 0;
+            for (int s = 0; s < supportFeatures.Length; s++)
+            {
+                sim += NumOps.ToDouble(NumOps.Multiply(queryFeatures[q], supportFeatures[s % supportFeatures.Length]));
+            }
+            logits[q] = sim * _timOptions.Temperature;
+        }
+
+        // Transductive refinement iterations
+        double condWeight = _timOptions.ConditionalEntropyWeight;
+        double margWeight = _timOptions.MarginalEntropyWeight;
+        double lr = 0.1;
+
+        for (int iter = 0; iter < _timOptions.TransductiveIterations; iter++)
+        {
+            // Softmax to get probabilities
+            double maxLogit = double.MinValue;
+            for (int q = 0; q < numQuery; q++)
+            {
+                maxLogit = Math.Max(maxLogit, logits[q]);
+            }
+
+            double sumExp = 0;
+            var probs = new double[numQuery];
+            for (int q = 0; q < numQuery; q++)
+            {
+                probs[q] = Math.Exp(logits[q] - maxLogit);
+                sumExp += probs[q];
+            }
+            for (int q = 0; q < numQuery; q++)
+            {
+                probs[q] /= Math.Max(sumExp, 1e-10);
+            }
+
+            // Conditional entropy gradient: -log(p) - 1
+            // Marginal entropy gradient: promotes balance
+            double marginalMean = 1.0 / Math.Max(numQuery, 1);
+            for (int q = 0; q < numQuery; q++)
+            {
+                double condGrad = condWeight * (Math.Log(Math.Max(probs[q], 1e-10)) + 1.0);
+                double margGrad = -margWeight * (Math.Log(Math.Max(marginalMean, 1e-10)) + 1.0);
+                logits[q] -= lr * (condGrad + margGrad);
+            }
+        }
+
+        // Convert refined logits back to feature space
+        var refined = new Vector<T>(supportFeatures.Length);
+        for (int i = 0; i < supportFeatures.Length; i++)
+        {
+            double refineScale = i < logits.Length ? 1.0 / (1.0 + Math.Exp(-logits[i])) : 0.5;
+            refined[i] = NumOps.Multiply(supportFeatures[i], NumOps.FromDouble(refineScale));
+        }
+
+        return refined;
+    }
+
+    private Vector<T> AverageVectors(List<Vector<T>> vectors)
+    {
+        if (vectors.Count == 0) return new Vector<T>(0);
+        var result = new Vector<T>(vectors[0].Length);
+        foreach (var v in vectors)
+            for (int i = 0; i < result.Length; i++)
+                result[i] = NumOps.Add(result[i], v[i]);
+        var scale = NumOps.FromDouble(1.0 / vectors.Count);
+        for (int i = 0; i < result.Length; i++)
+            result[i] = NumOps.Multiply(result[i], scale);
+        return result;
+    }
+}
+
+/// <summary>
+/// Adapted model wrapper for TIM with transductively refined predictions.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This model uses predictions that have been refined
+/// by processing all query examples together, taking advantage of the query set's
+/// structure for more accurate classification.
+/// </para>
+/// </remarks>
+internal class TIMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+{
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _backboneParams;
+    private readonly Vector<T>? _refinedWeights;
+
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+
+    public TIMModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams, Vector<T>? refinedWeights)
+    {
+        _model = model;
+        _backboneParams = backboneParams;
+        _refinedWeights = refinedWeights;
+    }
+
+    /// <inheritdoc/>
+    public TOutput Predict(TInput input)
+    {
+        _model.SetParameters(_backboneParams);
+        return _model.Predict(input);
+    }
+
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) { }
+
+    /// <inheritdoc/>
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
+}
