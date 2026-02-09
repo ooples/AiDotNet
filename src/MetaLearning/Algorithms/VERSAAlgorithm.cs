@@ -176,14 +176,31 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         {
             MetaModel.SetParameters(initParams);
 
-            // Forward pass: extract features and classify
+            // Forward pass: extract features and amortize classifier
             var supportPred = MetaModel.Predict(task.SupportInput);
-            var queryPred = MetaModel.Predict(task.QueryInput);
 
-            // Compute amortized classifier output
+            // Compute amortized classifier output from support features
             var classifierWeights = AmortizeClassifier(supportPred);
 
-            // Compute query loss
+            // Apply classifier-derived modulation to backbone before computing query loss
+            // This connects the amortization network to the training loss
+            if (classifierWeights.Length > 0)
+            {
+                double sumAbs = 0;
+                for (int i = 0; i < classifierWeights.Length; i++)
+                    sumAbs += Math.Abs(NumOps.ToDouble(classifierWeights[i]));
+                double meanAbs = sumAbs / classifierWeights.Length;
+                double modFactor = 0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0));
+
+                var currentParams = MetaModel.GetParameters();
+                var modulatedParams = new Vector<T>(currentParams.Length);
+                for (int i = 0; i < currentParams.Length; i++)
+                    modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor));
+                MetaModel.SetParameters(modulatedParams);
+            }
+
+            // Compute query loss on modulated backbone (amortization affects loss)
+            var queryPred = MetaModel.Predict(task.QueryInput);
             var queryLoss = ComputeLossFromOutput(queryPred, task.QueryOutput);
             losses.Add(queryLoss);
 

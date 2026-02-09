@@ -171,16 +171,44 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
             // Extract features
             var supportPred = MetaModel.Predict(task.SupportInput);
-            var queryPred = MetaModel.Predict(task.QueryInput);
 
             // Compute prototypes and adapt them
             var supportFeatures = ConvertToVector(supportPred);
+            Vector<T>? adaptedPrototypes = null;
             if (supportFeatures != null)
             {
-                var adaptedPrototypes = AdaptPrototypes(supportFeatures);
+                adaptedPrototypes = AdaptPrototypes(supportFeatures);
             }
 
-            // Classification loss
+            // Apply adaptation-derived modulation to backbone before computing query loss
+            // This connects the transformer adaptation to the training loss
+            if (adaptedPrototypes != null && supportFeatures != null)
+            {
+                double sumRatio = 0;
+                int count = 0;
+                for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedPrototypes.Length); i++)
+                {
+                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
+                    double adaptedVal = NumOps.ToDouble(adaptedPrototypes[i]);
+                    if (Math.Abs(rawVal) > 1e-10)
+                    {
+                        sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
+                        count++;
+                    }
+                }
+                if (count > 0)
+                {
+                    double avgRatio = sumRatio / count;
+                    var currentParams = MetaModel.GetParameters();
+                    var modulatedParams = new Vector<T>(currentParams.Length);
+                    for (int i = 0; i < currentParams.Length; i++)
+                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
+                    MetaModel.SetParameters(modulatedParams);
+                }
+            }
+
+            // Classification loss on modulated backbone (transformer affects loss)
+            var queryPred = MetaModel.Predict(task.QueryInput);
             var queryLoss = ComputeLossFromOutput(queryPred, task.QueryOutput);
             losses.Add(queryLoss);
 

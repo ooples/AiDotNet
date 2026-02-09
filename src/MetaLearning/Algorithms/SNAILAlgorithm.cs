@@ -231,12 +231,44 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
             // Forward pass through backbone
             var supportPred = MetaModel.Predict(task.SupportInput);
-            var queryPred = MetaModel.Predict(task.QueryInput);
 
             // Process through SNAIL blocks (TC + Attention)
-            var snailOutput = ProcessSNAILBlocks(supportPred, queryPred);
+            var queryPredRaw = MetaModel.Predict(task.QueryInput);
+            var snailOutput = ProcessSNAILBlocks(supportPred, queryPredRaw);
 
-            // Compute query loss
+            // Apply SNAIL-derived modulation to backbone before computing query loss
+            // This connects the TC/attention blocks to the training loss
+            if (snailOutput != null && snailOutput.Length > 0)
+            {
+                var supportFeatures = ConvertToVector(supportPred);
+                if (supportFeatures != null && supportFeatures.Length > 0)
+                {
+                    double sumRatio = 0;
+                    int count = 0;
+                    for (int i = 0; i < Math.Min(supportFeatures.Length, snailOutput.Length); i++)
+                    {
+                        double rawVal = NumOps.ToDouble(supportFeatures[i]);
+                        double snailVal = NumOps.ToDouble(snailOutput[i]);
+                        if (Math.Abs(rawVal) > 1e-10)
+                        {
+                            sumRatio += Math.Max(0.5, Math.Min(2.0, snailVal / rawVal));
+                            count++;
+                        }
+                    }
+                    if (count > 0)
+                    {
+                        double avgRatio = sumRatio / count;
+                        var currentParams = MetaModel.GetParameters();
+                        var modulatedParams = new Vector<T>(currentParams.Length);
+                        for (int i = 0; i < currentParams.Length; i++)
+                            modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
+                        MetaModel.SetParameters(modulatedParams);
+                    }
+                }
+            }
+
+            // Compute query loss on modulated backbone (SNAIL blocks affect loss)
+            var queryPred = MetaModel.Predict(task.QueryInput);
             var queryLoss = ComputeLossFromOutput(queryPred, task.QueryOutput);
             losses.Add(queryLoss);
 

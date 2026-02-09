@@ -268,9 +268,90 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             MetaModel.SetParameters(updatedParams);
         }
 
+        // Update per-step learning rates via finite differences (LSLR meta-learning)
+        // Per paper: alpha = alpha - beta * grad(meta_loss, alpha)
+        if (_mamlOptions.UsePerStepLearningRates)
+        {
+            UpdatePerStepLearningRates(taskBatch, initParams, effectiveOuterLR);
+        }
+
         _currentIteration++;
 
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Updates per-step learning rates using finite differences.
+    /// For each step k, perturbs alpha_k by epsilon, re-runs the inner loop,
+    /// measures loss change, and updates alpha_k via: alpha_k -= lr * dL/d(alpha_k).
+    /// </summary>
+    /// <param name="taskBatch">Current task batch.</param>
+    /// <param name="initParams">Initial backbone parameters.</param>
+    /// <param name="outerLR">Outer learning rate.</param>
+    private void UpdatePerStepLearningRates(
+        TaskBatch<T, TInput, TOutput> taskBatch,
+        Vector<T> initParams,
+        double outerLR)
+    {
+        double epsilon = 1e-3;
+
+        for (int step = 0; step < _mamlOptions.AdaptationSteps; step++)
+        {
+            double lossPlus = 0;
+            double lossMinus = 0;
+
+            // Evaluate with alpha_k + epsilon
+            _perStepLearningRates[step] += epsilon;
+            foreach (var task in taskBatch.Tasks)
+            {
+                lossPlus += NumOps.ToDouble(EvaluateTaskLoss(task, initParams));
+            }
+
+            // Evaluate with alpha_k - epsilon (delta = 2*epsilon from current)
+            _perStepLearningRates[step] -= 2.0 * epsilon;
+            foreach (var task in taskBatch.Tasks)
+            {
+                lossMinus += NumOps.ToDouble(EvaluateTaskLoss(task, initParams));
+            }
+
+            // Restore original alpha_k
+            _perStepLearningRates[step] += epsilon;
+
+            // Finite difference gradient: dL/d(alpha_k) ≈ (L+ - L-) / (2 * epsilon)
+            int numTasks = Math.Max(taskBatch.Tasks.Length, 1);
+            double grad = (lossPlus / numTasks - lossMinus / numTasks) / (2.0 * epsilon);
+
+            // Update alpha_k, clamped to [1e-6, 1.0] for stability
+            _perStepLearningRates[step] = Math.Max(1e-6,
+                Math.Min(1.0, _perStepLearningRates[step] - outerLR * grad));
+        }
+    }
+
+    /// <summary>
+    /// Evaluates the query loss for a single task after running the full inner loop.
+    /// Used by LSLR update to measure loss as a function of per-step learning rates.
+    /// </summary>
+    /// <param name="task">The task to evaluate.</param>
+    /// <param name="initParams">Starting backbone parameters.</param>
+    /// <returns>Query loss after inner-loop adaptation.</returns>
+    private T EvaluateTaskLoss(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams)
+    {
+        var taskParams = new Vector<T>(initParams.Length);
+        for (int i = 0; i < initParams.Length; i++)
+            taskParams[i] = initParams[i];
+
+        MetaModel.SetParameters(taskParams);
+
+        for (int step = 0; step < _mamlOptions.AdaptationSteps; step++)
+        {
+            var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+            grad = ClipGradients(grad);
+            double stepLR = _perStepLearningRates[step];
+            taskParams = ApplyGradients(taskParams, grad, stepLR);
+            MetaModel.SetParameters(taskParams);
+        }
+
+        return ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
     }
 
     /// <summary>
@@ -405,9 +486,6 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         return weights;
     }
 
-    /// <summary>
-    /// Computes the element-wise average of a list of vectors.
-    /// </summary>
 }
 
 /// <summary>
