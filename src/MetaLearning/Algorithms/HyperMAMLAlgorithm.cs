@@ -109,6 +109,60 @@ public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         }
     }
 
+    /// <summary>
+    /// Generates a task-specific initialization by running support features through the hypernetwork,
+    /// then blends it with the shared initialization.
+    /// </summary>
+    /// <param name="sharedInit">The shared meta-learned initialization.</param>
+    /// <param name="supportFeatures">Support set features for conditioning.</param>
+    /// <returns>Blended task-specific initialization.</returns>
+    private Vector<T> GenerateTaskInit(Vector<T> sharedInit, Vector<T>? supportFeatures)
+    {
+        if (supportFeatures == null || supportFeatures.Length == 0)
+            return sharedInit;
+
+        // Compute support set statistics
+        T mean = NumOps.Zero;
+        T variance = NumOps.Zero;
+        for (int i = 0; i < supportFeatures.Length; i++)
+            mean = NumOps.Add(mean, supportFeatures[i]);
+        mean = NumOps.Divide(mean, NumOps.FromDouble(Math.Max(supportFeatures.Length, 1)));
+
+        for (int i = 0; i < supportFeatures.Length; i++)
+        {
+            T diff = NumOps.Subtract(supportFeatures[i], mean);
+            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+        }
+        variance = NumOps.Divide(variance, NumOps.FromDouble(Math.Max(supportFeatures.Length, 1)));
+
+        double meanVal = NumOps.ToDouble(mean);
+        double varVal = NumOps.ToDouble(variance);
+
+        // Generate per-parameter modulations via hypernetwork
+        double blendAlpha = _hyperMAMLOptions.BlendFactor;
+        var blended = new Vector<T>(sharedInit.Length);
+        int paramIdx = 0;
+
+        for (int i = 0; i < sharedInit.Length; i++)
+        {
+            // Hypernetwork: MLP(stats) -> per-parameter offset
+            double w1 = paramIdx < _hypernetParams.Length
+                ? NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]) : 0.01;
+            double w2 = paramIdx < _hypernetParams.Length
+                ? NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]) : 0.01;
+            double b = paramIdx < _hypernetParams.Length
+                ? NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]) : 0;
+            double offset = Math.Tanh(w1 * meanVal + w2 * varVal + b) * 0.1;
+
+            // Blend: alpha * (shared + offset) + (1-alpha) * shared
+            double sharedVal = NumOps.ToDouble(sharedInit[i]);
+            double taskVal = sharedVal + offset;
+            blended[i] = NumOps.FromDouble(blendAlpha * taskVal + (1.0 - blendAlpha) * sharedVal);
+        }
+
+        return blended;
+    }
+
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
@@ -118,10 +172,14 @@ public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
         foreach (var task in taskBatch.Tasks)
         {
-            // Blend shared init with task-specific init (conceptually)
+            // Generate task-specific initialization from support features
             MetaModel.SetParameters(initParams);
+            var supportPred = MetaModel.Predict(task.SupportInput);
+            var supportFeatures = ConvertToVector(supportPred);
+            var taskInit = GenerateTaskInit(initParams, supportFeatures);
+            MetaModel.SetParameters(taskInit);
 
-            // Inner loop adaptation
+            // Inner loop adaptation from task-specific init
             for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
             {
                 var innerGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
@@ -153,9 +211,17 @@ public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var adaptedParams = MetaModel.GetParameters();
-        MetaModel.SetParameters(adaptedParams);
+        var sharedInit = MetaModel.GetParameters();
 
+        // Generate task-specific initialization from support features
+        MetaModel.SetParameters(sharedInit);
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+        var taskInit = GenerateTaskInit(sharedInit, supportFeatures);
+        MetaModel.SetParameters(taskInit);
+
+        // Inner loop adaptation from task-specific init
+        var adaptedParams = taskInit;
         for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
         {
             var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);

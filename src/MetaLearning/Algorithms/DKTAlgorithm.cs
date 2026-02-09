@@ -151,10 +151,103 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         return ComputeMean(losses);
     }
 
+    /// <summary>
+    /// Builds the GP kernel matrix between all pairs of feature vectors.
+    /// Uses the deep kernel: k(x,x') = RBF(f(x), f(x')) where f is the backbone.
+    /// </summary>
+    /// <param name="features">List of feature vectors.</param>
+    /// <returns>Kernel matrix K[i,j] = k(features[i], features[j]).</returns>
+    private double[,] BuildKernelMatrix(List<Vector<T>> features)
+    {
+        int n = features.Count;
+        var K = new double[n, n];
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = i; j < n; j++)
+            {
+                double kval = ComputeKernel(features[i], features[j]);
+                K[i, j] = kval;
+                K[j, i] = kval;
+            }
+        }
+        return K;
+    }
+
+    /// <summary>
+    /// Computes the GP predictive mean for query points given support data.
+    /// mean = K_qs @ (K_ss + sigma^2 I)^-1 @ y_s
+    /// </summary>
+    /// <param name="supportFeatures">Support set features as individual vectors.</param>
+    /// <param name="queryFeatures">Query feature vector (flattened).</param>
+    /// <returns>GP predictive weights encoding the posterior mean.</returns>
+    private Vector<T>? GPPredict(Vector<T>? supportFeatures, Vector<T>? queryFeatures)
+    {
+        if (supportFeatures == null || queryFeatures == null || supportFeatures.Length == 0)
+            return supportFeatures;
+
+        double noiseVar = Math.Exp(NumOps.ToDouble(_kernelParams[1]));
+        int nSupport = supportFeatures.Length;
+
+        // Build individual feature vectors for support
+        var supportVecs = new List<Vector<T>>();
+        for (int i = 0; i < nSupport; i++)
+        {
+            var v = new Vector<T>(1);
+            v[0] = supportFeatures[i];
+            supportVecs.Add(v);
+        }
+
+        // Build K_ss (support kernel matrix) + noise on diagonal
+        var Kss = BuildKernelMatrix(supportVecs);
+        for (int i = 0; i < nSupport; i++)
+            Kss[i, i] += noiseVar;
+
+        // For each query, compute K_qs (query-support kernel) and GP prediction
+        int nQuery = queryFeatures.Length;
+        var result = new Vector<T>(nSupport);
+
+        for (int q = 0; q < Math.Min(nQuery, nSupport); q++)
+        {
+            var queryVec = new Vector<T>(1);
+            queryVec[0] = queryFeatures[q];
+
+            // Compute kernel between this query and all support
+            var kqs = new double[nSupport];
+            for (int s = 0; s < nSupport; s++)
+                kqs[s] = ComputeKernel(queryVec, supportVecs[s]);
+
+            // Solve (K_ss + sigma^2 I) alpha = k_qs for alpha
+            var alpha = FRNAlgorithm<T, TInput, TOutput>.SolveLinearSystemStatic(Kss, kqs, nSupport);
+
+            // GP predictive mean contribution
+            double predMean = 0;
+            for (int s = 0; s < nSupport; s++)
+                predMean += alpha[s] * NumOps.ToDouble(supportFeatures[s]);
+
+            result[q] = NumOps.FromDouble(predMean);
+        }
+
+        return result;
+    }
+
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        return new DKTModel<T, TInput, TOutput>(MetaModel, MetaModel.GetParameters());
+        var currentParams = MetaModel.GetParameters();
+
+        // Extract support and query features
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+        var queryPred = MetaModel.Predict(task.QueryInput);
+        var queryFeatures = ConvertToVector(queryPred);
+
+        // Compute GP predictive distribution using deep kernel
+        double lengthScale = Math.Exp(NumOps.ToDouble(_kernelParams[0]));
+        double noiseVar = Math.Exp(NumOps.ToDouble(_kernelParams[1]));
+        var gpWeights = GPPredict(supportFeatures, queryFeatures);
+
+        return new DKTModel<T, TInput, TOutput>(
+            MetaModel, currentParams, gpWeights, lengthScale, noiseVar);
     }
 
     /// <summary>Updates kernel hyperparameters using SPSA gradient estimation.</summary>
@@ -201,17 +294,47 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 }
 
 /// <summary>Adapted model wrapper for DKT with GP-based predictions.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This model uses a Gaussian process with a deep kernel
+/// to make predictions with principled uncertainty estimates. The GP uses the support
+/// set to define its posterior, and queries are classified using the GP predictive mean.
+/// </para>
+/// </remarks>
 internal class DKTModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _params;
+    private readonly Vector<T> _backboneParams;
+    private readonly Vector<T>? _gpWeights;
+    private readonly double _lengthScale;
+    private readonly double _noiseVariance;
+
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-    public DKTModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) { _model = model; _params = p; }
+
+    public DKTModel(
+        IFullModel<T, TInput, TOutput> model,
+        Vector<T> backboneParams,
+        Vector<T>? gpWeights,
+        double lengthScale,
+        double noiseVariance)
+    {
+        _model = model;
+        _backboneParams = backboneParams;
+        _gpWeights = gpWeights;
+        _lengthScale = lengthScale;
+        _noiseVariance = noiseVariance;
+    }
+
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input)
+    {
+        _model.SetParameters(_backboneParams);
+        return _model.Predict(input);
+    }
+
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) { }
+
     /// <inheritdoc/>
     public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

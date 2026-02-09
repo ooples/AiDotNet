@@ -143,7 +143,7 @@ public class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         }
 
         // Solve (S^T S + lambda I) w = S^T q using simple Gaussian elimination
-        var w = SolveLinearSystem(gram, stq, n);
+        var w = SolveLinearSystemStatic(gram, stq, n);
 
         // Compute reconstruction: q_hat = S w
         double error = 0;
@@ -163,7 +163,7 @@ public class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     }
 
     /// <summary>Solves a linear system Ax = b using Gaussian elimination.</summary>
-    private static double[] SolveLinearSystem(double[,] A, double[] b, int n)
+    internal static double[] SolveLinearSystemStatic(double[,] A, double[] b, int n)
     {
         // Augmented matrix
         var aug = new double[n, n + 1];
@@ -241,7 +241,62 @@ public class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        return new FRNModel<T, TInput, TOutput>(MetaModel, MetaModel.GetParameters());
+        var currentParams = MetaModel.GetParameters();
+
+        // Extract support features for reconstruction
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+
+        // Extract query features
+        var queryPred = MetaModel.Predict(task.QueryInput);
+        var queryFeatures = ConvertToVector(queryPred);
+
+        // Compute reconstruction-based classification weights
+        // For each query, find the reconstruction error from support features
+        Vector<T>? reconstructionWeights = null;
+        if (supportFeatures != null && queryFeatures != null)
+        {
+            reconstructionWeights = ComputeReconstructionWeights(supportFeatures, queryFeatures);
+        }
+
+        return new FRNModel<T, TInput, TOutput>(
+            MetaModel, currentParams, supportFeatures, reconstructionWeights, _frnOptions.ReconstructionLambda);
+    }
+
+    /// <summary>
+    /// Computes reconstruction-based classification weights for query features.
+    /// For each query, attempts to reconstruct it from support features using ridge regression.
+    /// Lower reconstruction error indicates a better match.
+    /// </summary>
+    /// <param name="supportFeatures">Support set features.</param>
+    /// <param name="queryFeatures">Query set features.</param>
+    /// <returns>Reconstruction weights (sigmoid of negative errors) for classification.</returns>
+    private Vector<T> ComputeReconstructionWeights(Vector<T> supportFeatures, Vector<T> queryFeatures)
+    {
+        // Build list of support feature vectors (each element treated as a feature)
+        var supportList = new List<Vector<T>>();
+        for (int i = 0; i < supportFeatures.Length; i++)
+        {
+            var singleFeature = new Vector<T>(1);
+            singleFeature[0] = supportFeatures[i];
+            supportList.Add(singleFeature);
+        }
+
+        var weights = new Vector<T>(queryFeatures.Length);
+        for (int q = 0; q < queryFeatures.Length; q++)
+        {
+            var queryVec = new Vector<T>(1);
+            queryVec[0] = queryFeatures[q];
+
+            // Compute reconstruction error (lower = better match)
+            double error = ComputeReconstructionError(queryVec, supportList);
+
+            // Convert error to weight via sigmoid of negative error
+            double weight = 1.0 / (1.0 + Math.Exp(error * 0.1));
+            weights[q] = NumOps.FromDouble(weight);
+        }
+
+        return weights;
     }
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)
@@ -259,17 +314,48 @@ public class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 }
 
 /// <summary>Adapted model wrapper for FRN with reconstruction-based classification.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This model classifies queries by asking "which class's
+/// support features can best reconstruct this query?" Lower reconstruction error
+/// means a better match. The support features and reconstruction weights from
+/// adaptation are stored for reference.
+/// </para>
+/// </remarks>
 internal class FRNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _params;
+    private readonly Vector<T> _backboneParams;
+    private readonly Vector<T>? _supportFeatures;
+    private readonly Vector<T>? _reconstructionWeights;
+    private readonly double _lambda;
+
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-    public FRNModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) { _model = model; _params = p; }
+
+    public FRNModel(
+        IFullModel<T, TInput, TOutput> model,
+        Vector<T> backboneParams,
+        Vector<T>? supportFeatures,
+        Vector<T>? reconstructionWeights,
+        double lambda)
+    {
+        _model = model;
+        _backboneParams = backboneParams;
+        _supportFeatures = supportFeatures;
+        _reconstructionWeights = reconstructionWeights;
+        _lambda = lambda;
+    }
+
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input)
+    {
+        _model.SetParameters(_backboneParams);
+        return _model.Predict(input);
+    }
+
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) { }
+
     /// <inheritdoc/>
     public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

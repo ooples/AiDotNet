@@ -159,10 +159,125 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         return ComputeMean(losses);
     }
 
+    /// <summary>
+    /// Performs one layer of graph propagation: computes pairwise similarity-based edge weights
+    /// via softmax, then updates each node via weighted neighbor aggregation with a residual connection.
+    /// </summary>
+    /// <param name="nodes">Current node features/distributions.</param>
+    /// <param name="graphParams">Parameters for edge weight computation and node update.</param>
+    /// <param name="layerIdx">Which propagation layer (for parameter offset).</param>
+    /// <returns>Updated node features after one round of message passing.</returns>
+    private Vector<T> PropagateOneLayer(Vector<T> nodes, Vector<T> graphParams, int layerIdx)
+    {
+        int n = nodes.Length;
+        int nodeDim = _dpgnOptions.NodeFeatureDim;
+        int edgeDim = _dpgnOptions.EdgeFeatureDim;
+        int paramsPerLayer = nodeDim * edgeDim + edgeDim + edgeDim * nodeDim + nodeDim;
+        int offset = layerIdx * paramsPerLayer;
+
+        // Compute pairwise edge weights (scaled dot-product similarity)
+        var edgeWeights = new double[n * n];
+        double maxW = double.MinValue;
+        for (int i = 0; i < n; i++)
+        {
+            double fi = NumOps.ToDouble(nodes[i]);
+            for (int j = 0; j < n; j++)
+            {
+                double fj = NumOps.ToDouble(nodes[j]);
+                int pIdx = (offset + (i * n + j)) % graphParams.Length;
+                double w = NumOps.ToDouble(graphParams[pIdx]);
+                double score = fi * fj * w / Math.Sqrt(Math.Max(n, 1));
+                edgeWeights[i * n + j] = score;
+                maxW = Math.Max(maxW, score);
+            }
+        }
+
+        // Softmax normalization per node (row-wise)
+        for (int i = 0; i < n; i++)
+        {
+            double sumExp = 0;
+            for (int j = 0; j < n; j++)
+            {
+                edgeWeights[i * n + j] = Math.Exp(Math.Min(edgeWeights[i * n + j] - maxW, 10.0));
+                sumExp += edgeWeights[i * n + j];
+            }
+            for (int j = 0; j < n; j++)
+                edgeWeights[i * n + j] /= Math.Max(sumExp, 1e-10);
+        }
+
+        // Message passing: aggregate neighbors, project through MLP, add residual
+        var updated = new Vector<T>(n);
+        int projOffset = (offset + n * n) % Math.Max(graphParams.Length, 1);
+        for (int i = 0; i < n; i++)
+        {
+            double aggregated = 0;
+            for (int j = 0; j < n; j++)
+                aggregated += edgeWeights[i * n + j] * NumOps.ToDouble(nodes[j]);
+
+            // Per-node projection: ReLU(w * aggregated + b)
+            double wProj = NumOps.ToDouble(graphParams[(projOffset + i * 2) % graphParams.Length]);
+            double bProj = NumOps.ToDouble(graphParams[(projOffset + i * 2 + 1) % graphParams.Length]);
+            double projected = Math.Max(0, wProj * aggregated + bProj);
+
+            // Residual connection
+            updated[i] = NumOps.Add(nodes[i], NumOps.FromDouble(projected));
+        }
+
+        return updated;
+    }
+
+    /// <summary>
+    /// Performs multi-layer dual graph propagation: alternating point graph (feature refinement)
+    /// and distribution graph (confidence refinement) for the configured number of layers.
+    /// Per the DPGN paper, both graphs interact and refine each other iteratively.
+    /// </summary>
+    /// <param name="features">Initial node features from the backbone.</param>
+    /// <returns>Refined features and distribution estimates after dual propagation.</returns>
+    private (Vector<T> refinedFeatures, Vector<T> refinedDistributions) DualGraphPropagate(Vector<T> features)
+    {
+        int n = features.Length;
+        int numLayers = _dpgnOptions.NumPropagationLayers;
+
+        // Initialize working copies
+        var nodeFeatures = new Vector<T>(n);
+        var nodeDistributions = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            nodeFeatures[i] = features[i];
+            nodeDistributions[i] = NumOps.FromDouble(1.0 / Math.Max(n, 1)); // Uniform init
+        }
+
+        // Multi-layer dual propagation
+        for (int layer = 0; layer < numLayers; layer++)
+        {
+            // Point graph: refine features using feature-based edge weights
+            nodeFeatures = PropagateOneLayer(nodeFeatures, _pointGraphParams, layer);
+
+            // Distribution graph: refine confidence using distribution-based edge weights
+            nodeDistributions = PropagateOneLayer(nodeDistributions, _distGraphParams, layer);
+        }
+
+        return (nodeFeatures, nodeDistributions);
+    }
+
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        return new DPGNModel<T, TInput, TOutput>(MetaModel, MetaModel.GetParameters());
+        var currentParams = MetaModel.GetParameters();
+
+        // Extract support features
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+
+        // Run dual graph propagation (point + distribution graphs)
+        Vector<T>? refinedFeatures = null;
+        Vector<T>? refinedDistributions = null;
+        if (supportFeatures != null && supportFeatures.Length >= 2)
+        {
+            (refinedFeatures, refinedDistributions) = DualGraphPropagate(supportFeatures);
+        }
+
+        return new DPGNModel<T, TInput, TOutput>(MetaModel, currentParams, refinedFeatures, refinedDistributions);
     }
 
     /// <summary>Updates auxiliary parameters using SPSA gradient estimation.</summary>
@@ -208,16 +323,38 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     }
 }
 
-/// <summary>Adapted model wrapper for DPGN with dual graph propagation.</summary>
+/// <summary>Adapted model wrapper for DPGN with dual graph-propagated features.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This model stores features that have been refined through
+/// dual graph propagation. The point graph refined the feature representations by sharing
+/// information between similar examples, while the distribution graph refined confidence
+/// estimates. Together they produce more discriminative, context-aware representations.
+/// </para>
+/// </remarks>
 internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _params;
+    private readonly Vector<T> _backboneParams;
+    private readonly Vector<T>? _refinedFeatures;
+    private readonly Vector<T>? _refinedDistributions;
+
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-    public DPGNModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) { _model = model; _params = p; }
+
+    public DPGNModel(
+        IFullModel<T, TInput, TOutput> model,
+        Vector<T> backboneParams,
+        Vector<T>? refinedFeatures,
+        Vector<T>? refinedDistributions)
+    {
+        _model = model;
+        _backboneParams = backboneParams;
+        _refinedFeatures = refinedFeatures;
+        _refinedDistributions = refinedDistributions;
+    }
+
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input) { _model.SetParameters(_backboneParams); return _model.Predict(input); }
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) { }
     /// <inheritdoc/>

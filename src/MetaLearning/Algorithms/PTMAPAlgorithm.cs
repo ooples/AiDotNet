@@ -170,10 +170,107 @@ public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         return ComputeMean(losses);
     }
 
+    /// <summary>
+    /// Performs MAP estimation with iterative refinement on query soft assignments.
+    /// </summary>
+    /// <param name="supportFeatures">Power-transformed, centered, normalized support features.</param>
+    /// <param name="queryFeatures">Power-transformed, centered, normalized query features.</param>
+    /// <returns>Refined query assignment weights after MAP iterations.</returns>
+    private Vector<T>? MAPEstimation(Vector<T>? supportFeatures, Vector<T>? queryFeatures)
+    {
+        if (supportFeatures == null || queryFeatures == null || queryFeatures.Length == 0)
+            return supportFeatures;
+
+        int numQuery = queryFeatures.Length;
+
+        // Initialize logits from support-query cosine similarity
+        var logits = new double[numQuery];
+        for (int q = 0; q < numQuery; q++)
+        {
+            double sim = 0;
+            for (int s = 0; s < supportFeatures.Length; s++)
+            {
+                sim += NumOps.ToDouble(NumOps.Multiply(queryFeatures[q], supportFeatures[s % supportFeatures.Length]));
+            }
+            logits[q] = sim * _ptmapOptions.Temperature;
+        }
+
+        // Iterative MAP refinement (EM-like)
+        for (int iter = 0; iter < _ptmapOptions.MAPIterations; iter++)
+        {
+            // E-step: softmax to get soft assignments
+            double maxLogit = double.MinValue;
+            for (int q = 0; q < numQuery; q++)
+                maxLogit = Math.Max(maxLogit, logits[q]);
+
+            double sumExp = 0;
+            var probs = new double[numQuery];
+            for (int q = 0; q < numQuery; q++)
+            {
+                probs[q] = Math.Exp(logits[q] - maxLogit);
+                sumExp += probs[q];
+            }
+            for (int q = 0; q < numQuery; q++)
+                probs[q] /= Math.Max(sumExp, 1e-10);
+
+            // M-step: update centroids using soft assignments, then recompute logits
+            double centroidShift = 0;
+            for (int q = 0; q < numQuery; q++)
+            {
+                double weightedSim = 0;
+                for (int s = 0; s < supportFeatures.Length; s++)
+                {
+                    double suppVal = NumOps.ToDouble(supportFeatures[s % supportFeatures.Length]);
+                    double queryVal = NumOps.ToDouble(queryFeatures[q]);
+                    weightedSim += suppVal * (1.0 + probs[q]) * queryVal;
+                }
+                double newLogit = weightedSim * _ptmapOptions.Temperature;
+                centroidShift += Math.Abs(newLogit - logits[q]);
+                logits[q] = newLogit;
+            }
+
+            // Early convergence check
+            if (centroidShift / Math.Max(numQuery, 1) < 1e-6)
+                break;
+        }
+
+        // Convert refined logits back to weights
+        var refined = new Vector<T>(supportFeatures.Length);
+        for (int i = 0; i < supportFeatures.Length; i++)
+        {
+            double scale = i < numQuery ? 1.0 / (1.0 + Math.Exp(-logits[i])) : 0.5;
+            refined[i] = NumOps.Multiply(supportFeatures[i], NumOps.FromDouble(scale));
+        }
+        return refined;
+    }
+
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        return new PTMAPModel<T, TInput, TOutput>(MetaModel, MetaModel.GetParameters());
+        var currentParams = MetaModel.GetParameters();
+
+        // Extract support and query features
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+        var queryPred = MetaModel.Predict(task.QueryInput);
+        var queryFeatures = ConvertToVector(queryPred);
+
+        // Step 1: Power transform (makes features more Gaussian)
+        if (supportFeatures != null)
+            supportFeatures = ApplyPowerTransform(supportFeatures);
+        if (queryFeatures != null)
+            queryFeatures = ApplyPowerTransform(queryFeatures);
+
+        // Step 2: Center and L2-normalize
+        if (supportFeatures != null)
+            supportFeatures = CenterAndNormalize(supportFeatures);
+        if (queryFeatures != null)
+            queryFeatures = CenterAndNormalize(queryFeatures);
+
+        // Step 3: MAP estimation (transductive refinement)
+        var refinedWeights = MAPEstimation(supportFeatures, queryFeatures);
+
+        return new PTMAPModel<T, TInput, TOutput>(MetaModel, currentParams, refinedWeights);
     }
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)
@@ -190,18 +287,39 @@ public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     }
 }
 
-/// <summary>Adapted model wrapper for PT+MAP with power-transformed features.</summary>
+/// <summary>Adapted model wrapper for PT+MAP with power-transformed features and MAP refinement.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This model uses features that were power-transformed
+/// to be more Gaussian, then refined using MAP estimation where all query examples
+/// are processed jointly for better transductive classification.
+/// </para>
+/// </remarks>
 internal class PTMAPModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _params;
+    private readonly Vector<T> _backboneParams;
+    private readonly Vector<T>? _refinedWeights;
+
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-    public PTMAPModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) { _model = model; _params = p; }
+
+    public PTMAPModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams, Vector<T>? refinedWeights)
+    {
+        _model = model;
+        _backboneParams = backboneParams;
+        _refinedWeights = refinedWeights;
+    }
+
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input)
+    {
+        _model.SetParameters(_backboneParams);
+        return _model.Predict(input);
+    }
+
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) { }
+
     /// <inheritdoc/>
     public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

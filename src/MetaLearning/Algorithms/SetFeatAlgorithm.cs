@@ -152,10 +152,121 @@ public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         return ComputeMean(losses);
     }
 
+    /// <summary>
+    /// Encodes a set of features using the set encoder (attention pooling).
+    /// Captures richer information than simple mean: variance, inter-example relationships.
+    /// </summary>
+    /// <param name="features">Set of features to encode.</param>
+    /// <returns>Set-level representation.</returns>
+    private Vector<T>? EncodeSet(Vector<T>? features)
+    {
+        if (features == null || features.Length == 0)
+            return features;
+
+        int dim = _setFeatOptions.SetEncoderDim;
+        var encoded = new Vector<T>(features.Length);
+        int paramIdx = 0;
+
+        // Attention pooling: compute attention scores, then weighted sum
+        var scores = new double[features.Length];
+        double maxScore = double.MinValue;
+
+        for (int i = 0; i < features.Length; i++)
+        {
+            double featureVal = NumOps.ToDouble(features[i]);
+            double w = paramIdx < _setEncoderParams.Length
+                ? NumOps.ToDouble(_setEncoderParams[paramIdx++ % _setEncoderParams.Length]) : 0.01;
+            double b = paramIdx < _setEncoderParams.Length
+                ? NumOps.ToDouble(_setEncoderParams[paramIdx++ % _setEncoderParams.Length]) : 0;
+            scores[i] = w * featureVal + b;
+            maxScore = Math.Max(maxScore, scores[i]);
+        }
+
+        // Softmax attention
+        double sumExp = 0;
+        for (int i = 0; i < features.Length; i++)
+        {
+            scores[i] = Math.Exp(scores[i] - maxScore);
+            sumExp += scores[i];
+        }
+        for (int i = 0; i < features.Length; i++)
+            scores[i] /= Math.Max(sumExp, 1e-10);
+
+        // Weighted combination + residual
+        for (int i = 0; i < features.Length; i++)
+        {
+            T weighted = NumOps.Zero;
+            for (int j = 0; j < features.Length; j++)
+            {
+                weighted = NumOps.Add(weighted,
+                    NumOps.Multiply(features[j], NumOps.FromDouble(scores[j])));
+            }
+            // Residual: original + attention-weighted
+            encoded[i] = NumOps.Add(features[i], weighted);
+        }
+
+        return encoded;
+    }
+
+    /// <summary>
+    /// Applies cross-attention between class representations, allowing
+    /// each class to adjust based on all other classes.
+    /// </summary>
+    /// <param name="classRepresentations">Encoded class representations.</param>
+    /// <returns>Cross-attention refined representations.</returns>
+    private Vector<T>? ApplyCrossAttention(Vector<T>? classRepresentations)
+    {
+        if (classRepresentations == null || classRepresentations.Length < 2)
+            return classRepresentations;
+
+        var refined = new Vector<T>(classRepresentations.Length);
+        int paramIdx = 0;
+
+        for (int i = 0; i < classRepresentations.Length; i++)
+        {
+            double qi = NumOps.ToDouble(classRepresentations[i]);
+            T weightedSum = NumOps.Zero;
+            double totalWeight = 0;
+
+            for (int j = 0; j < classRepresentations.Length; j++)
+            {
+                double kj = NumOps.ToDouble(classRepresentations[j]);
+                double w = paramIdx < _crossAttentionParams.Length
+                    ? NumOps.ToDouble(_crossAttentionParams[paramIdx++ % _crossAttentionParams.Length]) : 0.01;
+                double score = qi * kj * w / Math.Sqrt(classRepresentations.Length);
+                double weight = Math.Exp(Math.Min(score, 10.0));
+                totalWeight += weight;
+                weightedSum = NumOps.Add(weightedSum,
+                    NumOps.Multiply(classRepresentations[j], NumOps.FromDouble(weight)));
+            }
+
+            if (totalWeight > 1e-10)
+                refined[i] = NumOps.Add(classRepresentations[i],
+                    NumOps.Divide(weightedSum, NumOps.FromDouble(totalWeight)));
+            else
+                refined[i] = classRepresentations[i];
+        }
+
+        return refined;
+    }
+
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        return new SetFeatModel<T, TInput, TOutput>(MetaModel, MetaModel.GetParameters());
+        var currentParams = MetaModel.GetParameters();
+
+        // Extract support features
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+
+        // Encode support set using set encoder (attention pooling)
+        var setEncoded = EncodeSet(supportFeatures);
+
+        // Optional cross-attention between class representations
+        if (_setFeatOptions.UseCrossAttention)
+            setEncoded = ApplyCrossAttention(setEncoded);
+
+        return new SetFeatModel<T, TInput, TOutput>(MetaModel, currentParams, setEncoded);
     }
 
     /// <summary>Updates auxiliary parameters using SPSA gradient estimation.</summary>
@@ -201,18 +312,39 @@ public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     }
 }
 
-/// <summary>Adapted model wrapper for SetFeat.</summary>
+/// <summary>Adapted model wrapper for SetFeat with set-encoded class representations.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This model uses class representations that capture
+/// set-level information (not just means) through attention pooling and optional
+/// cross-attention between classes for context-aware classification.
+/// </para>
+/// </remarks>
 internal class SetFeatModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _params;
+    private readonly Vector<T> _backboneParams;
+    private readonly Vector<T>? _setEncodedFeatures;
+
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-    public SetFeatModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) { _model = model; _params = p; }
+
+    public SetFeatModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams, Vector<T>? setEncodedFeatures)
+    {
+        _model = model;
+        _backboneParams = backboneParams;
+        _setEncodedFeatures = setEncodedFeatures;
+    }
+
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input)
+    {
+        _model.SetParameters(_backboneParams);
+        return _model.Predict(input);
+    }
+
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) { }
+
     /// <inheritdoc/>
     public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

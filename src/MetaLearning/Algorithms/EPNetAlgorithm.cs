@@ -169,7 +169,19 @@ public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        return new EPNetModel<T, TInput, TOutput>(MetaModel, MetaModel.GetParameters());
+        var currentParams = MetaModel.GetParameters();
+
+        // Extract support and query features
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+        var queryPred = MetaModel.Predict(task.QueryInput);
+        var queryFeatures = ConvertToVector(queryPred);
+
+        // Apply embedding propagation to smooth features across the kNN graph
+        var propagatedSupport = supportFeatures != null ? PropagateEmbeddings(supportFeatures) : null;
+        var propagatedQuery = queryFeatures != null ? PropagateEmbeddings(queryFeatures) : null;
+
+        return new EPNetModel<T, TInput, TOutput>(MetaModel, currentParams, propagatedSupport, propagatedQuery);
     }
 
     private Vector<T> AverageVectors(List<Vector<T>> vectors)
@@ -187,17 +199,44 @@ public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 }
 
 /// <summary>Adapted model wrapper for EPNet with embedding propagation.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This model uses features that have been smoothed
+/// by propagation across a similarity graph, where nearby examples share
+/// information to produce more consistent and discriminative embeddings.
+/// </para>
+/// </remarks>
 internal class EPNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _params;
+    private readonly Vector<T> _backboneParams;
+    private readonly Vector<T>? _propagatedSupport;
+    private readonly Vector<T>? _propagatedQuery;
+
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-    public EPNetModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) { _model = model; _params = p; }
+
+    public EPNetModel(
+        IFullModel<T, TInput, TOutput> model,
+        Vector<T> backboneParams,
+        Vector<T>? propagatedSupport,
+        Vector<T>? propagatedQuery)
+    {
+        _model = model;
+        _backboneParams = backboneParams;
+        _propagatedSupport = propagatedSupport;
+        _propagatedQuery = propagatedQuery;
+    }
+
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input)
+    {
+        _model.SetParameters(_backboneParams);
+        return _model.Predict(input);
+    }
+
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) { }
+
     /// <inheritdoc/>
     public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

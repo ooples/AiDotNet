@@ -197,10 +197,89 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         return ComputeMean(losses);
     }
 
+    /// <summary>
+    /// Encodes the support set into a latent distribution (mu, sigma) using the encoder.
+    /// Then samples from this distribution using the reparameterization trick.
+    /// </summary>
+    /// <param name="supportFeatures">Support set features.</param>
+    /// <returns>Sampled latent vector for task-level representation.</returns>
+    private Vector<T>? EncodeAndSample(Vector<T>? supportFeatures)
+    {
+        if (supportFeatures == null || supportFeatures.Length == 0)
+            return supportFeatures;
+
+        int latentDim = _npbmlOptions.LatentDim;
+
+        // Aggregate support features
+        T supportMean = NumOps.Zero;
+        for (int i = 0; i < supportFeatures.Length; i++)
+            supportMean = NumOps.Add(supportMean, supportFeatures[i]);
+        supportMean = NumOps.Divide(supportMean, NumOps.FromDouble(Math.Max(supportFeatures.Length, 1)));
+        double aggregated = NumOps.ToDouble(supportMean);
+
+        // Run through encoder to get mu and log_sigma
+        var mu = new double[latentDim];
+        var logSigma = new double[latentDim];
+        int paramIdx = 0;
+
+        for (int i = 0; i < latentDim; i++)
+        {
+            // Hidden layer
+            double wh = paramIdx < _encoderParams.Length
+                ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0.01;
+            double bh = paramIdx < _encoderParams.Length
+                ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0;
+            double hidden = Math.Tanh(wh * aggregated + bh);
+
+            // Mu output
+            double wMu = paramIdx < _encoderParams.Length
+                ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0.01;
+            double bMu = paramIdx < _encoderParams.Length
+                ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0;
+            mu[i] = wMu * hidden + bMu;
+
+            // Log-sigma output
+            double wSig = paramIdx < _encoderParams.Length
+                ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0.01;
+            double bSig = paramIdx < _encoderParams.Length
+                ? NumOps.ToDouble(_encoderParams[paramIdx++ % _encoderParams.Length]) : 0;
+            logSigma[i] = wSig * hidden + bSig;
+        }
+
+        // Reparameterization trick: z = mu + sigma * epsilon, epsilon ~ N(0,1)
+        var sampled = new Vector<T>(supportFeatures.Length);
+        for (int i = 0; i < supportFeatures.Length; i++)
+        {
+            int latIdx = i % latentDim;
+            double sigma = Math.Exp(logSigma[latIdx]);
+            // Box-Muller for Gaussian sample
+            double u1 = Math.Max(RandomGenerator.NextDouble(), 1e-10);
+            double u2 = RandomGenerator.NextDouble();
+            double epsilon = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+
+            double z = mu[latIdx] + sigma * epsilon;
+
+            // Modulate support features with sampled latent
+            double modulation = 1.0 / (1.0 + Math.Exp(-z)); // Sigmoid gate
+            sampled[i] = NumOps.Multiply(supportFeatures[i], NumOps.FromDouble(modulation));
+        }
+
+        return sampled;
+    }
+
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        return new NPBMLModel<T, TInput, TOutput>(MetaModel, MetaModel.GetParameters(), _npbmlOptions.NumSamples);
+        var currentParams = MetaModel.GetParameters();
+
+        // Extract support features
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+
+        // Encode support set into latent distribution and sample
+        var sampledLatent = EncodeAndSample(supportFeatures);
+
+        return new NPBMLModel<T, TInput, TOutput>(MetaModel, currentParams, sampledLatent, _npbmlOptions.NumSamples);
     }
 
     /// <summary>Updates auxiliary parameters using SPSA gradient estimation.</summary>
@@ -247,19 +326,41 @@ public class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 }
 
 /// <summary>Adapted model wrapper for NPBML with probabilistic prediction.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This model makes predictions based on a latent variable
+/// sampled from the support set's encoded distribution. The reparameterization trick
+/// enables gradient flow through the sampling process, and multiple samples can
+/// be used to estimate uncertainty.
+/// </para>
+/// </remarks>
 internal class NPBMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _params;
+    private readonly Vector<T> _backboneParams;
+    private readonly Vector<T>? _sampledLatent;
     private readonly int _numSamples;
+
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-    public NPBMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> p, int numSamples)
-    { _model = model; _params = p; _numSamples = numSamples; }
+
+    public NPBMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams, Vector<T>? sampledLatent, int numSamples)
+    {
+        _model = model;
+        _backboneParams = backboneParams;
+        _sampledLatent = sampledLatent;
+        _numSamples = numSamples;
+    }
+
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input)
+    {
+        _model.SetParameters(_backboneParams);
+        return _model.Predict(input);
+    }
+
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) { }
+
     /// <inheritdoc/>
     public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

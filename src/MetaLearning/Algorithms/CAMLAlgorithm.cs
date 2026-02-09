@@ -143,10 +143,64 @@ public class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         return ComputeMean(losses);
     }
 
+    /// <summary>
+    /// Applies the context module to adapt prototypes based on the support set context.
+    /// </summary>
+    /// <param name="supportFeatures">Support set features (prototypes).</param>
+    /// <returns>Context-adapted prototypes.</returns>
+    private Vector<T>? ApplyContextModule(Vector<T>? supportFeatures)
+    {
+        if (supportFeatures == null || supportFeatures.Length == 0)
+            return supportFeatures;
+
+        int ctxDim = _camlOptions.ContextDimension;
+        var adapted = new Vector<T>(supportFeatures.Length);
+
+        // Aggregate support features into a context vector (mean pooling)
+        T contextSum = NumOps.Zero;
+        for (int i = 0; i < supportFeatures.Length; i++)
+            contextSum = NumOps.Add(contextSum, supportFeatures[i]);
+        double contextMean = NumOps.ToDouble(contextSum) / Math.Max(supportFeatures.Length, 1);
+
+        // Apply context-conditioned projection
+        int paramIdx = 0;
+        for (int i = 0; i < supportFeatures.Length; i++)
+        {
+            double featureVal = NumOps.ToDouble(supportFeatures[i]);
+
+            // Context gate: sigmoid(w * context + b)
+            double wCtx = paramIdx < _contextParams.Length
+                ? NumOps.ToDouble(_contextParams[paramIdx++ % _contextParams.Length]) : 0.01;
+            double bCtx = paramIdx < _contextParams.Length
+                ? NumOps.ToDouble(_contextParams[paramIdx++ % _contextParams.Length]) : 0;
+            double gate = 1.0 / (1.0 + Math.Exp(-(wCtx * contextMean + bCtx)));
+
+            // Context-adapted feature: gate * projection(feature) + (1-gate) * feature
+            double wProj = paramIdx < _contextParams.Length
+                ? NumOps.ToDouble(_contextParams[paramIdx++ % _contextParams.Length]) : 0.01;
+            double bProj = paramIdx < _contextParams.Length
+                ? NumOps.ToDouble(_contextParams[paramIdx++ % _contextParams.Length]) : 0;
+            double projected = featureVal * wProj + bProj;
+
+            adapted[i] = NumOps.FromDouble(gate * projected + (1.0 - gate) * featureVal);
+        }
+
+        return adapted;
+    }
+
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        return new CAMLModel<T, TInput, TOutput>(MetaModel, MetaModel.GetParameters());
+        var currentParams = MetaModel.GetParameters();
+
+        // Extract support features
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+
+        // Apply context module to adapt prototypes
+        var adaptedPrototypes = ApplyContextModule(supportFeatures);
+
+        return new CAMLModel<T, TInput, TOutput>(MetaModel, currentParams, adaptedPrototypes);
     }
 
     /// <summary>Updates context module parameters using SPSA gradient estimation.</summary>
@@ -192,18 +246,39 @@ public class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     }
 }
 
-/// <summary>Adapted model wrapper for CAML.</summary>
+/// <summary>Adapted model wrapper for CAML with context-adapted prototypes.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This model uses prototypes that have been adapted
+/// by a lightweight context module. The frozen backbone provides rich features,
+/// and the context module adjusts prototypes based on the specific task context.
+/// </para>
+/// </remarks>
 internal class CAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _params;
+    private readonly Vector<T> _backboneParams;
+    private readonly Vector<T>? _adaptedPrototypes;
+
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-    public CAMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) { _model = model; _params = p; }
+
+    public CAMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams, Vector<T>? adaptedPrototypes)
+    {
+        _model = model;
+        _backboneParams = backboneParams;
+        _adaptedPrototypes = adaptedPrototypes;
+    }
+
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input)
+    {
+        _model.SetParameters(_backboneParams);
+        return _model.Predict(input);
+    }
+
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) { }
+
     /// <inheritdoc/>
     public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

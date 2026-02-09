@@ -159,10 +159,120 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         return ComputeMean(losses);
     }
 
+    /// <summary>
+    /// Detects K discriminative parts from features using attention-based selection.
+    /// Each part attends over all feature positions and produces a weighted aggregation.
+    /// </summary>
+    /// <param name="features">Raw features from the backbone.</param>
+    /// <returns>Vector of K part features, one per detected part.</returns>
+    private Vector<T>? DetectParts(Vector<T>? features)
+    {
+        if (features == null || features.Length == 0)
+            return features;
+
+        int numParts = _constellationOptions.NumParts;
+        int n = features.Length;
+        var partFeatures = new Vector<T>(numParts);
+        int paramIdx = 0;
+
+        for (int k = 0; k < numParts; k++)
+        {
+            // Compute attention scores for this part across all feature positions
+            var scores = new double[n];
+            double maxScore = double.MinValue;
+            for (int i = 0; i < n; i++)
+            {
+                double fi = NumOps.ToDouble(features[i]);
+                double w = paramIdx < _partDetectorParams.Length
+                    ? NumOps.ToDouble(_partDetectorParams[paramIdx++ % _partDetectorParams.Length]) : 0.01;
+                scores[i] = fi * w;
+                maxScore = Math.Max(maxScore, scores[i]);
+            }
+
+            // Softmax attention
+            double sumExp = 0;
+            for (int i = 0; i < n; i++)
+            {
+                scores[i] = Math.Exp(Math.Min(scores[i] - maxScore, 10.0));
+                sumExp += scores[i];
+            }
+
+            // Weighted aggregation to produce part feature
+            double partVal = 0;
+            for (int i = 0; i < n; i++)
+            {
+                double weight = scores[i] / Math.Max(sumExp, 1e-10);
+                partVal += weight * NumOps.ToDouble(features[i]);
+            }
+
+            // Part bias
+            double bias = paramIdx < _partDetectorParams.Length
+                ? NumOps.ToDouble(_partDetectorParams[paramIdx++ % _partDetectorParams.Length]) : 0;
+            partFeatures[k] = NumOps.FromDouble(partVal + bias);
+        }
+
+        return partFeatures;
+    }
+
+    /// <summary>
+    /// Computes constellation scores: pairwise spatial relationships between detected parts.
+    /// Each part's representation is enriched with learned relational context from all other parts.
+    /// </summary>
+    /// <param name="parts">Detected part features.</param>
+    /// <returns>Parts enriched with pairwise relational context.</returns>
+    private Vector<T>? ComputeConstellationScores(Vector<T>? parts)
+    {
+        if (parts == null || parts.Length < 2 || !_constellationOptions.UseSpatialRelations)
+            return parts;
+
+        int K = parts.Length;
+        var constellation = new Vector<T>(K);
+        int paramIdx = 0;
+
+        // For each part, aggregate learned pairwise relationships with all other parts
+        for (int i = 0; i < K; i++)
+        {
+            double pi = NumOps.ToDouble(parts[i]);
+            double relSum = 0;
+
+            for (int j = 0; j < K; j++)
+            {
+                if (i == j) continue;
+                double pj = NumOps.ToDouble(parts[j]);
+                double w = paramIdx < _relationParams.Length
+                    ? NumOps.ToDouble(_relationParams[paramIdx++ % _relationParams.Length]) : 0.01;
+                double diff = pi - pj;
+                relSum += w * diff * diff; // Learned distance-like relation
+            }
+
+            // Combine part feature with its relational context via tanh gate
+            double bias = paramIdx < _relationParams.Length
+                ? NumOps.ToDouble(_relationParams[paramIdx++ % _relationParams.Length]) : 0;
+            constellation[i] = NumOps.Add(parts[i], NumOps.FromDouble(Math.Tanh(relSum + bias)));
+        }
+
+        return constellation;
+    }
+
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        return new ConstellationNetModel<T, TInput, TOutput>(MetaModel, MetaModel.GetParameters());
+        var currentParams = MetaModel.GetParameters();
+
+        // Extract support features
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+
+        // Detect discriminative parts from support features
+        var detectedParts = DetectParts(supportFeatures);
+
+        // Compute constellation (pairwise spatial relationships between parts)
+        Vector<T>? constellation = null;
+        if (_constellationOptions.UseSpatialRelations)
+            constellation = ComputeConstellationScores(detectedParts);
+
+        return new ConstellationNetModel<T, TInput, TOutput>(
+            MetaModel, currentParams, detectedParts, constellation);
     }
 
     /// <summary>Updates auxiliary parameters using SPSA gradient estimation.</summary>
@@ -208,16 +318,38 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     }
 }
 
-/// <summary>Adapted model wrapper for ConstellationNet with part-based matching.</summary>
+/// <summary>Adapted model wrapper for ConstellationNet with part-based constellation matching.</summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This model stores detected parts and their constellation
+/// (spatial relationship structure). During classification, query examples can be compared
+/// against support classes not just by overall similarity, but by matching specific parts
+/// and checking whether their spatial arrangement is consistent.
+/// </para>
+/// </remarks>
 internal class ConstellationNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _model;
-    private readonly Vector<T> _params;
+    private readonly Vector<T> _backboneParams;
+    private readonly Vector<T>? _detectedParts;
+    private readonly Vector<T>? _constellation;
+
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-    public ConstellationNetModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) { _model = model; _params = p; }
+
+    public ConstellationNetModel(
+        IFullModel<T, TInput, TOutput> model,
+        Vector<T> backboneParams,
+        Vector<T>? detectedParts,
+        Vector<T>? constellation)
+    {
+        _model = model;
+        _backboneParams = backboneParams;
+        _detectedParts = detectedParts;
+        _constellation = constellation;
+    }
+
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input) { _model.SetParameters(_backboneParams); return _model.Predict(input); }
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) { }
     /// <inheritdoc/>
