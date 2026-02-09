@@ -102,7 +102,7 @@ public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     /// <summary>Initializes set encoder and cross-attention parameters.</summary>
     private void InitializeSetEncoder()
     {
-        int dim = _setFeatOptions.SetEncoderDim;
+        int dim = Math.Max(_setFeatOptions.SetEncoderDim, 1);
         // Set encoder: attention pooling + projection
         int encoderParams = dim * dim + dim + dim * dim + dim;
         _setEncoderParams = new Vector<T>(encoderParams);
@@ -215,7 +215,7 @@ public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         if (features == null || features.Length == 0)
             return features;
 
-        int dim = _setFeatOptions.SetEncoderDim;
+        int dim = Math.Max(_setFeatOptions.SetEncoderDim, 1);
         var encoded = new Vector<T>(features.Length);
         int paramIdx = 0;
 

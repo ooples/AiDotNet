@@ -98,7 +98,7 @@ public class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <summary>Initializes the context module parameters.</summary>
     private void InitializeContextModule()
     {
-        int ctxDim = _camlOptions.ContextDimension;
+        int ctxDim = Math.Max(_camlOptions.ContextDimension, 1);
         // Context aggregator + context-conditioned projection
         int totalParams = ctxDim * ctxDim + ctxDim + ctxDim * ctxDim + ctxDim;
         _contextParams = new Vector<T>(totalParams);
@@ -202,7 +202,7 @@ public class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         if (supportFeatures == null || supportFeatures.Length == 0)
             return supportFeatures;
 
-        int ctxDim = _camlOptions.ContextDimension;
+        int ctxDim = Math.Max(_camlOptions.ContextDimension, 1);
         var adapted = new Vector<T>(supportFeatures.Length);
 
         // Aggregate support features into a context vector (mean pooling)

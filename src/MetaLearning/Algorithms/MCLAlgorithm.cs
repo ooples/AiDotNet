@@ -101,7 +101,7 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// <summary>Initializes the contrastive projection head.</summary>
     private void InitializeProjectionHead()
     {
-        int projDim = _mclOptions.ProjectionDim;
+        int projDim = Math.Max(_mclOptions.ProjectionDim, 1);
         // Two-layer projection: feature_dim -> projDim -> projDim
         int totalParams = projDim * projDim + projDim + projDim * projDim + projDim;
         _projectionParams = new Vector<T>(totalParams);
@@ -121,7 +121,7 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     {
         if (features.Length < 2) return 0;
 
-        double temperature = _mclOptions.ContrastiveTemperature;
+        double temperature = Math.Max(_mclOptions.ContrastiveTemperature, 1e-10);
         double totalLoss = 0;
         int count = 0;
 
@@ -176,7 +176,7 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         if (features == null || features.Length == 0)
             return features;
 
-        int projDim = _mclOptions.ProjectionDim;
+        int projDim = Math.Max(_mclOptions.ProjectionDim, 1);
         var projected = new Vector<T>(features.Length);
 
         // Parameter layout: W1[projDim, projDim], b1[projDim], W2[projDim, projDim], b2[projDim]

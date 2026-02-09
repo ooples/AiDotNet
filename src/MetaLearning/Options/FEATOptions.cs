@@ -130,6 +130,12 @@ public class FEATOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     public double ContrastiveWeight { get; set; } = 0.5;
 
     /// <summary>
+    /// Gets or sets the feature dimension for the set-to-set transformer.
+    /// </summary>
+    /// <value>Default is 64.</value>
+    public int TransformerDim { get; set; } = 64;
+
+    /// <summary>
     /// Gets or sets the temperature for similarity computation.
     /// </summary>
     /// <value>Default is 64.0.</value>
@@ -161,6 +167,7 @@ public class FEATOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
                NumMetaIterations > 0 &&
                NumTransformerHeads > 0 &&
                NumTransformerLayers > 0 &&
+               TransformerDim > 0 &&
                Temperature > 0 &&
                ContrastiveWeight >= 0 && ContrastiveWeight <= 1;
     }
@@ -179,6 +186,7 @@ public class FEATOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
             EvaluationFrequency = EvaluationFrequency, EnableCheckpointing = EnableCheckpointing,
             CheckpointFrequency = CheckpointFrequency, UseFirstOrder = UseFirstOrder,
             NumTransformerHeads = NumTransformerHeads, NumTransformerLayers = NumTransformerLayers,
+            TransformerDim = TransformerDim,
             ContrastiveWeight = ContrastiveWeight, Temperature = Temperature
         };
     }

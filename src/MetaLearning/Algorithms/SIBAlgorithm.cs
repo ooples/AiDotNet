@@ -245,7 +245,7 @@ public class SIBAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
                             double cVal = NumOps.ToDouble(centroids[c]);
                             // KL divergence approximation
                             double klDiv = (qVal - cVal) * (qVal - cVal);
-                            double score = _sibOptions.Beta * klDiv / _sibOptions.Temperature;
+                            double score = _sibOptions.Beta * klDiv / Math.Max(_sibOptions.Temperature, 1e-10);
 
                             if (score < bestDist)
                             {

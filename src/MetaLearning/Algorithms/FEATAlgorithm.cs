@@ -129,7 +129,7 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         int heads = _featOptions.NumTransformerHeads;
         int layers = _featOptions.NumTransformerLayers;
-        int dim = 64; // Feature dimension estimate
+        int dim = Math.Max(_featOptions.TransformerDim, 1);
 
         // Each layer needs: Q, K, V projections + output projection + layer norm
         int paramsPerLayer = heads * (dim * dim * 3) + dim * dim + dim * 2;
