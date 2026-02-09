@@ -548,38 +548,6 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
     /// <summary>
     /// Computes the element-wise average of a list of vectors.
     /// </summary>
-    /// <param name="vectors">The vectors to average.</param>
-    /// <returns>The element-wise average vector.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This takes multiple gradient vectors (one from each task)
-    /// and computes their average. This average represents the "consensus direction" that
-    /// all tasks agree the parameters should move.
-    /// </para>
-    /// </remarks>
-    private Vector<T> AverageVectors(List<Vector<T>> vectors)
-    {
-        if (vectors.Count == 0)
-        {
-            return new Vector<T>(0);
-        }
-
-        var result = new Vector<T>(vectors[0].Length);
-        foreach (var v in vectors)
-        {
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.Add(result[i], v[i]);
-            }
-        }
-
-        var scale = NumOps.FromDouble(1.0 / vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = NumOps.Multiply(result[i], scale);
-        }
-
-        return result;
-    }
 }
 
 /// <summary>

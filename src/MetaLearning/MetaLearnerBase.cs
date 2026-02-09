@@ -856,6 +856,29 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
     #region Helper Methods
 
     /// <summary>
+    /// Computes the element-wise average of a list of vectors.
+    /// </summary>
+    /// <param name="vectors">The vectors to average (must all be the same length).</param>
+    /// <returns>The element-wise average vector, or an empty vector if the list is empty.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Given multiple gradient vectors (one per task), this computes
+    /// the average gradient by summing all vectors element-wise and dividing by the count.
+    /// This is used to aggregate gradients across a batch of meta-learning tasks.</para>
+    /// </remarks>
+    protected Vector<T> AverageVectors(List<Vector<T>> vectors)
+    {
+        if (vectors.Count == 0) return new Vector<T>(0);
+        var result = new Vector<T>(vectors[0].Length);
+        foreach (var v in vectors)
+            for (int i = 0; i < result.Length; i++)
+                result[i] = NumOps.Add(result[i], v[i]);
+        var scale = NumOps.FromDouble(1.0 / vectors.Count);
+        for (int i = 0; i < result.Length; i++)
+            result[i] = NumOps.Multiply(result[i], scale);
+        return result;
+    }
+
+    /// <summary>
     /// Creates a TaskBatch from a list of MetaLearningTasks.
     /// </summary>
     protected TaskBatch<T, TInput, TOutput> CreateTaskBatch(

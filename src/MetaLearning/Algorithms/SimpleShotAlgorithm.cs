@@ -197,9 +197,29 @@ public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         // Normalize features
         var normalizedFeatures = NormalizeFeatures(supportFeatures);
 
+        // Compute modulation from normalized vs raw support features
+        double[]? modulationFactors = null;
+        if (supportFeatures != null && normalizedFeatures != null)
+        {
+            double sumRatio = 0;
+            int count = 0;
+            for (int i = 0; i < Math.Min(supportFeatures.Length, normalizedFeatures.Length); i++)
+            {
+                double rawVal = NumOps.ToDouble(supportFeatures[i]);
+                double adaptedVal = NumOps.ToDouble(normalizedFeatures[i]);
+                if (Math.Abs(rawVal) > 1e-10)
+                {
+                    sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
+                    count++;
+                }
+            }
+            if (count > 0)
+                modulationFactors = [sumRatio / count];
+        }
+
         return new SimpleShotModel<T, TInput, TOutput>(
             MetaModel, currentParams, normalizedFeatures, _featureMean,
-            _simpleShotOptions.NormalizationType, _simpleShotOptions.DistanceMetric);
+            _simpleShotOptions.NormalizationType, _simpleShotOptions.DistanceMetric, modulationFactors);
     }
 
     /// <summary>
@@ -305,18 +325,6 @@ public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         }
     }
 
-    private Vector<T> AverageVectors(List<Vector<T>> vectors)
-    {
-        if (vectors.Count == 0) return new Vector<T>(0);
-        var result = new Vector<T>(vectors[0].Length);
-        foreach (var v in vectors)
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.Add(result[i], v[i]);
-        var scale = NumOps.FromDouble(1.0 / vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-            result[i] = NumOps.Multiply(result[i], scale);
-        return result;
-    }
 }
 
 /// <summary>
@@ -330,14 +338,22 @@ public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
 /// It's fast and simple - just one forward pass plus a distance computation.
 /// </para>
 /// </remarks>
-internal class SimpleShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class SimpleShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _supportFeatures;
     private readonly Vector<T>? _featureMean;
     private readonly string _normalizationType;
     private readonly string _distanceMetric;
+    private readonly double[]? _modulationFactors;
+
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _supportFeatures;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -348,7 +364,8 @@ internal class SimpleShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
         Vector<T>? supportFeatures,
         Vector<T>? featureMean,
         string normalizationType,
-        string distanceMetric)
+        string distanceMetric,
+        double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
@@ -356,12 +373,24 @@ internal class SimpleShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
         _featureMean = featureMean;
         _normalizationType = normalizationType;
         _distanceMetric = distanceMetric;
+        _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        _model.SetParameters(_backboneParams);
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            var modulated = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+                modulated[i] = NumOps.Multiply(_backboneParams[i],
+                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            _model.SetParameters(modulated);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
         return _model.Predict(input);
     }
 

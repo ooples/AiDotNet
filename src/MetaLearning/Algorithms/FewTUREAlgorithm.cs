@@ -244,23 +244,22 @@ public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         // Compute uncertainty-weighted classification
         var uncertaintyWeights = ComputeUncertaintyWeights(supportFeatures, queryFeatures);
 
+        // Compute modulation from uncertainty weights (higher weight = more reliable)
+        double[]? modulationFactors = null;
+        if (uncertaintyWeights != null && uncertaintyWeights.Length > 0)
+        {
+            double sumAbs = 0;
+            for (int i = 0; i < uncertaintyWeights.Length; i++)
+                sumAbs += Math.Abs(NumOps.ToDouble(uncertaintyWeights[i]));
+            double meanAbs = sumAbs / uncertaintyWeights.Length;
+            modulationFactors = [0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0))];
+        }
+
         return new FewTUREModel<T, TInput, TOutput>(
-            MetaModel, currentParams, uncertaintyWeights, _fewTUREOptions.UncertaintyThreshold);
+            MetaModel, currentParams, uncertaintyWeights, _fewTUREOptions.UncertaintyThreshold, modulationFactors);
     }
 
 
-    private Vector<T> AverageVectors(List<Vector<T>> vectors)
-    {
-        if (vectors.Count == 0) return new Vector<T>(0);
-        var result = new Vector<T>(vectors[0].Length);
-        foreach (var v in vectors)
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.Add(result[i], v[i]);
-        var scale = NumOps.FromDouble(1.0 / vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-            result[i] = NumOps.Multiply(result[i], scale);
-        return result;
-    }
 }
 
 /// <summary>Adapted model wrapper for FewTURE with uncertainty-weighted prediction.</summary>
@@ -270,12 +269,20 @@ public class FewTUREAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 /// (e.g., background patches) contribute less to the final classification.
 /// </para>
 /// </remarks>
-internal class FewTUREModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class FewTUREModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _uncertaintyWeights;
     private readonly double _uncertaintyThreshold;
+    private readonly double[]? _modulationFactors;
+
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _uncertaintyWeights;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -284,18 +291,31 @@ internal class FewTUREModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
         IFullModel<T, TInput, TOutput> model,
         Vector<T> backboneParams,
         Vector<T>? uncertaintyWeights,
-        double threshold)
+        double threshold,
+        double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
         _uncertaintyWeights = uncertaintyWeights;
         _uncertaintyThreshold = threshold;
+        _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        _model.SetParameters(_backboneParams);
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            var modulated = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+                modulated[i] = NumOps.Multiply(_backboneParams[i],
+                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            _model.SetParameters(modulated);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
         return _model.Predict(input);
     }
 

@@ -305,18 +305,6 @@ public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             MetaModel, currentParams, propagatedSupport, propagatedQuery, modulationFactors);
     }
 
-    private Vector<T> AverageVectors(List<Vector<T>> vectors)
-    {
-        if (vectors.Count == 0) return new Vector<T>(0);
-        var result = new Vector<T>(vectors[0].Length);
-        foreach (var v in vectors)
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.Add(result[i], v[i]);
-        var scale = NumOps.FromDouble(1.0 / vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-            result[i] = NumOps.Multiply(result[i], scale);
-        return result;
-    }
 }
 
 /// <summary>Adapted model wrapper for EPNet with embedding propagation.</summary>

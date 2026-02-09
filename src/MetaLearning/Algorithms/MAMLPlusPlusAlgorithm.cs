@@ -408,35 +408,6 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <summary>
     /// Computes the element-wise average of a list of vectors.
     /// </summary>
-    /// <param name="vectors">Vectors to average.</param>
-    /// <returns>The averaged vector.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Takes gradient vectors from multiple tasks and computes
-    /// their average. This averaged gradient represents the consensus update direction
-    /// that should improve performance across all tasks.
-    /// </para>
-    /// </remarks>
-    private Vector<T> AverageVectors(List<Vector<T>> vectors)
-    {
-        if (vectors.Count == 0) return new Vector<T>(0);
-
-        var result = new Vector<T>(vectors[0].Length);
-        foreach (var v in vectors)
-        {
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.Add(result[i], v[i]);
-            }
-        }
-
-        var scale = NumOps.FromDouble(1.0 / vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = NumOps.Multiply(result[i], scale);
-        }
-
-        return result;
-    }
 }
 
 /// <summary>

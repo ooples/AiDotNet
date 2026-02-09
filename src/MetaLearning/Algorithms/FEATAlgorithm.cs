@@ -225,8 +225,28 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         var supportFeatures = ConvertToVector(supportPred);
         var adaptedPrototypes = supportFeatures != null ? AdaptPrototypes(supportFeatures) : null;
 
+        // Compute modulation factors from adapted vs raw prototypes
+        double[]? modulationFactors = null;
+        if (supportFeatures != null && adaptedPrototypes != null)
+        {
+            double sumRatio = 0;
+            int count = 0;
+            for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedPrototypes.Length); i++)
+            {
+                double rawVal = NumOps.ToDouble(supportFeatures[i]);
+                double adaptedVal = NumOps.ToDouble(adaptedPrototypes[i]);
+                if (Math.Abs(rawVal) > 1e-10)
+                {
+                    sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
+                    count++;
+                }
+            }
+            if (count > 0)
+                modulationFactors = [sumRatio / count];
+        }
+
         return new FEATModel<T, TInput, TOutput>(
-            MetaModel, currentParams, adaptedPrototypes, _featOptions.Temperature);
+            MetaModel, currentParams, adaptedPrototypes, _featOptions.Temperature, modulationFactors);
     }
 
     /// <summary>
@@ -324,18 +344,6 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         return adapted;
     }
 
-    private Vector<T> AverageVectors(List<Vector<T>> vectors)
-    {
-        if (vectors.Count == 0) return new Vector<T>(0);
-        var result = new Vector<T>(vectors[0].Length);
-        foreach (var v in vectors)
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.Add(result[i], v[i]);
-        var scale = NumOps.FromDouble(1.0 / vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-            result[i] = NumOps.Multiply(result[i], scale);
-        return result;
-    }
 }
 
 /// <summary>
@@ -347,12 +355,20 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 /// prototypes capture inter-class relationships for better discrimination.
 /// </para>
 /// </remarks>
-internal class FEATModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class FEATModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _adaptedPrototypes;
     private readonly double _temperature;
+    private readonly double[]? _modulationFactors;
+
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _adaptedPrototypes;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -361,18 +377,31 @@ internal class FEATModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
         IFullModel<T, TInput, TOutput> model,
         Vector<T> backboneParams,
         Vector<T>? adaptedPrototypes,
-        double temperature)
+        double temperature,
+        double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
         _adaptedPrototypes = adaptedPrototypes;
         _temperature = temperature;
+        _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        _model.SetParameters(_backboneParams);
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            var modulated = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+                modulated[i] = NumOps.Multiply(_backboneParams[i],
+                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            _model.SetParameters(modulated);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
         return _model.Predict(input);
     }
 

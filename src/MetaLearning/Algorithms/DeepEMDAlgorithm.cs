@@ -181,10 +181,22 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         var supportPred = MetaModel.Predict(task.SupportInput);
         var supportFeatures = ConvertToVector(supportPred);
 
+        // Compute modulation from temperature-scaled support features
+        double[]? modulationFactors = null;
+        if (supportFeatures != null && supportFeatures.Length > 0)
+        {
+            double sumAbs = 0;
+            for (int i = 0; i < supportFeatures.Length; i++)
+                sumAbs += Math.Abs(NumOps.ToDouble(supportFeatures[i]));
+            double meanAbs = sumAbs / supportFeatures.Length;
+            double tempScale = 1.0 / Math.Max(_deepEmdOptions.Temperature, 1e-6);
+            modulationFactors = [Math.Max(0.5, Math.Min(2.0, 0.5 + 0.5 * tempScale * meanAbs / (1.0 + meanAbs)))];
+        }
+
         return new DeepEMDModel<T, TInput, TOutput>(
             MetaModel, currentParams, supportFeatures,
             _deepEmdOptions.Temperature, _deepEmdOptions.SinkhornIterations,
-            _deepEmdOptions.SinkhornRegularization);
+            _deepEmdOptions.SinkhornRegularization, modulationFactors);
     }
 
     /// <summary>
@@ -295,18 +307,6 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         return emd;
     }
 
-    private Vector<T> AverageVectors(List<Vector<T>> vectors)
-    {
-        if (vectors.Count == 0) return new Vector<T>(0);
-        var result = new Vector<T>(vectors[0].Length);
-        foreach (var v in vectors)
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.Add(result[i], v[i]);
-        var scale = NumOps.FromDouble(1.0 / vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-            result[i] = NumOps.Multiply(result[i], scale);
-        return result;
-    }
 }
 
 /// <summary>
@@ -318,14 +318,22 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 /// stored support features. The class with the smallest EMD wins.
 /// </para>
 /// </remarks>
-internal class DeepEMDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class DeepEMDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _supportFeatures;
     private readonly double _temperature;
     private readonly int _sinkhornIterations;
     private readonly double _sinkhornRegularization;
+    private readonly double[]? _modulationFactors;
+
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _supportFeatures;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -336,7 +344,8 @@ internal class DeepEMDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
         Vector<T>? supportFeatures,
         double temperature,
         int sinkhornIterations,
-        double sinkhornRegularization)
+        double sinkhornRegularization,
+        double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
@@ -344,12 +353,24 @@ internal class DeepEMDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
         _temperature = temperature;
         _sinkhornIterations = sinkhornIterations;
         _sinkhornRegularization = sinkhornRegularization;
+        _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        _model.SetParameters(_backboneParams);
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            var modulated = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+                modulated[i] = NumOps.Multiply(_backboneParams[i],
+                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            _model.SetParameters(modulated);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
         return _model.Predict(input);
     }
 

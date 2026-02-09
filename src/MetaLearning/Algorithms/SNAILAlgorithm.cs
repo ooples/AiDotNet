@@ -309,8 +309,20 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         // Process through SNAIL to build task representation
         var taskRepresentation = ProcessSNAILBlocks(supportPred, default);
 
+        // Compute modulation from task representation magnitudes
+        double[]? modulationFactors = null;
+        if (taskRepresentation.Length > 0)
+        {
+            double sumAbs = 0;
+            for (int i = 0; i < taskRepresentation.Length; i++)
+                sumAbs += Math.Abs(NumOps.ToDouble(taskRepresentation[i]));
+            double meanAbs = sumAbs / taskRepresentation.Length;
+            modulationFactors = [0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0))];
+        }
+
         return new SNAILModel<T, TInput, TOutput>(
-            MetaModel, currentParams, _tcBlockParams, _attentionBlockParams, taskRepresentation);
+            MetaModel, currentParams, _tcBlockParams, _attentionBlockParams,
+            taskRepresentation, modulationFactors);
     }
 
     /// <summary>
@@ -540,23 +552,6 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         return output;
     }
 
-    /// <summary>
-    /// Averages a list of vectors element-wise.
-    /// </summary>
-    /// <param name="vectors">The vectors to average.</param>
-    /// <returns>The element-wise average vector.</returns>
-    private Vector<T> AverageVectors(List<Vector<T>> vectors)
-    {
-        if (vectors.Count == 0) return new Vector<T>(0);
-        var result = new Vector<T>(vectors[0].Length);
-        foreach (var v in vectors)
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.Add(result[i], v[i]);
-        var scale = NumOps.FromDouble(1.0 / vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-            result[i] = NumOps.Multiply(result[i], scale);
-        return result;
-    }
 }
 
 /// <summary>
@@ -572,43 +567,56 @@ public class SNAILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 /// based on the support examples it has already "read."
 /// </para>
 /// </remarks>
-internal class SNAILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class SNAILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly List<Vector<T>> _tcBlockParams;
     private readonly List<Vector<T>> _attentionBlockParams;
     private readonly Vector<T> _taskRepresentation;
+    private readonly double[]? _modulationFactors;
+
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _taskRepresentation;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
-    /// <summary>
-    /// Creates a new SNAIL adapted model.
-    /// </summary>
-    /// <param name="model">The base feature extractor model.</param>
-    /// <param name="backboneParams">The backbone parameters to use for prediction.</param>
-    /// <param name="tcBlockParams">Temporal convolution block parameters.</param>
-    /// <param name="attentionBlockParams">Attention block parameters.</param>
-    /// <param name="taskRepresentation">The pre-computed task representation from processing support set.</param>
     public SNAILModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> backboneParams,
         List<Vector<T>> tcBlockParams,
         List<Vector<T>> attentionBlockParams,
-        Vector<T> taskRepresentation)
+        Vector<T> taskRepresentation,
+        double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
         _tcBlockParams = tcBlockParams;
         _attentionBlockParams = attentionBlockParams;
         _taskRepresentation = taskRepresentation;
+        _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        _model.SetParameters(_backboneParams);
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            var modulated = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+                modulated[i] = NumOps.Multiply(_backboneParams[i],
+                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            _model.SetParameters(modulated);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
         return _model.Predict(input);
     }
 

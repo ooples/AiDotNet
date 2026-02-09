@@ -286,7 +286,18 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             ridgeWeights = ComputeRidgeWeights(supportFeatures, supportLabels);
         }
 
-        return new R2D2Model<T, TInput, TOutput>(MetaModel, currentParams, ridgeWeights, _lambda);
+        // Compute modulation from ridge weight magnitudes
+        double[]? modulationFactors = null;
+        if (ridgeWeights != null && ridgeWeights.Length > 0)
+        {
+            double sumAbs = 0;
+            for (int i = 0; i < ridgeWeights.Length; i++)
+                sumAbs += Math.Abs(NumOps.ToDouble(ridgeWeights[i]));
+            double meanAbs = sumAbs / ridgeWeights.Length;
+            modulationFactors = [0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0))];
+        }
+
+        return new R2D2Model<T, TInput, TOutput>(MetaModel, currentParams, ridgeWeights, _lambda, modulationFactors);
     }
 
     /// <summary>
@@ -568,30 +579,6 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         _lambda = Math.Max(1e-6, originalLambda - _r2d2Options.OuterLearningRate * lambdaGrad);
     }
 
-    /// <summary>
-    /// Computes the element-wise average of a list of vectors.
-    /// </summary>
-    private Vector<T> AverageVectors(List<Vector<T>> vectors)
-    {
-        if (vectors.Count == 0) return new Vector<T>(0);
-
-        var result = new Vector<T>(vectors[0].Length);
-        foreach (var v in vectors)
-        {
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.Add(result[i], v[i]);
-            }
-        }
-
-        var scale = NumOps.FromDouble(1.0 / vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = NumOps.Multiply(result[i], scale);
-        }
-
-        return result;
-    }
 }
 
 /// <summary>
@@ -607,52 +594,54 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 /// 2. Applies the ridge regression weights to classify
 /// </para>
 /// </remarks>
-internal class R2D2Model<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class R2D2Model<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _ridgeWeights;
     private readonly double _lambda;
+    private readonly double[]? _modulationFactors;
+
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _ridgeWeights;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
-    /// <summary>
-    /// Creates a new R2-D2 adapted model.
-    /// </summary>
-    /// <param name="model">The feature extractor model.</param>
-    /// <param name="backboneParams">The meta-learned backbone parameters.</param>
-    /// <param name="ridgeWeights">The task-specific ridge regression weights.</param>
-    /// <param name="lambda">The regularization parameter used.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Packages together:
-    /// - The feature extractor (shared across tasks)
-    /// - The ridge regression weights (specific to this task)
-    /// Together they form a complete classifier for the adapted task.
-    /// </para>
-    /// </remarks>
     public R2D2Model(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
-        Vector<T>? ridgeWeights, double lambda)
+        Vector<T>? ridgeWeights, double lambda, double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
         _ridgeWeights = ridgeWeights;
         _lambda = lambda;
+        _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        _model.SetParameters(_backboneParams);
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            var modulated = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+                modulated[i] = NumOps.Multiply(_backboneParams[i],
+                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            _model.SetParameters(modulated);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
         return _model.Predict(input);
     }
 
-    /// <summary>
-    /// Training is not supported on adapted R2-D2 models. Use R2D2Algorithm.MetaTrain instead.
-    /// </summary>
-    public void Train(TInput inputs, TOutput targets)
-    {
-    }
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) { }
 
     /// <inheritdoc/>
     public ModelMetadata<T> GetModelMetadata() => Metadata;

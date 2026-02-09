@@ -137,7 +137,7 @@ public class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         }
 
         // Update context module via SPSA
-        UpdateContextModule(taskBatch);
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _contextParams, _camlOptions.OuterLearningRate);
 
         _currentIteration++;
         return ComputeMean(losses);
@@ -200,50 +200,29 @@ public class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         // Apply context module to adapt prototypes
         var adaptedPrototypes = ApplyContextModule(supportFeatures);
 
-        return new CAMLModel<T, TInput, TOutput>(MetaModel, currentParams, adaptedPrototypes);
+        // Compute modulation factors from adapted vs raw prototypes
+        double[]? modulationFactors = null;
+        if (supportFeatures != null && adaptedPrototypes != null)
+        {
+            double sumRatio = 0;
+            int count = 0;
+            for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedPrototypes.Length); i++)
+            {
+                double rawVal = NumOps.ToDouble(supportFeatures[i]);
+                double adaptedVal = NumOps.ToDouble(adaptedPrototypes[i]);
+                if (Math.Abs(rawVal) > 1e-10)
+                {
+                    sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
+                    count++;
+                }
+            }
+            if (count > 0)
+                modulationFactors = [sumRatio / count];
+        }
+
+        return new CAMLModel<T, TInput, TOutput>(MetaModel, currentParams, adaptedPrototypes, modulationFactors);
     }
 
-    /// <summary>Updates context module parameters using SPSA gradient estimation.</summary>
-    private void UpdateContextModule(TaskBatch<T, TInput, TOutput> taskBatch)
-    {
-        double epsilon = 1e-5;
-        double lr = _camlOptions.OuterLearningRate;
-
-        var direction = new Vector<T>(_contextParams.Length);
-        for (int i = 0; i < direction.Length; i++)
-            direction[i] = NumOps.FromDouble(RandomGenerator.NextDouble() > 0.5 ? 1.0 : -1.0);
-
-        double baseLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        baseLoss /= taskBatch.Tasks.Length;
-
-        for (int i = 0; i < _contextParams.Length; i++)
-            _contextParams[i] = NumOps.Add(_contextParams[i], NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon)));
-
-        double perturbedLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        perturbedLoss /= taskBatch.Tasks.Length;
-
-        double directionalGrad = (perturbedLoss - baseLoss) / epsilon;
-        for (int i = 0; i < _contextParams.Length; i++)
-            _contextParams[i] = NumOps.Subtract(_contextParams[i],
-                NumOps.Multiply(direction[i], NumOps.FromDouble(epsilon + lr * directionalGrad)));
-    }
-
-    private Vector<T> AverageVectors(List<Vector<T>> vectors)
-    {
-        if (vectors.Count == 0) return new Vector<T>(0);
-        var result = new Vector<T>(vectors[0].Length);
-        foreach (var v in vectors)
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.Add(result[i], v[i]);
-        var scale = NumOps.FromDouble(1.0 / vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-            result[i] = NumOps.Multiply(result[i], scale);
-        return result;
-    }
 }
 
 /// <summary>Adapted model wrapper for CAML with context-adapted prototypes.</summary>
@@ -253,26 +232,47 @@ public class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 /// and the context module adjusts prototypes based on the specific task context.
 /// </para>
 /// </remarks>
-internal class CAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class CAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _adaptedPrototypes;
+    private readonly double[]? _modulationFactors;
+
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _adaptedPrototypes;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
-    public CAMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams, Vector<T>? adaptedPrototypes)
+    public CAMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
+        Vector<T>? adaptedPrototypes, double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
         _adaptedPrototypes = adaptedPrototypes;
+        _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        _model.SetParameters(_backboneParams);
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            var modulated = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+                modulated[i] = NumOps.Multiply(_backboneParams[i],
+                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            _model.SetParameters(modulated);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
         return _model.Predict(input);
     }
 

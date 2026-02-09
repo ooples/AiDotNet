@@ -239,7 +239,18 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         var supportPred = MetaModel.Predict(task.SupportInput);
         var classifierWeights = AmortizeClassifier(supportPred);
 
-        return new VERSAModel<T, TInput, TOutput>(MetaModel, currentParams, classifierWeights);
+        // Compute modulation from classifier weight magnitudes
+        double[]? modulationFactors = null;
+        if (classifierWeights.Length > 0)
+        {
+            double sumAbs = 0;
+            for (int i = 0; i < classifierWeights.Length; i++)
+                sumAbs += Math.Abs(NumOps.ToDouble(classifierWeights[i]));
+            double meanAbs = sumAbs / classifierWeights.Length;
+            modulationFactors = [0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0))];
+        }
+
+        return new VERSAModel<T, TInput, TOutput>(MetaModel, currentParams, classifierWeights, modulationFactors);
     }
 
     /// <summary>
@@ -307,18 +318,6 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         return current;
     }
 
-    private Vector<T> AverageVectors(List<Vector<T>> vectors)
-    {
-        if (vectors.Count == 0) return new Vector<T>(0);
-        var result = new Vector<T>(vectors[0].Length);
-        foreach (var v in vectors)
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.Add(result[i], v[i]);
-        var scale = NumOps.FromDouble(1.0 / vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-            result[i] = NumOps.Multiply(result[i], scale);
-        return result;
-    }
 }
 
 /// <summary>
@@ -329,26 +328,47 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 /// with classifier weights that were instantly produced by the amortization network.
 /// </para>
 /// </remarks>
-internal class VERSAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal class VERSAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T> _classifierWeights;
+    private readonly double[]? _modulationFactors;
+
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _classifierWeights;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
-    public VERSAModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams, Vector<T> classifierWeights)
+    public VERSAModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
+        Vector<T> classifierWeights, double[]? modulationFactors)
     {
         _model = model;
         _backboneParams = backboneParams;
         _classifierWeights = classifierWeights;
+        _modulationFactors = modulationFactors;
     }
 
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        _model.SetParameters(_backboneParams);
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            var modulated = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+                modulated[i] = NumOps.Multiply(_backboneParams[i],
+                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            _model.SetParameters(modulated);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
         return _model.Predict(input);
     }
 
