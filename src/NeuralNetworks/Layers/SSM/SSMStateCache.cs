@@ -276,6 +276,27 @@ public class SSMStateCache<T>
     /// <returns>True if a conv buffer is cached for this layer.</returns>
     public bool HasConvBuffer(int layerIndex) => _convBuffers.ContainsKey(layerIndex);
 
+    /// <summary>
+    /// Gets all layer indices that have cached SSM states.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Returns a list of which layers currently have saved hidden states.
+    /// Useful when you need to iterate over all cached states, for example when migrating states
+    /// to a compressed cache.</para>
+    /// </remarks>
+    /// <returns>An enumerable of layer indices with cached SSM states.</returns>
+    public IEnumerable<int> GetSSMStateLayerIndices() => _ssmStates.Keys;
+
+    /// <summary>
+    /// Gets all layer indices that have cached conv buffers.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Returns a list of which layers currently have saved convolution buffers.
+    /// Useful when iterating over all cached conv states.</para>
+    /// </remarks>
+    /// <returns>An enumerable of layer indices with cached conv buffers.</returns>
+    public IEnumerable<int> GetConvBufferLayerIndices() => _convBuffers.Keys;
+
     private Tensor<T> CompressState(Tensor<T> state)
     {
         // Simple min-max quantization for state compression

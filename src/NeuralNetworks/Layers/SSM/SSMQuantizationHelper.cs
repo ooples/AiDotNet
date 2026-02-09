@@ -104,8 +104,31 @@ public static class SSMQuantizationHelper<T>
         if (bitWidth <= 0 || bitWidth > 32)
             throw new ArgumentException($"Bit width ({bitWidth}) must be between 1 and 32.", nameof(bitWidth));
 
-        // Create a new cache with compression enabled
-        return new SSMStateCache<T>(enableCompression: true, compressionBitWidth: bitWidth);
+        // Create a new cache with compression enabled and migrate existing states
+        var compressed = new SSMStateCache<T>(enableCompression: true, compressionBitWidth: bitWidth);
+
+        // Migrate all existing SSM states into the compressed cache
+        // The compressed cache's CacheSSMState will apply quantization automatically
+        foreach (int layerIndex in cache.GetSSMStateLayerIndices().ToList())
+        {
+            var state = cache.GetSSMState(layerIndex);
+            if (state != null)
+            {
+                compressed.CacheSSMState(layerIndex, state);
+            }
+        }
+
+        // Migrate all existing conv buffers
+        foreach (int layerIndex in cache.GetConvBufferLayerIndices().ToList())
+        {
+            var buffer = cache.GetConvBuffer(layerIndex);
+            if (buffer != null)
+            {
+                compressed.CacheConvBuffer(layerIndex, buffer);
+            }
+        }
+
+        return compressed;
     }
 
     /// <summary>
