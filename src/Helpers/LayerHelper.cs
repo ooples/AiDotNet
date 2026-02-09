@@ -13838,6 +13838,7 @@ public static class LayerHelper<T>
     /// <param name="expandFactor">The expansion factor. Default: 2.</param>
     /// <param name="numLayers">The number of Mamba layers. Default: 4.</param>
     /// <param name="dropout">The dropout rate for regularization. Default: 0.1.</param>
+    /// <param name="convKernelSize">The kernel size for the depthwise Conv1D in each MambaBlock. Default: 4.</param>
     /// <returns>An enumerable of layers configured for Mamba.</returns>
     /// <remarks>
     /// <para>
@@ -13865,7 +13866,8 @@ public static class LayerHelper<T>
         int stateDim = 16,
         int expandFactor = 2,
         int numLayers = 4,
-        double dropout = 0.1)
+        double dropout = 0.1,
+        int convKernelSize = 4)
     {
         // === Input Embedding ===
         // Projects each timestep from numFeatures to modelDim.
@@ -13887,7 +13889,7 @@ public static class LayerHelper<T>
                 modelDimension: modelDim,
                 stateDimension: stateDim,
                 expandFactor: expandFactor,
-                convKernelSize: 4);
+                convKernelSize: convKernelSize);
         }
 
         // === Output Projection ===

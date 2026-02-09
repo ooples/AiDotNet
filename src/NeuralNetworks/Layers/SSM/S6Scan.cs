@@ -67,11 +67,22 @@ public static class S6Scan<T>
     /// <param name="seqLen">Length of each sequence.</param>
     /// <param name="innerDimension">Inner dimension of the SSM.</param>
     /// <param name="stateDimension">State dimension of the SSM.</param>
+    /// <param name="initialState">Optional initial hidden state [batch, innerDim, stateDim]. If null, starts from zeros.</param>
     /// <returns>A tuple of (output [batch, seqLen, innerDim], hiddenStates [batch, seqLen+1, innerDim, stateDim]).</returns>
     public static (Tensor<T> Output, Tensor<T> HiddenStates) SequentialScanForward(
         Tensor<T> x, Tensor<T> delta, Tensor<T> aLog, Tensor<T> b, Tensor<T> c, Tensor<T> dParam,
-        int batchSize, int seqLen, int innerDimension, int stateDimension)
+        int batchSize, int seqLen, int innerDimension, int stateDimension,
+        Tensor<T>? initialState = null)
     {
+        if (x.Rank != 3 || x.Shape[0] != batchSize || x.Shape[1] != seqLen || x.Shape[2] != innerDimension)
+            throw new ArgumentException($"x must be [batch={batchSize}, seqLen={seqLen}, innerDim={innerDimension}], got shape [{string.Join(",", x.Shape)}].");
+        if (delta.Rank != 3 || delta.Shape[0] != batchSize || delta.Shape[1] != seqLen)
+            throw new ArgumentException($"delta shape mismatch: expected [batch={batchSize}, seqLen={seqLen}, ...], got [{string.Join(",", delta.Shape)}].");
+        if (b.Rank != 3 || b.Shape[0] != batchSize || b.Shape[1] != seqLen || b.Shape[2] != stateDimension)
+            throw new ArgumentException($"b must be [batch={batchSize}, seqLen={seqLen}, stateDim={stateDimension}], got [{string.Join(",", b.Shape)}].");
+        if (c.Rank != 3 || c.Shape[0] != batchSize || c.Shape[1] != seqLen || c.Shape[2] != stateDimension)
+            throw new ArgumentException($"c must be [batch={batchSize}, seqLen={seqLen}, stateDim={stateDimension}], got [{string.Join(",", c.Shape)}].");
+
         var output = new Tensor<T>(new[] { batchSize, seqLen, innerDimension });
 
         // Pre-compute A = -exp(A_log) as tensor: [innerDim, stateDim]
@@ -82,11 +93,27 @@ public static class S6Scan<T>
         // D parameter for skip connection: [1, innerDim] for broadcasting
         var D2D = dParam.Reshape(1, innerDimension);
 
-        // Hidden state: [batch, innerDim, stateDim] - initialized to zeros
-        var h = new Tensor<T>(new[] { batchSize, innerDimension, stateDimension });
+        // Hidden state: [batch, innerDim, stateDim] - use initial state or zeros
+        Tensor<T> h;
+        if (initialState != null)
+        {
+            // Copy initial state so we don't mutate the caller's tensor
+            h = new Tensor<T>(new[] { batchSize, innerDimension, stateDimension });
+            h = Engine.TensorAdd(h, initialState);
+        }
+        else
+        {
+            h = new Tensor<T>(new[] { batchSize, innerDimension, stateDimension });
+        }
 
         // Store all hidden states for backward pass: [batch, seqLen+1, innerDim, stateDim]
         var allHiddenStates = new Tensor<T>(new[] { batchSize, seqLen + 1, innerDimension, stateDimension });
+
+        // Store initial state at index 0
+        if (initialState != null)
+        {
+            allHiddenStates.SetSlice(1, 0, initialState);
+        }
 
         // Time loop - only sequential dependency
         for (int t = 0; t < seqLen; t++)
@@ -160,6 +187,11 @@ public static class S6Scan<T>
             Tensor<T> b, Tensor<T> c, Tensor<T> dParam, Tensor<T> hiddenStates,
             int batchSize, int seqLen, int innerDimension, int stateDimension)
     {
+        if (dOutput.Rank != 3 || dOutput.Shape[0] != batchSize || dOutput.Shape[1] != seqLen || dOutput.Shape[2] != innerDimension)
+            throw new ArgumentException($"dOutput must be [batch={batchSize}, seqLen={seqLen}, innerDim={innerDimension}], got [{string.Join(",", dOutput.Shape)}].");
+        if (hiddenStates.Rank != 4 || hiddenStates.Shape[0] != batchSize || hiddenStates.Shape[1] != seqLen + 1)
+            throw new ArgumentException($"hiddenStates must be [batch={batchSize}, seqLen+1={seqLen + 1}, ...], got [{string.Join(",", hiddenStates.Shape)}].");
+
         var dX = new Tensor<T>(new[] { batchSize, seqLen, innerDimension });
         var dDelta = new Tensor<T>(new[] { batchSize, seqLen, innerDimension });
         var dB = new Tensor<T>(new[] { batchSize, seqLen, stateDimension });
@@ -298,6 +330,11 @@ public static class S6Scan<T>
         Tensor<T> x, Tensor<T> delta, Tensor<T> aLog, Tensor<T> b, Tensor<T> c, Tensor<T> dParam,
         int batchSize, int seqLen, int innerDimension, int stateDimension)
     {
+        if (x.Rank != 3 || x.Shape[0] != batchSize || x.Shape[1] != seqLen || x.Shape[2] != innerDimension)
+            throw new ArgumentException($"x must be [batch={batchSize}, seqLen={seqLen}, innerDim={innerDimension}], got [{string.Join(",", x.Shape)}].");
+        if (b.Rank != 3 || b.Shape[0] != batchSize || b.Shape[1] != seqLen || b.Shape[2] != stateDimension)
+            throw new ArgumentException($"b must be [batch={batchSize}, seqLen={seqLen}, stateDim={stateDimension}], got [{string.Join(",", b.Shape)}].");
+
         // Pre-compute A = -exp(A_log): [innerDim, stateDim]
         var negA = Engine.TensorNegate(Engine.TensorExp(aLog));
         var negA3D = Engine.TensorExpandDims(negA, 0);  // [1, innerDim, stateDim]

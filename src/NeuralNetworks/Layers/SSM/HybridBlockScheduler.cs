@@ -683,15 +683,16 @@ public class HybridBlockScheduler<T> : LayerBase<T>
         var blocks = new ILayer<T>[numLayers];
         var isAttention = new bool[numLayers];
 
-        // Create ONE shared attention layer (Zamba's key innovation)
-        var sharedAttention = new GatedLinearAttentionLayer<T>(sequenceLength, modelDimension, numAttentionHeads);
-
+        // Zamba uses independent attention instances at each attention position.
+        // Each instance gets its own cached activations for correct backward pass.
+        // True weight-tying (shared parameter tensors) would require explicit parameter
+        // synchronization during updates, which can be added as an optimization later.
         for (int i = 0; i < numLayers; i++)
         {
             if ((i + 1) % attentionFrequency == 0)
             {
-                // Shared attention layer (same instance reused)
-                blocks[i] = sharedAttention;
+                // Independent attention layer per position (avoids cache corruption during backward)
+                blocks[i] = new GatedLinearAttentionLayer<T>(sequenceLength, modelDimension, numAttentionHeads);
                 isAttention[i] = true;
             }
             else

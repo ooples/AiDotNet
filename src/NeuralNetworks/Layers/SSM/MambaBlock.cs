@@ -99,6 +99,7 @@ public class MambaBlock<T> : LayerBase<T>
     private Tensor<T>? _lastB;
     private Tensor<T>? _lastC;
     private Tensor<T>? _lastHiddenStates;
+    private Tensor<T>? _initialHiddenState;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -388,8 +389,10 @@ public class MambaBlock<T> : LayerBase<T>
         // Step 6: Selective scan (core SSM computation) - delegated to S6Scan
         var (scanOutput, hiddenStatesResult) = S6Scan<T>.SequentialScanForward(
             siluOutput, delta, _aLog, bParam, cParam, _dParam,
-            batchSize, seqLen, _innerDimension, _stateDimension);
+            batchSize, seqLen, _innerDimension, _stateDimension,
+            _initialHiddenState);
         _lastHiddenStates = hiddenStatesResult;
+        _initialHiddenState = null; // consumed
         _lastScanOutput = scanOutput;
 
         // Step 7: Output gating: y = scan_output * SiLU(z) via Engine
@@ -993,4 +996,23 @@ public class MambaBlock<T> : LayerBase<T>
     /// </remarks>
     /// <returns>The hidden states tensor, or null if no forward pass has been performed.</returns>
     public Tensor<T>? GetHiddenState() => _lastHiddenStates;
+
+    /// <summary>
+    /// Sets the initial hidden state for the next forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When set, the next call to <see cref="Forward"/> will start from this state instead of zeros.
+    /// The state is consumed (reset to null) after one forward pass. Shape must be
+    /// [batch, innerDim, stateDim].
+    /// </para>
+    /// <para><b>For Beginners:</b> This restores the model's "memory" from a previous step,
+    /// allowing autoregressive generation to continue from where it left off instead of
+    /// starting fresh each time.</para>
+    /// </remarks>
+    /// <param name="state">The hidden state tensor [batch, innerDim, stateDim].</param>
+    public void SetHiddenState(Tensor<T> state)
+    {
+        _initialHiddenState = state;
+    }
 }

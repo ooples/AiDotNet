@@ -182,11 +182,11 @@ public class VisionMambaModelTests
     }
 
     [Fact]
-    public void SupportsTraining_ReturnsTrue()
+    public void SupportsTraining_ReturnsFalse_UntilFullBackwardImplemented()
     {
         var model = new VisionMambaModel<float>(
             16, 16, 4, 1, modelDimension: 16, numLayers: 2, numClasses: 3, stateDimension: 4);
-        Assert.True(model.SupportsTraining);
+        Assert.False(model.SupportsTraining);
     }
 
     [Fact]

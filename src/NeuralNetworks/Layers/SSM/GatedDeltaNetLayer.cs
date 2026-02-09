@@ -98,6 +98,8 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
     private Tensor<T>? _lastAlpha;
     private Tensor<T>? _lastGate;
     private Tensor<T>? _lastStates;
+    private Tensor<T>? _lastSiluConv;
+    private Tensor<T>? _lastDeltaRuleOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -261,7 +263,8 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
         // Step 1: Short convolution
         var convOutput = DepthwiseConv1DForward(input3D, batchSize, seqLen);
         var siluConv = Engine.Swish(convOutput);
-        _lastConvOutput = siluConv;
+        _lastConvOutput = convOutput;
+        _lastSiluConv = siluConv;
 
         // Step 2: Q, K, V projections
         var siluFlat = siluConv.Reshape(batchSize * seqLen, _modelDimension);
@@ -293,6 +296,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
 
         // Step 4: Delta rule recurrence per head
         var output = DeltaRuleForward(q, k, v, alpha, beta, batchSize, seqLen);
+        _lastDeltaRuleOutput = output;
 
         // Step 5: Gated output
         var gatedOutput = Engine.TensorMultiply(output, gate);
@@ -398,6 +402,13 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
                     }
                 }
             }
+
+            // Save state snapshot for backward pass
+            for (int bi = 0; bi < batchSize; bi++)
+                for (int hi2 = 0; hi2 < _numHeads; hi2++)
+                    for (int di = 0; di < _headDimension; di++)
+                        for (int ki = 0; ki < _headDimension; ki++)
+                            allStates[new[] { bi, t + 1, hi2, di, ki }] = state[new[] { bi, hi2, di, ki }];
         }
 
         _lastStates = allStates;
@@ -444,7 +455,10 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null)
+        if (_lastInput == null || _lastOutput == null || _lastSiluConv == null ||
+            _lastQuery == null || _lastKey == null || _lastValue == null ||
+            _lastAlpha == null || _lastBeta == null || _lastGate == null ||
+            _lastDeltaRuleOutput == null || _lastConvOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
@@ -471,21 +485,198 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
         _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
         _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
 
-        // Output projection backward
+        // Step 6 backward: output projection
         var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
+        var gatedFlat = Engine.TensorMultiply(_lastDeltaRuleOutput, _lastGate)
+            .Reshape(batchSize * seqLen, _modelDimension);
+        _outputProjectionWeightsGradient = Engine.TensorMatMul(gatedFlat.Transpose([1, 0]), gradFlat);
+
         var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
             .Reshape(batchSize, seqLen, _modelDimension);
 
-        // Gate backward
-        var dDelta = Engine.TensorMultiply(dGated, _lastGate!);
+        // Step 5 backward: gating - output = deltaRuleOut * gate
+        var dDeltaRuleOut = Engine.TensorMultiply(dGated, _lastGate);
+        var dGateSwish = Engine.TensorMultiply(dGated, _lastDeltaRuleOutput);
 
-        // Propagate through Q, K, V projections (simplified)
-        var dDeltaFlat = dDelta.Reshape(batchSize * seqLen, _modelDimension);
-        var dConvOutput = Engine.TensorMatMul(dDeltaFlat, _queryWeights.Transpose([1, 0]));
+        // Gate uses Swish, derivative: swish(x) + sigmoid(x) * (1 - swish(x))
+        var dGateRaw = Engine.TensorMultiply(dGateSwish, ComputeSiLUDerivative(_lastConvOutput));
 
-        // Conv backward through SiLU (approximate)
-        var dConv3D = dConvOutput.Reshape(batchSize, seqLen, _modelDimension);
-        var dInput = DepthwiseConv1DBackward(dConv3D, _lastInput, batchSize, seqLen);
+        // Gate weight gradients
+        var siluFlat = _lastSiluConv.Reshape(batchSize * seqLen, _modelDimension);
+        var dGateRawFlat = dGateRaw.Reshape(batchSize * seqLen, _modelDimension);
+        _outputGateWeightsGradient = Engine.TensorMatMul(siluFlat.Transpose([1, 0]), dGateRawFlat);
+        _outputGateBiasGradient = Engine.ReduceSum(dGateRaw, new int[] { 0, 1 });
+
+        // Accumulate SiLU input gradient from gate path
+        var dSiluFromGate = Engine.TensorMatMul(dGateRawFlat, _outputGateWeights.Transpose([1, 0]));
+
+        // Step 4 backward: delta rule recurrence
+        var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dAlpha = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+        var dBeta = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
+
+        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        var dState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+
+        for (int t = seqLen - 1; t >= 0; t--)
+        {
+            for (int hi = 0; hi < _numHeads; hi++)
+            {
+                int dimStart = hi * _headDimension;
+
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    T alphaVal = _lastAlpha[new[] { bi, t, hi }];
+                    T betaVal = _lastBeta[new[] { bi, t, hi }];
+
+                    // Output: O = S * Q, dS += dO * Q^T, dQ += S^T * dO
+                    for (int di = 0; di < _headDimension; di++)
+                    {
+                        int flatDi = dimStart + di;
+                        T dO = dDeltaRuleOut[new[] { bi, t, flatDi }];
+
+                        for (int ki = 0; ki < _headDimension; ki++)
+                        {
+                            int flatKi = dimStart + ki;
+                            T qVal = _lastQuery[new[] { bi, t, flatKi }];
+                            T sVal = _lastStates != null ? _lastStates[new[] { bi, t + 1, hi, di, ki }] : NumOps.Zero;
+
+                            dState[new[] { bi, hi, di, ki }] = NumOps.Add(
+                                dState[new[] { bi, hi, di, ki }],
+                                NumOps.Multiply(dO, qVal));
+
+                            dQ[new[] { bi, t, flatKi }] = NumOps.Add(
+                                dQ[new[] { bi, t, flatKi }],
+                                NumOps.Multiply(dO, sVal));
+                        }
+                    }
+
+                    // State update: S = alpha * S_prev + beta * delta * K^T
+                    // dS_prev = alpha * dS, dAlpha += dS * S_prev
+                    // dBeta += dS * delta * K^T, dDelta += beta * dS * K, dK += beta * delta^T * dS
+                    for (int di = 0; di < _headDimension; di++)
+                    {
+                        int flatDi = dimStart + di;
+                        T vVal = _lastValue[new[] { bi, t, flatDi }];
+
+                        // Recompute delta[di] = v[di] - (S_prev * k)[di]
+                        T sK_di = NumOps.Zero;
+                        for (int ki2 = 0; ki2 < _headDimension; ki2++)
+                        {
+                            int flatKi2 = dimStart + ki2;
+                            T kVal2 = NumOps.Multiply(_lastKey[new[] { bi, t, flatKi2 }], keyScale);
+                            T sPrev = _lastStates != null ? _lastStates[new[] { bi, t, hi, di, ki2 }] : NumOps.Zero;
+                            sK_di = NumOps.Add(sK_di, NumOps.Multiply(sPrev, kVal2));
+                        }
+                        T deltaDi = NumOps.Subtract(vVal, sK_di);
+
+                        for (int ki = 0; ki < _headDimension; ki++)
+                        {
+                            int flatKi = dimStart + ki;
+                            T kVal = NumOps.Multiply(_lastKey[new[] { bi, t, flatKi }], keyScale);
+                            T dS = dState[new[] { bi, hi, di, ki }];
+                            T sPrev = _lastStates != null ? _lastStates[new[] { bi, t, hi, di, ki }] : NumOps.Zero;
+
+                            // dAlpha
+                            dAlpha[new[] { bi, t, hi }] = NumOps.Add(
+                                dAlpha[new[] { bi, t, hi }],
+                                NumOps.Multiply(dS, sPrev));
+
+                            // dBeta
+                            dBeta[new[] { bi, t, hi }] = NumOps.Add(
+                                dBeta[new[] { bi, t, hi }],
+                                NumOps.Multiply(dS, NumOps.Multiply(deltaDi, kVal)));
+
+                            // dV from delta = v - S*k
+                            dV[new[] { bi, t, flatDi }] = NumOps.Add(
+                                dV[new[] { bi, t, flatDi }],
+                                NumOps.Multiply(NumOps.Multiply(betaVal, dS), kVal));
+
+                            // dK
+                            dK[new[] { bi, t, flatKi }] = NumOps.Add(
+                                dK[new[] { bi, t, flatKi }],
+                                NumOps.Multiply(NumOps.Multiply(betaVal, deltaDi), dS));
+
+                            // Propagate dState to previous timestep
+                            dState[new[] { bi, hi, di, ki }] = NumOps.Multiply(alphaVal, dS);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Steps 3,2 backward: gate and projection weight gradients
+        // Alpha/Beta through sigmoid derivative
+        var alphaSigDeriv = Engine.TensorMultiply(_lastAlpha,
+            Engine.TensorSubtract(
+                CreateOnesLike(_lastAlpha), _lastAlpha));
+        var dAlphaRaw = Engine.TensorMultiply(dAlpha, alphaSigDeriv);
+
+        var betaSigDeriv = Engine.TensorMultiply(_lastBeta,
+            Engine.TensorSubtract(
+                CreateOnesLike(_lastBeta), _lastBeta));
+        var dBetaRaw = Engine.TensorMultiply(dBeta, betaSigDeriv);
+
+        // Gate weight gradients
+        var dAlphaFlat = dAlphaRaw.Reshape(batchSize * seqLen, _numHeads);
+        _alphaWeightsGradient = Engine.TensorMatMul(siluFlat.Transpose([1, 0]), dAlphaFlat);
+        _alphaBiasGradient = Engine.ReduceSum(dAlphaRaw, new int[] { 0, 1 });
+
+        var dBetaFlat = dBetaRaw.Reshape(batchSize * seqLen, _numHeads);
+        _betaWeightsGradient = Engine.TensorMatMul(siluFlat.Transpose([1, 0]), dBetaFlat);
+        _betaBiasGradient = Engine.ReduceSum(dBetaRaw, new int[] { 0, 1 });
+
+        // Q, K, V weight gradients
+        var dQFlat = dQ.Reshape(batchSize * seqLen, _modelDimension);
+        var dKFlat = dK.Reshape(batchSize * seqLen, _modelDimension);
+        var dVFlat = dV.Reshape(batchSize * seqLen, _modelDimension);
+
+        _queryWeightsGradient = Engine.TensorMatMul(siluFlat.Transpose([1, 0]), dQFlat);
+        _keyWeightsGradient = Engine.TensorMatMul(siluFlat.Transpose([1, 0]),
+            Engine.TensorMultiplyScalar(dKFlat, keyScale));
+        _valueWeightsGradient = Engine.TensorMatMul(siluFlat.Transpose([1, 0]), dVFlat);
+
+        // SiLU input gradient from all projection paths
+        var dSiluTotal = Engine.TensorMatMul(dQFlat, _queryWeights.Transpose([1, 0]));
+        dSiluTotal = Engine.TensorAdd(dSiluTotal,
+            Engine.TensorMatMul(Engine.TensorMultiplyScalar(dKFlat, keyScale), _keyWeights.Transpose([1, 0])));
+        dSiluTotal = Engine.TensorAdd(dSiluTotal,
+            Engine.TensorMatMul(dVFlat, _valueWeights.Transpose([1, 0])));
+        dSiluTotal = Engine.TensorAdd(dSiluTotal,
+            Engine.TensorMatMul(dAlphaFlat, _alphaWeights.Transpose([1, 0])));
+        dSiluTotal = Engine.TensorAdd(dSiluTotal,
+            Engine.TensorMatMul(dBetaFlat, _betaWeights.Transpose([1, 0])));
+        dSiluTotal = Engine.TensorAdd(dSiluTotal, dSiluFromGate);
+
+        // SiLU backward
+        var dSilu3D = dSiluTotal.Reshape(batchSize, seqLen, _modelDimension);
+        var dConv = Engine.TensorMultiply(dSilu3D, ComputeSiLUDerivative(_lastConvOutput));
+
+        // Conv1D backward and weight gradients
+        var dInput = DepthwiseConv1DBackward(dConv, _lastInput, batchSize, seqLen);
+
+        // Conv weight gradients
+        for (int ki = 0; ki < _convKernelSize; ki++)
+        {
+            for (int t = ki; t < seqLen; t++)
+            {
+                var x_src = _lastInput.GetSliceAlongDimension(t - ki, 1);
+                var dOut_t = dConv.GetSliceAlongDimension(t, 1);
+                // Accumulate: dW[d, ki] += sum_batch(x_src[b,d] * dOut[b,d])
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    for (int d = 0; d < _modelDimension; d++)
+                    {
+                        _convWeightsGradient[new[] { d, ki }] = NumOps.Add(
+                            _convWeightsGradient[new[] { d, ki }],
+                            NumOps.Multiply(x_src[new[] { bi, d }], dOut_t[new[] { bi, d }]));
+                    }
+                }
+            }
+        }
+        _convBiasGradient = Engine.ReduceSum(dConv, new int[] { 0, 1 });
 
         if (_originalInputShape != null && _originalInputShape.Length == 2)
             return dInput.Reshape(seqLen, _modelDimension);
@@ -494,6 +685,27 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
             return dInput.Reshape(_originalInputShape);
 
         return dInput;
+    }
+
+    private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
+    {
+        // SiLU(x) = x * sigmoid(x)
+        // SiLU'(x) = sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x))
+        //          = sigmoid(x) * (1 + x * (1 - sigmoid(x)))
+        var sig = Engine.Sigmoid(x);
+        var ones = new Tensor<T>(x.Shape);
+        for (int i = 0; i < ones.Length; i++) ones[i] = NumOps.One;
+        var oneMinusSig = Engine.TensorSubtract(ones, sig);
+        var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
+        var onePlusXSig = Engine.TensorAdd(ones, xTimesOneMinusSig);
+        return Engine.TensorMultiply(sig, onePlusXSig);
+    }
+
+    private Tensor<T> CreateOnesLike(Tensor<T> template)
+    {
+        var ones = new Tensor<T>(template.Shape);
+        for (int i = 0; i < ones.Length; i++) ones[i] = NumOps.One;
+        return ones;
     }
 
     private Tensor<T> DepthwiseConv1DBackward(
@@ -597,6 +809,8 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
         _lastAlpha = null;
         _lastGate = null;
         _lastStates = null;
+        _lastSiluConv = null;
+        _lastDeltaRuleOutput = null;
         _originalInputShape = null;
         _convWeightsGradient = null;
         _convBiasGradient = null;
@@ -616,7 +830,7 @@ public class GatedDeltaNetLayer<T> : LayerBase<T>
     #endregion
 
     /// <inheritdoc />
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc />
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

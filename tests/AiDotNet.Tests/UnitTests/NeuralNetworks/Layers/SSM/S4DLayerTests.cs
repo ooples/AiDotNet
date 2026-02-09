@@ -203,10 +203,10 @@ public class S4DLayerTests
     }
 
     [Fact]
-    public void SupportsTraining_ReturnsTrue()
+    public void SupportsTraining_ReturnsFalse_UntilFullBackwardImplemented()
     {
         var layer = new S4DLayer<float>(4, 32, 8);
-        Assert.True(layer.SupportsTraining);
+        Assert.False(layer.SupportsTraining);
     }
 
     [Fact]

@@ -124,7 +124,12 @@ public class RWKVLayer<T> : LayerBase<T>
     private Tensor<T>? _normBeta2Gradient;
 
     /// <inheritdoc />
-    public override bool SupportsTraining => true;
+    /// <summary>
+    /// Training is not yet supported. The backward pass is a placeholder that only passes through
+    /// activation gradients. Full gradient computation for time-mix, decay, projections, and norms
+    /// is required before enabling training.
+    /// </summary>
+    public override bool SupportsTraining => false;
 
     /// <summary>
     /// Gets the model dimension.
@@ -724,7 +729,7 @@ public class RWKVLayer<T> : LayerBase<T>
     #endregion
 
     /// <inheritdoc />
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc />
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

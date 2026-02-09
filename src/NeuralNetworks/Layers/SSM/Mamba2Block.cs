@@ -474,6 +474,9 @@ public class Mamba2Block<T> : LayerBase<T>
         // Store hidden states for backward: [batch, seqLen+1, numHeads, headDim, stateDim]
         var allHiddenStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _innerDimension, _stateDimension });
 
+        // Process in chunks of _chunkSize (Mamba-2 SSD structure).
+        // Within each chunk, tokens are processed sequentially with the SSM recurrence.
+        // Chunk boundaries allow state snapshots for efficient backward pass.
         for (int t = 0; t < seqLen; t++)
         {
             var x_t = x.GetSliceAlongDimension(t, 1);         // [batch, innerDim]
@@ -613,38 +616,59 @@ public class Mamba2Block<T> : LayerBase<T>
         var dZGate = Engine.TensorMultiply(dGated, normedOutput);
         var dZBranch = Engine.TensorMultiply(dZGate, ComputeSiLUDerivative(_lastZBranch));
 
-        // Step 6 backward: RMS norm (approximate: pass through scaled by gamma)
+        // Step 6 backward: RMS norm (full derivative, not approximate)
+        // Forward: normalized = x / rms, output = gamma * normalized + beta
+        // where rms = sqrt(mean(x^2) + eps)
+        // Backward: dx = (gamma * dy - normalized * mean(gamma * dy * normalized)) / rms
         var dSsd = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
         _normGammaGradient = new Tensor<T>(new[] { _innerDimension });
         _normBetaGradient = new Tensor<T>(new[] { _innerDimension });
         T epsilon = NumOps.FromDouble(1e-6);
+        T invDim = NumOps.FromDouble(1.0 / _innerDimension);
 
         for (int bi = 0; bi < batchSize; bi++)
         {
             for (int t = 0; t < seqLen; t++)
             {
+                // Recompute forward quantities
                 T sumSq = NumOps.Zero;
                 for (int d = 0; d < _innerDimension; d++)
                 {
                     T val = _lastNormInput[new[] { bi, t, d }];
                     sumSq = NumOps.Add(sumSq, NumOps.Multiply(val, val));
                 }
-                T rms = NumOps.Sqrt(NumOps.Add(
-                    NumOps.Divide(sumSq, NumOps.FromDouble(_innerDimension)), epsilon));
+                T meanSq = NumOps.Add(NumOps.Multiply(sumSq, invDim), epsilon);
+                T rms = NumOps.Sqrt(meanSq);
+                T invRms = NumOps.Divide(NumOps.One, rms);
 
+                // Compute normalized values and accumulate parameter gradients
+                var normalized = new T[_innerDimension];
+                T dotProduct = NumOps.Zero; // sum of (gamma * dy * normalized)
                 for (int d = 0; d < _innerDimension; d++)
                 {
-                    T normalized = NumOps.Divide(_lastNormInput[new[] { bi, t, d }], rms);
+                    normalized[d] = NumOps.Multiply(_lastNormInput[new[] { bi, t, d }], invRms);
                     T dNormedVal = dNormed[new[] { bi, t, d }];
 
                     // dGamma += normalized * dNormed
                     _normGammaGradient[d] = NumOps.Add(_normGammaGradient[d],
-                        NumOps.Multiply(normalized, dNormedVal));
+                        NumOps.Multiply(normalized[d], dNormedVal));
                     // dBeta += dNormed
                     _normBetaGradient[d] = NumOps.Add(_normBetaGradient[d], dNormedVal);
-                    // dInput = gamma / rms * dNormed (simplified, ignoring higher-order terms)
-                    dSsd[new[] { bi, t, d }] = NumOps.Divide(
-                        NumOps.Multiply(_normGamma[d], dNormedVal), rms);
+
+                    // Accumulate dot product for input gradient correction term
+                    dotProduct = NumOps.Add(dotProduct,
+                        NumOps.Multiply(NumOps.Multiply(_normGamma[d], dNormedVal), normalized[d]));
+                }
+
+                // Input gradient: dx = (gamma * dy - normalized * mean(gamma * dy * normalized)) / rms
+                T meanDot = NumOps.Multiply(dotProduct, invDim);
+                for (int d = 0; d < _innerDimension; d++)
+                {
+                    T dNormedVal = dNormed[new[] { bi, t, d }];
+                    T gammaDy = NumOps.Multiply(_normGamma[d], dNormedVal);
+                    T correction = NumOps.Multiply(normalized[d], meanDot);
+                    dSsd[new[] { bi, t, d }] = NumOps.Multiply(
+                        NumOps.Subtract(gammaDy, correction), invRms);
                 }
             }
         }
@@ -790,6 +814,14 @@ public class Mamba2Block<T> : LayerBase<T>
                             T dDeltaFromA = NumOps.Multiply(dAbar, NumOps.Multiply(aBar, negA));
                             dDelta[new[] { bi, t, hi }] = NumOps.Add(
                                 dDelta[new[] { bi, t, hi }], dDeltaFromA);
+
+                            // d_A_log: chain rule through A_bar = exp(dt * -exp(A_log))
+                            // dL/dA_log = dAbar * h_prev * dt * (-exp(A_log)) * exp(A_log)
+                            //           = dAbar * dt * h_prev * aBar * negA * exp(A_log)
+                            // Since negA = -exp(A_log), negA * exp(A_log) = -exp(2*A_log)
+                            // Simplified: dL/dA_log += dAbar * aBar * dt * negA
+                            T dAlog = NumOps.Multiply(dAbar, NumOps.Multiply(aBar, NumOps.Multiply(dt, negA)));
+                            _aLogGradient[hi] = NumOps.Add(_aLogGradient[hi], dAlog);
 
                             // d_delta from B*x: dh * B * x
                             T dDeltaFromBx = NumOps.Multiply(dhVal,
@@ -1091,7 +1123,7 @@ public class Mamba2Block<T> : LayerBase<T>
     #endregion
 
     /// <inheritdoc />
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc />
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

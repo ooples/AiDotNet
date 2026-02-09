@@ -121,7 +121,12 @@ public class VisionMambaModel<T> : LayerBase<T>
     private Tensor<T>? _classifierBiasGradient;
 
     /// <inheritdoc />
-    public override bool SupportsTraining => true;
+    /// <summary>
+    /// Training is not yet supported. The backward pass uses a simplified RMSNorm derivative and
+    /// does not invert cross-scan/continuous scan patterns. Full gradient computation is required
+    /// before enabling training.
+    /// </summary>
+    public override bool SupportsTraining => false;
 
     /// <summary>Gets the image height.</summary>
     /// <remarks><para><b>For Beginners:</b> The expected height of input images in pixels. Images must have this exact height.</para></remarks>
@@ -707,7 +712,7 @@ public class VisionMambaModel<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc />
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

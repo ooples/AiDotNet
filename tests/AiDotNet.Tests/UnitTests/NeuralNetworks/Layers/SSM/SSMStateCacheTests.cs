@@ -115,6 +115,8 @@ public class SSMStateCacheTests
         var retrieved = cache.GetConvBuffer(0);
         Assert.NotNull(retrieved);
         Assert.Equal(buffer.Shape, retrieved.Shape);
+        for (int i = 0; i < buffer.Length; i++)
+            Assert.Equal(buffer[i], retrieved[i]);
     }
 
     [Fact]

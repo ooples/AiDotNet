@@ -111,7 +111,12 @@ public class S4DLayer<T> : LayerBase<T>
     private Tensor<T>? _logDeltaGradient;
 
     /// <inheritdoc />
-    public override bool SupportsTraining => true;
+    /// <summary>
+    /// Training is not yet supported. The backward pass uses simplified gradient paths and skips
+    /// the chain rule through exp(delta*A) and delta*B discretization. Full backpropagation through
+    /// the S4D recurrence is required before enabling training.
+    /// </summary>
+    public override bool SupportsTraining => false;
 
     /// <summary>
     /// Gets the model dimension (d_model) of this S4D layer.
@@ -789,7 +794,7 @@ public class S4DLayer<T> : LayerBase<T>
     #endregion
 
     /// <inheritdoc />
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc />
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

@@ -627,16 +627,26 @@ public class MambaLanguageModel<T> : LayerBase<T>
         {
             var residual = current;
 
+            // Restore cached hidden state into the block before forward
+            var cachedState = _stateCache.GetSSMState(i);
+            if (cachedState != null)
+            {
+                _blocks[i].SetHiddenState(cachedState);
+            }
+
             // Reshape for MambaBlock: [1, 1, modelDim] (batch=1, seqLen=1, dim=modelDim)
             var block3D = current.Reshape(1, 1, _modelDimension);
             var blockOut = _blocks[i].Forward(block3D); // [1, 1, modelDim]
             var blockOut2D = blockOut.Reshape(1, _modelDimension);
 
-            // Cache the SSM hidden state from this block
+            // Cache the SSM hidden state from this block for next step
             var blockState = _blocks[i].GetHiddenState();
             if (blockState != null)
             {
-                _stateCache.CacheSSMState(i, blockState);
+                // Extract the final timestep state: [batch, innerDim, stateDim]
+                // Hidden states shape is [batch, seqLen+1, innerDim, stateDim], take last timestep
+                var finalState = blockState.GetSliceAlongDimension(blockState.Shape[1] - 1, 1);
+                _stateCache.CacheSSMState(i, finalState);
             }
 
             // Residual connection
@@ -657,7 +667,7 @@ public class MambaLanguageModel<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc />
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

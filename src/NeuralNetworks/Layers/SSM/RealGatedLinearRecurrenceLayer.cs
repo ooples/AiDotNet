@@ -82,6 +82,7 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInputGate;
     private Tensor<T>? _lastHiddenStates;
     private Tensor<T>? _lastDecayFactors;
+    private Tensor<T>? _lastRecurrenceOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -247,6 +248,7 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
 
         // Step 3: Gated linear recurrence
         var output = GatedRecurrenceForward(projected3D, recGate3D, inpGate3D, batchSize, seqLen);
+        _lastRecurrenceOutput = output;
 
         // Step 4: Output projection
         var outFlat = output.Reshape(batchSize * seqLen, _recurrenceDimension);
@@ -296,7 +298,8 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
                 for (int d = 0; d < _recurrenceDimension; d++)
                 {
                     double cVal = NumOps.ToDouble(_decayParam[d]);
-                    double softplusC = Math.Log(1.0 + Math.Exp(cVal));
+                    // Numerically stable softplus: for large x, softplus(x) ≈ x
+                    double softplusC = cVal > 20.0 ? cVal : Math.Log(1.0 + Math.Exp(cVal));
                     double baseDecay = Math.Exp(-softplusC);
                     double rVal = NumOps.ToDouble(r_t[new[] { bi, d }]);
                     double a = rVal * baseDecay;
@@ -339,19 +342,17 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
 
         var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
 
-        // Output projection backward
+        // Output projection backward: y = recOut * Wout + bout
         var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
         _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
 
-        var recOut = _lastHiddenStates != null
-            ? new Tensor<T>(new[] { batchSize * seqLen, _recurrenceDimension })
-            : new Tensor<T>(new[] { batchSize * seqLen, _recurrenceDimension });
-        _outputProjectionWeightsGradient = new Tensor<T>([_recurrenceDimension, _modelDimension]);
+        var recOutFlat = _lastRecurrenceOutput!.Reshape(batchSize * seqLen, _recurrenceDimension);
+        _outputProjectionWeightsGradient = Engine.TensorMatMul(recOutFlat.Transpose([1, 0]), gradFlat);
 
         var dRecurrence = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
             .Reshape(batchSize, seqLen, _recurrenceDimension);
 
-        // Initialize remaining gradients
+        // Initialize all gradients
         _inputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _recurrenceDimension]);
         _inputProjectionBiasGradient = new Tensor<T>([_recurrenceDimension]);
         _recurrenceGateWeightsGradient = new Tensor<T>([_recurrenceDimension, _recurrenceDimension]);
@@ -361,25 +362,109 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _valueProjectionWeightsGradient = new Tensor<T>([_recurrenceDimension, _recurrenceDimension]);
         _decayParamGradient = new Tensor<T>([_recurrenceDimension]);
 
-        // Recurrence backward: propagate dh through time
+        // Recurrence backward through time
+        // h_t = a_t * h_{t-1} + sqrt(1-a_t^2) * (i_t * v_t)
         var dh = new Tensor<T>(new[] { batchSize, _recurrenceDimension });
+        var dProjected = new Tensor<T>(new[] { batchSize, seqLen, _recurrenceDimension });
 
         for (int t = seqLen - 1; t >= 0; t--)
         {
             var dOut_t = dRecurrence.GetSliceAlongDimension(t, 1);
             dh = Engine.TensorAdd(dh, dOut_t);
 
-            if (_lastDecayFactors != null)
+            var p_t = _lastProjectedInput!.GetSliceAlongDimension(t, 1);
+            var r_t = _lastRecurrenceGate!.GetSliceAlongDimension(t, 1);
+            var i_t = _lastInputGate!.GetSliceAlongDimension(t, 1);
+            var v_t = Engine.TensorMatMul(p_t, _valueProjectionWeights);
+
+            var dRGate = new Tensor<T>(new[] { batchSize, _recurrenceDimension });
+            var dIGate = new Tensor<T>(new[] { batchSize, _recurrenceDimension });
+            var dV = new Tensor<T>(new[] { batchSize, _recurrenceDimension });
+            var dhPrev = new Tensor<T>(new[] { batchSize, _recurrenceDimension });
+
+            for (int bi = 0; bi < batchSize; bi++)
             {
-                var decay_t = _lastDecayFactors.GetSliceAlongDimension(t, 1);
-                dh = Engine.TensorMultiply(dh, decay_t);
+                for (int d = 0; d < _recurrenceDimension; d++)
+                {
+                    double dhVal = NumOps.ToDouble(dh[new[] { bi, d }]);
+                    double cVal = NumOps.ToDouble(_decayParam[d]);
+                    double softplusC = cVal > 20.0 ? cVal : Math.Log(1.0 + Math.Exp(cVal));
+                    double baseDecay = Math.Exp(-softplusC);
+                    double rVal = NumOps.ToDouble(r_t[new[] { bi, d }]);
+                    double aVal = rVal * baseDecay;
+                    double sqrtFactor = Math.Sqrt(Math.Max(0, 1.0 - aVal * aVal));
+                    double iVal = NumOps.ToDouble(i_t[new[] { bi, d }]);
+                    double vVal = NumOps.ToDouble(v_t[new[] { bi, d }]);
+                    double hPrev = NumOps.ToDouble(_lastHiddenStates![new[] { bi, t, d }]);
+
+                    // dh/dh_prev = a_t
+                    dhPrev[new[] { bi, d }] = NumOps.FromDouble(dhVal * aVal);
+
+                    // dh/da = h_prev + (-a / sqrt(1-a^2)) * (i*v) if sqrtFactor > 0
+                    double dhda = dhVal * hPrev;
+                    if (sqrtFactor > 1e-10)
+                        dhda += dhVal * (-aVal / sqrtFactor) * (iVal * vVal);
+
+                    // da/dr = baseDecay
+                    dRGate[new[] { bi, d }] = NumOps.FromDouble(dhda * baseDecay);
+
+                    // da/dc: chain through softplus and exp
+                    // a = r * exp(-softplus(c)), da/dc = -r * exp(-softplus(c)) * sigmoid(c)
+                    double sigC = 1.0 / (1.0 + Math.Exp(-cVal));
+                    double dadC = -rVal * baseDecay * sigC;
+                    _decayParamGradient[d] = NumOps.Add(_decayParamGradient[d],
+                        NumOps.FromDouble(dhda * dadC));
+
+                    // dh/d(i*v) = sqrtFactor
+                    double dIV = dhVal * sqrtFactor;
+                    dIGate[new[] { bi, d }] = NumOps.FromDouble(dIV * vVal);
+                    dV[new[] { bi, d }] = NumOps.FromDouble(dIV * iVal);
+                }
             }
+
+            // Propagate dh to previous timestep
+            dh = dhPrev;
+
+            // Value projection gradient: v = p * Wv
+            _valueProjectionWeightsGradient = Engine.TensorAdd(_valueProjectionWeightsGradient,
+                Engine.TensorMatMul(p_t.Transpose([1, 0]), dV));
+            var dPFromV = Engine.TensorMatMul(dV, _valueProjectionWeights.Transpose([1, 0]));
+
+            // Gate gradients through sigmoid: d/dx sig(x) = sig(x)*(1-sig(x))
+            var ones = new Tensor<T>(r_t.Shape);
+            for (int idx = 0; idx < ones.Length; idx++) ones[idx] = NumOps.One;
+
+            var rSigDeriv = Engine.TensorMultiply(r_t, Engine.TensorSubtract(ones, r_t));
+            var dRGateRaw = Engine.TensorMultiply(dRGate, rSigDeriv);
+
+            var iSigDeriv = Engine.TensorMultiply(i_t, Engine.TensorSubtract(ones, i_t));
+            var dIGateRaw = Engine.TensorMultiply(dIGate, iSigDeriv);
+
+            // Gate weight gradients: gate = sigmoid(p * W + b)
+            _recurrenceGateWeightsGradient = Engine.TensorAdd(_recurrenceGateWeightsGradient,
+                Engine.TensorMatMul(p_t.Transpose([1, 0]), dRGateRaw));
+            _recurrenceGateBiasGradient = Engine.TensorAdd(_recurrenceGateBiasGradient,
+                Engine.ReduceSum(dRGateRaw, new int[] { 0 }));
+
+            _inputGateWeightsGradient = Engine.TensorAdd(_inputGateWeightsGradient,
+                Engine.TensorMatMul(p_t.Transpose([1, 0]), dIGateRaw));
+            _inputGateBiasGradient = Engine.TensorAdd(_inputGateBiasGradient,
+                Engine.ReduceSum(dIGateRaw, new int[] { 0 }));
+
+            // Projected input gradient from all gate paths
+            var dP_t = Engine.TensorMatMul(dRGateRaw, _recurrenceGateWeights.Transpose([1, 0]));
+            dP_t = Engine.TensorAdd(dP_t,
+                Engine.TensorMatMul(dIGateRaw, _inputGateWeights.Transpose([1, 0])));
+            dP_t = Engine.TensorAdd(dP_t, dPFromV);
+
+            dProjected.SetSlice(1, t, dP_t);
         }
 
-        // Input projection gradient (simplified)
+        // Input projection backward: projected = input * Winp + binp
         var input2D = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        var dProjFlat = dRecurrence.Reshape(batchSize * seqLen, _recurrenceDimension);
+        var dProjFlat = dProjected.Reshape(batchSize * seqLen, _recurrenceDimension);
         _inputProjectionWeightsGradient = Engine.TensorMatMul(input2D.Transpose([1, 0]), dProjFlat);
+        _inputProjectionBiasGradient = Engine.ReduceSum(dProjected, new int[] { 0, 1 });
 
         var inputGradFlat = Engine.TensorMatMul(dProjFlat, _inputProjectionWeights.Transpose([1, 0]));
         var inputGrad3D = inputGradFlat.Reshape(batchSize, seqLen, _modelDimension);
@@ -463,6 +548,7 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _lastInputGate = null;
         _lastHiddenStates = null;
         _lastDecayFactors = null;
+        _lastRecurrenceOutput = null;
         _originalInputShape = null;
         _inputProjectionWeightsGradient = null;
         _inputProjectionBiasGradient = null;
@@ -479,7 +565,7 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
     #endregion
 
     /// <inheritdoc />
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc />
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

@@ -202,10 +202,10 @@ public class RWKVLayerTests
     }
 
     [Fact]
-    public void SupportsTraining_ReturnsTrue()
+    public void SupportsTraining_ReturnsFalse_UntilFullBackwardImplemented()
     {
         var layer = new RWKVLayer<float>(4, 32, 4);
-        Assert.True(layer.SupportsTraining);
+        Assert.False(layer.SupportsTraining);
     }
 
     [Fact]

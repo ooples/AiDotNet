@@ -95,6 +95,10 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInputGates;
     private Tensor<T>? _lastForgetGates;
     private Tensor<T>? _lastOutputGates;
+    private Tensor<T>? _lastQ;
+    private Tensor<T>? _lastK;
+    private Tensor<T>? _lastV;
+    private Tensor<T>? _lastHiddenPreProj;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -242,10 +246,14 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
         // Normalizer state per head: n[batch, head, headDim]
         var normState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension });
 
-        // Store gates for backward
+        // Store gates and projections for backward
         var allInputGates = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
         var allForgetGates = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
         var allOutputGates = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allHiddenPreProj = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
         var allCellStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
         var allNormStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension });
 
@@ -279,6 +287,10 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
                 Engine.TensorMatMul(x_t, _keyWeights), scaleK);
             var v = Engine.TensorMatMul(x_t, _valueWeights);
 
+            allQ.SetSlice(1, t, q);
+            allK.SetSlice(1, t, k);
+            allV.SetSlice(1, t, v);
+
             // Update matrix cell state per head: C = f * C + i * (v * k^T)
             var h_t = new Tensor<T>(new[] { batchSize, _modelDimension });
 
@@ -292,9 +304,11 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
                     T fVal = fGate[new[] { bi, dimStart }];
                     T oVal = oGate[new[] { bi, dimStart }];
 
-                    // Clamp exponential gate to prevent overflow
-                    double iClamped = Math.Min(NumOps.ToDouble(iVal), 20.0);
-                    iVal = NumOps.FromDouble(Math.Exp(Math.Min(Math.Log(Math.Max(iClamped, 1e-10)), 10.0)));
+                    // Clamp input gate pre-activation before exp to prevent overflow
+                    // exp(20) ≈ 4.85e8 which is safe; exp(>88) overflows float
+                    double iRaw = NumOps.ToDouble(iVal);
+                    double iClampedExp = Math.Exp(Math.Min(iRaw, 20.0));
+                    iVal = NumOps.FromDouble(iClampedExp);
 
                     // Matrix cell update: C = f * C + i * (v outer k)
                     for (int di = 0; di < _headDimension; di++)
@@ -347,6 +361,8 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
                 }
             }
 
+            allHiddenPreProj.SetSlice(1, t, h_t);
+
             // Output projection
             var y_t = Engine.TensorMatMul(h_t, _outputProjectionWeights);
             var outBias = _outputProjectionBias.Reshape(1, _modelDimension);
@@ -360,6 +376,10 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
         _lastInputGates = allInputGates;
         _lastForgetGates = allForgetGates;
         _lastOutputGates = allOutputGates;
+        _lastQ = allQ;
+        _lastK = allK;
+        _lastV = allV;
+        _lastHiddenPreProj = allHiddenPreProj;
 
         var result = ApplyActivation(output);
         _lastOutput = result;
@@ -378,11 +398,16 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        if (_lastInput == null || _lastOutput == null)
+        if (_lastInput == null || _lastOutput == null ||
+            _lastCellStates == null || _lastNormStates == null ||
+            _lastInputGates == null || _lastForgetGates == null ||
+            _lastOutputGates == null || _lastQ == null || _lastK == null ||
+            _lastV == null || _lastHiddenPreProj == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
         int batchSize = _lastInput.Shape[0];
         int seqLen = _lastInput.Shape[1];
+        T scaleK = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         var grad3D = outputGradient.Rank == 2
             ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
@@ -390,7 +415,7 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
 
         var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
 
-        // Initialize gradients
+        // Initialize all gradients
         _inputGateWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
         _inputGateBiasGradient = new Tensor<T>([_modelDimension]);
         _forgetGateWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
@@ -403,25 +428,202 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
         _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
         _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
 
-        // Simplified backward through output projection
+        // Output projection backward: y = h * Wout + bout
         var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        var dHidden = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]));
-
-        // Input gradient (simplified: propagate through gate and projection chains)
-        var input2D = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
+        var hFlat = _lastHiddenPreProj.Reshape(batchSize * seqLen, _modelDimension);
         _outputProjectionWeightsGradient = Engine.TensorMatMul(
-            dHidden.Transpose([1, 0]), gradFlat);
+            hFlat.Transpose([1, 0]), gradFlat);
 
-        var inputGradFlat = Engine.TensorMatMul(dHidden, _queryWeights.Transpose([1, 0]));
-        var inputGrad3D = inputGradFlat.Reshape(batchSize, seqLen, _modelDimension);
+        // dh = dOut * Wout^T  [batch*seqLen, modelDim]
+        var dh = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
+            .Reshape(batchSize, seqLen, _modelDimension);
+
+        // Accumulate input gradient through all projection paths
+        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+
+        // Running cell/norm state gradients for BPTT
+        var dCellState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
+        var dNormState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension });
+
+        for (int t = seqLen - 1; t >= 0; t--)
+        {
+            var x_t = _lastInput.GetSliceAlongDimension(t, 1);
+            var dh_t = dh.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
+            var q_t = _lastQ.GetSliceAlongDimension(t, 1);
+            var k_t = _lastK.GetSliceAlongDimension(t, 1);
+            var v_t = _lastV.GetSliceAlongDimension(t, 1);
+            var iGate = _lastInputGates.GetSliceAlongDimension(t, 1);
+            var fGate = _lastForgetGates.GetSliceAlongDimension(t, 1);
+            var oGate = _lastOutputGates.GetSliceAlongDimension(t, 1);
+
+            var dQ = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var dK = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var dV = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var dIGate = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var dFGate = new Tensor<T>(new[] { batchSize, _modelDimension });
+            var dOGate = new Tensor<T>(new[] { batchSize, _modelDimension });
+
+            for (int hi = 0; hi < _numHeads; hi++)
+            {
+                int dimStart = hi * _headDimension;
+
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    T iVal = iGate[new[] { bi, dimStart }];
+                    T fVal = fGate[new[] { bi, dimStart }];
+                    T oVal = oGate[new[] { bi, dimStart }];
+
+                    // Recompute normalizer for this timestep
+                    T nDotQ = NumOps.Zero;
+                    for (int ki = 0; ki < _headDimension; ki++)
+                    {
+                        int flatKi = dimStart + ki;
+                        nDotQ = NumOps.Add(nDotQ,
+                            NumOps.Multiply(
+                                _lastNormStates[new[] { bi, t + 1, hi, ki }],
+                                q_t[new[] { bi, flatKi }]));
+                    }
+                    double normFactor = Math.Max(Math.Abs(NumOps.ToDouble(nDotQ)), 1.0);
+                    T invNorm = NumOps.FromDouble(1.0 / normFactor);
+
+                    for (int di = 0; di < _headDimension; di++)
+                    {
+                        int flatDi = dimStart + di;
+                        T dhVal = NumOps.Multiply(dh_t[new[] { bi, flatDi }], invNorm);
+
+                        // dOutput gate: dh/do = (C * q) / norm
+                        T cq = NumOps.Zero;
+                        for (int ki = 0; ki < _headDimension; ki++)
+                        {
+                            int flatKi = dimStart + ki;
+                            cq = NumOps.Add(cq,
+                                NumOps.Multiply(
+                                    _lastCellStates[new[] { bi, t + 1, hi, di, ki }],
+                                    q_t[new[] { bi, flatKi }]));
+                        }
+                        dOGate[new[] { bi, flatDi }] = NumOps.Add(
+                            dOGate[new[] { bi, flatDi }],
+                            NumOps.Multiply(NumOps.Multiply(cq, invNorm), dh_t[new[] { bi, flatDi }]));
+
+                        // Gradient through C*q: oVal * dhVal flows to both C and q
+                        T oTimesdh = NumOps.Multiply(oVal, dhVal);
+
+                        for (int ki = 0; ki < _headDimension; ki++)
+                        {
+                            int flatKi = dimStart + ki;
+                            T cellVal = _lastCellStates[new[] { bi, t + 1, hi, di, ki }];
+                            T qVal = q_t[new[] { bi, flatKi }];
+
+                            // dQ += o * dh * C[di,ki] / norm
+                            dQ[new[] { bi, flatKi }] = NumOps.Add(
+                                dQ[new[] { bi, flatKi }],
+                                NumOps.Multiply(oTimesdh, cellVal));
+
+                            // dCell += o * dh * q[ki] / norm
+                            T dCell = NumOps.Multiply(oTimesdh, qVal);
+                            dCellState[new[] { bi, hi, di, ki }] = NumOps.Add(
+                                dCellState[new[] { bi, hi, di, ki }], dCell);
+                        }
+                    }
+
+                    // Cell state backward: C = f * C_prev + i * v * k
+                    // dC_prev = f * dC, dF += dC * C_prev, dI += dC * v * k, dV += dC * i * k, dK += dC * i * v
+                    for (int di = 0; di < _headDimension; di++)
+                    {
+                        int flatDi = dimStart + di;
+                        T vVal = v_t[new[] { bi, flatDi }];
+
+                        for (int ki = 0; ki < _headDimension; ki++)
+                        {
+                            int flatKi = dimStart + ki;
+                            T dC = dCellState[new[] { bi, hi, di, ki }];
+                            T kVal = k_t[new[] { bi, flatKi }];
+
+                            // dForget gate from cell state
+                            T cPrev = t > 0
+                                ? _lastCellStates[new[] { bi, t, hi, di, ki }]
+                                : NumOps.Zero;
+                            dFGate[new[] { bi, dimStart }] = NumOps.Add(
+                                dFGate[new[] { bi, dimStart }],
+                                NumOps.Multiply(dC, cPrev));
+
+                            // dInput gate from cell state
+                            dIGate[new[] { bi, dimStart }] = NumOps.Add(
+                                dIGate[new[] { bi, dimStart }],
+                                NumOps.Multiply(dC, NumOps.Multiply(vVal, kVal)));
+
+                            // dV from cell state
+                            dV[new[] { bi, flatDi }] = NumOps.Add(
+                                dV[new[] { bi, flatDi }],
+                                NumOps.Multiply(dC, NumOps.Multiply(iVal, kVal)));
+
+                            // dK from cell state
+                            dK[new[] { bi, flatKi }] = NumOps.Add(
+                                dK[new[] { bi, flatKi }],
+                                NumOps.Multiply(dC, NumOps.Multiply(iVal, vVal)));
+
+                            // Propagate to previous cell state
+                            dCellState[new[] { bi, hi, di, ki }] = NumOps.Multiply(fVal, dC);
+                        }
+                    }
+                }
+            }
+
+            // Gate derivative chains: input gate uses exp, forget/output use sigmoid
+            // dIGate is w.r.t. exp output, chain rule: d/dx exp(x) = exp(x)
+            var dIGateRaw = Engine.TensorMultiply(dIGate, iGate);
+
+            // Sigmoid derivative: sig(x) * (1 - sig(x))
+            var ones = new Tensor<T>(fGate.Shape);
+            for (int idx = 0; idx < ones.Length; idx++) ones[idx] = NumOps.One;
+            var fSigDeriv = Engine.TensorMultiply(fGate, Engine.TensorSubtract(ones, fGate));
+            var dFGateRaw = Engine.TensorMultiply(dFGate, fSigDeriv);
+
+            var oSigDeriv = Engine.TensorMultiply(oGate, Engine.TensorSubtract(ones, oGate));
+            var dOGateRaw = Engine.TensorMultiply(dOGate, oSigDeriv);
+
+            // Accumulate weight gradients: dW += x^T * dGateRaw
+            var x_t_T = x_t.Transpose([1, 0]);
+            _inputGateWeightsGradient = Engine.TensorAdd(_inputGateWeightsGradient,
+                Engine.TensorMatMul(x_t_T, dIGateRaw));
+            _inputGateBiasGradient = Engine.TensorAdd(_inputGateBiasGradient,
+                Engine.ReduceSum(dIGateRaw, new int[] { 0 }));
+            _forgetGateWeightsGradient = Engine.TensorAdd(_forgetGateWeightsGradient,
+                Engine.TensorMatMul(x_t_T, dFGateRaw));
+            _forgetGateBiasGradient = Engine.TensorAdd(_forgetGateBiasGradient,
+                Engine.ReduceSum(dFGateRaw, new int[] { 0 }));
+            _outputGateWeightsGradient = Engine.TensorAdd(_outputGateWeightsGradient,
+                Engine.TensorMatMul(x_t_T, dOGateRaw));
+            _outputGateBiasGradient = Engine.TensorAdd(_outputGateBiasGradient,
+                Engine.ReduceSum(dOGateRaw, new int[] { 0 }));
+
+            // Q, K, V weight gradients
+            _queryWeightsGradient = Engine.TensorAdd(_queryWeightsGradient,
+                Engine.TensorMatMul(x_t_T, dQ));
+            _keyWeightsGradient = Engine.TensorAdd(_keyWeightsGradient,
+                Engine.TensorMatMul(x_t_T, Engine.TensorMultiplyScalar(dK, scaleK)));
+            _valueWeightsGradient = Engine.TensorAdd(_valueWeightsGradient,
+                Engine.TensorMatMul(x_t_T, dV));
+
+            // Input gradient: sum of all paths flowing through x_t
+            var dX_t = Engine.TensorMatMul(dIGateRaw, _inputGateWeights.Transpose([1, 0]));
+            dX_t = Engine.TensorAdd(dX_t, Engine.TensorMatMul(dFGateRaw, _forgetGateWeights.Transpose([1, 0])));
+            dX_t = Engine.TensorAdd(dX_t, Engine.TensorMatMul(dOGateRaw, _outputGateWeights.Transpose([1, 0])));
+            dX_t = Engine.TensorAdd(dX_t, Engine.TensorMatMul(dQ, _queryWeights.Transpose([1, 0])));
+            dX_t = Engine.TensorAdd(dX_t, Engine.TensorMatMul(
+                Engine.TensorMultiplyScalar(dK, scaleK), _keyWeights.Transpose([1, 0])));
+            dX_t = Engine.TensorAdd(dX_t, Engine.TensorMatMul(dV, _valueWeights.Transpose([1, 0])));
+
+            dInput.SetSlice(1, t, dX_t);
+        }
 
         if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return inputGrad3D.Reshape(seqLen, _modelDimension);
+            return dInput.Reshape(seqLen, _modelDimension);
 
         if (_originalInputShape != null)
-            return inputGrad3D.Reshape(_originalInputShape);
+            return dInput.Reshape(_originalInputShape);
 
-        return inputGrad3D;
+        return dInput;
     }
 
     #region Parameter Management
@@ -487,6 +689,10 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
         _lastInputGates = null;
         _lastForgetGates = null;
         _lastOutputGates = null;
+        _lastQ = null;
+        _lastK = null;
+        _lastV = null;
+        _lastHiddenPreProj = null;
         _originalInputShape = null;
         _inputGateWeightsGradient = null;
         _inputGateBiasGradient = null;
@@ -504,7 +710,7 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
     #endregion
 
     /// <inheritdoc />
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc />
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

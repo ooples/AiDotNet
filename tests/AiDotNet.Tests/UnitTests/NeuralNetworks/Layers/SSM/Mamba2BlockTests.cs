@@ -158,6 +158,8 @@ public class Mamba2BlockTests
         var inputGrad = block.Backward(grad);
 
         Assert.Equal(input.Shape, inputGrad.Shape);
+        for (int i = 0; i < inputGrad.Length; i++)
+            Assert.False(float.IsNaN(inputGrad[i]), $"NaN detected in backward output at index {i}");
     }
 
     [Fact]
