@@ -370,13 +370,17 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             warped[i] = rawGradients[i];
         }
 
-        int paramsPerLayer = rawGradients.Length / Math.Max(_warpOptions.NumWarpLayers, 1);
+        int numLayers = Math.Max(_warpOptions.NumWarpLayers, 1);
+        int paramsPerLayer = rawGradients.Length / numLayers;
 
         for (int w = 0; w < _warpLayerParams.Count; w++)
         {
             var warpParams = _warpLayerParams[w];
             int startIdx = w * paramsPerLayer;
-            int endIdx = Math.Min(startIdx + paramsPerLayer, rawGradients.Length);
+            // Last warp layer covers all remaining parameters (handles non-divisible lengths)
+            int endIdx = (w == _warpLayerParams.Count - 1)
+                ? rawGradients.Length
+                : Math.Min(startIdx + paramsPerLayer, rawGradients.Length);
 
             for (int i = startIdx; i < endIdx; i++)
             {
@@ -533,6 +537,9 @@ public class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
                     avgGrad[j] = NumOps.Add(avgGrad[j], regGrad);
                 }
             }
+
+            // Apply gradient clipping before update
+            avgGrad = ClipGradients(avgGrad);
 
             // Apply update
             double lr = _warpOptions.WarpLearningRate;

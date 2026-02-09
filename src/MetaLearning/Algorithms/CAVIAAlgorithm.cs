@@ -353,9 +353,6 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     {
         for (int step = 0; step < _caviaOptions.AdaptationSteps; step++)
         {
-            // Augment input with current context
-            var augmentedInput = AugmentInput(supportInput, context);
-
             // Compute context gradients using finite differences on the context vector
             var contextGradients = ComputeContextGradients(context, supportInput, supportOutput);
 

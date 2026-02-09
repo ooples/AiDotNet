@@ -129,6 +129,18 @@ public class LaplacianShotOptions<T, TInput, TOutput> : ModelOptions, IMetaLearn
     /// </remarks>
     public double KernelBandwidth { get; set; } = 1.0;
 
+    /// <summary>
+    /// Gets or sets the step size (alpha) for Laplacian smoothing iterations.
+    /// </summary>
+    /// <value>Default is 0.1.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Controls how much predictions change per iteration.
+    /// Smaller values are more stable but converge slower. Larger values converge
+    /// faster but may oscillate.
+    /// </para>
+    /// </remarks>
+    public double StepSize { get; set; } = 0.1;
+
     #endregion
 
     #region Constructors

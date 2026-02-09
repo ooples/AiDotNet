@@ -215,16 +215,17 @@ public class LaplacianShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 distances[j] = diff * diff;
             }
 
-            // Find k nearest neighbors
+            // Find k nearest neighbors (clone distances to avoid modifying edge weight source)
+            var sortedDistances = (double[])distances.Clone();
             var neighborIndices = new int[numQuery];
             for (int j = 0; j < numQuery; j++) neighborIndices[j] = j;
-            Array.Sort(distances, neighborIndices);
+            Array.Sort(sortedDistances, neighborIndices);
 
             // Set edge weights for k nearest (skip self at index 0)
             for (int n = 1; n <= k && n < numQuery; n++)
             {
                 int j = neighborIndices[n];
-                double w = Math.Exp(-distances[n] / Math.Max(sigma, 1e-10));
+                double w = Math.Exp(-sortedDistances[n] / Math.Max(sigma, 1e-10));
                 weights[i, j] = w;
                 weights[j, i] = w; // Symmetric
             }
@@ -254,7 +255,7 @@ public class LaplacianShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         // Iterative Laplacian smoothing
         var refined = (double[])logits.Clone();
-        double alpha = 0.1;
+        double alpha = _lapShotOptions.StepSize;
 
         for (int iter = 0; iter < _lapShotOptions.PropagationIterations; iter++)
         {

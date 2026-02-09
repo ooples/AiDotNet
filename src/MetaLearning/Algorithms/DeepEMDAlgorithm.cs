@@ -76,6 +76,11 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
+    private const double MinModulationFactor = 0.5;
+    private const double MaxModulationFactor = 2.0;
+    private const double SinkhornStabilityEpsilon = 1e-10;
+    private const double NumericalEpsilon = 1e-6;
+
     private readonly DeepEMDOptions<T, TInput, TOutput> _deepEmdOptions;
 
     /// <inheritdoc/>
@@ -144,7 +149,7 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
                 // EMD-derived modulation: low EMD (similar) → modulation near 1.0,
                 // high EMD (dissimilar) → modulation < 1.0 (shrink features)
                 double modFactor = 1.0 / (1.0 + emdScore * _deepEmdOptions.Temperature);
-                modFactor = Math.Max(0.5, Math.Min(2.0, 0.5 + modFactor));
+                modFactor = Math.Max(MinModulationFactor, Math.Min(MaxModulationFactor, MinModulationFactor + modFactor));
 
                 var currentParams = MetaModel.GetParameters();
                 var modulatedParams = new Vector<T>(currentParams.Length);
@@ -200,8 +205,9 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
             for (int i = 0; i < supportFeatures.Length; i++)
                 sumAbs += Math.Abs(NumOps.ToDouble(supportFeatures[i]));
             double meanAbs = sumAbs / supportFeatures.Length;
-            double tempScale = 1.0 / Math.Max(_deepEmdOptions.Temperature, 1e-6);
-            modulationFactors = [Math.Max(0.5, Math.Min(2.0, 0.5 + 0.5 * tempScale * meanAbs / (1.0 + meanAbs)))];
+            double tempScale = 1.0 / Math.Max(_deepEmdOptions.Temperature, NumericalEpsilon);
+            modulationFactors = [Math.Max(MinModulationFactor, Math.Min(MaxModulationFactor,
+                MinModulationFactor + MinModulationFactor * tempScale * meanAbs / (1.0 + meanAbs)))];
         }
 
         return new DeepEMDModel<T, TInput, TOutput>(
@@ -237,20 +243,34 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
     private double ComputeEMDScore(Vector<T> features1, Vector<T> features2)
     {
         int numNodes = _deepEmdOptions.NumNodes;
-        int dim1 = features1.Length;
-        int dim2 = features2.Length;
 
-        // Compute cost matrix
-        int n1 = Math.Min(numNodes, dim1);
-        int n2 = Math.Min(numNodes, dim2);
+        // Treat flat feature vectors as sets of node feature vectors
+        // Each node has featureDim dimensions: total_length / numNodes
+        int n1 = Math.Min(numNodes, features1.Length);
+        int n2 = Math.Min(numNodes, features2.Length);
+        int featureDim1 = Math.Max(features1.Length / Math.Max(n1, 1), 1);
+        int featureDim2 = Math.Max(features2.Length / Math.Max(n2, 1), 1);
+        int featureDim = Math.Min(featureDim1, featureDim2);
+
+        // Compute cost matrix using squared Euclidean distance between node feature vectors
         var costMatrix = new double[n1, n2];
 
         for (int i = 0; i < n1; i++)
         {
             for (int j = 0; j < n2; j++)
             {
-                double diff = NumOps.ToDouble(features1[i]) - NumOps.ToDouble(features2[j]);
-                costMatrix[i, j] = diff * diff;
+                double sqDist = 0;
+                for (int d = 0; d < featureDim; d++)
+                {
+                    int idx1 = i * featureDim1 + d;
+                    int idx2 = j * featureDim2 + d;
+                    if (idx1 < features1.Length && idx2 < features2.Length)
+                    {
+                        double diff = NumOps.ToDouble(features1[idx1]) - NumOps.ToDouble(features2[idx2]);
+                        sqDist += diff * diff;
+                    }
+                }
+                costMatrix[i, j] = sqDist;
             }
         }
 
@@ -263,7 +283,7 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         {
             for (int j = 0; j < n2; j++)
             {
-                K[i, j] = Math.Exp(-costMatrix[i, j] / Math.Max(epsilon, 1e-10));
+                K[i, j] = Math.Exp(-costMatrix[i, j] / Math.Max(epsilon, SinkhornStabilityEpsilon));
             }
         }
 
@@ -289,7 +309,7 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
                 {
                     sum += K[i, j] * scalingV[j];
                 }
-                scalingU[i] = sum > 1e-10 ? u[i] / sum : u[i];
+                scalingU[i] = sum > SinkhornStabilityEpsilon ? u[i] / sum : u[i];
             }
 
             // Update v: v = b / (K^T * u)
@@ -300,7 +320,7 @@ public class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
                 {
                     sum += K[i, j] * scalingU[i];
                 }
-                scalingV[j] = sum > 1e-10 ? v[j] / sum : v[j];
+                scalingV[j] = sum > SinkhornStabilityEpsilon ? v[j] / sum : v[j];
             }
         }
 

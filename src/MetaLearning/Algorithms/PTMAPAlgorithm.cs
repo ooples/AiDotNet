@@ -212,18 +212,40 @@ public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             for (int q = 0; q < numQuery; q++)
                 probs[q] /= Math.Max(sumExp, 1e-10);
 
-            // M-step: update centroids using soft assignments, then recompute logits
+            // M-step: update centroids using soft-assignment-weighted support features, then recompute logits
+            // Each query's new logit is its similarity to a centroid built from
+            // all support features weighted by soft assignments across all queries
             double centroidShift = 0;
+
+            // Compute centroid: weighted average of support features using soft assignments
+            var centroid = new double[supportFeatures.Length];
+            double totalWeight = 0;
+            for (int q2 = 0; q2 < numQuery; q2++)
+                totalWeight += probs[q2];
+            totalWeight = Math.Max(totalWeight, 1e-10);
+
+            for (int s = 0; s < supportFeatures.Length; s++)
+            {
+                double suppVal = NumOps.ToDouble(supportFeatures[s]);
+                // Centroid blends support features with query-weighted contributions
+                double weightedSum = suppVal; // Start with support feature
+                for (int q2 = 0; q2 < numQuery; q2++)
+                {
+                    double queryVal = q2 < queryFeatures.Length ? NumOps.ToDouble(queryFeatures[q2]) : 0;
+                    weightedSum += (probs[q2] / totalWeight) * queryVal;
+                }
+                centroid[s] = weightedSum / 2.0; // Average of support and weighted query
+            }
+
             for (int q = 0; q < numQuery; q++)
             {
-                double weightedSim = 0;
+                double queryVal = NumOps.ToDouble(queryFeatures[q]);
+                double sim = 0;
                 for (int s = 0; s < supportFeatures.Length; s++)
                 {
-                    double suppVal = NumOps.ToDouble(supportFeatures[s % supportFeatures.Length]);
-                    double queryVal = NumOps.ToDouble(queryFeatures[q]);
-                    weightedSim += suppVal * (1.0 + probs[q]) * queryVal;
+                    sim += centroid[s] * queryVal;
                 }
-                double newLogit = weightedSim * _ptmapOptions.Temperature;
+                double newLogit = sim * _ptmapOptions.Temperature;
                 centroidShift += Math.Abs(newLogit - logits[q]);
                 logits[q] = newLogit;
             }

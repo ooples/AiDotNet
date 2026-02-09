@@ -550,31 +550,75 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         double epsilon = 1e-5;
         double originalLambda = _lambda;
+        var initParams = MetaModel.GetParameters();
 
-        // Compute loss at current lambda
+        // Compute loss at current lambda using ridge regression predictions
         double baseLoss = 0;
+        _lambda = originalLambda;
         foreach (var task in taskBatch.Tasks)
         {
+            MetaModel.SetParameters(initParams);
+            var supportPred = MetaModel.Predict(task.SupportInput);
+            var supportFeatures = ConvertToVector(supportPred);
+            var supportLabels = ConvertToVector(task.SupportOutput);
+            if (supportFeatures != null && supportLabels != null)
+            {
+                var weights = ComputeRidgeWeights(supportFeatures, supportLabels);
+                if (weights != null)
+                {
+                    // Modulate backbone with ridge weight magnitude
+                    double sumAbs = 0;
+                    for (int i = 0; i < weights.Length; i++)
+                        sumAbs += Math.Abs(NumOps.ToDouble(weights[i]));
+                    double meanAbs = sumAbs / Math.Max(weights.Length, 1);
+                    double modFactor = Math.Max(0.5, Math.Min(2.0, 0.5 + meanAbs / (1.0 + meanAbs)));
+                    var modulated = new Vector<T>(initParams.Length);
+                    for (int i = 0; i < initParams.Length; i++)
+                        modulated[i] = NumOps.Multiply(initParams[i], NumOps.FromDouble(modFactor));
+                    MetaModel.SetParameters(modulated);
+                }
+            }
             baseLoss += NumOps.ToDouble(ComputeLossFromOutput(
                 MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        baseLoss /= taskBatch.Tasks.Length;
+        baseLoss /= Math.Max(taskBatch.Tasks.Length, 1);
 
-        // Compute loss at perturbed lambda
+        // Compute loss at perturbed lambda using ridge regression with new lambda
         _lambda = originalLambda + epsilon;
         double perturbedLoss = 0;
         foreach (var task in taskBatch.Tasks)
         {
+            MetaModel.SetParameters(initParams);
+            var supportPred = MetaModel.Predict(task.SupportInput);
+            var supportFeatures = ConvertToVector(supportPred);
+            var supportLabels = ConvertToVector(task.SupportOutput);
+            if (supportFeatures != null && supportLabels != null)
+            {
+                var weights = ComputeRidgeWeights(supportFeatures, supportLabels);
+                if (weights != null)
+                {
+                    double sumAbs = 0;
+                    for (int i = 0; i < weights.Length; i++)
+                        sumAbs += Math.Abs(NumOps.ToDouble(weights[i]));
+                    double meanAbs = sumAbs / Math.Max(weights.Length, 1);
+                    double modFactor = Math.Max(0.5, Math.Min(2.0, 0.5 + meanAbs / (1.0 + meanAbs)));
+                    var modulated = new Vector<T>(initParams.Length);
+                    for (int i = 0; i < initParams.Length; i++)
+                        modulated[i] = NumOps.Multiply(initParams[i], NumOps.FromDouble(modFactor));
+                    MetaModel.SetParameters(modulated);
+                }
+            }
             perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(
                 MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        perturbedLoss /= taskBatch.Tasks.Length;
+        perturbedLoss /= Math.Max(taskBatch.Tasks.Length, 1);
 
         // Gradient of loss w.r.t. lambda
         double lambdaGrad = (perturbedLoss - baseLoss) / epsilon;
 
         // Update lambda with gradient descent, constrain to be positive
         _lambda = Math.Max(1e-6, originalLambda - _r2d2Options.OuterLearningRate * lambdaGrad);
+        MetaModel.SetParameters(initParams);
     }
 
 }
