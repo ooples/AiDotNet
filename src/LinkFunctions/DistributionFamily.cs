@@ -3,7 +3,7 @@ namespace AiDotNet.LinkFunctions;
 /// <summary>
 /// Distribution families for GLMs.
 /// </summary>
-public enum DistributionFamily
+public enum GlmDistributionFamily
 {
     /// <summary>
     /// Normal (Gaussian) distribution. Canonical link: Identity.

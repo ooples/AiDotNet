@@ -635,6 +635,12 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastMean == null || _lastVariance == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Reshape rank-1 gradient to [1, N] to match the forward pass reshape of 1D inputs
+        if (_inputWas1D && outputGradient.Shape.Length == 1)
+        {
+            outputGradient = outputGradient.Reshape(1, outputGradient.Length);
+        }
+
         // Ensure shapes match for backward pass
         var adjustedGradient = outputGradient;
         var adjustedInput = _lastInput;
@@ -759,6 +765,12 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Reshape rank-1 gradient to [1, N] to match the forward pass reshape of 1D inputs
+        if (_inputWas1D && outputGradient.Shape.Length == 1)
+        {
+            outputGradient = outputGradient.Reshape(1, outputGradient.Length);
+        }
 
         // Convert to computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);

@@ -479,11 +479,22 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Auto-reshape 1D gradient to match _lastOutput rank (2D) when needed
+        // Auto-reshape 1D gradient to match _lastOutput rank (2D) when needed,
+        // but only when the last forward pass effectively had batch size 1.
         var grad = outputGradient;
         if (grad.Rank == 1 && _lastOutput.Rank == 2)
         {
-            grad = grad.Reshape(1, grad.Shape[0]);
+            // Allow reshape only when batch size is 1 or the original input was 1D.
+            if (_lastOutput.Shape[0] == 1 || _inputWas1D)
+            {
+                grad = grad.Reshape(1, grad.Shape[0]);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "Backward received a 1D output gradient for a batched output. " +
+                    "Expected a 2D tensor of shape [batch, outputSize] matching the last forward pass.");
+            }
         }
 
         var delta = ApplyActivationDerivative(_lastOutput, grad);

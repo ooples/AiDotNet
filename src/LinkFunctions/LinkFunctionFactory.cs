@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+using System.Linq;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LinkFunctions;
@@ -23,6 +25,23 @@ namespace AiDotNet.LinkFunctions;
 /// </remarks>
 public static class LinkFunctionFactory<T>
 {
+    private static readonly Lazy<ReadOnlyDictionary<string, ILinkFunction<T>>> CachedLinkFunctions =
+        new(() =>
+        {
+            var links = new ILinkFunction<T>[]
+            {
+                new IdentityLink<T>(),
+                new LogitLink<T>(),
+                new LogLink<T>(),
+                new ProbitLink<T>(),
+                new ReciprocalLink<T>(),
+                new CLogLogLink<T>(),
+                new SqrtLink<T>(),
+                new InverseSquaredLink<T>()
+            };
+            return new ReadOnlyDictionary<string, ILinkFunction<T>>(
+                links.ToDictionary(link => link.Name, link => link));
+        });
     /// <summary>
     /// Creates a link function of the specified type.
     /// </summary>
@@ -49,17 +68,17 @@ public static class LinkFunctionFactory<T>
     /// </summary>
     /// <param name="family">The distribution family.</param>
     /// <returns>The canonical link function.</returns>
-    public static ILinkFunction<T> GetCanonicalLink(DistributionFamily family)
+    public static ILinkFunction<T> GetCanonicalLink(GlmDistributionFamily family)
     {
         return family switch
         {
-            DistributionFamily.Normal => new IdentityLink<T>(),
-            DistributionFamily.Binomial => new LogitLink<T>(),
-            DistributionFamily.Poisson => new LogLink<T>(),
-            DistributionFamily.Gamma => new ReciprocalLink<T>(),
-            DistributionFamily.InverseGaussian => new InverseSquaredLink<T>(),
-            DistributionFamily.NegativeBinomial => new LogLink<T>(),
-            DistributionFamily.Tweedie => throw new NotSupportedException(
+            GlmDistributionFamily.Normal => new IdentityLink<T>(),
+            GlmDistributionFamily.Binomial => new LogitLink<T>(),
+            GlmDistributionFamily.Poisson => new LogLink<T>(),
+            GlmDistributionFamily.Gamma => new ReciprocalLink<T>(),
+            GlmDistributionFamily.InverseGaussian => new InverseSquaredLink<T>(),
+            GlmDistributionFamily.NegativeBinomial => new LogLink<T>(),
+            GlmDistributionFamily.Tweedie => throw new NotSupportedException(
                 "The Tweedie canonical link is a power link g(μ)=μ^(1-p)/(1-p) that depends on the " +
                 "Tweedie power parameter p. Use the appropriate link for your specific p value " +
                 "(e.g., Log for p=1, Inverse for p=2)."),
@@ -71,19 +90,9 @@ public static class LinkFunctionFactory<T>
     /// <summary>
     /// Gets all available link functions.
     /// </summary>
-    /// <returns>Dictionary of link function names to instances.</returns>
-    public static Dictionary<string, ILinkFunction<T>> GetAllLinkFunctions()
+    /// <returns>A cached, read-only dictionary of link function names to instances.</returns>
+    public static IReadOnlyDictionary<string, ILinkFunction<T>> GetAllLinkFunctions()
     {
-        return new Dictionary<string, ILinkFunction<T>>
-        {
-            { "Identity", new IdentityLink<T>() },
-            { "Logit", new LogitLink<T>() },
-            { "Log", new LogLink<T>() },
-            { "Probit", new ProbitLink<T>() },
-            { "Inverse", new ReciprocalLink<T>() },
-            { "CLogLog", new CLogLogLink<T>() },
-            { "Sqrt", new SqrtLink<T>() },
-            { "InverseSquared", new InverseSquaredLink<T>() }
-        };
+        return CachedLinkFunctions.Value;
     }
 }
