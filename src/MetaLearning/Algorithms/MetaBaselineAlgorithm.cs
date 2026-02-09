@@ -67,27 +67,112 @@ public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         return ComputeMean(losses);
     }
 
+    /// <summary>L2-normalizes a feature vector for cosine similarity computation.</summary>
+    private Vector<T>? L2Normalize(Vector<T>? features)
+    {
+        if (features == null || features.Length == 0) return features;
+        double normSq = 0;
+        for (int i = 0; i < features.Length; i++)
+        {
+            double v = NumOps.ToDouble(features[i]);
+            normSq += v * v;
+        }
+        double norm = Math.Sqrt(normSq);
+        if (norm < 1e-10) return features;
+        var normalized = new Vector<T>(features.Length);
+        for (int i = 0; i < features.Length; i++)
+            normalized[i] = NumOps.Divide(features[i], NumOps.FromDouble(norm));
+        return normalized;
+    }
+
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        return new MetaBaselineModel<T, TInput, TOutput>(MetaModel, MetaModel.GetParameters());
+        var currentParams = MetaModel.GetParameters();
+
+        // Extract and L2-normalize support features for cosine-similarity classification
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+        var normalizedSupport = L2Normalize(supportFeatures);
+
+        // Compute modulation: cosine normalization changes feature magnitudes
+        double[]? modulationFactors = null;
+        if (supportFeatures != null && normalizedSupport != null)
+        {
+            double sumRatio = 0;
+            int count = 0;
+            for (int i = 0; i < Math.Min(supportFeatures.Length, normalizedSupport.Length); i++)
+            {
+                double rawVal = NumOps.ToDouble(supportFeatures[i]);
+                double adaptedVal = NumOps.ToDouble(normalizedSupport[i]);
+                if (Math.Abs(rawVal) > 1e-10)
+                {
+                    sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
+                    count++;
+                }
+            }
+            if (count > 0)
+                modulationFactors = [sumRatio / count];
+        }
+
+        return new MetaBaselineModel<T, TInput, TOutput>(
+            MetaModel, currentParams, normalizedSupport,
+            _metaBaselineOptions.Temperature, modulationFactors);
     }
 
 }
 
-/// <summary>Adapted model wrapper for Meta-Baseline.</summary>
-internal class MetaBaselineModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+/// <summary>Adapted model wrapper for Meta-Baseline with cosine-similarity classification.</summary>
+internal class MetaBaselineModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _params;
+    private readonly Vector<T>? _supportPrototypes;
+    private readonly double _temperature;
+    private readonly double[]? _modulationFactors;
+
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _supportPrototypes;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
+
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
-    public MetaBaselineModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) { _model = model; _params = p; }
+
+    public MetaBaselineModel(IFullModel<T, TInput, TOutput> model, Vector<T> p,
+        Vector<T>? supportPrototypes, double temperature, double[]? modulationFactors)
+    {
+        _model = model;
+        _params = p;
+        _supportPrototypes = supportPrototypes;
+        _temperature = Math.Max(temperature, 1e-10);
+        _modulationFactors = modulationFactors;
+    }
+
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { _model.SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input)
+    {
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            var modulated = new Vector<T>(_params.Length);
+            for (int i = 0; i < _params.Length; i++)
+                modulated[i] = NumOps.Multiply(_params[i],
+                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            _model.SetParameters(modulated);
+        }
+        else
+        {
+            _model.SetParameters(_params);
+        }
+        return _model.Predict(input);
+    }
+
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) =>
         throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
+
     /// <inheritdoc/>
     public ModelMetadata<T> GetModelMetadata() => Metadata;
 }

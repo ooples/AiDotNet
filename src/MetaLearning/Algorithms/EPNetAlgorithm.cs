@@ -216,6 +216,49 @@ public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         foreach (var task in taskBatch.Tasks)
         {
             MetaModel.SetParameters(initParams);
+
+            // Extract support and query features, propagate on joint graph
+            var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
+            var queryFeatures = ConvertToVector(MetaModel.Predict(task.QueryInput));
+
+            int supportLen = supportFeatures?.Length ?? 0;
+            int queryLen = queryFeatures?.Length ?? 0;
+
+            // Run embedding propagation to compute modulation factor
+            if (supportLen > 0 && queryLen > 0)
+            {
+                var combined = new Vector<T>(supportLen + queryLen);
+                for (int i = 0; i < supportLen; i++)
+                    combined[i] = supportFeatures is not null ? supportFeatures[i] : NumOps.Zero;
+                for (int i = 0; i < queryLen; i++)
+                    combined[supportLen + i] = queryFeatures is not null ? queryFeatures[i] : NumOps.Zero;
+
+                var propagated = PropagateEmbeddings(combined);
+
+                // Compute modulation from propagation effect on features
+                double sumRatio = 0;
+                int count = 0;
+                for (int i = 0; i < combined.Length; i++)
+                {
+                    double raw = NumOps.ToDouble(combined[i]);
+                    double prop = NumOps.ToDouble(propagated[i]);
+                    if (Math.Abs(raw) > 1e-10)
+                    {
+                        sumRatio += Math.Max(0.5, Math.Min(2.0, prop / raw));
+                        count++;
+                    }
+                }
+                if (count > 0)
+                {
+                    double avgRatio = sumRatio / count;
+                    var currentParams = MetaModel.GetParameters();
+                    var modulatedParams = new Vector<T>(currentParams.Length);
+                    for (int i = 0; i < currentParams.Length; i++)
+                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
+                    MetaModel.SetParameters(modulatedParams);
+                }
+            }
+
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));

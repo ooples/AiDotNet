@@ -210,7 +210,25 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             // Classification loss on modulated backbone (transformer affects loss)
             var queryPred = MetaModel.Predict(task.QueryInput);
             var queryLoss = ComputeLossFromOutput(queryPred, task.QueryOutput);
-            losses.Add(queryLoss);
+
+            // Contrastive loss: adapted prototypes should stay close to original
+            // L_contrastive = ||adapted - original||^2 / dim
+            double contrastiveLoss = 0;
+            if (_featOptions.ContrastiveWeight > 0 && adaptedPrototypes != null && supportFeatures != null)
+            {
+                double sumSqDiff = 0;
+                int minLen = Math.Min(supportFeatures.Length, adaptedPrototypes.Length);
+                for (int i = 0; i < minLen; i++)
+                {
+                    double diff = NumOps.ToDouble(adaptedPrototypes[i]) - NumOps.ToDouble(supportFeatures[i]);
+                    sumSqDiff += diff * diff;
+                }
+                contrastiveLoss = sumSqDiff / Math.Max(minLen, 1);
+            }
+
+            // Combined loss = classification + contrastive
+            double totalLoss = NumOps.ToDouble(queryLoss) + _featOptions.ContrastiveWeight * contrastiveLoss;
+            losses.Add(NumOps.FromDouble(totalLoss));
 
             // Compute meta-gradients
             var metaGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
