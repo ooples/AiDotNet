@@ -775,12 +775,18 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
 
     /// <summary>
     /// Updates auxiliary parameters using multi-sample SPSA (Simultaneous Perturbation Stochastic
-    /// Approximation). Averages gradient estimates over multiple random perturbation directions
-    /// for more stable and accurate updates than single-sample SPSA.
+    /// Approximation) with a caller-provided loss function. The loss delegate must use the
+    /// auxiliary parameters (which are perturbed in-place via the <paramref name="auxParams"/> ref)
+    /// so that the finite-difference gradient estimate reflects their actual effect on the loss.
     /// </summary>
     /// <param name="taskBatch">The current task batch for loss evaluation.</param>
     /// <param name="auxParams">The auxiliary parameters to update (modified in place).</param>
     /// <param name="learningRate">Learning rate for the update step.</param>
+    /// <param name="computeLoss">
+    /// Delegate that computes the average loss over the task batch using the current state of
+    /// <paramref name="auxParams"/>. The delegate is called with params already perturbed,
+    /// so it should read the auxiliary param field directly (which is the same ref).
+    /// </param>
     /// <param name="numSamples">Number of perturbation directions to average (default 3).</param>
     /// <param name="epsilon">Perturbation magnitude for finite differences (default 1e-5).</param>
     /// <remarks>
@@ -792,7 +798,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
     /// <para><b>For Beginners:</b> When we can't compute exact gradients for auxiliary parameters
     /// (because they're not part of the main neural network), we estimate them by:
     /// 1. Randomly perturbing all parameters simultaneously
-    /// 2. Measuring how the loss changes
+    /// 2. Measuring how the loss changes via a delegate that actually USES the perturbed params
     /// 3. Inferring the gradient direction from the change
     /// Doing this multiple times and averaging gives a more reliable gradient estimate.
     /// </para>
@@ -801,6 +807,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
         TaskBatch<T, TInput, TOutput> taskBatch,
         ref Vector<T> auxParams,
         double learningRate,
+        Func<TaskBatch<T, TInput, TOutput>, double> computeLoss,
         int numSamples = 3,
         double epsilon = 1e-5)
     {
@@ -808,11 +815,8 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
             return;
 
         // Compute base loss once (shared across all samples)
-        double baseLoss = 0;
-        foreach (var task in taskBatch.Tasks)
-            baseLoss += NumOps.ToDouble(ComputeLossFromOutput(
-                MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        baseLoss /= taskBatch.Tasks.Length;
+        // The delegate reads the current (unperturbed) aux params
+        double baseLoss = computeLoss(taskBatch);
 
         // Accumulate gradient estimates across multiple perturbation directions
         var gradientAccum = new double[auxParams.Length];
@@ -828,12 +832,8 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
             for (int i = 0; i < auxParams.Length; i++)
                 auxParams[i] = NumOps.Add(auxParams[i], NumOps.FromDouble(epsilon * direction[i]));
 
-            // Compute perturbed loss
-            double perturbedLoss = 0;
-            foreach (var task in taskBatch.Tasks)
-                perturbedLoss += NumOps.ToDouble(ComputeLossFromOutput(
-                    MetaModel.Predict(task.QueryInput), task.QueryOutput));
-            perturbedLoss /= taskBatch.Tasks.Length;
+            // Compute perturbed loss — delegate reads the now-perturbed aux params
+            double perturbedLoss = computeLoss(taskBatch);
 
             // Restore parameters: auxParams -= epsilon * direction
             for (int i = 0; i < auxParams.Length; i++)
