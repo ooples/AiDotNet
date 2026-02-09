@@ -43,7 +43,7 @@ public class GANDALFNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the GANDALF-specific options.
     /// </summary>
-    public GANDALFOptions<T> Options => _options;
+    public new GANDALFOptions<T> Options => _options;
 
     /// <summary>
     /// Gets the number of trees in the ensemble.

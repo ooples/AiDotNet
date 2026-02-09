@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
@@ -80,14 +81,15 @@ public class Mamba<T> : ForecastingModelBase<T>
     private DenseLayer<T>? _inputEmbedding;
 
     /// <summary>
-    /// References to the Mamba block layers.
+    /// References to the Mamba block layers implementing the real selective SSM.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> Each Mamba block contains the selective SSM
     /// mechanism that processes the sequence with linear complexity.
+    /// Each block performs: input projection -> Conv1D -> SiLU -> selective scan -> output gating -> output projection.
     /// </para>
     /// </remarks>
-    private List<DenseLayer<T>>? _mambaBlocks;
+    private List<MambaBlock<T>>? _mambaBlocks;
 
     /// <summary>
     /// Reference to the output projection layer.
@@ -362,12 +364,13 @@ public class Mamba<T> : ForecastingModelBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> After creating all layers, we keep direct references
     /// to important ones for quick access during computation.
+    /// The layer order is: DenseLayer (input embed) -> N x MambaBlock -> DenseLayer(s) (output proj).
     /// </para>
     /// </remarks>
     private void ExtractLayerReferences()
     {
         _inputEmbedding = Layers.OfType<DenseLayer<T>>().FirstOrDefault();
-        _mambaBlocks = Layers.OfType<DenseLayer<T>>().Skip(1).Take(_numLayers * 6).ToList();
+        _mambaBlocks = Layers.OfType<MambaBlock<T>>().ToList();
         _outputProjection = Layers.OfType<DenseLayer<T>>().LastOrDefault();
     }
 
@@ -377,18 +380,27 @@ public class Mamba<T> : ForecastingModelBase<T>
     /// <param name="layers">The layers to validate.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> When using custom layers, we ensure they include
-    /// the necessary components for the Mamba architecture.
+    /// the necessary components: input embedding (DenseLayer), at least one MambaBlock,
+    /// and output projection (DenseLayer).
     /// </para>
     /// </remarks>
     protected override void ValidateCustomLayers(List<ILayer<T>> layers)
     {
         base.ValidateCustomLayers(layers);
 
+        var mambaBlockCount = layers.OfType<MambaBlock<T>>().Count();
         var denseCount = layers.OfType<DenseLayer<T>>().Count();
-        if (denseCount < 3)
+
+        if (mambaBlockCount < 1)
         {
             throw new ArgumentException(
-                "Mamba requires at least input embedding, SSM processing, and output projection layers.");
+                "Mamba requires at least one MambaBlock layer for selective SSM processing.");
+        }
+
+        if (denseCount < 2)
+        {
+            throw new ArgumentException(
+                "Mamba requires at least input embedding and output projection DenseLayer layers.");
         }
     }
 
@@ -701,44 +713,84 @@ public class Mamba<T> : ForecastingModelBase<T>
     /// <returns>Output tensor with forecast values.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> The forward pass:
-    /// 1. Embeds input to model dimension
-    /// 2. Processes through stacked Mamba blocks (selective SSM)
-    /// 3. Projects to forecast values
+    /// 1. Reshapes input to [batch, seqLen, numFeatures]
+    /// 2. Embeds each timestep from numFeatures to modelDim via the input DenseLayer
+    /// 3. Processes through stacked MambaBlock layers (selective SSM) in 3D [batch, seqLen, modelDim]
+    /// 4. Flattens and projects to forecast values via the output DenseLayers
     /// Mamba achieves linear O(n) complexity through its state space formulation.
     /// </para>
     /// </remarks>
     private Tensor<T> Forward(Tensor<T> input)
     {
-        // Flatten input to 2D [batch, features] for Dense layers
-        // Input may be [batch, seq, features] = [1, contextLength, numFeatures]
-        // Dense layers expect flat input of size numFeatures * contextLength
-        var current = input;
+        // Normalize input to [batch, seqLen, numFeatures]
+        var current = NormalizeInputTo3D(input);
+        int batchSize = current.Shape[0];
+        int seqLen = current.Shape[1];
 
-        if (current.Rank > 2)
+        // === Phase 1: Input Embedding ===
+        // Apply input DenseLayer per-timestep: reshape [batch, seqLen, numFeatures] -> [batch*seqLen, numFeatures]
+        // DenseLayer projects numFeatures -> modelDim, then reshape back to [batch, seqLen, modelDim]
+        if (_inputEmbedding is not null)
         {
-            int totalElements = current.Length;
-            current = current.Reshape(new[] { 1, totalElements });
-        }
-        else if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
+            current = current.Reshape(new[] { batchSize * seqLen, _numFeatures });
+            current = _inputEmbedding.Forward(current);
+            current = current.Reshape(new[] { batchSize, seqLen, _modelDimension });
         }
 
-        foreach (var layer in Layers)
+        // === Phase 2: Mamba Blocks ===
+        // MambaBlock layers natively accept [batch, seqLen, modelDim] and return the same shape
+        if (_mambaBlocks is not null)
         {
-            // BatchNorm and Dense layers expect 2D input
-            // Ensure we maintain 2D shape through the network
-            if (current.Rank > 2)
+            foreach (var block in _mambaBlocks)
             {
-                int batch = current.Shape[0];
-                int features = current.Length / batch;
-                current = current.Reshape(new[] { batch, features });
+                current = block.Forward(current);
             }
+        }
 
+        // === Phase 3: Output Projection ===
+        // Flatten [batch, seqLen, modelDim] -> [batch, seqLen * modelDim] for output DenseLayers
+        current = current.Reshape(new[] { batchSize, seqLen * _modelDimension });
+
+        // Apply remaining DenseLayers (output projection chain)
+        // These are the DenseLayers after the MambaBlocks in the Layers list
+        var outputLayers = Layers.OfType<DenseLayer<T>>().Skip(1).ToList(); // skip input embedding
+        foreach (var layer in outputLayers)
+        {
             current = layer.Forward(current);
         }
 
         return current;
+    }
+
+    /// <summary>
+    /// Normalizes input to 3D [batch, seqLen, numFeatures] regardless of input shape.
+    /// </summary>
+    private Tensor<T> NormalizeInputTo3D(Tensor<T> input)
+    {
+        if (input.Rank == 3)
+        {
+            return input;
+        }
+
+        if (input.Rank == 2)
+        {
+            // [seqLen, numFeatures] -> [1, seqLen, numFeatures]
+            return input.Reshape(new[] { 1, input.Shape[0], input.Shape[1] });
+        }
+
+        if (input.Rank == 1)
+        {
+            // [seqLen * numFeatures] -> [1, contextLength, numFeatures]
+            int seqLen = _numFeatures > 1 ? input.Length / _numFeatures : _contextLength;
+            int features = _numFeatures > 1 ? _numFeatures : input.Length / _contextLength;
+            if (features < 1) features = 1;
+            if (seqLen < 1) seqLen = input.Length;
+            return input.Reshape(new[] { 1, seqLen, features });
+        }
+
+        // Higher rank: flatten to [batch, seqLen, features]
+        int total = input.Length;
+        return input.Reshape(new[] { 1, _contextLength, total / _contextLength });
     }
 
     /// <summary>
@@ -747,65 +799,56 @@ public class Mamba<T> : ForecastingModelBase<T>
     /// <param name="outputGradient">Gradient of the loss with respect to output.</param>
     /// <returns>Gradient with respect to input.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> The backward pass computes gradients for all trainable
-    /// parameters. Mamba's recurrent structure allows efficient gradient computation.
+    /// <para><b>For Beginners:</b> The backward pass reverses the forward pass:
+    /// 1. Backprop through output DenseLayers (2D gradients)
+    /// 2. Reshape gradient to [batch, seqLen, modelDim] for MambaBlock backward
+    /// 3. Backprop through stacked MambaBlock layers (3D gradients)
+    /// 4. Reshape and backprop through input embedding DenseLayer
     /// </para>
     /// </remarks>
     private Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // Ensure gradient is 2D for Dense/BatchNorm backward pass
         var current = outputGradient;
 
+        // Ensure gradient is 2D [batch, outputDim] for the output DenseLayers
         if (current.Rank == 1)
         {
             current = current.Reshape(new[] { 1, current.Length });
         }
-        else if (current.Rank > 2)
+
+        int batchSize = current.Shape[0];
+
+        // === Phase 3 backward: Output projection DenseLayers ===
+        var outputLayers = Layers.OfType<DenseLayer<T>>().Skip(1).ToList();
+        for (int i = outputLayers.Count - 1; i >= 0; i--)
         {
-            int batch = current.Shape[0];
-            int features = current.Length / batch;
-            current = current.Reshape(new[] { batch, features });
+            current = outputLayers[i].Backward(current);
         }
 
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        // === Phase 2 backward: MambaBlock layers ===
+        // Reshape from [batch, seqLen * modelDim] to [batch, seqLen, modelDim]
+        current = current.Reshape(new[] { batchSize, _contextLength, _modelDimension });
+
+        if (_mambaBlocks is not null)
         {
-            var layer = Layers[i];
-
-            // Ensure 2D shape before each backward call
-            if (current.Rank > 2)
+            for (int i = _mambaBlocks.Count - 1; i >= 0; i--)
             {
-                int batch = current.Shape[0];
-                int features = current.Length / batch;
-                current = current.Reshape(new[] { batch, features });
+                current = _mambaBlocks[i].Backward(current);
             }
-
-            // For BatchNorm layers, ensure gradient matches the expected input size
-            // BatchNorm preserves shape, so gradient should match stored input
-            if (layer is BatchNormalizationLayer<T> bnLayer)
-            {
-                // Get the expected size from the BatchNorm's output shape (same as input for BatchNorm)
-                var outputShape = bnLayer.GetOutputShape();
-                int expectedSize = outputShape.Length > 0 ? outputShape[0] : current.Length;
-
-                if (current.Length != expectedSize)
-                {
-                    // Gradient size doesn't match - pad or truncate
-                    var gradData = new T[expectedSize];
-                    int copyLen = Math.Min(current.Length, expectedSize);
-                    for (int j = 0; j < copyLen; j++)
-                    {
-                        gradData[j] = current.Data.Span[j];
-                    }
-                    current = new Tensor<T>(new[] { 1, expectedSize }, new Vector<T>(gradData));
-                }
-                else if (current.Shape.Length != 2 || current.Shape[1] != expectedSize)
-                {
-                    current = current.Reshape(new[] { 1, expectedSize });
-                }
-            }
-
-            current = layer.Backward(current);
         }
+
+        // === Phase 1 backward: Input embedding DenseLayer ===
+        // Reshape [batch, seqLen, modelDim] -> [batch*seqLen, modelDim] for DenseLayer backward
+        int seqLen = current.Shape[1];
+        current = current.Reshape(new[] { batchSize * seqLen, _modelDimension });
+
+        if (_inputEmbedding is not null)
+        {
+            current = _inputEmbedding.Backward(current);
+        }
+
+        // Reshape back to [batch, seqLen, numFeatures]
+        current = current.Reshape(new[] { batchSize, seqLen, _numFeatures });
 
         return current;
     }

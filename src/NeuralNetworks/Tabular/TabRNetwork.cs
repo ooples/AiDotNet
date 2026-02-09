@@ -50,7 +50,7 @@ public class TabRNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the TabR-specific options.
     /// </summary>
-    public TabROptions<T> Options => _options;
+    public new TabROptions<T> Options => _options;
 
     /// <summary>
     /// Gets the number of neighbors to retrieve.

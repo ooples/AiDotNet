@@ -49,7 +49,7 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the FT-Transformer-specific options.
     /// </summary>
-    public FTTransformerOptions<T> Options => _options;
+    public new FTTransformerOptions<T> Options => _options;
 
     /// <summary>
     /// Gets the embedding dimension.

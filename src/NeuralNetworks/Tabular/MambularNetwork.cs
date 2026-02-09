@@ -45,7 +45,7 @@ public class MambularNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the Mambular-specific options.
     /// </summary>
-    public MambularOptions<T> Options => _options;
+    public new MambularOptions<T> Options => _options;
 
     /// <summary>
     /// Gets the embedding dimension.

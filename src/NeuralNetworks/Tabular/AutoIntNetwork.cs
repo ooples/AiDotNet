@@ -48,7 +48,7 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the AutoInt-specific options.
     /// </summary>
-    public AutoIntOptions<T> Options => _options;
+    public new AutoIntOptions<T> Options => _options;
 
     /// <summary>
     /// Gets the embedding dimension.

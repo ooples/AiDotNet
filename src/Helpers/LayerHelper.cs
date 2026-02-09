@@ -1,4 +1,5 @@
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.PhysicsInformed.NeuralOperators;
 
 namespace AiDotNet.Helpers;
@@ -13866,73 +13867,33 @@ public static class LayerHelper<T>
         int numLayers = 4,
         double dropout = 0.1)
     {
-        int innerDim = modelDim * expandFactor;
-
         // === Input Embedding ===
+        // Projects each timestep from numFeatures to modelDim.
+        // The model Forward reshapes [batch, seqLen, numFeatures] -> [batch*seqLen, numFeatures],
+        // applies this layer, then reshapes back to [batch, seqLen, modelDim].
         yield return new DenseLayer<T>(
-            inputSize: numFeatures * contextLength,
-            outputSize: modelDim * contextLength,
+            inputSize: numFeatures,
+            outputSize: modelDim,
             activationFunction: new GELUActivation<T>());
 
         // === Mamba Blocks ===
+        // Real MambaBlock layers that implement the full selective SSM with
+        // input projection, depthwise Conv1D, selective scan (S6), and output gating.
+        // Each block takes [batch, seqLen, modelDim] and returns [batch, seqLen, modelDim].
         for (int layer = 0; layer < numLayers; layer++)
         {
-            // Pre-norm
-            yield return new BatchNormalizationLayer<T>(modelDim * contextLength);
-
-            // === Mamba Block Start ===
-            // Input projection (simulates x_proj and z_proj)
-            yield return new DenseLayer<T>(
-                inputSize: modelDim * contextLength,
-                outputSize: innerDim * contextLength,
-                activationFunction: new SiLUActivation<T>());
-
-            // Selective SSM simulation using dense layers
-            // In real Mamba, this is a state space model with input-dependent parameters
-            // We simulate it with a series of dense layers that capture the selective behavior
-
-            // B projection (input to state)
-            yield return new DenseLayer<T>(
-                inputSize: innerDim * contextLength,
-                outputSize: innerDim * stateDim,
-                activationFunction: null);
-
-            // State processing (simulates the SSM state dynamics)
-            yield return new DenseLayer<T>(
-                inputSize: innerDim * stateDim,
-                outputSize: innerDim * stateDim,
-                activationFunction: new SiLUActivation<T>());
-
-            // C projection (state to output)
-            yield return new DenseLayer<T>(
-                inputSize: innerDim * stateDim,
-                outputSize: innerDim * contextLength,
-                activationFunction: null);
-
-            // Gating mechanism (z branch)
-            yield return new DenseLayer<T>(
-                inputSize: innerDim * contextLength,
-                outputSize: innerDim * contextLength,
-                activationFunction: new SiLUActivation<T>());
-
-            // Output projection
-            yield return new DenseLayer<T>(
-                inputSize: innerDim * contextLength,
-                outputSize: modelDim * contextLength,
-                activationFunction: null);
-
-            // Dropout
-            if (dropout > 0)
-            {
-                yield return new DropoutLayer<T>(dropout);
-            }
-            // === Mamba Block End ===
+            yield return new MambaBlock<T>(
+                sequenceLength: contextLength,
+                modelDimension: modelDim,
+                stateDimension: stateDim,
+                expandFactor: expandFactor,
+                convKernelSize: 4);
         }
 
-        // === Final Layer Norm ===
-        yield return new BatchNormalizationLayer<T>(modelDim * contextLength);
-
         // === Output Projection ===
+        // Projects from modelDim to forecastHorizon.
+        // The model Forward flattens the MambaBlock output [batch, seqLen, modelDim]
+        // to [batch, seqLen * modelDim] and applies these layers.
         yield return new DenseLayer<T>(
             inputSize: modelDim * contextLength,
             outputSize: modelDim * forecastHorizon / 4,

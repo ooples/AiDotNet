@@ -56,7 +56,7 @@ public class SAINTNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the SAINT-specific options.
     /// </summary>
-    public SAINTOptions<T> Options => _options;
+    public new SAINTOptions<T> Options => _options;
 
     /// <summary>
     /// Gets the embedding dimension.

@@ -49,7 +49,7 @@ public class TabPFNNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the TabPFN-specific options.
     /// </summary>
-    public TabPFNOptions<T> Options => _options;
+    public new TabPFNOptions<T> Options => _options;
 
     /// <summary>
     /// Gets the embedding dimension.
