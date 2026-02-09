@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
@@ -234,6 +235,68 @@ public class GroupedQueryAttentionLayerTests
 
         Assert.Equal(qWeights.Shape[1], kWeights.Shape[1]);
         Assert.Equal(qWeights.Shape[1], vWeights.Shape[1]);
+    }
+
+    [Fact]
+    public void GQA_WithKVHeadsEqualsHeads_ProducesIdenticalOutputToMHA()
+    {
+        // When numKVHeads == numHeads, GQA must produce numerically identical output to standard MHA
+        int seqLen = 4;
+        int embDim = 32;
+        int numHeads = 4;
+
+        var gqa = new GroupedQueryAttentionLayer<float>(seqLen, embDim, numHeads, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+
+        // Copy GQA parameters to MHA (both have identical layout: Q, K, V, O weights, O bias)
+        var gqaParams = gqa.GetParameters();
+        mha.SetParameters(gqaParams);
+
+        // Run same input through both
+        var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
+        var gqaOutput = gqa.Forward(input);
+        var mhaOutput = mha.Forward(input);
+
+        // Compare element-wise - implementations use different code paths
+        // (GQA: manual loops, MHA: Engine.ScaledDotProductAttention)
+        // but the math is identical, so results should match within float precision
+        var gqaArr = gqaOutput.ToArray();
+        var mhaArr = mhaOutput.ToArray();
+
+        Assert.Equal(gqaArr.Length, mhaArr.Length);
+        for (int i = 0; i < gqaArr.Length; i++)
+        {
+            Assert.True(MathF.Abs(gqaArr[i] - mhaArr[i]) < 1e-4f,
+                $"Output mismatch at index {i}: GQA={gqaArr[i]:G6}, MHA={mhaArr[i]:G6}, diff={MathF.Abs(gqaArr[i] - mhaArr[i]):E2}");
+        }
+    }
+
+    [Fact]
+    public void GQA_WithKVHeadsEqualsHeads_ProducesIdenticalOutputToMHA_2D()
+    {
+        // Test 2D input path (no batch dimension)
+        int seqLen = 4;
+        int embDim = 32;
+        int numHeads = 4;
+
+        var gqa = new GroupedQueryAttentionLayer<float>(seqLen, embDim, numHeads, numHeads);
+        var mha = new MultiHeadAttentionLayer<float>(seqLen, embDim, numHeads);
+
+        mha.SetParameters(gqa.GetParameters());
+
+        var input = CreateRandomTensor(new[] { seqLen, embDim });
+        var gqaOutput = gqa.Forward(input);
+        var mhaOutput = mha.Forward(input);
+
+        var gqaArr = gqaOutput.ToArray();
+        var mhaArr = mhaOutput.ToArray();
+
+        Assert.Equal(gqaArr.Length, mhaArr.Length);
+        for (int i = 0; i < gqaArr.Length; i++)
+        {
+            Assert.True(MathF.Abs(gqaArr[i] - mhaArr[i]) < 1e-4f,
+                $"2D output mismatch at index {i}: GQA={gqaArr[i]:G6}, MHA={mhaArr[i]:G6}");
+        }
     }
 
     [Fact]

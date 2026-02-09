@@ -257,6 +257,106 @@ public class InferenceOptimizerIntegrationTests
         Assert.Contains(optimized.Layers, l => l.GetType().Name.Contains("QuantizedDenseLayer"));
     }
 
+    [Fact]
+    public void KVCacheConfig_GQA_MemorySavings_ProportionalToKVHeadRatio()
+    {
+        // Verify that KV-cache memory scales linearly with NumHeads.
+        // GQA with numKVHeads=8 vs numKVHeads=1 should give exactly 8x savings.
+        int numLayers = 1;
+        int maxSeqLen = 512;
+        int headDim = 64;
+        int batchSize = 1;
+
+        var mhaConfig = new KVCacheConfig
+        {
+            NumLayers = numLayers,
+            NumHeads = 8,
+            HeadDimension = headDim,
+            MaxSequenceLength = maxSeqLen,
+            MaxBatchSize = batchSize,
+            DataType = CacheDataType.Float32
+        };
+
+        var gqaConfig = new KVCacheConfig
+        {
+            NumLayers = numLayers,
+            NumHeads = 1, // GQA with 1 KV head
+            HeadDimension = headDim,
+            MaxSequenceLength = maxSeqLen,
+            MaxBatchSize = batchSize,
+            DataType = CacheDataType.Float32
+        };
+
+        long mhaBytes = mhaConfig.EstimateMemoryBytes();
+        long gqaBytes = gqaConfig.EstimateMemoryBytes();
+
+        Assert.True(mhaBytes > 0);
+        Assert.True(gqaBytes > 0);
+
+        double ratio = (double)mhaBytes / gqaBytes;
+        Assert.Equal(8.0, ratio, precision: 1);
+    }
+
+    [Fact]
+    public void KVCacheConfig_Llama70B_GQA_Savings_8x()
+    {
+        // Llama 2 70B uses 64 Q heads, 8 KV heads -> 8x KV-cache savings
+        var fullMHA = new KVCacheConfig
+        {
+            NumLayers = 80,
+            NumHeads = 64,
+            HeadDimension = 128,
+            MaxSequenceLength = 4096,
+            MaxBatchSize = 1,
+            DataType = CacheDataType.Float16
+        };
+
+        var gqa = new KVCacheConfig
+        {
+            NumLayers = 80,
+            NumHeads = 8, // 8 KV heads (GQA)
+            HeadDimension = 128,
+            MaxSequenceLength = 4096,
+            MaxBatchSize = 1,
+            DataType = CacheDataType.Float16
+        };
+
+        long fullBytes = fullMHA.EstimateMemoryBytes();
+        long gqaBytes = gqa.EstimateMemoryBytes();
+
+        double ratio = (double)fullBytes / gqaBytes;
+        Assert.Equal(8.0, ratio, precision: 1);
+
+        // Verify absolute memory makes sense: 80 layers * 8 heads * 4096 * 128 * 2 (K+V) * 2 bytes
+        long expectedGqaBytes = 80L * 8 * 4096 * 128 * 2 * 2;
+        Assert.Equal(expectedGqaBytes, gqaBytes);
+    }
+
+    [Theory]
+    [InlineData(8, 8, 1.0)]  // MHA: no savings
+    [InlineData(8, 4, 2.0)]  // 2x savings
+    [InlineData(8, 2, 4.0)]  // 4x savings
+    [InlineData(8, 1, 8.0)]  // 8x savings (MQA)
+    [InlineData(64, 8, 8.0)] // Llama 70B ratio
+    public void KVCacheConfig_MemorySavingsRatio_MatchesHeadRatio(
+        int fullHeads, int kvHeads, double expectedRatio)
+    {
+        var fullConfig = new KVCacheConfig
+        {
+            NumLayers = 1, NumHeads = fullHeads, HeadDimension = 64,
+            MaxSequenceLength = 1024, MaxBatchSize = 1
+        };
+
+        var gqaConfig = new KVCacheConfig
+        {
+            NumLayers = 1, NumHeads = kvHeads, HeadDimension = 64,
+            MaxSequenceLength = 1024, MaxBatchSize = 1
+        };
+
+        double ratio = (double)fullConfig.EstimateMemoryBytes() / gqaConfig.EstimateMemoryBytes();
+        Assert.Equal(expectedRatio, ratio, precision: 1);
+    }
+
     #region Helpers
 
     private static NeuralNetworkBase<float> CreateMHAModel(
