@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GatedLinearAttentionLayer<T> : LayerBase<T>
+internal class GatedLinearAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
     private readonly int _numHeads;
@@ -486,17 +486,22 @@ public class GatedLinearAttentionLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
-        if (_queryWeightsGradient == null)
+        if (_queryWeightsGradient is null || _keyWeightsGradient is null ||
+            _valueWeightsGradient is null || _gateWeightsGradient is null ||
+            _gateBiasGradient is null || _outputWeightsGradient is null ||
+            _outputBiasGradient is null)
+        {
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        }
 
         T negLR = NumOps.Negate(learningRate);
         _queryWeights = Engine.TensorAdd(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient, negLR));
-        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
-        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
-        _gateWeights = Engine.TensorAdd(_gateWeights, Engine.TensorMultiplyScalar(_gateWeightsGradient!, negLR));
-        _gateBias = Engine.TensorAdd(_gateBias, Engine.TensorMultiplyScalar(_gateBiasGradient!, negLR));
-        _outputWeights = Engine.TensorAdd(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGradient!, negLR));
-        _outputBias = Engine.TensorAdd(_outputBias, Engine.TensorMultiplyScalar(_outputBiasGradient!, negLR));
+        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient, negLR));
+        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient, negLR));
+        _gateWeights = Engine.TensorAdd(_gateWeights, Engine.TensorMultiplyScalar(_gateWeightsGradient, negLR));
+        _gateBias = Engine.TensorAdd(_gateBias, Engine.TensorMultiplyScalar(_gateBiasGradient, negLR));
+        _outputWeights = Engine.TensorAdd(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGradient, negLR));
+        _outputBias = Engine.TensorAdd(_outputBias, Engine.TensorMultiplyScalar(_outputBiasGradient, negLR));
     }
 
     /// <inheritdoc />

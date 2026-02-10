@@ -183,6 +183,8 @@ public class RWKVLayer<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        if (sequenceLength <= 0)
+            throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
         if (modelDimension <= 0)
             throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
         if (numHeads <= 0)
@@ -320,9 +322,6 @@ public class RWKVLayer<T> : LayerBase<T>
         // State for WKV: numerator [batch, numHeads, headDim, headDim] and denominator [batch, numHeads, headDim]
         var stateNum = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
         var stateDen = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension });
-
-        // Store all states for backward
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _modelDimension });
 
         var xPrev = new Tensor<T>(new[] { batchSize, _modelDimension });  // initialized to zeros (token shift)
 
@@ -462,7 +461,7 @@ public class RWKVLayer<T> : LayerBase<T>
             xPrev = x_t;
         }
 
-        _lastState = allStates;
+        _lastState = xPrev.Clone();  // Store final token state for potential autoregressive continuation
         _lastReceptance = output;  // Cache for backward
         _lastWkv = output;
         return output;
@@ -630,29 +629,39 @@ public class RWKVLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
-        if (_timeMixRGradient == null)
+        if (_timeMixRGradient is null || _timeMixKGradient is null || _timeMixVGradient is null ||
+            _receptanceWeightsGradient is null || _keyWeightsGradient is null ||
+            _valueWeightsGradient is null || _outputWeightsGradient is null ||
+            _decayWeightsGradient is null || _decayBiasGradient is null || _bonusGradient is null ||
+            _channelMixRGradient is null || _channelMixKGradient is null ||
+            _channelKeyWeightsGradient is null || _channelValueWeightsGradient is null ||
+            _channelReceptanceWeightsGradient is null ||
+            _normGamma1Gradient is null || _normBeta1Gradient is null ||
+            _normGamma2Gradient is null || _normBeta2Gradient is null)
+        {
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+        }
 
         T negLR = NumOps.Negate(learningRate);
         _timeMixR = Engine.TensorAdd(_timeMixR, Engine.TensorMultiplyScalar(_timeMixRGradient, negLR));
-        _timeMixK = Engine.TensorAdd(_timeMixK, Engine.TensorMultiplyScalar(_timeMixKGradient!, negLR));
-        _timeMixV = Engine.TensorAdd(_timeMixV, Engine.TensorMultiplyScalar(_timeMixVGradient!, negLR));
-        _receptanceWeights = Engine.TensorAdd(_receptanceWeights, Engine.TensorMultiplyScalar(_receptanceWeightsGradient!, negLR));
-        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
-        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
-        _outputWeights = Engine.TensorAdd(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGradient!, negLR));
-        _decayWeights = Engine.TensorAdd(_decayWeights, Engine.TensorMultiplyScalar(_decayWeightsGradient!, negLR));
-        _decayBias = Engine.TensorAdd(_decayBias, Engine.TensorMultiplyScalar(_decayBiasGradient!, negLR));
-        _bonus = Engine.TensorAdd(_bonus, Engine.TensorMultiplyScalar(_bonusGradient!, negLR));
-        _channelMixR = Engine.TensorAdd(_channelMixR, Engine.TensorMultiplyScalar(_channelMixRGradient!, negLR));
-        _channelMixK = Engine.TensorAdd(_channelMixK, Engine.TensorMultiplyScalar(_channelMixKGradient!, negLR));
-        _channelKeyWeights = Engine.TensorAdd(_channelKeyWeights, Engine.TensorMultiplyScalar(_channelKeyWeightsGradient!, negLR));
-        _channelValueWeights = Engine.TensorAdd(_channelValueWeights, Engine.TensorMultiplyScalar(_channelValueWeightsGradient!, negLR));
-        _channelReceptanceWeights = Engine.TensorAdd(_channelReceptanceWeights, Engine.TensorMultiplyScalar(_channelReceptanceWeightsGradient!, negLR));
-        _normGamma1 = Engine.TensorAdd(_normGamma1, Engine.TensorMultiplyScalar(_normGamma1Gradient!, negLR));
-        _normBeta1 = Engine.TensorAdd(_normBeta1, Engine.TensorMultiplyScalar(_normBeta1Gradient!, negLR));
-        _normGamma2 = Engine.TensorAdd(_normGamma2, Engine.TensorMultiplyScalar(_normGamma2Gradient!, negLR));
-        _normBeta2 = Engine.TensorAdd(_normBeta2, Engine.TensorMultiplyScalar(_normBeta2Gradient!, negLR));
+        _timeMixK = Engine.TensorAdd(_timeMixK, Engine.TensorMultiplyScalar(_timeMixKGradient, negLR));
+        _timeMixV = Engine.TensorAdd(_timeMixV, Engine.TensorMultiplyScalar(_timeMixVGradient, negLR));
+        _receptanceWeights = Engine.TensorAdd(_receptanceWeights, Engine.TensorMultiplyScalar(_receptanceWeightsGradient, negLR));
+        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient, negLR));
+        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient, negLR));
+        _outputWeights = Engine.TensorAdd(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGradient, negLR));
+        _decayWeights = Engine.TensorAdd(_decayWeights, Engine.TensorMultiplyScalar(_decayWeightsGradient, negLR));
+        _decayBias = Engine.TensorAdd(_decayBias, Engine.TensorMultiplyScalar(_decayBiasGradient, negLR));
+        _bonus = Engine.TensorAdd(_bonus, Engine.TensorMultiplyScalar(_bonusGradient, negLR));
+        _channelMixR = Engine.TensorAdd(_channelMixR, Engine.TensorMultiplyScalar(_channelMixRGradient, negLR));
+        _channelMixK = Engine.TensorAdd(_channelMixK, Engine.TensorMultiplyScalar(_channelMixKGradient, negLR));
+        _channelKeyWeights = Engine.TensorAdd(_channelKeyWeights, Engine.TensorMultiplyScalar(_channelKeyWeightsGradient, negLR));
+        _channelValueWeights = Engine.TensorAdd(_channelValueWeights, Engine.TensorMultiplyScalar(_channelValueWeightsGradient, negLR));
+        _channelReceptanceWeights = Engine.TensorAdd(_channelReceptanceWeights, Engine.TensorMultiplyScalar(_channelReceptanceWeightsGradient, negLR));
+        _normGamma1 = Engine.TensorAdd(_normGamma1, Engine.TensorMultiplyScalar(_normGamma1Gradient, negLR));
+        _normBeta1 = Engine.TensorAdd(_normBeta1, Engine.TensorMultiplyScalar(_normBeta1Gradient, negLR));
+        _normGamma2 = Engine.TensorAdd(_normGamma2, Engine.TensorMultiplyScalar(_normGamma2Gradient, negLR));
+        _normBeta2 = Engine.TensorAdd(_normBeta2, Engine.TensorMultiplyScalar(_normBeta2Gradient, negLR));
     }
 
     /// <inheritdoc />
@@ -762,12 +771,12 @@ public class RWKVLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets the receptance projection weights for external inspection.
+    /// Gets a copy of the receptance projection weights for external inspection.
     /// </summary>
-    public Tensor<T> GetReceptanceWeights() => _receptanceWeights;
+    public Tensor<T> GetReceptanceWeights() => _receptanceWeights.Clone();
 
     /// <summary>
-    /// Gets the output projection weights for external inspection.
+    /// Gets a copy of the output projection weights for external inspection.
     /// </summary>
-    public Tensor<T> GetOutputWeights() => _outputWeights;
+    public Tensor<T> GetOutputWeights() => _outputWeights.Clone();
 }

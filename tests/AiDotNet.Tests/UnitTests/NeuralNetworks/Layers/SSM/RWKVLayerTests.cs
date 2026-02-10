@@ -97,7 +97,7 @@ public class RWKVLayerTests
         var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape, seed: 99);
         var inputGrad = layer.Backward(grad);
 
         Assert.Equal(input.Shape, inputGrad.Shape);
@@ -114,7 +114,7 @@ public class RWKVLayerTests
         var input = CreateRandomTensor(new[] { seqLen, modelDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape, seed: 99);
         var inputGrad = layer.Backward(grad);
 
         Assert.Equal(input.Shape, inputGrad.Shape);
@@ -257,7 +257,7 @@ public class RWKVLayerTests
         var input = CreateRandomDoubleTensor(new[] { 1, seqLen, modelDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomDoubleTensor(output.Shape);
+        var grad = CreateRandomDoubleTensor(output.Shape, seed: 99);
         var inputGrad = layer.Backward(grad);
 
         Assert.Equal(input.Shape, inputGrad.Shape);
@@ -266,10 +266,10 @@ public class RWKVLayerTests
 
     #region Helpers
 
-    private static Tensor<float> CreateRandomTensor(int[] shape)
+    private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
         var tensor = new Tensor<float>(shape);
-        var random = new Random(42);
+        var random = new Random(seed);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = (float)(random.NextDouble() * 2 - 1);
@@ -277,10 +277,10 @@ public class RWKVLayerTests
         return tensor;
     }
 
-    private static Tensor<double> CreateRandomDoubleTensor(int[] shape)
+    private static Tensor<double> CreateRandomDoubleTensor(int[] shape, int seed = 42)
     {
         var tensor = new Tensor<double>(shape);
-        var random = new Random(42);
+        var random = new Random(seed);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = random.NextDouble() * 2 - 1;

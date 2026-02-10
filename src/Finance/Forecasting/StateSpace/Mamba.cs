@@ -746,6 +746,13 @@ public class Mamba<T> : ForecastingModelBase<T>
                 $"Input sequence length ({seqLen}) does not match expected context length ({_contextLength}). " +
                 "The output Dense layers are constructed for contextLength * modelDimension.");
 
+        // Validate feature dimension matches expected numFeatures
+        int featureDim = current.Shape[2];
+        if (featureDim != _numFeatures)
+            throw new ArgumentException(
+                $"Input feature dimension ({featureDim}) does not match expected numFeatures ({_numFeatures}). " +
+                "The input embedding layer expects numFeatures as its input size.");
+
         // Store forward pass dimensions for backward
         _lastForwardSeqLen = seqLen;
         _lastForwardBatchSize = batchSize;

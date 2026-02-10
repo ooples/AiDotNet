@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class MambaBlock<T> : LayerBase<T>
+internal class MambaBlock<T> : LayerBase<T>
 {
     // Configuration
     private readonly int _modelDimension;
@@ -211,6 +211,12 @@ public class MambaBlock<T> : LayerBase<T>
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        if (sequenceLength <= 0)
+        {
+            throw new ArgumentException(
+                $"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
+        }
+
         if (modelDimension <= 0)
         {
             throw new ArgumentException(
