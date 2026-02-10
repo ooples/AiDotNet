@@ -720,12 +720,6 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
             throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
         }
 
-        // If no differencing at all, fall back to base class
-        if (_d == 0 && _D == 0)
-        {
-            return base.Forecast(history, steps);
-        }
-
         // Apply the same differencing as in TrainCore
         Vector<T> diffHistory = ApplyDifferencing(history);
 
