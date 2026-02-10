@@ -102,6 +102,11 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
+    /// Tracks whether the last forward pass input was rank-1, so backward can preserve rank.
+    /// </summary>
+    private bool _inputWas1D;
+
+    /// <summary>
     /// The batch mean from the last forward pass.
     /// </summary>
     /// <remarks>
@@ -332,6 +337,13 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Auto-reshape 1D input to [1, N] for batch normalization compatibility
+        _inputWas1D = input.Shape.Length == 1;
+        if (_inputWas1D)
+        {
+            input = input.Reshape(1, input.Length);
+        }
+
         _lastInput = input;
 
         if (IsTrainingMode)
@@ -379,6 +391,12 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
             _runningVariance = Engine.TensorAdd(momentumRunningVar, scaledBatchVar);
 
+            // Preserve original rank
+            if (_inputWas1D)
+            {
+                output = output.Reshape(output.Length);
+            }
+
             return output;
         }
         else
@@ -398,7 +416,15 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             // Handle any tensor rank (2D, 3D, 4D, 5D, etc.)
             // Dimension 0 is batch, dimension 1 is features/channels
             // Dimensions 2+ are spatial dimensions
-            return ApplyInferenceAnyRank(input, scale, shift);
+            var result = ApplyInferenceAnyRank(input, scale, shift);
+
+            // Preserve original rank
+            if (_inputWas1D)
+            {
+                result = result.Reshape(result.Length);
+            }
+
+            return result;
         }
     }
 
@@ -609,6 +635,12 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastMean == null || _lastVariance == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Reshape rank-1 gradient to [1, N] to match the forward pass reshape of 1D inputs
+        if (_inputWas1D && outputGradient.Shape.Length == 1)
+        {
+            outputGradient = outputGradient.Reshape(1, outputGradient.Length);
+        }
+
         // Ensure shapes match for backward pass
         var adjustedGradient = outputGradient;
         var adjustedInput = _lastInput;
@@ -709,6 +741,12 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         _gammaGradient = gradGamma;
         _betaGradient = gradBeta;
 
+        // Preserve original rank: if forward input was 1D, return 1D gradient
+        if (_inputWas1D && inputGradient.Shape.Length > 1)
+        {
+            inputGradient = inputGradient.Reshape(inputGradient.Length);
+        }
+
         return inputGradient;
     }
 
@@ -727,6 +765,12 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
+
+        // Reshape rank-1 gradient to [1, N] to match the forward pass reshape of 1D inputs
+        if (_inputWas1D && outputGradient.Shape.Length == 1)
+        {
+            outputGradient = outputGradient.Reshape(1, outputGradient.Length);
+        }
 
         // Convert to computation nodes
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
@@ -793,7 +837,15 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         _gammaGradient = gammaNode.Gradient ?? throw new InvalidOperationException("Gamma gradient is null.");
         _betaGradient = betaNode.Gradient ?? throw new InvalidOperationException("Beta gradient is null.");
 
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+        var inputGrad = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
+
+        // Preserve original rank: if forward input was 1D, return 1D gradient
+        if (_inputWas1D && inputGrad.Shape.Length > 1)
+        {
+            inputGrad = inputGrad.Reshape(inputGrad.Length);
+        }
+
+        return inputGrad;
     }
 
     /// <summary>

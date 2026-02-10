@@ -72,10 +72,10 @@ public class ReciprocalLink<T> : ILinkFunction<T>
     public T InverseLinkDerivative(T eta)
     {
         double e = NumOps.ToDouble(eta);
-        if (Math.Abs(e) < 1e-10)
+        // Clamp to positive since for Gamma distribution mu must be positive
+        if (e < 1e-10)
         {
-            e = Math.Sign(e) * 1e-10;
-            if (e == 0) e = 1e-10;
+            e = 1e-10;
         }
         return NumOps.FromDouble(-1 / (e * e));
     }

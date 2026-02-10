@@ -17392,4 +17392,976 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Synthetic Tabular Data Generation
+
+    /// <summary>
+    /// Creates default velocity MLP layers for a TabFlow generator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The velocity MLP takes concatenated [data, time_embedding] as input and predicts
+    /// the velocity field v(x, t) that defines the ODE dx/dt = v(x, t).
+    /// Architecture: Dense(SiLU) → [Dropout] → ... → Dense(Identity)
+    /// </para>
+    /// <para>
+    /// Reference: "Flow Matching for Tabular Data" (2024)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Input dimension (dataWidth + timeEmbeddingDim).</param>
+    /// <param name="outputDim">Output dimension (dataWidth).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <param name="dropoutRate">Dropout rate between hidden layers.</param>
+    /// <returns>A collection of layers forming the velocity MLP.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabFlowVelocityLayers(
+        int inputDim,
+        int outputDim,
+        int[] hiddenDims,
+        double dropoutRate = 0.0)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default time projection layers for a TabFlow generator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Projects sinusoidal time embeddings through a learnable SiLU layer
+    /// before concatenation with data features.
+    /// </para>
+    /// </remarks>
+    /// <param name="timeEmbDim">Time embedding dimension.</param>
+    /// <returns>A collection of layers for time projection.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabFlowTimeProjectionLayers(
+        int timeEmbDim)
+    {
+        yield return new DenseLayer<T>(timeEmbDim, timeEmbDim, (IActivationFunction<T>)new SiLUActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default denoiser MLP layers for a FinDiff financial diffusion generator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The denoiser predicts the noise added at each diffusion timestep.
+    /// Takes concatenated [noised_data, timestep_embedding] as input.
+    /// Architecture: Dense(SiLU) → Dense(SiLU) → ... → Dense(Identity)
+    /// </para>
+    /// <para>
+    /// Reference: "Diffusion Models for Financial Tabular Data" (2024)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Input dimension (dataWidth + timestepEmbeddingDim).</param>
+    /// <param name="outputDim">Output dimension (dataWidth).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <returns>A collection of layers forming the denoiser MLP.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultFinDiffDenoiserLayers(
+        int inputDim,
+        int outputDim,
+        int[] hiddenDims)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default timestep projection layers for a FinDiff generator.
+    /// </summary>
+    /// <param name="timestepEmbDim">Timestep embedding dimension.</param>
+    /// <returns>A collection of layers for timestep projection.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultFinDiffTimestepProjectionLayers(
+        int timestepEmbDim)
+    {
+        yield return new DenseLayer<T>(timestepEmbDim, timestepEmbDim, (IActivationFunction<T>)new SiLUActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default generator MLP layers for GAN-based tabular generators
+    /// (CopulaGAN, DP-CTGAN, CTAB-GAN+, TableGAN).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Generator architecture: Dense(SiLU) → BatchNorm → [Dropout] → ... → Dense(Identity)
+    /// Following the CTGAN paper design with batch normalization and SiLU activation.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Input dimension (latent + conditional vector).</param>
+    /// <param name="outputDim">Output dimension (transformed data width).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <param name="useBatchNorm">Whether to use batch normalization.</param>
+    /// <param name="dropoutRate">Dropout rate between hidden layers.</param>
+    /// <returns>A collection of layers forming the generator MLP.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabularGANGeneratorLayers(
+        int inputDim,
+        int outputDim,
+        int[] hiddenDims,
+        bool useBatchNorm = true,
+        double dropoutRate = 0.0)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+
+            if (useBatchNorm)
+            {
+                yield return new BatchNormalizationLayer<T>(hiddenDims[i]);
+            }
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default discriminator MLP layers for GAN-based tabular generators.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Discriminator architecture: Dense(LeakyReLU) → Dropout → ... → Dense(Identity)
+    /// Following the CTGAN paper design with LeakyReLU activation and dropout.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Input dimension (data width + conditional).</param>
+    /// <param name="outputDim">Output dimension (1 for real/fake score).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <param name="dropoutRate">Dropout rate between hidden layers.</param>
+    /// <returns>A collection of layers forming the discriminator MLP.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabularGANDiscriminatorLayers(
+        int inputDim,
+        int outputDim,
+        int[] hiddenDims,
+        double dropoutRate = 0.3)
+    {
+        var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], leakyRelu);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default classifier MLP layers for TableGAN and CTAB-GAN+ auxiliary classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Classifier architecture: Dense(ReLU) → Dense(ReLU) → ... → Dense(Identity)
+    /// Used for label column prediction in TableGAN's information loss.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Input dimension (data width).</param>
+    /// <param name="outputDim">Output dimension (number of label classes).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <returns>A collection of layers forming the classifier MLP.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabularClassifierLayers(
+        int inputDim,
+        int outputDim,
+        int[] hiddenDims)
+    {
+        var relu = (IActivationFunction<T>)new ReLUActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], relu);
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default embedder layers for TimeGAN's embedding network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The embedder maps original features to a latent embedding space.
+    /// Architecture: Dense(SiLU) → Dense(SiLU) → ... → Dense(SiLU)
+    /// </para>
+    /// <para>
+    /// Reference: "Time-series Generative Adversarial Networks" (NeurIPS 2019)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Input dimension (feature count).</param>
+    /// <param name="outputDim">Embedding dimension.</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <returns>A collection of layers forming the embedder network.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeGANEmbedderLayers(
+        int inputDim,
+        int outputDim,
+        int[] hiddenDims)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, silu);
+    }
+
+    /// <summary>
+    /// Creates default recovery layers for TimeGAN's recovery network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The recovery network maps embeddings back to original feature space.
+    /// Architecture: Dense(SiLU) → Dense(SiLU) → ... → Dense(Identity)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Embedding dimension.</param>
+    /// <param name="outputDim">Original feature count.</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <returns>A collection of layers forming the recovery network.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeGANRecoveryLayers(
+        int inputDim,
+        int outputDim,
+        int[] hiddenDims)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default supervisor layers for TimeGAN's supervisor network.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The supervisor captures temporal dynamics in the embedding space.
+    /// Architecture: Dense(SiLU) → Dense(SiLU)
+    /// </para>
+    /// </remarks>
+    /// <param name="embeddingDim">Embedding dimension (used for both input and output).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <returns>A collection of layers forming the supervisor network.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTimeGANSupervisorLayers(
+        int embeddingDim,
+        int[] hiddenDims)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = embeddingDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, embeddingDim, silu);
+    }
+
+    /// <summary>
+    /// Creates default VAE encoder layers for TabSyn latent diffusion.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Encoder compresses transformed data to a latent space. The final layer outputs
+    /// 2 * latentDim values (mean and log-variance for reparameterization trick).
+    /// Architecture: Dense(SiLU) → Dense(SiLU) → ... → Dense(Identity, 2*latentDim)
+    /// </para>
+    /// <para>
+    /// Reference: "TabSyn: Bridging the Gap" (NeurIPS 2023)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Input dimension (transformed data width).</param>
+    /// <param name="latentDim">Latent space dimension.</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <returns>A collection of layers forming the VAE encoder.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabSynEncoderLayers(
+        int inputDim,
+        int latentDim,
+        int[] hiddenDims)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+            prevDim = hiddenDims[i];
+        }
+
+        // Output 2*latentDim for mean and log-variance
+        yield return new DenseLayer<T>(prevDim, latentDim * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default VAE decoder layers for TabSyn latent diffusion.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Decoder reconstructs transformed data from latent codes.
+    /// Architecture: Dense(SiLU) → Dense(SiLU) → ... → Dense(Identity)
+    /// </para>
+    /// </remarks>
+    /// <param name="latentDim">Latent space dimension.</param>
+    /// <param name="outputDim">Output dimension (transformed data width).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <returns>A collection of layers forming the VAE decoder.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabSynDecoderLayers(
+        int latentDim,
+        int outputDim,
+        int[] hiddenDims)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = latentDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default latent diffusion denoiser layers for TabSyn.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The denoiser operates in the VAE latent space, predicting noise at each timestep.
+    /// Takes concatenated [noised_latent, timestep_embedding] as input.
+    /// Architecture: Dense(SiLU) → Dense(SiLU) → ... → Dense(Identity)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Input dimension (latentDim + timestepEmbeddingDim).</param>
+    /// <param name="outputDim">Output dimension (latentDim).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <returns>A collection of layers forming the latent denoiser.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabSynDiffusionLayers(
+        int inputDim,
+        int outputDim,
+        int[] hiddenDims)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default denoiser layers for AutoDiffTab automated diffusion.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// AutoDiffTab uses automated architecture search over diffusion configurations.
+    /// The denoiser MLP is similar to TabDDPM but with configurable depth/width.
+    /// Architecture: Dense(SiLU) → [Dropout] → Dense(SiLU) → [Dropout] → ... → Dense(Identity)
+    /// </para>
+    /// <para>
+    /// Reference: "Automated Diffusion Models for Tabular Data" (2024)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Input dimension (dataWidth + timestepEmbeddingDim).</param>
+    /// <param name="outputDim">Output dimension (dataWidth).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <param name="dropoutRate">Dropout rate between hidden layers.</param>
+    /// <returns>A collection of layers forming the denoiser MLP.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultAutoDiffTabDenoiserLayers(
+        int inputDim,
+        int outputDim,
+        int[] hiddenDims,
+        double dropoutRate = 0.0)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default GNN encoder layers for GOGGLE graph-based generation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The encoder uses graph convolutional layers to learn feature dependencies,
+    /// followed by a projection to latent space (mean and log-variance).
+    /// Architecture: GCN → GCN → Dense(Identity, 2*latentDim)
+    /// </para>
+    /// <para>
+    /// Reference: "GOGGLE: Generative Modelling for Tabular Data by Learning Relational Structure" (ICLR 2023)
+    /// </para>
+    /// </remarks>
+    /// <param name="numFeatures">Number of input features (graph nodes).</param>
+    /// <param name="latentDim">Latent space dimension.</param>
+    /// <param name="hiddenDim">Hidden dimension for GCN layers.</param>
+    /// <param name="numGCNLayers">Number of graph convolutional layers.</param>
+    /// <returns>A collection of layers forming the GNN encoder.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultGOGGLEEncoderLayers(
+        int numFeatures,
+        int latentDim,
+        int hiddenDim,
+        int numGCNLayers = 2)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = numFeatures;
+
+        for (int i = 0; i < numGCNLayers; i++)
+        {
+            yield return new GraphConvolutionalLayer<T>(prevDim, hiddenDim, silu);
+            prevDim = hiddenDim;
+        }
+
+        // Project to latent space (mean + log-variance)
+        yield return new DenseLayer<T>(prevDim, latentDim * 2, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default decoder layers for GOGGLE graph-based generation.
+    /// </summary>
+    /// <param name="latentDim">Latent space dimension.</param>
+    /// <param name="outputDim">Output dimension (number of features).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <returns>A collection of layers forming the decoder MLP.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultGOGGLEDecoderLayers(
+        int latentDim,
+        int outputDim,
+        int[] hiddenDims)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = latentDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default autoregressive transformer layers for REaLTabFormer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// GPT-2 style autoregressive model treating columns as a sequence of tokens.
+    /// Architecture: Embedding → PositionalEncoding → [SelfAttention → LayerNorm → Dense → LayerNorm] × N → Dense(Identity)
+    /// </para>
+    /// <para>
+    /// Reference: "REaLTabFormer: Generating Realistic Relational and Tabular Data using Transformers" (2023)
+    /// </para>
+    /// </remarks>
+    /// <param name="vocabSize">Vocabulary size for column tokens.</param>
+    /// <param name="embeddingDim">Embedding dimension.</param>
+    /// <param name="maxSeqLen">Maximum sequence length (number of columns).</param>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="numTransformerLayers">Number of transformer layers.</param>
+    /// <param name="ffnDim">Feed-forward network hidden dimension.</param>
+    /// <param name="dropoutRate">Dropout rate.</param>
+    /// <returns>A collection of layers forming the REaLTabFormer.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultREaLTabFormerLayers(
+        int vocabSize,
+        int embeddingDim,
+        int maxSeqLen,
+        int numHeads = 4,
+        int numTransformerLayers = 4,
+        int ffnDim = 256,
+        double dropoutRate = 0.1)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDim);
+        yield return new PositionalEncodingLayer<T>(maxSeqLen, embeddingDim);
+
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new SelfAttentionLayer<T>(maxSeqLen, embeddingDim, numHeads, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            yield return new DenseLayer<T>(embeddingDim, ffnDim, (IActivationFunction<T>)new GELUActivation<T>());
+            yield return new DenseLayer<T>(ffnDim, embeddingDim, (IActivationFunction<T>)new IdentityActivation<T>());
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+        }
+
+        // Output projection to vocabulary
+        yield return new DenseLayer<T>(embeddingDim, vocabSize, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default MLP layers for MedSynth medical synthetic data generation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// MedSynth uses a VAE/GAN hybrid with clinical validity constraints.
+    /// The encoder/decoder follow standard VAE architecture.
+    /// </para>
+    /// <para>
+    /// Reference: "Privacy-Preserving Medical Tabular Synthesis" (2024)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Input dimension.</param>
+    /// <param name="outputDim">Output dimension.</param>
+    /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <param name="dropoutRate">Dropout rate.</param>
+    /// <returns>A collection of layers.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultMedSynthLayers(
+        int inputDim,
+        int outputDim,
+        int[] hiddenDims,
+        double dropoutRate = 0.1)
+    {
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default generator layers for a DP-CTGAN generator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Same residual connection architecture as CopulaGAN/CTGAN generators.
+    /// Identity activation on all layers; ReLU is applied manually after batch normalization.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Generator input dimension (embedding + conditional vector width).</param>
+    /// <param name="outputDim">Generator output dimension (transformed data width).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions from options.</param>
+    /// <returns>A collection of DenseLayer instances for the generator.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultDPCTGANGeneratorLayers(
+        int inputDim, int outputDim, int[] hiddenDims)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            int layerInput = i == 0 ? inputDim : hiddenDims[i - 1] + inputDim;
+            yield return new DenseLayer<T>(layerInput, hiddenDims[i], identity);
+        }
+
+        int lastHidden = hiddenDims.Length > 0 ? hiddenDims[^1] + inputDim : inputDim;
+        yield return new DenseLayer<T>(lastHidden, outputDim, identity);
+    }
+
+    /// <summary>
+    /// Creates default discriminator layers for a DP-CTGAN discriminator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Same sequential architecture as CopulaGAN discriminator.
+    /// Identity activation on all layers; LeakyReLU is applied manually.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Discriminator input dimension (packed data + conditional).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions from options.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>A collection of layers for the discriminator.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultDPCTGANDiscriminatorLayers(
+        int inputDim, int[] hiddenDims, double dropoutRate)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], identity);
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, 1, identity);
+    }
+
+    /// <summary>
+    /// Creates default generator layers for a CTAB-GAN+ generator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The generator uses Identity activation on all layers because ReLU is applied
+    /// manually after batch normalization in the residual connection pattern.
+    /// Architecture: [Dense(in->h1), Dense(h1+in->h2), ..., Dense(hN+in->out)]
+    /// Each hidden layer receives the previous output concatenated with the original input.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Generator input dimension (embedding + conditional vector width).</param>
+    /// <param name="outputDim">Generator output dimension (transformed data width).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions from options.</param>
+    /// <returns>A collection of DenseLayer instances for the generator.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCTABGANPlusGeneratorLayers(
+        int inputDim, int outputDim, int[] hiddenDims)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            int layerInput = i == 0 ? inputDim : hiddenDims[i - 1] + inputDim;
+            yield return new DenseLayer<T>(layerInput, hiddenDims[i], identity);
+        }
+
+        int lastHidden = hiddenDims.Length > 0 ? hiddenDims[^1] + inputDim : inputDim;
+        yield return new DenseLayer<T>(lastHidden, outputDim, identity);
+    }
+
+    /// <summary>
+    /// Creates default discriminator layers for a CTAB-GAN+ discriminator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The discriminator uses Identity activation on all layers because LeakyReLU
+    /// is applied manually for gradient computation during WGAN-GP training.
+    /// The final critic head (Dense->1) is included. The auxiliary classifier head
+    /// is created separately in the generator class.
+    /// Architecture: Dense(in->h1) -> Dense(h1->h2) -> ... -> Dense(hN->1)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Discriminator input dimension (packed data + conditional).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions from options.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>A collection of layers for the discriminator.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCTABGANPlusDiscriminatorLayers(
+        int inputDim, int[] hiddenDims, double dropoutRate)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], identity);
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, 1, identity);
+    }
+
+    /// <summary>
+    /// Creates default generator layers for a CopulaGAN generator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The generator uses Identity activation on all layers because ReLU is applied
+    /// manually after batch normalization in the residual connection pattern.
+    /// Architecture: [Dense(in→h1), Dense(h1+in→h2), ..., Dense(hN+in→out)]
+    /// Each hidden layer receives the previous output concatenated with the original input.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Generator input dimension (embedding + conditional vector width).</param>
+    /// <param name="outputDim">Generator output dimension (transformed data width).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions from options.</param>
+    /// <returns>A collection of DenseLayer instances for the generator.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCopulaGANGeneratorLayers(
+        int inputDim, int outputDim, int[] hiddenDims)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            int layerInput = i == 0 ? inputDim : hiddenDims[i - 1] + inputDim;
+            yield return new DenseLayer<T>(layerInput, hiddenDims[i], identity);
+        }
+
+        int lastHidden = hiddenDims.Length > 0 ? hiddenDims[^1] + inputDim : inputDim;
+        yield return new DenseLayer<T>(lastHidden, outputDim, identity);
+    }
+
+    /// <summary>
+    /// Creates default discriminator layers for a CopulaGAN discriminator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The discriminator uses Identity activation on all layers because LeakyReLU
+    /// is applied manually for gradient computation during WGAN-GP training.
+    /// Architecture: Dense(in→h1) → Dense(h1→h2) → ... → Dense(hN→1)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Discriminator input dimension (packed data + conditional).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions from options.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>A collection of layers for the discriminator.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCopulaGANDiscriminatorLayers(
+        int inputDim, int[] hiddenDims, double dropoutRate)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], identity);
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, 1, identity);
+    }
+
+    /// <summary>
+    /// Creates default generator layers for a CTGAN generator with residual connections.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The generator uses Identity activation on all layers because batch normalization
+    /// and ReLU are applied manually with residual connections during training.
+    /// Architecture: Dense(in→h1) → Dense(h1+in→h2) → ... → Dense(hN+in→out)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Generator input dimension (noise + conditional).</param>
+    /// <param name="outputDim">Generator output dimension (transformed data width).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions from options.</param>
+    /// <returns>A collection of layers for the generator.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCTGANGeneratorLayers(
+        int inputDim, int outputDim, int[] hiddenDims)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            int layerInput = i == 0 ? inputDim : hiddenDims[i - 1] + inputDim;
+            yield return new DenseLayer<T>(layerInput, hiddenDims[i], identity);
+        }
+
+        int lastHidden = hiddenDims.Length > 0 ? hiddenDims[^1] + inputDim : inputDim;
+        yield return new DenseLayer<T>(lastHidden, outputDim, identity);
+    }
+
+    /// <summary>
+    /// Creates default discriminator layers for a CTGAN discriminator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The discriminator uses Identity activation on all layers because LeakyReLU
+    /// is applied manually for gradient computation during WGAN-GP training.
+    /// Architecture: Dense(in→h1) → Dropout → Dense(h1→h2) → Dropout → ... → Dense(hN→1)
+    /// </para>
+    /// </remarks>
+    /// <param name="inputDim">Discriminator input dimension (packed data + conditional).</param>
+    /// <param name="hiddenDims">Hidden layer dimensions from options.</param>
+    /// <param name="dropoutRate">Dropout rate for regularization.</param>
+    /// <returns>A collection of layers for the discriminator.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCTGANDiscriminatorLayers(
+        int inputDim, int[] hiddenDims, double dropoutRate)
+    {
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], identity);
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, 1, identity);
+    }
+
+    #endregion
+
+    #region TabDDPM Layer Factory Methods
+
+    /// <summary>
+    /// Creates default TabDDPM denoiser MLP layers: SiLU hidden layers with optional dropout.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTabDDPMDenoiserLayers(
+        int inputDim, int[] hiddenDims, double dropoutRate)
+    {
+        var silu = new SiLUActivation<T>() as IActivationFunction<T>;
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+            prevDim = hiddenDims[i];
+        }
+    }
+
+    #endregion
+
+    #region TVAE Layer Factory Methods
+
+    /// <summary>
+    /// Creates default TVAE encoder layers: hidden layers with ReLU, final layer outputs 2*latentDim
+    /// (mean and logvar concatenated).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTVAEEncoderLayers(
+        int inputDim, int latentDim, int[] hiddenDims)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], relu);
+            prevDim = hiddenDims[i];
+        }
+
+        // Output layer produces 2*latentDim: first half = mean, second half = logvar
+        yield return new DenseLayer<T>(prevDim, 2 * latentDim, identity);
+    }
+
+    /// <summary>
+    /// Creates default TVAE decoder layers: hidden layers with ReLU, final identity output layer.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTVAEDecoderLayers(
+        int latentDim, int outputDim, int[] hiddenDims)
+    {
+        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int prevDim = latentDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], relu);
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, identity);
+    }
+
+    #endregion
+
+    #region PATE-GAN Factory Methods
+
+    /// <summary>
+    /// Creates default PATE-GAN generator layers with residual connections.
+    /// Uses IdentityActivation so the caller controls activation ordering (FC → BN → ReLU).
+    /// </summary>
+    /// <param name="inputDim">Generator noise dimension (embedding dim).</param>
+    /// <param name="outputDim">Generator output dimension (transformed data width).</param>
+    /// <param name="hiddenDims">Hidden layer sizes.</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultPATEGANGeneratorLayers(
+        int inputDim, int outputDim, int[] hiddenDims)
+    {
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            // Residual: layer input includes original input concatenated
+            int layerInput = i == 0 ? inputDim : hiddenDims[i - 1] + inputDim;
+            yield return new DenseLayer<T>(layerInput, hiddenDims[i], identity);
+        }
+
+        // Output layer (residual connection from last hidden + original input)
+        int lastHidden = hiddenDims.Length > 0 ? hiddenDims[^1] + inputDim : inputDim;
+        yield return new DenseLayer<T>(lastHidden, outputDim, identity);
+    }
+
+    /// <summary>
+    /// Creates default PATE-GAN teacher/student discriminator layers.
+    /// Uses IdentityActivation so the caller controls activation ordering (FC → LeakyReLU).
+    /// </summary>
+    /// <param name="inputDim">Discriminator input dimension (transformed data width).</param>
+    /// <param name="outputDim">Output dimension (1 for real/fake score).</param>
+    /// <param name="hiddenDims">Hidden layer sizes.</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultPATEGANDiscriminatorLayers(
+        int inputDim, int outputDim, int[] hiddenDims)
+    {
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int prevDim = inputDim;
+
+        for (int i = 0; i < hiddenDims.Length; i++)
+        {
+            yield return new DenseLayer<T>(prevDim, hiddenDims[i], identity);
+            prevDim = hiddenDims[i];
+        }
+
+        yield return new DenseLayer<T>(prevDim, outputDim, identity);
+    }
+
+    #endregion
 }
