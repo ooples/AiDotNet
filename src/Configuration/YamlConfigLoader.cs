@@ -4,7 +4,7 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace AiDotNet.Configuration;
 
 /// <summary>
-/// Loads and validates YAML configuration files into <see cref="YamlModelConfig"/> instances.
+/// Loads and deserializes YAML configuration files into <see cref="YamlModelConfig"/> instances.
 /// </summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> This class reads a YAML file from disk (or a YAML string)

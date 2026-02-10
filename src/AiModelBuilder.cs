@@ -241,6 +241,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // Memory management configuration for gradient checkpointing, activation pooling, and model sharding
     private Training.Memory.TrainingMemoryConfig? _memoryConfig;
 
+    // Internal accessors for test verification (visible to AiDotNetTests via InternalsVisibleTo)
+    internal IOptimizer<T, TInput, TOutput>? ConfiguredOptimizer => _optimizer;
+    internal CacheConfig? ConfiguredCaching => _cacheConfig;
+    internal AiDotNet.Configuration.JitCompilationConfig? ConfiguredJitCompilation => _jitCompilationConfig;
+    internal AiDotNet.Configuration.InferenceOptimizationConfig? ConfiguredInferenceOptimizations => _inferenceOptimizationConfig;
+    internal InterpretabilityOptions? ConfiguredInterpretability => _interpretabilityOptions;
+    internal Training.Memory.TrainingMemoryConfig? ConfiguredMemoryManagement => _memoryConfig;
+
     /// <summary>
     /// Creates a new <see cref="AiModelBuilder{T, TInput, TOutput}"/> with configuration loaded from a YAML file.
     /// </summary>
@@ -290,7 +298,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             throw new ArgumentException("Config file path cannot be null or empty.", nameof(configFilePath));
         }
 
-        var config = YamlConfigLoader.LoadFromFile(configFilePath);
+        var fullPath = Path.GetFullPath(configFilePath);
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("YAML config file not found.", fullPath);
+        }
+
+        var config = YamlConfigLoader.LoadFromFile(fullPath);
         YamlConfigApplier<T, TInput, TOutput>.Apply(config, this);
     }
 

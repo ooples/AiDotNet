@@ -324,9 +324,18 @@ jitCompilation:
   throwOnFailure: true
 ");
 
-            // This should not throw - the builder successfully parses and applies the YAML config
+            // The builder successfully parses and applies the YAML config
             var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>(tempFile);
             Assert.NotNull(builder);
+
+            // Verify YAML values were actually applied to the builder
+            Assert.NotNull(builder.ConfiguredCaching);
+            Assert.True(builder.ConfiguredCaching.Enabled);
+            Assert.Equal(2000, builder.ConfiguredCaching.MaxCacheSize);
+
+            Assert.NotNull(builder.ConfiguredJitCompilation);
+            Assert.True(builder.ConfiguredJitCompilation.Enabled);
+            Assert.True(builder.ConfiguredJitCompilation.ThrowOnFailure);
         }
         finally
         {
@@ -346,8 +355,9 @@ caching:
   maxCacheSize: 500
 ");
 
-            // YAML sets caching, then fluent overrides it
-            var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>(tempFile)
+            // YAML sets caching (enabled=true, maxCacheSize=500), then fluent overrides it
+            var builder = (AiModelBuilder<double, Matrix<double>, Vector<double>>)
+                new AiModelBuilder<double, Matrix<double>, Vector<double>>(tempFile)
                 .ConfigureCaching(new CacheConfig
                 {
                     Enabled = false,
@@ -355,6 +365,11 @@ caching:
                 });
 
             Assert.NotNull(builder);
+
+            // Verify the fluent override took effect over YAML values
+            Assert.NotNull(builder.ConfiguredCaching);
+            Assert.False(builder.ConfiguredCaching.Enabled);
+            Assert.Equal(100, builder.ConfiguredCaching.MaxCacheSize);
         }
         finally
         {
@@ -638,8 +653,11 @@ optimizer:
         var config = YamlConfigLoader.LoadFromString(yaml);
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
 
-        // Should not throw - factory creates Adam optimizer with null model
+        // Factory creates Adam optimizer with null model
         YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder);
+
+        // Verify the optimizer was actually configured on the builder
+        Assert.NotNull(builder.ConfiguredOptimizer);
     }
 
     [Fact]
@@ -654,6 +672,9 @@ optimizer:
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
 
         YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder);
+
+        // Verify the optimizer was actually configured on the builder
+        Assert.NotNull(builder.ConfiguredOptimizer);
     }
 
     #endregion
@@ -780,6 +801,25 @@ memoryManagement:
             // End-to-end: YAML file -> builder constructor -> all sections applied
             var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>(tempFile);
             Assert.NotNull(builder);
+
+            // Verify each section was actually applied
+            Assert.NotNull(builder.ConfiguredOptimizer);
+
+            Assert.NotNull(builder.ConfiguredCaching);
+            Assert.True(builder.ConfiguredCaching.Enabled);
+            Assert.Equal(1000, builder.ConfiguredCaching.MaxCacheSize);
+
+            Assert.NotNull(builder.ConfiguredJitCompilation);
+            Assert.True(builder.ConfiguredJitCompilation.Enabled);
+
+            Assert.NotNull(builder.ConfiguredInferenceOptimizations);
+            Assert.True(builder.ConfiguredInferenceOptimizations.EnableKVCache);
+
+            Assert.NotNull(builder.ConfiguredInterpretability);
+            Assert.True(builder.ConfiguredInterpretability.EnableSHAP);
+
+            Assert.NotNull(builder.ConfiguredMemoryManagement);
+            Assert.True(builder.ConfiguredMemoryManagement.UseGradientCheckpointing);
         }
         finally
         {
