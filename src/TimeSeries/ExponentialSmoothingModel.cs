@@ -131,6 +131,21 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     private Vector<T> _initialValues;
 
     /// <summary>
+    /// The level value at the end of training, used as the starting point for forecasting.
+    /// </summary>
+    private T _trainedLevel;
+
+    /// <summary>
+    /// The trend value at the end of training, used as the starting point for forecasting.
+    /// </summary>
+    private T _trainedTrend;
+
+    /// <summary>
+    /// The seasonal factors at the end of training, used as the starting point for forecasting.
+    /// </summary>
+    private Vector<T> _trainedSeasonalFactors;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ExponentialSmoothingModel{T}"/> class with the specified options.
     /// </summary>
     /// <param name="options">The configuration options for the exponential smoothing model.</param>
@@ -159,6 +174,9 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         _beta = options.UseTrend ? NumOps.FromDouble(options.InitialBeta) : NumOps.Zero;
         _gamma = options.UseSeasonal ? NumOps.FromDouble(options.InitialGamma) : NumOps.Zero;
         _initialValues = Vector<T>.Empty();
+        _trainedLevel = NumOps.Zero;
+        _trainedTrend = NumOps.Zero;
+        _trainedSeasonalFactors = Vector<T>.Empty();
     }
 
     /// <summary>
@@ -777,6 +795,70 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
                 _initialValues[i + 2] = seasonalFactors[i];
             }
         }
+
+        // Run through the training data to compute the final level/trend/seasonal state
+        SaveTrainedState(y);
+    }
+
+    /// <summary>
+    /// Runs through the training data with the optimized parameters to compute
+    /// the final level, trend, and seasonal state for use in forecasting.
+    /// </summary>
+    private void SaveTrainedState(Vector<T> y)
+    {
+        T level = _initialValues[0];
+        T trend = Options.IncludeTrend ? _initialValues[1] : NumOps.Zero;
+        Vector<T> seasonalFactors = Options.SeasonalPeriod > 0
+            ? new Vector<T>([.. _initialValues.Skip(2)])
+            : Vector<T>.Empty();
+
+        for (int i = 0; i < y.Length; i++)
+        {
+            T observation = y[i];
+            T oldLevel = level;
+
+            // Update level using actual observation
+            if (Options.SeasonalPeriod > 0)
+            {
+                T seasonFactor = seasonalFactors[i % Options.SeasonalPeriod];
+                T deseasonalized = NumOps.Divide(observation, seasonFactor);
+                level = NumOps.Add(
+                    NumOps.Multiply(_alpha, deseasonalized),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend))
+                );
+            }
+            else
+            {
+                level = NumOps.Add(
+                    NumOps.Multiply(_alpha, observation),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend))
+                );
+            }
+
+            // Update trend
+            if (Options.IncludeTrend)
+            {
+                trend = NumOps.Add(
+                    NumOps.Multiply(_beta, NumOps.Subtract(level, oldLevel)),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _beta), trend)
+                );
+            }
+
+            // Update seasonal factors
+            if (Options.SeasonalPeriod > 0)
+            {
+                int seasonIndex = i % Options.SeasonalPeriod;
+                seasonalFactors[seasonIndex] = NumOps.Add(
+                    NumOps.Multiply(_gamma, NumOps.Divide(observation, level)),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _gamma), seasonalFactors[seasonIndex])
+                );
+            }
+        }
+
+        // Save the final state
+        _trainedLevel = level;
+        _trainedTrend = trend;
+        _trainedSeasonalFactors = seasonalFactors.Length > 0 ? seasonalFactors.Clone() : Vector<T>.Empty();
     }
 
     /// <summary>
@@ -823,5 +905,98 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         // If for some reason we couldn't make a prediction, return a default value
         // This should never happen in normal operation, but provides a fallback
         return NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Forecasts future values using the trained end-of-training state instead of
+    /// resetting to initial values on each call.
+    /// </summary>
+    /// <param name="history">The historical time series values.</param>
+    /// <param name="steps">The number of future steps to forecast.</param>
+    /// <returns>A vector of forecasted values.</returns>
+    public override Vector<T> Forecast(Vector<T> history, int steps)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("The model must be trained before forecasting.");
+        }
+
+        if (history == null)
+        {
+            throw new ArgumentNullException(nameof(history), "History cannot be null.");
+        }
+
+        if (steps <= 0)
+        {
+            throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
+        }
+
+        // Start from the trained end-of-training state
+        T level = _trainedLevel;
+        T trend = _trainedTrend;
+        Vector<T> seasonalFactors = _trainedSeasonalFactors.Length > 0
+            ? _trainedSeasonalFactors.Clone()
+            : Vector<T>.Empty();
+
+        // The seasonal index continues from where training left off
+        // Training processed y.Length observations, so the next season index is y.Length % period
+        // But we don't know training length here, so use history length as approximation
+        int seasonStartIndex = history.Length;
+
+        Vector<T> forecasts = new Vector<T>(steps);
+        for (int i = 0; i < steps; i++)
+        {
+            T forecast;
+            if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
+            {
+                int seasonIdx = (seasonStartIndex + i) % Options.SeasonalPeriod;
+                forecast = NumOps.Multiply(NumOps.Add(level, trend), seasonalFactors[seasonIdx]);
+            }
+            else
+            {
+                forecast = NumOps.Add(level, trend);
+            }
+
+            forecasts[i] = forecast;
+
+            // Update level and trend for the next step using the forecast value
+            // (since we don't have actual observations for future steps)
+            T oldLevel = level;
+            if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
+            {
+                int seasonIdx = (seasonStartIndex + i) % Options.SeasonalPeriod;
+                T deseasonalized = NumOps.Divide(forecast, seasonalFactors[seasonIdx]);
+                level = NumOps.Add(
+                    NumOps.Multiply(_alpha, deseasonalized),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend))
+                );
+            }
+            else
+            {
+                level = NumOps.Add(
+                    NumOps.Multiply(_alpha, forecast),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend))
+                );
+            }
+
+            if (Options.IncludeTrend)
+            {
+                trend = NumOps.Add(
+                    NumOps.Multiply(_beta, NumOps.Subtract(level, oldLevel)),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _beta), trend)
+                );
+            }
+
+            if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
+            {
+                int seasonIdx = (seasonStartIndex + i) % Options.SeasonalPeriod;
+                seasonalFactors[seasonIdx] = NumOps.Add(
+                    NumOps.Multiply(_gamma, NumOps.Divide(forecast, NumOps.Add(oldLevel, trend))),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _gamma), seasonalFactors[seasonIdx])
+                );
+            }
+        }
+
+        return forecasts;
     }
 }
