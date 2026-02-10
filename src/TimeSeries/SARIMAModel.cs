@@ -697,6 +697,167 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
+    /// Forecasts future values using the trained SARIMA model, properly handling both
+    /// regular and seasonal differencing.
+    /// </summary>
+    /// <param name="history">The historical time series values.</param>
+    /// <param name="steps">The number of future steps to forecast.</param>
+    /// <returns>A vector of forecasted values in the original (undifferenced) scale.</returns>
+    public override Vector<T> Forecast(Vector<T> history, int steps)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("The model must be trained before forecasting.");
+        }
+
+        if (history == null)
+        {
+            throw new ArgumentNullException(nameof(history), "History cannot be null.");
+        }
+
+        if (steps <= 0)
+        {
+            throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
+        }
+
+        // If no differencing at all, fall back to base class
+        if (_d == 0 && _D == 0)
+        {
+            return base.Forecast(history, steps);
+        }
+
+        // Apply the same differencing as in TrainCore
+        Vector<T> diffHistory = ApplyDifferencing(history);
+
+        // Build a working list of differenced values
+        int maxLag = Math.Max(_p, _P * _m);
+        List<T> extendedDiff = new List<T>(diffHistory.Length + steps);
+        for (int i = 0; i < diffHistory.Length; i++)
+        {
+            extendedDiff.Add(diffHistory[i]);
+        }
+
+        // Generate forecasts on the differenced scale
+        Vector<T> diffForecasts = new Vector<T>(steps);
+        for (int step = 0; step < steps; step++)
+        {
+            T prediction = _constant;
+
+            // Non-seasonal AR component
+            for (int j = 0; j < _p && j < extendedDiff.Count; j++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(
+                    _arCoefficients[j], extendedDiff[extendedDiff.Count - 1 - j]));
+            }
+
+            // Seasonal AR component
+            for (int j = 0; j < _P; j++)
+            {
+                int lagIdx = extendedDiff.Count - (j + 1) * _m;
+                if (lagIdx >= 0)
+                {
+                    prediction = NumOps.Add(prediction, NumOps.Multiply(
+                        _sarCoefficients[j], extendedDiff[lagIdx]));
+                }
+            }
+
+            // MA/SMA components are assumed zero for future predictions
+
+            diffForecasts[step] = prediction;
+            extendedDiff.Add(prediction);
+        }
+
+        // Undifference: first undo regular differencing, then seasonal differencing
+        // (reverse order of ApplyDifferencing which does seasonal first, then regular)
+
+        // Undo regular (non-seasonal) differencing d times
+        var currentForecasts = new List<T>(steps);
+        for (int i = 0; i < steps; i++)
+        {
+            currentForecasts.Add(diffForecasts[i]);
+        }
+
+        // We need the tail of history at each intermediate differencing level
+        // ApplyDifferencing does: seasonal D times -> then regular d times
+        // So to undo: first undo regular d times, then undo seasonal D times
+
+        // Compute the series after seasonal differencing but before regular differencing
+        Vector<T> afterSeasonalDiff = history;
+        for (int i = 0; i < _D; i++)
+        {
+            afterSeasonalDiff = SeasonalDifference(afterSeasonalDiff, _m);
+        }
+
+        // Undo regular differencing d times
+        // Each level needs the last value of the series at that level
+        Vector<T> tempSeries = afterSeasonalDiff;
+        var regularTailValues = new T[_d];
+        for (int level = 0; level < _d; level++)
+        {
+            regularTailValues[level] = tempSeries[tempSeries.Length - 1];
+            // Difference for next level
+            Vector<T> nextLevel = new Vector<T>(tempSeries.Length - 1);
+            for (int i = 1; i < tempSeries.Length; i++)
+            {
+                nextLevel[i - 1] = NumOps.Subtract(tempSeries[i], tempSeries[i - 1]);
+            }
+            tempSeries = nextLevel;
+        }
+
+        // Undo regular differencing in reverse
+        for (int level = _d - 1; level >= 0; level--)
+        {
+            T lastVal = regularTailValues[level];
+            for (int i = 0; i < currentForecasts.Count; i++)
+            {
+                T undiff = NumOps.Add(currentForecasts[i], lastVal);
+                currentForecasts[i] = undiff;
+                lastVal = undiff;
+            }
+        }
+
+        // Undo seasonal differencing D times
+        // For seasonal undifferencing: forecast[i] = diffForecast[i] + value[i - m]
+        // We need the last m values from the previous level for each D
+        for (int level = 0; level < _D; level++)
+        {
+            // Compute the series at this seasonal differencing level
+            Vector<T> seriesAtLevel = history;
+            for (int d2 = 0; d2 < _D - 1 - level; d2++)
+            {
+                seriesAtLevel = SeasonalDifference(seriesAtLevel, _m);
+            }
+
+            // Get the last m values from this series
+            var seasonalTail = new List<T>();
+            for (int i = Math.Max(0, seriesAtLevel.Length - _m); i < seriesAtLevel.Length; i++)
+            {
+                seasonalTail.Add(seriesAtLevel[i]);
+            }
+
+            // Undo seasonal differencing: forecast[i] = diffForecast[i] + value[i - m]
+            // where value[i-m] comes from either the tail or previous forecasts
+            var combined = new List<T>(seasonalTail);
+            for (int i = 0; i < currentForecasts.Count; i++)
+            {
+                int refIdx = combined.Count - _m;
+                T refVal = refIdx >= 0 ? combined[refIdx] : NumOps.Zero;
+                T undiff = NumOps.Add(currentForecasts[i], refVal);
+                currentForecasts[i] = undiff;
+                combined.Add(undiff);
+            }
+        }
+
+        Vector<T> result = new Vector<T>(steps);
+        for (int i = 0; i < steps; i++)
+        {
+            result[i] = currentForecasts[i];
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Gets metadata about the model, including its type, parameters, and configuration.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the model.</returns>
