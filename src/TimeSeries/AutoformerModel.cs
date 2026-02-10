@@ -343,9 +343,8 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
 
     /// <summary>
     /// Trains the model using backpropagation through the Autoformer architecture.
-    /// For multi-step forecasting, the input should contain lookback + forecastHorizon values.
-    /// The first lookback values are used as input, and the last forecastHorizon values
-    /// from the sequence are used as multi-step targets.
+    /// Constructs proper lookback windows from the target vector y rather than using
+    /// x.GetRow(i), which may return only 1 value for univariate time series.
     /// </summary>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
@@ -353,52 +352,46 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         int forecastHorizon = _options.ForecastHorizon;
         int lookback = _options.LookbackWindow;
 
+        // Build training samples from y: for each valid index i,
+        // input = y[i-lookback : i], target = y[i : i+forecastHorizon]
+        int startIdx = lookback;
+        int endIdx = y.Length - forecastHorizon;
+
+        if (endIdx <= startIdx)
+        {
+            // Not enough data for even one sample; fall back to minimal training
+            return;
+        }
+
+        var sampleIndices = Enumerable.Range(startIdx, endIdx - startIdx).ToList();
+
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
-            var indices = Enumerable.Range(0, x.Rows).OrderBy(_ => _random.Next()).ToList();
+            var shuffled = sampleIndices.OrderBy(_ => _random.Next()).ToList();
 
-            for (int batchStart = 0; batchStart < x.Rows; batchStart += _options.BatchSize)
+            for (int batchStart = 0; batchStart < shuffled.Count; batchStart += _options.BatchSize)
             {
-                int batchEnd = Math.Min(batchStart + _options.BatchSize, x.Rows);
+                int batchEnd = Math.Min(batchStart + _options.BatchSize, shuffled.Count);
                 int batchSize = batchEnd - batchStart;
 
                 ResetGradientAccumulators();
 
                 for (int idx = batchStart; idx < batchEnd; idx++)
                 {
-                    int i = indices[idx];
-                    Vector<T> fullSequence = x.GetRow(i);
+                    int i = shuffled[idx];
 
-                    // Extract multi-step targets from the input sequence
-                    // If input contains lookback + forecastHorizon values, use the last forecastHorizon as targets
-                    // Otherwise, construct targets from available data
+                    // Extract lookback window from y
+                    var input = new Vector<T>(lookback);
+                    for (int t = 0; t < lookback; t++)
+                    {
+                        input[t] = y[i - lookback + t];
+                    }
+
+                    // Extract multi-step targets from y
                     var targets = new Vector<T>(forecastHorizon);
-                    int inputLen = Math.Min(fullSequence.Length, lookback);
-
-                    if (fullSequence.Length >= lookback + forecastHorizon)
+                    for (int h = 0; h < forecastHorizon; h++)
                     {
-                        // Full sequence available: use last forecastHorizon values as multi-step targets
-                        for (int h = 0; h < forecastHorizon; h++)
-                        {
-                            targets[h] = fullSequence[lookback + h];
-                        }
-                    }
-                    else
-                    {
-                        // Fallback: use y[i] for first target, pad with last known value
-                        targets[0] = y[i];
-                        T lastValue = y[i];
-                        for (int h = 1; h < forecastHorizon; h++)
-                        {
-                            targets[h] = lastValue;
-                        }
-                    }
-
-                    // Extract input portion (first lookback values)
-                    var input = new Vector<T>(inputLen);
-                    for (int t = 0; t < inputLen; t++)
-                    {
-                        input[t] = fullSequence[t];
+                        targets[h] = y[i + h];
                     }
 
                     var gradients = ComputeGradientsMultiStep(input, targets);
