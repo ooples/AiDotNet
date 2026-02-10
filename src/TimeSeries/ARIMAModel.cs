@@ -92,6 +92,12 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     private T _residualMean;
 
     /// <summary>
+    /// Stores the last d values from the original (undifferenced) training data,
+    /// needed for undifferencing forecasts.
+    /// </summary>
+    private Vector<T> _lastOriginalValues;
+
+    /// <summary>
     /// Creates a new ARIMA model with the specified options.
     /// </summary>
     /// <param name="options">Options for the ARIMA model, including p, d, and q parameters. If null, default options are used.</param>
@@ -115,6 +121,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         _anomalyThreshold = NumOps.Zero;
         _residualStdDev = NumOps.Zero;
         _residualMean = NumOps.Zero;
+        _lastOriginalValues = Vector<T>.Empty();
     }
 
     /// <summary>
@@ -382,7 +389,21 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         // Step 4: Estimate constant term for the model
         _constant = EstimateConstant(diffY, _arCoefficients, _maCoefficients);
 
-        // Step 5: If anomaly detection is enabled, compute threshold from residuals
+        // Step 5: Store the last d values from the original series for undifferencing forecasts
+        if (d > 0)
+        {
+            _lastOriginalValues = new Vector<T>(d);
+            for (int i = 0; i < d; i++)
+            {
+                _lastOriginalValues[i] = y[y.Length - d + i];
+            }
+        }
+        else
+        {
+            _lastOriginalValues = Vector<T>.Empty();
+        }
+
+        // Step 6: If anomaly detection is enabled, compute threshold from residuals
         if (_arimaOptions.EnableAnomalyDetection)
         {
             ComputeAnomalyThreshold(arResiduals);
@@ -484,6 +505,137 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         // or we assume errors of zero for simplicity
 
         return prediction;
+    }
+
+    /// <summary>
+    /// Forecasts future values using the trained ARIMA model, properly handling differencing.
+    /// </summary>
+    /// <param name="history">The historical time series values.</param>
+    /// <param name="steps">The number of future steps to forecast.</param>
+    /// <returns>A vector of forecasted values in the original (undifferenced) scale.</returns>
+    public override Vector<T> Forecast(Vector<T> history, int steps)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("The model must be trained before forecasting.");
+        }
+
+        if (history == null)
+        {
+            throw new ArgumentNullException(nameof(history), "History cannot be null.");
+        }
+
+        if (steps <= 0)
+        {
+            throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
+        }
+
+        int d = _arimaOptions.D;
+        int p = _arimaOptions.P;
+
+        // If no differencing, fall back to base class behavior
+        if (d == 0)
+        {
+            return base.Forecast(history, steps);
+        }
+
+        // Difference the history to get the series that the AR/MA coefficients were trained on
+        Vector<T> diffHistory = TimeSeriesHelper<T>.DifferenceSeries(history, d);
+
+        // Build a working list of differenced values we can extend
+        List<T> extendedDiffHistory = new List<T>(diffHistory.Length + steps);
+        for (int i = 0; i < diffHistory.Length; i++)
+        {
+            extendedDiffHistory.Add(diffHistory[i]);
+        }
+
+        // Generate forecasts on the differenced scale
+        Vector<T> diffForecasts = new Vector<T>(steps);
+        for (int step = 0; step < steps; step++)
+        {
+            T prediction = _constant;
+
+            // AR component: use the most recent p differenced values
+            for (int j = 0; j < _arCoefficients.Length && j < extendedDiffHistory.Count; j++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(
+                    _arCoefficients[j], extendedDiffHistory[extendedDiffHistory.Count - 1 - j]));
+            }
+
+            // MA component is assumed zero for future predictions (no actual errors available)
+
+            diffForecasts[step] = prediction;
+            extendedDiffHistory.Add(prediction);
+        }
+
+        // Undifference the forecasts: cumulatively add back from the last original value(s)
+        // For d=1: forecast[i] = diffForecast[i] + lastOriginal (then lastOriginal = forecast[i])
+        // For d=2: need to undifference twice
+        Vector<T> forecasts = diffForecasts;
+        // We need to undifference d times. Each time, we cumulative-sum starting from the last value
+        // at that level. We stored the last d values from the original series.
+        // Rebuild integration from the inside out.
+        // The innermost differenced series was integrated from the previous level.
+        // We need the last value at each differencing level.
+
+        // Compute the last values at each differencing level
+        // Level 0: original y -> last value = y[n-1]
+        // Level 1: diff once -> last value = diff1[n-2] = y[n-1] - y[n-2]
+        // etc.
+        // _lastOriginalValues stores the last d values of y: y[n-d], y[n-d+1], ..., y[n-1]
+        // For d=1: we need y[n-1] to undifference
+        // For d=2: we need y'[n-2] = y[n-1]-y[n-2] to undifference first, then y[n-1] again
+
+        // Compute tail values at each integration level
+        var tailValues = new T[d];
+        // Start with the original values
+        var tempTail = new List<T>();
+        for (int i = 0; i < _lastOriginalValues.Length; i++)
+        {
+            tempTail.Add(_lastOriginalValues[i]);
+        }
+
+        // For each differencing level, the "last value" before that differencing is the last element
+        // of the progressively differenced tail
+        for (int level = 0; level < d; level++)
+        {
+            tailValues[level] = tempTail[tempTail.Count - 1];
+            // Difference tempTail for the next level
+            var newTail = new List<T>();
+            for (int i = 1; i < tempTail.Count; i++)
+            {
+                newTail.Add(NumOps.Subtract(tempTail[i], tempTail[i - 1]));
+            }
+            tempTail = newTail;
+        }
+
+        // Now undifference d times (in reverse order of differencing)
+        // The forecasts are at the fully-differenced level (level d)
+        // We integrate back: level d -> d-1 -> ... -> 0
+        var currentForecasts = new List<T>(steps);
+        for (int i = 0; i < steps; i++)
+        {
+            currentForecasts.Add(forecasts[i]);
+        }
+
+        for (int level = d - 1; level >= 0; level--)
+        {
+            T lastVal = tailValues[level];
+            for (int i = 0; i < currentForecasts.Count; i++)
+            {
+                T undiff = NumOps.Add(currentForecasts[i], lastVal);
+                currentForecasts[i] = undiff;
+                lastVal = undiff;
+            }
+        }
+
+        Vector<T> result = new Vector<T>(steps);
+        for (int i = 0; i < steps; i++)
+        {
+            result[i] = currentForecasts[i];
+        }
+
+        return result;
     }
 
     /// <summary>
