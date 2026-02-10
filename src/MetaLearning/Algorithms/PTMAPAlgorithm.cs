@@ -180,7 +180,11 @@ public class PTMAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         if (supportFeatures == null || queryFeatures == null || queryFeatures.Length == 0)
             return supportFeatures;
 
-        int numQuery = queryFeatures.Length;
+        // Cap query count: ConvertToVector flattens all predictions into a 1D vector,
+        // so Length is total scalars, not the number of examples. The EM-like loop
+        // iterates over all query elements, so cap to bound compute time.
+        const int MaxQueryNodes = 256;
+        int numQuery = Math.Min(queryFeatures.Length, MaxQueryNodes);
 
         // Initialize logits from support-query cosine similarity
         var logits = new double[numQuery];

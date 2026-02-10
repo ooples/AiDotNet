@@ -487,457 +487,212 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     ///    Example: input=[1.0, 2.0, 3.0] * context=[1.5, 0.5, 1.0] = [1.5, 1.0, 3.0]
     /// </para>
     /// </remarks>
-    private TInput AugmentInput(TInput input, Vector<T> context)
+    private TInput AugmentInput(TInput input, Vector<T> context) =>
+        CAVIAContextHelper<T>.AugmentInput<TInput>(input, context, _caviaOptions.ContextInjectionMode, NumOps);
+}
+
+/// <summary>
+/// Shared static helper for CAVIA context injection operations.
+/// Eliminates duplication between CAVIAAlgorithm and CAVIAModel.
+/// </summary>
+internal static class CAVIAContextHelper<T>
+{
+    /// <summary>Augments input by injecting context according to the specified injection mode.</summary>
+    public static TInput AugmentInput<TInput>(TInput input, Vector<T> context,
+        CAVIAContextInjectionMode mode, INumericOperations<T> numOps)
     {
-        return _caviaOptions.ContextInjectionMode switch
+        return mode switch
         {
-            CAVIAContextInjectionMode.Concatenation => ConcatenateContext(input, context),
-            CAVIAContextInjectionMode.Addition => AddContext(input, context),
-            CAVIAContextInjectionMode.Multiplication => MultiplyContext(input, context),
-            _ => ConcatenateContext(input, context)
+            CAVIAContextInjectionMode.Concatenation => ConcatenateContext<TInput>(input, context),
+            CAVIAContextInjectionMode.Addition => AddContext<TInput>(input, context, numOps),
+            CAVIAContextInjectionMode.Multiplication => MultiplyContext<TInput>(input, context, numOps),
+            _ => ConcatenateContext<TInput>(input, context)
         };
     }
 
-    /// <summary>
-    /// Concatenates the context vector with each sample in the input.
-    /// </summary>
-    /// <param name="input">The original input (Tensor, Matrix, or Vector).</param>
-    /// <param name="context">The context vector to append.</param>
-    /// <returns>A new input with context appended to the feature dimension of each sample.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This dispatches to the appropriate concatenation method based on
-    /// the input type. Each sample in the input gets the same context vector appended to its
-    /// feature dimension. This is the most common injection mode because it doesn't require
-    /// the context dimension to match the input dimension.
-    /// </para>
-    /// </remarks>
-    private TInput ConcatenateContext(TInput input, Vector<T> context)
+    public static TInput ConcatenateContext<TInput>(TInput input, Vector<T> context)
     {
         if (input is Tensor<T> tensor)
-        {
             return (TInput)(object)ConcatenateTensorWithContext(tensor, context);
-        }
-
         if (input is Matrix<T> matrix)
-        {
             return (TInput)(object)ConcatenateMatrixWithContext(matrix, context);
-        }
-
         if (input is Vector<T> vector)
-        {
             return (TInput)(object)ConcatenateVectorWithContext(vector, context);
-        }
-
         throw new NotSupportedException(
             $"Input type {typeof(TInput).Name} is not supported for context concatenation. " +
             $"Supported types: Tensor<T>, Matrix<T>, Vector<T>.");
     }
 
-    /// <summary>
-    /// Concatenates context with a tensor input.
-    /// </summary>
-    /// <param name="tensor">The input tensor (1D or 2D).</param>
-    /// <param name="context">The context vector to append.</param>
-    /// <returns>A new tensor with context appended to the feature dimension.</returns>
-    /// <remarks>
-    /// <para>
-    /// Handles two tensor shapes:
-    /// <list type="bullet">
-    /// <item><b>1D [features]:</b> Creates [features + context_dim] - single sample.</item>
-    /// <item><b>2D [batch, features]:</b> Creates [batch, features + context_dim] - batch of samples.
-    /// The same context is appended to every sample in the batch.</item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> If your input is a tensor of shape [32, 10] (32 samples, 10 features)
-    /// and context has 100 dimensions, the output will be [32, 110] - each sample now has
-    /// its original 10 features plus the 100 context values appended.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ConcatenateTensorWithContext(Tensor<T> tensor, Vector<T> context)
+    public static Tensor<T> ConcatenateTensorWithContext(Tensor<T> tensor, Vector<T> context)
     {
         if (tensor.Shape.Length == 1)
         {
-            // 1D: [features] -> [features + context_dim]
             int newDim = tensor.Shape[0] + context.Length;
             var result = new Tensor<T>(new int[] { newDim });
-
             for (int i = 0; i < tensor.Shape[0]; i++)
-            {
                 result[new int[] { i }] = tensor[new int[] { i }];
-            }
             for (int i = 0; i < context.Length; i++)
-            {
                 result[new int[] { tensor.Shape[0] + i }] = context[i];
-            }
-
             return result;
         }
         else if (tensor.Shape.Length == 2)
         {
-            // 2D: [batch, features] -> [batch, features + context_dim]
             int batchSize = tensor.Shape[0];
             int originalFeatures = tensor.Shape[1];
             int newFeatures = originalFeatures + context.Length;
             var result = new Tensor<T>(new int[] { batchSize, newFeatures });
-
             for (int b = 0; b < batchSize; b++)
             {
-                // Copy original features
                 for (int f = 0; f < originalFeatures; f++)
-                {
                     result[new int[] { b, f }] = tensor[new int[] { b, f }];
-                }
-                // Append context (same context for all samples in the batch)
                 for (int c = 0; c < context.Length; c++)
-                {
                     result[new int[] { b, originalFeatures + c }] = context[c];
-                }
             }
-
             return result;
         }
-
         throw new NotSupportedException(
-            $"Tensor with {tensor.Shape.Length} dimensions is not supported for context concatenation. " +
-            $"Supported: 1D [features] or 2D [batch, features].");
+            $"Tensor with {tensor.Shape.Length} dimensions is not supported for context concatenation.");
     }
 
-    /// <summary>
-    /// Concatenates context with a matrix input. Each row gets the context appended.
-    /// </summary>
-    /// <param name="matrix">The input matrix [batch, features].</param>
-    /// <param name="context">The context vector to append to each row.</param>
-    /// <returns>A new matrix [batch, features + context_dim] with context appended to each row.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Each row in the matrix represents one sample's features. This method
-    /// adds the context as extra columns to every row. If your data has 10 features and context
-    /// has 100 dimensions, each row grows from 10 columns to 110 columns.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ConcatenateMatrixWithContext(Matrix<T> matrix, Vector<T> context)
+    public static Matrix<T> ConcatenateMatrixWithContext(Matrix<T> matrix, Vector<T> context)
     {
         int newCols = matrix.Columns + context.Length;
         var result = new Matrix<T>(matrix.Rows, newCols);
-
         for (int row = 0; row < matrix.Rows; row++)
         {
-            // Copy original features
             for (int col = 0; col < matrix.Columns; col++)
-            {
                 result[row, col] = matrix[row, col];
-            }
-            // Append context
             for (int c = 0; c < context.Length; c++)
-            {
                 result[row, matrix.Columns + c] = context[c];
-            }
         }
-
         return result;
     }
 
-    /// <summary>
-    /// Concatenates context with a vector input (single sample).
-    /// </summary>
-    /// <param name="vector">The input feature vector [features].</param>
-    /// <param name="context">The context vector to append.</param>
-    /// <returns>A new vector [features + context_dim] with context appended after the features.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> For a single sample, this simply glues the context to the end of the
-    /// feature vector. Example: features=[1.0, 2.0] + context=[0.5, -0.3, 0.1] = [1.0, 2.0, 0.5, -0.3, 0.1].
-    /// </para>
-    /// </remarks>
-    private Vector<T> ConcatenateVectorWithContext(Vector<T> vector, Vector<T> context)
+    public static Vector<T> ConcatenateVectorWithContext(Vector<T> vector, Vector<T> context)
     {
         var result = new Vector<T>(vector.Length + context.Length);
-
         for (int i = 0; i < vector.Length; i++)
-        {
             result[i] = vector[i];
-        }
         for (int i = 0; i < context.Length; i++)
-        {
             result[vector.Length + i] = context[i];
-        }
-
         return result;
     }
 
-    /// <summary>
-    /// Adds the context vector element-wise to each sample in the input.
-    /// </summary>
-    /// <param name="input">The original input (Tensor, Matrix, or Vector).</param>
-    /// <param name="context">The context vector to add (must match input feature dimension).</param>
-    /// <returns>A new input with context added element-wise to each sample's features.</returns>
-    /// <exception cref="ArgumentException">Thrown when context dimension doesn't match input feature dimension.</exception>
-    /// <remarks>
-    /// <para>
-    /// Addition injection mode treats context as a per-task bias. Each context value is added to
-    /// the corresponding feature value, shifting the input in feature space based on the task.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is like adding a task-specific offset to each feature.
-    /// If feature 3 tends to be higher for task A vs task B, the context can learn to
-    /// compensate by adding or subtracting from that feature. Unlike concatenation, this
-    /// doesn't change the input dimension, but it requires context_dim = input_dim.
-    /// </para>
-    /// </remarks>
-    private TInput AddContext(TInput input, Vector<T> context)
+    public static TInput AddContext<TInput>(TInput input, Vector<T> context, INumericOperations<T> numOps)
     {
         if (input is Tensor<T> tensor)
-        {
-            return (TInput)(object)AddContextToTensor(tensor, context);
-        }
-
+            return (TInput)(object)AddContextToTensor(tensor, context, numOps);
         if (input is Matrix<T> matrix)
-        {
-            return (TInput)(object)AddContextToMatrix(matrix, context);
-        }
-
+            return (TInput)(object)AddContextToMatrix(matrix, context, numOps);
         if (input is Vector<T> vector)
         {
             if (vector.Length != context.Length)
-            {
                 throw new ArgumentException(
-                    $"Context dimension ({context.Length}) must match input dimension ({vector.Length}) " +
-                    $"for Addition injection mode.");
-            }
-            return (TInput)(object)Engine.Add(vector, context);
+                    $"Context dimension ({context.Length}) must match input dimension ({vector.Length}) for Addition injection mode.");
+            var result = new Vector<T>(vector.Length);
+            for (int i = 0; i < vector.Length; i++)
+                result[i] = numOps.Add(vector[i], context[i]);
+            return (TInput)(object)result;
         }
-
         throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported for context addition.");
     }
 
-    /// <summary>
-    /// Adds context element-wise to a tensor input.
-    /// </summary>
-    /// <param name="tensor">The input tensor (1D or 2D).</param>
-    /// <param name="context">The context vector to add (must match feature dimension).</param>
-    /// <returns>A new tensor with context added element-wise to the feature dimension.</returns>
-    /// <exception cref="ArgumentException">Thrown when context dimension doesn't match tensor feature dimension.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> For a 2D tensor [batch, features], each sample gets the same context
-    /// vector added to its features. For a 1D tensor [features], context is added directly.
-    /// The tensor shape is preserved (no dimension change).
-    /// </para>
-    /// </remarks>
-    private Tensor<T> AddContextToTensor(Tensor<T> tensor, Vector<T> context)
+    public static Tensor<T> AddContextToTensor(Tensor<T> tensor, Vector<T> context, INumericOperations<T> numOps)
     {
         if (tensor.Shape.Length == 1)
         {
             if (tensor.Shape[0] != context.Length)
-            {
                 throw new ArgumentException(
-                    $"Context dimension ({context.Length}) must match tensor dimension ({tensor.Shape[0]}) " +
-                    $"for Addition injection mode.");
-            }
-
+                    $"Context dimension ({context.Length}) must match tensor dimension ({tensor.Shape[0]}) for Addition injection mode.");
             var result = new Tensor<T>(tensor.Shape);
             for (int i = 0; i < tensor.Shape[0]; i++)
-            {
-                result[new int[] { i }] = NumOps.Add(tensor[new int[] { i }], context[i]);
-            }
+                result[new int[] { i }] = numOps.Add(tensor[new int[] { i }], context[i]);
             return result;
         }
         else if (tensor.Shape.Length == 2)
         {
             if (tensor.Shape[1] != context.Length)
-            {
                 throw new ArgumentException(
-                    $"Context dimension ({context.Length}) must match feature dimension ({tensor.Shape[1]}) " +
-                    $"for Addition injection mode.");
-            }
-
+                    $"Context dimension ({context.Length}) must match feature dimension ({tensor.Shape[1]}) for Addition injection mode.");
             var result = new Tensor<T>(tensor.Shape);
             for (int b = 0; b < tensor.Shape[0]; b++)
-            {
                 for (int f = 0; f < tensor.Shape[1]; f++)
-                {
-                    result[new int[] { b, f }] = NumOps.Add(tensor[new int[] { b, f }], context[f]);
-                }
-            }
+                    result[new int[] { b, f }] = numOps.Add(tensor[new int[] { b, f }], context[f]);
             return result;
         }
-
-        throw new NotSupportedException(
-            $"Tensor with {tensor.Shape.Length} dimensions is not supported for context addition.");
+        throw new NotSupportedException($"Tensor with {tensor.Shape.Length} dimensions is not supported for context addition.");
     }
 
-    /// <summary>
-    /// Adds context element-wise to each row of a matrix input.
-    /// </summary>
-    /// <param name="matrix">The input matrix [batch, features].</param>
-    /// <param name="context">The context vector to add to each row (must match column count).</param>
-    /// <returns>A new matrix with context added to each row's features.</returns>
-    /// <exception cref="ArgumentException">Thrown when context dimension doesn't match matrix column count.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Each row (sample) in the matrix gets the context values added to
-    /// its corresponding columns. The matrix shape stays the same - only the values change.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> AddContextToMatrix(Matrix<T> matrix, Vector<T> context)
+    public static Matrix<T> AddContextToMatrix(Matrix<T> matrix, Vector<T> context, INumericOperations<T> numOps)
     {
         if (matrix.Columns != context.Length)
-        {
             throw new ArgumentException(
-                $"Context dimension ({context.Length}) must match feature dimension ({matrix.Columns}) " +
-                $"for Addition injection mode.");
-        }
-
+                $"Context dimension ({context.Length}) must match feature dimension ({matrix.Columns}) for Addition injection mode.");
         var result = new Matrix<T>(matrix.Rows, matrix.Columns);
         for (int row = 0; row < matrix.Rows; row++)
-        {
             for (int col = 0; col < matrix.Columns; col++)
-            {
-                result[row, col] = NumOps.Add(matrix[row, col], context[col]);
-            }
-        }
+                result[row, col] = numOps.Add(matrix[row, col], context[col]);
         return result;
     }
 
-    /// <summary>
-    /// Multiplies the context vector element-wise with each sample in the input (FiLM-style gating).
-    /// </summary>
-    /// <param name="input">The original input (Tensor, Matrix, or Vector).</param>
-    /// <param name="context">The context vector to multiply (must match input feature dimension).</param>
-    /// <returns>A new input with context multiplied element-wise with each sample's features.</returns>
-    /// <exception cref="ArgumentException">Thrown when context dimension doesn't match input feature dimension.</exception>
-    /// <remarks>
-    /// <para>
-    /// Multiplication injection mode treats context as a per-task feature scaling (similar to
-    /// Feature-wise Linear Modulation / FiLM). Each context value scales the corresponding
-    /// feature, allowing the model to emphasize or suppress features based on the task.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is like adjusting the volume of each feature per task.
-    /// A context value of 2.0 doubles that feature's importance, while 0.5 halves it,
-    /// and 0.0 completely silences it. This is powerful when different tasks rely on
-    /// different subsets of features. Unlike concatenation, this doesn't change the input
-    /// dimension, but it requires context_dim = input_dim.
-    /// </para>
-    /// </remarks>
-    private TInput MultiplyContext(TInput input, Vector<T> context)
+    public static TInput MultiplyContext<TInput>(TInput input, Vector<T> context, INumericOperations<T> numOps)
     {
         if (input is Tensor<T> tensor)
-        {
-            return (TInput)(object)MultiplyContextWithTensor(tensor, context);
-        }
-
+            return (TInput)(object)MultiplyContextWithTensor(tensor, context, numOps);
         if (input is Matrix<T> matrix)
-        {
-            return (TInput)(object)MultiplyContextWithMatrix(matrix, context);
-        }
-
+            return (TInput)(object)MultiplyContextWithMatrix(matrix, context, numOps);
         if (input is Vector<T> vector)
         {
             if (vector.Length != context.Length)
-            {
                 throw new ArgumentException(
-                    $"Context dimension ({context.Length}) must match input dimension ({vector.Length}) " +
-                    $"for Multiplication injection mode.");
-            }
-            return (TInput)(object)Engine.Multiply(vector, context);
+                    $"Context dimension ({context.Length}) must match input dimension ({vector.Length}) for Multiplication injection mode.");
+            var result = new Vector<T>(vector.Length);
+            for (int i = 0; i < vector.Length; i++)
+                result[i] = numOps.Multiply(vector[i], context[i]);
+            return (TInput)(object)result;
         }
-
         throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported for context multiplication.");
     }
 
-    /// <summary>
-    /// Multiplies context element-wise with a tensor input.
-    /// </summary>
-    /// <param name="tensor">The input tensor (1D or 2D).</param>
-    /// <param name="context">The context vector to multiply (must match feature dimension).</param>
-    /// <returns>A new tensor with context multiplied element-wise with the feature dimension.</returns>
-    /// <exception cref="ArgumentException">Thrown when context dimension doesn't match tensor feature dimension.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> For a 2D tensor [batch, features], each sample gets its features
-    /// scaled by the context values. For a 1D tensor [features], context is multiplied directly.
-    /// The tensor shape is preserved (no dimension change).
-    /// </para>
-    /// </remarks>
-    private Tensor<T> MultiplyContextWithTensor(Tensor<T> tensor, Vector<T> context)
+    public static Tensor<T> MultiplyContextWithTensor(Tensor<T> tensor, Vector<T> context, INumericOperations<T> numOps)
     {
         if (tensor.Shape.Length == 1)
         {
             if (tensor.Shape[0] != context.Length)
-            {
                 throw new ArgumentException(
-                    $"Context dimension ({context.Length}) must match tensor dimension ({tensor.Shape[0]}) " +
-                    $"for Multiplication injection mode.");
-            }
-
+                    $"Context dimension ({context.Length}) must match tensor dimension ({tensor.Shape[0]}) for Multiplication injection mode.");
             var result = new Tensor<T>(tensor.Shape);
             for (int i = 0; i < tensor.Shape[0]; i++)
-            {
-                result[new int[] { i }] = NumOps.Multiply(tensor[new int[] { i }], context[i]);
-            }
+                result[new int[] { i }] = numOps.Multiply(tensor[new int[] { i }], context[i]);
             return result;
         }
         else if (tensor.Shape.Length == 2)
         {
             if (tensor.Shape[1] != context.Length)
-            {
                 throw new ArgumentException(
-                    $"Context dimension ({context.Length}) must match feature dimension ({tensor.Shape[1]}) " +
-                    $"for Multiplication injection mode.");
-            }
-
+                    $"Context dimension ({context.Length}) must match feature dimension ({tensor.Shape[1]}) for Multiplication injection mode.");
             var result = new Tensor<T>(tensor.Shape);
             for (int b = 0; b < tensor.Shape[0]; b++)
-            {
                 for (int f = 0; f < tensor.Shape[1]; f++)
-                {
-                    result[new int[] { b, f }] = NumOps.Multiply(tensor[new int[] { b, f }], context[f]);
-                }
-            }
+                    result[new int[] { b, f }] = numOps.Multiply(tensor[new int[] { b, f }], context[f]);
             return result;
         }
-
-        throw new NotSupportedException(
-            $"Tensor with {tensor.Shape.Length} dimensions is not supported for context multiplication.");
+        throw new NotSupportedException($"Tensor with {tensor.Shape.Length} dimensions is not supported for context multiplication.");
     }
 
-    /// <summary>
-    /// Multiplies context element-wise with each row of a matrix input.
-    /// </summary>
-    /// <param name="matrix">The input matrix [batch, features].</param>
-    /// <param name="context">The context vector to multiply with each row (must match column count).</param>
-    /// <returns>A new matrix with context multiplied with each row's features.</returns>
-    /// <exception cref="ArgumentException">Thrown when context dimension doesn't match matrix column count.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Each row (sample) in the matrix gets its feature values scaled
-    /// by the corresponding context values. The matrix shape stays the same - only the values change.
-    /// A context value of 1.0 leaves a feature unchanged, while values above/below 1.0 amplify/reduce it.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> MultiplyContextWithMatrix(Matrix<T> matrix, Vector<T> context)
+    public static Matrix<T> MultiplyContextWithMatrix(Matrix<T> matrix, Vector<T> context, INumericOperations<T> numOps)
     {
         if (matrix.Columns != context.Length)
-        {
             throw new ArgumentException(
-                $"Context dimension ({context.Length}) must match feature dimension ({matrix.Columns}) " +
-                $"for Multiplication injection mode.");
-        }
-
+                $"Context dimension ({context.Length}) must match feature dimension ({matrix.Columns}) for Multiplication injection mode.");
         var result = new Matrix<T>(matrix.Rows, matrix.Columns);
         for (int row = 0; row < matrix.Rows; row++)
-        {
             for (int col = 0; col < matrix.Columns; col++)
-            {
-                result[row, col] = NumOps.Multiply(matrix[row, col], context[col]);
-            }
-        }
+                result[row, col] = numOps.Multiply(matrix[row, col], context[col]);
         return result;
     }
 }
+
 
 /// <summary>
 /// CAVIA inference model that uses adapted context parameters for predictions.
@@ -1133,225 +888,6 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// so the model always processes inputs with the task-specific context information.
     /// </para>
     /// </remarks>
-    private TInput AugmentInput(TInput input, Vector<T> context)
-    {
-        return _options.ContextInjectionMode switch
-        {
-            CAVIAContextInjectionMode.Concatenation => ConcatenateContext(input, context),
-            CAVIAContextInjectionMode.Addition => AddContext(input, context),
-            CAVIAContextInjectionMode.Multiplication => MultiplyContext(input, context),
-            _ => ConcatenateContext(input, context)
-        };
-    }
-
-    /// <summary>
-    /// Dispatches context concatenation to the appropriate type-specific implementation.
-    /// </summary>
-    private TInput ConcatenateContext(TInput input, Vector<T> context)
-    {
-        if (input is Tensor<T> tensor)
-        {
-            return (TInput)(object)ConcatenateTensorWithContext(tensor, context);
-        }
-        if (input is Matrix<T> matrix)
-        {
-            return (TInput)(object)ConcatenateMatrixWithContext(matrix, context);
-        }
-        if (input is Vector<T> vector)
-        {
-            return (TInput)(object)ConcatenateVectorWithContext(vector, context);
-        }
-        throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported for context concatenation.");
-    }
-
-    /// <summary>
-    /// Concatenates context with a tensor input for the inference model.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Mirrors the same concatenation logic used in <see cref="CAVIAAlgorithm{T, TInput, TOutput}"/>
-    /// to ensure consistent input augmentation between training and inference.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ConcatenateTensorWithContext(Tensor<T> tensor, Vector<T> context)
-    {
-        if (tensor.Shape.Length == 1)
-        {
-            int newDim = tensor.Shape[0] + context.Length;
-            var result = new Tensor<T>(new int[] { newDim });
-            for (int i = 0; i < tensor.Shape[0]; i++)
-            {
-                result[new int[] { i }] = tensor[new int[] { i }];
-            }
-            for (int i = 0; i < context.Length; i++)
-            {
-                result[new int[] { tensor.Shape[0] + i }] = context[i];
-            }
-            return result;
-        }
-        else if (tensor.Shape.Length == 2)
-        {
-            int batchSize = tensor.Shape[0];
-            int originalFeatures = tensor.Shape[1];
-            int newFeatures = originalFeatures + context.Length;
-            var result = new Tensor<T>(new int[] { batchSize, newFeatures });
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < originalFeatures; f++)
-                {
-                    result[new int[] { b, f }] = tensor[new int[] { b, f }];
-                }
-                for (int c = 0; c < context.Length; c++)
-                {
-                    result[new int[] { b, originalFeatures + c }] = context[c];
-                }
-            }
-            return result;
-        }
-        throw new NotSupportedException($"Tensor with {tensor.Shape.Length} dimensions is not supported.");
-    }
-
-    /// <summary>
-    /// Concatenates context with a matrix input for the inference model.
-    /// </summary>
-    private Matrix<T> ConcatenateMatrixWithContext(Matrix<T> matrix, Vector<T> context)
-    {
-        int newCols = matrix.Columns + context.Length;
-        var result = new Matrix<T>(matrix.Rows, newCols);
-        for (int row = 0; row < matrix.Rows; row++)
-        {
-            for (int col = 0; col < matrix.Columns; col++)
-            {
-                result[row, col] = matrix[row, col];
-            }
-            for (int c = 0; c < context.Length; c++)
-            {
-                result[row, matrix.Columns + c] = context[c];
-            }
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// Concatenates context with a vector input for the inference model.
-    /// </summary>
-    private Vector<T> ConcatenateVectorWithContext(Vector<T> vector, Vector<T> context)
-    {
-        var result = new Vector<T>(vector.Length + context.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = vector[i];
-        }
-        for (int i = 0; i < context.Length; i++)
-        {
-            result[vector.Length + i] = context[i];
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// Adds context element-wise to the input for the inference model.
-    /// </summary>
-    private TInput AddContext(TInput input, Vector<T> context)
-    {
-        if (input is Tensor<T> tensor)
-        {
-            if (tensor.Shape.Length == 1)
-            {
-                var result = new Tensor<T>(tensor.Shape);
-                for (int i = 0; i < tensor.Shape[0]; i++)
-                {
-                    result[new int[] { i }] = _numOps.Add(tensor[new int[] { i }], context[i]);
-                }
-                return (TInput)(object)result;
-            }
-            else if (tensor.Shape.Length == 2)
-            {
-                var result = new Tensor<T>(tensor.Shape);
-                for (int b = 0; b < tensor.Shape[0]; b++)
-                {
-                    for (int f = 0; f < tensor.Shape[1]; f++)
-                    {
-                        result[new int[] { b, f }] = _numOps.Add(tensor[new int[] { b, f }], context[f]);
-                    }
-                }
-                return (TInput)(object)result;
-            }
-        }
-        if (input is Matrix<T> matrix)
-        {
-            var result = new Matrix<T>(matrix.Rows, matrix.Columns);
-            for (int row = 0; row < matrix.Rows; row++)
-            {
-                for (int col = 0; col < matrix.Columns; col++)
-                {
-                    result[row, col] = _numOps.Add(matrix[row, col], context[col]);
-                }
-            }
-            return (TInput)(object)result;
-        }
-        if (input is Vector<T> vector)
-        {
-            var result = new Vector<T>(vector.Length);
-            for (int i = 0; i < vector.Length; i++)
-            {
-                result[i] = _numOps.Add(vector[i], context[i]);
-            }
-            return (TInput)(object)result;
-        }
-        throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported for context addition.");
-    }
-
-    /// <summary>
-    /// Multiplies context element-wise with the input for the inference model (FiLM-style gating).
-    /// </summary>
-    private TInput MultiplyContext(TInput input, Vector<T> context)
-    {
-        if (input is Tensor<T> tensor)
-        {
-            if (tensor.Shape.Length == 1)
-            {
-                var result = new Tensor<T>(tensor.Shape);
-                for (int i = 0; i < tensor.Shape[0]; i++)
-                {
-                    result[new int[] { i }] = _numOps.Multiply(tensor[new int[] { i }], context[i]);
-                }
-                return (TInput)(object)result;
-            }
-            else if (tensor.Shape.Length == 2)
-            {
-                var result = new Tensor<T>(tensor.Shape);
-                for (int b = 0; b < tensor.Shape[0]; b++)
-                {
-                    for (int f = 0; f < tensor.Shape[1]; f++)
-                    {
-                        result[new int[] { b, f }] = _numOps.Multiply(tensor[new int[] { b, f }], context[f]);
-                    }
-                }
-                return (TInput)(object)result;
-            }
-        }
-        if (input is Matrix<T> matrix)
-        {
-            var result = new Matrix<T>(matrix.Rows, matrix.Columns);
-            for (int row = 0; row < matrix.Rows; row++)
-            {
-                for (int col = 0; col < matrix.Columns; col++)
-                {
-                    result[row, col] = _numOps.Multiply(matrix[row, col], context[col]);
-                }
-            }
-            return (TInput)(object)result;
-        }
-        if (input is Vector<T> vector)
-        {
-            var result = new Vector<T>(vector.Length);
-            for (int i = 0; i < vector.Length; i++)
-            {
-                result[i] = _numOps.Multiply(vector[i], context[i]);
-            }
-            return (TInput)(object)result;
-        }
-        throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported for context multiplication.");
-    }
+    private TInput AugmentInput(TInput input, Vector<T> context) =>
+        CAVIAContextHelper<T>.AugmentInput<TInput>(input, context, _options.ContextInjectionMode, _numOps);
 }

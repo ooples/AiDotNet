@@ -198,7 +198,12 @@ public class LaplacianShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             return supportFeatures;
         }
 
-        int numQuery = queryFeatures.Length;
+        // Cap the number of graph nodes to prevent O(n^2) memory explosion.
+        // ConvertToVector flattens all predictions into a single 1D vector, so
+        // queryFeatures.Length is the total scalar count, not the number of examples.
+        // The kNN graph and adjacency matrix scale quadratically with node count.
+        const int MaxGraphNodes = 256;
+        int numQuery = Math.Min(queryFeatures.Length, MaxGraphNodes);
         int k = Math.Min(_lapShotOptions.KNearestNeighbors, numQuery - 1);
         double sigma = _lapShotOptions.KernelBandwidth;
         double lambda = _lapShotOptions.LaplacianWeight;
