@@ -211,7 +211,7 @@ public class RWKVLayerTests
     }
 
     [Fact]
-    public void SupportsTraining_ReturnsFalse_UntilFullBackwardImplemented()
+    public void SupportsTraining_ReturnsFalse_InferenceOnlyLayer()
     {
         var layer = new RWKVLayer<float>(4, 32, 4);
         Assert.False(layer.SupportsTraining);
@@ -244,7 +244,7 @@ public class RWKVLayerTests
         var output = layer.Forward(input);
 
         Assert.Equal(input.Shape, output.Shape);
-        Assert.False(ContainsNaNDouble(output));
+        Assert.False(ContainsNaN(output));
     }
 
     [Fact]
@@ -261,7 +261,7 @@ public class RWKVLayerTests
         var inputGrad = layer.Backward(grad);
 
         Assert.Equal(input.Shape, inputGrad.Shape);
-        Assert.False(ContainsNaNDouble(inputGrad));
+        Assert.False(ContainsNaN(inputGrad));
     }
 
     #region Helpers
@@ -288,20 +288,11 @@ public class RWKVLayerTests
         return tensor;
     }
 
-    private static bool ContainsNaN(Tensor<float> tensor)
+    private static bool ContainsNaN<T>(Tensor<T> tensor) where T : struct, IConvertible
     {
         foreach (var value in tensor.ToArray())
         {
-            if (float.IsNaN(value)) return true;
-        }
-        return false;
-    }
-
-    private static bool ContainsNaNDouble(Tensor<double> tensor)
-    {
-        foreach (var value in tensor.ToArray())
-        {
-            if (double.IsNaN(value)) return true;
+            if (double.IsNaN(Convert.ToDouble(value))) return true;
         }
         return false;
     }

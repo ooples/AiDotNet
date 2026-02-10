@@ -962,24 +962,24 @@ public class MambaBlock<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets the input projection weights for external inspection or quantization.
+    /// Gets a copy of the input projection weights for external inspection or quantization.
     /// </summary>
-    public Tensor<T> GetInputProjectionWeights() => _inputProjectionWeights;
+    public Tensor<T> GetInputProjectionWeights() => _inputProjectionWeights.Clone();
 
     /// <summary>
-    /// Gets the output projection weights for external inspection or quantization.
+    /// Gets a copy of the output projection weights for external inspection or quantization.
     /// </summary>
-    public Tensor<T> GetOutputProjectionWeights() => _outputProjectionWeights;
+    public Tensor<T> GetOutputProjectionWeights() => _outputProjectionWeights.Clone();
 
     /// <summary>
-    /// Gets the A_log parameter tensor (A = -exp(A_log)) for external inspection.
+    /// Gets a copy of the A_log parameter tensor (A = -exp(A_log)) for external inspection.
     /// </summary>
-    public Tensor<T> GetALogParameter() => _aLog;
+    public Tensor<T> GetALogParameter() => _aLog.Clone();
 
     /// <summary>
-    /// Gets the D skip connection parameter for external inspection.
+    /// Gets a copy of the D skip connection parameter for external inspection.
     /// </summary>
-    public Tensor<T> GetDParameter() => _dParam;
+    public Tensor<T> GetDParameter() => _dParam.Clone();
 
     /// <summary>
     /// Gets the current hidden state from the last forward pass, if available.

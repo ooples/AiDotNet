@@ -13848,10 +13848,10 @@ public static class LayerHelper<T>
     /// through input-dependent state space parameters.
     /// </para>
     /// <para>
-    /// The architecture simulates the Mamba block using available layers:
-    /// - Input projection to expanded dimension
-    /// - Dense layers simulating the SSM selective mechanism
-    /// - Output projection back to model dimension
+    /// The architecture uses real MambaBlock layers with the full selective SSM:
+    /// - DenseLayer for input embedding (numFeatures -> modelDim)
+    /// - Stacked MambaBlock layers with depthwise Conv1D, selective scan, and output gating
+    /// - DenseLayers for output projection (seqLen * modelDim -> forecastHorizon)
     /// </para>
     /// <para>
     /// <b>Reference:</b> Gu and Dao, "Mamba: Linear-Time Sequence Modeling with Selective State Spaces", 2024.

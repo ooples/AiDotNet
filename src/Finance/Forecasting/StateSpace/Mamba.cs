@@ -92,13 +92,14 @@ public class Mamba<T> : ForecastingModelBase<T>
     private List<MambaBlock<T>>? _mambaBlocks;
 
     /// <summary>
-    /// Reference to the output projection layer.
+    /// References to the output projection layers (all DenseLayers after input embedding).
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Projects the Mamba output to forecast values.
+    /// <para><b>For Beginners:</b> Projects the Mamba output to forecast values
+    /// through one or more dense layers.
     /// </para>
     /// </remarks>
-    private DenseLayer<T>? _outputProjection;
+    private List<DenseLayer<T>>? _outputProjectionLayers;
 
     #endregion
 
@@ -357,12 +358,14 @@ public class Mamba<T> : ForecastingModelBase<T>
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            ExtractLayerReferences();
         }
         else if (_useNativeMode)
         {
             Layers.AddRange(LayerHelper<T>.CreateDefaultMambaLayers(
                 Architecture, _contextLength, _forecastHorizon, _numFeatures,
-                _modelDimension, _stateDimension, _expandFactor, _numLayers, _dropout));
+                _modelDimension, _stateDimension, _expandFactor, _numLayers, _dropout,
+                _convKernelSize));
 
             ExtractLayerReferences();
         }
@@ -381,7 +384,7 @@ public class Mamba<T> : ForecastingModelBase<T>
     {
         _inputEmbedding = Layers.OfType<DenseLayer<T>>().FirstOrDefault();
         _mambaBlocks = Layers.OfType<MambaBlock<T>>().ToList();
-        _outputProjection = Layers.OfType<DenseLayer<T>>().LastOrDefault();
+        _outputProjectionLayers = Layers.OfType<DenseLayer<T>>().Skip(1).ToList();
     }
 
     /// <summary>
@@ -773,10 +776,12 @@ public class Mamba<T> : ForecastingModelBase<T>
 
         // Apply remaining DenseLayers (output projection chain)
         // These are the DenseLayers after the MambaBlocks in the Layers list
-        var outputLayers = Layers.OfType<DenseLayer<T>>().Skip(1).ToList(); // skip input embedding
-        foreach (var layer in outputLayers)
+        if (_outputProjectionLayers is not null)
         {
-            current = layer.Forward(current);
+            foreach (var layer in _outputProjectionLayers)
+            {
+                current = layer.Forward(current);
+            }
         }
 
         return current;
@@ -820,8 +825,8 @@ public class Mamba<T> : ForecastingModelBase<T>
             return input.Reshape(new[] { 1, seqLen, features });
         }
 
-        // Higher rank (4D+): preserve leading batch dimensions, flatten to [batch, seqLen, features]
-        // e.g. [batch, channels, seqLen, features] -> [batch, seqLen, channels * features]
+        // Higher rank (4D+): flatten all leading dimensions into batch, keep last two dims as [seqLen, features]
+        // e.g. [batch, channels, seqLen, features] -> [batch * channels, seqLen, features]
         int batchDims = 1;
         for (int i = 0; i < input.Rank - 2; i++)
             batchDims *= input.Shape[i];
@@ -853,13 +858,15 @@ public class Mamba<T> : ForecastingModelBase<T>
             current = current.Reshape(new[] { 1, current.Length });
         }
 
-        int batchSize = current.Shape[0];
+        int batchSize = _lastForwardBatchSize;
 
         // === Phase 3 backward: Output projection DenseLayers ===
-        var outputLayers = Layers.OfType<DenseLayer<T>>().Skip(1).ToList();
-        for (int i = outputLayers.Count - 1; i >= 0; i--)
+        if (_outputProjectionLayers is not null)
         {
-            current = outputLayers[i].Backward(current);
+            for (int i = _outputProjectionLayers.Count - 1; i >= 0; i--)
+            {
+                current = _outputProjectionLayers[i].Backward(current);
+            }
         }
 
         // === Phase 2 backward: MambaBlock layers ===

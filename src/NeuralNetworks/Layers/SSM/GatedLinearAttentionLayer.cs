@@ -589,12 +589,12 @@ public class GatedLinearAttentionLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets the query projection weights for external inspection.
+    /// Gets a copy of the query projection weights for external inspection.
     /// </summary>
-    public Tensor<T> GetQueryWeights() => _queryWeights;
+    public Tensor<T> GetQueryWeights() => _queryWeights.Clone();
 
     /// <summary>
-    /// Gets the output projection weights for external inspection.
+    /// Gets a copy of the output projection weights for external inspection.
     /// </summary>
-    public Tensor<T> GetOutputWeights() => _outputWeights;
+    public Tensor<T> GetOutputWeights() => _outputWeights.Clone();
 }

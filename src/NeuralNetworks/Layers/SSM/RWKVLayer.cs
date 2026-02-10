@@ -125,9 +125,9 @@ public class RWKVLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     /// <summary>
-    /// Training is not yet supported. The backward pass is a placeholder that only passes through
-    /// activation gradients. Full gradient computation for time-mix, decay, projections, and norms
-    /// is required before enabling training.
+    /// Training is not supported. The backward pass propagates activation gradients
+    /// but does not compute per-parameter gradients for the RWKV sub-layers
+    /// (time-mix, decay, channel-mix projections, and layer norms).
     /// </summary>
     public override bool SupportsTraining => false;
 

@@ -110,7 +110,7 @@ public class HybridBlockSchedulerTests
 
         var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
         var output = scheduler.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape, seed: 99);
         var inputGrad = scheduler.Backward(grad);
 
         Assert.Equal(input.Shape, inputGrad.Shape);
