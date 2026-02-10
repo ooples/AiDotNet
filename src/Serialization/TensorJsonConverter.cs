@@ -123,7 +123,13 @@ namespace AiDotNet.Serialization
                 throw new JsonSerializationException("Tensor JSON must contain 'shape' property.");
             }
 
-            // Validate that all dimensions are non-negative (empty shape = scalar is valid)
+            // Validate that shape has at least one dimension
+            if (shape.Length == 0)
+            {
+                throw new JsonSerializationException("Tensor 'shape' must have at least one dimension.");
+            }
+
+            // Validate that all dimensions are non-negative
             for (int i = 0; i < shape.Length; i++)
             {
                 if (shape[i] < 0)
