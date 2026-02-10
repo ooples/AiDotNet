@@ -673,9 +673,11 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         var ff2B = TensorOperations<T>.Variable(layer.GetFF2Bias(), $"{prefix}ff2Bias", requiresGradient: true);
         paramNodes.AddRange(new[] { ff1W, ff1B, ff2W, ff2B });
 
-        var ffHidden = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(normalized, ff1W), ff1B);
+        // ff1Weight is [ffDim, embDim], need transpose for [seqLen, embDim] @ [embDim, ffDim]
+        var ffHidden = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(normalized, TensorOperations<T>.Transpose(ff1W)), ff1B);
         var ffActivated = TensorOperations<T>.ReLU(ffHidden);
-        var ffOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(ffActivated, ff2W), ff2B);
+        // ff2Weight is [embDim, ffDim], need transpose for [seqLen, ffDim] @ [ffDim, embDim]
+        var ffOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(ffActivated, TensorOperations<T>.Transpose(ff2W)), ff2B);
 
         // Residual + LayerNorm
         var ffResidual = TensorOperations<T>.Add(normalized, ffOutput);
@@ -750,9 +752,11 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         var ff2B = TensorOperations<T>.Variable(layer.GetFF2Bias(), $"{prefix}ff2Bias", requiresGradient: true);
         paramNodes.AddRange(new[] { ff1W, ff1B, ff2W, ff2B });
 
-        var ffHidden = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(normalized2, ff1W), ff1B);
+        // ff1Weight is [ffDim, embDim], need transpose for [seqLen, embDim] @ [embDim, ffDim]
+        var ffHidden = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(normalized2, TensorOperations<T>.Transpose(ff1W)), ff1B);
         var ffActivated = TensorOperations<T>.ReLU(ffHidden);
-        var ffOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(ffActivated, ff2W), ff2B);
+        // ff2Weight is [embDim, ffDim], need transpose for [seqLen, ffDim] @ [ffDim, embDim]
+        var ffOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(ffActivated, TensorOperations<T>.Transpose(ff2W)), ff2B);
 
         // Residual + LayerNorm
         var ffResidual = TensorOperations<T>.Add(normalized2, ffOutput);
