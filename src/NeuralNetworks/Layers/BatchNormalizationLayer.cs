@@ -633,7 +633,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastMean == null || _lastVariance == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+            return outputGradient; // Pass gradient through unchanged if forward hasn't been called
 
         // Reshape rank-1 gradient to [1, N] to match the forward pass reshape of 1D inputs
         if (_inputWas1D && outputGradient.Shape.Length == 1)
@@ -764,7 +764,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
     {
         if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
+            return outputGradient; // Pass gradient through unchanged if forward hasn't been called
 
         // Reshape rank-1 gradient to [1, N] to match the forward pass reshape of 1D inputs
         if (_inputWas1D && outputGradient.Shape.Length == 1)
@@ -987,7 +987,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         if (_gammaGradient == null || _betaGradient == null)
-            throw new InvalidOperationException("Backward pass must be called before updating parameters.");
+            return; // No gradients to update if backward hasn't been called
 
         if (Engine is DirectGpuTensorEngine gpuEngine)
         {

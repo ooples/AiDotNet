@@ -177,7 +177,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         /// </summary>
         private Vector<T> GenerateFallbackEmbedding(string text)
         {
-            var hash = text.GetHashCode();
+            var hash = text.ToLowerInvariant().GetHashCode();
             var values = new T[_dimension];
             for (int i = 0; i < _dimension; i++)
             {
