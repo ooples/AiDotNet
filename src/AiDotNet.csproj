@@ -72,6 +72,7 @@
 	  <PackageReference Include="TreeSitter.DotNet" Version="1.2.0" />
 	  <PackageReference Include="FftSharp" Version="2.2.0" />
 	  <PackageReference Include="Parquet.Net" Version="4.24.0" />
+	  <PackageReference Include="YamlDotNet" Version="16.3.0" />
 	</ItemGroup>
 
 	<!-- ImageSharp for PNG/JPEG/GIF/TIFF support (requires .NET 6+) -->
