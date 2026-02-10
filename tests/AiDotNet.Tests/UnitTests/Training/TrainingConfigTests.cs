@@ -150,6 +150,8 @@ model:
             // Assert
             Assert.Equal(string.Empty, config.Name);
             Assert.Equal(0.001, config.LearningRate, 10);
+            Assert.NotNull(config.Params);
+            Assert.Empty(config.Params);
         }
 
         [Fact]
@@ -220,6 +222,33 @@ lossFunction:
             Assert.Equal("Focal", config.LossFunction.Name);
             Assert.True(config.LossFunction.Params.ContainsKey("gamma"));
             Assert.True(config.LossFunction.Params.ContainsKey("alpha"));
+        }
+
+        [Fact]
+        public void LoadFromString_WithOptimizerSection_DeserializesCorrectly()
+        {
+            // Arrange
+            var yaml = @"
+model:
+  name: ""ARIMA""
+optimizer:
+  name: ""Adam""
+  learningRate: 0.01
+  params:
+    beta1: 0.9
+    beta2: 0.999
+";
+
+            // Act
+            var config = YamlConfigLoader.LoadFromString<TrainingRecipeConfig>(yaml);
+
+            // Assert
+            Assert.NotNull(config.Optimizer);
+            Assert.Equal("Adam", config.Optimizer.Name);
+            Assert.Equal(0.01, config.Optimizer.LearningRate, 10);
+            Assert.NotNull(config.Optimizer.Params);
+            Assert.True(config.Optimizer.Params.ContainsKey("beta1"));
+            Assert.True(config.Optimizer.Params.ContainsKey("beta2"));
         }
     }
 }

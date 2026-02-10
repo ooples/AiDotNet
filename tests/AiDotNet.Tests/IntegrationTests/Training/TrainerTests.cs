@@ -239,5 +239,172 @@ trainer:
             Assert.Same(config, trainer.Config);
             Assert.Equal("ExponentialSmoothing", trainer.Config.Model?.Name);
         }
+
+        [Fact]
+        public void Trainer_WithOptimizer_CreatesOptimizerAndSetsModel()
+        {
+            // Arrange
+            var config = new TrainingRecipeConfig
+            {
+                Model = new ModelConfig { Name = "ExponentialSmoothing" },
+                Optimizer = new OptimizerConfig { Name = "Normal" },
+                Trainer = new TrainerSettings { Epochs = 2, EnableLogging = false }
+            };
+
+            // Act
+            var trainer = new Trainer<double>(config);
+
+            // Assert - optimizer should be created and accessible
+            Assert.NotNull(trainer.Optimizer);
+        }
+
+        [Fact]
+        public void Trainer_WithoutOptimizer_OptimizerIsNull()
+        {
+            // Arrange
+            var config = new TrainingRecipeConfig
+            {
+                Model = new ModelConfig { Name = "ExponentialSmoothing" },
+                Trainer = new TrainerSettings { Epochs = 1, EnableLogging = false }
+            };
+
+            // Act
+            var trainer = new Trainer<double>(config);
+
+            // Assert - no optimizer config = null optimizer
+            Assert.Null(trainer.Optimizer);
+        }
+
+        [Fact]
+        public void Trainer_WithInvalidOptimizerName_ThrowsArgumentException()
+        {
+            // Arrange
+            var config = new TrainingRecipeConfig
+            {
+                Model = new ModelConfig { Name = "ExponentialSmoothing" },
+                Optimizer = new OptimizerConfig { Name = "NonExistentOptimizer" }
+            };
+
+            // Act & Assert
+            Assert.Throws<ArgumentException>(() => new Trainer<double>(config));
+        }
+
+        [Fact]
+        public void Trainer_WithOptimizerAndData_CompletesTraining()
+        {
+            // Arrange
+            var config = new TrainingRecipeConfig
+            {
+                Model = new ModelConfig { Name = "ExponentialSmoothing" },
+                Optimizer = new OptimizerConfig { Name = "Normal", LearningRate = 0.01 },
+                LossFunction = new LossFunctionConfig { Name = "MeanSquaredError" },
+                Trainer = new TrainerSettings
+                {
+                    Epochs = 3,
+                    EnableLogging = false,
+                    Seed = 42
+                }
+            };
+
+            var trainer = new Trainer<double>(config);
+
+            var features = new Matrix<double>(10, 2);
+            var labels = new Vector<double>(10);
+            for (int i = 0; i < 10; i++)
+            {
+                features[i, 0] = i * 1.0;
+                features[i, 1] = i * 2.0;
+                labels[i] = i * 3.0;
+            }
+            trainer.SetData(features, labels);
+
+            // Act
+            var result = trainer.Run();
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.True(result.Completed);
+            Assert.Equal(3, result.TotalEpochs);
+            Assert.NotNull(trainer.Optimizer);
+        }
+
+        [Fact]
+        public void Trainer_WithSeed_ProducesReproducibleResults()
+        {
+            // Arrange - run the same training twice with the same seed
+            var config = new TrainingRecipeConfig
+            {
+                Model = new ModelConfig { Name = "ExponentialSmoothing" },
+                LossFunction = new LossFunctionConfig { Name = "MeanSquaredError" },
+                Trainer = new TrainerSettings
+                {
+                    Epochs = 3,
+                    EnableLogging = false,
+                    Seed = 12345
+                }
+            };
+
+            var features = new Matrix<double>(10, 2);
+            var labels = new Vector<double>(10);
+            for (int i = 0; i < 10; i++)
+            {
+                features[i, 0] = i * 1.0;
+                features[i, 1] = i * 2.0;
+                labels[i] = i * 3.0;
+            }
+
+            // Act - first run
+            var trainer1 = new Trainer<double>(config);
+            trainer1.SetData(features, labels);
+            var result1 = trainer1.Run();
+
+            // Act - second run with same seed
+            var trainer2 = new Trainer<double>(config);
+            trainer2.SetData(features, labels);
+            var result2 = trainer2.Run();
+
+            // Assert - both runs should produce the same losses
+            Assert.Equal(result1.EpochLosses.Count, result2.EpochLosses.Count);
+            for (int i = 0; i < result1.EpochLosses.Count; i++)
+            {
+                Assert.Equal(result1.EpochLosses[i], result2.EpochLosses[i], 10);
+            }
+        }
+
+        [Fact]
+        public void Trainer_DefaultsToModelLossFunction_WhenNotSpecified()
+        {
+            // Arrange - no LossFunction section in config
+            var config = new TrainingRecipeConfig
+            {
+                Model = new ModelConfig { Name = "ExponentialSmoothing" },
+                Trainer = new TrainerSettings
+                {
+                    Epochs = 2,
+                    EnableLogging = false
+                }
+            };
+
+            var trainer = new Trainer<double>(config);
+
+            var features = new Matrix<double>(10, 2);
+            var labels = new Vector<double>(10);
+            for (int i = 0; i < 10; i++)
+            {
+                features[i, 0] = i;
+                features[i, 1] = i * 0.5;
+                labels[i] = i * 2.0;
+            }
+            trainer.SetData(features, labels);
+
+            // Act - should not throw; uses model's DefaultLossFunction
+            var result = trainer.Run();
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.True(result.Completed);
+            Assert.Equal(2, result.TotalEpochs);
+        }
     }
 }
+

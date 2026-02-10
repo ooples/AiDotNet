@@ -184,13 +184,18 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
     {
         EnsureLoaded();
 
+        if (LoadedFeatures is null || LoadedLabels is null)
+        {
+            throw new InvalidOperationException("Data has not been loaded. Call LoadAsync() first.");
+        }
+
         var batchFeatures = new Matrix<T>(indices.Length, _featureCount);
         var batchLabels = new Vector<T>(indices.Length);
 
         for (int i = 0; i < indices.Length; i++)
         {
-            batchLabels[i] = LoadedLabels![indices[i]];
-            batchFeatures.SetRow(i, LoadedFeatures!.GetRow(indices[i]));
+            batchLabels[i] = LoadedLabels[indices[i]];
+            batchFeatures.SetRow(i, LoadedFeatures.GetRow(indices[i]));
         }
 
         return (batchFeatures, batchLabels);
@@ -230,13 +235,18 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
     /// </summary>
     private InMemoryDataLoader<T, Matrix<T>, Vector<T>> CreateSubsetLoader(int[] indices)
     {
+        if (LoadedFeatures is null || LoadedLabels is null)
+        {
+            throw new InvalidOperationException("Data has not been loaded. Call LoadAsync() first.");
+        }
+
         var subsetFeatures = new Matrix<T>(indices.Length, _featureCount);
         var subsetLabels = new Vector<T>(indices.Length);
 
         for (int i = 0; i < indices.Length; i++)
         {
-            subsetLabels[i] = LoadedLabels![indices[i]];
-            subsetFeatures.SetRow(i, LoadedFeatures!.GetRow(indices[i]));
+            subsetLabels[i] = LoadedLabels[indices[i]];
+            subsetFeatures.SetRow(i, LoadedFeatures.GetRow(indices[i]));
         }
 
         return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(subsetFeatures, subsetLabels);

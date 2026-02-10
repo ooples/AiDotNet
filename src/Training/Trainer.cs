@@ -4,6 +4,7 @@ using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.Factories;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Training.Configuration;
 using AiDotNet.Training.Factories;
 
@@ -44,15 +45,22 @@ namespace AiDotNet.Training;
 public class Trainer<T> : ITrainer<T>
 {
     private readonly ITimeSeriesModel<T> _model;
+    private readonly IOptimizer<T, Matrix<T>, Vector<T>>? _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly int _epochs;
     private readonly bool _enableLogging;
+    private readonly int? _seed;
     private CsvDataLoader<T>? _csvLoader;
     private Matrix<T>? _features;
     private Vector<T>? _labels;
 
     /// <inheritdoc/>
     public TrainingRecipeConfig Config { get; }
+
+    /// <summary>
+    /// Gets the optimizer created from the configuration, if one was specified.
+    /// </summary>
+    public IOptimizer<T, Matrix<T>, Vector<T>>? Optimizer => _optimizer;
 
     /// <summary>
     /// Creates a trainer from a YAML configuration file.
@@ -83,7 +91,22 @@ public class Trainer<T> : ITrainer<T>
         // Create model
         _model = ModelFactory<T, Matrix<T>, Vector<T>>.Create(config.Model);
 
-        // Create loss function (default to MSE if not specified)
+        // Create optimizer (if specified)
+        if (config.Optimizer is not null && !string.IsNullOrWhiteSpace(config.Optimizer.Name))
+        {
+            if (!Enum.TryParse<OptimizerType>(config.Optimizer.Name, ignoreCase: true, out var optimizerType))
+            {
+                throw new ArgumentException(
+                    $"Unknown optimizer name: '{config.Optimizer.Name}'. " +
+                    $"Valid names are: {string.Join(", ", Enum.GetNames(typeof(OptimizerType)))}",
+                    nameof(config));
+            }
+
+            _optimizer = OptimizerFactory<T, Matrix<T>, Vector<T>>.CreateOptimizer(optimizerType);
+            _optimizer.SetModel(_model);
+        }
+
+        // Create loss function (default to model's DefaultLossFunction if not specified)
         if (config.LossFunction is not null && !string.IsNullOrWhiteSpace(config.LossFunction.Name))
         {
             _lossFunction = LossFunctionFactory<T>.Create(config.LossFunction.Name, config.LossFunction.Params);
@@ -96,6 +119,7 @@ public class Trainer<T> : ITrainer<T>
         // Apply trainer settings
         _epochs = config.Trainer?.Epochs ?? 10;
         _enableLogging = config.Trainer?.EnableLogging ?? true;
+        _seed = config.Trainer?.Seed;
 
         // Create data loader if path is specified
         _csvLoader = DatasetFactory<T>.Create(config.Dataset);
@@ -122,9 +146,20 @@ public class Trainer<T> : ITrainer<T>
         // Load data if needed
         var (features, labels) = ResolveData();
 
+        // Set seed for reproducibility if specified
+        if (_seed.HasValue)
+        {
+            RandomHelper.CreateSeededRandom(_seed.Value);
+        }
+
         if (_enableLogging)
         {
             Console.WriteLine($"Training {Config.Model?.Name} for {_epochs} epochs...");
+            if (_optimizer is not null)
+            {
+                Console.WriteLine($"  Optimizer: {Config.Optimizer?.Name}");
+            }
+            Console.WriteLine($"  Loss Function: {_lossFunction.GetType().Name}");
         }
 
         // Training loop
@@ -142,6 +177,16 @@ public class Trainer<T> : ITrainer<T>
             {
                 Console.WriteLine($"  Epoch {epoch + 1}/{_epochs} - Loss: {loss}");
             }
+
+            // Check for early stopping via optimizer
+            if (_optimizer is not null && _optimizer.ShouldEarlyStop())
+            {
+                if (_enableLogging)
+                {
+                    Console.WriteLine($"  Early stopping triggered at epoch {epoch + 1}");
+                }
+                break;
+            }
         }
 
         stopwatch.Stop();
@@ -155,7 +200,7 @@ public class Trainer<T> : ITrainer<T>
         {
             TrainedModel = _model,
             EpochLosses = epochLosses,
-            TotalEpochs = _epochs,
+            TotalEpochs = epochLosses.Count,
             TrainingDuration = stopwatch.Elapsed,
             Completed = true
         };
