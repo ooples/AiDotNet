@@ -182,29 +182,14 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
             // Apply adaptation-derived modulation to backbone before computing query loss
             // This connects the transformer adaptation to the training loss
-            if (adaptedPrototypes != null && supportFeatures != null)
+            var modFactor = ComputeModulationFactor(supportFeatures, adaptedPrototypes);
+            if (modFactor.HasValue)
             {
-                double sumRatio = 0;
-                int count = 0;
-                for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedPrototypes.Length); i++)
-                {
-                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                    double adaptedVal = NumOps.ToDouble(adaptedPrototypes[i]);
-                    if (Math.Abs(rawVal) > 1e-10)
-                    {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    double avgRatio = sumRatio / count;
-                    var currentParams = MetaModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    MetaModel.SetParameters(modulatedParams);
-                }
+                var currentParams = MetaModel.GetParameters();
+                var modulatedParams = new Vector<T>(currentParams.Length);
+                for (int i = 0; i < currentParams.Length; i++)
+                    modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor.Value));
+                MetaModel.SetParameters(modulatedParams);
             }
 
             // Classification loss on modulated backbone (transformer affects loss)
@@ -271,24 +256,8 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         var adaptedPrototypes = supportFeatures != null ? AdaptPrototypes(supportFeatures) : null;
 
         // Compute modulation factors from adapted vs raw prototypes
-        double[]? modulationFactors = null;
-        if (supportFeatures != null && adaptedPrototypes != null)
-        {
-            double sumRatio = 0;
-            int count = 0;
-            for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedPrototypes.Length); i++)
-            {
-                double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                double adaptedVal = NumOps.ToDouble(adaptedPrototypes[i]);
-                if (Math.Abs(rawVal) > 1e-10)
-                {
-                    sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
-                    count++;
-                }
-            }
-            if (count > 0)
-                modulationFactors = [sumRatio / count];
-        }
+        var adaptModFactor = ComputeModulationFactor(supportFeatures, adaptedPrototypes);
+        double[]? modulationFactors = adaptModFactor.HasValue ? [adaptModFactor.Value] : null;
 
         return new FEATModel<T, TInput, TOutput>(
             MetaModel, currentParams, adaptedPrototypes, _featOptions.Temperature, modulationFactors);
@@ -313,29 +282,14 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             if (supportFeatures != null)
                 adaptedPrototypes = AdaptPrototypes(supportFeatures);
 
-            if (adaptedPrototypes != null && supportFeatures != null)
+            var auxModFactor = ComputeModulationFactor(supportFeatures, adaptedPrototypes);
+            if (auxModFactor.HasValue)
             {
-                double sumRatio = 0;
-                int count = 0;
-                for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedPrototypes.Length); i++)
-                {
-                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                    double adaptedVal = NumOps.ToDouble(adaptedPrototypes[i]);
-                    if (Math.Abs(rawVal) > 1e-10)
-                    {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    double avgRatio = sumRatio / count;
-                    var currentParams = MetaModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    MetaModel.SetParameters(modulatedParams);
-                }
+                var currentParams = MetaModel.GetParameters();
+                var modulatedParams = new Vector<T>(currentParams.Length);
+                for (int i = 0; i < currentParams.Length; i++)
+                    modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(auxModFactor.Value));
+                MetaModel.SetParameters(modulatedParams);
             }
 
             var queryPred = MetaModel.Predict(task.QueryInput);
@@ -344,6 +298,28 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
         MetaModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+    }
+
+    /// <summary>
+    /// Computes a scalar modulation factor by comparing adapted vs raw feature vectors.
+    /// Returns the clamped average ratio of adapted/raw values, or null if no valid ratios.
+    /// </summary>
+    private double? ComputeModulationFactor(Vector<T>? rawFeatures, Vector<T>? adaptedFeatures)
+    {
+        if (rawFeatures == null || adaptedFeatures == null) return null;
+        double sumRatio = 0;
+        int count = 0;
+        for (int i = 0; i < Math.Min(rawFeatures.Length, adaptedFeatures.Length); i++)
+        {
+            double rawVal = NumOps.ToDouble(rawFeatures[i]);
+            double adaptedVal = NumOps.ToDouble(adaptedFeatures[i]);
+            if (Math.Abs(rawVal) > 1e-10)
+            {
+                sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
+                count++;
+            }
+        }
+        return count > 0 ? sumRatio / count : null;
     }
 
     /// <summary>
@@ -456,6 +432,8 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 /// that have been adapted by the transformer to be task-specific. The adapted
 /// prototypes capture inter-class relationships for better discrimination.
 /// </para>
+/// <para><b>Thread Safety:</b> This class is NOT thread-safe. Predict mutates the shared
+/// model's parameters via SetParameters. Callers must ensure single-threaded access.</para>
 /// </remarks>
 internal class FEATModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {

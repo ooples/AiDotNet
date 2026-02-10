@@ -69,6 +69,18 @@ namespace AiDotNet.MetaLearning.Algorithms;
 ///     theta = theta - lr * grad(loss)
 /// </code>
 /// </para>
+/// <para><b>Implementation Notes:</b>
+/// - MetaTrain uses classification loss as a pragmatic approximation of the GP marginal
+///   log-likelihood. The full GP-based optimization requires matrix inversions per task
+///   which is expensive; the classification loss provides equivalent gradient signal for
+///   training the feature extractor end-to-end.
+/// - The modulation strategy computes a single scalar from GP kernel weights and applies it
+///   uniformly to all backbone parameters. This is a deliberate simplification; per-layer
+///   or per-feature-group modulation could better preserve the GP's learned relationships
+///   but would require additional complexity.
+/// - Adapted models (DKTModel) mutate the shared model instance via SetParameters in Predict.
+///   Callers must ensure single-threaded access to each adapted model instance.
+/// </para>
 /// <para>
 /// Reference: Patacchiola, M., Turner, J., Crowley, E.J., O'Boyle, M., &amp; Sherron, A. (2020).
 /// Bayesian Meta-Learning for the Few-Shot Setting via Deep Kernels. ICLR 2020.

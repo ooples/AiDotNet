@@ -374,24 +374,15 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// It's like fitting a hyperplane through the support data and using it to predict.
     /// </para>
     /// </remarks>
-    private Vector<T> SolveRidgeRegression(
-        Vector<T> supportFeatures,
-        Vector<T> supportLabels,
-        Vector<T> queryFeatures)
+    /// <summary>
+    /// Builds the Gram matrix G = X^T X + lambda I and X^T y, then solves for ridge weights.
+    /// Shared helper for SolveRidgeRegression and ComputeRidgeWeights.
+    /// </summary>
+    private double[]? SolveRidgeSystem(List<Vector<T>> X, Vector<T> supportLabels, int featureDim)
     {
-        // Determine per-example feature dimension
-        int featureDim = EstimateFeatureDim(supportFeatures.Length, queryFeatures.Length);
-        int nSupport = Math.Max(supportFeatures.Length / Math.Max(featureDim, 1), 1);
-        int nQuery = Math.Max(queryFeatures.Length / Math.Max(featureDim, 1), 1);
-
-        // Split into per-example vectors
-        var X = SplitIntoVectors(supportFeatures, nSupport, featureDim);
-        var queryVecs = SplitIntoVectors(queryFeatures, nQuery, featureDim);
-
         if (X.Count < 2 || featureDim < 1)
-            return queryFeatures;
+            return null;
 
-        // Build Gram matrix: G = X^T X + lambda I (featureDim x featureDim)
         var gram = new double[featureDim, featureDim];
         for (int i = 0; i < featureDim; i++)
         {
@@ -406,10 +397,9 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 gram[i, j] = dot;
                 gram[j, i] = dot;
             }
-            gram[i, i] += _lambda; // Regularization
+            gram[i, i] += _lambda;
         }
 
-        // Build X^T y: support labels assigned per example
         var xty = new double[featureDim];
         for (int d = 0; d < featureDim; d++)
         {
@@ -417,17 +407,31 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             for (int s = 0; s < X.Count; s++)
             {
                 double x_sd = d < X[s].Length ? NumOps.ToDouble(X[s][d]) : 0;
-                // Use s-th label (scalar label per support example)
                 double y_s = s < supportLabels.Length ? NumOps.ToDouble(supportLabels[s]) : 0;
                 sum += x_sd * y_s;
             }
             xty[d] = sum;
         }
 
-        // Solve (X^T X + lambda I) w = X^T y using Gaussian elimination
-        var w = FRNAlgorithm<T, TInput, TOutput>.SolveLinearSystemStatic(gram, xty, featureDim);
+        return FRNAlgorithm<T, TInput, TOutput>.SolveLinearSystemStatic(gram, xty, featureDim);
+    }
 
-        // For each query, compute prediction = x_q^T w (dot product)
+    private Vector<T> SolveRidgeRegression(
+        Vector<T> supportFeatures,
+        Vector<T> supportLabels,
+        Vector<T> queryFeatures)
+    {
+        int featureDim = EstimateFeatureDim(supportFeatures.Length, queryFeatures.Length);
+        int nSupport = Math.Max(supportFeatures.Length / Math.Max(featureDim, 1), 1);
+        int nQuery = Math.Max(queryFeatures.Length / Math.Max(featureDim, 1), 1);
+
+        var X = SplitIntoVectors(supportFeatures, nSupport, featureDim);
+        var queryVecs = SplitIntoVectors(queryFeatures, nQuery, featureDim);
+
+        var w = SolveRidgeSystem(X, supportLabels, featureDim);
+        if (w == null)
+            return queryFeatures;
+
         var predictions = new Vector<T>(nQuery);
         for (int q = 0; q < queryVecs.Count; q++)
         {
@@ -487,43 +491,9 @@ public class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         int nSupport = Math.Max(supportFeatures.Length / featureDim, 1);
 
         var X = SplitIntoVectors(supportFeatures, nSupport, featureDim);
-        if (X.Count < 2)
+        var w = SolveRidgeSystem(X, supportLabels, featureDim);
+        if (w == null)
             return null;
-
-        // Build Gram matrix: G = X^T X + lambda I
-        var gram = new double[featureDim, featureDim];
-        for (int i = 0; i < featureDim; i++)
-        {
-            for (int j = i; j < featureDim; j++)
-            {
-                double dot = 0;
-                for (int s = 0; s < X.Count; s++)
-                {
-                    if (i < X[s].Length && j < X[s].Length)
-                        dot += NumOps.ToDouble(X[s][i]) * NumOps.ToDouble(X[s][j]);
-                }
-                gram[i, j] = dot;
-                gram[j, i] = dot;
-            }
-            gram[i, i] += _lambda;
-        }
-
-        // Build X^T y
-        var xty = new double[featureDim];
-        for (int d = 0; d < featureDim; d++)
-        {
-            double sum = 0;
-            for (int s = 0; s < X.Count; s++)
-            {
-                double x_sd = d < X[s].Length ? NumOps.ToDouble(X[s][d]) : 0;
-                double y_s = s < supportLabels.Length ? NumOps.ToDouble(supportLabels[s]) : 0;
-                sum += x_sd * y_s;
-            }
-            xty[d] = sum;
-        }
-
-        // Solve (X^T X + lambda I) w = X^T y
-        var w = FRNAlgorithm<T, TInput, TOutput>.SolveLinearSystemStatic(gram, xty, featureDim);
 
         var weights = new Vector<T>(featureDim);
         for (int i = 0; i < featureDim; i++)

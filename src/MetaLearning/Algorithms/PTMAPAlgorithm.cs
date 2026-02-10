@@ -352,17 +352,38 @@ internal class PTMAPModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
+        // Start from backbone parameters, optionally adjusted by refined MAP weights
+        Vector<T> baseParams;
+        if (_refinedWeights != null && _refinedWeights.Length > 0)
+        {
+            // Use refined MAP weights to adjust backbone: blend refined transductive
+            // assignments into parameter modulation for query-time adaptation
+            double sumAbs = 0;
+            for (int i = 0; i < _refinedWeights.Length; i++)
+                sumAbs += Math.Abs(NumOps.ToDouble(_refinedWeights[i]));
+            double meanAbs = sumAbs / Math.Max(_refinedWeights.Length, 1);
+            double refinedModFactor = Math.Max(0.5, Math.Min(2.0, 0.5 + meanAbs / (1.0 + meanAbs)));
+
+            baseParams = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+                baseParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(refinedModFactor));
+        }
+        else
+        {
+            baseParams = _backboneParams;
+        }
+
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
+            var modulated = new Vector<T>(baseParams.Length);
+            for (int i = 0; i < baseParams.Length; i++)
+                modulated[i] = NumOps.Multiply(baseParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
             _model.SetParameters(modulated);
         }
         else
         {
-            _model.SetParameters(_backboneParams);
+            _model.SetParameters(baseParams);
         }
         return _model.Predict(input);
     }

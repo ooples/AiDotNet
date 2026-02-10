@@ -220,6 +220,8 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         int offset = layerIdx * paramsPerLayer;
 
         // Compute pairwise edge weights (scaled dot-product similarity)
+        // Edge params occupy the first portion of each layer's parameter block
+        int edgeParamCount = nodeDim * edgeDim + edgeDim;
         var edgeWeights = new double[n * n];
         double maxW = double.MinValue;
         for (int i = 0; i < n; i++)
@@ -228,7 +230,8 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             for (int j = 0; j < n; j++)
             {
                 double fj = NumOps.ToDouble(nodes[j]);
-                int pIdx = (offset + (i * n + j)) % graphParams.Length;
+                int pIdx = offset + ((i * n + j) % Math.Max(edgeParamCount, 1));
+                if (pIdx >= graphParams.Length) pIdx = pIdx % graphParams.Length;
                 double w = NumOps.ToDouble(graphParams[pIdx]);
                 double score = fi * fj * w / Math.Sqrt(Math.Max(n, 1));
                 edgeWeights[i * n + j] = score;
@@ -252,7 +255,8 @@ public class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         // Message passing: aggregate neighbors, project through shared MLP, add residual
         // Standard GNN pattern: shared weights applied identically to each node's aggregated message
         var updated = new Vector<T>(n);
-        int projOffset = (offset + n * n) % Math.Max(graphParams.Length, 1);
+        int projOffset = offset + edgeParamCount;
+        if (projOffset >= graphParams.Length) projOffset = projOffset % graphParams.Length;
         double wProj = NumOps.ToDouble(graphParams[projOffset % graphParams.Length]);
         double bProj = NumOps.ToDouble(graphParams[(projOffset + 1) % graphParams.Length]);
         for (int i = 0; i < n; i++)

@@ -104,8 +104,40 @@ public class OpenMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, 
             }
 
             // Query evaluation with open-set awareness
-            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-            losses.Add(queryLoss);
+            var queryPred = MetaModel.Predict(task.QueryInput);
+            var queryLoss = ComputeLossFromOutput(queryPred, task.QueryOutput);
+
+            // Open-set confidence penalty: for a fraction of tasks, penalize overconfident
+            // predictions to encourage calibrated outputs for OOD detection at test time
+            double lossVal = NumOps.ToDouble(queryLoss);
+            if (_openMAMLOptions.OpenSetTaskFraction > 0 &&
+                RandomGenerator.NextDouble() < _openMAMLOptions.OpenSetTaskFraction)
+            {
+                var queryFeatures = ConvertToVector(queryPred);
+                if (queryFeatures != null && queryFeatures.Length > 0)
+                {
+                    // Entropy regularization: penalize low-entropy (overconfident) predictions
+                    // Encourages model to be uncertain when appropriate
+                    double maxVal = double.MinValue;
+                    for (int i = 0; i < queryFeatures.Length; i++)
+                        maxVal = Math.Max(maxVal, NumOps.ToDouble(queryFeatures[i]));
+                    double sumExp = 0;
+                    for (int i = 0; i < queryFeatures.Length; i++)
+                        sumExp += Math.Exp(NumOps.ToDouble(queryFeatures[i]) - maxVal);
+                    double entropy = 0;
+                    for (int i = 0; i < queryFeatures.Length; i++)
+                    {
+                        double p = Math.Exp(NumOps.ToDouble(queryFeatures[i]) - maxVal) / Math.Max(sumExp, 1e-10);
+                        if (p > 1e-10)
+                            entropy -= p * Math.Log(p);
+                    }
+                    // Penalize low entropy (reward high entropy for open-set tasks)
+                    double maxEntropy = Math.Log(Math.Max(queryFeatures.Length, 2));
+                    double entropyPenalty = (1.0 - entropy / Math.Max(maxEntropy, 1e-10)) * _openMAMLOptions.OpenSetThreshold;
+                    lossVal += entropyPenalty;
+                }
+            }
+            losses.Add(NumOps.FromDouble(lossVal));
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 

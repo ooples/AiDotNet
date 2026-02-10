@@ -348,7 +348,9 @@ public class WarpGradOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpt
     }
 
     /// <summary>
-    /// Creates a deep copy of the WarpGrad options.
+    /// Creates a copy of the WarpGrad options. Value-type properties are copied by value;
+    /// reference-type properties (MetaModel, LossFunction, MetaOptimizer, InnerOptimizer,
+    /// DataLoader) are copied by reference (shallow copy).
     /// </summary>
     /// <returns>A new WarpGradOptions instance with the same configuration.</returns>
     public IMetaLearnerOptions<T> Clone()

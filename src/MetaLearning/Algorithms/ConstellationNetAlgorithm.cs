@@ -353,6 +353,8 @@ public class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 /// against support classes not just by overall similarity, but by matching specific parts
 /// and checking whether their spatial arrangement is consistent.
 /// </para>
+/// <para><b>Thread Safety:</b> This class is NOT thread-safe. Predict mutates the shared
+/// model's parameters via SetParameters. Callers must ensure single-threaded access.</para>
 /// </remarks>
 internal class ConstellationNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {

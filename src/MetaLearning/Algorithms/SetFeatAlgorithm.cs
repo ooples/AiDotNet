@@ -244,16 +244,17 @@ public class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
         for (int i = 0; i < features.Length; i++)
             scores[i] /= Math.Max(sumExp, 1e-10);
 
-        // Weighted combination + residual
+        // Compute attention-weighted combination (same for all positions)
+        T weighted = NumOps.Zero;
+        for (int j = 0; j < features.Length; j++)
+        {
+            weighted = NumOps.Add(weighted,
+                NumOps.Multiply(features[j], NumOps.FromDouble(scores[j])));
+        }
+
+        // Residual: original + attention-weighted
         for (int i = 0; i < features.Length; i++)
         {
-            T weighted = NumOps.Zero;
-            for (int j = 0; j < features.Length; j++)
-            {
-                weighted = NumOps.Add(weighted,
-                    NumOps.Multiply(features[j], NumOps.FromDouble(scores[j])));
-            }
-            // Residual: original + attention-weighted
             encoded[i] = NumOps.Add(features[i], weighted);
         }
 

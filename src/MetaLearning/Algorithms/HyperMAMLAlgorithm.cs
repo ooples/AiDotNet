@@ -145,13 +145,10 @@ public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
         for (int i = 0; i < sharedInit.Length; i++)
         {
-            // Hypernetwork: MLP(stats) -> per-parameter offset
-            double w1 = paramIdx < _hypernetParams.Length
-                ? NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]) : 0.01;
-            double w2 = paramIdx < _hypernetParams.Length
-                ? NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]) : 0.01;
-            double b = paramIdx < _hypernetParams.Length
-                ? NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]) : 0;
+            // Hypernetwork: MLP(stats) -> per-parameter offset (cyclic reuse via modulo)
+            double w1 = NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]);
+            double w2 = NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]);
+            double b = NumOps.ToDouble(_hypernetParams[paramIdx++ % _hypernetParams.Length]);
             double offset = Math.Tanh(w1 * meanVal + w2 * varVal + b) * 0.1;
 
             // Blend: alpha * (shared + offset) + (1-alpha) * shared
