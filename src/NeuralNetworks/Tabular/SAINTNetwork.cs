@@ -58,6 +58,9 @@ public class SAINTNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public new SAINTOptions<T> Options => _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>

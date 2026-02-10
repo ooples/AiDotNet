@@ -45,6 +45,9 @@ public class GANDALFNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public new GANDALFOptions<T> Options => _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the number of trees in the ensemble.
     /// </summary>

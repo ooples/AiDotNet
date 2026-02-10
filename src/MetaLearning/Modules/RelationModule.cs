@@ -99,6 +99,35 @@ public class RelationModule<T>
     }
 
     /// <summary>
+    /// Sets the learnable parameters of the relation module.
+    /// </summary>
+    /// <param name="parameters">New parameter values to apply.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This replaces the module's internal weights
+    /// with new values, typically after gradient-based updates during training.
+    /// </para>
+    /// </remarks>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+        {
+            throw new ArgumentNullException(nameof(parameters));
+        }
+
+        if (parameters.Length != _weights.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match internal weights length ({_weights.Length}).",
+                nameof(parameters));
+        }
+
+        for (int i = 0; i < _weights.Length; i++)
+        {
+            _weights[i] = parameters[i];
+        }
+    }
+
+    /// <summary>
     /// Sets the training mode.
     /// </summary>
     /// <param name="isTraining">True for training mode, false for inference mode.</param>

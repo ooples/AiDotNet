@@ -50,6 +50,9 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public new AutoIntOptions<T> Options => _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>

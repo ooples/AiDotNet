@@ -232,9 +232,12 @@ public class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 {
                     accumulatedBodyGradients[i] = NumOps.Add(accumulatedBodyGradients[i], bodyGradients[i]);
                 }
-                for (int i = 0; i < accumulatedHeadGradients!.Length; i++)
+                if (accumulatedHeadGradients != null)
                 {
-                    accumulatedHeadGradients[i] = NumOps.Add(accumulatedHeadGradients[i], headMetaGradients[i]);
+                    for (int i = 0; i < accumulatedHeadGradients.Length; i++)
+                    {
+                        accumulatedHeadGradients[i] = NumOps.Add(accumulatedHeadGradients[i], headMetaGradients[i]);
+                    }
                 }
             }
         }

@@ -241,7 +241,18 @@ public class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
             return (TOutput)(object)logits;
         }
 
-        // Try to use the base model's output type
-        return _baseModel.Predict(default!);
+        if (typeof(TOutput) == typeof(Tensor<T>))
+        {
+            return (TOutput)(object)Tensor<T>.FromVector(logits);
+        }
+
+        if (typeof(TOutput) == typeof(T[]))
+        {
+            return (TOutput)(object)logits.ToArray();
+        }
+
+        throw new InvalidOperationException(
+            $"Cannot convert Vector<{typeof(T).Name}> to {typeof(TOutput).Name}. " +
+            $"Supported types: Vector<T>, Tensor<T>, T[]");
     }
 }
