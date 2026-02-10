@@ -46,10 +46,8 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private ILossFunction<T> _lossFunction;
 
-    /// <summary>
-    /// Gets the FT-Transformer-specific options.
-    /// </summary>
-    public FTTransformerOptions<T> Options => _options;
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
 
     /// <summary>
     /// Gets the embedding dimension.

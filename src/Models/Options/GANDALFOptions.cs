@@ -40,7 +40,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "GANDALF: Gated Adaptive Network for Deep Automated Learning of Features" (2022)
 /// </para>
 /// </remarks>
-public class GANDALFOptions<T>
+public class GANDALFOptions<T> : RiskModelOptions<T>
 {
     /// <summary>
     /// Gets or sets the number of trees in the ensemble.
