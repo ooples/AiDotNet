@@ -33,10 +33,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class ALiBiPositionalBiasLayer<T> : LayerBase<T>
+internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
 {
     private readonly int _numHeads;
-    private int _maxSequenceLength;
+    private readonly int _maxSequenceLength;
 
     /// <summary>
     /// Pre-computed per-head slopes: slope_h = 2^(-8/numHeads * (h+1)).
@@ -67,7 +67,7 @@ public class ALiBiPositionalBiasLayer<T> : LayerBase<T>
     /// <param name="numHeads">Number of attention heads.</param>
     /// <param name="maxSequenceLength">Initial maximum sequence length for pre-computation (auto-extends).</param>
     public ALiBiPositionalBiasLayer(int numHeads, int maxSequenceLength = 2048)
-        : base([maxSequenceLength, maxSequenceLength], [numHeads, maxSequenceLength, maxSequenceLength])
+        : base([numHeads, maxSequenceLength, maxSequenceLength], [numHeads, maxSequenceLength, maxSequenceLength])
     {
         _numHeads = numHeads;
         _maxSequenceLength = maxSequenceLength;
@@ -86,14 +86,19 @@ public class ALiBiPositionalBiasLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="queryLen">Number of query positions.</param>
     /// <param name="keyLen">Number of key positions.</param>
+    /// <param name="useCausalMask">Whether to apply causal masking (future positions get -inf). Default: true.</param>
     /// <returns>Bias tensor of shape [numHeads, queryLen, keyLen].</returns>
-    public Tensor<T> ComputeBias(int queryLen, int keyLen)
+    public Tensor<T> ComputeBias(int queryLen, int keyLen, bool useCausalMask = true)
     {
-        lock (_biasLock)
+        // Only use cache for default causal masking (most common path)
+        if (useCausalMask)
         {
-            if (_biasCache != null && _biasCacheQueryLen == queryLen && _biasCacheKeyLen == keyLen)
+            lock (_biasLock)
             {
-                return _biasCache;
+                if (_biasCache != null && _biasCacheQueryLen == queryLen && _biasCacheKeyLen == keyLen)
+                {
+                    return _biasCache;
+                }
             }
         }
 
@@ -109,7 +114,7 @@ public class ALiBiPositionalBiasLayer<T> : LayerBase<T>
                 for (int j = 0; j < keyLen; j++)
                 {
                     // Causal masking: future positions get -inf
-                    if (j > i + (keyLen - queryLen))
+                    if (useCausalMask && j > i + (keyLen - queryLen))
                     {
                         bias[new[] { h, i, j }] = negInf;
                     }
@@ -125,11 +130,14 @@ public class ALiBiPositionalBiasLayer<T> : LayerBase<T>
             }
         }
 
-        lock (_biasLock)
+        if (useCausalMask)
         {
-            _biasCache = bias;
-            _biasCacheQueryLen = queryLen;
-            _biasCacheKeyLen = keyLen;
+            lock (_biasLock)
+            {
+                _biasCache = bias;
+                _biasCacheQueryLen = queryLen;
+                _biasCacheKeyLen = keyLen;
+            }
         }
 
         return bias;

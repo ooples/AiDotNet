@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class RotaryPositionalEncodingLayer<T> : LayerBase<T>
+internal class RotaryPositionalEncodingLayer<T> : LayerBase<T>
 {
     private int _maxSequenceLength;
     private readonly int _headDimension;
@@ -124,11 +124,10 @@ public class RotaryPositionalEncodingLayer<T> : LayerBase<T>
                 return;
 
             int oldLength = _maxSequenceLength;
-            _maxSequenceLength = requiredLength;
 
             int halfDim = _headDimension / 2;
-            var newCos = new Tensor<T>([_maxSequenceLength, halfDim]);
-            var newSin = new Tensor<T>([_maxSequenceLength, halfDim]);
+            var newCos = new Tensor<T>([requiredLength, halfDim]);
+            var newSin = new Tensor<T>([requiredLength, halfDim]);
 
             // Copy existing cache
             for (int pos = 0; pos < oldLength; pos++)
@@ -140,11 +139,17 @@ public class RotaryPositionalEncodingLayer<T> : LayerBase<T>
                 }
             }
 
+            // Swap cache references before updating length for thread safety:
+            // other threads checking _maxSequenceLength will not see positions
+            // beyond what the current cache tensors actually contain.
             _cosCache = newCos;
             _sinCache = newSin;
 
             // Compute new entries
-            InitializeCache(oldLength, _maxSequenceLength);
+            InitializeCache(oldLength, requiredLength);
+
+            // Update length last so concurrent readers never index beyond cache bounds
+            _maxSequenceLength = requiredLength;
         }
     }
 
@@ -158,6 +163,13 @@ public class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     public (Tensor<T> RotatedQueries, Tensor<T> RotatedKeys) ApplyRoPE(
         Tensor<T> queries, Tensor<T> keys, int startPosition = 0)
     {
+        if (startPosition < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(startPosition),
+                $"startPosition must be non-negative. Got: {startPosition}.");
+        }
+
         int rank = queries.Shape.Length;
         int seqLen = queries.Shape[rank - 2];
         int headDim = queries.Shape[rank - 1];
@@ -166,6 +178,15 @@ public class RotaryPositionalEncodingLayer<T> : LayerBase<T>
         {
             throw new ArgumentException(
                 $"Expected head dimension {_headDimension}, got {headDim}.");
+        }
+
+        // Validate key tensor shape matches query head dimension
+        int keyHeadDim = keys.Shape[keys.Shape.Length - 1];
+        if (keyHeadDim != _headDimension)
+        {
+            throw new ArgumentException(
+                $"Key head dimension ({keyHeadDim}) must match query head dimension ({_headDimension}).",
+                nameof(keys));
         }
 
         int endPosition = startPosition + seqLen;
@@ -288,6 +309,10 @@ public class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// <returns>Rotated tensor with the same shape.</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        int rank = input.Shape.Length;
+        int seqLen = rank >= 2 ? input.Shape[rank - 2] : input.Shape[0];
+        EnsureCacheLength(seqLen);
+
         return RotateTensor(input, 0);
     }
 
@@ -298,6 +323,10 @@ public class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     /// <returns>Gradient with inverse rotation applied.</returns>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
+        int rank = outputGradient.Shape.Length;
+        int seqLen = rank >= 2 ? outputGradient.Shape[rank - 2] : outputGradient.Shape[0];
+        EnsureCacheLength(seqLen);
+
         return InverseRotateTensor(outputGradient, 0);
     }
 

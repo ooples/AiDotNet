@@ -97,6 +97,11 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
 
+    /// <summary>
+    /// Gets the RoPE theta parameter if RoPE is configured, or the default 10000.0.
+    /// </summary>
+    public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
+
     // Cached projected Q, K, V for backward pass (4D: [batch, heads, seq, head_dim])
     private Tensor<T>? _lastProjectedQueries = null;
     private Tensor<T>? _lastProjectedKeys = null;
@@ -1240,6 +1245,15 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             out var queriesGradient4D,
             out var keysGradient4D,
             out var valuesGradient4D);
+
+        // Apply inverse RoPE rotation to Q/K gradients before reshaping.
+        // The forward pass cached post-RoPE Q/K, so attention backward gives gradients
+        // w.r.t. rotated Q/K. We need gradients w.r.t. pre-rotation Q/K for weight updates.
+        if (_ropeLayer != null)
+        {
+            queriesGradient4D = _ropeLayer.Backward(queriesGradient4D);
+            keysGradient4D = _ropeLayer.Backward(keysGradient4D);
+        }
 
         // Reshape gradients from 4D to 3D: [batch, seq, embed]
         var queriesGradient = queriesGradient4D.Transpose([0, 2, 1, 3]).Reshape([batchSize, sequenceLength, embeddingDimension]);

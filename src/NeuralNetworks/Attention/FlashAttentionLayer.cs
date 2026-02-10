@@ -340,10 +340,67 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null || _lastQuery == null ||
-            _lastKey == null || _lastValue == null || _lastAttentionOutput == null ||
-            _lastSoftmaxStats == null)
+            _lastKey == null || _lastValue == null || _lastAttentionOutput == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
+        }
+
+        // softmaxStats is null when ALiBi manual attention fallback was used;
+        // recompute stats from cached Q/K/V so FlashAttentionBackward can proceed.
+        if (_lastSoftmaxStats == null)
+        {
+            // Recompute softmax stats (logsumexp per row) for the backward kernel
+            int batchSize2 = _lastQuery.Shape[0];
+            int numHeads2 = _lastQuery.Shape[1];
+            int seqLenQ2 = _lastQuery.Shape[2];
+            _lastSoftmaxStats = new Tensor<T>(new[] { batchSize2, numHeads2, seqLenQ2 });
+
+            int headDim2 = _lastQuery.Shape[3];
+            T scale2 = NumOps.FromDouble(_lastScale);
+
+            for (int b = 0; b < batchSize2; b++)
+            {
+                for (int h = 0; h < numHeads2; h++)
+                {
+                    for (int i = 0; i < seqLenQ2; i++)
+                    {
+                        T maxScore = NumOps.FromDouble(double.NegativeInfinity);
+                        int seqLenKV2 = _lastKey.Shape[2];
+
+                        for (int j = 0; j < seqLenKV2; j++)
+                        {
+                            T dot = NumOps.Zero;
+                            for (int d = 0; d < headDim2; d++)
+                            {
+                                dot = NumOps.Add(dot, NumOps.Multiply(
+                                    _lastQuery[new[] { b, h, i, d }],
+                                    _lastKey[new[] { b, h, j, d }]));
+                            }
+                            T score = NumOps.Multiply(dot, scale2);
+                            if (NumOps.GreaterThan(score, maxScore))
+                                maxScore = score;
+                        }
+
+                        T sumExp = NumOps.Zero;
+                        for (int j = 0; j < seqLenKV2; j++)
+                        {
+                            T dot = NumOps.Zero;
+                            for (int d = 0; d < headDim2; d++)
+                            {
+                                dot = NumOps.Add(dot, NumOps.Multiply(
+                                    _lastQuery[new[] { b, h, i, d }],
+                                    _lastKey[new[] { b, h, j, d }]));
+                            }
+                            T score = NumOps.Multiply(dot, scale2);
+                            sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(score, maxScore)));
+                        }
+
+                        // logsumexp = max + log(sumExp)
+                        _lastSoftmaxStats[new[] { b, h, i }] = NumOps.Add(
+                            maxScore, NumOps.Log(sumExp));
+                    }
+                }
+            }
         }
 
         var normalizedGrad = NormalizeOutputGradient(outputGradient, out int batchSize, out int sequenceLength, out int embeddingDimension);

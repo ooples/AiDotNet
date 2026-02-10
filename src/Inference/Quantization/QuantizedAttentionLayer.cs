@@ -100,7 +100,7 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
         _outputBias = ExtractBias(source);
 
         (_ropeLayer, _alibiLayer) = CreatePositionalEncodingLayers(
-            _positionalEncoding, _headDimension, _headCount, source.GetInputShape()[0]);
+            _positionalEncoding, _headDimension, _headCount, source.GetInputShape()[0], source.RoPETheta);
     }
 
     /// <summary>
@@ -136,7 +136,7 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
         _outputBias = ExtractBiasFromGQA(source);
 
         (_ropeLayer, _alibiLayer) = CreatePositionalEncodingLayers(
-            _positionalEncoding, _headDimension, _headCount, source.GetInputShape()[0]);
+            _positionalEncoding, _headDimension, _headCount, source.GetInputShape()[0], source.RoPETheta);
     }
 
     public override bool SupportsTraining => false;
@@ -209,15 +209,9 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
         }
 
         // Compute attention
-        Tensor<float> context;
-        if (_alibiLayer != null)
-        {
-            context = ComputeAttentionWithALiBi(queries, keys, values, seqLen, seqLen);
-        }
-        else
-        {
-            context = ComputeStandardAttention(queries, keys, values);
-        }
+        var context = _alibiLayer != null
+            ? ComputeAttentionWithALiBi(queries, keys, values, seqLen, seqLen)
+            : ComputeStandardAttention(queries, keys, values);
 
         // Reshape: [batch, numHeads, seq, headDim] -> [batch*seq, numHeads*headDim]
         var contextFlat = new Tensor<float>(new[] { batchSize * seqLen, _headCount * _headDimension });
@@ -382,12 +376,13 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     }
 
     private static (RotaryPositionalEncodingLayer<float>?, ALiBiPositionalBiasLayer<float>?) CreatePositionalEncodingLayers(
-        PositionalEncodingType encodingType, int headDimension, int numHeads, int maxSequenceLength)
+        PositionalEncodingType encodingType, int headDimension, int numHeads, int maxSequenceLength,
+        double ropeTheta = 10000.0)
     {
         return encodingType switch
         {
             PositionalEncodingType.Rotary => (
-                new RotaryPositionalEncodingLayer<float>(maxSequenceLength, headDimension), null),
+                new RotaryPositionalEncodingLayer<float>(maxSequenceLength, headDimension, ropeTheta), null),
             PositionalEncodingType.ALiBi => (
                 null, new ALiBiPositionalBiasLayer<float>(numHeads, maxSequenceLength)),
             _ => (null, null)

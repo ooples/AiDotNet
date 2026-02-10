@@ -62,8 +62,8 @@ public class QuantizedAttentionTests
         var fp32Output = mha.Forward(input);
         var int8Output = quantized.Forward(input);
 
-        // INT8 quantized attention should be within ~5% of FP32
-        // (weight-only quantization with per-row scaling is quite accurate)
+        // INT8 quantized attention should be within ~10% of FP32
+        // (weight-only quantization with per-row scaling preserves most precision)
         double relativeError = ComputeRelativeError(fp32Output, int8Output);
         Assert.True(relativeError < 0.10,
             $"INT8 quantized attention relative error ({relativeError:F4}) exceeds 10% tolerance");
@@ -220,7 +220,7 @@ public class QuantizedAttentionTests
                 float dequantized = FP8WeightOnlyQuantization.Dequantize(
                     quantized.Weights[r * cols + c], quantized.Scales[r]);
                 float error = MathF.Abs(original - dequantized);
-                // FP8 should be within ~10% for typical values
+                // FP8 E4M3 has limited precision; absolute error should stay below 0.5
                 Assert.True(error < 0.5f,
                     $"FP8 dequantization error ({error}) too large at [{r}, {c}]");
             }

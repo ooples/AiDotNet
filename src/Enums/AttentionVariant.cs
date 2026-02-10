@@ -19,7 +19,7 @@ namespace AiDotNet.Enums;
 /// reducing KV-cache memory by 8x compared to standard MHA.
 /// </para>
 /// </remarks>
-public enum AttentionVariant
+internal enum AttentionVariant
 {
     /// <summary>
     /// Standard Multi-Head Attention where numKVHeads == numHeads.

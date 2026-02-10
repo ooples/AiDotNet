@@ -127,10 +127,9 @@ internal static class NF4WeightOnlyQuantization
     public static int ExtractIndex(byte[] packed, int elementIndex)
     {
         int byteIdx = elementIndex / 2;
-        if ((elementIndex & 1) == 0)
-            return packed[byteIdx] & 0x0F;
-        else
-            return (packed[byteIdx] >> 4) & 0x0F;
+        return (elementIndex & 1) == 0
+            ? packed[byteIdx] & 0x0F
+            : (packed[byteIdx] >> 4) & 0x0F;
     }
 
     private static int FindNearestNF4Index(double value)

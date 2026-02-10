@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class GroupedQueryAttentionLayer<T> : LayerBase<T>
+internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _numHeads;
     private readonly int _numKVHeads;
@@ -113,6 +113,11 @@ public class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// Gets the positional encoding type used by this attention layer.
     /// </summary>
     public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
+
+    /// <summary>
+    /// Gets the RoPE theta parameter if RoPE is configured, or the default 10000.0.
+    /// </summary>
+    public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
 
     /// <summary>
     /// Gets the total number of trainable parameters.
@@ -257,9 +262,7 @@ public class GroupedQueryAttentionLayer<T> : LayerBase<T>
         // Apply RoPE to Q and K (before KV head expansion)
         if (_ropeLayer != null)
         {
-            var expandedKeysForRope = keys;
-            (queries, expandedKeysForRope) = _ropeLayer.ApplyRoPE(queries, keys, startPosition: 0);
-            keys = expandedKeysForRope;
+            (queries, keys) = _ropeLayer.ApplyRoPE(queries, keys, startPosition: 0);
         }
 
         _lastProjectedQueries = queries;
@@ -274,16 +277,10 @@ public class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _lastExpandedValues = expandedValues;
 
         // Compute attention with weights caching: [batch, numHeads, seqQ, seqKV]
-        Tensor<T> context;
         Tensor<T> attentionWeights;
-        if (_alibiLayer != null)
-        {
-            context = ComputeAttentionWithALiBi(queries, expandedKeys, expandedValues, seqLen, seqLen, out attentionWeights);
-        }
-        else
-        {
-            context = ComputeStandardAttention(queries, expandedKeys, expandedValues, out attentionWeights);
-        }
+        var context = _alibiLayer != null
+            ? ComputeAttentionWithALiBi(queries, expandedKeys, expandedValues, seqLen, seqLen, out attentionWeights)
+            : ComputeStandardAttention(queries, expandedKeys, expandedValues, out attentionWeights);
 
         _lastAttentionWeights = attentionWeights;
 
@@ -550,6 +547,15 @@ public class GroupedQueryAttentionLayer<T> : LayerBase<T>
         var dK_4D = AggregateKVGradients(dExpandedK_4D, batchSize, seqLength);
         var dV_4D = AggregateKVGradients(dExpandedV_4D, batchSize, seqLength);
 
+        // 6b. Apply inverse RoPE rotation to Q/K gradients
+        // The forward pass cached post-RoPE Q/K, so attention backward gives gradients w.r.t.
+        // rotated Q/K. We need gradients w.r.t. pre-rotation Q/K for correct weight updates.
+        if (_ropeLayer != null)
+        {
+            dQ_4D = _ropeLayer.Backward(dQ_4D);
+            dK_4D = _ropeLayer.Backward(dK_4D);
+        }
+
         // 7. Reshape gradients from 4D to 2D for weight gradient computation
         var dQ_flat = dQ_4D.Transpose(new[] { 0, 2, 1, 3 })
             .Reshape(batchSize * seqLength, _numHeads * _headDimension);
@@ -674,6 +680,11 @@ public class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _lastProjectedQueries = null;
         _lastProjectedKeys = null;
         _lastProjectedValues = null;
+        _lastExpandedKeys = null;
+        _lastExpandedValues = null;
+        _lastAttentionWeights = null;
+        _lastAttentionContext = null;
+        _originalInputShape = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;

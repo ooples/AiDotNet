@@ -216,10 +216,30 @@ internal class InferenceOptimizer<T>
             return false;
         }
 
+        bool anyInitialized = false;
+
         // Handle GQA layers
         if (gqaLayers.Count > 0)
         {
-            return InitializeGQAKVCache(gqaLayers);
+            anyInitialized = InitializeGQAKVCache(gqaLayers);
+        }
+
+        // Handle MHA layers (even if GQA layers also exist)
+        if (attentionLayers.Count > 0 && _kvCache != null)
+        {
+            // Cache already created by GQA init; attach to MHA layers
+            foreach (var layer in attentionLayers)
+            {
+                layer.Cache = _kvCache;
+                layer.InferenceMode = true;
+            }
+
+            return true;
+        }
+
+        if (attentionLayers.Count == 0)
+        {
+            return anyInitialized;
         }
 
         // Determine cache parameters from the first attention layer
@@ -634,7 +654,8 @@ internal class InferenceOptimizer<T>
                         ropeTheta: _config.RoPETheta,
                         maxSequenceLength: seqLen);
                 }
-                else if (_config.PositionalEncoding == PositionalEncodingType.Rotary)
+                else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
+                         _config.PositionalEncoding == PositionalEncodingType.ALiBi)
                 {
                     cachedGqa.ConfigurePositionalEncoding(
                         _config.PositionalEncoding,
@@ -677,10 +698,13 @@ internal class InferenceOptimizer<T>
                         ? new QuantizedDenseLayer(dense, dense.VectorActivation)
                         : new QuantizedDenseLayer(dense);
 
-                    model.Layers[i] = (AiDotNet.Interfaces.ILayer<T>)(object)replacement;
-                    any = true;
+                    if (replacement is ILayer<T> typedReplacement)
+                    {
+                        model.Layers[i] = typedReplacement;
+                        any = true;
+                    }
                 }
-                catch (Exception ex)
+                catch (InvalidOperationException ex)
                 {
                     InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "DenseLayerQuantizationFailed;FallbackToFP");
                 }
@@ -691,10 +715,13 @@ internal class InferenceOptimizer<T>
                 try
                 {
                     var replacement = new QuantizedAttentionLayer(mha, mode);
-                    model.Layers[i] = (AiDotNet.Interfaces.ILayer<T>)(object)replacement;
-                    any = true;
+                    if (replacement is ILayer<T> typedReplacement)
+                    {
+                        model.Layers[i] = typedReplacement;
+                        any = true;
+                    }
                 }
-                catch (Exception ex)
+                catch (InvalidOperationException ex)
                 {
                     InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "MHAQuantizationFailed;FallbackToFP");
                 }
@@ -705,10 +732,13 @@ internal class InferenceOptimizer<T>
                 try
                 {
                     var replacement = new QuantizedAttentionLayer(gqa, mode);
-                    model.Layers[i] = (AiDotNet.Interfaces.ILayer<T>)(object)replacement;
-                    any = true;
+                    if (replacement is ILayer<T> typedReplacement)
+                    {
+                        model.Layers[i] = typedReplacement;
+                        any = true;
+                    }
                 }
-                catch (Exception ex)
+                catch (InvalidOperationException ex)
                 {
                     InferenceDiagnostics.RecordException("InferenceOptimizer", "WeightOnlyQuantization", ex, "GQAQuantizationFailed;FallbackToFP");
                 }

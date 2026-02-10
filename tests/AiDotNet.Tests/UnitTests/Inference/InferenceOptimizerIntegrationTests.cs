@@ -40,6 +40,7 @@ public class InferenceOptimizerIntegrationTests
 
         var cached = optimized.Layers.OfType<CachedMultiHeadAttention<float>>().First();
         Assert.True(cached.InferenceMode);
+        Assert.Equal(PositionalEncodingType.Rotary, cached.PositionalEncoding);
     }
 
     [Fact]
@@ -82,13 +83,13 @@ public class InferenceOptimizerIntegrationTests
         };
 
         var optimizer = new InferenceOptimizer<float>(config);
-        optimizer.OptimizeForInference(model, cloneModel: false);
+        var (optimized, _) = optimizer.OptimizeForInference(model, cloneModel: false);
 
         var kvCache = optimizer.KVCache;
         Assert.NotNull(kvCache);
 
         // Verify the cached GQA layer has correct KV head count
-        var cachedGqa = model.Layers.OfType<CachedGroupedQueryAttention<float>>().First();
+        var cachedGqa = optimized.Layers.OfType<CachedGroupedQueryAttention<float>>().First();
         Assert.Equal(2, cachedGqa.KVHeadCount);
         Assert.Equal(8, cachedGqa.HeadCount);
 
@@ -117,6 +118,7 @@ public class InferenceOptimizerIntegrationTests
         Assert.True(anyApplied);
         var cachedGqa = optimized.Layers.OfType<CachedGroupedQueryAttention<float>>().First();
         Assert.True(cachedGqa.InferenceMode);
+        Assert.Equal(PositionalEncodingType.Rotary, cachedGqa.PositionalEncoding);
     }
 
     [Theory]
