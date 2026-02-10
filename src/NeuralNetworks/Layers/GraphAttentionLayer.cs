@@ -508,8 +508,19 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         T numHeadsT = NumOps.FromDouble(_numHeads);
         var avgOverHeads = Engine.TensorDivideScalar(sumOverHeads, numHeadsT);
 
-        // Add bias with broadcasting: bias [outputFeatures] -> [1, 1, outputFeatures]
-        var biasExpanded = _bias.Reshape([1, 1, _outputFeatures]);
+        // Add bias: expand bias to match avgOverHeads shape [batchSize, numNodes, outputFeatures]
+        var avgShape = avgOverHeads.Shape;
+        var biasExpanded = new Tensor<T>(avgShape);
+        for (int b = 0; b < avgShape[0]; b++)
+        {
+            for (int n = 0; n < avgShape[1]; n++)
+            {
+                for (int f = 0; f < avgShape[2]; f++)
+                {
+                    biasExpanded[b, n, f] = _bias[f];
+                }
+            }
+        }
         output = Engine.TensorAdd(avgOverHeads, biasExpanded);
 
         activatedOutput = ApplyActivation(output);

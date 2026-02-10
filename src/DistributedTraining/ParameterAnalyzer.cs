@@ -303,19 +303,12 @@ public class ParameterAnalyzer<T>
     /// </para>
     /// </remarks>
     /// <param name="groups">The parameter groups to analyze</param>
-    /// <returns>A dictionary of statistics (e.g., "TotalGroups", "AverageGroupSize")</returns>
-    /// <exception cref="ArgumentNullException">Thrown if groups is null</exception>
-    /// <exception cref="ArgumentException">Thrown if groups is empty</exception>
+    /// <returns>A dictionary of statistics (e.g., "TotalGroups", "AverageGroupSize"), or an empty dictionary if groups is null or empty.</returns>
     public Dictionary<string, double> CalculateDistributionStats(List<ParameterGroup> groups)
     {
-        if (groups == null)
+        if (groups == null || groups.Count == 0)
         {
-            throw new ArgumentNullException(nameof(groups));
-        }
-
-        if (groups.Count == 0)
-        {
-            throw new ArgumentException("Parameter groups cannot be empty.", nameof(groups));
+            return new Dictionary<string, double>();
         }
 
         var stats = new Dictionary<string, double>

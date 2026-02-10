@@ -104,6 +104,10 @@ public class Trainer<T> : ITrainer<T>
 
             _optimizer = OptimizerFactory<T, Matrix<T>, Vector<T>>.CreateOptimizer(optimizerType);
             _optimizer.SetModel(_model);
+
+            // Apply learning rate from config to the optimizer's options
+            var optimizerOptions = _optimizer.GetOptions();
+            optimizerOptions.InitialLearningRate = config.Optimizer.LearningRate;
         }
 
         // Create loss function (default to model's DefaultLossFunction if not specified)

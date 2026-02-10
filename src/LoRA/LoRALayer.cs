@@ -175,7 +175,7 @@ public class LoRALayer<T> : LayerBase<T>
 
         if (rank > Math.Min(inputSize, outputSize))
         {
-            throw new ArgumentOutOfRangeException(nameof(rank), $"Rank ({rank}) cannot exceed min(inputSize, outputSize) = {Math.Min(inputSize, outputSize)}");
+            throw new ArgumentException($"Rank ({rank}) cannot exceed min(inputSize, outputSize) = {Math.Min(inputSize, outputSize)}", nameof(rank));
         }
 
         _rank = rank;
