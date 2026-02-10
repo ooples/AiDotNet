@@ -791,9 +791,9 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
     /// <param name="epsilon">Perturbation magnitude for finite differences (default 1e-5).</param>
     /// <remarks>
     /// <para>
-    /// SPSA (Spall, 1992) estimates gradients using only 2 function evaluations per sample,
-    /// regardless of the number of parameters. Multi-sample averaging reduces variance of the
-    /// gradient estimate at the cost of additional evaluations (2 * numSamples total).
+    /// SPSA (Spall, 1992) estimates gradients using one-sided finite differences: one base
+    /// evaluation plus one perturbed evaluation per sample direction (numSamples + 1 total).
+    /// Multi-sample averaging reduces variance of the gradient estimate.
     /// </para>
     /// <para><b>For Beginners:</b> When we can't compute exact gradients for auxiliary parameters
     /// (because they're not part of the main neural network), we estimate them by:
@@ -862,7 +862,8 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
     /// <summary>
     /// Computes the element-wise average of a list of vectors.
     /// </summary>
-    /// <param name="vectors">The vectors to average (must all be the same length).</param>
+    /// <param name="vectors">The vectors to average. If lengths differ, shorter vectors
+    /// contribute zeros for the missing trailing dimensions (truncated to first vector's length).</param>
     /// <returns>The element-wise average vector, or an empty vector if the list is empty.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Given multiple gradient vectors (one per task), this computes

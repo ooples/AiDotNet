@@ -198,7 +198,7 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         loss = AddRegularizationTerms(loss);
 
         // Step 7: Backpropagate and update both networks
-        UpdateNetworks(loss, task);
+        UpdateNetworks(task);
 
         return loss;
     }
@@ -499,7 +499,7 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// weights to reduce the loss.
     /// </para>
     /// </remarks>
-    private void UpdateNetworks(T loss, IMetaLearningTask<T, TInput, TOutput> task)
+    private void UpdateNetworks(IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Update feature encoder using base class gradient computation
         var featureGradients = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
@@ -512,11 +512,13 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         var relationParams = _relationModule.GetParameters();
         if (relationParams.Length == 0) return;
 
-        // Compute baseline loss with CURRENT (post-update) feature encoder
-        var baseSupportFeatures = EncodeExamples(task.SupportInput);
-        var baseQueryFeatures = EncodeExamples(task.QueryInput);
-        var baseClassFeatures = GroupFeaturesByClass(baseSupportFeatures, task.SupportOutput);
-        var baseScores = ComputeRelationScores(baseQueryFeatures, baseClassFeatures);
+        // Cache encoded features once (encoder params are fixed for this update step)
+        var cachedSupportFeatures = EncodeExamples(task.SupportInput);
+        var cachedQueryFeatures = EncodeExamples(task.QueryInput);
+        var cachedClassFeatures = GroupFeaturesByClass(cachedSupportFeatures, task.SupportOutput);
+
+        // Compute baseline loss with cached features
+        var baseScores = ComputeRelationScores(cachedQueryFeatures, cachedClassFeatures);
         var baseProbabilities = ApplySoftmaxToScores(baseScores);
         T baseLoss = ComputeCrossEntropyLoss(baseProbabilities, task.QueryOutput);
 
@@ -534,11 +536,8 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             relationParams[i] = NumOps.Add(original, NumOps.FromDouble(epsilon));
             _relationModule.SetParameters(relationParams);
 
-            // Recompute forward pass with perturbed relation module
-            var supportFeatures = EncodeExamples(task.SupportInput);
-            var queryFeatures = EncodeExamples(task.QueryInput);
-            var classFeatures = GroupFeaturesByClass(supportFeatures, task.SupportOutput);
-            var scores = ComputeRelationScores(queryFeatures, classFeatures);
+            // Recompute only relation scores with perturbed module (encoder features are cached)
+            var scores = ComputeRelationScores(cachedQueryFeatures, cachedClassFeatures);
             var probabilities = ApplySoftmaxToScores(scores);
             T perturbedLoss = ComputeCrossEntropyLoss(probabilities, task.QueryOutput);
 

@@ -1074,14 +1074,10 @@ public class MetaLearningNewAlgorithmsIntegrationTests
 
         Assert.NotNull(adapted);
         var adaptedMeta = adapted as IAdaptedMetaModel<double>;
-        if (adaptedMeta != null)
-        {
-            // Verify the interface properties are accessible
-            var features = adaptedMeta.AdaptedSupportFeatures;
-            var modulation = adaptedMeta.ParameterModulationFactors;
-            // Features may be null if backbone produces no usable vector
-            // Modulation should be set if features exist
-        }
+        Assert.NotNull(adaptedMeta);
+        // Verify the interface properties are accessible
+        var features = adaptedMeta.AdaptedSupportFeatures;
+        var modulation = adaptedMeta.ParameterModulationFactors;
 
         var predictions = adapted.Predict(task.QuerySetX);
         Assert.NotNull(predictions);
@@ -1104,11 +1100,9 @@ public class MetaLearningNewAlgorithmsIntegrationTests
 
         Assert.NotNull(adapted);
         var adaptedMeta = adapted as IAdaptedMetaModel<double>;
-        if (adaptedMeta != null)
-        {
-            var features = adaptedMeta.AdaptedSupportFeatures;
-            var modulation = adaptedMeta.ParameterModulationFactors;
-        }
+        Assert.NotNull(adaptedMeta);
+        var features = adaptedMeta.AdaptedSupportFeatures;
+        var modulation = adaptedMeta.ParameterModulationFactors;
 
         var predictions = adapted.Predict(task.QuerySetX);
         Assert.NotNull(predictions);
@@ -1132,11 +1126,9 @@ public class MetaLearningNewAlgorithmsIntegrationTests
 
         Assert.NotNull(adapted);
         var adaptedMeta = adapted as IAdaptedMetaModel<double>;
-        if (adaptedMeta != null)
-        {
-            var features = adaptedMeta.AdaptedSupportFeatures;
-            var modulation = adaptedMeta.ParameterModulationFactors;
-        }
+        Assert.NotNull(adaptedMeta);
+        var features = adaptedMeta.AdaptedSupportFeatures;
+        var modulation = adaptedMeta.ParameterModulationFactors;
 
         var predictions = adapted.Predict(task.QuerySetX);
         Assert.NotNull(predictions);
