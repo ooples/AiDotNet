@@ -49,6 +49,9 @@ public class TabMNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public new TabMOptions<T> Options => _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the number of ensemble members.
     /// </summary>

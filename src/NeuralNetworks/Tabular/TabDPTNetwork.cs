@@ -47,6 +47,9 @@ public class TabDPTNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public new TabDPTOptions<T> Options => _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>

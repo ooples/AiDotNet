@@ -47,6 +47,9 @@ public class MambularNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public new MambularOptions<T> Options => _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>

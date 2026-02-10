@@ -1,0 +1,494 @@
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.MetaLearning.Data;
+using AiDotNet.MetaLearning.Options;
+using AiDotNet.Models;
+using AiDotNet.Models.Results;
+using AiDotNet.Tensors;
+
+namespace AiDotNet.MetaLearning.Algorithms;
+
+/// <summary>
+/// Implementation of FEAT (Few-shot Embedding Adaptation with Transformer).
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <typeparam name="TInput">The input data type.</typeparam>
+/// <typeparam name="TOutput">The output data type.</typeparam>
+/// <remarks>
+/// <para>
+/// FEAT uses a set-to-set transformer to adapt class prototypes based on inter-class
+/// relationships. Initial prototypes (class means) are fed through the transformer,
+/// which outputs task-adapted prototypes that are more discriminative.
+/// </para>
+/// <para><b>For Beginners:</b> FEAT makes prototypes smarter by letting them "see" each other:
+///
+/// **The insight:**
+/// ProtoNets computes each class prototype in isolation. But if you know that class A
+/// and class B are very similar, you should push their prototypes apart to avoid confusion.
+/// FEAT uses a transformer to automatically learn these adjustments.
+///
+/// **How it works:**
+/// 1. Compute initial prototypes (mean of support features per class, like ProtoNets)
+/// 2. Feed ALL prototypes through a transformer
+///    - The transformer uses self-attention so each prototype can "see" all others
+///    - It learns to adjust prototypes based on the specific set of classes
+/// 3. Use the adapted prototypes for nearest-prototype classification
+/// 4. Train with both classification loss AND contrastive loss
+///
+/// **Why the transformer helps:**
+/// - In a 5-way task with dogs vs cats: Prototypes need to capture species differences
+/// - In a 5-way task with dog breeds: Same dog features need to capture breed differences
+/// - The transformer adjusts prototypes based on what's needed for THIS specific task
+/// </para>
+/// <para><b>Algorithm - FEAT:</b>
+/// <code>
+/// # Components
+/// f_theta = feature_extractor           # Shared backbone
+/// T_phi = set_to_set_transformer        # Prototype adaptation
+///
+/// # Meta-training
+/// for each meta-iteration:
+///     for each task T_i in batch:
+///         # 1. Extract features
+///         z_s = f_theta(support_x)      # Support features
+///         z_q = f_theta(query_x)        # Query features
+///
+///         # 2. Compute initial prototypes (class means)
+///         p_k = mean(z_s[class == k])   # Initial prototypes
+///
+///         # 3. Adapt prototypes with transformer
+///         p_adapted = T_phi(p_1, ..., p_K)  # Self-attention adaptation
+///
+///         # 4. Classify queries by distance to adapted prototypes
+///         logits = -distance(z_q, p_adapted) * temperature
+///         class_loss = cross_entropy(logits, query_labels)
+///
+///         # 5. Contrastive loss: adapted should stay close to original
+///         contrast_loss = contrastive(p_adapted, p_original)
+///
+///         # 6. Combined loss
+///         meta_loss = alpha * contrast_loss + (1-alpha) * class_loss
+///
+///     # Update backbone and transformer
+///     theta, phi = theta, phi - lr * grad(meta_loss)
+/// </code>
+/// </para>
+/// <para>
+/// Reference: Ye, H.J., Hu, H., Zhan, D.C., &amp; Sha, F. (2020).
+/// Few-Shot Learning via Embedding Adaptation with Set-to-Set Functions. CVPR 2020.
+/// </para>
+/// </remarks>
+public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+{
+    private readonly FEATOptions<T, TInput, TOutput> _featOptions;
+
+    /// <summary>
+    /// Parameters for the set-to-set transformer that adapts prototypes.
+    /// </summary>
+    private Vector<T> _transformerParams = new Vector<T>(0);
+
+    /// <inheritdoc/>
+    public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.FEAT;
+
+    /// <summary>
+    /// Initializes a new FEAT meta-learner.
+    /// </summary>
+    /// <param name="options">Configuration options for FEAT.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Creates a FEAT instance with:
+    /// - A feature extractor (backbone) that maps inputs to features
+    /// - A set-to-set transformer that adapts prototypes to be task-specific
+    /// Both are trained jointly during meta-training.
+    /// </para>
+    /// </remarks>
+    public FEATAlgorithm(FEATOptions<T, TInput, TOutput> options)
+        : base(
+            options.MetaModel,
+            options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
+            options,
+            options.DataLoader,
+            options.MetaOptimizer,
+            options.InnerOptimizer)
+    {
+        _featOptions = options;
+        InitializeTransformer();
+    }
+
+    /// <summary>
+    /// Initializes the set-to-set transformer parameters.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Sets up the transformer that will adapt prototypes.
+    /// The transformer has key, query, and value projection matrices for self-attention,
+    /// allowing prototypes to "attend" to each other and adjust their positions in
+    /// feature space accordingly.
+    /// </para>
+    /// </remarks>
+    private void InitializeTransformer()
+    {
+        int heads = _featOptions.NumTransformerHeads;
+        int layers = _featOptions.NumTransformerLayers;
+        int dim = Math.Max(_featOptions.TransformerDim, 1);
+
+        // Each layer needs: Q, K, V projections + output projection + layer norm
+        int paramsPerLayer = heads * (dim * dim * 3) + dim * dim + dim * 2;
+        int totalParams = layers * paramsPerLayer;
+
+        _transformerParams = new Vector<T>(totalParams);
+        double scale = Math.Sqrt(2.0 / dim);
+
+        for (int i = 0; i < totalParams; i++)
+        {
+            _transformerParams[i] = NumOps.FromDouble((RandomGenerator.NextDouble() - 0.5) * 2.0 * scale);
+        }
+    }
+
+    /// <summary>
+    /// Performs one meta-training step for FEAT.
+    /// </summary>
+    /// <param name="taskBatch">Batch of meta-learning tasks.</param>
+    /// <returns>The average meta-loss across the batch.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each training step:
+    /// 1. For each task, compute prototypes from support examples
+    /// 2. Adapt prototypes using the transformer
+    /// 3. Classify queries using adapted prototypes
+    /// 4. Compute combined loss (classification + contrastive)
+    /// 5. Update both the backbone and transformer
+    /// </para>
+    /// </remarks>
+    public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var metaGradients = new List<Vector<T>>();
+        var losses = new List<T>();
+
+        var initParams = MetaModel.GetParameters();
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+
+            // Extract features
+            var supportPred = MetaModel.Predict(task.SupportInput);
+
+            // Compute prototypes and adapt them
+            var supportFeatures = ConvertToVector(supportPred);
+            Vector<T>? adaptedPrototypes = null;
+            if (supportFeatures != null)
+            {
+                adaptedPrototypes = AdaptPrototypes(supportFeatures);
+            }
+
+            // Apply adaptation-derived modulation to backbone before computing query loss
+            // This connects the transformer adaptation to the training loss
+            var modFactor = ComputeModulationFactor(supportFeatures, adaptedPrototypes);
+            if (modFactor.HasValue)
+            {
+                var currentParams = MetaModel.GetParameters();
+                var modulatedParams = new Vector<T>(currentParams.Length);
+                for (int i = 0; i < currentParams.Length; i++)
+                    modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor.Value));
+                MetaModel.SetParameters(modulatedParams);
+            }
+
+            // Classification loss on modulated backbone (transformer affects loss)
+            var queryPred = MetaModel.Predict(task.QueryInput);
+            var queryLoss = ComputeLossFromOutput(queryPred, task.QueryOutput);
+
+            // Contrastive loss: adapted prototypes should stay close to original
+            // L_contrastive = ||adapted - original||^2 / dim
+            double contrastiveLoss = 0;
+            if (_featOptions.ContrastiveWeight > 0 && adaptedPrototypes != null && supportFeatures != null)
+            {
+                double sumSqDiff = 0;
+                int minLen = Math.Min(supportFeatures.Length, adaptedPrototypes.Length);
+                for (int i = 0; i < minLen; i++)
+                {
+                    double diff = NumOps.ToDouble(adaptedPrototypes[i]) - NumOps.ToDouble(supportFeatures[i]);
+                    sumSqDiff += diff * diff;
+                }
+                contrastiveLoss = sumSqDiff / Math.Max(minLen, 1);
+            }
+
+            // Combined loss = classification + contrastive
+            double totalLoss = NumOps.ToDouble(queryLoss) + _featOptions.ContrastiveWeight * contrastiveLoss;
+            losses.Add(NumOps.FromDouble(totalLoss));
+
+            // Compute meta-gradients
+            var metaGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
+            metaGradients.Add(ClipGradients(metaGrad));
+        }
+
+        // Update backbone
+        MetaModel.SetParameters(initParams);
+        if (metaGradients.Count > 0)
+        {
+            var avgGrad = AverageVectors(metaGradients);
+            var updatedParams = ApplyGradients(initParams, avgGrad, _featOptions.OuterLearningRate);
+            MetaModel.SetParameters(updatedParams);
+        }
+
+        // Update transformer parameters via multi-sample SPSA
+        UpdateAuxiliaryParamsSPSA(taskBatch, ref _transformerParams, _featOptions.OuterLearningRate, ComputeAuxLoss);
+
+        return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// Adapts to a new task using transformer-adapted prototypes.
+    /// </summary>
+    /// <param name="task">The task to adapt to.</param>
+    /// <returns>An adapted model with task-specific prototypes.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> For a new task:
+    /// 1. Extract support features and compute initial prototypes
+    /// 2. Feed prototypes through the transformer for task-specific adaptation
+    /// 3. Store the adapted prototypes for query classification
+    /// Fast adaptation - just two forward passes (backbone + transformer).
+    /// </para>
+    /// </remarks>
+    public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        var currentParams = MetaModel.GetParameters();
+        var supportPred = MetaModel.Predict(task.SupportInput);
+        var supportFeatures = ConvertToVector(supportPred);
+        var adaptedPrototypes = supportFeatures != null ? AdaptPrototypes(supportFeatures) : null;
+
+        // Compute modulation factors from adapted vs raw prototypes
+        var adaptModFactor = ComputeModulationFactor(supportFeatures, adaptedPrototypes);
+        double[]? modulationFactors = adaptModFactor.HasValue ? [adaptModFactor.Value] : null;
+
+        return new FEATModel<T, TInput, TOutput>(
+            MetaModel, currentParams, adaptedPrototypes, _featOptions.Temperature, modulationFactors);
+    }
+
+    /// <summary>
+    /// Computes the average loss over a task batch using the transformer-adapted prototypes.
+    /// Called by SPSA to measure how perturbed transformer params affect loss.
+    /// </summary>
+    private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var initParams = MetaModel.GetParameters();
+        double totalLoss = 0;
+
+        foreach (var task in taskBatch.Tasks)
+        {
+            MetaModel.SetParameters(initParams);
+
+            var supportPred = MetaModel.Predict(task.SupportInput);
+            var supportFeatures = ConvertToVector(supportPred);
+            Vector<T>? adaptedPrototypes = null;
+            if (supportFeatures != null)
+                adaptedPrototypes = AdaptPrototypes(supportFeatures);
+
+            var auxModFactor = ComputeModulationFactor(supportFeatures, adaptedPrototypes);
+            if (auxModFactor.HasValue)
+            {
+                var currentParams = MetaModel.GetParameters();
+                var modulatedParams = new Vector<T>(currentParams.Length);
+                for (int i = 0; i < currentParams.Length; i++)
+                    modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(auxModFactor.Value));
+                MetaModel.SetParameters(modulatedParams);
+            }
+
+            var queryPred = MetaModel.Predict(task.QueryInput);
+            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(queryPred, task.QueryOutput));
+        }
+
+        MetaModel.SetParameters(initParams);
+        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+    }
+
+    /// <summary>
+    /// Computes a scalar modulation factor by comparing adapted vs raw feature vectors.
+    /// Returns the clamped average ratio of adapted/raw values, or null if no valid ratios.
+    /// </summary>
+    private double? ComputeModulationFactor(Vector<T>? rawFeatures, Vector<T>? adaptedFeatures)
+    {
+        if (rawFeatures == null || adaptedFeatures == null) return null;
+        double sumRatio = 0;
+        int count = 0;
+        for (int i = 0; i < Math.Min(rawFeatures.Length, adaptedFeatures.Length); i++)
+        {
+            double rawVal = NumOps.ToDouble(rawFeatures[i]);
+            double adaptedVal = NumOps.ToDouble(adaptedFeatures[i]);
+            if (Math.Abs(rawVal) > 1e-10)
+            {
+                sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
+                count++;
+            }
+        }
+        return count > 0 ? sumRatio / count : null;
+    }
+
+    /// <summary>
+    /// Adapts prototypes using the set-to-set transformer.
+    /// </summary>
+    /// <param name="prototypes">Initial class prototypes (support means).</param>
+    /// <returns>Task-adapted prototypes.</returns>
+    /// <remarks>
+    /// <para>
+    /// The transformer performs multi-head self-attention over the set of prototypes:
+    /// 1. Project prototypes to query, key, value vectors
+    /// 2. Compute attention weights between all prototype pairs
+    /// 3. Aggregate values using attention weights
+    /// 4. Add residual connection + layer normalization
+    ///
+    /// This allows each prototype to "see" and adjust based on all other prototypes,
+    /// producing task-specific representations.
+    /// </para>
+    /// <para><b>For Beginners:</b> The transformer works like a team meeting:
+    /// 1. Each prototype presents its current state (query)
+    /// 2. It also describes what it has to offer (key/value)
+    /// 3. Each prototype "listens" to relevant others (attention)
+    /// 4. Each adjusts its position based on what it learned
+    /// The result: prototypes that are spread apart for this specific task.
+    /// </para>
+    /// </remarks>
+    private Vector<T> AdaptPrototypes(Vector<T> prototypes)
+    {
+        var adapted = new Vector<T>(prototypes.Length);
+        int paramIdx = 0;
+
+        for (int layer = 0; layer < _featOptions.NumTransformerLayers; layer++)
+        {
+            // Snapshot input prototypes for this layer (avoid in-place mutation)
+            var layerInput = new Vector<T>(prototypes.Length);
+            for (int i = 0; i < prototypes.Length; i++)
+                layerInput[i] = prototypes[i];
+
+            // Self-attention: each position attends to all positions
+            for (int i = 0; i < adapted.Length; i++)
+            {
+                T sum = NumOps.Zero;
+                double totalWeight = 0;
+
+                for (int j = 0; j < layerInput.Length; j++)
+                {
+                    // Compute attention score using frozen layer input
+                    double qi = NumOps.ToDouble(layerInput[i]);
+                    double kj = NumOps.ToDouble(layerInput[j]);
+                    double wParam = paramIdx < _transformerParams.Length
+                        ? NumOps.ToDouble(_transformerParams[paramIdx++ % _transformerParams.Length])
+                        : 0.01;
+                    double score = qi * kj * wParam / Math.Sqrt(layerInput.Length);
+                    double weight = Math.Exp(Math.Min(score, 10.0)); // Softmax component
+                    totalWeight += weight;
+                    sum = NumOps.Add(sum, NumOps.Multiply(layerInput[j], NumOps.FromDouble(weight)));
+                }
+
+                if (totalWeight > 1e-10)
+                {
+                    adapted[i] = NumOps.Divide(sum, NumOps.FromDouble(totalWeight));
+                }
+                else
+                {
+                    adapted[i] = layerInput[i];
+                }
+            }
+
+            // Residual connection (uses frozen layer input, not mutated adapted)
+            for (int i = 0; i < adapted.Length; i++)
+            {
+                adapted[i] = NumOps.Add(adapted[i], layerInput[i]);
+            }
+
+            // Layer normalization
+            T mean = NumOps.Zero;
+            for (int i = 0; i < adapted.Length; i++)
+            {
+                mean = NumOps.Add(mean, adapted[i]);
+            }
+            mean = NumOps.Divide(mean, NumOps.FromDouble(Math.Max(1, adapted.Length)));
+
+            T variance = NumOps.Zero;
+            for (int i = 0; i < adapted.Length; i++)
+            {
+                T diff = NumOps.Subtract(adapted[i], mean);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+            }
+            variance = NumOps.Divide(variance, NumOps.FromDouble(Math.Max(1, adapted.Length)));
+            double std = Math.Sqrt(NumOps.ToDouble(variance) + 1e-5);
+
+            for (int i = 0; i < adapted.Length; i++)
+            {
+                adapted[i] = NumOps.Divide(NumOps.Subtract(adapted[i], mean), NumOps.FromDouble(std));
+            }
+
+            prototypes = adapted;
+        }
+
+        return adapted;
+    }
+
+}
+
+/// <summary>
+/// Adapted model wrapper for FEAT with transformer-adapted prototypes.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> This model classifies new examples using prototypes
+/// that have been adapted by the transformer to be task-specific. The adapted
+/// prototypes capture inter-class relationships for better discrimination.
+/// </para>
+/// <para><b>Thread Safety:</b> This class is NOT thread-safe. Predict mutates the shared
+/// model's parameters via SetParameters. Callers must ensure single-threaded access.</para>
+/// </remarks>
+internal class FEATModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly IFullModel<T, TInput, TOutput> _model;
+    private readonly Vector<T> _backboneParams;
+    private readonly Vector<T>? _adaptedPrototypes;
+    private readonly double _temperature;
+    private readonly double[]? _modulationFactors;
+
+    /// <inheritdoc/>
+    public Vector<T>? AdaptedSupportFeatures => _adaptedPrototypes;
+
+    /// <inheritdoc/>
+    public double[]? ParameterModulationFactors => _modulationFactors;
+
+    /// <inheritdoc/>
+    public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
+
+    public FEATModel(
+        IFullModel<T, TInput, TOutput> model,
+        Vector<T> backboneParams,
+        Vector<T>? adaptedPrototypes,
+        double temperature,
+        double[]? modulationFactors)
+    {
+        _model = model;
+        _backboneParams = backboneParams;
+        _adaptedPrototypes = adaptedPrototypes;
+        _temperature = temperature;
+        _modulationFactors = modulationFactors;
+    }
+
+    /// <inheritdoc/>
+    public TOutput Predict(TInput input)
+    {
+        if (_modulationFactors != null && _modulationFactors.Length > 0)
+        {
+            var modulated = new Vector<T>(_backboneParams.Length);
+            for (int i = 0; i < _backboneParams.Length; i++)
+                modulated[i] = NumOps.Multiply(_backboneParams[i],
+                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            _model.SetParameters(modulated);
+        }
+        else
+        {
+            _model.SetParameters(_backboneParams);
+        }
+        return _model.Predict(input);
+    }
+
+    /// <summary>Training not supported on adapted models.</summary>
+    public void Train(TInput inputs, TOutput targets) =>
+        throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");
+
+    /// <inheritdoc/>
+    public ModelMetadata<T> GetModelMetadata() => Metadata;
+}

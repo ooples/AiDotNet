@@ -50,6 +50,9 @@ public class TabNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public new TabNetOptions<T> Options => _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the number of decision steps.
     /// </summary>

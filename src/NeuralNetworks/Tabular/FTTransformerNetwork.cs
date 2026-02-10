@@ -51,6 +51,9 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public new FTTransformerOptions<T> Options => _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>

@@ -54,6 +54,9 @@ public class NODENetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public new NODEOptions<T> Options => _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the number of trees in the ensemble.
     /// </summary>

@@ -283,5 +283,484 @@ public enum MetaLearningAlgorithmType
     /// task-specific classifiers.
     /// </para>
     /// </remarks>
-    BOIL
+    BOIL,
+
+    /// <summary>
+    /// Fast Context Adaptation via Meta-Learning (Zintgraf et al., ICML 2019).
+    /// Separates model parameters into shared body and task-specific context, adapting only context in the inner loop.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Divide parameters into shared body parameters (updated in outer loop)
+    /// and a small context vector (adapted per task in inner loop). Much faster than MAML
+    /// because only the context vector is differentiated through.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want MAML-like adaptation speed with reduced meta-overfitting
+    /// and lower computational cost. Especially effective when tasks share common structure
+    /// but differ in specific aspects.
+    /// </para>
+    /// </remarks>
+    CAVIA,
+
+    /// <summary>
+    /// Warped Gradient Descent meta-learning (Flennerhag et al., ICLR 2020).
+    /// Learns preconditioning warp-layers that transform gradients for more efficient inner-loop adaptation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Instead of just learning a good initialization (like MAML), learn a
+    /// gradient preconditioning transformation that makes gradient descent more effective.
+    /// Warp-layers reshape the optimization landscape without requiring second-order gradients.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want efficient adaptation without second-order gradient cost,
+    /// or when tasks benefit from learning both initialization and optimization geometry.
+    /// </para>
+    /// </remarks>
+    WarpGrad,
+
+    /// <summary>
+    /// MAML++ - How to Train Your MAML (Antoniou et al., ICLR 2019).
+    /// Production-hardened MAML with multi-step loss, per-step learning rates,
+    /// derivative-order annealing, and batch normalization fixes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Addresses training instabilities in MAML through engineering improvements:
+    /// multi-step loss optimization (MSL), learned step-size learning rates (LSLR),
+    /// derivative-order annealing, and per-step batch normalization.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want MAML's approach but with production-grade stability and performance.
+    /// </para>
+    /// </remarks>
+    MAMLPlusPlus,
+
+    /// <summary>
+    /// R2-D2 - Meta-learning with Differentiable Closed-form Solvers (Bertinetto et al., ICLR 2019).
+    /// Uses differentiable ridge regression as a closed-form inner-loop solver.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Replace iterative inner-loop gradient descent with a closed-form
+    /// ridge regression solver. The exact solution w = (X^T X + lambda I)^-1 X^T y is
+    /// differentiable, enabling efficient meta-gradient computation.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want extremely fast inner-loop adaptation with a mathematically
+    /// optimal classifier, especially when tasks have linearly separable features.
+    /// </para>
+    /// </remarks>
+    R2D2,
+
+    /// <summary>
+    /// VERSA - Versatile and Efficient Few-shot Learning (Gordon et al., ICLR 2019).
+    /// Uses an amortization network to produce task-specific classifier parameters
+    /// in a single forward pass, eliminating the need for inner-loop optimization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Train a separate "amortization network" that takes aggregated
+    /// support set features and directly outputs classifier weights. This replaces
+    /// iterative inner-loop optimization with a single forward pass.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You need the fastest possible adaptation (no inner-loop optimization)
+    /// and want to learn a general mapping from support sets to classifiers.
+    /// </para>
+    /// </remarks>
+    VERSA,
+
+    /// <summary>
+    /// SNAIL - Simple Neural Attentive Meta-Learner (Mishra et al., ICLR 2018).
+    /// Combines temporal convolutions with causal attention to perform
+    /// sequence-to-sequence meta-learning on few-shot tasks.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Treat few-shot learning as a sequence modeling problem.
+    /// Feed support examples (with labels) as a sequence, then feed query examples.
+    /// Temporal convolutions capture local patterns, causal attention captures global patterns.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want to leverage powerful sequence modeling architectures
+    /// for few-shot learning, especially when the order of examples matters or when
+    /// you need both local and global pattern recognition.
+    /// </para>
+    /// </remarks>
+    SNAIL,
+
+    /// <summary>
+    /// SimpleShot - Nearest-centroid classification with feature normalization (Wang et al., 2019).
+    /// Shows that simple methods with proper normalization match complex meta-learning algorithms.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> A well-trained feature extractor + L2 or centered L2 normalization +
+    /// nearest-centroid classification is a surprisingly strong few-shot baseline.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You need a strong baseline, want fast inference, or want to
+    /// evaluate whether complex meta-learning methods are truly adding value.
+    /// </para>
+    /// </remarks>
+    SimpleShot,
+
+    /// <summary>
+    /// DeepEMD - Earth Mover's Distance for few-shot learning (Zhang et al., CVPR 2020).
+    /// Uses optimal transport to compare local feature sets between examples.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Compare examples by finding the optimal matching between their local
+    /// features using the Earth Mover's Distance. This captures fine-grained structural
+    /// similarity that global feature comparison misses.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> Tasks involve structured data where part-to-part correspondence
+    /// matters (e.g., fine-grained image classification, structural comparison).
+    /// </para>
+    /// </remarks>
+    DeepEMD,
+
+    /// <summary>
+    /// FEAT - Few-shot Embedding Adaptation with Transformer (Ye et al., CVPR 2020).
+    /// Uses a set-to-set transformer to adapt class prototypes based on inter-class relationships.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Prototypes should be task-aware. A transformer lets prototypes
+    /// "see" each other and adjust their positions in feature space for better discrimination
+    /// within each specific task.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want task-adaptive prototypes that capture inter-class
+    /// relationships, improving over standard ProtoNets.
+    /// </para>
+    /// </remarks>
+    FEAT,
+
+    /// <summary>
+    /// TIM - Transductive Information Maximization (Boudiaf et al., NeurIPS 2020).
+    /// Refines query predictions by maximizing mutual information across the query set.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Use ALL query examples jointly by maximizing mutual information:
+    /// each prediction should be confident (low conditional entropy) and class assignments
+    /// should be balanced (high marginal entropy).
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You have access to all query examples at once (transductive setting)
+    /// and want to exploit query set structure for better predictions.
+    /// </para>
+    /// </remarks>
+    TIM,
+
+    /// <summary>
+    /// LaplacianShot - Laplacian Regularized Few-Shot Learning (Ziko et al., ICML 2020).
+    /// Adds graph-based label propagation to nearest-centroid classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Build a kNN graph over query features and smooth predictions using
+    /// the graph Laplacian. Similar queries get similar predictions, propagating confident
+    /// labels to uncertain ones.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want a simple yet effective transductive method that improves
+    /// upon SimpleShot with graph-based refinement.
+    /// </para>
+    /// </remarks>
+    LaplacianShot,
+
+    /// <summary>
+    /// SIB - Sequential Information Bottleneck (Hu et al., 2020).
+    /// Uses the information bottleneck principle for transductive few-shot clustering.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Iteratively refine cluster assignments by balancing information
+    /// retention (useful for classification) with compression (removing noise).
+    /// Multiple random restarts avoid local optima.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want a principled transductive method based on information
+    /// theory with theoretical guarantees.
+    /// </para>
+    /// </remarks>
+    SIB,
+
+    /// <summary>
+    /// PMF - Pre-train, Meta-train, Fine-tune (Hu et al., ICLR 2022).
+    /// Three-stage pipeline combining standard pretraining, episodic meta-training,
+    /// and optional task-specific fine-tuning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> The best of all worlds: use pretraining for good features,
+    /// episodic training for few-shot adaptation, and optional fine-tuning for final refinement.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want a strong, well-studied pipeline that systematically
+    /// combines the best practices from both transfer learning and meta-learning.
+    /// </para>
+    /// </remarks>
+    PMF,
+
+    /// <summary>
+    /// Meta-Baseline - Simple pre-train then meta-train with cosine classifier (Chen et al., ICLR 2021).
+    /// Shows that simple methods with cosine classification are surprisingly strong baselines.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Pre-train a feature extractor with standard classification, then
+    /// fine-tune with episodic training using cosine-similarity nearest-centroid. Simplicity
+    /// is competitive with complex meta-learning.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want a strong, simple baseline or when complex methods
+    /// aren't clearly justified for your task.
+    /// </para>
+    /// </remarks>
+    MetaBaseline,
+
+    /// <summary>
+    /// CAML - Context-Aware Meta-Learning (Fifty et al., NeurIPS 2023).
+    /// Uses frozen pretrained backbones with lightweight context-aware adaptation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Modern pretrained models produce excellent features. Instead of
+    /// fine-tuning the backbone, learn a small context module that adapts classification
+    /// based on the support set structure.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You have access to a strong pretrained model and want efficient
+    /// adaptation without backbone fine-tuning.
+    /// </para>
+    /// </remarks>
+    CAML,
+
+    /// <summary>
+    /// Open-MAML - MAML extended for open-set recognition.
+    /// Handles scenarios where query examples may belong to unseen classes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Extend MAML with a confidence-based rejection mechanism.
+    /// The model learns to produce low confidence for out-of-distribution examples,
+    /// enabling it to say "I don't know" instead of forcing a wrong classification.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> Your application may encounter classes not seen during support
+    /// set construction, requiring robust unknown detection.
+    /// </para>
+    /// </remarks>
+    OpenMAML,
+
+    /// <summary>
+    /// HyperShot - Kernel hypernetwork for few-shot learning.
+    /// Generates task-specific kernel parameters from support set statistics.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Different tasks need different similarity functions. A hypernetwork
+    /// generates custom kernel parameters for each task based on support set statistics,
+    /// enabling adaptive distance computation.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You believe a fixed distance metric is suboptimal and want
+    /// task-adaptive similarity computation.
+    /// </para>
+    /// </remarks>
+    HyperShot,
+
+    /// <summary>
+    /// HyperMAML - Hypernetwork-based MAML initialization.
+    /// Generates task-specific initial parameters rather than using a shared initialization.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Instead of one initialization for all tasks, use a hypernetwork
+    /// that looks at the support set and generates a task-specific starting point.
+    /// The custom initialization is already close to the task optimum.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> Tasks are highly diverse and a single MAML initialization
+    /// can't serve all tasks well, or you want faster adaptation with fewer inner steps.
+    /// </para>
+    /// </remarks>
+    HyperMAML,
+
+    /// <summary>
+    /// SetFeat - Matching Feature Sets for Few-Shot Classification (Afrasiyabi et al., CVPR 2022).
+    /// Learns set-level features that capture intra-class variation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Represent each class as a SET of features rather than a single
+    /// prototype. A set encoder captures how the class varies, and optional cross-attention
+    /// lets classes inform each other.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> Intra-class variation matters for your task and simple mean
+    /// prototypes lose important distributional information.
+    /// </para>
+    /// </remarks>
+    SetFeat,
+
+    /// <summary>
+    /// FewTURE - Few-shot Transformer with Uncertainty and Reliable Estimation (Hiller et al., ECCV 2022).
+    /// Token-level matching with uncertainty estimation for reliable prediction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Compare images at the patch/token level instead of globally.
+    /// Estimate uncertainty for each token comparison and weight reliable matches more.
+    /// This focuses on informative image regions automatically.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You need fine-grained comparison with uncertainty quantification,
+    /// especially for visual tasks where discriminative features are localized.
+    /// </para>
+    /// </remarks>
+    FewTURE,
+
+    /// <summary>
+    /// NPBML - Neural Process-Based Meta-Learning.
+    /// Probabilistic meta-learner that captures task-level uncertainty.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Encode support sets into a latent DISTRIBUTION (not just a point).
+    /// Multiple samples from this distribution give different predictions, and their
+    /// disagreement quantifies uncertainty about the task.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You need uncertainty estimates for your few-shot predictions,
+    /// such as safety-critical applications or active learning.
+    /// </para>
+    /// </remarks>
+    NPBML,
+
+    /// <summary>
+    /// MCL - Meta-learning with Contrastive Learning.
+    /// Combines episodic meta-learning with supervised contrastive learning.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Train features with two objectives: (1) meta-learning loss for
+    /// few-shot task performance, and (2) contrastive loss for well-clustered embeddings.
+    /// Features that are both task-adapted and well-organized transfer better.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want features that are simultaneously good for few-shot
+    /// classification AND produce well-structured embedding spaces.
+    /// </para>
+    /// </remarks>
+    MCL,
+
+    /// <summary>
+    /// DKT - Deep Kernel Transfer (Patacchiola et al., ICLR 2020).
+    /// Combines deep feature extractors with Gaussian processes for Bayesian few-shot classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Use a neural network to learn a feature space where a GP classifier
+    /// provides principled Bayesian predictions with uncertainty estimates. The deep kernel
+    /// is trained end-to-end.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You need uncertainty estimates for predictions, or when
+    /// principled Bayesian reasoning is important for your application.
+    /// </para>
+    /// </remarks>
+    DKT,
+
+    /// <summary>
+    /// DPGN - Distribution Propagation Graph Network (Yang et al., CVPR 2020).
+    /// Dual graph structure propagating both point estimates and distribution information.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Use two complementary graphs - a point graph for feature propagation
+    /// and a distribution graph for uncertainty propagation. Both refine each other
+    /// through multi-layer message passing.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want to model both feature similarity and confidence
+    /// explicitly in a graph-based framework.
+    /// </para>
+    /// </remarks>
+    DPGN,
+
+    /// <summary>
+    /// EPNet - Embedding Propagation Network (Rodriguez et al., CVPR 2020).
+    /// Refines embeddings through label propagation on a nearest-neighbor graph.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Build a kNN graph over all examples and propagate features
+    /// through diffusion. This smooths the feature manifold, making features more
+    /// discriminative and robust to noise.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want a simple transductive method that improves features
+    /// through manifold smoothing.
+    /// </para>
+    /// </remarks>
+    EPNet,
+
+    /// <summary>
+    /// PT+MAP - Power Transform + Maximum A Posteriori (Hu et al., ICLR 2021).
+    /// Simple power transform normalization with Bayesian MAP classification.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Apply a power transform to make features Gaussian, then use
+    /// MAP estimation for optimal Bayesian classification. Surprisingly effective
+    /// despite its simplicity.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> You want a strong transductive baseline with minimal complexity,
+    /// or when feature distributions are highly non-Gaussian.
+    /// </para>
+    /// </remarks>
+    PTMAP,
+
+    /// <summary>
+    /// FRN - Few-shot Classification via Feature Map Reconstruction (Wertheimer et al., CVPR 2021).
+    /// Classifies by reconstruction error from class-specific support features.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Instead of comparing features by distance, try to reconstruct
+    /// the query features using each class's support features via ridge regression.
+    /// The class with lowest reconstruction error is chosen.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> Simple distance metrics are insufficient and you want
+    /// reconstruction-based classification that can combine multiple support examples.
+    /// </para>
+    /// </remarks>
+    FRN,
+
+    /// <summary>
+    /// ConstellationNet - Structured part-based few-shot learning (Xu et al., ICLR 2021).
+    /// Detects discriminative parts and models their spatial relationships.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Key Idea:</b> Detect K discriminative parts per example and model their
+    /// spatial arrangement as a "constellation." Classification matches both
+    /// individual parts and their structural arrangement.
+    /// </para>
+    /// <para>
+    /// <b>Use When:</b> Discriminative information lies in the arrangement of parts,
+    /// such as fine-grained recognition where spatial structure matters.
+    /// </para>
+    /// </remarks>
+    ConstellationNet
 }

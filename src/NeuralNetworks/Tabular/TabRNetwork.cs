@@ -52,6 +52,9 @@ public class TabRNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public new TabROptions<T> Options => _options;
 
+    /// <inheritdoc/>
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the number of neighbors to retrieve.
     /// </summary>
