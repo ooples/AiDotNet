@@ -44,6 +44,11 @@ public class TabMNetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private ILossFunction<T> _lossFunction;
 
+    /// <summary>
+    /// Gets the TabM-specific options.
+    /// </summary>
+    public new TabMOptions<T> Options => _options;
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 

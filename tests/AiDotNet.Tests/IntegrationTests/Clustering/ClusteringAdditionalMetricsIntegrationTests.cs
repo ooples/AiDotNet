@@ -1,3 +1,4 @@
+#nullable disable
 using AiDotNet.Clustering.Evaluation;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
@@ -138,8 +139,8 @@ public class ClusteringAdditionalMetricsIntegrationTests
         var scores = metrics.EvaluateExternal(dataset.Labels, dataset.Labels);
 
         Assert.True(scores.HasExternalMetrics);
-        Assert.Equal(1.0, scores.AdjustedRandIndex.Value, 1e-6);
-        Assert.Equal(1.0, scores.NormalizedMutualInformation.Value, 1e-6);
+        Assert.Equal(1.0, scores.AdjustedRandIndex.GetValueOrDefault(), 1e-6);
+        Assert.Equal(1.0, scores.NormalizedMutualInformation.GetValueOrDefault(), 1e-6);
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+#nullable disable
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1302,8 +1303,10 @@ public class InterpretabilityIntegrationTests
     {
         var enabledMethods = new HashSet<InterpretationMethod> { InterpretationMethod.SHAP };
 
+#pragma warning disable CS0618 // Testing legacy overload behavior
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => InterpretableModelHelper.GetFeatureInteractionAsync<double>(enabledMethods, 0, 1));
+#pragma warning restore CS0618
     }
 
     [Fact]
@@ -1311,7 +1314,9 @@ public class InterpretabilityIntegrationTests
     {
         var enabledMethods = new HashSet<InterpretationMethod> { InterpretationMethod.FeatureInteraction };
 
+#pragma warning disable CS0618 // Testing legacy overload behavior
         var result = await InterpretableModelHelper.GetFeatureInteractionAsync<double>(enabledMethods, 0, 1);
+#pragma warning restore CS0618
 
         Assert.Equal(0.0, result);
     }

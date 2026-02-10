@@ -42,6 +42,11 @@ public class TabDPTNetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private ILossFunction<T> _lossFunction;
 
+    /// <summary>
+    /// Gets the TabDPT-specific options.
+    /// </summary>
+    public new TabDPTOptions<T> Options => _options;
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 

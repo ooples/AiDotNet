@@ -40,6 +40,11 @@ public class GANDALFNetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private ILossFunction<T> _lossFunction;
 
+    /// <summary>
+    /// Gets the GANDALF-specific options.
+    /// </summary>
+    public new GANDALFOptions<T> Options => _options;
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 

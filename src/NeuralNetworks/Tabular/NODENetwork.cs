@@ -49,6 +49,11 @@ public class NODENetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private ILossFunction<T> _lossFunction;
 
+    /// <summary>
+    /// Gets the NODE-specific options.
+    /// </summary>
+    public new NODEOptions<T> Options => _options;
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
