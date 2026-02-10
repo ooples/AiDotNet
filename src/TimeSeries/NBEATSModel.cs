@@ -301,12 +301,14 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 
         for (int sampleIdx = batchStart; sampleIdx < batchEnd; sampleIdx++)
         {
-            // Extract input vector for this sample
+            // Extract input vector for this sample, padding with zeros if x has fewer columns
+            int actualInputSize = Math.Min(_options.LookbackWindow, x.Columns);
             Vector<T> input = new Vector<T>(_options.LookbackWindow);
-            for (int j = 0; j < _options.LookbackWindow; j++)
+            for (int j = 0; j < actualInputSize; j++)
             {
                 input[j] = x[sampleIdx, j];
             }
+            // Remaining values are already zero from Vector constructor
 
             // Get prediction
             T prediction = PredictSingle(input);
