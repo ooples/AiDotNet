@@ -46,6 +46,9 @@ public class MetaBaselineAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch.Tasks.Length == 0)
+            return NumOps.Zero;
+
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
         var initParams = MetaModel.GetParameters();

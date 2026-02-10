@@ -212,7 +212,8 @@ public class SNAILOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
                AttentionValueDim > 0 &&
                NumTCFilters > 0 &&
                NumBlocks > 0 &&
-               MaxSequenceLength > 0;
+               MaxSequenceLength > 0 &&
+               DropoutRate >= 0 && DropoutRate < 1.0;
     }
 
     /// <inheritdoc/>

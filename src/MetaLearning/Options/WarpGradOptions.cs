@@ -338,6 +338,8 @@ public class WarpGradOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpt
                MetaBatchSize > 0 &&
                NumMetaIterations > 0 &&
                EvaluationTasks > 0 &&
+               EvaluationFrequency > 0 &&
+               CheckpointFrequency > 0 &&
                NumWarpLayers > 0 &&
                WarpLayerHiddenDim > 0 &&
                WarpLearningRate > 0 &&

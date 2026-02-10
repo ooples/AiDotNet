@@ -232,7 +232,8 @@ public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             }
             else
             {
-                AccumulateVectors(accumulatedEncoderMeanGrad, encMeanGrad);
+                if (accumulatedEncoderMeanGrad != null)
+                    AccumulateVectors(accumulatedEncoderMeanGrad, encMeanGrad);
                 if (accumulatedEncoderVarGrad != null)
                     AccumulateVectors(accumulatedEncoderVarGrad, encVarGrad);
                 if (accumulatedDecoderGrad != null)

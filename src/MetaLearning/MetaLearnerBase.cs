@@ -872,10 +872,14 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
     protected Vector<T> AverageVectors(List<Vector<T>> vectors)
     {
         if (vectors.Count == 0) return new Vector<T>(0);
-        var result = new Vector<T>(vectors[0].Length);
+        int expectedLength = vectors[0].Length;
+        var result = new Vector<T>(expectedLength);
         foreach (var v in vectors)
-            for (int i = 0; i < result.Length; i++)
+        {
+            int len = Math.Min(v.Length, expectedLength);
+            for (int i = 0; i < len; i++)
                 result[i] = NumOps.Add(result[i], v[i]);
+        }
         var scale = NumOps.FromDouble(1.0 / vectors.Count);
         for (int i = 0; i < result.Length; i++)
             result[i] = NumOps.Multiply(result[i], scale);

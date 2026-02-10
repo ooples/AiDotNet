@@ -4,6 +4,19 @@ using AiDotNet.Models.Options;
 namespace AiDotNet.MetaLearning.Options;
 
 /// <summary>
+/// Uncertainty estimation method for FewTURE.
+/// </summary>
+public enum FewTUREUncertaintyMethod
+{
+    /// <summary>Prediction entropy: H(p) = -sum(p_i * log(p_i))</summary>
+    Entropy,
+    /// <summary>Prediction variance across token-level features.</summary>
+    Variance,
+    /// <summary>Monte Carlo dropout-based uncertainty.</summary>
+    MCDropout
+}
+
+/// <summary>
 /// Configuration options for FewTURE (Few-shot Transformer with Uncertainty and Reliable Estimation) (Hiller et al., ECCV 2022).
 /// </summary>
 /// <typeparam name="T">The numeric data type.</typeparam>
@@ -75,8 +88,8 @@ public class FewTUREOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// <value>Default is 196 (14x14 patches from a 224x224 image).</value>
     public int NumTokens { get; set; } = 196;
     /// <summary>Gets or sets the uncertainty estimation method.</summary>
-    /// <value>Default is "entropy" (prediction entropy).</value>
-    public string UncertaintyMethod { get; set; } = "entropy";
+    /// <value>Default is <see cref="FewTUREUncertaintyMethod.Entropy"/> (prediction entropy).</value>
+    public FewTUREUncertaintyMethod UncertaintyMethod { get; set; } = FewTUREUncertaintyMethod.Entropy;
     /// <summary>Gets or sets the uncertainty threshold for reliable estimation.</summary>
     /// <value>Default is 0.5.</value>
     public double UncertaintyThreshold { get; set; } = 0.5;

@@ -213,9 +213,12 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             }
             else
             {
-                for (int i = 0; i < accumulatedEncoderGradients.Length; i++)
+                if (accumulatedEncoderGradients != null)
                 {
-                    accumulatedEncoderGradients[i] = NumOps.Add(accumulatedEncoderGradients[i], encoderGradients[i]);
+                    for (int i = 0; i < accumulatedEncoderGradients.Length; i++)
+                    {
+                        accumulatedEncoderGradients[i] = NumOps.Add(accumulatedEncoderGradients[i], encoderGradients[i]);
+                    }
                 }
                 if (accumulatedAdaptationGradients != null)
                 {

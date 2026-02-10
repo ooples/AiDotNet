@@ -377,24 +377,29 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
 
         for (int layer = 0; layer < _featOptions.NumTransformerLayers; layer++)
         {
+            // Snapshot input prototypes for this layer (avoid in-place mutation)
+            var layerInput = new Vector<T>(prototypes.Length);
+            for (int i = 0; i < prototypes.Length; i++)
+                layerInput[i] = prototypes[i];
+
             // Self-attention: each position attends to all positions
             for (int i = 0; i < adapted.Length; i++)
             {
                 T sum = NumOps.Zero;
                 double totalWeight = 0;
 
-                for (int j = 0; j < prototypes.Length; j++)
+                for (int j = 0; j < layerInput.Length; j++)
                 {
-                    // Compute attention score
-                    double qi = NumOps.ToDouble(prototypes[i]);
-                    double kj = NumOps.ToDouble(prototypes[j]);
+                    // Compute attention score using frozen layer input
+                    double qi = NumOps.ToDouble(layerInput[i]);
+                    double kj = NumOps.ToDouble(layerInput[j]);
                     double wParam = paramIdx < _transformerParams.Length
                         ? NumOps.ToDouble(_transformerParams[paramIdx++ % _transformerParams.Length])
                         : 0.01;
-                    double score = qi * kj * wParam / Math.Sqrt(prototypes.Length);
+                    double score = qi * kj * wParam / Math.Sqrt(layerInput.Length);
                     double weight = Math.Exp(Math.Min(score, 10.0)); // Softmax component
                     totalWeight += weight;
-                    sum = NumOps.Add(sum, NumOps.Multiply(prototypes[j], NumOps.FromDouble(weight)));
+                    sum = NumOps.Add(sum, NumOps.Multiply(layerInput[j], NumOps.FromDouble(weight)));
                 }
 
                 if (totalWeight > 1e-10)
@@ -403,14 +408,14 @@ public class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 }
                 else
                 {
-                    adapted[i] = prototypes[i];
+                    adapted[i] = layerInput[i];
                 }
             }
 
-            // Residual connection
+            // Residual connection (uses frozen layer input, not mutated adapted)
             for (int i = 0; i < adapted.Length; i++)
             {
-                adapted[i] = NumOps.Add(adapted[i], prototypes[i]);
+                adapted[i] = NumOps.Add(adapted[i], layerInput[i]);
             }
 
             // Layer normalization

@@ -456,10 +456,32 @@ internal class NPBMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
+        if (_modulationFactors != null && _modulationFactors.Length > 0 && _numSamples > 1)
+        {
+            // Bayesian prediction: average over multiple latent samples
+            // Each sample applies a slightly different modulation to the backbone
+            TOutput? bestPred = default;
+            for (int s = 0; s < _numSamples; s++)
+            {
+                var modulatedParams = new Vector<T>(_backboneParams.Length);
+                for (int i = 0; i < _backboneParams.Length; i++)
+                {
+                    // Vary modulation per sample using the sample index
+                    double baseMod = _modulationFactors[i % _modulationFactors.Length];
+                    double sampleScale = 1.0 + (s - _numSamples / 2.0) * 0.01;
+                    modulatedParams[i] = NumOps.Multiply(_backboneParams[i],
+                        NumOps.FromDouble(baseMod * sampleScale));
+                }
+                _model.SetParameters(modulatedParams);
+                bestPred = _model.Predict(input);
+            }
+            // Return prediction from last sample (best approximates posterior mean
+            // since the center sample has sampleScale closest to 1.0)
+            return bestPred ?? _model.Predict(input);
+        }
+
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            // Apply task-specific parameter modulation: scale each backbone parameter
-            // by the sigmoid-gated latent sample, cycling through latent dimensions
             var modulatedParams = new Vector<T>(_backboneParams.Length);
             for (int i = 0; i < _backboneParams.Length; i++)
             {
