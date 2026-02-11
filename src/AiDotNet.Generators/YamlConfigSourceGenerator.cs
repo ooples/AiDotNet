@@ -536,6 +536,9 @@ internal static class YamlParamsHelper
         sb.AppendLine();
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Collections.Generic;");
+        sb.AppendLine("using System.Globalization;");
+        sb.AppendLine("using System.Linq;");
+        sb.AppendLine("using System.Reflection;");
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Configuration;");
         sb.AppendLine();
@@ -596,7 +599,7 @@ internal static class YamlParamsHelper
         sb.AppendLine("            throw new ArgumentException($\"Unknown type '{typeName}' for section '{sectionName}'. Available types: {available}\");");
         sb.AppendLine("        }");
         sb.AppendLine();
-        sb.AppendLine("        var instance = Activator.CreateInstance(concreteType);");
+        sb.AppendLine("        var instance = CreateWithBestConstructor(concreteType, parameters);");
         sb.AppendLine("        if (instance is null)");
         sb.AppendLine("        {");
         sb.AppendLine("            throw new InvalidOperationException($\"Failed to create instance of type '{concreteType.FullName}'.\");");
@@ -610,6 +613,135 @@ internal static class YamlParamsHelper
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        throw new InvalidCastException($\"Type '{concreteType.FullName}' does not implement '{typeof(TInterface).Name}'.\");");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine("    /// Creates an instance using the best matching constructor. Tries parameterless first,");
+        sb.AppendLine("    /// then falls back to constructors whose parameters can be resolved from YAML params");
+        sb.AppendLine("    /// or created with default values.");
+        sb.AppendLine("    /// </summary>");
+        sb.AppendLine("    private static object? CreateWithBestConstructor(Type concreteType, Dictionary<string, object>? parameters)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var constructors = concreteType.GetConstructors(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);");
+        sb.AppendLine();
+        sb.AppendLine("        // Try parameterless constructor first.");
+        sb.AppendLine("        foreach (var ctor in constructors)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (ctor.GetParameters().Length == 0)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                return ctor.Invoke(Array.Empty<object>());");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        // Sort constructors: fewest parameters first for simplest match.");
+        sb.AppendLine("        var sortedCtors = constructors.OrderBy(c => c.GetParameters().Length).ToArray();");
+        sb.AppendLine();
+        sb.AppendLine("        foreach (var ctor in sortedCtors)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var ctorParams = ctor.GetParameters();");
+        sb.AppendLine("            var args = new object?[ctorParams.Length];");
+        sb.AppendLine("            var canResolve = true;");
+        sb.AppendLine();
+        sb.AppendLine("            for (int i = 0; i < ctorParams.Length; i++)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var param = ctorParams[i];");
+        sb.AppendLine("                var paramType = param.ParameterType;");
+        sb.AppendLine();
+        sb.AppendLine("                // Check if YAML params has a matching value by name.");
+        sb.AppendLine("                if (parameters is not null && TryResolveFromParams(parameters, param.Name ?? \"\", paramType, out var resolved))");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    args[i] = resolved;");
+        sb.AppendLine("                }");
+        sb.AppendLine("                else if (param.HasDefaultValue)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    args[i] = param.DefaultValue;");
+        sb.AppendLine("                }");
+        sb.AppendLine("                else if (paramType.IsValueType)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    args[i] = Activator.CreateInstance(paramType);");
+        sb.AppendLine("                }");
+        sb.AppendLine("                else if (IsNullableParam(param))");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    args[i] = null;");
+        sb.AppendLine("                }");
+        sb.AppendLine("                else");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    // Try to create the parameter type (e.g., an Options object).");
+        sb.AppendLine("                    try");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        var paramInstance = Activator.CreateInstance(paramType);");
+        sb.AppendLine("                        if (paramInstance is not null)");
+        sb.AppendLine("                        {");
+        sb.AppendLine("                            YamlParamsHelper.ApplyParams(paramInstance, parameters);");
+        sb.AppendLine("                            args[i] = paramInstance;");
+        sb.AppendLine("                        }");
+        sb.AppendLine("                        else");
+        sb.AppendLine("                        {");
+        sb.AppendLine("                            canResolve = false;");
+        sb.AppendLine("                            break;");
+        sb.AppendLine("                        }");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                    catch");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        canResolve = false;");
+        sb.AppendLine("                        break;");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
+        sb.AppendLine();
+        sb.AppendLine("            if (canResolve)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                try");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    return ctor.Invoke(args);");
+        sb.AppendLine("                }");
+        sb.AppendLine("                catch");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    // Try next constructor.");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        // Last resort: try Activator with no args (may throw).");
+        sb.AppendLine("        return Activator.CreateInstance(concreteType);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static bool TryResolveFromParams(Dictionary<string, object> parameters, string paramName, Type paramType, out object? result)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        result = null;");
+        sb.AppendLine("        foreach (var kvp in parameters)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (string.Equals(kvp.Key, paramName, StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine("            {");
+        sb.AppendLine("                try");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    var underlyingType = Nullable.GetUnderlyingType(paramType) ?? paramType;");
+        sb.AppendLine("                    if (underlyingType.IsEnum && kvp.Value is string enumStr)");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        result = Enum.Parse(underlyingType, enumStr, ignoreCase: true);");
+        sb.AppendLine("                        return true;");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                    result = Convert.ChangeType(kvp.Value, underlyingType, System.Globalization.CultureInfo.InvariantCulture);");
+        sb.AppendLine("                    return true;");
+        sb.AppendLine("                }");
+        sb.AppendLine("                catch");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    return false;");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine("        return false;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static bool IsNullableParam(System.Reflection.ParameterInfo param)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        // Check for nullable reference type or Nullable<T>.");
+        sb.AppendLine("        if (Nullable.GetUnderlyingType(param.ParameterType) is not null) return true;");
+        sb.AppendLine("        var nullableAttr = param.GetCustomAttributes(true)");
+        sb.AppendLine("            .FirstOrDefault(a => a.GetType().FullName == \"System.Runtime.CompilerServices.NullableAttribute\");");
+        sb.AppendLine("        if (nullableAttr is not null) return true;");
+        sb.AppendLine("        // If the parameter has a nullable annotation in metadata.");
+        sb.AppendLine("        return !param.ParameterType.IsValueType;");
         sb.AppendLine("    }");
         sb.AppendLine();
 
@@ -966,9 +1098,8 @@ internal static class YamlParamsHelper
 
             if (isMatch)
             {
-                // Only include types with a parameterless constructor (or no explicit constructors).
-                var hasParameterlessCtor = symbol.Constructors.Any(c =>
-                    c.Parameters.Length == 0 &&
+                // Register all concrete implementations that have at least one public constructor.
+                var hasPublicCtor = symbol.Constructors.Any(c =>
                     c.DeclaredAccessibility == Accessibility.Public);
 
                 // Also allow types with no explicitly declared constructors (default ctor).
@@ -976,7 +1107,25 @@ internal static class YamlParamsHelper
                     c.DeclaredAccessibility == Accessibility.Public &&
                     !c.IsImplicitlyDeclared);
 
-                if (hasParameterlessCtor || hasDefaultCtor)
+                // Skip nested types that aren't publicly accessible.
+                if (symbol.ContainingType is not null &&
+                    symbol.DeclaredAccessibility != Accessibility.Public)
+                {
+                    hasPublicCtor = false;
+                    hasDefaultCtor = false;
+                }
+
+                // Skip types with generic parameters that can't be resolved from <T, TInput, TOutput>.
+                if (hasPublicCtor || hasDefaultCtor)
+                {
+                    if (!HasOnlyResolvableTypeParameters(symbol))
+                    {
+                        hasPublicCtor = false;
+                        hasDefaultCtor = false;
+                    }
+                }
+
+                if (hasPublicCtor || hasDefaultCtor)
                 {
                     _results.Add(new ImplementationInfo
                     {
@@ -992,6 +1141,37 @@ internal static class YamlParamsHelper
             {
                 nestedType.Accept(this);
             }
+        }
+
+        /// <summary>
+        /// Checks that all type parameters on the given symbol can be resolved from the
+        /// registry's available type parameters: T, TInput, TOutput.
+        /// Types like <c>StratifiedKFoldCrossValidator&lt;T, TInput, TOutput, TMetadata&gt;</c>
+        /// have extra type parameters that can't be resolved and must be excluded.
+        /// </summary>
+        private static bool HasOnlyResolvableTypeParameters(INamedTypeSymbol symbol)
+        {
+            // The allowed type parameter names that the YamlTypeRegistry<T, TInput, TOutput> provides.
+            var allowed = new HashSet<string>(StringComparer.Ordinal) { "T", "TInput", "TOutput" };
+
+            // Collect all type parameters from the symbol and its containing types.
+            var allTypeParams = new List<ITypeParameterSymbol>();
+            var current = symbol;
+            while (current is not null)
+            {
+                allTypeParams.AddRange(current.TypeParameters);
+                current = current.ContainingType;
+            }
+
+            foreach (var tp in allTypeParams)
+            {
+                if (!allowed.Contains(tp.Name))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
     }
 }
