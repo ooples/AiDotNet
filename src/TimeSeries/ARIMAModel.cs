@@ -532,6 +532,13 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
 
         int d = _arimaOptions.D;
 
+        if (d > 0 && history.Length < d + 1)
+        {
+            throw new ArgumentException(
+                $"History length ({history.Length}) must be at least {d + 1} to support differencing order {d}.",
+                nameof(history));
+        }
+
         // If no differencing, fall back to base class behavior
         if (d == 0)
         {
