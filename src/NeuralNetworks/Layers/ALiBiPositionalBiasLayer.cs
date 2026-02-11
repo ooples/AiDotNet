@@ -69,6 +69,16 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
     public ALiBiPositionalBiasLayer(int numHeads, int maxSequenceLength = 2048)
         : base([numHeads, maxSequenceLength, maxSequenceLength], [numHeads, maxSequenceLength, maxSequenceLength])
     {
+        if (numHeads <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "numHeads must be greater than zero.");
+        }
+
+        if (maxSequenceLength <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxSequenceLength), "maxSequenceLength must be greater than zero.");
+        }
+
         _numHeads = numHeads;
         _maxSequenceLength = maxSequenceLength;
 
@@ -90,6 +100,13 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
     /// <returns>Bias tensor of shape [numHeads, queryLen, keyLen].</returns>
     public Tensor<T> ComputeBias(int queryLen, int keyLen, bool useCausalMask = true)
     {
+        if (useCausalMask && queryLen > keyLen)
+        {
+            throw new ArgumentException(
+                $"Causal ALiBi requires queryLen ({queryLen}) <= keyLen ({keyLen}).",
+                nameof(queryLen));
+        }
+
         // Only use cache for default causal masking (most common path)
         if (useCausalMask)
         {

@@ -260,11 +260,11 @@ internal class PagedAttentionKernel<T>
                     }
                     score *= scale;
 
-                    // Apply ALiBi bias: slope[head] * (keyPos - queryPos)
-                    // This penalizes distant tokens with a linear bias per head
+                    // Apply ALiBi bias: -slope[head] * |keyPos - queryPos|
+                    // Consistent with ALiBiPositionalBiasLayer.ComputeBias which uses -slope * |i - j|
                     if (alibiSlopes != null)
                     {
-                        score += alibiSlopes[head] * (pos - qPos);
+                        score += -alibiSlopes[head] * Math.Abs(pos - qPos);
                     }
 
                     // Online softmax update

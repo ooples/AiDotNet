@@ -199,6 +199,27 @@ internal class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Applies inverse RoPE rotation to query and key gradients (for backward pass).
+    /// Since RoPE rotation is orthogonal, the inverse is rotation by the negative angle.
+    /// </summary>
+    /// <param name="gradQuery">Gradient tensor for queries in the rotated space.</param>
+    /// <param name="gradKey">Gradient tensor for keys in the rotated space.</param>
+    /// <param name="startPosition">Starting position offset (must match the forward pass).</param>
+    /// <returns>Tuple of un-rotated (gradQuery, gradKey) with the same shapes.</returns>
+    public (Tensor<T> GradQuery, Tensor<T> GradKey) ApplyInverseRoPE(
+        Tensor<T> gradQuery, Tensor<T> gradKey, int startPosition = 0)
+    {
+        int seqLen = gradQuery.Shape[gradQuery.Shape.Length - 2];
+        int endPosition = startPosition + seqLen;
+        EnsureCacheLength(endPosition);
+
+        var unrotatedGradQ = InverseRotateTensor(gradQuery, startPosition);
+        var unrotatedGradK = InverseRotateTensor(gradKey, startPosition);
+
+        return (unrotatedGradQ, unrotatedGradK);
+    }
+
+    /// <summary>
     /// Applies RoPE rotation to a single tensor.
     /// </summary>
     private Tensor<T> RotateTensor(Tensor<T> input, int startPosition)

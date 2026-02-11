@@ -197,6 +197,12 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
             case PositionalEncodingType.ALiBi:
                 _alibiLayer = new ALiBiPositionalBiasLayer<T>(_numHeads, maxSequenceLength);
                 break;
+            case PositionalEncodingType.None:
+                break;
+            default:
+                throw new ArgumentException(
+                    $"Unsupported positional encoding type for GroupedQueryAttentionLayer: {encodingType}.",
+                    nameof(encodingType));
         }
     }
 

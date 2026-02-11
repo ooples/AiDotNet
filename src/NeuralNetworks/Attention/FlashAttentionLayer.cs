@@ -392,6 +392,14 @@ public class FlashAttentionLayer<T> : LayerBase<T>
             out var gradValue,
             attentionBias: _lastAlibiBias);
 
+        // Inverse-rotate Q/K gradients out of rotated space before computing weight gradients.
+        // Forward rotated Q/K via RoPE, so gradients from attention are in rotated space.
+        // Weight gradients need un-rotated gradients to match the un-rotated _lastInput.
+        if (_ropeLayer != null)
+        {
+            (gradQuery, gradKey) = _ropeLayer.ApplyInverseRoPE(gradQuery, gradKey, startPosition: 0);
+        }
+
         // Reshape gradients back to [batch, seq, embedding]
         gradQuery = gradQuery.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);
         gradKey = gradKey.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);

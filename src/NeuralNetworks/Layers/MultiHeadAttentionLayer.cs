@@ -94,6 +94,13 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
     /// <summary>
+    /// Gets or sets whether causal masking is applied during attention computation.
+    /// When true, positions can only attend to earlier positions (autoregressive behavior).
+    /// When false, attention is bidirectional (encoder-style).
+    /// </summary>
+    public bool UseCausalMask { get; set; }
+
+    /// <summary>
     /// Gets the positional encoding type used by this attention layer.
     /// </summary>
     public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
@@ -771,7 +778,7 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_alibiLayer != null)
         {
             // Use FlashAttention with ALiBi bias injection
-            var aliBiBias = _alibiLayer.ComputeBias(seqLengthQ, seqLengthKV);
+            var aliBiBias = _alibiLayer.ComputeBias(seqLengthQ, seqLengthKV, useCausalMask: UseCausalMask);
             var flashConfig = FlashAttentionConfig.Default;
             flashConfig.ReturnAttentionWeights = true;
             var (flashOutput, flashWeights) = FlashAttention<T>.Forward(queries, keys, values, flashConfig, attentionBias: aliBiBias);
