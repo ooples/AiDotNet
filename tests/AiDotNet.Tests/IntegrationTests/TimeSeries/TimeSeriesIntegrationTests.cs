@@ -359,7 +359,7 @@ public class TimeSeriesIntegrationTests
 
     /// <summary>
     /// Helper to create a simple linear trend dataset for training.
-    /// Returns (x, y) where y = slope * i + intercept + noise.
+    /// Returns (x, y) where y = slope * i + intercept.
     /// </summary>
     private static (Tensors.LinearAlgebra.Matrix<double> x, Tensors.LinearAlgebra.Vector<double> y) CreateLinearTrendData(int n, double slope = 0.5, double intercept = 10.0)
     {

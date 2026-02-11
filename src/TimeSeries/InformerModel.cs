@@ -216,7 +216,6 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     {
         T learningRate = _numOps.FromDouble(_options.LearningRate);
         int lookback = _options.LookbackWindow;
-        int forecastHorizon = _options.ForecastHorizon;
 
         // Build training samples from y: input = y[i-lookback : i], target = y[i]
         var validIndices = new List<int>();
@@ -226,7 +225,12 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         }
 
         if (validIndices.Count == 0)
-            return;
+        {
+            throw new ArgumentException(
+                $"Not enough data to build a single training sample. " +
+                $"Require at least {lookback + 1} points, got {y.Length}.",
+                nameof(y));
+        }
 
         double prevLoss = double.MaxValue;
 
@@ -259,10 +263,10 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                     T target = y[i];
 
                     // Compute gradients via backpropagation and accumulate
-                    var gradients = ComputeGradients(input, target);
+                    var (gradients, prediction) = ComputeGradients(input, target);
                     AccumulateGradients(gradients);
 
-                    double error = _numOps.ToDouble(_numOps.Subtract(target, PredictSingle(input)));
+                    double error = _numOps.ToDouble(_numOps.Subtract(target, prediction));
                     epochLoss += error * error;
                     sampleCount++;
                 }
@@ -290,7 +294,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         }
     }
 
-    private Dictionary<string, Tensor<T>> ComputeGradients(Vector<T> input, T target)
+    private (Dictionary<string, Tensor<T>> gradients, T prediction) ComputeGradients(Vector<T> input, T target)
     {
         var gradients = new Dictionary<string, Tensor<T>>();
 
@@ -397,7 +401,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         }
         gradients["inputProjection"] = dInputProj;
 
-        return gradients;
+        return (gradients, prediction);
     }
 
     private void AccumulateGradients(Dictionary<string, Tensor<T>> gradients)

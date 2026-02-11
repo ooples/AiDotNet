@@ -720,11 +720,19 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
             throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
         }
 
+        int minRequiredLength = Math.Max(_p, _P * _m) + _d + _D * _m;
+        if (history.Length < minRequiredLength)
+        {
+            throw new ArgumentException(
+                $"History length ({history.Length}) is too short for the configured SARIMA parameters. " +
+                $"Minimum required length: {minRequiredLength}.",
+                nameof(history));
+        }
+
         // Apply the same differencing as in TrainCore
         Vector<T> diffHistory = ApplyDifferencing(history);
 
         // Build a working list of differenced values
-        int maxLag = Math.Max(_p, _P * _m);
         List<T> extendedDiff = new List<T>(diffHistory.Length + steps);
         for (int i = 0; i < diffHistory.Length; i++)
         {

@@ -531,7 +531,6 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         }
 
         int d = _arimaOptions.D;
-        int p = _arimaOptions.P;
 
         // If no differencing, fall back to base class behavior
         if (d == 0)
@@ -568,39 +567,36 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
             extendedDiffHistory.Add(prediction);
         }
 
-        // Undifference the forecasts: cumulatively add back from the last original value(s)
-        // For d=1: forecast[i] = diffForecast[i] + lastOriginal (then lastOriginal = forecast[i])
-        // For d=2: need to undifference twice
-        Vector<T> forecasts = diffForecasts;
-        // We need to undifference d times. Each time, we cumulative-sum starting from the last value
-        // at that level. We stored the last d values from the original series.
-        // Rebuild integration from the inside out.
-        // The innermost differenced series was integrated from the previous level.
-        // We need the last value at each differencing level.
+        // Undifference the forecasts back to the original scale
+        return UndifferenceForecasts(diffForecasts, history, d, steps);
+    }
 
-        // Compute the last values at each differencing level
-        // Level 0: original y -> last value = y[n-1]
-        // Level 1: diff once -> last value = diff1[n-2] = y[n-1] - y[n-2]
+    /// <summary>
+    /// Undifferences forecasted values back to the original scale by reversing the differencing
+    /// that was applied during training.
+    /// </summary>
+    /// <param name="diffForecasts">The forecasts on the differenced scale.</param>
+    /// <param name="history">The original (undifferenced) history to derive tail values from.</param>
+    /// <param name="d">The differencing order.</param>
+    /// <param name="steps">The number of forecast steps.</param>
+    /// <returns>A vector of forecasts on the original (undifferenced) scale.</returns>
+    private Vector<T> UndifferenceForecasts(Vector<T> diffForecasts, Vector<T> history, int d, int steps)
+    {
+        // Compute tail values at each integration level from the history parameter
+        // Level 0: original history -> last value = history[n-1]
+        // Level 1: first-differenced -> last value = history[n-1] - history[n-2]
         // etc.
-        // _lastOriginalValues stores the last d values of y: y[n-d], y[n-d+1], ..., y[n-1]
-        // For d=1: we need y[n-1] to undifference
-        // For d=2: we need y'[n-2] = y[n-1]-y[n-2] to undifference first, then y[n-1] again
-
-        // Compute tail values at each integration level
         var tailValues = new T[d];
-        // Start with the original values
         var tempTail = new List<T>();
-        for (int i = 0; i < _lastOriginalValues.Length; i++)
+        int tailStart = Math.Max(0, history.Length - d);
+        for (int i = tailStart; i < history.Length; i++)
         {
-            tempTail.Add(_lastOriginalValues[i]);
+            tempTail.Add(history[i]);
         }
 
-        // For each differencing level, the "last value" before that differencing is the last element
-        // of the progressively differenced tail
         for (int level = 0; level < d; level++)
         {
             tailValues[level] = tempTail[tempTail.Count - 1];
-            // Difference tempTail for the next level
             var newTail = new List<T>();
             for (int i = 1; i < tempTail.Count; i++)
             {
@@ -609,13 +605,11 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
             tempTail = newTail;
         }
 
-        // Now undifference d times (in reverse order of differencing)
-        // The forecasts are at the fully-differenced level (level d)
-        // We integrate back: level d -> d-1 -> ... -> 0
+        // Undifference d times (in reverse order of differencing)
         var currentForecasts = new List<T>(steps);
         for (int i = 0; i < steps; i++)
         {
-            currentForecasts.Add(forecasts[i]);
+            currentForecasts.Add(diffForecasts[i]);
         }
 
         for (int level = d - 1; level >= 0; level--)

@@ -357,13 +357,15 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         int startIdx = lookback;
         int endIdx = y.Length - forecastHorizon;
 
-        if (endIdx <= startIdx)
+        if (endIdx < startIdx)
         {
-            // Not enough data for even one sample; fall back to minimal training
-            return;
+            throw new ArgumentException(
+                $"Not enough data to build a single training sample. " +
+                $"Require at least {lookback + forecastHorizon + 1} points, got {y.Length}.",
+                nameof(y));
         }
 
-        var sampleIndices = Enumerable.Range(startIdx, endIdx - startIdx).ToList();
+        var sampleIndices = Enumerable.Range(startIdx, endIdx - startIdx + 1).ToList();
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
