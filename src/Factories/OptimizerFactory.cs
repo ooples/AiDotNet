@@ -134,8 +134,13 @@ public static class OptimizerFactory<T, TInput, TOutput>
                 $"No public constructors found on {concreteType.Name}.");
         }
 
-        // Pick the constructor with the fewest parameters to minimize dependencies.
-        var ctor = constructors.OrderBy(c => c.GetParameters().Length).First();
+        // Pick the best constructor: prefer parameterless, then fewest required (non-default) parameters,
+        // then fewest total parameters. This is more stable than purely fewest-parameter selection.
+        var ctor = constructors
+            .OrderBy(c => c.GetParameters().Length == 0 ? 0 : 1)  // prefer parameterless
+            .ThenBy(c => c.GetParameters().Count(p => !p.HasDefaultValue))  // then fewest required
+            .ThenBy(c => c.GetParameters().Length)  // then fewest total
+            .First();
         var parameters = ctor.GetParameters();
         // Provide default values based on parameter types to avoid null-related constructor failures.
         // Nullable reference types and optional parameters get null; value types get their defaults.

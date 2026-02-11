@@ -24,7 +24,7 @@ namespace AiDotNet.Configuration;
 /// var config = YamlConfigLoader.LoadFromString&lt;TrainingRecipeConfig&gt;(yamlContent);
 /// </code>
 /// </remarks>
-internal static class YamlConfigLoader
+public static class YamlConfigLoader
 {
     /// <summary>
     /// Loads a YAML configuration file from disk and deserializes it into a <see cref="YamlModelConfig"/>.

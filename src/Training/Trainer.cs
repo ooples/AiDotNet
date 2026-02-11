@@ -40,7 +40,7 @@ namespace AiDotNet.Training;
 /// </code>
 /// </para>
 /// </remarks>
-internal class Trainer<T> : TrainerBase<T>
+public class Trainer<T> : TrainerBase<T>
 {
     /// <summary>
     /// Creates a trainer from a YAML configuration file.

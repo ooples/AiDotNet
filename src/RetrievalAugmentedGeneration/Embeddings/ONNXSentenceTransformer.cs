@@ -43,24 +43,25 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
 
         /// <summary>
         /// Ensures the ONNX model and tokenizer are loaded, loading lazily on first use.
+        /// Returns false if the model file is unavailable (caller should use fallback).
         /// </summary>
-        private void EnsureModelLoaded()
+        private bool EnsureModelLoaded()
         {
             if (_session != null && _tokenizer != null)
             {
-                return;
+                return true;
             }
 
             lock (_initLock)
             {
                 if (_session != null && _tokenizer != null)
                 {
-                    return;
+                    return true;
                 }
 
                 if (!File.Exists(_modelPath))
                 {
-                    throw new FileNotFoundException($"ONNX model file not found: {_modelPath}", _modelPath);
+                    return false;
                 }
 
                 var session = new InferenceSession(_modelPath);
@@ -70,17 +71,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
                 // Assign both atomically so concurrent readers never see a partial state
                 _tokenizer = tokenizer;
                 _session = session;
+                return true;
             }
         }
 
         /// <summary>
         /// Gets the inference session, ensuring it's loaded.
         /// </summary>
+        /// <exception cref="FileNotFoundException">Thrown when the ONNX model file is not found.</exception>
         private InferenceSession Session
         {
             get
             {
-                EnsureModelLoaded();
+                if (!EnsureModelLoaded())
+                {
+                    throw new FileNotFoundException($"ONNX model file not found: {_modelPath}", _modelPath);
+                }
                 return _session ?? throw new InvalidOperationException("Failed to load ONNX session.");
             }
         }
@@ -88,11 +94,15 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         /// <summary>
         /// Gets the tokenizer, ensuring it's loaded.
         /// </summary>
+        /// <exception cref="FileNotFoundException">Thrown when the ONNX model file is not found.</exception>
         private ITokenizer Tokenizer
         {
             get
             {
-                EnsureModelLoaded();
+                if (!EnsureModelLoaded())
+                {
+                    throw new FileNotFoundException($"ONNX model file not found: {_modelPath}", _modelPath);
+                }
                 return _tokenizer ?? throw new InvalidOperationException("Failed to load tokenizer.");
             }
         }
@@ -102,11 +112,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             if (string.IsNullOrWhiteSpace(text))
                 return CreateZeroVector();
 
-            // Fall back to deterministic hash-based embedding when model file is unavailable
-            if (!File.Exists(_modelPath))
+            // Fall back to deterministic hash-based embedding when model file is unavailable.
+            // Uses EnsureModelLoaded() for consistent behavior - no separate File.Exists check
+            // that could race with the lazy-init check inside EnsureModelLoaded().
+            if (!EnsureModelLoaded())
                 return GenerateFallbackEmbedding(text);
 
-            // 1. Tokenize (EnsureModelLoaded via Tokenizer property validates model loaded)
+            // 1. Tokenize (model is guaranteed loaded at this point)
             var tokenizationResult = Tokenizer.Encode(text, new AiDotNet.Tokenization.Models.EncodingOptions
             {
                 MaxLength = _maxTokens,

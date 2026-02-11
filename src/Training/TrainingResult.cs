@@ -13,7 +13,7 @@ namespace AiDotNet.Training;
 /// improved over time), how long it took, and whether it completed successfully.
 /// </para>
 /// </remarks>
-internal class TrainingResult<T>
+public class TrainingResult<T>
 {
     /// <summary>
     /// Gets or sets the trained model ready for making predictions.

@@ -29,7 +29,7 @@ namespace AiDotNet.Training;
 /// <see cref="TrainEpoch"/>.
 /// </para>
 /// </remarks>
-internal abstract class TrainerBase<T> : ITrainer<T>
+public abstract class TrainerBase<T> : ITrainer<T>
 {
     private readonly IFullModel<T, Matrix<T>, Vector<T>> _model;
     private readonly IOptimizer<T, Matrix<T>, Vector<T>>? _optimizer;
@@ -110,8 +110,11 @@ internal abstract class TrainerBase<T> : ITrainer<T>
             _optimizer.SetModel(_model);
 
             // Apply learning rate from config to the optimizer's options
-            var optimizerOptions = _optimizer.GetOptions();
-            optimizerOptions.InitialLearningRate = config.Optimizer.LearningRate;
+            if (config.Optimizer.LearningRate > 0)
+            {
+                var optimizerOptions = _optimizer.GetOptions();
+                optimizerOptions.InitialLearningRate = config.Optimizer.LearningRate;
+            }
         }
 
         // Create loss function (default to model's DefaultLossFunction if not specified)

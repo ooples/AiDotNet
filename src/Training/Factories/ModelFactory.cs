@@ -110,9 +110,11 @@ internal static class ModelFactory<T, TInput, TOutput>
     /// </summary>
     /// <param name="options">The options object to populate.</param>
     /// <param name="parameters">The parameter dictionary from the configuration.</param>
-    private static void ApplyParameters(TimeSeriesRegressionOptions<T> options, Dictionary<string, object> parameters)
+    /// <param name="strict">When true, throws on unknown or unconvertible parameters. Default is false.</param>
+    private static void ApplyParameters(TimeSeriesRegressionOptions<T> options, Dictionary<string, object> parameters, bool strict = false)
     {
         var optionsType = options.GetType();
+        var warnings = new List<string>();
 
         foreach (var kvp in parameters)
         {
@@ -129,9 +131,13 @@ internal static class ModelFactory<T, TInput, TOutput>
 
             if (property is null || !property.CanWrite)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[ModelFactory] Warning: Unknown parameter '{kvp.Key}' for {optionsType.Name}. " +
-                    $"Available properties: {string.Join(", ", optionsType.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanWrite).Select(p => p.Name))}");
+                var availableProps = string.Join(", ",
+                    optionsType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                        .Where(p => p.CanWrite)
+                        .Select(p => p.Name));
+                var message = $"Unknown parameter '{kvp.Key}' for {optionsType.Name}. Available properties: {availableProps}";
+                warnings.Add(message);
+                System.Diagnostics.Trace.TraceWarning($"[ModelFactory] {message}");
                 continue;
             }
 
@@ -143,10 +149,17 @@ internal static class ModelFactory<T, TInput, TOutput>
             }
             catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"[ModelFactory] Warning: Cannot convert parameter '{kvp.Key}' value '{kvp.Value}' " +
-                    $"to {property.PropertyType.Name}: {ex.Message}");
+                var message = $"Cannot convert parameter '{kvp.Key}' value '{kvp.Value}' to {property.PropertyType.Name}: {ex.Message}";
+                warnings.Add(message);
+                System.Diagnostics.Trace.TraceWarning($"[ModelFactory] {message}");
             }
+        }
+
+        if (strict && warnings.Count > 0)
+        {
+            throw new ArgumentException(
+                $"Model configuration has {warnings.Count} parameter error(s):\n" +
+                string.Join("\n", warnings.Select(w => $"  - {w}")));
         }
     }
 

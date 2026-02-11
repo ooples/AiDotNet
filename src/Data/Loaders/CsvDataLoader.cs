@@ -27,7 +27,7 @@ namespace AiDotNet.Data.Loaders;
 /// </code>
 /// </para>
 /// </remarks>
-internal class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T>>
+public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T>>
 {
     private readonly string _filePath;
     private readonly bool _hasHeader;
