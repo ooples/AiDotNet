@@ -1,5 +1,6 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks.Attention;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -278,9 +279,20 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
 
         // Compute attention with weights caching: [batch, numHeads, seqQ, seqKV]
         Tensor<T> attentionWeights;
-        var context = _alibiLayer != null
-            ? ComputeAttentionWithALiBi(queries, expandedKeys, expandedValues, seqLen, seqLen, out attentionWeights)
-            : ComputeStandardAttention(queries, expandedKeys, expandedValues, out attentionWeights);
+        Tensor<T> context;
+        if (_alibiLayer != null)
+        {
+            var aliBiBias = _alibiLayer.ComputeBias(seqLen, seqLen);
+            var flashConfig = FlashAttentionConfig.Default;
+            flashConfig.ReturnAttentionWeights = true;
+            var (flashOutput, flashWeights) = FlashAttention<T>.Forward(queries, expandedKeys, expandedValues, flashConfig, attentionBias: aliBiBias);
+            context = flashOutput;
+            attentionWeights = flashWeights ?? new Tensor<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
+        }
+        else
+        {
+            context = ComputeStandardAttention(queries, expandedKeys, expandedValues, out attentionWeights);
+        }
 
         _lastAttentionWeights = attentionWeights;
 
@@ -378,78 +390,6 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
                                 keys[new[] { b, h, j, d }]));
                         }
                         scores[j] = NumOps.Multiply(dot, scale);
-                        if (NumOps.GreaterThan(scores[j], maxScore))
-                            maxScore = scores[j];
-                    }
-
-                    T sumExp = NumOps.Zero;
-                    var weights = new T[seqLenKV];
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        weights[j] = NumOps.Exp(NumOps.Subtract(scores[j], maxScore));
-                        sumExp = NumOps.Add(sumExp, weights[j]);
-                    }
-
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        T w = NumericalStabilityHelper.SafeDiv(weights[j], sumExp);
-                        attentionWeightsOut[new[] { b, h, i, j }] = w;
-                    }
-
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int j = 0; j < seqLenKV; j++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(
-                                attentionWeightsOut[new[] { b, h, i, j }],
-                                values[new[] { b, h, j, d }]));
-                        }
-                        output[new[] { b, h, i, d }] = sum;
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    private Tensor<T> ComputeAttentionWithALiBi(
-        Tensor<T> queries, Tensor<T> keys, Tensor<T> values,
-        int seqLenQ, int seqLenKV, out Tensor<T> attentionWeightsOut)
-    {
-        int batchSize = queries.Shape[0];
-        int numHeads = queries.Shape[1];
-        int headDim = queries.Shape[3];
-
-        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
-        T negInf = NumOps.FromDouble(double.NegativeInfinity);
-        var bias = _alibiLayer!.ComputeBias(seqLenQ, seqLenKV);
-
-        var output = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, headDim });
-        attentionWeightsOut = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, seqLenKV });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < numHeads; h++)
-            {
-                for (int i = 0; i < seqLenQ; i++)
-                {
-                    var scores = new T[seqLenKV];
-                    T maxScore = negInf;
-
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        T dot = NumOps.Zero;
-                        for (int d = 0; d < headDim; d++)
-                        {
-                            dot = NumOps.Add(dot, NumOps.Multiply(
-                                queries[new[] { b, h, i, d }],
-                                keys[new[] { b, h, j, d }]));
-                        }
-                        scores[j] = NumOps.Add(
-                            NumOps.Multiply(dot, scale),
-                            bias[new[] { h, i, j }]);
                         if (NumOps.GreaterThan(scores[j], maxScore))
                             maxScore = scores[j];
                     }
