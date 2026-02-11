@@ -1,27 +1,18 @@
-using System.Diagnostics;
-using AiDotNet.Configuration;
-using AiDotNet.Data.Loaders;
-using AiDotNet.Enums;
-using AiDotNet.Factories;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Tensors.Helpers;
 using AiDotNet.Training.Configuration;
-using AiDotNet.Training.Factories;
 
 namespace AiDotNet.Training;
 
 /// <summary>
-/// Executes a complete training pipeline from a YAML configuration or <see cref="TrainingRecipeConfig"/>.
+/// Default trainer that delegates to the model's built-in <c>Train()</c> method each epoch.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> The Trainer is the central piece that brings everything together.
-/// Give it a YAML file or a configuration object, and it will:
-/// 1. Create the model, optimizer, and loss function
-/// 2. Load data from CSV (if specified)
-/// 3. Run the training loop for the specified number of epochs
-/// 4. Return the trained model with loss history
+/// <b>For Beginners:</b> This is the standard trainer for models that know how to train
+/// themselves (e.g., time series models like ARIMA and ExponentialSmoothing). Each epoch
+/// it calls <c>model.Train(features, labels)</c>, then measures how well the model predicts
+/// by computing the loss.
 /// </para>
 /// <para>
 /// <b>Example usage from YAML:</b>
@@ -49,33 +40,8 @@ namespace AiDotNet.Training;
 /// </code>
 /// </para>
 /// </remarks>
-internal class Trainer<T> : ITrainer<T>
+internal class Trainer<T> : TrainerBase<T>
 {
-    private readonly IFullModel<T, Matrix<T>, Vector<T>> _model;
-    private readonly IOptimizer<T, Matrix<T>, Vector<T>>? _optimizer;
-    private readonly ILossFunction<T> _lossFunction;
-    private readonly int _epochs;
-    private readonly bool _enableLogging;
-    private readonly int? _seed;
-    private readonly CsvDataLoader<T>? _csvLoader;
-    private Matrix<T>? _features;
-    private Vector<T>? _labels;
-
-    /// <inheritdoc/>
-    public TrainingRecipeConfig Config { get; }
-
-    /// <summary>
-    /// Gets the optimizer created from the configuration, if one was specified.
-    /// </summary>
-    public IOptimizer<T, Matrix<T>, Vector<T>>? Optimizer => _optimizer;
-
-    /// <summary>
-    /// Gets or sets the action used for logging training messages.
-    /// Defaults to <see cref="Console.WriteLine(string)"/>.
-    /// Set to a custom delegate to redirect logs to your preferred logging framework.
-    /// </summary>
-    public Action<string> LogAction { get; set; } = Console.WriteLine;
-
     /// <summary>
     /// Creates a trainer from a YAML configuration file.
     /// </summary>
@@ -83,7 +49,7 @@ internal class Trainer<T> : ITrainer<T>
     /// <exception cref="ArgumentException">Thrown when the file path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the YAML file does not exist.</exception>
     public Trainer(string yamlFilePath)
-        : this(YamlConfigLoader.LoadFromFile<TrainingRecipeConfig>(yamlFilePath))
+        : base(yamlFilePath)
     {
     }
 
@@ -94,160 +60,32 @@ internal class Trainer<T> : ITrainer<T>
     /// <exception cref="ArgumentNullException">Thrown when config is null.</exception>
     /// <exception cref="ArgumentException">Thrown when required config sections are missing.</exception>
     public Trainer(TrainingRecipeConfig config)
+        : base(config)
     {
-        Config = config ?? throw new ArgumentNullException(nameof(config));
-
-        if (config.Model is null || string.IsNullOrWhiteSpace(config.Model.Name))
-        {
-            throw new ArgumentException("Training recipe must specify a model with a name.", nameof(config));
-        }
-
-        // Create model
-        _model = ModelFactory<T, Matrix<T>, Vector<T>>.Create(config.Model);
-
-        // Create optimizer (if specified)
-        if (config.Optimizer is not null && !string.IsNullOrWhiteSpace(config.Optimizer.Name))
-        {
-            if (!Enum.TryParse<OptimizerType>(config.Optimizer.Name, ignoreCase: true, out var optimizerType))
-            {
-                throw new ArgumentException(
-                    $"Unknown optimizer name: '{config.Optimizer.Name}'. " +
-                    $"Valid names are: {string.Join(", ", Enum.GetNames(typeof(OptimizerType)))}",
-                    nameof(config));
-            }
-
-            _optimizer = OptimizerFactory<T, Matrix<T>, Vector<T>>.CreateOptimizer(optimizerType);
-            _optimizer.SetModel(_model);
-
-            // Apply learning rate from config to the optimizer's options
-            var optimizerOptions = _optimizer.GetOptions();
-            optimizerOptions.InitialLearningRate = config.Optimizer.LearningRate;
-        }
-
-        // Create loss function (default to model's DefaultLossFunction if not specified)
-        _lossFunction = config.LossFunction is not null && !string.IsNullOrWhiteSpace(config.LossFunction.Name)
-            ? LossFunctionFactory<T>.Create(config.LossFunction.Name, config.LossFunction.Params)
-            : _model.DefaultLossFunction;
-
-        // Apply trainer settings
-        _epochs = config.Trainer?.Epochs ?? 10;
-        _enableLogging = config.Trainer?.EnableLogging ?? true;
-        _seed = config.Trainer?.Seed;
-
-        // Create data loader if path is specified
-        _csvLoader = DatasetFactory<T>.Create(config.Dataset);
     }
 
     /// <summary>
-    /// Sets in-memory feature and label data for training, bypassing CSV loading.
+    /// Trains the model for one epoch by calling its built-in Train method,
+    /// then computes and returns the loss.
     /// </summary>
     /// <param name="features">The input feature matrix.</param>
     /// <param name="labels">The output label vector.</param>
-    /// <exception cref="ArgumentNullException">Thrown when features or labels is null.</exception>
-    public void SetData(Matrix<T> features, Vector<T> labels)
+    /// <param name="epoch">The zero-based epoch index.</param>
+    /// <returns>The loss value after training this epoch.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Models like ARIMA and ExponentialSmoothing fit their parameters
+    /// internally when you call <c>Train()</c>. This trainer simply delegates to that method,
+    /// then measures how good the predictions are by computing the loss function.
+    /// </para>
+    /// </remarks>
+    protected override T TrainEpoch(Matrix<T> features, Vector<T> labels, int epoch)
     {
-        _features = features ?? throw new ArgumentNullException(nameof(features));
-        _labels = labels ?? throw new ArgumentNullException(nameof(labels));
-    }
+        // Train the model on the data
+        Model.Train(features, labels);
 
-    /// <inheritdoc/>
-    public async Task<TrainingResult<T>> RunAsync()
-    {
-        return await Task.Run(() => Run()).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc/>
-    public TrainingResult<T> Run()
-    {
-        var stopwatch = Stopwatch.StartNew();
-        var epochLosses = new List<T>();
-
-        // Load data if needed
-        var (features, labels) = ResolveData();
-
-        // Set seed for reproducibility if specified
-        if (_seed.HasValue)
-        {
-            RandomHelper.CreateSeededRandom(_seed.Value);
-        }
-
-        if (_enableLogging)
-        {
-            LogAction($"Training {Config.Model?.Name} for {_epochs} epochs...");
-            if (_optimizer is not null)
-            {
-                LogAction($"  Optimizer: {Config.Optimizer?.Name}");
-            }
-            LogAction($"  Loss Function: {_lossFunction.GetType().Name}");
-        }
-
-        // Training loop
-        // Models self-train via Train() (e.g., ExponentialSmoothing fits params internally).
-        // The optimizer is used for early stopping signals; full gradient-based Optimize()
-        // integration requires a model that exposes gradient APIs.
-        for (int epoch = 0; epoch < _epochs; epoch++)
-        {
-            // Train the model on the data
-            _model.Train(features, labels);
-
-            // Compute loss
-            var predictions = _model.Predict(features);
-            var loss = _lossFunction.CalculateLoss(predictions, labels);
-            epochLosses.Add(loss);
-
-            if (_enableLogging)
-            {
-                LogAction($"  Epoch {epoch + 1}/{_epochs} - Loss: {loss}");
-            }
-
-            // Check for early stopping via optimizer
-            if (_optimizer is not null && _optimizer.ShouldEarlyStop())
-            {
-                if (_enableLogging)
-                {
-                    LogAction($"  Early stopping triggered at epoch {epoch + 1}");
-                }
-                break;
-            }
-        }
-
-        stopwatch.Stop();
-
-        if (_enableLogging)
-        {
-            LogAction($"Training completed in {stopwatch.Elapsed.TotalSeconds:F2}s");
-        }
-
-        return new TrainingResult<T>
-        {
-            TrainedModel = _model,
-            EpochLosses = epochLosses,
-            TotalEpochs = epochLosses.Count,
-            TrainingDuration = stopwatch.Elapsed,
-            Completed = true
-        };
-    }
-
-    /// <summary>
-    /// Resolves the feature/label data from either in-memory data or the CSV loader.
-    /// </summary>
-    private (Matrix<T> Features, Vector<T> Labels) ResolveData()
-    {
-        // Prefer in-memory data if set
-        if (_features is not null && _labels is not null)
-        {
-            return (_features, _labels);
-        }
-
-        // Load from CSV
-        if (_csvLoader is not null)
-        {
-            _csvLoader.LoadAsync().ConfigureAwait(false).GetAwaiter().GetResult();
-            return (_csvLoader.Features, _csvLoader.Labels);
-        }
-
-        throw new InvalidOperationException(
-            "No training data available. Either specify a dataset path in the configuration " +
-            "or call SetData() with in-memory data before calling Run().");
+        // Compute loss
+        var predictions = Model.Predict(features);
+        return LossFunction.CalculateLoss(predictions, labels);
     }
 }
