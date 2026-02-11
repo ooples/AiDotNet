@@ -1,4 +1,5 @@
 
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 
@@ -34,6 +35,20 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     private readonly int _headDimension;
     private readonly FlashAttentionConfig _config;
 
+    // Positional encoding support
+    private RotaryPositionalEncodingLayer<T>? _ropeLayer;
+    private ALiBiPositionalBiasLayer<T>? _alibiLayer;
+
+    /// <summary>
+    /// Gets the positional encoding type used by this attention layer.
+    /// </summary>
+    public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
+
+    /// <summary>
+    /// Gets the RoPE base frequency (theta) if RoPE is configured.
+    /// </summary>
+    public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
+
     // Projection weights
     private Matrix<T> _queryWeights;
     private Matrix<T> _keyWeights;
@@ -49,6 +64,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     private Tensor<T>? _lastValue;
     private Tensor<T>? _lastAttentionOutput;
     private Tensor<T>? _lastSoftmaxStats;
+    private Tensor<T>? _lastAlibiBias;
     private double _lastScale;
     private int[]? _originalInputShape;
 
@@ -166,6 +182,39 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Configures positional encoding for this Flash Attention layer.
+    /// </summary>
+    /// <param name="encodingType">The type of positional encoding to use.</param>
+    /// <param name="ropeTheta">Base frequency for RoPE (default: 10000.0).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length for pre-computation (default: 2048).</param>
+    public void ConfigurePositionalEncoding(
+        PositionalEncodingType encodingType,
+        double ropeTheta = 10000.0,
+        int maxSequenceLength = 2048)
+    {
+        PositionalEncoding = encodingType;
+        _ropeLayer = null;
+        _alibiLayer = null;
+
+        switch (encodingType)
+        {
+            case PositionalEncodingType.Rotary:
+                _ropeLayer = new RotaryPositionalEncodingLayer<T>(
+                    maxSequenceLength, _headDimension, ropeTheta);
+                break;
+            case PositionalEncodingType.ALiBi:
+                _alibiLayer = new ALiBiPositionalBiasLayer<T>(_headCount, maxSequenceLength);
+                break;
+            case PositionalEncodingType.None:
+                break;
+            default:
+                throw new ArgumentException(
+                    $"Unsupported positional encoding type for FlashAttentionLayer: {encodingType}.",
+                    nameof(encodingType));
+        }
+    }
+
+    /// <summary>
     /// Initializes projection weights using Xavier/Glorot initialization.
     /// </summary>
     private void InitializeParameters()
@@ -228,6 +277,12 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         keys = keys.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
         values = values.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
 
+        // Apply RoPE to Q and K if configured
+        if (_ropeLayer != null)
+        {
+            (queries, keys) = _ropeLayer.ApplyRoPE(queries, keys, startPosition: 0);
+        }
+
         // Cache for backward pass
         _lastQuery = queries;
         _lastKey = keys;
@@ -239,14 +294,25 @@ public class FlashAttentionLayer<T> : LayerBase<T>
             : null; // null means 1/sqrt(headDim) will be computed by IEngine
         _lastScale = scale ?? 1.0 / Math.Sqrt(_headDimension);
 
+        Tensor<T> attentionOutput;
+        Tensor<T>? softmaxStats;
+
+        // Compute ALiBi bias if configured, passing it directly to the engine
+        Tensor<T>? aliBiBias = _alibiLayer != null
+            ? _alibiLayer.ComputeBias(queries.Shape[2], keys.Shape[2], _config.UseCausalMask)
+            : null;
+        _lastAlibiBias = aliBiBias;
+
         // Apply Flash Attention using IEngine for GPU acceleration
-        var attentionOutput = Engine.FlashAttention(
+        // The engine now natively supports additive attention bias (e.g. ALiBi)
+        attentionOutput = Engine.FlashAttention(
             queries,
             keys,
             values,
             scale,
             _config.UseCausalMask,
-            out var softmaxStats);
+            out softmaxStats,
+            attentionBias: aliBiBias);
 
         _lastAttentionOutput = attentionOutput;
         _lastSoftmaxStats = softmaxStats;
@@ -284,10 +350,14 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null || _lastQuery == null ||
-            _lastKey == null || _lastValue == null || _lastAttentionOutput == null ||
-            _lastSoftmaxStats == null)
+            _lastKey == null || _lastValue == null || _lastAttentionOutput == null)
         {
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
+        }
+
+        if (_lastSoftmaxStats == null)
+        {
+            throw new InvalidOperationException("Softmax statistics were not computed during the forward pass.");
         }
 
         var normalizedGrad = NormalizeOutputGradient(outputGradient, out int batchSize, out int sequenceLength, out int embeddingDimension);
@@ -307,6 +377,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         attentionOutputGradient = attentionOutputGradient.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
 
         // Flash Attention backward pass using IEngine for GPU acceleration
+        // Pass the cached ALiBi bias so the backward kernel accounts for the bias gradient
         Engine.FlashAttentionBackward(
             attentionOutputGradient,
             _lastQuery,
@@ -318,7 +389,16 @@ public class FlashAttentionLayer<T> : LayerBase<T>
             _config.UseCausalMask,
             out var gradQuery,
             out var gradKey,
-            out var gradValue);
+            out var gradValue,
+            attentionBias: _lastAlibiBias);
+
+        // Inverse-rotate Q/K gradients out of rotated space before computing weight gradients.
+        // Forward rotated Q/K via RoPE, so gradients from attention are in rotated space.
+        // Weight gradients need un-rotated gradients to match the un-rotated _lastInput.
+        if (_ropeLayer != null)
+        {
+            (gradQuery, gradKey) = _ropeLayer.ApplyInverseRoPE(gradQuery, gradKey, startPosition: 0);
+        }
 
         // Reshape gradients back to [batch, seq, embedding]
         gradQuery = gradQuery.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);
@@ -530,6 +610,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         _lastValue = null;
         _lastAttentionOutput = null;
         _lastSoftmaxStats = null;
+        _lastAlibiBias = null;
         _lastScale = 0;
         _originalInputShape = null;
 
@@ -623,6 +704,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         diagnostics["BlockSizeKV"] = _config.BlockSizeKV.ToString();
         diagnostics["RecomputeInBackward"] = _config.RecomputeInBackward.ToString();
         diagnostics["Precision"] = _config.Precision.ToString();
+        diagnostics["PositionalEncoding"] = PositionalEncoding.ToString();
 
         return diagnostics;
     }

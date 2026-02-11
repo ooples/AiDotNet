@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+
 namespace AiDotNet.Configuration;
 
 /// <summary>
@@ -206,6 +208,42 @@ public class InferenceOptimizationConfig
     /// - Causal: Always applies causal masking (GPT-style).
     /// </remarks>
     public AttentionMaskingMode AttentionMasking { get; set; } = AttentionMaskingMode.Auto;
+
+    #endregion
+
+    #region Positional Encoding Settings
+
+    /// <summary>
+    /// Gets or sets the positional encoding type for attention layers.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Positional encoding tells the model about token order in a sequence.
+    ///
+    /// Options:
+    /// - <b>Sinusoidal</b> (default): Classic sine/cosine encoding from the original Transformer
+    /// - <b>Rotary (RoPE)</b>: Modern approach used by Llama, Mistral, Phi - encodes relative positions
+    /// - <b>ALiBi</b>: Simple distance bias used by BLOOM, MPT - great length extrapolation
+    /// - <b>None</b>: No positional encoding (when handled externally or not needed)
+    ///
+    /// For modern LLM inference, <see cref="PositionalEncodingType.Rotary"/> is recommended.
+    /// </para>
+    /// </remarks>
+    public PositionalEncodingType PositionalEncoding { get; set; } = PositionalEncodingType.Sinusoidal;
+
+    /// <summary>
+    /// Gets or sets the base frequency parameter for RoPE (theta).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This controls how quickly the rotation frequencies change across dimensions.
+    ///
+    /// Standard values:
+    /// - 10000.0 (default): Standard for Llama 2, Mistral, most models
+    /// - 500000.0: Used by some long-context models (Llama 3.1 with extended context)
+    ///
+    /// Only used when <see cref="PositionalEncoding"/> is <see cref="PositionalEncodingType.Rotary"/>.
+    /// </para>
+    /// </remarks>
+    public double RoPETheta { get; set; } = 10000.0;
 
     #endregion
 
@@ -466,22 +504,48 @@ public class InferenceOptimizationConfig
     #region Inference Quantization (Advanced)
 
     /// <summary>
+    /// Gets or sets the weight quantization mode used for inference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Weight-only quantization reduces memory bandwidth and improves cache locality by storing weights
+    /// in a lower-precision format with per-row/per-group scaling. Activations remain in FP32 and
+    /// accumulation is performed in FP32. This applies to both dense and attention layers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This compresses your model's weights to use less memory and run faster.
+    ///
+    /// Options:
+    /// - <b>None</b> (default): No quantization, full FP32 precision
+    /// - <b>WeightOnlyInt8</b>: 4x compression, per-row INT8 (good quality, works everywhere)
+    /// - <b>WeightOnlyFP8</b>: 4x compression, per-row FP8 E4M3 (better outlier handling)
+    /// - <b>WeightOnlyNF4</b>: 8x compression, per-group 4-bit NormalFloat (maximum compression, QLoRA format)
+    ///
+    /// INT8 and FP8 typically preserve &gt;99% accuracy. NF4 may introduce slightly more error
+    /// but uses half the memory of 8-bit formats.
+    /// </para>
+    /// </remarks>
+    public InferenceQuantizationMode InferenceQuantization { get; set; } = InferenceQuantizationMode.None;
+
+    /// <summary>
     /// Gets or sets whether weight-only INT8 quantization is enabled for inference.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Weight-only quantization reduces memory bandwidth and improves cache locality by storing weights in int8
-    /// with per-output scaling. Activations remain in FP32/FP16, and accumulation is performed in float.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This makes your model weights smaller so the CPU/GPU can read them faster.
-    /// </para>
-    /// <para>
-    /// This is disabled by default until validated across more layer types and kernels. When enabled, the optimizer
-    /// will apply it opportunistically and fall back safely when unsupported.
+    /// This is a backward-compatible convenience property. Setting it to true is equivalent to
+    /// setting <see cref="InferenceQuantization"/> to <see cref="InferenceQuantizationMode.WeightOnlyInt8"/>.
     /// </para>
     /// </remarks>
-    public bool EnableWeightOnlyQuantization { get; set; } = false;
+    public bool EnableWeightOnlyQuantization
+    {
+        get => InferenceQuantization != InferenceQuantizationMode.None;
+        set
+        {
+            if (value && InferenceQuantization == InferenceQuantizationMode.None)
+                InferenceQuantization = InferenceQuantizationMode.WeightOnlyInt8;
+            else if (!value)
+                InferenceQuantization = InferenceQuantizationMode.None;
+        }
+    }
 
     #endregion
 }
@@ -626,4 +690,40 @@ public enum KVCacheQuantizationMode
 
     /// <summary>Signed int8 quantization with scaling (advanced, opt-in).</summary>
     Int8
+}
+
+/// <summary>
+/// Specifies the weight quantization mode for inference optimization.
+/// </summary>
+/// <remarks>
+/// <para><b>For Beginners:</b> These modes control how model weights are compressed for faster inference.
+///
+/// Each mode offers a different trade-off between compression and accuracy:
+/// - INT8: 4x compression, excellent accuracy (per-row scaling)
+/// - FP8: 4x compression, better outlier handling (floating-point format)
+/// - NF4: 8x compression, optimized for normally-distributed weights (QLoRA format)
+/// </para>
+/// </remarks>
+public enum InferenceQuantizationMode
+{
+    /// <summary>No weight quantization. Weights stay in original FP32/FP64 precision.</summary>
+    None,
+
+    /// <summary>
+    /// Per-row INT8 weight-only quantization (4x compression).
+    /// Each output row is quantized with its own scale factor.
+    /// </summary>
+    WeightOnlyInt8,
+
+    /// <summary>
+    /// Per-row FP8 E4M3 weight-only quantization (4x compression).
+    /// Uses 8-bit floating-point for better outlier preservation than INT8.
+    /// </summary>
+    WeightOnlyFP8,
+
+    /// <summary>
+    /// Per-group NF4 (4-bit NormalFloat) weight-only quantization (8x compression).
+    /// Optimal for normally-distributed weights. Uses block-wise scaling.
+    /// </summary>
+    WeightOnlyNF4
 }
