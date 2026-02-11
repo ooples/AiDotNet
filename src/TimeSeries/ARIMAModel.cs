@@ -568,28 +568,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// <returns>A vector of forecasts on the original (undifferenced) scale.</returns>
     private Vector<T> UndifferenceForecasts(Vector<T> diffForecasts, Vector<T> history, int d, int steps)
     {
-        // Compute tail values at each integration level from the history parameter
-        // Level 0: original history -> last value = history[n-1]
-        // Level 1: first-differenced -> last value = history[n-1] - history[n-2]
-        // etc.
-        var tailValues = new T[d];
-        var tempTail = new List<T>();
-        int tailStart = Math.Max(0, history.Length - d);
-        for (int i = tailStart; i < history.Length; i++)
-        {
-            tempTail.Add(history[i]);
-        }
-
-        for (int level = 0; level < d; level++)
-        {
-            tailValues[level] = tempTail[tempTail.Count - 1];
-            var newTail = new List<T>();
-            for (int i = 1; i < tempTail.Count; i++)
-            {
-                newTail.Add(NumOps.Subtract(tempTail[i], tempTail[i - 1]));
-            }
-            tempTail = newTail;
-        }
+        T[] tailValues = ComputeIntegrationTailValues(history, d);
 
         // Undifference d times (in reverse order of differencing)
         var currentForecasts = new List<T>(steps);
@@ -616,6 +595,34 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Computes the tail value at each integration (differencing) level from the history,
+    /// needed for undifferencing forecasts back to the original scale.
+    /// </summary>
+    private T[] ComputeIntegrationTailValues(Vector<T> history, int d)
+    {
+        var tailValues = new T[d];
+        var tempTail = new List<T>();
+        int tailStart = Math.Max(0, history.Length - d);
+        for (int i = tailStart; i < history.Length; i++)
+        {
+            tempTail.Add(history[i]);
+        }
+
+        for (int level = 0; level < d; level++)
+        {
+            tailValues[level] = tempTail[tempTail.Count - 1];
+            var newTail = new List<T>();
+            for (int i = 1; i < tempTail.Count; i++)
+            {
+                newTail.Add(NumOps.Subtract(tempTail[i], tempTail[i - 1]));
+            }
+            tempTail = newTail;
+        }
+
+        return tailValues;
     }
 
     /// <summary>

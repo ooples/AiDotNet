@@ -683,9 +683,21 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         }
         else
         {
-            _trainedLevel = NumOps.Zero;
-            _trainedTrend = NumOps.Zero;
-            _trainedSeasonalFactors = Vector<T>.Empty();
+            // Seed trained state from initial values so legacy models still forecast correctly
+            _trainedLevel = _initialValues.Length > 0 ? _initialValues[0] : NumOps.Zero;
+            _trainedTrend = _initialValues.Length > 1 ? _initialValues[1] : NumOps.Zero;
+            if (Options.SeasonalPeriod > 0 && _initialValues.Length >= Options.SeasonalPeriod + 2)
+            {
+                _trainedSeasonalFactors = new Vector<T>(Options.SeasonalPeriod);
+                for (int i = 0; i < Options.SeasonalPeriod; i++)
+                {
+                    _trainedSeasonalFactors[i] = _initialValues[i + 2];
+                }
+            }
+            else
+            {
+                _trainedSeasonalFactors = Vector<T>.Empty();
+            }
             _trainingLength = 0;
         }
     }

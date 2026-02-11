@@ -771,18 +771,30 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
 
         // Undifference: first undo regular differencing, then seasonal differencing
         // (reverse order of ApplyDifferencing which does seasonal first, then regular)
-
-        // Undo regular (non-seasonal) differencing d times
         var currentForecasts = new List<T>(steps);
         for (int i = 0; i < steps; i++)
         {
             currentForecasts.Add(diffForecasts[i]);
         }
 
-        // We need the tail of history at each intermediate differencing level
-        // ApplyDifferencing does: seasonal D times -> then regular d times
-        // So to undo: first undo regular d times, then undo seasonal D times
+        UndoRegularDifferencing(currentForecasts, history);
+        UndoSeasonalDifferencing(currentForecasts, history);
 
+        Vector<T> result = new Vector<T>(steps);
+        for (int i = 0; i < steps; i++)
+        {
+            result[i] = currentForecasts[i];
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Undoes regular (non-seasonal) differencing by computing tail values at each
+    /// integration level and cumulatively summing in reverse order.
+    /// </summary>
+    private void UndoRegularDifferencing(List<T> forecasts, Vector<T> history)
+    {
         // Compute the series after seasonal differencing but before regular differencing
         Vector<T> afterSeasonalDiff = history;
         for (int i = 0; i < _D; i++)
@@ -790,14 +802,12 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
             afterSeasonalDiff = SeasonalDifference(afterSeasonalDiff, _m);
         }
 
-        // Undo regular differencing d times
-        // Each level needs the last value of the series at that level
+        // Compute tail value at each regular differencing level
         Vector<T> tempSeries = afterSeasonalDiff;
         var regularTailValues = new T[_d];
         for (int level = 0; level < _d; level++)
         {
             regularTailValues[level] = tempSeries[tempSeries.Length - 1];
-            // Difference for next level
             Vector<T> nextLevel = new Vector<T>(tempSeries.Length - 1);
             for (int i = 1; i < tempSeries.Length; i++)
             {
@@ -810,17 +820,21 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
         for (int level = _d - 1; level >= 0; level--)
         {
             T lastVal = regularTailValues[level];
-            for (int i = 0; i < currentForecasts.Count; i++)
+            for (int i = 0; i < forecasts.Count; i++)
             {
-                T undiff = NumOps.Add(currentForecasts[i], lastVal);
-                currentForecasts[i] = undiff;
+                T undiff = NumOps.Add(forecasts[i], lastVal);
+                forecasts[i] = undiff;
                 lastVal = undiff;
             }
         }
+    }
 
-        // Undo seasonal differencing D times
-        // For seasonal undifferencing: forecast[i] = diffForecast[i] + value[i - m]
-        // We need the last m values from the previous level for each D
+    /// <summary>
+    /// Undoes seasonal differencing D times by reconstructing original-scale values
+    /// from the seasonal tail of the history at each level.
+    /// </summary>
+    private void UndoSeasonalDifferencing(List<T> forecasts, Vector<T> history)
+    {
         for (int level = 0; level < _D; level++)
         {
             // Compute the series at this seasonal differencing level
@@ -838,25 +852,16 @@ public class SARIMAModel<T> : TimeSeriesModelBase<T>
             }
 
             // Undo seasonal differencing: forecast[i] = diffForecast[i] + value[i - m]
-            // where value[i-m] comes from either the tail or previous forecasts
             var combined = new List<T>(seasonalTail);
-            for (int i = 0; i < currentForecasts.Count; i++)
+            for (int i = 0; i < forecasts.Count; i++)
             {
                 int refIdx = combined.Count - _m;
                 T refVal = refIdx >= 0 ? combined[refIdx] : NumOps.Zero;
-                T undiff = NumOps.Add(currentForecasts[i], refVal);
-                currentForecasts[i] = undiff;
+                T undiff = NumOps.Add(forecasts[i], refVal);
+                forecasts[i] = undiff;
                 combined.Add(undiff);
             }
         }
-
-        Vector<T> result = new Vector<T>(steps);
-        for (int i = 0; i < steps; i++)
-        {
-            result[i] = currentForecasts[i];
-        }
-
-        return result;
     }
 
     /// <summary>
