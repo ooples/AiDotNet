@@ -331,8 +331,8 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
             {
                 return double.NaN;
             }
-            // Other exp=15 patterns represent max value
-            value = E4M3_MAX_VALUE;
+            // exp=15 with mantissa 0-6 are valid normal values (actual exponent = 15 - 7 = 8)
+            value = (1.0 + mantissa / 8.0) * Math.Pow(2, exp - E4M3_EXPONENT_BIAS);
         }
         else
         {
@@ -382,10 +382,16 @@ public class FP8Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
             return (byte)((sign ? 0x80 : 0) | mantissa);
         }
 
-        exp = MathHelper.Clamp(exp, 1, 14);
+        exp = MathHelper.Clamp(exp, 1, 15);
         double mantissaD = absValue / Math.Pow(2, exp - E4M3_EXPONENT_BIAS) - 1.0;
         int mant = (int)Math.Round(mantissaD * 8);
         mant = MathHelper.Clamp(mant, 0, 7);
+
+        // Guard against NaN encoding: exp=15, mantissa=7 is NaN per NVIDIA spec
+        if (exp == 15 && mant >= 7)
+        {
+            mant = 6;
+        }
 
         return (byte)((sign ? 0x80 : 0) | (exp << 3) | mant);
     }
