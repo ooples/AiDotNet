@@ -41,6 +41,13 @@ namespace AiDotNet.Training;
 /// var result = trainer.Run();
 /// </code>
 /// </para>
+/// <para>
+/// <b>Custom logging:</b>
+/// <code>
+/// var trainer = new Trainer&lt;double&gt;(config);
+/// trainer.LogAction = message => myLogger.Info(message);
+/// </code>
+/// </para>
 /// </remarks>
 public class Trainer<T> : ITrainer<T>
 {
@@ -50,7 +57,7 @@ public class Trainer<T> : ITrainer<T>
     private readonly int _epochs;
     private readonly bool _enableLogging;
     private readonly int? _seed;
-    private CsvDataLoader<T>? _csvLoader;
+    private readonly CsvDataLoader<T>? _csvLoader;
     private Matrix<T>? _features;
     private Vector<T>? _labels;
 
@@ -61,6 +68,13 @@ public class Trainer<T> : ITrainer<T>
     /// Gets the optimizer created from the configuration, if one was specified.
     /// </summary>
     public IOptimizer<T, Matrix<T>, Vector<T>>? Optimizer => _optimizer;
+
+    /// <summary>
+    /// Gets or sets the action used for logging training messages.
+    /// Defaults to <see cref="Console.WriteLine(string)"/>.
+    /// Set to a custom delegate to redirect logs to your preferred logging framework.
+    /// </summary>
+    public Action<string> LogAction { get; set; } = Console.WriteLine;
 
     /// <summary>
     /// Creates a trainer from a YAML configuration file.
@@ -111,14 +125,9 @@ public class Trainer<T> : ITrainer<T>
         }
 
         // Create loss function (default to model's DefaultLossFunction if not specified)
-        if (config.LossFunction is not null && !string.IsNullOrWhiteSpace(config.LossFunction.Name))
-        {
-            _lossFunction = LossFunctionFactory<T>.Create(config.LossFunction.Name, config.LossFunction.Params);
-        }
-        else
-        {
-            _lossFunction = _model.DefaultLossFunction;
-        }
+        _lossFunction = config.LossFunction is not null && !string.IsNullOrWhiteSpace(config.LossFunction.Name)
+            ? LossFunctionFactory<T>.Create(config.LossFunction.Name, config.LossFunction.Params)
+            : _model.DefaultLossFunction;
 
         // Apply trainer settings
         _epochs = config.Trainer?.Epochs ?? 10;
@@ -158,12 +167,12 @@ public class Trainer<T> : ITrainer<T>
 
         if (_enableLogging)
         {
-            Console.WriteLine($"Training {Config.Model?.Name} for {_epochs} epochs...");
+            LogAction($"Training {Config.Model?.Name} for {_epochs} epochs...");
             if (_optimizer is not null)
             {
-                Console.WriteLine($"  Optimizer: {Config.Optimizer?.Name}");
+                LogAction($"  Optimizer: {Config.Optimizer?.Name}");
             }
-            Console.WriteLine($"  Loss Function: {_lossFunction.GetType().Name}");
+            LogAction($"  Loss Function: {_lossFunction.GetType().Name}");
         }
 
         // Training loop
@@ -179,7 +188,7 @@ public class Trainer<T> : ITrainer<T>
 
             if (_enableLogging)
             {
-                Console.WriteLine($"  Epoch {epoch + 1}/{_epochs} - Loss: {loss}");
+                LogAction($"  Epoch {epoch + 1}/{_epochs} - Loss: {loss}");
             }
 
             // Check for early stopping via optimizer
@@ -187,7 +196,7 @@ public class Trainer<T> : ITrainer<T>
             {
                 if (_enableLogging)
                 {
-                    Console.WriteLine($"  Early stopping triggered at epoch {epoch + 1}");
+                    LogAction($"  Early stopping triggered at epoch {epoch + 1}");
                 }
                 break;
             }
@@ -197,7 +206,7 @@ public class Trainer<T> : ITrainer<T>
 
         if (_enableLogging)
         {
-            Console.WriteLine($"Training completed in {stopwatch.Elapsed.TotalSeconds:F2}s");
+            LogAction($"Training completed in {stopwatch.Elapsed.TotalSeconds:F2}s");
         }
 
         return new TrainingResult<T>

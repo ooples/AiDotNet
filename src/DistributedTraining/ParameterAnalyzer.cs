@@ -302,11 +302,17 @@ public class ParameterAnalyzer<T>
     /// helping you understand the efficiency of the grouping strategy.
     /// </para>
     /// </remarks>
-    /// <param name="groups">The parameter groups to analyze</param>
-    /// <returns>A dictionary of statistics (e.g., "TotalGroups", "AverageGroupSize"), or an empty dictionary if groups is null or empty.</returns>
+    /// <param name="groups">The parameter groups to analyze.</param>
+    /// <returns>A dictionary of statistics (e.g., "TotalGroups", "AverageGroupSize"), or an empty dictionary if groups is empty.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="groups"/> is null.</exception>
     public Dictionary<string, double> CalculateDistributionStats(List<ParameterGroup> groups)
     {
-        if (groups == null || groups.Count == 0)
+        if (groups is null)
+        {
+            throw new ArgumentNullException(nameof(groups));
+        }
+
+        if (groups.Count == 0)
         {
             return new Dictionary<string, double>();
         }

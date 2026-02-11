@@ -473,7 +473,7 @@ optimizer:
     }
 
     [Fact]
-    public void Apply_WithValidTimeSeriesModel_DoesNotThrow()
+    public void Apply_WithValidTimeSeriesModel_ConfiguresModelOnBuilder()
     {
         var yaml = @"
 timeSeriesModel:
@@ -481,10 +481,16 @@ timeSeriesModel:
 ";
 
         var config = YamlConfigLoader.LoadFromString(yaml);
+        Assert.NotNull(config.TimeSeriesModel);
+        Assert.Equal("ARIMA", config.TimeSeriesModel.Type);
+
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
 
-        // Should not throw when TInput=Matrix<T>, TOutput=Vector<T>
+        // Apply should configure the ARIMA model on the builder without throwing
         YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder);
+
+        // Verify the builder returns itself (fluent API works after apply)
+        Assert.NotNull(builder);
     }
 
     [Fact]

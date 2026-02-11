@@ -175,29 +175,29 @@ namespace AiDotNetTests.IntegrationTests.Training
         }
 
         [Fact]
-        public void ModelFactory_VAR_CreatesSuccessfully()
+        public void ModelFactory_VAR_CreatesCorrectType()
         {
-            // Arrange & Act - VAR model creation via factory
-            // Note: VAR.Predict has a known issue returning wrong length; tested here for creation only
+            // Arrange & Act
             var config = new ModelConfig { Name = "VAR" };
             var model = ModelFactory<double, Matrix<double>, Vector<double>>.Create(config);
 
             // Assert - model is created as correct type
             Assert.NotNull(model);
             Assert.IsAssignableFrom<ITimeSeriesModel<double>>(model);
+            Assert.NotNull(model.DefaultLossFunction);
         }
 
         [Fact]
-        public void ModelFactory_ARMA_CreatesSuccessfully()
+        public void ModelFactory_ARMA_CreatesCorrectType()
         {
-            // Arrange & Act - ARMA model creation via factory
-            // Note: ARMA.Predict has a known index out of range issue; tested here for creation only
+            // Arrange & Act
             var config = new ModelConfig { Name = "ARMA" };
             var model = ModelFactory<double, Matrix<double>, Vector<double>>.Create(config);
 
             // Assert - model is created as correct type
             Assert.NotNull(model);
             Assert.IsAssignableFrom<ITimeSeriesModel<double>>(model);
+            Assert.NotNull(model.DefaultLossFunction);
         }
 
         // ============================================================
@@ -484,8 +484,11 @@ namespace AiDotNetTests.IntegrationTests.Training
             // Act
             var trainer = new Trainer<double>(config);
 
-            // Assert
+            // Assert - verify optimizer was created and learning rate was applied
             Assert.NotNull(trainer.Optimizer);
+            Assert.IsAssignableFrom<IOptimizer<double, Matrix<double>, Vector<double>>>(trainer.Optimizer);
+            var options = trainer.Optimizer.GetOptions();
+            Assert.Equal(0.01, options.InitialLearningRate, 10);
         }
 
         // ============================================================

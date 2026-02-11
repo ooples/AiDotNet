@@ -88,11 +88,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             if (string.IsNullOrWhiteSpace(text))
                 return CreateZeroVector();
 
-            // If model file doesn't exist, generate deterministic fallback embeddings
-            // This enables unit testing without requiring real ONNX model files
             if (!File.Exists(_modelPath))
             {
-                return GenerateFallbackEmbedding(text);
+                throw new FileNotFoundException(
+                    $"ONNX model file not found: '{_modelPath}'. " +
+                    "Download the model file or provide a valid path.",
+                    _modelPath);
             }
 
             // 1. Tokenize

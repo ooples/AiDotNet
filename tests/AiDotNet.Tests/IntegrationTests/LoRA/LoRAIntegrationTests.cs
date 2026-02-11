@@ -495,11 +495,11 @@ public class LoRAIntegrationTests
             loss /= output.Length;
 
             if (epoch == 0) initialLoss = loss;
-            if (epoch == 9) finalLoss = loss;
+            finalLoss = loss;
 
-            // Skip backward if loss is already non-finite
-            if (double.IsNaN(loss) || double.IsInfinity(loss))
-                break;
+            // Verify every epoch produces finite loss
+            Assert.False(double.IsNaN(loss), $"Loss became NaN at epoch {epoch}");
+            Assert.False(double.IsInfinity(loss), $"Loss became Infinity at epoch {epoch}");
 
             adapter.Backward(gradient);
             adapter.UpdateParameters(trainingLr);

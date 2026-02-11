@@ -129,17 +129,23 @@ public static class ModelFactory<T, TInput, TOutput>
 
             if (property is null || !property.CanWrite)
             {
-                continue; // Skip unknown parameters silently
+                System.Diagnostics.Debug.WriteLine(
+                    $"[ModelFactory] Warning: Unknown parameter '{kvp.Key}' for {optionsType.Name}. " +
+                    $"Available properties: {string.Join(", ", optionsType.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanWrite).Select(p => p.Name))}");
+                continue;
             }
 
             try
             {
-                var convertedValue = ConvertValue(kvp.Value, property.PropertyType);
+                object paramValue = kvp.Value;
+                var convertedValue = ConvertValue(paramValue, property.PropertyType);
                 property.SetValue(options, convertedValue);
             }
             catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
             {
-                // Skip parameters that can't be converted
+                System.Diagnostics.Debug.WriteLine(
+                    $"[ModelFactory] Warning: Cannot convert parameter '{kvp.Key}' value '{kvp.Value}' " +
+                    $"to {property.PropertyType.Name}: {ex.Message}");
             }
         }
     }
