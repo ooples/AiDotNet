@@ -239,18 +239,20 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
         var expandedValues = ExpandKVHeads(values, batchSize, cachedSeqLen);
 
         // Compute attention
+        // ALiBi must be checked first because FlashAttention<T>.Forward (pure C#) does not accept
+        // an attention bias parameter. If ALiBi is configured, always use the standard path with bias.
         Tensor<T> attentionOutput;
-        if (_useFlashAttention)
+        if (_alibiLayer != null)
+        {
+            attentionOutput = StandardAttentionWithALiBi(queries, expandedKeys, expandedValues, _useCausalMask, seqLen, cachedSeqLen);
+        }
+        else if (_useFlashAttention)
         {
             var config = FlashAttentionConfig.Default;
             config.UseCausalMask = _useCausalMask;
             int queryOffset = Math.Max(0, cachedSeqLen - seqLen);
             var (flashOutput, _) = FlashAttention<T>.Forward(queries, expandedKeys, expandedValues, config, queryOffset: queryOffset);
             attentionOutput = flashOutput;
-        }
-        else if (_alibiLayer != null)
-        {
-            attentionOutput = StandardAttentionWithALiBi(queries, expandedKeys, expandedValues, _useCausalMask, seqLen, cachedSeqLen);
         }
         else
         {
@@ -287,16 +289,16 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
         var expandedValues = ExpandKVHeads(values, batchSize, seqLen);
 
         Tensor<T> attentionOutput;
-        if (_useFlashAttention)
+        if (_alibiLayer != null)
+        {
+            attentionOutput = StandardAttentionWithALiBi(queries, expandedKeys, expandedValues, _useCausalMask, seqLen, seqLen);
+        }
+        else if (_useFlashAttention)
         {
             var config = FlashAttentionConfig.Default;
             config.UseCausalMask = _useCausalMask;
             var (flashOutput, _) = FlashAttention<T>.Forward(queries, expandedKeys, expandedValues, config);
             attentionOutput = flashOutput;
-        }
-        else if (_alibiLayer != null)
-        {
-            attentionOutput = StandardAttentionWithALiBi(queries, expandedKeys, expandedValues, _useCausalMask, seqLen, seqLen);
         }
         else
         {

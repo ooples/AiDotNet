@@ -200,6 +200,12 @@ public class FlashAttentionLayer<T> : LayerBase<T>
             case PositionalEncodingType.ALiBi:
                 _alibiLayer = new ALiBiPositionalBiasLayer<T>(_headCount, maxSequenceLength);
                 break;
+            case PositionalEncodingType.None:
+                break;
+            default:
+                throw new ArgumentException(
+                    $"Unsupported positional encoding type for FlashAttentionLayer: {encodingType}.",
+                    nameof(encodingType));
         }
     }
 

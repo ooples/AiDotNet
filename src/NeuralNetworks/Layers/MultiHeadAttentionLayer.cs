@@ -372,6 +372,12 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             case PositionalEncodingType.ALiBi:
                 _alibiLayer = new ALiBiPositionalBiasLayer<T>(_headCount, maxSequenceLength);
                 break;
+            case PositionalEncodingType.None:
+                break;
+            default:
+                throw new ArgumentException(
+                    $"Unsupported positional encoding type for MultiHeadAttentionLayer: {encodingType}.",
+                    nameof(encodingType));
         }
     }
 

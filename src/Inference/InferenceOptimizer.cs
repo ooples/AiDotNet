@@ -546,7 +546,7 @@ internal class InferenceOptimizer<T>
                         {
                             cached.ConfigurePositionalEncoding(
                                 mha.PositionalEncoding,
-                                ropeTheta: _config.RoPETheta,
+                                ropeTheta: mha.RoPETheta,
                                 maxSequenceLength: seqLen);
                         }
                         else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
@@ -625,7 +625,9 @@ internal class InferenceOptimizer<T>
             }
 
             // Handle Grouped-Query Attention -> CachedGroupedQueryAttention
-            if (layer is GroupedQueryAttentionLayer<T> gqa && enableKVCache && !enablePagedKVCache)
+            // GQA rewrite: use CachedGroupedQueryAttention for regular KV cache.
+            // Paged KV cache does not yet support GQA, so fall back to regular cache.
+            if (layer is GroupedQueryAttentionLayer<T> gqa && enableKVCache)
             {
                 var inputShape = gqa.GetInputShape();
                 if (inputShape.Length < 2)
@@ -651,7 +653,7 @@ internal class InferenceOptimizer<T>
                 {
                     cachedGqa.ConfigurePositionalEncoding(
                         gqa.PositionalEncoding,
-                        ropeTheta: _config.RoPETheta,
+                        ropeTheta: gqa.RoPETheta,
                         maxSequenceLength: seqLen);
                 }
                 else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
