@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Models.Options;
 using AiDotNet.TimeSeries;
@@ -528,7 +529,7 @@ public class TimeSeriesIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact(Timeout = 30_000)]
+    [Fact]
     public async Task InformerModel_Train_CompletesInReasonableTime()
     {
         // Arrange: small dataset with reduced defaults
@@ -546,8 +547,14 @@ public class TimeSeriesIntegrationTests
         };
         var model = new InformerModel<double>(options);
 
-        // Act & Assert: training should complete (not hang) and not crash
-        var exception = await Record.ExceptionAsync(() => Task.Run(() => model.Train(x, y)));
+        // Act: run training with an explicit timeout so a hang doesn't leave orphaned work
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var trainTask = Task.Run(() => model.Train(x, y), cts.Token);
+        var completedTask = await Task.WhenAny(trainTask, Task.Delay(TimeSpan.FromSeconds(30)));
+
+        // Assert: training should complete within the timeout
+        Assert.True(completedTask == trainTask, "Informer training did not complete within 30 seconds (possible hang).");
+        var exception = await Record.ExceptionAsync(() => trainTask);
         Assert.Null(exception);
     }
 
