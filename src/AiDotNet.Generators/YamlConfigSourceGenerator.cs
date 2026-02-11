@@ -557,9 +557,13 @@ internal static class YamlParamsHelper
             sb.AppendLine($"    private static readonly Dictionary<string, Type> {dictName} = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)");
             sb.AppendLine($"    {{");
 
+            var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var impl in section.ConcreteImplementations)
             {
-                sb.AppendLine($"        {{ \"{impl.ShortName}\", typeof({impl.FullyQualifiedName}) }},");
+                if (seenNames.Add(impl.ShortName))
+                {
+                    sb.AppendLine($"        {{ \"{impl.ShortName}\", typeof({impl.FullyQualifiedName}) }},");
+                }
             }
 
             sb.AppendLine($"    }};");
@@ -787,7 +791,10 @@ internal static class YamlParamsHelper
 
         foreach (var section in registrySections)
         {
-            var names = string.Join(", ", section.ConcreteImplementations.Select(i => $"\"{i.ShortName}\""));
+            var uniqueNames = section.ConcreteImplementations
+                .Select(i => i.ShortName)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+            var names = string.Join(", ", uniqueNames.Select(n => $"\"{n}\""));
             sb.AppendLine($"        {{ \"{section.Method.SectionName}\", new[] {{ {names} }} }},");
         }
 
@@ -1100,32 +1107,34 @@ internal static class YamlParamsHelper
             {
                 // Register all concrete implementations that have at least one public constructor.
                 var hasPublicCtor = symbol.Constructors.Any(c =>
-                    c.DeclaredAccessibility == Accessibility.Public);
-
-                // Also allow types with no explicitly declared constructors (default ctor).
-                var hasDefaultCtor = !symbol.Constructors.Any(c =>
                     c.DeclaredAccessibility == Accessibility.Public &&
                     !c.IsImplicitlyDeclared);
+
+                // Also allow types with a compiler-generated public default constructor
+                // (i.e., no explicitly declared constructors at all).
+                var hasImplicitDefaultCtor = symbol.Constructors.Any(c =>
+                    c.IsImplicitlyDeclared &&
+                    c.DeclaredAccessibility == Accessibility.Public);
 
                 // Skip nested types that aren't publicly accessible.
                 if (symbol.ContainingType is not null &&
                     symbol.DeclaredAccessibility != Accessibility.Public)
                 {
                     hasPublicCtor = false;
-                    hasDefaultCtor = false;
+                    hasImplicitDefaultCtor = false;
                 }
 
                 // Skip types with generic parameters that can't be resolved from <T, TInput, TOutput>.
-                if (hasPublicCtor || hasDefaultCtor)
+                if (hasPublicCtor || hasImplicitDefaultCtor)
                 {
                     if (!HasOnlyResolvableTypeParameters(symbol))
                     {
                         hasPublicCtor = false;
-                        hasDefaultCtor = false;
+                        hasImplicitDefaultCtor = false;
                     }
                 }
 
-                if (hasPublicCtor || hasDefaultCtor)
+                if (hasPublicCtor || hasImplicitDefaultCtor)
                 {
                     _results.Add(new ImplementationInfo
                     {
