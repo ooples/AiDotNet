@@ -352,7 +352,13 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         var aliBiBias = _alibiLayer?.ComputeBias(seqLen, seqLen);
         var flashConfig = new FlashAttentionConfig { ReturnAttentionWeights = true };
         var (flashOutput, flashWeights) = FlashAttention<T>.Forward(queries, keys, values, flashConfig, attentionBias: aliBiBias);
-        return (flashOutput, flashWeights ?? new Tensor<T>(new[] { batchSize, _numHeads, seqLen, seqLen }));
+        if (flashWeights is null)
+        {
+            throw new InvalidOperationException(
+                "FlashAttention returned null attention weights despite ReturnAttentionWeights=true. " +
+                "This would corrupt the backward pass. Ensure FlashAttention.Forward returns weights when requested.");
+        }
+        return (flashOutput, flashWeights);
     }
 
     private (Tensor<T> Context, Tensor<T> AttentionWeights) ComputeStandardAttentionWithWeights(
