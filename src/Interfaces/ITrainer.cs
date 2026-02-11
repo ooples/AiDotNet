@@ -14,7 +14,7 @@ namespace AiDotNet.Interfaces;
 /// This is the "run my experiment" interface.
 /// </para>
 /// </remarks>
-public interface ITrainer<T>
+internal interface ITrainer<T>
 {
     /// <summary>
     /// Gets the training recipe configuration used by this trainer.

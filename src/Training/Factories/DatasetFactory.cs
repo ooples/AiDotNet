@@ -15,7 +15,7 @@ namespace AiDotNet.Training.Factories;
 /// so you can provide data programmatically.
 /// </para>
 /// </remarks>
-public static class DatasetFactory<T>
+internal static class DatasetFactory<T>
 {
     /// <summary>
     /// Creates a data loader from a dataset configuration.

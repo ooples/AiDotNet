@@ -20,7 +20,7 @@ namespace AiDotNet.Training.Factories;
 /// and the factory creates the right model with those settings.
 /// </para>
 /// </remarks>
-public static class ModelFactory<T, TInput, TOutput>
+internal static class ModelFactory<T, TInput, TOutput>
 {
     /// <summary>
     /// Creates a time series model from a <see cref="ModelConfig"/> object.

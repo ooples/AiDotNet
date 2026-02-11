@@ -49,7 +49,7 @@ namespace AiDotNet.Training;
 /// </code>
 /// </para>
 /// </remarks>
-public class Trainer<T> : ITrainer<T>
+internal class Trainer<T> : ITrainer<T>
 {
     private readonly IFullModel<T, Matrix<T>, Vector<T>> _model;
     private readonly IOptimizer<T, Matrix<T>, Vector<T>>? _optimizer;
@@ -182,9 +182,9 @@ public class Trainer<T> : ITrainer<T>
         }
 
         // Training loop
-        // Note: Models self-train via Train() (e.g., ExponentialSmoothing fits params internally).
-        // The optimizer is used for configuration (learning rate) and early stopping signals.
-        // Full optimizer.Optimize() integration is planned for gradient-based models in a future PR.
+        // Models self-train via Train() (e.g., ExponentialSmoothing fits params internally).
+        // The optimizer is used for early stopping signals; full gradient-based Optimize()
+        // integration requires a model that exposes gradient APIs.
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
             // Train the model on the data

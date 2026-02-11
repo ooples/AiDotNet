@@ -106,7 +106,7 @@ public static class OptimizerFactory<T, TInput, TOutput>
     /// The optimizer is created without a model reference; call <c>SetModel()</c> before optimizing.
     /// </para>
     /// </remarks>
-    public static IOptimizer<T, TInput, TOutput> CreateOptimizer(OptimizerType optimizerTypeEnum)
+    internal static IOptimizer<T, TInput, TOutput> CreateOptimizer(OptimizerType optimizerTypeEnum)
     {
         if (!_optimizerTypes.TryGetValue(optimizerTypeEnum, out Type? optimizerGenericType))
         {

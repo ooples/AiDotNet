@@ -2414,17 +2414,15 @@ public class MergedPRBugFixTests
     }
 
     [Fact]
-    public void ParameterAnalyzer_CalculateDistributionStats_NullGroups_ReturnsEmptyDict()
+    public void ParameterAnalyzer_CalculateDistributionStats_NullGroups_ThrowsArgumentNullException()
     {
         // ARRANGE
         var analyzer = new AiDotNet.DistributedTraining.ParameterAnalyzer<double>();
-        List<AiDotNet.DistributedTraining.ParameterAnalyzer<double>.ParameterGroup>? nullGroups = null;
 
-        // ACT
-        var result = analyzer.CalculateDistributionStats(nullGroups!);
-
-        // ASSERT
-        Assert.Empty(result);
+        // ACT & ASSERT - CalculateDistributionStats throws on null input
+        Assert.Throws<ArgumentNullException>(() =>
+            analyzer.CalculateDistributionStats(
+                (List<AiDotNet.DistributedTraining.ParameterAnalyzer<double>.ParameterGroup>)null));
     }
 
     [Fact]

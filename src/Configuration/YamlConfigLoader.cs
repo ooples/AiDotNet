@@ -64,6 +64,7 @@ internal static class YamlConfigLoader
 
         var deserializer = new DeserializerBuilder()
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
+            .IgnoreUnmatchedProperties()
             .Build();
 
         YamlModelConfig? config;
@@ -73,7 +74,7 @@ internal static class YamlConfigLoader
         }
         catch (YamlException ex)
         {
-            throw new ArgumentException("YAML contains unknown or invalid properties.", nameof(yamlContent), ex);
+            throw new ArgumentException("YAML deserialization failed.", nameof(yamlContent), ex);
         }
 
         return config ?? new YamlModelConfig();
@@ -119,6 +120,7 @@ internal static class YamlConfigLoader
 
         var deserializer = new DeserializerBuilder()
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
+            .IgnoreUnmatchedProperties()
             .Build();
 
         TConfig? config;
@@ -128,7 +130,7 @@ internal static class YamlConfigLoader
         }
         catch (YamlException ex)
         {
-            throw new ArgumentException("YAML contains unknown or invalid properties.", nameof(yamlContent), ex);
+            throw new ArgumentException("YAML deserialization failed.", nameof(yamlContent), ex);
         }
 
         return config ?? new TConfig();

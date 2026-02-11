@@ -516,8 +516,16 @@ timeSeriesModel:
         var config = new YamlModelConfig();
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
 
+        // Verify all sections are null before applying
+        Assert.Null(config.Optimizer);
+        Assert.Null(config.TimeSeriesModel);
+        Assert.Null(config.Quantization);
+        Assert.Null(config.Compression);
+
         // Should not throw - empty config means no sections to apply
-        YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder);
+        var exception = Record.Exception(() =>
+            YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder));
+        Assert.Null(exception);
     }
 
     #endregion
@@ -549,29 +557,31 @@ timeSeriesModel:
             .CreateOptimizer(OptimizerType.GradientDescent);
 
         Assert.NotNull(optimizer);
+        Assert.Contains("GradientDescent", optimizer.GetType().Name);
     }
 
     [Fact]
     public void OptimizerFactory_CreateOptimizer_AllRegisteredTypes_CreateSuccessfully()
     {
-        var registeredTypes = new[]
+        var registeredTypes = new Dictionary<OptimizerType, string>
         {
-            OptimizerType.Adam,
-            OptimizerType.GradientDescent,
-            OptimizerType.StochasticGradientDescent,
-            OptimizerType.AntColony,
-            OptimizerType.GeneticAlgorithm,
-            OptimizerType.SimulatedAnnealing,
-            OptimizerType.ParticleSwarm,
-            OptimizerType.Normal,
+            { OptimizerType.Adam, "Adam" },
+            { OptimizerType.GradientDescent, "GradientDescent" },
+            { OptimizerType.StochasticGradientDescent, "StochasticGradientDescent" },
+            { OptimizerType.AntColony, "AntColony" },
+            { OptimizerType.GeneticAlgorithm, "GeneticAlgorithm" },
+            { OptimizerType.SimulatedAnnealing, "SimulatedAnnealing" },
+            { OptimizerType.ParticleSwarm, "ParticleSwarm" },
+            { OptimizerType.Normal, "Normal" },
         };
 
-        foreach (var type in registeredTypes)
+        foreach (var (type, expectedName) in registeredTypes)
         {
             var optimizer = OptimizerFactory<double, Matrix<double>, Vector<double>>
                 .CreateOptimizer(type);
 
             Assert.NotNull(optimizer);
+            Assert.Contains(expectedName, optimizer.GetType().Name);
         }
     }
 

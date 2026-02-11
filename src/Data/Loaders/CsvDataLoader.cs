@@ -27,7 +27,7 @@ namespace AiDotNet.Data.Loaders;
 /// </code>
 /// </para>
 /// </remarks>
-public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T>>
+internal class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T>>
 {
     private readonly string _filePath;
     private readonly bool _hasHeader;
@@ -79,10 +79,10 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
             throw new FileNotFoundException($"CSV file not found: {_filePath}", _filePath);
         }
 
-        var lines = await Task.Run(() => File.ReadAllLines(_filePath), cancellationToken).ConfigureAwait(false);
+        var lines = await Task.Run(() => File.ReadLines(_filePath).ToList(), cancellationToken).ConfigureAwait(false);
         int startLine = _hasHeader ? 1 : 0;
 
-        if (lines.Length <= startLine)
+        if (lines.Count <= startLine)
         {
             throw new InvalidOperationException("CSV file contains no data rows.");
         }
@@ -90,7 +90,7 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
         // Parse all data rows
         var dataRows = new List<double[]>();
         int skippedEmptyRows = 0;
-        for (int i = startLine; i < lines.Length; i++)
+        for (int i = startLine; i < lines.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 

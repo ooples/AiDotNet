@@ -6,7 +6,9 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.TimeSeries;
 using AiDotNet.Training;
 using AiDotNet.Training.Configuration;
 using AiDotNet.Training.Factories;
@@ -73,6 +75,19 @@ namespace AiDotNetTests.IntegrationTests.Training
             Assert.NotNull(defaultModel);
             Assert.NotNull(customModel);
             Assert.NotSame(defaultModel, customModel);
+
+            // Verify custom parameters actually differ from defaults via GetOptions()
+            var defaultOptions = ((TimeSeriesModelBase<double>)defaultModel).GetOptions();
+            var customOptions = ((TimeSeriesModelBase<double>)customModel).GetOptions();
+
+            var defaultArima = Assert.IsType<ARIMAOptions<double>>(defaultOptions);
+            var customArima = Assert.IsType<ARIMAOptions<double>>(customOptions);
+
+            // Defaults: P=1, D=1, Q=1; Custom: P=5, D=0, Q=3
+            Assert.Equal(1, defaultArima.P);
+            Assert.Equal(5, customArima.P);
+            Assert.Equal(0, customArima.D);
+            Assert.Equal(3, customArima.Q);
         }
 
         [Fact]
@@ -374,8 +389,9 @@ namespace AiDotNetTests.IntegrationTests.Training
         [Fact]
         public void LossFunctionFactory_MarginLoss_WithCustomMPlusMMinusLambda_Works()
         {
-            // Arrange - Margin loss with non-default capsule network parameters
-            var loss = LossFunctionFactory<double>.Create(
+            // Arrange - Margin loss with default and custom capsule network parameters
+            var defaultLoss = LossFunctionFactory<double>.Create(LossType.Margin);
+            var customLoss = LossFunctionFactory<double>.Create(
                 LossType.Margin,
                 new Dictionary<string, object>
                 {
@@ -388,17 +404,21 @@ namespace AiDotNetTests.IntegrationTests.Training
             var actual = new Vector<double>(new double[] { 1.0, 0.0, 1.0 });
 
             // Act
-            var lossValue = loss.CalculateLoss(predicted, actual);
+            var defaultValue = defaultLoss.CalculateLoss(predicted, actual);
+            var customValue = customLoss.CalculateLoss(predicted, actual);
 
-            // Assert
-            Assert.True(lossValue >= 0.0);
+            // Assert - both produce valid loss, but custom params change the value
+            Assert.True(defaultValue >= 0.0);
+            Assert.True(customValue >= 0.0);
+            Assert.NotEqual(defaultValue, customValue);
         }
 
         [Fact]
         public void LossFunctionFactory_ScaleInvariantDepth_CustomLambda_Works()
         {
-            // Arrange
-            var loss = LossFunctionFactory<double>.Create(
+            // Arrange - compare default lambda vs custom lambda
+            var defaultLoss = LossFunctionFactory<double>.Create(LossType.ScaleInvariantDepth);
+            var customLoss = LossFunctionFactory<double>.Create(
                 LossType.ScaleInvariantDepth,
                 new Dictionary<string, object> { { "lambda", 0.8 } });
 
@@ -406,10 +426,13 @@ namespace AiDotNetTests.IntegrationTests.Training
             var actual = new Vector<double>(new double[] { 2.5, 3.5, 4.5 });
 
             // Act
-            var lossValue = loss.CalculateLoss(predicted, actual);
+            var defaultValue = defaultLoss.CalculateLoss(predicted, actual);
+            var customValue = customLoss.CalculateLoss(predicted, actual);
 
-            // Assert
-            Assert.True(!double.IsNaN(lossValue));
+            // Assert - both produce valid non-NaN loss, but lambda changes the value
+            Assert.False(double.IsNaN(defaultValue));
+            Assert.False(double.IsNaN(customValue));
+            Assert.NotEqual(defaultValue, customValue);
         }
 
         // ============================================================
@@ -935,9 +958,14 @@ trainer:
                 Assert.NotNull(train);
                 Assert.NotNull(validation);
                 Assert.NotNull(test);
-                // Total samples should add up
                 Assert.Equal(100, loader.TotalCount);
                 Assert.Equal(3, loader.FeatureCount);
+
+                // Verify split sizes add up to total (70/15/15 of 100)
+                Assert.Equal(70, train.TotalCount);
+                Assert.Equal(15, validation.TotalCount);
+                Assert.Equal(15, test.TotalCount);
+                Assert.Equal(loader.TotalCount, train.TotalCount + validation.TotalCount + test.TotalCount);
             }
             finally
             {

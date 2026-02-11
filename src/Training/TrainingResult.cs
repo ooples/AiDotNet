@@ -13,7 +13,7 @@ namespace AiDotNet.Training;
 /// improved over time), how long it took, and whether it completed successfully.
 /// </para>
 /// </remarks>
-public class TrainingResult<T>
+internal class TrainingResult<T>
 {
     /// <summary>
     /// Gets or sets the trained model ready for making predictions.
@@ -36,7 +36,8 @@ public class TrainingResult<T>
     public TimeSpan TrainingDuration { get; set; }
 
     /// <summary>
-    /// Gets or sets whether the training run completed all requested epochs without error.
+    /// Gets or sets whether the training run completed without error.
+    /// True when training finishes normally (all epochs or early stopping), false on failure.
     /// </summary>
     public bool Completed { get; set; }
 }
