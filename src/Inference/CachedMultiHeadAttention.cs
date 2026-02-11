@@ -294,8 +294,10 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
 
         // Compute attention using cached K, V
         Tensor<T> attentionOutput;
-        if (_useFlashAttention)
+        if (_useFlashAttention || _alibiLayer != null)
         {
+            // Use FlashAttention for both flash-enabled and ALiBi paths
+            // (ALiBi bias is injected via attentionBias parameter)
             var config = FlashAttentionConfig.Default;
             config.UseCausalMask = _useCausalMask;
 
@@ -306,12 +308,6 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
             Tensor<T>? aliBiBias = _alibiLayer?.ComputeBias(seqLenQ, seqLenKV, _useCausalMask);
             var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config, queryOffset: queryOffset, attentionBias: aliBiBias);
             attentionOutput = flashOutput;
-        }
-        else if (_alibiLayer != null)
-        {
-            int seqLenQ = queries.Shape[2];
-            int seqLenKV = keys.Shape[2];
-            attentionOutput = StandardAttentionWithALiBi(queries, keys, values, _useCausalMask, seqLenQ, seqLenKV);
         }
         else
         {
@@ -354,7 +350,7 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
 
         // Compute attention
         Tensor<T> attentionOutput;
-        if (_useFlashAttention)
+        if (_useFlashAttention || _alibiLayer != null)
         {
             var config = FlashAttentionConfig.Default;
             config.UseCausalMask = _useCausalMask;
@@ -362,10 +358,6 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
             Tensor<T>? aliBiBias = _alibiLayer?.ComputeBias(seqLen, seqLen, _useCausalMask);
             var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config, attentionBias: aliBiBias);
             attentionOutput = flashOutput;
-        }
-        else if (_alibiLayer != null)
-        {
-            attentionOutput = StandardAttentionWithALiBi(queries, keys, values, _useCausalMask, seqLen, seqLen);
         }
         else
         {
@@ -451,90 +443,6 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
                     }
 
                     // Normalize and compute output
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int j = 0; j < seqLenKV; j++)
-                        {
-                            T weight = NumericalStabilityHelper.SafeDiv(weights[j], sumExp);
-                            T vVal = value[new[] { b, h, j, d }];
-                            sum = NumOps.Add(sum, NumOps.Multiply(weight, vVal));
-                        }
-                        output[new[] { b, h, i, d }] = sum;
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Standard attention with ALiBi position bias injection.
-    /// </summary>
-    private Tensor<T> StandardAttentionWithALiBi(
-        Tensor<T> query, Tensor<T> key, Tensor<T> value,
-        bool useCausalMask, int seqLenQ, int seqLenKV)
-    {
-        int batchSize = query.Shape[0];
-        int numHeads = query.Shape[1];
-        int headDim = query.Shape[3];
-
-        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
-        T negInf = NumOps.FromDouble(double.NegativeInfinity);
-        var bias = _alibiLayer!.ComputeBias(seqLenQ, seqLenKV);
-
-        var output = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, headDim });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < numHeads; h++)
-            {
-                var scores = new T[seqLenQ, seqLenKV];
-                for (int i = 0; i < seqLenQ; i++)
-                {
-                    int queryPos = seqLenKV - seqLenQ + i;
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        if (useCausalMask && j > queryPos)
-                        {
-                            scores[i, j] = negInf;
-                            continue;
-                        }
-
-                        T dot = NumOps.Zero;
-                        for (int d = 0; d < headDim; d++)
-                        {
-                            T qVal = query[new[] { b, h, i, d }];
-                            T kVal = key[new[] { b, h, j, d }];
-                            dot = NumOps.Add(dot, NumOps.Multiply(qVal, kVal));
-                        }
-
-                        // Add ALiBi bias to scaled dot-product score
-                        scores[i, j] = NumOps.Add(
-                            NumOps.Multiply(dot, scale),
-                            bias[new[] { h, i, j }]);
-                    }
-                }
-
-                // Softmax row-wise
-                for (int i = 0; i < seqLenQ; i++)
-                {
-                    T maxScore = negInf;
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        if (NumOps.GreaterThan(scores[i, j], maxScore))
-                            maxScore = scores[i, j];
-                    }
-
-                    T sumExp = NumOps.Zero;
-                    var weights = new T[seqLenKV];
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        weights[j] = NumOps.Exp(NumOps.Subtract(scores[i, j], maxScore));
-                        sumExp = NumOps.Add(sumExp, weights[j]);
-                    }
-
                     for (int d = 0; d < headDim; d++)
                     {
                         T sum = NumOps.Zero;

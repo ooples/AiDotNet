@@ -240,20 +240,15 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
 
         // Compute attention
         Tensor<T> attentionOutput;
-        if (_useFlashAttention)
+        if (_useFlashAttention || _alibiLayer != null)
         {
             var config = FlashAttentionConfig.Default;
             config.UseCausalMask = _useCausalMask;
             int queryOffset = Math.Max(0, cachedSeqLen - seqLen);
 
-            // Compute ALiBi bias if configured and pass it through FlashAttention
             Tensor<T>? aliBiBias = _alibiLayer?.ComputeBias(seqLen, cachedSeqLen, _useCausalMask);
             var (flashOutput, _) = FlashAttention<T>.Forward(queries, expandedKeys, expandedValues, config, queryOffset: queryOffset, attentionBias: aliBiBias);
             attentionOutput = flashOutput;
-        }
-        else if (_alibiLayer != null)
-        {
-            attentionOutput = StandardAttentionWithALiBi(queries, expandedKeys, expandedValues, _useCausalMask, seqLen, cachedSeqLen);
         }
         else
         {
@@ -290,7 +285,7 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
         var expandedValues = ExpandKVHeads(values, batchSize, seqLen);
 
         Tensor<T> attentionOutput;
-        if (_useFlashAttention)
+        if (_useFlashAttention || _alibiLayer != null)
         {
             var config = FlashAttentionConfig.Default;
             config.UseCausalMask = _useCausalMask;
@@ -298,10 +293,6 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
             Tensor<T>? aliBiBias = _alibiLayer?.ComputeBias(seqLen, seqLen, _useCausalMask);
             var (flashOutput, _) = FlashAttention<T>.Forward(queries, expandedKeys, expandedValues, config, attentionBias: aliBiBias);
             attentionOutput = flashOutput;
-        }
-        else if (_alibiLayer != null)
-        {
-            attentionOutput = StandardAttentionWithALiBi(queries, expandedKeys, expandedValues, _useCausalMask, seqLen, seqLen);
         }
         else
         {
@@ -380,82 +371,6 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
                                 key[new[] { b, h, j, d }]));
                         }
                         scores[j] = NumOps.Multiply(dot, scale);
-                        if (NumOps.GreaterThan(scores[j], maxScore))
-                            maxScore = scores[j];
-                    }
-
-                    T sumExp = NumOps.Zero;
-                    var weights = new T[seqLenKV];
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        weights[j] = NumOps.Exp(NumOps.Subtract(scores[j], maxScore));
-                        sumExp = NumOps.Add(sumExp, weights[j]);
-                    }
-
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int j = 0; j < seqLenKV; j++)
-                        {
-                            T w = NumericalStabilityHelper.SafeDiv(weights[j], sumExp);
-                            sum = NumOps.Add(sum, NumOps.Multiply(w,
-                                value[new[] { b, h, j, d }]));
-                        }
-                        output[new[] { b, h, i, d }] = sum;
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Standard attention with ALiBi position bias injection.
-    /// </summary>
-    private Tensor<T> StandardAttentionWithALiBi(
-        Tensor<T> query, Tensor<T> key, Tensor<T> value,
-        bool useCausalMask, int seqLenQ, int seqLenKV)
-    {
-        int batchSize = query.Shape[0];
-        int numHeads = query.Shape[1];
-        int headDim = query.Shape[3];
-
-        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
-        T negInf = NumOps.FromDouble(double.NegativeInfinity);
-        var bias = _alibiLayer!.ComputeBias(seqLenQ, seqLenKV);
-
-        var output = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, headDim });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < numHeads; h++)
-            {
-                for (int i = 0; i < seqLenQ; i++)
-                {
-                    int queryPos = seqLenKV - seqLenQ + i;
-                    var scores = new T[seqLenKV];
-                    T maxScore = negInf;
-
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        if (useCausalMask && j > queryPos)
-                        {
-                            scores[j] = negInf;
-                            continue;
-                        }
-
-                        T dot = NumOps.Zero;
-                        for (int d = 0; d < headDim; d++)
-                        {
-                            dot = NumOps.Add(dot, NumOps.Multiply(
-                                query[new[] { b, h, i, d }],
-                                key[new[] { b, h, j, d }]));
-                        }
-
-                        scores[j] = NumOps.Add(
-                            NumOps.Multiply(dot, scale),
-                            bias[new[] { h, i, j }]);
                         if (NumOps.GreaterThan(scores[j], maxScore))
                             maxScore = scores[j];
                     }
