@@ -121,7 +121,7 @@
 
 	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo) -->
 	<ItemGroup>
-	  <PackageReference Include="AiDotNet.Tensors" Version="0.5.0" />
+	  <PackageReference Include="AiDotNet.Tensors" Version="0.7.0" />
 	</ItemGroup>
 
 	<!--

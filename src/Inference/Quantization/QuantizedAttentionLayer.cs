@@ -209,19 +209,11 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
             values = ExpandKVHeads(values, batchSize, seqLen, _numKVHeads, headsPerGroup, _headCount);
         }
 
-        // Compute attention
-        Tensor<float> context;
-        if (_alibiLayer != null)
-        {
-            var aliBiBias = _alibiLayer.ComputeBias(seqLen, seqLen);
-            var flashConfig = FlashAttentionConfig.Default;
-            var (flashOutput, _) = FlashAttention<float>.Forward(queries, keys, values, flashConfig, attentionBias: aliBiBias);
-            context = flashOutput;
-        }
-        else
-        {
-            context = ComputeStandardAttention(queries, keys, values);
-        }
+        // Compute attention (with ALiBi bias if configured)
+        var context = _alibiLayer != null
+            ? FlashAttention<float>.Forward(queries, keys, values, FlashAttentionConfig.Default,
+                attentionBias: _alibiLayer.ComputeBias(seqLen, seqLen)).Output
+            : ComputeStandardAttention(queries, keys, values);
 
         // Reshape: [batch, numHeads, seq, headDim] -> [batch*seq, numHeads*headDim]
         var contextFlat = new Tensor<float>(new[] { batchSize * seqLen, _headCount * _headDimension });
@@ -391,11 +383,14 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     {
         return encodingType switch
         {
+            PositionalEncodingType.None => (null, null),
             PositionalEncodingType.Rotary => (
                 new RotaryPositionalEncodingLayer<float>(maxSequenceLength, headDimension, ropeTheta), null),
             PositionalEncodingType.ALiBi => (
                 null, new ALiBiPositionalBiasLayer<float>(numHeads, maxSequenceLength)),
-            _ => (null, null)
+            _ => throw new ArgumentOutOfRangeException(nameof(encodingType),
+                encodingType, $"Unsupported positional encoding type: {encodingType}. " +
+                "Supported types are None, Rotary (RoPE), and ALiBi.")
         };
     }
 

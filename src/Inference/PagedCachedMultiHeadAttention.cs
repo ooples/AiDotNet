@@ -294,7 +294,9 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                         // Step 3: Update cache and compute attention via kernel
                         Kernel.UpdateCache(keySpan, valueSpan, SequenceId, _currentPosition, LayerIndex);
                         Kernel.ComputeTiledPagedAttention(querySpan, SequenceId, LayerIndex, attnOutput,
-                            1.0f / MathF.Sqrt(_headDimension));
+                            1.0f / MathF.Sqrt(_headDimension),
+                            alibiSlopes: alibiSlopes,
+                            queryPosition: _currentPosition);
 
                         // Step 4: Output projection
                         if (useQuantized)

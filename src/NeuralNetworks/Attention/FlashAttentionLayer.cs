@@ -298,13 +298,9 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         Tensor<T>? softmaxStats;
 
         // Compute ALiBi bias if configured, passing it directly to the engine
-        Tensor<T>? aliBiBias = null;
-        if (_alibiLayer != null)
-        {
-            int seqLenQ = queries.Shape[2];
-            int seqLenKV = keys.Shape[2];
-            aliBiBias = _alibiLayer.ComputeBias(seqLenQ, seqLenKV, _config.UseCausalMask);
-        }
+        Tensor<T>? aliBiBias = _alibiLayer != null
+            ? _alibiLayer.ComputeBias(queries.Shape[2], keys.Shape[2], _config.UseCausalMask)
+            : null;
         _lastAlibiBias = aliBiBias;
 
         // Apply Flash Attention using IEngine for GPU acceleration

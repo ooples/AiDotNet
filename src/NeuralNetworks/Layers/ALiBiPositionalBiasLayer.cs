@@ -111,18 +111,22 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
 
             for (int i = 0; i < queryLen; i++)
             {
+                // Map local query index to absolute position in the full sequence.
+                // For KV-cached decoding (queryLen=1, keyLen=full_seq): effectiveQueryPos = 0 + (full_seq - 1) = last position
+                // For full attention (queryLen=keyLen): effectiveQueryPos = i
+                int effectiveQueryPos = i + (keyLen - queryLen);
+
                 for (int j = 0; j < keyLen; j++)
                 {
-                    // Causal masking: future positions get -inf
-                    if (useCausalMask && j > i + (keyLen - queryLen))
+                    // Causal masking: mask out key positions beyond the effective query position
+                    if (useCausalMask && j > effectiveQueryPos)
                     {
                         bias[new[] { h, i, j }] = negInf;
                     }
                     else
                     {
-                        // ALiBi bias: -slope * |i - j| (adjusted for key offset)
-                        int queryPos = i + (keyLen - queryLen);
-                        int distance = Math.Abs(queryPos - j);
+                        // ALiBi bias: -slope * |effective_query_pos - key_pos|
+                        int distance = Math.Abs(effectiveQueryPos - j);
                         bias[new[] { h, i, j }] = NumOps.Negate(
                             NumOps.Multiply(slope, NumOps.FromDouble(distance)));
                     }
