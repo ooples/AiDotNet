@@ -4,6 +4,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 using Newtonsoft.Json;
 
 namespace AiDotNet.AdversarialRobustness.Alignment;
@@ -39,7 +40,8 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     /// <param name="options">The alignment configuration options.</param>
     public RLHFAlignment(AlignmentMethodOptions<T> options)
     {
-        this.options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        this.options = options;
     }
 
     /// <inheritdoc/>

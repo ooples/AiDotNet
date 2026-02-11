@@ -1,5 +1,6 @@
 using System.Text;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Agents;
 
@@ -44,7 +45,8 @@ public abstract class AgentBase<T> : IAgent<T>
     /// </remarks>
     protected AgentBase(IChatModel<T> chatModel, IEnumerable<ITool>? tools = null)
     {
-        ChatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
+        Guard.NotNull(chatModel);
+        ChatModel = chatModel;
         _tools = tools?.ToList() ?? new List<ITool>();
         _scratchpad = new StringBuilder();
     }

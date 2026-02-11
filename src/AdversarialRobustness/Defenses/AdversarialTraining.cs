@@ -8,6 +8,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 using Newtonsoft.Json;
 
 namespace AiDotNet.AdversarialRobustness.Defenses;
@@ -46,7 +47,8 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
     /// <param name="options">The defense configuration options.</param>
     public AdversarialTraining(AdversarialDefenseOptions<T> options)
     {
-        this.options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        this.options = options;
 
         // Initialize the attack method to use during training
         var attackOptions = new AdversarialAttackOptions<T>

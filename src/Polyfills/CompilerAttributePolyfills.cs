@@ -60,6 +60,26 @@ namespace System.Runtime.CompilerServices
     }
 }
 
+namespace System.Runtime.CompilerServices
+{
+    /// <summary>
+    /// Polyfill for CallerArgumentExpressionAttribute, introduced in C# 10 / .NET 6.
+    /// Allows methods to capture the expression passed to a parameter as a string.
+    /// On .NET Framework, the compiler does not populate this automatically,
+    /// so callers must pass <c>nameof(param)</c> explicitly.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
+    internal sealed class CallerArgumentExpressionAttribute : Attribute
+    {
+        public CallerArgumentExpressionAttribute(string parameterName)
+        {
+            ParameterName = parameterName;
+        }
+
+        public string ParameterName { get; }
+    }
+}
+
 namespace System.Diagnostics.CodeAnalysis
 {
     /// <summary>
@@ -83,6 +103,15 @@ namespace System.Diagnostics.CodeAnalysis
         }
 
         public bool ReturnValue { get; }
+    }
+
+    /// <summary>
+    /// Specifies that an output is not null even if the corresponding type allows it.
+    /// Applied to Guard.NotNull's parameter to tell the compiler the value is non-null after the call.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field | AttributeTargets.Parameter | AttributeTargets.ReturnValue, Inherited = false)]
+    internal sealed class NotNullAttribute : Attribute
+    {
     }
 }
 

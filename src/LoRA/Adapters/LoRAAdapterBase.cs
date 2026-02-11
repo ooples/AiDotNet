@@ -166,7 +166,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     protected LoRAAdapterBase(ILayer<T> baseLayer, int rank, double alpha = -1, bool freezeBaseLayer = true)
         : base(
             (baseLayer ?? throw new ArgumentNullException(nameof(baseLayer))).GetInputShape(),
-            (baseLayer ?? throw new ArgumentNullException(nameof(baseLayer))).GetOutputShape())
+            baseLayer.GetOutputShape())
     {
         _baseLayer = baseLayer;
         _freezeBaseLayer = freezeBaseLayer;
