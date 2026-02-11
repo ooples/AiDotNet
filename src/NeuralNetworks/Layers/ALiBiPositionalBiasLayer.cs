@@ -128,10 +128,10 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
 
             for (int i = 0; i < queryLen; i++)
             {
-                // Map local query index to absolute position in the full sequence.
-                // For KV-cached decoding (queryLen=1, keyLen=full_seq): effectiveQueryPos = 0 + (full_seq - 1) = last position
-                // For full attention (queryLen=keyLen): effectiveQueryPos = i
-                int effectiveQueryPos = i + (keyLen - queryLen);
+                // For KV-cached causal decoding (queryLen=1, keyLen=full_seq):
+                //   effectiveQueryPos = 0 + (full_seq - 1) = last position
+                // For full attention without causal masking, positions are just i (no offset).
+                int effectiveQueryPos = useCausalMask ? i + (keyLen - queryLen) : i;
 
                 for (int j = 0; j < keyLen; j++)
                 {
