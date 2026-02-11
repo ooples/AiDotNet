@@ -92,12 +92,6 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     private T _residualMean;
 
     /// <summary>
-    /// Stores the last d values from the original (undifferenced) training data,
-    /// needed for undifferencing forecasts.
-    /// </summary>
-    private Vector<T> _lastOriginalValues;
-
-    /// <summary>
     /// Creates a new ARIMA model with the specified options.
     /// </summary>
     /// <param name="options">Options for the ARIMA model, including p, d, and q parameters. If null, default options are used.</param>
@@ -121,7 +115,6 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         _anomalyThreshold = NumOps.Zero;
         _residualStdDev = NumOps.Zero;
         _residualMean = NumOps.Zero;
-        _lastOriginalValues = Vector<T>.Empty();
     }
 
     /// <summary>
@@ -389,21 +382,7 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
         // Step 4: Estimate constant term for the model
         _constant = EstimateConstant(diffY, _arCoefficients, _maCoefficients);
 
-        // Step 5: Store the last d values from the original series for undifferencing forecasts
-        if (d > 0)
-        {
-            _lastOriginalValues = new Vector<T>(d);
-            for (int i = 0; i < d; i++)
-            {
-                _lastOriginalValues[i] = y[y.Length - d + i];
-            }
-        }
-        else
-        {
-            _lastOriginalValues = Vector<T>.Empty();
-        }
-
-        // Step 6: If anomaly detection is enabled, compute threshold from residuals
+        // Step 5: If anomaly detection is enabled, compute threshold from residuals
         if (_arimaOptions.EnableAnomalyDetection)
         {
             ComputeAnomalyThreshold(arResiduals);

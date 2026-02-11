@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using AiDotNet.Models.Options;
 using AiDotNet.TimeSeries;
 using Xunit;
@@ -445,10 +446,13 @@ public class TimeSeriesIntegrationTests
     [Fact]
     public void ExponentialSmoothing_TrainAndForecast_DoesNotResetState()
     {
-        // Arrange: linear trend data
-        var (x, y) = CreateLinearTrendData(100);
+        // Arrange: strong linear trend data with fixed smoothing params
+        // to guarantee a non-zero trend component in forecasts
+        var (x, y) = CreateLinearTrendData(100, slope: 2.0, intercept: 10.0);
         var options = new ExponentialSmoothingOptions<double>
         {
+            InitialAlpha = 0.3,
+            InitialBeta = 0.3,
             UseTrend = true,
             UseSeasonal = false
         };
@@ -459,28 +463,23 @@ public class TimeSeriesIntegrationTests
         var history = new Tensors.LinearAlgebra.Vector<double>(50);
         for (int i = 0; i < 50; i++)
             history[i] = y[50 + i];
-        var forecasts = model.Forecast(history, 3);
+        var forecasts = model.Forecast(history, 5);
 
-        // Assert: forecasts should be finite and consecutive forecasts should differ
-        // (indicating the state evolves between forecast steps)
-        Assert.Equal(3, forecasts.Length);
+        // Assert: forecasts should be finite
+        Assert.Equal(5, forecasts.Length);
         for (int i = 0; i < forecasts.Length; i++)
         {
             Assert.False(double.IsNaN(forecasts[i]), $"Forecast[{i}] is NaN");
             Assert.False(double.IsInfinity(forecasts[i]), $"Forecast[{i}] is Infinity");
         }
 
-        // With a trend, consecutive forecasts should not be identical
-        bool allIdentical = true;
+        // With a strong upward trend and non-trivial beta, multi-step forecasts
+        // should be monotonically increasing (each step adds the trend)
         for (int i = 1; i < forecasts.Length; i++)
         {
-            if (Math.Abs(forecasts[i] - forecasts[i - 1]) > 1e-10)
-            {
-                allIdentical = false;
-                break;
-            }
+            Assert.True(forecasts[i] > forecasts[i - 1],
+                $"Forecast[{i}] ({forecasts[i]}) should be greater than Forecast[{i - 1}] ({forecasts[i - 1]}) with an upward trend");
         }
-        Assert.False(allIdentical, "Consecutive forecasts should differ when trend is enabled");
     }
 
     [Fact]
@@ -529,8 +528,8 @@ public class TimeSeriesIntegrationTests
         Assert.Null(exception);
     }
 
-    [Fact]
-    public void InformerModel_Train_CompletesInReasonableTime()
+    [Fact(Timeout = 30_000)]
+    public async Task InformerModel_Train_CompletesInReasonableTime()
     {
         // Arrange: small dataset with reduced defaults
         var (x, y) = CreateLinearTrendData(40);
@@ -548,7 +547,7 @@ public class TimeSeriesIntegrationTests
         var model = new InformerModel<double>(options);
 
         // Act & Assert: training should complete (not hang) and not crash
-        var exception = Record.Exception(() => model.Train(x, y));
+        var exception = await Record.ExceptionAsync(() => Task.Run(() => model.Train(x, y)));
         Assert.Null(exception);
     }
 

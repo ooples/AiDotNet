@@ -667,16 +667,27 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
             _initialValues[i] = NumOps.FromDouble(reader.ReadDouble());
         }
 
-        // Trained state fields for forecasting
-        _trainedLevel = NumOps.FromDouble(reader.ReadDouble());
-        _trainedTrend = NumOps.FromDouble(reader.ReadDouble());
-        int seasonalLength = reader.ReadInt32();
-        _trainedSeasonalFactors = new Vector<T>(seasonalLength);
-        for (int i = 0; i < seasonalLength; i++)
+        // Trained state fields for forecasting (added in a later version).
+        // Older serialized models won't have these fields, so only read when data remains.
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
         {
-            _trainedSeasonalFactors[i] = NumOps.FromDouble(reader.ReadDouble());
+            _trainedLevel = NumOps.FromDouble(reader.ReadDouble());
+            _trainedTrend = NumOps.FromDouble(reader.ReadDouble());
+            int seasonalLength = reader.ReadInt32();
+            _trainedSeasonalFactors = new Vector<T>(seasonalLength);
+            for (int i = 0; i < seasonalLength; i++)
+            {
+                _trainedSeasonalFactors[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+            _trainingLength = reader.ReadInt32();
         }
-        _trainingLength = reader.ReadInt32();
+        else
+        {
+            _trainedLevel = NumOps.Zero;
+            _trainedTrend = NumOps.Zero;
+            _trainedSeasonalFactors = Vector<T>.Empty();
+            _trainingLength = 0;
+        }
     }
 
     /// <summary>
@@ -941,10 +952,10 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Forecasts future values using the trained end-of-training state instead of
-    /// resetting to initial values on each call.
+    /// Forecasts future values by first replaying smoothing updates over the provided
+    /// history to align state, then projecting forward for the requested number of steps.
     /// </summary>
-    /// <param name="history">The historical time series values.</param>
+    /// <param name="history">The historical time series values to align state from.</param>
     /// <param name="steps">The number of future steps to forecast.</param>
     /// <returns>A vector of forecasted values.</returns>
     public override Vector<T> Forecast(Vector<T> history, int steps)
@@ -964,24 +975,65 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
             throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
         }
 
-        // Start from the trained end-of-training state
+        // Start from the trained end-of-training state and replay over history
+        // to align level/trend/seasonal to the actual provided data
         T level = _trainedLevel;
         T trend = _trainedTrend;
         Vector<T> seasonalFactors = _trainedSeasonalFactors.Length > 0
             ? _trainedSeasonalFactors.Clone()
             : Vector<T>.Empty();
 
-        // The seasonal index continues from where training left off
-        // Training processed _trainingLength observations, so the next season index aligns with that
-        int seasonStartIndex = _trainingLength;
+        // Replay smoothing updates over history to bring state up to date
+        for (int i = 0; i < history.Length; i++)
+        {
+            T observation = history[i];
+            T oldLevel = level;
 
+            if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
+            {
+                int seasonIdx = (_trainingLength + i) % Options.SeasonalPeriod;
+                T seasonFactor = seasonalFactors[seasonIdx];
+                T deseasonalized = NumOps.Divide(observation, seasonFactor);
+                level = NumOps.Add(
+                    NumOps.Multiply(_alpha, deseasonalized),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend))
+                );
+            }
+            else
+            {
+                level = NumOps.Add(
+                    NumOps.Multiply(_alpha, observation),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _alpha), NumOps.Add(oldLevel, trend))
+                );
+            }
+
+            if (EsOptions.UseTrend)
+            {
+                trend = NumOps.Add(
+                    NumOps.Multiply(_beta, NumOps.Subtract(level, oldLevel)),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _beta), trend)
+                );
+            }
+
+            if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
+            {
+                int seasonIdx = (_trainingLength + i) % Options.SeasonalPeriod;
+                seasonalFactors[seasonIdx] = NumOps.Add(
+                    NumOps.Multiply(_gamma, NumOps.Divide(observation, level)),
+                    NumOps.Multiply(NumOps.Subtract(NumOps.One, _gamma), seasonalFactors[seasonIdx])
+                );
+            }
+        }
+
+        // Now forecast forward from the history-aligned state
+        int forecastSeasonStart = _trainingLength + history.Length;
         Vector<T> forecasts = new Vector<T>(steps);
         for (int i = 0; i < steps; i++)
         {
             T forecast;
             if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
             {
-                int seasonIdx = (seasonStartIndex + i) % Options.SeasonalPeriod;
+                int seasonIdx = (forecastSeasonStart + i) % Options.SeasonalPeriod;
                 forecast = NumOps.Multiply(NumOps.Add(level, trend), seasonalFactors[seasonIdx]);
             }
             else
@@ -992,11 +1044,10 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
             forecasts[i] = forecast;
 
             // Update level and trend for the next step using the forecast value
-            // (since we don't have actual observations for future steps)
             T oldLevel = level;
             if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
             {
-                int seasonIdx = (seasonStartIndex + i) % Options.SeasonalPeriod;
+                int seasonIdx = (forecastSeasonStart + i) % Options.SeasonalPeriod;
                 T deseasonalized = NumOps.Divide(forecast, seasonalFactors[seasonIdx]);
                 level = NumOps.Add(
                     NumOps.Multiply(_alpha, deseasonalized),
@@ -1021,7 +1072,7 @@ public class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
 
             if (Options.SeasonalPeriod > 0 && seasonalFactors.Length > 0)
             {
-                int seasonIdx = (seasonStartIndex + i) % Options.SeasonalPeriod;
+                int seasonIdx = (forecastSeasonStart + i) % Options.SeasonalPeriod;
                 seasonalFactors[seasonIdx] = NumOps.Add(
                     NumOps.Multiply(_gamma, NumOps.Divide(forecast, NumOps.Add(oldLevel, trend))),
                     NumOps.Multiply(NumOps.Subtract(NumOps.One, _gamma), seasonalFactors[seasonIdx])
