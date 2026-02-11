@@ -44,6 +44,11 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     /// </summary>
     public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
 
+    /// <summary>
+    /// Gets the RoPE base frequency (theta) if RoPE is configured.
+    /// </summary>
+    public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
+
     // Projection weights
     private Matrix<T> _queryWeights;
     private Matrix<T> _keyWeights;

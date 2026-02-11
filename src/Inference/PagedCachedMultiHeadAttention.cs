@@ -1,4 +1,5 @@
 using System.Buffers;
+using AiDotNet.Enums;
 using AiDotNet.Inference.PagedAttention;
 using AiDotNet.Inference.Quantization;
 using AiDotNet.NeuralNetworks.Attention;
@@ -25,6 +26,10 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
     private readonly int _headDimension;
     private readonly int _embeddingDimension;
     private readonly bool _useCausalMask;
+
+    // Positional encoding
+    private RotaryPositionalEncodingLayer<T>? _ropeLayer;
+    private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
     private Matrix<T> _queryWeights;
     private Matrix<T> _keyWeights;
@@ -85,6 +90,16 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
     /// </summary>
     public long SequenceId { get; set; }
 
+    /// <summary>
+    /// Gets the positional encoding type used by this attention layer.
+    /// </summary>
+    public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
+
+    /// <summary>
+    /// Gets the RoPE base frequency (theta) if RoPE is configured.
+    /// </summary>
+    public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
+
     public PagedCachedMultiHeadAttention(
         int sequenceLength,
         int embeddingDimension,
@@ -116,6 +131,39 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
 
         _flashConfig = FlashAttentionConfig.Default;
         _flashConfig.UseCausalMask = useCausalMask;
+    }
+
+    /// <summary>
+    /// Configures positional encoding for this paged cached attention layer.
+    /// </summary>
+    /// <param name="encodingType">The type of positional encoding to use.</param>
+    /// <param name="ropeTheta">Base frequency for RoPE (default: 10000.0).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length for pre-computation.</param>
+    public void ConfigurePositionalEncoding(
+        PositionalEncodingType encodingType,
+        double ropeTheta = 10000.0,
+        int maxSequenceLength = 2048)
+    {
+        PositionalEncoding = encodingType;
+        _ropeLayer = null;
+        _alibiLayer = null;
+
+        switch (encodingType)
+        {
+            case PositionalEncodingType.Rotary:
+                _ropeLayer = new RotaryPositionalEncodingLayer<T>(
+                    maxSequenceLength, _headDimension, ropeTheta);
+                break;
+            case PositionalEncodingType.ALiBi:
+                _alibiLayer = new ALiBiPositionalBiasLayer<T>(_headCount, maxSequenceLength);
+                break;
+            case PositionalEncodingType.None:
+                break;
+            default:
+                throw new ArgumentException(
+                    $"Unsupported positional encoding type for PagedCachedMultiHeadAttention: {encodingType}.",
+                    nameof(encodingType));
+        }
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
@@ -186,49 +234,122 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
                                 wVInt8.HasValue &&
                                 wOInt8.HasValue;
 
-            for (int t = 0; t < seqLen; t++)
+            // Pre-compute ALiBi slopes per head for the paged attention path.
+            float[]? alibiSlopes = null;
+            if (_alibiLayer != null)
             {
-                for (int d = 0; d < embDim; d++)
+                alibiSlopes = new float[_headCount];
+                for (int h = 0; h < _headCount; h++)
                 {
-                    hidden[d] = Convert.ToSingle(input[0, t, d]);
+                    // ALiBi slope for head h: 2^(-8h/H) where H is total heads
+                    double exponent = -8.0 * (h + 1) / _headCount;
+                    alibiSlopes[h] = (float)Math.Pow(2.0, exponent);
                 }
+            }
 
-                if (useQuantized)
-                {
-                    Kernel.ForwardQuantized(
-                        hiddenStates: hidden,
-                        wQ: wQInt8!.Value,
-                        wK: wKInt8!.Value,
-                        wV: wVInt8!.Value,
-                        wO: wOInt8!.Value,
-                        sequenceId: SequenceId,
-                        position: _currentPosition,
-                        layer: LayerIndex,
-                        output: tokenOut);
-                }
-                else
-                {
-                    Kernel.Forward(
-                        hiddenStates: hidden,
-                        wQ: wQ,
-                        wK: wK,
-                        wV: wV,
-                        wO: wO,
-                        sequenceId: SequenceId,
-                        position: _currentPosition,
-                        layer: LayerIndex,
-                        output: tokenOut);
-                }
+            int projDim = _headCount * _headDimension;
+            var queryBuf = pool.Rent(projDim);
+            var keyBuf = pool.Rent(projDim);
+            var valueBuf = pool.Rent(projDim);
+            var attnBuf = pool.Rent(projDim);
 
-                // Add bias and activation.
-                for (int d = 0; d < embDim; d++)
-                {
-                    T value = NumOps.FromDouble(tokenOut[d]);
-                    value = NumOps.Add(value, _outputBias[d]);
-                    output[0, t, d] = ScalarActivation!.Activate(value);
-                }
+            try
+            {
+                var querySpan = queryBuf.AsSpan(0, projDim);
+                var keySpan = keyBuf.AsSpan(0, projDim);
+                var valueSpan = valueBuf.AsSpan(0, projDim);
+                var attnOutput = attnBuf.AsSpan(0, projDim);
 
-                _currentPosition++;
+                for (int t = 0; t < seqLen; t++)
+                {
+                    for (int d = 0; d < embDim; d++)
+                    {
+                        hidden[d] = Convert.ToSingle(input[0, t, d]);
+                    }
+
+                    if (_ropeLayer != null || _alibiLayer != null)
+                    {
+                        // Decompose the kernel call to inject RoPE/ALiBi.
+                        // Step 1: Project Q, K, V
+                        if (useQuantized)
+                        {
+                            MatVecMulInt8(hidden, wQInt8!.Value, querySpan);
+                            MatVecMulInt8(hidden, wKInt8!.Value, keySpan);
+                            MatVecMulInt8(hidden, wVInt8!.Value, valueSpan);
+                        }
+                        else
+                        {
+                            MatVecMul(hidden, wQ, querySpan, embDim, projDim);
+                            MatVecMul(hidden, wK, keySpan, embDim, projDim);
+                            MatVecMul(hidden, wV, valueSpan, embDim, projDim);
+                        }
+
+                        // Step 2: Apply RoPE to Q and K
+                        if (_ropeLayer != null)
+                        {
+                            ApplyRoPEToSpan(querySpan, _currentPosition);
+                            ApplyRoPEToSpan(keySpan, _currentPosition);
+                        }
+
+                        // Step 3: Update cache and compute attention via kernel
+                        Kernel.UpdateCache(keySpan, valueSpan, SequenceId, _currentPosition, LayerIndex);
+                        Kernel.ComputeTiledPagedAttention(querySpan, SequenceId, LayerIndex, attnOutput,
+                            1.0f / MathF.Sqrt(_headDimension));
+
+                        // Step 4: Output projection
+                        if (useQuantized)
+                        {
+                            MatVecMulInt8(attnOutput, wOInt8!.Value, tokenOut);
+                        }
+                        else
+                        {
+                            MatVecMul(attnOutput, wO, tokenOut, projDim, embDim);
+                        }
+                    }
+                    else if (useQuantized)
+                    {
+                        Kernel.ForwardQuantized(
+                            hiddenStates: hidden,
+                            wQ: wQInt8!.Value,
+                            wK: wKInt8!.Value,
+                            wV: wVInt8!.Value,
+                            wO: wOInt8!.Value,
+                            sequenceId: SequenceId,
+                            position: _currentPosition,
+                            layer: LayerIndex,
+                            output: tokenOut);
+                    }
+                    else
+                    {
+                        Kernel.Forward(
+                            hiddenStates: hidden,
+                            wQ: wQ,
+                            wK: wK,
+                            wV: wV,
+                            wO: wO,
+                            sequenceId: SequenceId,
+                            position: _currentPosition,
+                            layer: LayerIndex,
+                            output: tokenOut);
+                    }
+
+                    // Add bias and activation.
+                    for (int d = 0; d < embDim; d++)
+                    {
+                        T value = NumOps.FromDouble(tokenOut[d]);
+                        value = NumOps.Add(value, _outputBias[d]);
+                        output[0, t, d] = ScalarActivation!.Activate(value);
+                    }
+
+                    _currentPosition++;
+                }
+            }
+            finally
+            {
+                pool.Return(queryBuf);
+                pool.Return(keyBuf);
+                pool.Return(valueBuf);
+                pool.Return(attnBuf);
             }
         }
         finally
@@ -252,7 +373,17 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
         var kh = SplitHeads(k);
         var vh = SplitHeads(v);
 
-        var (attn, _) = FlashAttention<T>.Forward(qh, kh, vh, _flashConfig);
+        // Apply RoPE to Q and K if configured (position starts at 0 for standard forward)
+        if (_ropeLayer != null)
+        {
+            (qh, kh) = _ropeLayer.ApplyRoPE(qh, kh, startPosition: 0);
+        }
+
+        // Compute ALiBi bias if configured
+        int seqLen = input.Shape[1];
+        Tensor<T>? aliBiBias = _alibiLayer?.ComputeBias(seqLen, seqLen, _useCausalMask);
+
+        var (attn, _) = FlashAttention<T>.Forward(qh, kh, vh, _flashConfig, attentionBias: aliBiBias);
 
         // Merge heads back to [B, S, E]
         var merged = MergeHeads(attn);
@@ -262,7 +393,6 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
         var projected = merged.Multiply(_outputWeights);
 
         int batch = projected.Shape[0];
-        int seqLen = projected.Shape[1];
         var output = new Tensor<T>([batch, seqLen, _embeddingDimension]);
 
         for (int b = 0; b < batch; b++)
@@ -335,6 +465,68 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
         }
 
         return merged;
+    }
+
+    /// <summary>
+    /// Applies RoPE rotation to a projected Q or K span in-place.
+    /// The span contains [numHeads * headDim] floats, laid out as [head0_d0..head0_dH, head1_d0..head1_dH, ...].
+    /// </summary>
+    private void ApplyRoPEToSpan(Span<float> projected, int position)
+    {
+        if (_ropeLayer == null) return;
+
+        double theta = _ropeLayer.Theta;
+
+        for (int h = 0; h < _headCount; h++)
+        {
+            int offset = h * _headDimension;
+            for (int d = 0; d < _headDimension / 2; d++)
+            {
+                double freq = 1.0 / Math.Pow(theta, 2.0 * d / _headDimension);
+                double angle = position * freq;
+                float cos = (float)Math.Cos(angle);
+                float sin = (float)Math.Sin(angle);
+
+                float x0 = projected[offset + 2 * d];
+                float x1 = projected[offset + 2 * d + 1];
+                projected[offset + 2 * d] = x0 * cos - x1 * sin;
+                projected[offset + 2 * d + 1] = x0 * sin + x1 * cos;
+            }
+        }
+    }
+
+    private static void MatVecMul(ReadOnlySpan<float> vec, ReadOnlySpan<float> mat, Span<float> output, int inDim, int outDim)
+    {
+        output.Clear();
+        for (int i = 0; i < outDim; i++)
+        {
+            float sum = 0;
+            int rowOffset = i * inDim;
+            for (int j = 0; j < inDim; j++)
+            {
+                sum += vec[j] * mat[rowOffset + j];
+            }
+            output[i] = sum;
+        }
+    }
+
+    private static void MatVecMulInt8(ReadOnlySpan<float> vec, in Int8WeightOnlyQuantization.QuantizedWeights mat, Span<float> output)
+    {
+        int rows = mat.Rows;
+        int cols = mat.Cols;
+        var weights = mat.Weights;
+        var scales = mat.Scales;
+
+        for (int r = 0; r < rows; r++)
+        {
+            int baseIdx = r * cols;
+            float sum = 0f;
+            for (int c = 0; c < cols; c++)
+            {
+                sum += weights[baseIdx + c] * vec[c];
+            }
+            output[r] = sum * scales[r];
+        }
     }
 
     private static float[] MatrixToFloatForKernel(Matrix<T> matrix)
@@ -514,6 +706,8 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
         _currentPosition = 0;
+        _ropeLayer?.ResetState();
+        _alibiLayer?.ResetState();
     }
 
     public override Tensor<T> Backward(Tensor<T> outputGradient)
@@ -539,7 +733,8 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
         {
             ["HeadCount"] = _headCount.ToString(),
             ["UseCausalMask"] = _useCausalMask.ToString(),
-            ["EnableWeightOnlyQuantization"] = EnableWeightOnlyQuantization.ToString()
+            ["EnableWeightOnlyQuantization"] = EnableWeightOnlyQuantization.ToString(),
+            ["PositionalEncoding"] = PositionalEncoding.ToString()
         };
     }
 }

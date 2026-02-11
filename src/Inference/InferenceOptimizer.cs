@@ -527,6 +527,24 @@ internal class InferenceOptimizer<T>
                             activationFunction: activation);
                         paged.EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization;
                         paged.SetParameters(mha.GetParameters());
+
+                        // Preserve positional encoding configuration from source MHA layer
+                        if (mha.PositionalEncoding != PositionalEncodingType.None)
+                        {
+                            paged.ConfigurePositionalEncoding(
+                                mha.PositionalEncoding,
+                                ropeTheta: mha.RoPETheta,
+                                maxSequenceLength: seqLen);
+                        }
+                        else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
+                                 _config.PositionalEncoding == PositionalEncodingType.ALiBi)
+                        {
+                            paged.ConfigurePositionalEncoding(
+                                _config.PositionalEncoding,
+                                ropeTheta: _config.RoPETheta,
+                                maxSequenceLength: seqLen);
+                        }
+
                         model.Layers[i] = paged;
                     }
                     else
@@ -606,6 +624,24 @@ internal class InferenceOptimizer<T>
                         activationFunction: activation);
                     paged.EnableWeightOnlyQuantization = _config.EnableWeightOnlyQuantization;
                     paged.SetParameters(flash.GetParameters());
+
+                    // Preserve positional encoding configuration from source FlashAttention layer
+                    if (flash.PositionalEncoding != PositionalEncodingType.None)
+                    {
+                        paged.ConfigurePositionalEncoding(
+                            flash.PositionalEncoding,
+                            ropeTheta: flash.RoPETheta,
+                            maxSequenceLength: seqLen);
+                    }
+                    else if (_config.PositionalEncoding == PositionalEncodingType.Rotary ||
+                             _config.PositionalEncoding == PositionalEncodingType.ALiBi)
+                    {
+                        paged.ConfigurePositionalEncoding(
+                            _config.PositionalEncoding,
+                            ropeTheta: _config.RoPETheta,
+                            maxSequenceLength: seqLen);
+                    }
+
                     model.Layers[i] = paged;
                 }
                 else
