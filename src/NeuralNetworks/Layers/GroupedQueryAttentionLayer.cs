@@ -278,21 +278,9 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _lastExpandedValues = expandedValues;
 
         // Compute attention with weights caching: [batch, numHeads, seqQ, seqKV]
-        Tensor<T> attentionWeights;
-        Tensor<T> context;
-        if (_alibiLayer != null)
-        {
-            var aliBiBias = _alibiLayer.ComputeBias(seqLen, seqLen);
-            var flashConfig = FlashAttentionConfig.Default;
-            flashConfig.ReturnAttentionWeights = true;
-            var (flashOutput, flashWeights) = FlashAttention<T>.Forward(queries, expandedKeys, expandedValues, flashConfig, attentionBias: aliBiBias);
-            context = flashOutput;
-            attentionWeights = flashWeights ?? new Tensor<T>(new[] { batchSize, _numHeads, seqLen, seqLen });
-        }
-        else
-        {
-            context = ComputeStandardAttention(queries, expandedKeys, expandedValues, out attentionWeights);
-        }
+        var (context, attentionWeights) = _alibiLayer != null
+            ? ComputeALiBiAttention(queries, expandedKeys, expandedValues, seqLen, batchSize)
+            : ComputeStandardAttentionWithWeights(queries, expandedKeys, expandedValues);
 
         _lastAttentionWeights = attentionWeights;
 
@@ -356,6 +344,22 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         }
 
         return expanded;
+    }
+
+    private (Tensor<T> Context, Tensor<T> AttentionWeights) ComputeALiBiAttention(
+        Tensor<T> queries, Tensor<T> keys, Tensor<T> values, int seqLen, int batchSize)
+    {
+        var aliBiBias = _alibiLayer?.ComputeBias(seqLen, seqLen);
+        var flashConfig = new FlashAttentionConfig { ReturnAttentionWeights = true };
+        var (flashOutput, flashWeights) = FlashAttention<T>.Forward(queries, keys, values, flashConfig, attentionBias: aliBiBias);
+        return (flashOutput, flashWeights ?? new Tensor<T>(new[] { batchSize, _numHeads, seqLen, seqLen }));
+    }
+
+    private (Tensor<T> Context, Tensor<T> AttentionWeights) ComputeStandardAttentionWithWeights(
+        Tensor<T> queries, Tensor<T> keys, Tensor<T> values)
+    {
+        var context = ComputeStandardAttention(queries, keys, values, out var attentionWeights);
+        return (context, attentionWeights);
     }
 
     private Tensor<T> ComputeStandardAttention(Tensor<T> queries, Tensor<T> keys, Tensor<T> values, out Tensor<T> attentionWeightsOut)

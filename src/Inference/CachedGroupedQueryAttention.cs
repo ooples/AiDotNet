@@ -35,7 +35,7 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
     private readonly bool _useFlashAttention;
     private readonly bool _useCausalMask;
 
-    // Projection weights
+    // Projection weights (initialized in constructor, never reassigned)
     private readonly Matrix<T> _queryWeights;
     private readonly Matrix<T> _keyWeights;  // Reduced: [embDim, numKVHeads * headDim]
     private readonly Matrix<T> _valueWeights; // Reduced: [embDim, numKVHeads * headDim]
@@ -239,21 +239,12 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
         var expandedValues = ExpandKVHeads(values, batchSize, cachedSeqLen);
 
         // Compute attention
-        Tensor<T> attentionOutput;
-        if (_useFlashAttention || _alibiLayer != null)
-        {
-            var config = FlashAttentionConfig.Default;
-            config.UseCausalMask = _useCausalMask;
-            int queryOffset = Math.Max(0, cachedSeqLen - seqLen);
-
-            Tensor<T>? aliBiBias = _alibiLayer?.ComputeBias(seqLen, cachedSeqLen, _useCausalMask);
-            var (flashOutput, _) = FlashAttention<T>.Forward(queries, expandedKeys, expandedValues, config, queryOffset: queryOffset, attentionBias: aliBiBias);
-            attentionOutput = flashOutput;
-        }
-        else
-        {
-            attentionOutput = StandardAttention(queries, expandedKeys, expandedValues, _useCausalMask);
-        }
+        Tensor<T> attentionOutput = _useFlashAttention || _alibiLayer != null
+            ? FlashAttention<T>.Forward(queries, expandedKeys, expandedValues,
+                new FlashAttentionConfig { UseCausalMask = _useCausalMask },
+                queryOffset: Math.Max(0, cachedSeqLen - seqLen),
+                attentionBias: _alibiLayer?.ComputeBias(seqLen, cachedSeqLen, _useCausalMask)).Output
+            : StandardAttention(queries, expandedKeys, expandedValues, _useCausalMask);
 
         // Reshape and project output
         attentionOutput = attentionOutput.Transpose([0, 2, 1, 3]).Reshape(batchSize, seqLen, _embeddingDimension);
@@ -284,20 +275,11 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
         var expandedKeys = ExpandKVHeads(keys, batchSize, seqLen);
         var expandedValues = ExpandKVHeads(values, batchSize, seqLen);
 
-        Tensor<T> attentionOutput;
-        if (_useFlashAttention || _alibiLayer != null)
-        {
-            var config = FlashAttentionConfig.Default;
-            config.UseCausalMask = _useCausalMask;
-
-            Tensor<T>? aliBiBias = _alibiLayer?.ComputeBias(seqLen, seqLen, _useCausalMask);
-            var (flashOutput, _) = FlashAttention<T>.Forward(queries, expandedKeys, expandedValues, config, attentionBias: aliBiBias);
-            attentionOutput = flashOutput;
-        }
-        else
-        {
-            attentionOutput = StandardAttention(queries, expandedKeys, expandedValues, _useCausalMask);
-        }
+        Tensor<T> attentionOutput = _useFlashAttention || _alibiLayer != null
+            ? FlashAttention<T>.Forward(queries, expandedKeys, expandedValues,
+                new FlashAttentionConfig { UseCausalMask = _useCausalMask },
+                attentionBias: _alibiLayer?.ComputeBias(seqLen, seqLen, _useCausalMask)).Output
+            : StandardAttention(queries, expandedKeys, expandedValues, _useCausalMask);
 
         attentionOutput = attentionOutput.Transpose([0, 2, 1, 3]).Reshape(batchSize, seqLen, _embeddingDimension);
         var output = attentionOutput.Multiply(_outputWeights).Add(_outputBias);

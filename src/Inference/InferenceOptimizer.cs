@@ -112,7 +112,7 @@ internal class InferenceOptimizer<T>
                 // NeuralNetworkBase.Clone performs a deep copy via serialization.
                 workingModel = (NeuralNetworkBase<T>)model.Clone();
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
                 // Some layer types may not yet support serialization-based cloning.
                 // Do not mutate the user's original model; just skip optimizations.
@@ -973,7 +973,7 @@ internal class InferenceOptimizer<T>
 
             return _draftModel != null;
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
             InferenceDiagnostics.RecordException("InferenceOptimizer", "SpeculativeDecoding", ex, "Draft model init failed; falling back to NGram.");
             try
@@ -982,7 +982,7 @@ internal class InferenceOptimizer<T>
                 InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: _draftModel != null, reason: "ExceptionFallbackToNGram");
                 return _draftModel != null;
             }
-            catch
+            catch (InvalidOperationException)
             {
                 InferenceDiagnostics.RecordDecision("InferenceOptimizer", "SpeculativeDraftModel", enabled: false, reason: "FallbackFailed");
                 _draftModel = null;
@@ -1080,9 +1080,9 @@ internal class InferenceOptimizer<T>
             {
                 _pagedKVCache.FreeSequence(_pagedSequenceId.Value);
             }
-            catch
+            catch (InvalidOperationException)
             {
-                // Best-effort cleanup.
+                // Best-effort cleanup - sequence may already be freed.
             }
 
             // Re-allocate with the same ID if possible; otherwise allocate a new one.
