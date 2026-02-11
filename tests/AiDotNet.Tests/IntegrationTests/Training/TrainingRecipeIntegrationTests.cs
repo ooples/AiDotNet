@@ -96,6 +96,15 @@ namespace AiDotNetTests.IntegrationTests.Training
 
             // Assert
             Assert.NotNull(model);
+            // Verify params were actually applied via reflection on the model's options
+            var optionsProp = model.GetType().GetProperty("Options",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+            Assert.NotNull(optionsProp);
+            var options = optionsProp!.GetValue(model);
+            Assert.NotNull(options);
+            var seasonalPeriodProp = options!.GetType().GetProperty("SeasonalPeriod");
+            Assert.NotNull(seasonalPeriodProp);
+            Assert.Equal(12, (int)seasonalPeriodProp!.GetValue(options)!);
         }
 
         [Fact]
@@ -117,6 +126,18 @@ namespace AiDotNetTests.IntegrationTests.Training
 
             // Assert
             Assert.NotNull(model);
+            // Verify params were actually applied via reflection on the model's options
+            var optionsProp = model.GetType().GetProperty("Options",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+            Assert.NotNull(optionsProp);
+            var options = optionsProp!.GetValue(model);
+            Assert.NotNull(options);
+            var seasonalPeriodProp = options!.GetType().GetProperty("SeasonalPeriod");
+            Assert.NotNull(seasonalPeriodProp);
+            Assert.Equal(7, (int)seasonalPeriodProp!.GetValue(options)!);
+            var includeTrendProp = options.GetType().GetProperty("IncludeTrend");
+            Assert.NotNull(includeTrendProp);
+            Assert.True((bool)includeTrendProp!.GetValue(options)!);
         }
 
         [Theory]
@@ -175,29 +196,57 @@ namespace AiDotNetTests.IntegrationTests.Training
         }
 
         [Fact]
-        public void ModelFactory_VAR_CreatesCorrectType()
+        public void ModelFactory_VAR_TrainsAndPredictsSuccessfully()
         {
-            // Arrange & Act
+            // Arrange
             var config = new ModelConfig { Name = "VAR" };
             var model = ModelFactory<double, Matrix<double>, Vector<double>>.Create(config);
-
-            // Assert - model is created as correct type
             Assert.NotNull(model);
             Assert.IsAssignableFrom<ITimeSeriesModel<double>>(model);
             Assert.NotNull(model.DefaultLossFunction);
+
+            // Act - train and predict
+            var features = new Matrix<double>(50, 2);
+            var labels = new Vector<double>(50);
+            for (int i = 0; i < 50; i++)
+            {
+                features[i, 0] = i;
+                features[i, 1] = i * 0.5;
+                labels[i] = i * 2.0;
+            }
+            model.Train(features, labels);
+            var predictions = model.Predict(features);
+
+            // Assert - predictions should have correct length
+            Assert.NotNull(predictions);
+            Assert.Equal(50, predictions.Length);
         }
 
         [Fact]
-        public void ModelFactory_ARMA_CreatesCorrectType()
+        public void ModelFactory_ARMA_TrainsAndPredictsSuccessfully()
         {
-            // Arrange & Act
+            // Arrange
             var config = new ModelConfig { Name = "ARMA" };
             var model = ModelFactory<double, Matrix<double>, Vector<double>>.Create(config);
-
-            // Assert - model is created as correct type
             Assert.NotNull(model);
             Assert.IsAssignableFrom<ITimeSeriesModel<double>>(model);
             Assert.NotNull(model.DefaultLossFunction);
+
+            // Act - train and predict
+            var features = new Matrix<double>(50, 2);
+            var labels = new Vector<double>(50);
+            for (int i = 0; i < 50; i++)
+            {
+                features[i, 0] = i;
+                features[i, 1] = i * 0.5;
+                labels[i] = i * 2.0;
+            }
+            model.Train(features, labels);
+            var predictions = model.Predict(features);
+
+            // Assert - predictions should have correct length
+            Assert.NotNull(predictions);
+            Assert.Equal(50, predictions.Length);
         }
 
         // ============================================================
@@ -248,9 +297,10 @@ namespace AiDotNetTests.IntegrationTests.Training
             var loss1 = gamma1.CalculateLoss(predicted, actual);
             var loss5 = gamma5.CalculateLoss(predicted, actual);
 
-            // Assert - higher gamma should down-weight easy examples more
+            // Assert - higher gamma should down-weight easy examples more, producing different losses
             Assert.True(loss1 >= 0.0);
             Assert.True(loss5 >= 0.0);
+            Assert.NotEqual(loss1, loss5);
         }
 
         [Fact]
@@ -295,9 +345,10 @@ namespace AiDotNetTests.IntegrationTests.Training
             var lossL1 = l1Heavy.CalculateLoss(predicted, actual);
             var lossL2 = l2Heavy.CalculateLoss(predicted, actual);
 
-            // Assert
+            // Assert - different L1 ratios should produce different loss values
             Assert.True(lossL1 >= 0.0);
             Assert.True(lossL2 >= 0.0);
+            Assert.NotEqual(lossL1, lossL2);
         }
 
         [Fact]
@@ -484,9 +535,10 @@ namespace AiDotNetTests.IntegrationTests.Training
             // Act
             var trainer = new Trainer<double>(config);
 
-            // Assert - verify optimizer was created and learning rate was applied
+            // Assert - verify optimizer was created with correct type and learning rate was applied
             Assert.NotNull(trainer.Optimizer);
             Assert.IsAssignableFrom<IOptimizer<double, Matrix<double>, Vector<double>>>(trainer.Optimizer);
+            Assert.Contains(optimizerName, trainer.Optimizer.GetType().Name, StringComparison.OrdinalIgnoreCase);
             var options = trainer.Optimizer.GetOptions();
             Assert.Equal(0.01, options.InitialLearningRate, 10);
         }

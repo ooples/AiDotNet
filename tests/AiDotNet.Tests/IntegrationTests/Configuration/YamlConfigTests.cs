@@ -539,6 +539,7 @@ timeSeriesModel:
             .CreateOptimizer(OptimizerType.Adam);
 
         Assert.NotNull(optimizer);
+        Assert.Contains("Adam", optimizer.GetType().Name);
     }
 
     [Fact]

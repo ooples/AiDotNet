@@ -1,3 +1,5 @@
+using AiDotNet.LinearAlgebra;
+
 namespace AiDotNet.Training;
 
 /// <summary>
@@ -16,7 +18,7 @@ public class TrainingResult<T>
     /// <summary>
     /// Gets or sets the trained model ready for making predictions.
     /// </summary>
-    public ITimeSeriesModel<T>? TrainedModel { get; set; }
+    public IFullModel<T, Matrix<T>, Vector<T>>? TrainedModel { get; set; }
 
     /// <summary>
     /// Gets or sets the loss value recorded at the end of each epoch.

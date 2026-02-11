@@ -72,14 +72,14 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
     }
 
     /// <inheritdoc/>
-    protected override Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         if (!File.Exists(_filePath))
         {
             throw new FileNotFoundException($"CSV file not found: {_filePath}", _filePath);
         }
 
-        var lines = File.ReadAllLines(_filePath);
+        var lines = await Task.Run(() => File.ReadAllLines(_filePath), cancellationToken).ConfigureAwait(false);
         int startLine = _hasHeader ? 1 : 0;
 
         if (lines.Length <= startLine)
@@ -89,6 +89,7 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
 
         // Parse all data rows
         var dataRows = new List<double[]>();
+        int skippedEmptyRows = 0;
         for (int i = startLine; i < lines.Length; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -96,17 +97,18 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
             var line = lines[i].Trim();
             if (string.IsNullOrEmpty(line))
             {
+                skippedEmptyRows++;
                 continue;
             }
 
-            var parts = line.Split(',');
+            var parts = ParseCsvLine(line);
             var values = new double[parts.Length];
             for (int j = 0; j < parts.Length; j++)
             {
-                if (!double.TryParse(parts[j].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
+                if (!double.TryParse(parts[j], NumberStyles.Any, CultureInfo.InvariantCulture, out var val))
                 {
                     throw new FormatException(
-                        $"Cannot parse value '{parts[j].Trim()}' at row {i + 1}, column {j + 1} as a number.");
+                        $"Cannot parse value '{parts[j]}' at row {i + 1}, column {j + 1} as a number.");
                 }
                 values[j] = val;
             }
@@ -165,8 +167,6 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
         LoadedFeatures = features;
         LoadedLabels = labels;
         InitializeIndices(_sampleCount);
-
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -228,6 +228,66 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
         var testLoader = CreateSubsetLoader(testIndices);
 
         return (trainLoader, valLoader, testLoader);
+    }
+
+    /// <summary>
+    /// Parses a single CSV line, handling RFC 4180 quoted fields (e.g., fields containing commas or quotes).
+    /// </summary>
+    private static string[] ParseCsvLine(string line)
+    {
+        var fields = new List<string>();
+        int i = 0;
+        while (i < line.Length)
+        {
+            if (line[i] == '"')
+            {
+                // Quoted field
+                i++; // skip opening quote
+                var field = new System.Text.StringBuilder();
+                while (i < line.Length)
+                {
+                    if (line[i] == '"')
+                    {
+                        if (i + 1 < line.Length && line[i + 1] == '"')
+                        {
+                            field.Append('"');
+                            i += 2; // skip escaped quote
+                        }
+                        else
+                        {
+                            i++; // skip closing quote
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        field.Append(line[i]);
+                        i++;
+                    }
+                }
+                fields.Add(field.ToString().Trim());
+                // Skip comma after quoted field
+                if (i < line.Length && line[i] == ',')
+                {
+                    i++;
+                }
+            }
+            else
+            {
+                // Unquoted field
+                int start = i;
+                while (i < line.Length && line[i] != ',')
+                {
+                    i++;
+                }
+                fields.Add(line.Substring(start, i - start).Trim());
+                if (i < line.Length)
+                {
+                    i++; // skip comma
+                }
+            }
+        }
+        return fields.ToArray();
     }
 
     /// <summary>

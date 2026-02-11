@@ -76,6 +76,11 @@ namespace AiDotNet.Serialization
                 throw new JsonSerializationException($"Cannot serialize tensor: Shape or Length property returned null.");
             }
             var shape = (int[])shapeObj;
+            // Normalize scalar tensors to shape [1] for consistent round-trip behavior
+            if (shape.Length == 0)
+            {
+                shape = new[] { 1 };
+            }
             var length = (int)lengthObj;
 
             // Get the ToArray method to extract all data

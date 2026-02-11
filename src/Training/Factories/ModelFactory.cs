@@ -221,6 +221,11 @@ public static class ModelFactory<T, TInput, TOutput>
             return Convert.ToInt64(value, CultureInfo.InvariantCulture);
         }
 
+        if (targetType.IsEnum && value is string stringValue)
+        {
+            return Enum.Parse(targetType, stringValue, ignoreCase: true);
+        }
+
         // Fallback: try ChangeType
         return Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
     }

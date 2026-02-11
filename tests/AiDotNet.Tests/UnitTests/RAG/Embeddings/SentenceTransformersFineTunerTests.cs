@@ -11,13 +11,16 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class SentenceTransformersFineTunerTests
     {
+        private static string GetMissingModelPath() =>
+            Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.onnx");
+
         [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -34,7 +37,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new SentenceTransformersFineTuner<double>(null, "output-model-path.onnx", 10, 0.00002, 384));
+                new SentenceTransformersFineTuner<double>(null, GetMissingModelPath(), 10, 0.00002, 384));
         }
 
         [Fact]
@@ -42,7 +45,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new SentenceTransformersFineTuner<double>("base-model-path.onnx", null, 10, 0.00002, 384));
+                new SentenceTransformersFineTuner<double>(GetMissingModelPath(), null, 10, 0.00002, 384));
         }
 
         [Fact]
@@ -50,7 +53,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new SentenceTransformersFineTuner<double>("base-model-path.onnx", "output-model-path.onnx", 0, 0.00002, 384));
+                new SentenceTransformersFineTuner<double>(GetMissingModelPath(), GetMissingModelPath(), 0, 0.00002, 384));
         }
 
         [Fact]
@@ -58,7 +61,7 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new SentenceTransformersFineTuner<double>("base-model-path.onnx", "output-model-path.onnx", -1, 0.00002, 384));
+                new SentenceTransformersFineTuner<double>(GetMissingModelPath(), GetMissingModelPath(), -1, 0.00002, 384));
         }
 
         [Fact]
@@ -66,8 +69,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange - model file does not exist on disk
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -82,8 +85,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -98,8 +101,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -114,8 +117,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange - using a non-existent model path
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 5,
                 0.00002,
                 384
@@ -136,8 +139,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -152,8 +155,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -170,8 +173,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -186,8 +189,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -203,8 +206,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange - model file does not exist on disk
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -220,8 +223,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange - model file does not exist on disk
             var model = new SentenceTransformersFineTuner<float>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002f,
                 384
@@ -236,8 +239,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 10,
                 0.00002,
                 384
@@ -255,8 +258,8 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange - using a non-existent model path
             var model = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 2,
                 0.00002,
                 384
@@ -274,15 +277,15 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         {
             // Arrange - model files don't exist, both should throw
             var model1 = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 5,
                 0.00001,
                 384
             );
             var model2 = new SentenceTransformersFineTuner<double>(
-                "base-model-path.onnx",
-                "output-model-path.onnx",
+                GetMissingModelPath(),
+                GetMissingModelPath(),
                 5,
                 0.0001,
                 384

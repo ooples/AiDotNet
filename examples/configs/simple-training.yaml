@@ -17,7 +17,8 @@ model:
 
 dataset:
   name: "sample-data"
-  path: "data/sample.csv"
+  # Replace with the path to your own CSV file (features + label columns)
+  path: "path/to/your-data.csv"
   batchSize: 32
   hasHeader: true
   labelColumn: -1

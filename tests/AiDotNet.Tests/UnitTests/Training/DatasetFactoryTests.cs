@@ -48,9 +48,11 @@ namespace AiDotNetTests.UnitTests.Training
             // Act
             var loader = DatasetFactory<double>.Create(config);
 
-            // Assert
+            // Assert - verify the loader was created with the correct type and config values applied
             Assert.NotNull(loader);
-            Assert.IsType<CsvDataLoader<double>>(loader);
+            var csvLoader = Assert.IsType<CsvDataLoader<double>>(loader);
+            Assert.Equal(64, csvLoader.BatchSize);
+            Assert.Equal("CsvDataLoader", csvLoader.Name);
         }
 
         [Fact]

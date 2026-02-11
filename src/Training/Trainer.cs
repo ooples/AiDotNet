@@ -51,7 +51,7 @@ namespace AiDotNet.Training;
 /// </remarks>
 public class Trainer<T> : ITrainer<T>
 {
-    private readonly ITimeSeriesModel<T> _model;
+    private readonly IFullModel<T, Matrix<T>, Vector<T>> _model;
     private readonly IOptimizer<T, Matrix<T>, Vector<T>>? _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly int _epochs;
@@ -151,6 +151,12 @@ public class Trainer<T> : ITrainer<T>
     }
 
     /// <inheritdoc/>
+    public async Task<TrainingResult<T>> RunAsync()
+    {
+        return await Task.Run(() => Run()).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public TrainingResult<T> Run()
     {
         var stopwatch = Stopwatch.StartNew();
@@ -176,6 +182,9 @@ public class Trainer<T> : ITrainer<T>
         }
 
         // Training loop
+        // Note: Models self-train via Train() (e.g., ExponentialSmoothing fits params internally).
+        // The optimizer is used for configuration (learning rate) and early stopping signals.
+        // Full optimizer.Optimize() integration is planned for gradient-based models in a future PR.
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
             // Train the model on the data
@@ -233,7 +242,7 @@ public class Trainer<T> : ITrainer<T>
         // Load from CSV
         if (_csvLoader is not null)
         {
-            _csvLoader.LoadAsync().GetAwaiter().GetResult();
+            _csvLoader.LoadAsync().ConfigureAwait(false).GetAwaiter().GetResult();
             return (_csvLoader.Features, _csvLoader.Labels);
         }
 

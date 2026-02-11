@@ -137,7 +137,22 @@ public static class OptimizerFactory<T, TInput, TOutput>
         // Pick the constructor with the fewest parameters to minimize dependencies.
         var ctor = constructors.OrderBy(c => c.GetParameters().Length).First();
         var parameters = ctor.GetParameters();
-        var args = new object?[parameters.Length]; // All nulls - constructors handle null options with defaults
+        // Provide default values based on parameter types to avoid null-related constructor failures.
+        // Nullable reference types and optional parameters get null; value types get their defaults.
+        var args = new object?[parameters.Length];
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var paramType = parameters[i].ParameterType;
+            if (parameters[i].HasDefaultValue)
+            {
+                args[i] = parameters[i].DefaultValue;
+            }
+            else if (paramType.IsValueType)
+            {
+                args[i] = Activator.CreateInstance(paramType);
+            }
+            // else: null for reference types - optimizer constructors should handle null options with defaults
+        }
 
         object? instance;
         try

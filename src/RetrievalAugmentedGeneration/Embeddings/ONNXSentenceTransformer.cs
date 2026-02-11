@@ -19,8 +19,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         private readonly string _modelPath;
         private readonly int _dimension;
         private readonly int _maxTokens;
-        private InferenceSession? _session;
-        private ITokenizer? _tokenizer;
+        private volatile InferenceSession? _session;
+        private volatile ITokenizer? _tokenizer;
+        private readonly object _initLock = new();
         private bool _disposed;
 
         public override int EmbeddingDimension => _dimension;
@@ -45,17 +46,30 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         /// </summary>
         private void EnsureModelLoaded()
         {
-            if (_session == null)
+            if (_session != null && _tokenizer != null)
             {
+                return;
+            }
+
+            lock (_initLock)
+            {
+                if (_session != null && _tokenizer != null)
+                {
+                    return;
+                }
+
                 if (!File.Exists(_modelPath))
                 {
                     throw new FileNotFoundException($"ONNX model file not found: {_modelPath}", _modelPath);
                 }
 
-                _session = new InferenceSession(_modelPath);
-
+                var session = new InferenceSession(_modelPath);
                 var modelDir = Path.GetDirectoryName(_modelPath) ?? ".";
-                _tokenizer = AutoTokenizer.FromPretrained(modelDir);
+                var tokenizer = AutoTokenizer.FromPretrained(modelDir);
+
+                // Assign both atomically so concurrent readers never see a partial state
+                _tokenizer = tokenizer;
+                _session = session;
             }
         }
 

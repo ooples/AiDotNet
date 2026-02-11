@@ -26,4 +26,10 @@ public interface ITrainer<T>
     /// </summary>
     /// <returns>A <see cref="TrainingResult{T}"/> containing the trained model, loss history, and metadata.</returns>
     TrainingResult<T> Run();
+
+    /// <summary>
+    /// Runs the full training loop asynchronously and returns the result.
+    /// </summary>
+    /// <returns>A task that resolves to a <see cref="TrainingResult{T}"/> containing the trained model, loss history, and metadata.</returns>
+    Task<TrainingResult<T>> RunAsync();
 }

@@ -1,3 +1,4 @@
+using YamlDotNet.Core;
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -23,7 +24,7 @@ namespace AiDotNet.Configuration;
 /// var config = YamlConfigLoader.LoadFromString&lt;TrainingRecipeConfig&gt;(yamlContent);
 /// </code>
 /// </remarks>
-public static class YamlConfigLoader
+internal static class YamlConfigLoader
 {
     /// <summary>
     /// Loads a YAML configuration file from disk and deserializes it into a <see cref="YamlModelConfig"/>.
@@ -63,10 +64,17 @@ public static class YamlConfigLoader
 
         var deserializer = new DeserializerBuilder()
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
-            .IgnoreUnmatchedProperties()
             .Build();
 
-        var config = deserializer.Deserialize<YamlModelConfig>(yamlContent);
+        YamlModelConfig? config;
+        try
+        {
+            config = deserializer.Deserialize<YamlModelConfig>(yamlContent);
+        }
+        catch (YamlException ex)
+        {
+            throw new ArgumentException("YAML contains unknown or invalid properties.", nameof(yamlContent), ex);
+        }
 
         return config ?? new YamlModelConfig();
     }
@@ -111,10 +119,17 @@ public static class YamlConfigLoader
 
         var deserializer = new DeserializerBuilder()
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
-            .IgnoreUnmatchedProperties()
             .Build();
 
-        var config = deserializer.Deserialize<TConfig>(yamlContent);
+        TConfig? config;
+        try
+        {
+            config = deserializer.Deserialize<TConfig>(yamlContent);
+        }
+        catch (YamlException ex)
+        {
+            throw new ArgumentException("YAML contains unknown or invalid properties.", nameof(yamlContent), ex);
+        }
 
         return config ?? new TConfig();
     }
