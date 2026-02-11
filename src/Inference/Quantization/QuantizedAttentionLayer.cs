@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -209,9 +210,18 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
         }
 
         // Compute attention
-        var context = _alibiLayer != null
-            ? ComputeAttentionWithALiBi(queries, keys, values, seqLen, seqLen)
-            : ComputeStandardAttention(queries, keys, values);
+        Tensor<float> context;
+        if (_alibiLayer != null)
+        {
+            var aliBiBias = _alibiLayer.ComputeBias(seqLen, seqLen);
+            var flashConfig = FlashAttentionConfig.Default;
+            var (flashOutput, _) = FlashAttention<float>.Forward(queries, keys, values, flashConfig, attentionBias: aliBiBias);
+            context = flashOutput;
+        }
+        else
+        {
+            context = ComputeStandardAttention(queries, keys, values);
+        }
 
         // Reshape: [batch, numHeads, seq, headDim] -> [batch*seq, numHeads*headDim]
         var contextFlat = new Tensor<float>(new[] { batchSize * seqLen, _headCount * _headDimension });
@@ -570,61 +580,6 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
                             dot += queries[new[] { b, h, i, d }] * keys[new[] { b, h, j, d }];
                         }
                         scores[j] = dot * scale;
-                        if (scores[j] > maxScore) maxScore = scores[j];
-                    }
-
-                    float sumExp = 0f;
-                    var weights = new float[seqLenKV];
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        weights[j] = MathF.Exp(scores[j] - maxScore);
-                        sumExp += weights[j];
-                    }
-
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        float sum = 0f;
-                        for (int j = 0; j < seqLenKV; j++)
-                        {
-                            sum += (weights[j] / sumExp) * values[new[] { b, h, j, d }];
-                        }
-                        output[new[] { b, h, i, d }] = sum;
-                    }
-                }
-            }
-        }
-        return output;
-    }
-
-    private Tensor<float> ComputeAttentionWithALiBi(
-        Tensor<float> queries, Tensor<float> keys, Tensor<float> values,
-        int seqLenQ, int seqLenKV)
-    {
-        int batchSize = queries.Shape[0];
-        int numHeads = queries.Shape[1];
-        int headDim = queries.Shape[3];
-
-        float scale = 1f / MathF.Sqrt(headDim);
-        var bias = _alibiLayer!.ComputeBias(seqLenQ, seqLenKV);
-        var output = new Tensor<float>(new[] { batchSize, numHeads, seqLenQ, headDim });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < numHeads; h++)
-            {
-                for (int i = 0; i < seqLenQ; i++)
-                {
-                    var scores = new float[seqLenKV];
-                    float maxScore = float.NegativeInfinity;
-
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        float dot = 0f;
-                        for (int d = 0; d < headDim; d++)
-                        {
-                            dot += queries[new[] { b, h, i, d }] * keys[new[] { b, h, j, d }];
-                        }
-                        scores[j] = dot * scale + bias[new[] { h, i, j }];
                         if (scores[j] > maxScore) maxScore = scores[j];
                     }
 
