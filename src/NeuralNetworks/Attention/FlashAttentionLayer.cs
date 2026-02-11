@@ -59,6 +59,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     private Tensor<T>? _lastValue;
     private Tensor<T>? _lastAttentionOutput;
     private Tensor<T>? _lastSoftmaxStats;
+    private Tensor<T>? _lastAlibiBias;
     private double _lastScale;
     private int[]? _originalInputShape;
 
@@ -285,24 +286,26 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         Tensor<T> attentionOutput;
         Tensor<T>? softmaxStats;
 
+        // Compute ALiBi bias if configured, passing it directly to the engine
+        Tensor<T>? aliBiBias = null;
         if (_alibiLayer != null)
         {
-            // ALiBi requires manual attention with bias injection before softmax
-            // Flash Attention kernel doesn't support additive bias, so fall back
-            attentionOutput = ComputeAttentionWithALiBi(
-                queries, keys, values, _lastScale, out softmaxStats);
+            int seqLenQ = queries.Shape[2];
+            int seqLenKV = keys.Shape[2];
+            aliBiBias = _alibiLayer.ComputeBias(seqLenQ, seqLenKV, _config.UseCausalMask);
         }
-        else
-        {
-            // Apply Flash Attention using IEngine for GPU acceleration
-            attentionOutput = Engine.FlashAttention(
-                queries,
-                keys,
-                values,
-                scale,
-                _config.UseCausalMask,
-                out softmaxStats);
-        }
+        _lastAlibiBias = aliBiBias;
+
+        // Apply Flash Attention using IEngine for GPU acceleration
+        // The engine now natively supports additive attention bias (e.g. ALiBi)
+        attentionOutput = Engine.FlashAttention(
+            queries,
+            keys,
+            values,
+            scale,
+            _config.UseCausalMask,
+            out softmaxStats,
+            attentionBias: aliBiBias);
 
         _lastAttentionOutput = attentionOutput;
         _lastSoftmaxStats = softmaxStats;
@@ -345,62 +348,9 @@ public class FlashAttentionLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        // softmaxStats is null when ALiBi manual attention fallback was used;
-        // recompute stats from cached Q/K/V so FlashAttentionBackward can proceed.
         if (_lastSoftmaxStats == null)
         {
-            // Recompute softmax stats (logsumexp per row) for the backward kernel
-            int batchSize2 = _lastQuery.Shape[0];
-            int numHeads2 = _lastQuery.Shape[1];
-            int seqLenQ2 = _lastQuery.Shape[2];
-            _lastSoftmaxStats = new Tensor<T>(new[] { batchSize2, numHeads2, seqLenQ2 });
-
-            int headDim2 = _lastQuery.Shape[3];
-            T scale2 = NumOps.FromDouble(_lastScale);
-
-            for (int b = 0; b < batchSize2; b++)
-            {
-                for (int h = 0; h < numHeads2; h++)
-                {
-                    for (int i = 0; i < seqLenQ2; i++)
-                    {
-                        T maxScore = NumOps.FromDouble(double.NegativeInfinity);
-                        int seqLenKV2 = _lastKey.Shape[2];
-
-                        for (int j = 0; j < seqLenKV2; j++)
-                        {
-                            T dot = NumOps.Zero;
-                            for (int d = 0; d < headDim2; d++)
-                            {
-                                dot = NumOps.Add(dot, NumOps.Multiply(
-                                    _lastQuery[new[] { b, h, i, d }],
-                                    _lastKey[new[] { b, h, j, d }]));
-                            }
-                            T score = NumOps.Multiply(dot, scale2);
-                            if (NumOps.GreaterThan(score, maxScore))
-                                maxScore = score;
-                        }
-
-                        T sumExp = NumOps.Zero;
-                        for (int j = 0; j < seqLenKV2; j++)
-                        {
-                            T dot = NumOps.Zero;
-                            for (int d = 0; d < headDim2; d++)
-                            {
-                                dot = NumOps.Add(dot, NumOps.Multiply(
-                                    _lastQuery[new[] { b, h, i, d }],
-                                    _lastKey[new[] { b, h, j, d }]));
-                            }
-                            T score = NumOps.Multiply(dot, scale2);
-                            sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(score, maxScore)));
-                        }
-
-                        // logsumexp = max + log(sumExp)
-                        _lastSoftmaxStats[new[] { b, h, i }] = NumOps.Add(
-                            maxScore, NumOps.Log(sumExp));
-                    }
-                }
-            }
+            throw new InvalidOperationException("Softmax statistics were not computed during the forward pass.");
         }
 
         var normalizedGrad = NormalizeOutputGradient(outputGradient, out int batchSize, out int sequenceLength, out int embeddingDimension);
@@ -420,6 +370,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         attentionOutputGradient = attentionOutputGradient.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
 
         // Flash Attention backward pass using IEngine for GPU acceleration
+        // Pass the cached ALiBi bias so the backward kernel accounts for the bias gradient
         Engine.FlashAttentionBackward(
             attentionOutputGradient,
             _lastQuery,
@@ -431,7 +382,8 @@ public class FlashAttentionLayer<T> : LayerBase<T>
             _config.UseCausalMask,
             out var gradQuery,
             out var gradKey,
-            out var gradValue);
+            out var gradValue,
+            attentionBias: _lastAlibiBias);
 
         // Reshape gradients back to [batch, seq, embedding]
         gradQuery = gradQuery.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);
@@ -464,136 +416,6 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         }
 
         return inputGradient.Reshape(_originalInputShape);
-    }
-
-    /// <summary>
-    /// Computes scaled dot-product attention with ALiBi bias injection before softmax.
-    /// Falls back from Flash Attention since the kernel doesn't support additive bias.
-    /// </summary>
-    private Tensor<T> ComputeAttentionWithALiBi(
-        Tensor<T> queries, Tensor<T> keys, Tensor<T> values,
-        double scale, out Tensor<T>? softmaxStats)
-    {
-        int batchSize = queries.Shape[0];
-        int numHeads = queries.Shape[1];
-        int seqLenQ = queries.Shape[2];
-        int seqLenKV = keys.Shape[2];
-        int headDim = queries.Shape[3];
-
-        T scaleT = NumOps.FromDouble(scale);
-
-        // Compute Q @ K^T / scale -> [batch, heads, seqQ, seqKV]
-        var scores = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, seqLenKV });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < numHeads; h++)
-            {
-                for (int i = 0; i < seqLenQ; i++)
-                {
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        T dot = NumOps.Zero;
-                        for (int d = 0; d < headDim; d++)
-                        {
-                            T qVal = queries[new[] { b, h, i, d }];
-                            T kVal = keys[new[] { b, h, j, d }];
-                            dot = NumOps.Add(dot, NumOps.Multiply(qVal, kVal));
-                        }
-                        scores[new[] { b, h, i, j }] = NumOps.Multiply(dot, scaleT);
-                    }
-                }
-            }
-        }
-
-        // Add ALiBi bias
-        var aliBiBias = _alibiLayer!.ComputeBias(seqLenQ, seqLenKV);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < numHeads; h++)
-            {
-                for (int i = 0; i < seqLenQ; i++)
-                {
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        scores[new[] { b, h, i, j }] = NumOps.Add(
-                            scores[new[] { b, h, i, j }],
-                            aliBiBias[new[] { h, i, j }]);
-                    }
-                }
-            }
-        }
-
-        // Apply causal mask if configured
-        if (_config.UseCausalMask)
-        {
-            T negInf = NumOps.FromDouble(double.NegativeInfinity);
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int h = 0; h < numHeads; h++)
-                {
-                    for (int i = 0; i < seqLenQ; i++)
-                    {
-                        for (int j = i + 1; j < seqLenKV; j++)
-                        {
-                            scores[new[] { b, h, i, j }] = negInf;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Softmax and weighted sum
-        var attentionWeights = new Tensor<T>(scores.Shape);
-        var output = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, headDim });
-        softmaxStats = null; // Not available in manual path
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < numHeads; h++)
-            {
-                for (int i = 0; i < seqLenQ; i++)
-                {
-                    // Find max for numerical stability
-                    T maxScore = NumOps.FromDouble(double.NegativeInfinity);
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        T s = scores[new[] { b, h, i, j }];
-                        if (NumOps.GreaterThan(s, maxScore))
-                            maxScore = s;
-                    }
-
-                    // Compute exp and sum
-                    T sumExp = NumOps.Zero;
-                    var weights = new T[seqLenKV];
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        weights[j] = NumOps.Exp(NumOps.Subtract(scores[new[] { b, h, i, j }], maxScore));
-                        sumExp = NumOps.Add(sumExp, weights[j]);
-                    }
-
-                    // Normalize and compute output
-                    for (int j = 0; j < seqLenKV; j++)
-                    {
-                        attentionWeights[new[] { b, h, i, j }] = NumericalStabilityHelper.SafeDiv(weights[j], sumExp);
-                    }
-
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int j = 0; j < seqLenKV; j++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(
-                                attentionWeights[new[] { b, h, i, j }],
-                                values[new[] { b, h, j, d }]));
-                        }
-                        output[new[] { b, h, i, d }] = sum;
-                    }
-                }
-            }
-        }
-
-        return output;
     }
 
     private Tensor<T> NormalizeTo3D(Tensor<T> input, out int batchSize, out int sequenceLength, out int embeddingDimension)
@@ -773,6 +595,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         _lastValue = null;
         _lastAttentionOutput = null;
         _lastSoftmaxStats = null;
+        _lastAlibiBias = null;
         _lastScale = 0;
         _originalInputShape = null;
 
