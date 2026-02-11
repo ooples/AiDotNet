@@ -24,7 +24,7 @@ namespace AiDotNet.Configuration;
 /// <item><description><b>Infrastructure configs:</b> JIT compilation, mixed precision, reasoning, benchmarking</description></item>
 /// </list>
 /// </remarks>
-public class YamlModelConfig
+public partial class YamlModelConfig
 {
     /// <summary>
     /// Optimizer selection section. Specify the optimizer type by name.

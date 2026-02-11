@@ -13,7 +13,7 @@ namespace AiDotNet.Configuration;
 /// Because this runs in the constructor (before any fluent calls), YAML provides defaults
 /// that fluent <c>.Configure*()</c> calls can override afterwards.</para>
 /// </remarks>
-internal static class YamlConfigApplier<T, TInput, TOutput>
+internal static partial class YamlConfigApplier<T, TInput, TOutput>
 {
     /// <summary>
     /// Applies all non-null sections of the YAML config to the builder.
@@ -148,5 +148,8 @@ internal static class YamlConfigApplier<T, TInput, TOutput>
         {
             builder.ConfigureMemoryManagement(config.MemoryManagement);
         }
+
+        // Apply all auto-generated sections discovered by the source generator.
+        ApplyGenerated(config, builder);
     }
 }
