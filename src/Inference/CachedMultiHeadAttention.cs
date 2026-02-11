@@ -302,7 +302,9 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
             int seqLenKV = keys.Shape[2];
             int seqLenQ = queries.Shape[2];
             int queryOffset = Math.Max(0, seqLenKV - seqLenQ);
-            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config, queryOffset: queryOffset);
+
+            Tensor<T>? aliBiBias = _alibiLayer?.ComputeBias(seqLenQ, seqLenKV, _useCausalMask);
+            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config, queryOffset: queryOffset, attentionBias: aliBiBias);
             attentionOutput = flashOutput;
         }
         else if (_alibiLayer != null)
@@ -356,7 +358,9 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
         {
             var config = FlashAttentionConfig.Default;
             config.UseCausalMask = _useCausalMask;
-            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config);
+
+            Tensor<T>? aliBiBias = _alibiLayer?.ComputeBias(seqLen, seqLen, _useCausalMask);
+            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config, attentionBias: aliBiBias);
             attentionOutput = flashOutput;
         }
         else if (_alibiLayer != null)
