@@ -1,4 +1,4 @@
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
+using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Interfaces;
 

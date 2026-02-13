@@ -6,14 +6,21 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Diffusion;
-using AiDotNet.Diffusion.Models;
+using AiDotNet.Diffusion.TextToImage;
+using AiDotNet.Diffusion.ImageEditing;
+using AiDotNet.Diffusion.Video;
+using AiDotNet.Diffusion.Audio;
+using AiDotNet.Diffusion.ThreeD;
+using AiDotNet.Diffusion.Control;
+using AiDotNet.Diffusion.SuperResolution;
+using AiDotNet.Diffusion.FastGeneration;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
+using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.AutoML
