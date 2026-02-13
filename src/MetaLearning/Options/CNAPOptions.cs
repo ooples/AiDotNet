@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -284,7 +285,8 @@ public class CNAPOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     /// <exception cref="ArgumentNullException">Thrown when metaModel is null.</exception>
     public CNAPOptions(IFullModel<T, TInput, TOutput> metaModel)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
     }
 
     #endregion

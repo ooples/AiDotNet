@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 
 namespace AiDotNet.DistributedTraining;
@@ -92,8 +93,10 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         IOptimizer<T, TInput, TOutput> wrappedOptimizer,
         IShardingConfiguration<T> config)
     {
-        _wrappedOptimizer = wrappedOptimizer ?? throw new ArgumentNullException(nameof(wrappedOptimizer));
-        Config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(wrappedOptimizer);
+        _wrappedOptimizer = wrappedOptimizer;
+        Guard.NotNull(config);
+        Config = config;
         NumOps = MathHelper.GetNumericOperations<T>();
 
         // Initialize communication backend if needed

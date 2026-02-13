@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using AiDotNet.Validation;
 // Note: Use fully qualified names for RagModels.ThoughtNode<T> to avoid ambiguity with AiDotNet.Reasoning.Models.RagModels.ThoughtNode<T>
 using RagModels = AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -88,8 +89,10 @@ public class TreeOfThoughtsRetriever<T> : RetrieverBase<T>
         TreeSearchStrategy searchStrategy = TreeSearchStrategy.BestFirst,
         int defaultTopK = 5) : base(defaultTopK)
     {
-        _generator = generator ?? throw new ArgumentNullException(nameof(generator));
-        _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
+        Guard.NotNull(generator);
+        _generator = generator;
+        Guard.NotNull(baseRetriever);
+        _baseRetriever = baseRetriever;
 
         if (maxDepth <= 0 || maxDepth > 10)
             throw new ArgumentOutOfRangeException(nameof(maxDepth), "maxDepth must be between 1 and 10");

@@ -11,6 +11,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Document.PixelToSequence;
 
@@ -127,7 +128,8 @@ public class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
         _hiddenDim = hiddenDim;
         _numEncoderLayers = numEncoderLayers;

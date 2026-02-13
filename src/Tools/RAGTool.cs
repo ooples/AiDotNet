@@ -1,5 +1,6 @@
 using System.Text;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Tools;
 
@@ -86,8 +87,10 @@ public class RAGTool<T> : ITool
         int? topKAfterRerank = 5,
         bool includeCitations = true)
     {
-        _retriever = retriever ?? throw new ArgumentNullException(nameof(retriever));
-        _generator = generator ?? throw new ArgumentNullException(nameof(generator));
+        Guard.NotNull(retriever);
+        _retriever = retriever;
+        Guard.NotNull(generator);
+        _generator = generator;
 
         if (topK < 1)
         {

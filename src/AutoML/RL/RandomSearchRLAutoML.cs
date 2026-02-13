@@ -9,6 +9,7 @@ using AiDotNet.ReinforcementLearning.Agents.DDPG;
 using AiDotNet.ReinforcementLearning.Agents.DQN;
 using AiDotNet.ReinforcementLearning.Agents.PPO;
 using AiDotNet.ReinforcementLearning.Agents.SAC;
+using AiDotNet.Validation;
 
 namespace AiDotNet.AutoML.RL;
 
@@ -30,8 +31,10 @@ internal sealed class RandomSearchRLAutoML<T>
         int maxStepsPerEpisode,
         int? seed = null)
     {
-        _environment = environment ?? throw new ArgumentNullException(nameof(environment));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(environment);
+        _environment = environment;
+        Guard.NotNull(options);
+        _options = options;
 
         _timeLimit = timeLimit;
         _trialLimit = trialLimit;
@@ -134,10 +137,7 @@ internal sealed class RandomSearchRLAutoML<T>
 
     private static void RecordFailedTrial(AutoMLRunSummary summary, int trialId, DateTime trialStartUtc, Exception exception)
     {
-        if (summary is null)
-        {
-            throw new ArgumentNullException(nameof(summary));
-        }
+        Guard.NotNull(summary);
 
         var completedUtc = DateTime.UtcNow;
         var duration = completedUtc - trialStartUtc;

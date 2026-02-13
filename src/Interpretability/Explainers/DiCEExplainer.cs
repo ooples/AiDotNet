@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -129,7 +130,8 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         FeatureType[]? featureTypes = null,
         int? randomState = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
         _numFeatures = numFeatures;
         _numCounterfactuals = numCounterfactuals;
         _populationSize = populationSize;

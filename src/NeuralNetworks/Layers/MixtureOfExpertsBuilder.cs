@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -337,7 +338,8 @@ public class MixtureOfExpertsBuilder<T>
     /// </remarks>
     public MixtureOfExpertsBuilder<T> WithExpertActivation(IActivationFunction<T> activation)
     {
-        _expertActivation = activation ?? throw new ArgumentNullException(nameof(activation));
+        Guard.NotNull(activation);
+        _expertActivation = activation;
         return this;
     }
 
@@ -370,7 +372,8 @@ public class MixtureOfExpertsBuilder<T>
     /// </remarks>
     public MixtureOfExpertsBuilder<T> WithOutputActivation(IActivationFunction<T> activation)
     {
-        _outputActivation = activation ?? throw new ArgumentNullException(nameof(activation));
+        Guard.NotNull(activation);
+        _outputActivation = activation;
         return this;
     }
 

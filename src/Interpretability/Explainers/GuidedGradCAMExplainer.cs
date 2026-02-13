@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -84,9 +85,12 @@ public class GuidedGradCAMExplainer<T> : ILocalExplainer<T, GuidedGradCAMExplana
         LayerGradCAMExplainer<T> gradcamExplainer,
         int[] inputShape)
     {
-        _guidedBackpropExplainer = guidedBackpropExplainer ?? throw new ArgumentNullException(nameof(guidedBackpropExplainer));
-        _gradcamExplainer = gradcamExplainer ?? throw new ArgumentNullException(nameof(gradcamExplainer));
-        _inputShape = inputShape ?? throw new ArgumentNullException(nameof(inputShape));
+        Guard.NotNull(guidedBackpropExplainer);
+        _guidedBackpropExplainer = guidedBackpropExplainer;
+        Guard.NotNull(gradcamExplainer);
+        _gradcamExplainer = gradcamExplainer;
+        Guard.NotNull(inputShape);
+        _inputShape = inputShape;
     }
 
     /// <summary>
@@ -116,7 +120,8 @@ public class GuidedGradCAMExplainer<T> : ILocalExplainer<T, GuidedGradCAMExplana
         int layerWidth,
         int numChannels)
     {
-        _inputShape = inputShape ?? throw new ArgumentNullException(nameof(inputShape));
+        Guard.NotNull(inputShape);
+        _inputShape = inputShape;
 
         _guidedBackpropExplainer = new GuidedBackpropExplainer<T>(network, inputShape);
         _gradcamExplainer = new LayerGradCAMExplainer<T>(

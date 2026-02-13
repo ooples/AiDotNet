@@ -3,6 +3,7 @@ using AiDotNet.Serving.ProgramSynthesis;
 using AiDotNet.Serving.Sandboxing.Sql;
 using AiDotNet.Serving.Security;
 using Microsoft.AspNetCore.Mvc;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Controllers.ProgramSynthesis;
 
@@ -22,10 +23,14 @@ public class SqlController : ControllerBase
         IServingRequestContextAccessor requestContextAccessor,
         ILogger<SqlController> logger)
     {
-        _executor = executor ?? throw new ArgumentNullException(nameof(executor));
-        _responseRedactor = responseRedactor ?? throw new ArgumentNullException(nameof(responseRedactor));
-        _requestContextAccessor = requestContextAccessor ?? throw new ArgumentNullException(nameof(requestContextAccessor));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        Guard.NotNull(executor);
+        _executor = executor;
+        Guard.NotNull(responseRedactor);
+        _responseRedactor = responseRedactor;
+        Guard.NotNull(requestContextAccessor);
+        _requestContextAccessor = requestContextAccessor;
+        Guard.NotNull(logger);
+        _logger = logger;
     }
 
     [HttpPost("execute")]

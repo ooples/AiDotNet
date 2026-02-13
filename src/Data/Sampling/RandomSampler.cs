@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Sampling;
 
@@ -136,7 +137,8 @@ public class SubsetSampler : DataSamplerBase
     public SubsetSampler(IEnumerable<int> indices, bool shuffle = false, int? seed = null)
         : base(seed)
     {
-        _indices = indices?.ToArray() ?? throw new ArgumentNullException(nameof(indices));
+        Guard.NotNull(indices);
+        _indices = indices.ToArray();
         _shuffle = shuffle;
     }
 

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Preprocessing.DataPreparation;
 
@@ -95,7 +96,8 @@ public class OutlierRemovalOperation<T> : IRowOperation<T>
         IAnomalyDetector<T> detector,
         OutlierHandlingMode mode = OutlierHandlingMode.Remove)
     {
-        _detector = detector ?? throw new ArgumentNullException(nameof(detector));
+        Guard.NotNull(detector);
+        _detector = detector;
         _mode = mode;
     }
 

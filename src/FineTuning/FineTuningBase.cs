@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.FineTuning;
 
@@ -50,7 +51,8 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
     /// <param name="options">The fine-tuning configuration options.</param>
     protected FineTuningBase(FineTuningOptions<T> options)
     {
-        Options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        Options = options;
         Random = options.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(options.RandomSeed.Value)
             : RandomHelper.CreateSeededRandom(Environment.TickCount);

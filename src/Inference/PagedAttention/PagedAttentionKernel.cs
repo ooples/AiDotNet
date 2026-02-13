@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using AiDotNet.Inference.Quantization;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Inference.PagedAttention;
 
@@ -40,7 +41,8 @@ internal class PagedAttentionKernel<T>
     /// </summary>
     public PagedAttentionKernel(PagedKVCache<T> kvCache, PagedAttentionConfig? config = null)
     {
-        _kvCache = kvCache ?? throw new ArgumentNullException(nameof(kvCache));
+        Guard.NotNull(kvCache);
+        _kvCache = kvCache;
         _config = config ?? new PagedAttentionConfig
         {
             NumHeads = kvCache.Config.NumHeads,

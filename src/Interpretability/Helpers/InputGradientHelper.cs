@@ -2,6 +2,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Helpers;
 
@@ -78,7 +79,8 @@ public class InputGradientHelper<T>
     /// </remarks>
     public InputGradientHelper(INeuralNetwork<T> neuralNetwork, double epsilon = 1e-4)
     {
-        _neuralNetwork = neuralNetwork ?? throw new ArgumentNullException(nameof(neuralNetwork));
+        Guard.NotNull(neuralNetwork);
+        _neuralNetwork = neuralNetwork;
         _epsilon = epsilon;
     }
 
@@ -98,7 +100,8 @@ public class InputGradientHelper<T>
     /// </remarks>
     public InputGradientHelper(Func<Vector<T>, Vector<T>> predictFunction, double epsilon = 1e-4)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
         _epsilon = epsilon;
     }
 
@@ -116,7 +119,8 @@ public class InputGradientHelper<T>
     /// </remarks>
     public InputGradientHelper(Func<Tensor<T>, Tensor<T>> tensorPredictFunction, double epsilon = 1e-4)
     {
-        _tensorPredictFunction = tensorPredictFunction ?? throw new ArgumentNullException(nameof(tensorPredictFunction));
+        Guard.NotNull(tensorPredictFunction);
+        _tensorPredictFunction = tensorPredictFunction;
         _epsilon = epsilon;
     }
 

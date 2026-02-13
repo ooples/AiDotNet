@@ -67,7 +67,8 @@ internal class PagedKVCache<T> : IDisposable
     /// </summary>
     public PagedKVCache(PagedKVCacheConfig config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
 
         // Create block manager
         var blockConfig = new BlockManagerConfig

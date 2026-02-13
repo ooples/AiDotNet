@@ -8,6 +8,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.DuelingDQN;
 
@@ -73,7 +74,8 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             EpsilonDecay = options.EpsilonDecay
         })
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(options.ReplayBufferSize, options.Seed);
         _epsilon = options.EpsilonStart;
         _steps = 0;

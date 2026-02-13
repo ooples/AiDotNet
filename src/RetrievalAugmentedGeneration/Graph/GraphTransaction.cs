@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -85,7 +86,8 @@ public class GraphTransaction<T> : IDisposable
     /// <param name="wal">Optional Write-Ahead Log for durability.</param>
     public GraphTransaction(IGraphStore<T> store, WriteAheadLog? wal = null)
     {
-        _store = store ?? throw new ArgumentNullException(nameof(store));
+        Guard.NotNull(store);
+        _store = store;
         _wal = wal;
         _operations = new List<TransactionOperation<T>>();
         _state = TransactionState.NotStarted;

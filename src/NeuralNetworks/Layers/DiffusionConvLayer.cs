@@ -6,6 +6,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -472,7 +473,8 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// </remarks>
     public void SetLaplacian(Tensor<T> laplacian, Tensor<T>? massMatrix = null)
     {
-        _laplacian = laplacian ?? throw new ArgumentNullException(nameof(laplacian));
+        Guard.NotNull(laplacian);
+        _laplacian = laplacian;
         _massMatrix = massMatrix;
         _eigenvalues = null;
         _eigenvectors = null;

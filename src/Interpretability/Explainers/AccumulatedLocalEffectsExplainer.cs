@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -71,8 +72,10 @@ public class AccumulatedLocalEffectsExplainer<T> : IGlobalExplainer<T, ALEResult
         int numIntervals = 20,
         string[]? featureNames = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
-        _data = data ?? throw new ArgumentNullException(nameof(data));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
+        Guard.NotNull(data);
+        _data = data;
 
         if (data.Rows == 0)
             throw new ArgumentException("Data must have at least one row.", nameof(data));

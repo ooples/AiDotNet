@@ -98,8 +98,10 @@ public class GridInterpolationKernel<T> : IKernelFunction<T>
         double[][] gridCoordinates,
         int interpolationOrder = 4)
     {
-        _baseKernel = baseKernel ?? throw new ArgumentNullException(nameof(baseKernel));
-        _gridCoordinates = gridCoordinates ?? throw new ArgumentNullException(nameof(gridCoordinates));
+        Guard.NotNull(baseKernel);
+        _baseKernel = baseKernel;
+        Guard.NotNull(gridCoordinates);
+        _gridCoordinates = gridCoordinates;
 
         if (gridCoordinates.Length == 0)
             throw new ArgumentException("Must have at least one dimension.");

@@ -1,6 +1,7 @@
 
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Strategies;
 
@@ -111,7 +112,8 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
         if (attentionWeight < 0 || attentionWeight > 1)
             throw new ArgumentException("Attention weight must be between 0 and 1", nameof(attentionWeight));
 
-        _attentionLayers = attentionLayers ?? throw new ArgumentNullException(nameof(attentionLayers));
+        Guard.NotNull(attentionLayers);
+        _attentionLayers = attentionLayers;
         _attentionWeight = attentionWeight;
         _matchingMode = matchingMode;
 

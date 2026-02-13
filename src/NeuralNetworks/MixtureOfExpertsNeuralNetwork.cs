@@ -143,7 +143,8 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
         double maxGradNorm = 1.0)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         Options = _options;
         _options.Validate();
 

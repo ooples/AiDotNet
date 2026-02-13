@@ -80,7 +80,8 @@ internal class BlockManager<T>
     /// </summary>
     public BlockManager(BlockManagerConfig config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
 
         _freeBlocks = new Queue<int>(_config.NumBlocks);
         _allocatedBlocks = new HashSet<int>();

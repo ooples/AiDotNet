@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MixedPrecision;
 
@@ -93,10 +94,14 @@ public class MixedPrecisionTrainingLoop<T>
                 $"Mixed-precision training requires T = float, got T = {typeof(T).Name}");
         }
 
-        _network = network ?? throw new ArgumentNullException(nameof(network));
-        _optimizer = optimizer ?? throw new ArgumentNullException(nameof(optimizer));
-        _lossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
-        _context = context ?? throw new ArgumentNullException(nameof(context));
+        Guard.NotNull(network);
+        _network = network;
+        Guard.NotNull(optimizer);
+        _optimizer = optimizer;
+        Guard.NotNull(lossFunction);
+        _lossFunction = lossFunction;
+        Guard.NotNull(context);
+        _context = context;
 
         // Select appropriate policy based on precision type
         _policy = policy ?? GetDefaultPolicy(context.Config.PrecisionType);

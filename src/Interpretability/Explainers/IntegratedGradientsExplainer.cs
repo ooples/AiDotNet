@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -114,7 +115,8 @@ public class IntegratedGradientsExplainer<T> : ILocalExplainer<T, IntegratedGrad
         Vector<T>? baseline = null,
         string[]? featureNames = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
         _gradientFunction = gradientFunction;
 
         if (numFeatures < 1)

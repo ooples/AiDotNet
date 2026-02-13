@@ -4,6 +4,7 @@ using AiDotNet.Preprocessing.DataPreparation.Splitting.TimeSeries;
 using AiDotNet.Preprocessing.DataPreparation.Splitting.Stratified;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Preprocessing.DataPreparation;
 
@@ -162,7 +163,8 @@ public class DataPreparationPipeline<T>
     /// </remarks>
     public DataPreparationPipeline<T> WithSplitter(IDataSplitter<T> splitter)
     {
-        _splitter = splitter ?? throw new ArgumentNullException(nameof(splitter));
+        Guard.NotNull(splitter);
+        _splitter = splitter;
         _isFitted = false;
         return this;
     }

@@ -1,3 +1,5 @@
+using AiDotNet.Validation;
+
 namespace AiDotNet.Serving.Services;
 
 /// <summary>
@@ -10,8 +12,10 @@ public sealed class ProtectedModelArtifact
         ModelName = modelName;
         EncryptedPath = encryptedPath;
         KeyId = keyId;
-        Key = (key ?? throw new ArgumentNullException(nameof(key))).ToArray();
-        Nonce = (nonce ?? throw new ArgumentNullException(nameof(nonce))).ToArray();
+        Guard.NotNull(key);
+        Guard.NotNull(nonce);
+        Key = key.ToArray();
+        Nonce = nonce.ToArray();
         Algorithm = algorithm;
     }
 

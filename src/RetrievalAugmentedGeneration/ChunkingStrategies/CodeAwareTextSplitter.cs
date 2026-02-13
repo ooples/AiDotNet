@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
 {
@@ -20,7 +21,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies
         public CodeAwareTextSplitter(int chunkSize = 1000, int chunkOverlap = 200, string language = "csharp")
             : base(chunkSize, chunkOverlap)
         {
-            _language = language ?? throw new ArgumentNullException(nameof(language));
+            Guard.NotNull(language);
+            _language = language;
         }
 
         /// <summary>

@@ -71,7 +71,8 @@ public class LoopChain<TInput, TOutput> : ChainBase<TInput, TOutput>
     /// <returns>This chain instance for method chaining.</returns>
     public LoopChain<TInput, TOutput> SetOperation(Func<object, object> operation)
     {
-        _syncOperation = operation ?? throw new ArgumentNullException(nameof(operation));
+        Guard.NotNull(operation);
+        _syncOperation = operation;
         return this;
     }
 
@@ -82,7 +83,8 @@ public class LoopChain<TInput, TOutput> : ChainBase<TInput, TOutput>
     /// <returns>This chain instance for method chaining.</returns>
     public LoopChain<TInput, TOutput> SetOperationAsync(Func<object, CancellationToken, Task<object>> operation)
     {
-        _asyncOperation = operation ?? throw new ArgumentNullException(nameof(operation));
+        Guard.NotNull(operation);
+        _asyncOperation = operation;
         return this;
     }
 
@@ -93,7 +95,8 @@ public class LoopChain<TInput, TOutput> : ChainBase<TInput, TOutput>
     /// <returns>This chain instance for method chaining.</returns>
     public LoopChain<TInput, TOutput> SetTerminationCondition(Func<object, bool> condition)
     {
-        _terminationCondition = condition ?? throw new ArgumentNullException(nameof(condition));
+        Guard.NotNull(condition);
+        _terminationCondition = condition;
         return this;
     }
 

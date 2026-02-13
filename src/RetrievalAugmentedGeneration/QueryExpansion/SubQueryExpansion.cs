@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 
@@ -80,8 +81,10 @@ public class SubQueryExpansion : QueryExpansionBase
         string llmApiKey,
         int maxSubQueries)
     {
-        _llmEndpoint = llmEndpoint ?? throw new ArgumentNullException(nameof(llmEndpoint));
-        _llmApiKey = llmApiKey ?? throw new ArgumentNullException(nameof(llmApiKey));
+        Guard.NotNull(llmEndpoint);
+        _llmEndpoint = llmEndpoint;
+        Guard.NotNull(llmApiKey);
+        _llmApiKey = llmApiKey;
 
         if (maxSubQueries <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxSubQueries), "Max sub-queries must be positive");

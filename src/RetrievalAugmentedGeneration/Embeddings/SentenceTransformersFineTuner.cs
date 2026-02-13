@@ -5,6 +5,7 @@ using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 
@@ -137,8 +138,10 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
         T learningRate,
         int dimension)
     {
-        _baseModelPath = baseModelPath ?? throw new ArgumentNullException(nameof(baseModelPath));
-        _outputModelPath = outputModelPath ?? throw new ArgumentNullException(nameof(outputModelPath));
+        Guard.NotNull(baseModelPath);
+        _baseModelPath = baseModelPath;
+        Guard.NotNull(outputModelPath);
+        _outputModelPath = outputModelPath;
 
         if (epochs <= 0)
             throw new ArgumentOutOfRangeException(nameof(epochs), "Epochs must be positive");

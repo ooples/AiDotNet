@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -80,7 +81,8 @@ public class GuidedBackpropExplainer<T> : ILocalExplainer<T, GuidedBackpropExpla
     /// </remarks>
     public GuidedBackpropExplainer(INeuralNetwork<T> network, int[]? inputShape = null)
     {
-        _network = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
+        _network = network;
         _inputShape = inputShape;
     }
 

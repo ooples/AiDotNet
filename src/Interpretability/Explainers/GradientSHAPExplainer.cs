@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -114,9 +115,11 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
         string[]? featureNames = null,
         int? randomState = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
         _gradientFunction = gradientFunction;
-        _backgroundData = backgroundData ?? throw new ArgumentNullException(nameof(backgroundData));
+        Guard.NotNull(backgroundData);
+        _backgroundData = backgroundData;
 
         if (backgroundData.Rows == 0)
             throw new ArgumentException("Background data must have at least one row.", nameof(backgroundData));

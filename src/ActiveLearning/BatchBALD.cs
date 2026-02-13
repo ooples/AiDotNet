@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ActiveLearning;
 
@@ -73,8 +74,8 @@ public class BatchBALD<T> : IActiveLearningStrategy<T>
     /// <inheritdoc />
     public int[] SelectSamples(IFullModel<T, Tensor<T>, Tensor<T>> model, Tensor<T> unlabeledPool, int batchSize)
     {
-        _ = model ?? throw new ArgumentNullException(nameof(model));
-        _ = unlabeledPool ?? throw new ArgumentNullException(nameof(unlabeledPool));
+        Guard.NotNull(model);
+        Guard.NotNull(unlabeledPool);
 
         var numSamples = unlabeledPool.Shape[0];
         batchSize = Math.Min(batchSize, numSamples);
@@ -103,8 +104,8 @@ public class BatchBALD<T> : IActiveLearningStrategy<T>
     /// <inheritdoc />
     public Vector<T> ComputeInformativenessScores(IFullModel<T, Tensor<T>, Tensor<T>> model, Tensor<T> unlabeledPool)
     {
-        _ = model ?? throw new ArgumentNullException(nameof(model));
-        _ = unlabeledPool ?? throw new ArgumentNullException(nameof(unlabeledPool));
+        Guard.NotNull(model);
+        Guard.NotNull(unlabeledPool);
 
         var numSamples = unlabeledPool.Shape[0];
         var mcPredictions = GetMCPredictions(model, unlabeledPool);

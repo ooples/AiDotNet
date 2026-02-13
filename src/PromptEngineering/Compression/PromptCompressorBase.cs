@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PromptEngineering.Compression;
 
@@ -38,7 +39,8 @@ public abstract class PromptCompressorBase : IPromptCompressor
     /// <param name="tokenCounter">Optional custom token counter function.</param>
     protected PromptCompressorBase(string name, Func<string, int>? tokenCounter = null)
     {
-        Name = name ?? throw new ArgumentNullException(nameof(name));
+        Guard.NotNull(name);
+        Name = name;
         _tokenCounter = tokenCounter;
     }
 

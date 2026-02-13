@@ -43,7 +43,8 @@ public class ConformalClassifier<T>
     /// <param name="numClasses">The number of classes in the classification problem.</param>
     public ConformalClassifier(INeuralNetwork<T> model, int numClasses)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        _model = model;
         _numClasses = numClasses;
         _numOps = MathHelper.GetNumericOperations<T>();
         _isCalibrated = false;

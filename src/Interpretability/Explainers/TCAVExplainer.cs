@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -135,9 +136,12 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
         double significanceLevel = 0.05,
         int? randomState = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
-        _layerActivationFunction = layerActivationFunction ?? throw new ArgumentNullException(nameof(layerActivationFunction));
-        _gradientToLayerFunction = gradientToLayerFunction ?? throw new ArgumentNullException(nameof(gradientToLayerFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
+        Guard.NotNull(layerActivationFunction);
+        _layerActivationFunction = layerActivationFunction;
+        Guard.NotNull(gradientToLayerFunction);
+        _gradientToLayerFunction = gradientToLayerFunction;
         _layerSize = layerSize;
         _regularization = regularization;
         _numCavs = numCavs;
@@ -788,7 +792,8 @@ public class ConceptActivationVector<T>
     /// </summary>
     public ConceptActivationVector(Vector<T> weights, double classifierAccuracy)
     {
-        Weights = weights ?? throw new ArgumentNullException(nameof(weights));
+        Guard.NotNull(weights);
+        Weights = weights;
         ClassifierAccuracy = classifierAccuracy;
     }
 }

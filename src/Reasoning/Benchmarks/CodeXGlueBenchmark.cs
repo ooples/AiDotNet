@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Benchmarks.Data;
 using AiDotNet.Reasoning.Benchmarks.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.Benchmarks;
 
@@ -30,7 +31,8 @@ public sealed class CodeXGlueBenchmark<T> : IBenchmark<T>
 
     public CodeXGlueBenchmark(CodeXGlueBenchmarkOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _numOps = MathHelper.GetNumericOperations<T>();
     }
 

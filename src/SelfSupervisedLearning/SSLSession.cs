@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.SelfSupervisedLearning.Evaluation;
+using AiDotNet.Validation;
 using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace AiDotNet.SelfSupervisedLearning;
@@ -89,7 +90,8 @@ public class SSLSession<T>
     /// <param name="config">Training configuration.</param>
     public SSLSession(ISSLMethod<T> method, SSLConfig? config = null)
     {
-        _method = method ?? throw new ArgumentNullException(nameof(method));
+        Guard.NotNull(method);
+        _method = method;
         _config = config ?? new SSLConfig();
         _metrics = new SSLMetrics<T>();
         _history = new SSLTrainingHistory<T>();

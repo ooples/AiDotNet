@@ -7,6 +7,7 @@ using AiDotNet.Serving.Services;
 using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Controllers;
 
@@ -46,13 +47,20 @@ public class ModelsController : ControllerBase
         IModelArtifactService artifactService,
         IAttestationVerifier attestationVerifier)
     {
-        _modelRepository = modelRepository ?? throw new ArgumentNullException(nameof(modelRepository));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _servingOptions = servingOptions?.Value ?? throw new ArgumentNullException(nameof(servingOptions));
-        _tierResolver = tierResolver ?? throw new ArgumentNullException(nameof(tierResolver));
-        _tierPolicyProvider = tierPolicyProvider ?? throw new ArgumentNullException(nameof(tierPolicyProvider));
-        _artifactService = artifactService ?? throw new ArgumentNullException(nameof(artifactService));
-        _attestationVerifier = attestationVerifier ?? throw new ArgumentNullException(nameof(attestationVerifier));
+        Guard.NotNull(modelRepository);
+        _modelRepository = modelRepository;
+        Guard.NotNull(logger);
+        _logger = logger;
+        Guard.NotNull(servingOptions);
+        _servingOptions = servingOptions.Value;
+        Guard.NotNull(tierResolver);
+        _tierResolver = tierResolver;
+        Guard.NotNull(tierPolicyProvider);
+        _tierPolicyProvider = tierPolicyProvider;
+        Guard.NotNull(artifactService);
+        _artifactService = artifactService;
+        Guard.NotNull(attestationVerifier);
+        _attestationVerifier = attestationVerifier;
     }
 
     /// <summary>

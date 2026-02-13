@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.UncertaintyQuantification.ConformalPrediction;
 
@@ -51,7 +52,8 @@ public class SplitConformalPredictor<T>
     /// </remarks>
     public SplitConformalPredictor(IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>> model)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        _model = model;
         _numOps = MathHelper.GetNumericOperations<T>();
         _isCalibrated = false;
     }

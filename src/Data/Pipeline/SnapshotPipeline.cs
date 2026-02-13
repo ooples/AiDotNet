@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Pipeline;
 
@@ -72,7 +73,8 @@ public class SnapshotPipeline<T>
         DiskCacheOptions? options = null,
         string? pipelineId = null)
     {
-        _sourcePipeline = sourcePipeline ?? throw new ArgumentNullException(nameof(sourcePipeline));
+        Guard.NotNull(sourcePipeline);
+        _sourcePipeline = sourcePipeline;
         _options = options ?? new DiskCacheOptions();
         _pipelineHash = pipelineId ?? ComputePipelineHash();
 

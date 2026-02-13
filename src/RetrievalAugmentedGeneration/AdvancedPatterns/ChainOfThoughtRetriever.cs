@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -111,8 +112,10 @@ public class ChainOfThoughtRetriever<T>
         RetrieverBase<T> baseRetriever,
         List<string>? fewShotExamples = null)
     {
-        _generator = generator ?? throw new ArgumentNullException(nameof(generator));
-        _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
+        Guard.NotNull(generator);
+        _generator = generator;
+        Guard.NotNull(baseRetriever);
+        _baseRetriever = baseRetriever;
         _fewShotExamples = fewShotExamples ?? new List<string>();
     }
 

@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
 
@@ -34,7 +35,8 @@ public class PretrainedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
         int inputDimension,
         int outputDimension)
     {
-        _pretrainedForward = pretrainedForward ?? throw new ArgumentNullException(nameof(pretrainedForward));
+        Guard.NotNull(pretrainedForward);
+        _pretrainedForward = pretrainedForward;
         _inputDim = inputDimension;
         _outputDim = outputDimension;
         _jitCompilableModel = null;
@@ -55,7 +57,8 @@ public class PretrainedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
         int inputDimension,
         int outputDimension)
     {
-        _jitCompilableModel = jitCompilableModel ?? throw new ArgumentNullException(nameof(jitCompilableModel));
+        Guard.NotNull(jitCompilableModel);
+        _jitCompilableModel = jitCompilableModel;
         _inputDim = inputDimension;
         _outputDim = outputDimension;
         _pretrainedForward = null;

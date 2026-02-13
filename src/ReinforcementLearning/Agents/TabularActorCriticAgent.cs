@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 
@@ -20,7 +21,8 @@ public class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase<T>
 
     public TabularActorCriticAgent(TabularActorCriticOptions<T> options) : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _policy = new Dictionary<string, Dictionary<int, T>>();
         _valueTable = new Dictionary<string, T>();
     }

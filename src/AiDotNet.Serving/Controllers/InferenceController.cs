@@ -4,6 +4,7 @@ using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
 using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.AspNetCore.Mvc;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Controllers;
 
@@ -35,9 +36,12 @@ public class InferenceController : ControllerBase
         IRequestBatcher requestBatcher,
         ILogger<InferenceController> logger)
     {
-        _modelRepository = modelRepository ?? throw new ArgumentNullException(nameof(modelRepository));
-        _requestBatcher = requestBatcher ?? throw new ArgumentNullException(nameof(requestBatcher));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        Guard.NotNull(modelRepository);
+        _modelRepository = modelRepository;
+        Guard.NotNull(requestBatcher);
+        _requestBatcher = requestBatcher;
+        Guard.NotNull(logger);
+        _logger = logger;
     }
 
     /// <summary>

@@ -159,8 +159,10 @@ public class GroundedAnswer<T>
     /// <param name="sourceDocuments">The source documents used to generate the answer.</param>
     public GroundedAnswer(string answer, IReadOnlyList<Document<T>> sourceDocuments)
     {
-        Answer = answer ?? throw new ArgumentNullException(nameof(answer));
-        SourceDocuments = sourceDocuments ?? throw new ArgumentNullException(nameof(sourceDocuments));
+        Guard.NotNull(answer);
+        Answer = answer;
+        Guard.NotNull(sourceDocuments);
+        SourceDocuments = sourceDocuments;
     }
 
     /// <summary>
@@ -174,9 +176,12 @@ public class GroundedAnswer<T>
     public GroundedAnswer(string query, string answer, IReadOnlyList<Document<T>> sourceDocuments,
         IReadOnlyList<string> citations, double confidenceScore)
     {
-        Query = query ?? throw new ArgumentNullException(nameof(query));
-        Answer = answer ?? throw new ArgumentNullException(nameof(answer));
-        SourceDocuments = sourceDocuments ?? throw new ArgumentNullException(nameof(sourceDocuments));
+        Guard.NotNull(query);
+        Query = query;
+        Guard.NotNull(answer);
+        Answer = answer;
+        Guard.NotNull(sourceDocuments);
+        SourceDocuments = sourceDocuments;
         Citations = citations ?? Enumerable.Empty<string>().ToList().AsReadOnly();
         ConfidenceScore = confidenceScore;
     }

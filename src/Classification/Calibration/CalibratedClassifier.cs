@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Classification.Calibration;
 
@@ -99,7 +100,8 @@ internal class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options ?? new CalibratedClassifierOptions<T>(), regularization)
     {
-        _baseClassifier = baseClassifier ?? throw new ArgumentNullException(nameof(baseClassifier));
+        Guard.NotNull(baseClassifier);
+        _baseClassifier = baseClassifier;
         _options = options ?? new CalibratedClassifierOptions<T>();
 
         _random = _options.Seed.HasValue

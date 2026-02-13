@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -94,9 +95,12 @@ public class NeuronAttributionExplainer<T> : IGPUAcceleratedExplainer<T>
         int integrationSteps = 50,
         string[]? neuronNames = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
-        _layerActivationFunction = layerActivationFunction ?? throw new ArgumentNullException(nameof(layerActivationFunction));
-        _neuronGradientFunction = neuronGradientFunction ?? throw new ArgumentNullException(nameof(neuronGradientFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
+        Guard.NotNull(layerActivationFunction);
+        _layerActivationFunction = layerActivationFunction;
+        Guard.NotNull(neuronGradientFunction);
+        _neuronGradientFunction = neuronGradientFunction;
         _layerSize = layerSize;
         _method = method;
         _integrationSteps = integrationSteps;

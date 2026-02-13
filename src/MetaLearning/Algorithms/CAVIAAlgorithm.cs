@@ -6,6 +6,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -746,10 +747,14 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         CAVIAOptions<T, TInput, TOutput> options,
         INumericOperations<T> numOps)
     {
-        _bodyModel = bodyModel ?? throw new ArgumentNullException(nameof(bodyModel));
-        _adaptedContext = adaptedContext ?? throw new ArgumentNullException(nameof(adaptedContext));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
-        _numOps = numOps ?? throw new ArgumentNullException(nameof(numOps));
+        Guard.NotNull(bodyModel);
+        _bodyModel = bodyModel;
+        Guard.NotNull(adaptedContext);
+        _adaptedContext = adaptedContext;
+        Guard.NotNull(options);
+        _options = options;
+        Guard.NotNull(numOps);
+        _numOps = numOps;
     }
 
     /// <summary>

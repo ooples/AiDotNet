@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -82,7 +83,7 @@ public class FRNOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     #region Constructors
     /// <summary>Initializes a new instance of FRNOptions.</summary>
     public FRNOptions(IFullModel<T, TInput, TOutput> metaModel)
-    { MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel)); }
+    { Guard.NotNull(metaModel); MetaModel = metaModel; }
     #endregion
 
     #region IMetaLearnerOptions Implementation

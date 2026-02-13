@@ -8,6 +8,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning;
 
@@ -162,9 +163,12 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
         IGradientBasedOptimizer<T, TInput, TOutput>? metaOptimizer = null,
         IGradientBasedOptimizer<T, TInput, TOutput>? innerOptimizer = null)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
-        LossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
+        Guard.NotNull(lossFunction);
+        LossFunction = lossFunction;
+        Guard.NotNull(options);
+        _options = options;
 
         if (!options.IsValid())
         {
@@ -382,7 +386,8 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
     /// <inheritdoc/>
     public void SetMetaModel(IFullModel<T, TInput, TOutput> model)
     {
-        MetaModel = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        MetaModel = model;
 
         // Reset optimizer state when the model changes to avoid stale momentum/velocity vectors
         // from the previous model's parameter space

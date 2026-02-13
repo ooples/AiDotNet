@@ -9,6 +9,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
 
@@ -60,7 +61,8 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
     public QMIXAgent(QMIXOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
         : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
             InitialLearningRate = 0.001,

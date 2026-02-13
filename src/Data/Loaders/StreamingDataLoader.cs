@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -67,7 +68,8 @@ public class StreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBase<T
         : base(batchSize, prefetchCount, numWorkers)
     {
         _sampleCount = sampleCount > 0 ? sampleCount : throw new ArgumentOutOfRangeException(nameof(sampleCount));
-        _sampleReader = sampleReader ?? throw new ArgumentNullException(nameof(sampleReader));
+        Guard.NotNull(sampleReader);
+        _sampleReader = sampleReader;
         _name = name ?? "StreamingDataLoader";
     }
 
@@ -146,7 +148,8 @@ public class FileStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBa
             throw new ArgumentNullException(nameof(directory));
         }
 
-        _fileProcessor = fileProcessor ?? throw new ArgumentNullException(nameof(fileProcessor));
+        Guard.NotNull(fileProcessor);
+        _fileProcessor = fileProcessor;
         _filePaths = Directory.GetFiles(directory, filePattern, searchOption);
 
         if (_filePaths.Length == 0)
@@ -233,8 +236,10 @@ public class CsvStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBas
         int numWorkers = 4)
         : base(batchSize, prefetchCount, numWorkers)
     {
-        _filePath = filePath ?? throw new ArgumentNullException(nameof(filePath));
-        _lineParser = lineParser ?? throw new ArgumentNullException(nameof(lineParser));
+        Guard.NotNullOrWhiteSpace(filePath);
+        _filePath = filePath;
+        Guard.NotNull(lineParser);
+        _lineParser = lineParser;
         _hasHeader = hasHeader;
 
         if (!File.Exists(filePath))
@@ -485,8 +490,10 @@ public class MemoryMappedStreamingDataLoader<T, TInput, TOutput> : StreamingData
         _outputSizeBytes = outputSizeBytes > 0 ? outputSizeBytes : throw new ArgumentOutOfRangeException(nameof(outputSizeBytes), "Output size must be positive.");
         _sampleSizeBytes = _inputSizeBytes + _outputSizeBytes;
         _headerSizeBytes = headerSizeBytes >= 0 ? headerSizeBytes : throw new ArgumentOutOfRangeException(nameof(headerSizeBytes), "Header size cannot be negative.");
-        _inputDeserializer = inputDeserializer ?? throw new ArgumentNullException(nameof(inputDeserializer));
-        _outputDeserializer = outputDeserializer ?? throw new ArgumentNullException(nameof(outputDeserializer));
+        Guard.NotNull(inputDeserializer);
+        _inputDeserializer = inputDeserializer;
+        Guard.NotNull(outputDeserializer);
+        _outputDeserializer = outputDeserializer;
 
         // Validate file size matches expected data size
         var fileInfo = new FileInfo(filePath);

@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Preprocessing;
 
@@ -133,7 +134,8 @@ public class PreprocessingPipeline<T, TInput, TOutput> : IDataTransformer<T, TIn
     /// <returns>This pipeline for method chaining.</returns>
     public PreprocessingPipeline<T, TInput, TOutput> SetFinalTransformer(IDataTransformer<T, TInput, TOutput> transformer)
     {
-        _finalTransformer = transformer ?? throw new ArgumentNullException(nameof(transformer));
+        Guard.NotNull(transformer);
+        _finalTransformer = transformer;
         _isFitted = false;
         return this;
     }

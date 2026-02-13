@@ -15,6 +15,7 @@ using AiDotNet.ProgramSynthesis.Results;
 using AiDotNet.ProgramSynthesis.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ProgramSynthesis.Engines;
 
@@ -43,7 +44,8 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         ITokenizer? tokenizer = null)
         : base(architecture, lossFunction)
     {
-        CodeArchitecture = architecture ?? throw new ArgumentNullException(nameof(architecture));
+        Guard.NotNull(architecture);
+        CodeArchitecture = architecture;
         _tokenizer = tokenizer ?? CreateDefaultTokenizer(CodeArchitecture.TargetLanguage);
 
         if (_tokenizer.VocabularySize > CodeArchitecture.VocabularySize)

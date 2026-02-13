@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PromptEngineering.Compression;
 
@@ -70,7 +71,8 @@ public class CachingCompressor : PromptCompressorBase
         Func<string, int>? tokenCounter = null)
         : base($"Caching({innerCompressor.Name})", tokenCounter)
     {
-        _innerCompressor = innerCompressor ?? throw new ArgumentNullException(nameof(innerCompressor));
+        Guard.NotNull(innerCompressor);
+        _innerCompressor = innerCompressor;
         _maxCacheSize = maxCacheSize > 0 ? maxCacheSize : 1000;
         _cacheExpiry = cacheExpiry ?? TimeSpan.FromHours(24);
         _cache = new ConcurrentDictionary<string, CacheEntry>();

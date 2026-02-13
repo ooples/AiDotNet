@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -47,7 +48,8 @@ public abstract class FederatedTrainerBase<TModel, TData, TMetadata, T> :
 
     public void SetAggregationStrategy(IAggregationStrategy<TModel> strategy)
     {
-        _aggregationStrategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
+        Guard.NotNull(strategy);
+        _aggregationStrategy = strategy;
     }
 
     public abstract TMetadata TrainRound(Dictionary<int, TData> clientData, double clientSelectionFraction = 1.0, int localEpochs = 1);

@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Classification.SemiSupervised;
 
@@ -121,7 +122,8 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
-        _baseClassifier = baseClassifier ?? throw new ArgumentNullException(nameof(baseClassifier));
+        Guard.NotNull(baseClassifier);
+        _baseClassifier = baseClassifier;
 
         if (baseClassifier is not IProbabilisticClassifier<T>)
         {

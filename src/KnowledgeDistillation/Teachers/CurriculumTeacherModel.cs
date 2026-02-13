@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
 
@@ -32,7 +33,8 @@ public class CurriculumTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
     /// <param name="baseTeacher">The underlying teacher model.</param>
     public CurriculumTeacherModel(ITeacherModel<Vector<T>, Vector<T>> baseTeacher)
     {
-        _baseTeacher = baseTeacher ?? throw new ArgumentNullException(nameof(baseTeacher));
+        Guard.NotNull(baseTeacher);
+        _baseTeacher = baseTeacher;
         // Note: Curriculum logic is implemented in CurriculumDistillationStrategy,
         // not in the teacher model. This is a simple wrapper around the base teacher.
     }

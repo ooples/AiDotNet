@@ -10,6 +10,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Audio.AudioLDM;
 
@@ -178,8 +179,8 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         _options = options ?? new AudioLDMOptions();
         Options = _options;
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
-            "Tokenizer is required. Use CLAP tokenizer or compatible tokenizer.");
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
 
         // Set dimensions based on model size

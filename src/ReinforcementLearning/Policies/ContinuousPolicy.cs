@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Policies
 {
@@ -27,8 +28,10 @@ namespace AiDotNet.ReinforcementLearning.Policies
             Random? random = null)
             : base(random)
         {
-            _policyNetwork = policyNetwork ?? throw new ArgumentNullException(nameof(policyNetwork));
-            _explorationStrategy = explorationStrategy ?? throw new ArgumentNullException(nameof(explorationStrategy));
+            Guard.NotNull(policyNetwork);
+            _policyNetwork = policyNetwork;
+            Guard.NotNull(explorationStrategy);
+            _explorationStrategy = explorationStrategy;
             _actionSize = actionSize;
             _useTanhSquashing = useTanhSquashing;
         }

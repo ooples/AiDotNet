@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ContinualLearning;
 
@@ -114,15 +115,15 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
     public void BeforeTask(INeuralNetwork<T> network, int taskId)
     {
         // Experience replay doesn't need to do anything before a task
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
     }
 
     /// <inheritdoc />
     public void AfterTask(INeuralNetwork<T> network, (Tensor<T> inputs, Tensor<T> targets) taskData, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = taskData.inputs ?? throw new ArgumentNullException(nameof(taskData));
-        _ = taskData.targets ?? throw new ArgumentNullException(nameof(taskData));
+        Guard.NotNull(network);
+        Guard.NotNull(taskData.inputs);
+        Guard.NotNull(taskData.targets);
 
         // Add task samples to buffer
         AddToBuffer(taskData.inputs, taskData.targets, taskId);
@@ -131,7 +132,7 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public T ComputeLoss(INeuralNetwork<T> network)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         if (_buffer.Count == 0)
         {
@@ -165,8 +166,8 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
     public Vector<T> ModifyGradients(INeuralNetwork<T> network, Vector<T> gradients)
     {
         // Experience replay works through loss, not gradient modification
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = gradients ?? throw new ArgumentNullException(nameof(gradients));
+        Guard.NotNull(network);
+        Guard.NotNull(gradients);
         return gradients;
     }
 

@@ -8,6 +8,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.LossFunctions;
+using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks
 {
@@ -1362,7 +1363,8 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         public virtual void SetBaseModel(IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>> model)
         {
-            _baseModel = model ?? throw new ArgumentNullException(nameof(model));
+            Guard.NotNull(model);
+            _baseModel = model;
         }
 
         /// <summary>
@@ -1384,7 +1386,8 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
         {
-            _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
+            Guard.NotNull(sensitiveFeatures);
+            _sensitiveFeatures = sensitiveFeatures;
             _fairnessMetrics.Clear();
             if (fairnessMetrics != null)
             {

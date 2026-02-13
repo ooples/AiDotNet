@@ -1,5 +1,6 @@
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Augmentation;
 
@@ -58,7 +59,8 @@ public class AugmentationContext<T>
     /// <param name="isTraining">Whether the context is in training mode.</param>
     public AugmentationContext(Random random, bool isTraining = true)
     {
-        _random = random ?? throw new ArgumentNullException(nameof(random));
+        Guard.NotNull(random);
+        _random = random;
         IsTraining = isTraining;
         Metadata = new Dictionary<string, object>();
     }

@@ -11,6 +11,7 @@ using AiDotNet.Tensors.Interfaces;
 using AiDotNet.UncertaintyQuantification.Interfaces;
 using AiDotNet.UncertaintyQuantification.Layers;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Models.Results;
 
@@ -136,7 +137,7 @@ public partial class AiModelResult<T, TInput, TOutput>
     }
 
     internal void SetDeepEnsembleModels(List<IFullModel<T, TInput, TOutput>> models)
-        => _deepEnsembleModels = models ?? throw new ArgumentNullException(nameof(models));
+        { Guard.NotNull(models); _deepEnsembleModels = models; }
 
     public UncertaintyPredictionResult<T, TOutput> PredictWithUncertainty(TInput newData, int? numSamples = null)
     {

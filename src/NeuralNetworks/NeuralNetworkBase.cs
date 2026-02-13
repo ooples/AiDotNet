@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -3406,7 +3407,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <exception cref="ArgumentNullException">Thrown when model is null.</exception>
     public virtual void SetBaseModel<TInput, TOutput>(IFullModel<T, TInput, TOutput> model)
     {
-        _baseModel = (model ?? throw new ArgumentNullException(nameof(model))) as IFullModel<T, Tensor<T>, Tensor<T>>;
+        Guard.NotNull(model);
+        _baseModel = model as IFullModel<T, Tensor<T>, Tensor<T>>;
     }
 
     /// <summary>
@@ -3425,7 +3427,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
     {
-        _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
+        Guard.NotNull(sensitiveFeatures);
+        _sensitiveFeatures = sensitiveFeatures;
         _fairnessMetrics.Clear();
         _fairnessMetrics.AddRange(fairnessMetrics);
     }

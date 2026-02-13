@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation;
 
@@ -123,8 +124,10 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         int earlyStoppingPatience = 10,
         int? seed = null)
     {
-        Teacher = teacher ?? throw new ArgumentNullException(nameof(teacher));
-        DistillationStrategy = distillationStrategy ?? throw new ArgumentNullException(nameof(distillationStrategy));
+        Guard.NotNull(teacher);
+        Teacher = teacher;
+        Guard.NotNull(distillationStrategy);
+        DistillationStrategy = distillationStrategy;
         _checkpointConfig = checkpointConfig;
         _useEarlyStopping = useEarlyStopping;
         _earlyStoppingMinDelta = earlyStoppingMinDelta;

@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Models;
 
@@ -87,7 +88,8 @@ public class Experiment : IExperiment
     public Experiment(string name, string? description = null, Dictionary<string, string>? tags = null)
     {
         ExperimentId = Guid.NewGuid().ToString();
-        Name = name ?? throw new ArgumentNullException(nameof(name));
+        Guard.NotNull(name);
+        Name = name;
         Description = description;
         CreatedAt = DateTime.UtcNow;
         LastUpdatedAt = DateTime.UtcNow;

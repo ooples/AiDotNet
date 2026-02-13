@@ -1,3 +1,5 @@
+using AiDotNet.Validation;
+
 namespace AiDotNet.Kernels;
 
 /// <summary>
@@ -113,7 +115,8 @@ public class LCMKernel<T> : IKernelFunction<T>
 
         for (int i = 0; i < _numComponents; i++)
         {
-            _inputKernels[i] = inputKernels[i] ?? throw new ArgumentNullException($"inputKernels[{i}]");
+            Guard.NotNull(inputKernels[i], $"inputKernels[{i}]");
+            _inputKernels[i] = inputKernels[i];
             _coregMatrices[i] = (double[,])coregMatrices[i].Clone();
         }
 
@@ -161,7 +164,8 @@ public class LCMKernel<T> : IKernelFunction<T>
 
         for (int i = 0; i < _numComponents; i++)
         {
-            _inputKernels[i] = inputKernels[i] ?? throw new ArgumentNullException($"inputKernels[{i}]");
+            Guard.NotNull(inputKernels[i], $"inputKernels[{i}]");
+            _inputKernels[i] = inputKernels[i];
 
             // Generate random factor matrix L_i, then B_i = L_i × L_i^T
             var L = new double[numOutputs, effectiveRank];

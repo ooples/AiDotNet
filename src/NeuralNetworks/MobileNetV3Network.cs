@@ -71,7 +71,8 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     {
         _options = options ?? new MobileNetV3Options();
         Options = _options;
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        Guard.NotNull(configuration);
+        _configuration = configuration;
 
         ArchitectureValidator.ValidateInputType(
             architecture,

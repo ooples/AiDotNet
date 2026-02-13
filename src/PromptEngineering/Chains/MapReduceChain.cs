@@ -71,7 +71,8 @@ public class MapReduceChain<TItem, TMapResult, TOutput> : ChainBase<IEnumerable<
     /// <returns>This chain instance for method chaining.</returns>
     public MapReduceChain<TItem, TMapResult, TOutput> SetMapper(Func<TItem, TMapResult> mapper)
     {
-        _syncMapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
+        Guard.NotNull(mapper);
+        _syncMapper = mapper;
         return this;
     }
 
@@ -83,7 +84,8 @@ public class MapReduceChain<TItem, TMapResult, TOutput> : ChainBase<IEnumerable<
     public MapReduceChain<TItem, TMapResult, TOutput> SetMapperAsync(
         Func<TItem, CancellationToken, Task<TMapResult>> mapper)
     {
-        _asyncMapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
+        Guard.NotNull(mapper);
+        _asyncMapper = mapper;
         return this;
     }
 
@@ -94,7 +96,8 @@ public class MapReduceChain<TItem, TMapResult, TOutput> : ChainBase<IEnumerable<
     /// <returns>This chain instance for method chaining.</returns>
     public MapReduceChain<TItem, TMapResult, TOutput> SetReducer(Func<IEnumerable<TMapResult>, TOutput> reducer)
     {
-        _syncReducer = reducer ?? throw new ArgumentNullException(nameof(reducer));
+        Guard.NotNull(reducer);
+        _syncReducer = reducer;
         return this;
     }
 
@@ -106,7 +109,8 @@ public class MapReduceChain<TItem, TMapResult, TOutput> : ChainBase<IEnumerable<
     public MapReduceChain<TItem, TMapResult, TOutput> SetReducerAsync(
         Func<IEnumerable<TMapResult>, CancellationToken, Task<TOutput>> reducer)
     {
-        _asyncReducer = reducer ?? throw new ArgumentNullException(nameof(reducer));
+        Guard.NotNull(reducer);
+        _asyncReducer = reducer;
         return this;
     }
 

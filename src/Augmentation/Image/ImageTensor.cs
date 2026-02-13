@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Augmentation.Image;
 
@@ -195,7 +196,8 @@ public class ImageTensor<T>
     /// <param name="colorSpace">The color space.</param>
     public ImageTensor(Tensor<T> data, ChannelOrder channelOrder = ChannelOrder.CHW, ColorSpace colorSpace = ColorSpace.RGB)
     {
-        _data = data ?? throw new ArgumentNullException(nameof(data));
+        Guard.NotNull(data);
+        _data = data;
         ChannelOrder = channelOrder;
         ColorSpace = colorSpace;
 

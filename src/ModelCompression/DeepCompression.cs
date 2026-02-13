@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ModelCompression;
 
@@ -399,9 +400,12 @@ public class DeepCompressionMetadata<T> : ICompressionMetadata<T>
         int originalLength,
         DeepCompressionStats compressionStats)
     {
-        PruningMetadata = pruningMetadata ?? throw new ArgumentNullException(nameof(pruningMetadata));
-        ClusteringMetadata = clusteringMetadata ?? throw new ArgumentNullException(nameof(clusteringMetadata));
-        HuffmanMetadata = huffmanMetadata ?? throw new ArgumentNullException(nameof(huffmanMetadata));
+        Guard.NotNull(pruningMetadata);
+        PruningMetadata = pruningMetadata;
+        Guard.NotNull(clusteringMetadata);
+        ClusteringMetadata = clusteringMetadata;
+        Guard.NotNull(huffmanMetadata);
+        HuffmanMetadata = huffmanMetadata;
         OriginalLength = originalLength;
         CompressionStats = compressionStats ?? new DeepCompressionStats();
     }

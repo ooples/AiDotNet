@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -104,7 +105,8 @@ public abstract class SSLMethodBase<T> : ISSLMethod<T>
         IProjectorHead<T>? projector,
         SSLConfig? config)
     {
-        _encoder = encoder ?? throw new ArgumentNullException(nameof(encoder));
+        Guard.NotNull(encoder);
+        _encoder = encoder;
         _projector = projector;
         _config = config ?? new SSLConfig();
     }

@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
@@ -96,13 +97,15 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         int vectorsPerDocument,
         string aggregationMethod)
     {
-        _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
+        Guard.NotNull(documentStore);
+        _documentStore = documentStore;
 
         if (vectorsPerDocument <= 0)
             throw new ArgumentOutOfRangeException(nameof(vectorsPerDocument), "Vectors per document must be positive");
 
         _vectorsPerDocument = vectorsPerDocument;
-        _aggregationMethod = aggregationMethod ?? throw new ArgumentNullException(nameof(aggregationMethod));
+        Guard.NotNull(aggregationMethod);
+        _aggregationMethod = aggregationMethod;
     }
 
     /// <summary>

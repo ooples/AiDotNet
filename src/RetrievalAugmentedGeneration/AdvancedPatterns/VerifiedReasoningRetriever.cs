@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -62,8 +63,10 @@ public class VerifiedReasoningRetriever<T> : RetrieverBase<T>
         int maxRefinementAttempts = 2,
         int defaultTopK = 5) : base(defaultTopK)
     {
-        _generator = generator ?? throw new ArgumentNullException(nameof(generator));
-        _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
+        Guard.NotNull(generator);
+        _generator = generator;
+        Guard.NotNull(baseRetriever);
+        _baseRetriever = baseRetriever;
 
         if (verificationThreshold < 0 || verificationThreshold > 1)
             throw new ArgumentOutOfRangeException(nameof(verificationThreshold), "Threshold must be between 0 and 1");

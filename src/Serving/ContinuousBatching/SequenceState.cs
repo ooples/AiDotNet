@@ -117,7 +117,8 @@ public class SequenceState<T>
     public SequenceState(GenerationRequest<T> request)
     {
         SequenceId = Interlocked.Increment(ref _nextId);
-        Request = request ?? throw new ArgumentNullException(nameof(request));
+        Guard.NotNull(request);
+        Request = request;
         Status = SequenceStatus.Pending;
         TokenIds = new List<int>(request.PromptTokenIds);
         PromptLength = request.PromptTokenIds.Count;

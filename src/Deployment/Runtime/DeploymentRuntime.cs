@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Deployment.Runtime;
 
@@ -21,7 +22,8 @@ public class DeploymentRuntime<T>
 
     public DeploymentRuntime(RuntimeConfiguration config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
         _models = new ConcurrentDictionary<string, ModelVersion<T>>();
         _abTests = new ConcurrentDictionary<string, ABTestConfig>();
         _telemetry = new TelemetryCollector(config.EnableTelemetry);

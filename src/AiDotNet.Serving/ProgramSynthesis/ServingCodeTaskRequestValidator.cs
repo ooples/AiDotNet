@@ -3,6 +3,7 @@ using AiDotNet.ProgramSynthesis.Requests;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Security;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.ProgramSynthesis;
 
@@ -12,7 +13,8 @@ public sealed class ServingCodeTaskRequestValidator : IServingCodeTaskRequestVal
 
     public ServingCodeTaskRequestValidator(IOptions<ServingProgramSynthesisOptions> options)
     {
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options.Value;
     }
 
     public bool TryValidate(

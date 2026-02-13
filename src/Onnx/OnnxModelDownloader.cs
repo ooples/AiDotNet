@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Onnx;
 
@@ -57,7 +58,8 @@ public class OnnxModelDownloader : IOnnxModelDownloader, IDisposable
     /// <param name="ownsHttpClient">Whether to dispose the HttpClient when this downloader is disposed.</param>
     public OnnxModelDownloader(HttpClient httpClient, string? cacheDirectory = null, bool ownsHttpClient = false)
     {
-        _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        Guard.NotNull(httpClient);
+        _httpClient = httpClient;
         _ownsHttpClient = ownsHttpClient;
 
         if (cacheDirectory is not null && !string.IsNullOrWhiteSpace(cacheDirectory)) { _cacheDirectory = cacheDirectory; } else { var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile); _cacheDirectory = Path.Combine(userHome, ".aidotnet", "models"); }

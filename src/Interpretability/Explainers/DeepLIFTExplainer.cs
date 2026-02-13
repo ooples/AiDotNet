@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -109,7 +110,8 @@ public class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanation<T>>, 
         string[]? featureNames = null,
         DeepLIFTRule rule = DeepLIFTRule.Rescale)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
         _getActivations = getActivations;
         _computeMultipliers = computeMultipliers;
 

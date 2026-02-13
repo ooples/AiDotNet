@@ -141,7 +141,8 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
         double logVariancePriorStd = 1.0,
         int? seed = null)
     {
-        _kernel = kernel ?? throw new ArgumentNullException(nameof(kernel));
+        Guard.NotNull(kernel);
+        _kernel = kernel;
         _numSamples = numSamples;
         _burnIn = burnIn;
         _thinning = thinning;
@@ -218,8 +219,10 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     /// </remarks>
     public void Fit(Matrix<T> X, Vector<T> y)
     {
-        _X = X ?? throw new ArgumentNullException(nameof(X));
-        _y = y ?? throw new ArgumentNullException(nameof(y));
+        Guard.NotNull(X);
+        _X = X;
+        Guard.NotNull(y);
+        _y = y;
 
         int n = X.Rows;
         if (y.Length != n)

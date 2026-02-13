@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.Components;
 
@@ -36,7 +37,8 @@ internal class ThoughtEvaluator<T> : IThoughtEvaluator<T>
     /// <param name="chatModel">The chat model used to evaluate thoughts.</param>
     public ThoughtEvaluator(IChatModel<T> chatModel)
     {
-        _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
+        Guard.NotNull(chatModel);
+        _chatModel = chatModel;
         _numOps = MathHelper.GetNumericOperations<T>();
     }
 

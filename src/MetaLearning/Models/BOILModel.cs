@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Models;
 
@@ -58,11 +59,15 @@ public class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
         Vector<T>? headBias,
         BOILOptions<T, TInput, TOutput> options)
     {
-        _baseModel = baseModel ?? throw new ArgumentNullException(nameof(baseModel));
-        _adaptedBodyParams = adaptedBodyParams ?? throw new ArgumentNullException(nameof(adaptedBodyParams));
-        _headWeights = headWeights ?? throw new ArgumentNullException(nameof(headWeights));
+        Guard.NotNull(baseModel);
+        _baseModel = baseModel;
+        Guard.NotNull(adaptedBodyParams);
+        _adaptedBodyParams = adaptedBodyParams;
+        Guard.NotNull(headWeights);
+        _headWeights = headWeights;
         _headBias = headBias;
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
     }
 
     /// <inheritdoc/>

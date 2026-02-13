@@ -75,8 +75,10 @@ public sealed class PooledTensor<T> : IDisposable
     /// </remarks>
     public PooledTensor(TensorPool<T> pool, Tensor<T> tensor)
     {
-        _pool = pool ?? throw new ArgumentNullException(nameof(pool));
-        Tensor = tensor ?? throw new ArgumentNullException(nameof(tensor));
+        Guard.NotNull(pool);
+        _pool = pool;
+        Guard.NotNull(tensor);
+        Tensor = tensor;
         _disposed = 0;
     }
 

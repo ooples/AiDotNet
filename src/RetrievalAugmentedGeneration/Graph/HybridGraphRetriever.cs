@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -53,8 +54,10 @@ public class HybridGraphRetriever<T>
         KnowledgeGraph<T> graph,
         IDocumentStore<T> documentStore)
     {
-        _graph = graph ?? throw new ArgumentNullException(nameof(graph));
-        _documentStore = documentStore ?? throw new ArgumentNullException(nameof(documentStore));
+        Guard.NotNull(graph);
+        _graph = graph;
+        Guard.NotNull(documentStore);
+        _documentStore = documentStore;
     }
 
     /// <summary>
