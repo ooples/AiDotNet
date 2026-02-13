@@ -1,6 +1,7 @@
 using AiDotNet.Data.Loaders;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Video;
 
@@ -69,7 +70,8 @@ public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
     /// </summary>
     public VideoFrameDataset(VideoFrameDatasetOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
 
         if (string.IsNullOrWhiteSpace(options.RootDirectory))
         {

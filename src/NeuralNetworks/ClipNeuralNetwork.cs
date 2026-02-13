@@ -8,6 +8,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -84,7 +85,8 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         if (string.IsNullOrWhiteSpace(textEncoderPath))
             throw new ArgumentException("Text encoder path cannot be null or empty.", nameof(textEncoderPath));
 
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
 
         if (!File.Exists(imageEncoderPath))
             throw new FileNotFoundException($"Image encoder model file not found: {imageEncoderPath}", imageEncoderPath);

@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Agents;
 
@@ -34,7 +35,8 @@ internal class AgentHyperparameterApplicator<T>
     /// <param name="registry">The registry that maps LLM parameter names to C# property names.</param>
     public AgentHyperparameterApplicator(HyperparameterRegistry registry)
     {
-        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+        Guard.NotNull(registry);
+        _registry = registry;
     }
 
     /// <summary>

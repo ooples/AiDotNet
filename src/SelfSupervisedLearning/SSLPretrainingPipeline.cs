@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.SelfSupervisedLearning.Evaluation;
+using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -42,7 +43,8 @@ public class SSLPretrainingPipeline<T>
     /// <param name="encoderOutputDim">Output dimension of the encoder.</param>
     public SSLPretrainingPipeline(INeuralNetwork<T> encoder, int encoderOutputDim)
     {
-        _encoder = encoder ?? throw new ArgumentNullException(nameof(encoder));
+        Guard.NotNull(encoder);
+        _encoder = encoder;
         _encoderOutputDim = encoderOutputDim;
         _config = new SSLConfig();
     }

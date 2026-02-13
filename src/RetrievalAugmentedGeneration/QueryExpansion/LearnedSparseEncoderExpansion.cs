@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.QueryExpansion;
 
@@ -75,7 +76,8 @@ public class LearnedSparseEncoderExpansion : QueryExpansionBase
         int maxExpansionTerms,
         double minTermWeight)
     {
-        _modelPath = modelPath ?? throw new ArgumentNullException(nameof(modelPath));
+        Guard.NotNull(modelPath);
+        _modelPath = modelPath;
 
         if (maxExpansionTerms <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxExpansionTerms), "Max expansion terms must be positive");

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -90,7 +91,8 @@ public class InputXGradientExplainer<T> : ILocalExplainer<T, InputXGradientExpla
         string[]? featureNames = null,
         bool absoluteValue = false)
     {
-        _network = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
+        _network = network;
         _numFeatures = numFeatures;
         _featureNames = featureNames;
         _absoluteValue = absoluteValue;
@@ -117,8 +119,10 @@ public class InputXGradientExplainer<T> : ILocalExplainer<T, InputXGradientExpla
         string[]? featureNames = null,
         bool absoluteValue = false)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
-        _gradientFunction = gradientFunction ?? throw new ArgumentNullException(nameof(gradientFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
+        Guard.NotNull(gradientFunction);
+        _gradientFunction = gradientFunction;
         _numFeatures = numFeatures;
         _featureNames = featureNames;
         _absoluteValue = absoluteValue;

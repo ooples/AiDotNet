@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Results;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Tools;
 
@@ -103,8 +104,10 @@ public class PredictionModelTool<T, TInput, TOutput> : ITool
         string description,
         Func<string, TInput> inputParser)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
-        _inputParser = inputParser ?? throw new ArgumentNullException(nameof(inputParser));
+        Guard.NotNull(model);
+        _model = model;
+        Guard.NotNull(inputParser);
+        _inputParser = inputParser;
 
         if (string.IsNullOrWhiteSpace(name))
         {

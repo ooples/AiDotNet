@@ -29,7 +29,8 @@ public sealed class ClassificationConformalPredictionSet
     /// <param name="classIndices">The predicted class index sets per sample.</param>
     public ClassificationConformalPredictionSet(int[][] classIndices)
     {
-        ClassIndices = classIndices ?? throw new ArgumentNullException(nameof(classIndices));
+        Guard.NotNull(classIndices);
+        ClassIndices = classIndices;
     }
 }
 

@@ -1,6 +1,7 @@
 using AiDotNet.Engines;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Prototypes;
 
@@ -50,7 +51,8 @@ public class PrototypeVector<T>
     /// </summary>
     public PrototypeVector(Vector<T> data)
     {
-        _data = data ?? throw new ArgumentNullException(nameof(data));
+        Guard.NotNull(data);
+        _data = data;
     }
 
     /// <summary>

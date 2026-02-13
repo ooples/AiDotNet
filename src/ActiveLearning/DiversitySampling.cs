@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ActiveLearning;
 
@@ -114,7 +115,7 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
     public int[] SelectSamples(IFullModel<T, Tensor<T>, Tensor<T>> model, Tensor<T> unlabeledPool, int batchSize)
     {
         // Note: model is not used in pure diversity sampling, but we accept it for interface compatibility
-        _ = unlabeledPool ?? throw new ArgumentNullException(nameof(unlabeledPool));
+        Guard.NotNull(unlabeledPool);
 
         var numSamples = unlabeledPool.Shape[0];
         batchSize = Math.Min(batchSize, numSamples);
@@ -137,7 +138,7 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
     public Vector<T> ComputeInformativenessScores(IFullModel<T, Tensor<T>, Tensor<T>> model, Tensor<T> unlabeledPool)
     {
         // Note: model is not used in diversity sampling
-        _ = unlabeledPool ?? throw new ArgumentNullException(nameof(unlabeledPool));
+        Guard.NotNull(unlabeledPool);
 
         var numSamples = unlabeledPool.Shape[0];
         var featureSize = unlabeledPool.Length / numSamples;

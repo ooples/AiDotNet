@@ -1,4 +1,5 @@
 using AiDotNet.Deployment.Export;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Deployment.Mobile.Android;
 
@@ -14,7 +15,8 @@ public class NNAPIBackend<T>
 
     public NNAPIBackend(NNAPIConfiguration config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
     }
 
     /// <summary>

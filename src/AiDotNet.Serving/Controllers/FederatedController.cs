@@ -4,6 +4,7 @@ using AiDotNet.Serving.Security;
 using AiDotNet.Serving.Security.Attestation;
 using AiDotNet.Serving.Services.Federated;
 using Microsoft.AspNetCore.Mvc;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Controllers;
 
@@ -35,11 +36,16 @@ public class FederatedController : ControllerBase
         ITierPolicyProvider tierPolicyProvider,
         IAttestationVerifier attestationVerifier)
     {
-        _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _tierResolver = tierResolver ?? throw new ArgumentNullException(nameof(tierResolver));
-        _tierPolicyProvider = tierPolicyProvider ?? throw new ArgumentNullException(nameof(tierPolicyProvider));
-        _attestationVerifier = attestationVerifier ?? throw new ArgumentNullException(nameof(attestationVerifier));
+        Guard.NotNull(coordinator);
+        _coordinator = coordinator;
+        Guard.NotNull(logger);
+        _logger = logger;
+        Guard.NotNull(tierResolver);
+        _tierResolver = tierResolver;
+        Guard.NotNull(tierPolicyProvider);
+        _tierPolicyProvider = tierPolicyProvider;
+        Guard.NotNull(attestationVerifier);
+        _attestationVerifier = attestationVerifier;
     }
 
     [HttpPost("runs")]

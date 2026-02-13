@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 
@@ -41,7 +42,8 @@ public class TransferBenchmark<T>
     /// <param name="encoderOutputDim">Output dimension of the encoder.</param>
     public TransferBenchmark(INeuralNetwork<T> encoder, int encoderOutputDim)
     {
-        _encoder = encoder ?? throw new ArgumentNullException(nameof(encoder));
+        Guard.NotNull(encoder);
+        _encoder = encoder;
         _encoderOutputDim = encoderOutputDim;
     }
 

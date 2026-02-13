@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PromptEngineering.FewShot;
 
@@ -93,7 +94,8 @@ public class DiversityExampleSelector<T> : FewShotExampleSelectorBase<T>
     /// </remarks>
     public DiversityExampleSelector(Func<string, Vector<T>> embeddingFunction, T diversityThreshold)
     {
-        _embeddingFunction = embeddingFunction ?? throw new ArgumentNullException(nameof(embeddingFunction));
+        Guard.NotNull(embeddingFunction);
+        _embeddingFunction = embeddingFunction;
         _diversityThreshold = ClampToUnitInterval(diversityThreshold);
         _exampleEmbeddings = new Dictionary<FewShotExample, Vector<T>>();
     }

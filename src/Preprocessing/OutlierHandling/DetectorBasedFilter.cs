@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Preprocessing.OutlierHandling;
 
@@ -119,7 +120,8 @@ public class DetectorBasedFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int[]? columnIndices = null)
         : base(columnIndices)
     {
-        _detector = detector ?? throw new ArgumentNullException(nameof(detector));
+        Guard.NotNull(detector);
+        _detector = detector;
         _mode = mode;
     }
 

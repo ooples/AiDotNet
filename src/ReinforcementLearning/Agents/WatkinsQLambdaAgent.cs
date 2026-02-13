@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.EligibilityTraces;
 
@@ -18,7 +19,8 @@ public class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
 
     public WatkinsQLambdaAgent(WatkinsQLambdaOptions<T> options) : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _eligibilityTraces = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = options.EpsilonStart;

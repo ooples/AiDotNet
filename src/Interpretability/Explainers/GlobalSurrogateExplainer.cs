@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -81,7 +82,8 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
         int numFeatures,
         string[]? featureNames = null)
     {
-        _blackBoxPredictFunction = blackBoxPredictFunction ?? throw new ArgumentNullException(nameof(blackBoxPredictFunction));
+        Guard.NotNull(blackBoxPredictFunction);
+        _blackBoxPredictFunction = blackBoxPredictFunction;
 
         if (numFeatures < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(numFeatures));
@@ -446,7 +448,8 @@ public class SurrogateExplanation<T>
         T fidelity,
         string[]? featureNames = null)
     {
-        Coefficients = coefficients ?? throw new ArgumentNullException(nameof(coefficients));
+        Guard.NotNull(coefficients);
+        Coefficients = coefficients;
         Intercept = intercept;
         Fidelity = fidelity;
         FeatureNames = featureNames;

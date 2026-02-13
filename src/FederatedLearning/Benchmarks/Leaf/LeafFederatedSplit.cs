@@ -1,4 +1,5 @@
 using AiDotNet.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.FederatedLearning.Benchmarks.Leaf;
 
@@ -28,8 +29,10 @@ public sealed class LeafFederatedSplit<TInput, TOutput>
         IReadOnlyList<string> userIds,
         IReadOnlyDictionary<string, FederatedClientDataset<TInput, TOutput>> userData)
     {
-        UserIds = userIds ?? throw new ArgumentNullException(nameof(userIds));
-        UserData = userData ?? throw new ArgumentNullException(nameof(userData));
+        Guard.NotNull(userIds);
+        UserIds = userIds;
+        Guard.NotNull(userData);
+        UserData = userData;
 
         if (UserIds.Count == 0)
         {

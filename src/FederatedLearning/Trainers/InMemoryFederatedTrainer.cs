@@ -11,6 +11,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
+using AiDotNet.Validation;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -53,7 +54,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
         IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null)
     {
-        _optimizerPrototype = optimizerPrototype ?? throw new ArgumentNullException(nameof(optimizerPrototype));
+        Guard.NotNull(optimizerPrototype);
+        _optimizerPrototype = optimizerPrototype;
         _learningRateOverride = learningRateOverride;
 
         if (convergenceThreshold < 0.0)

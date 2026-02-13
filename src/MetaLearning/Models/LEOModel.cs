@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Models;
 
@@ -51,10 +52,14 @@ public class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
         Vector<T> latentCode,
         LEOOptions<T, TInput, TOutput> options)
     {
-        _featureEncoder = featureEncoder ?? throw new ArgumentNullException(nameof(featureEncoder));
-        _classifierParams = classifierParams ?? throw new ArgumentNullException(nameof(classifierParams));
-        _latentCode = latentCode ?? throw new ArgumentNullException(nameof(latentCode));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(featureEncoder);
+        _featureEncoder = featureEncoder;
+        Guard.NotNull(classifierParams);
+        _classifierParams = classifierParams;
+        Guard.NotNull(latentCode);
+        _latentCode = latentCode;
+        Guard.NotNull(options);
+        _options = options;
     }
 
     /// <inheritdoc/>

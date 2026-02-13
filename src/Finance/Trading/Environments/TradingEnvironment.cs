@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Finance.Trading.Environments;
 
@@ -89,7 +90,8 @@ public abstract class TradingEnvironment<T> : IEnvironment<T>
         int maxEpisodeLength = 0,
         int? seed = null)
     {
-        MarketData = marketData ?? throw new ArgumentNullException(nameof(marketData));
+        Guard.NotNull(marketData);
+        MarketData = marketData;
         WindowSize = windowSize;
         InitialCapital = initialCapital;
         TransactionCost = transactionCost;

@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ActiveLearning;
 
@@ -57,7 +58,7 @@ public class QueryByCommittee<T> : IActiveLearningStrategy<T>
         IEnumerable<IFullModel<T, Tensor<T>, Tensor<T>>> committee,
         DisagreementMeasure measure = DisagreementMeasure.VoteEntropy)
     {
-        _ = committee ?? throw new ArgumentNullException(nameof(committee));
+        Guard.NotNull(committee);
 
         _numOps = MathHelper.GetNumericOperations<T>();
         _committee = [.. committee];
@@ -92,7 +93,7 @@ public class QueryByCommittee<T> : IActiveLearningStrategy<T>
     public int[] SelectSamples(IFullModel<T, Tensor<T>, Tensor<T>> model, Tensor<T> unlabeledPool, int batchSize)
     {
         // Note: The 'model' parameter is ignored; we use the committee instead
-        _ = unlabeledPool ?? throw new ArgumentNullException(nameof(unlabeledPool));
+        Guard.NotNull(unlabeledPool);
 
         var scores = ComputeInformativenessScores(model, unlabeledPool);
         var numSamples = unlabeledPool.Shape[0];
@@ -111,7 +112,7 @@ public class QueryByCommittee<T> : IActiveLearningStrategy<T>
     /// <inheritdoc />
     public Vector<T> ComputeInformativenessScores(IFullModel<T, Tensor<T>, Tensor<T>> model, Tensor<T> unlabeledPool)
     {
-        _ = unlabeledPool ?? throw new ArgumentNullException(nameof(unlabeledPool));
+        Guard.NotNull(unlabeledPool);
 
         // Get predictions from all committee members
         var allPredictions = new List<Tensor<T>>();

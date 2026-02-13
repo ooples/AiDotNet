@@ -14,6 +14,7 @@ using AiDotNet.Tokenization.HuggingFace;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Document.LayoutAware;
 
@@ -144,7 +145,8 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
         _numClasses = numClasses;
         _hiddenDim = hiddenDim;

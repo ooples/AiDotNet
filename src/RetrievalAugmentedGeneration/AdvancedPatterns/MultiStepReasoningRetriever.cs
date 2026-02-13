@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -141,8 +142,10 @@ public class MultiStepReasoningRetriever<T>
         RetrieverBase<T> baseRetriever,
         int maxSteps = 5)
     {
-        _generator = generator ?? throw new ArgumentNullException(nameof(generator));
-        _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
+        Guard.NotNull(generator);
+        _generator = generator;
+        Guard.NotNull(baseRetriever);
+        _baseRetriever = baseRetriever;
 
         if (maxSteps <= 0 || maxSteps > 20)
             throw new ArgumentOutOfRangeException(nameof(maxSteps), "maxSteps must be between 1 and 20");
@@ -375,8 +378,10 @@ public class ToolAugmentedReasoningRetriever<T>
         IGenerator<T> generator,
         RetrieverBase<T> baseRetriever)
     {
-        _generator = generator ?? throw new ArgumentNullException(nameof(generator));
-        _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
+        Guard.NotNull(generator);
+        _generator = generator;
+        Guard.NotNull(baseRetriever);
+        _baseRetriever = baseRetriever;
         _tools = new Dictionary<string, Func<string, string>>();
 
         // Register default tools

@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.SelfSupervisedLearning.Losses;
+using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -72,9 +73,12 @@ public class BYOL<T> : SSLMethodBase<T>
         SSLConfig? config = null)
         : base(encoder, onlineProjector, config ?? new SSLConfig { Method = SSLMethodType.BYOL })
     {
-        _targetEncoder = targetEncoder ?? throw new ArgumentNullException(nameof(targetEncoder));
-        _onlineProjector = onlineProjector ?? throw new ArgumentNullException(nameof(onlineProjector));
-        _targetProjector = targetProjector ?? throw new ArgumentNullException(nameof(targetProjector));
+        Guard.NotNull(targetEncoder);
+        _targetEncoder = targetEncoder;
+        Guard.NotNull(onlineProjector);
+        _onlineProjector = onlineProjector;
+        Guard.NotNull(targetProjector);
+        _targetProjector = targetProjector;
 
         if (!_onlineProjector.HasPredictor)
             throw new ArgumentException("Online projector must have a predictor head", nameof(onlineProjector));

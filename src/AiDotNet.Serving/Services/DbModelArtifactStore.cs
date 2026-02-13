@@ -3,6 +3,7 @@ using AiDotNet.Serving.Persistence;
 using AiDotNet.Serving.Persistence.Entities;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Services;
 
@@ -18,7 +19,8 @@ public sealed class DbModelArtifactStore : IModelArtifactStore
 
     public DbModelArtifactStore(IServiceScopeFactory scopeFactory, IDataProtectionProvider dataProtectionProvider)
     {
-        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+        Guard.NotNull(scopeFactory);
+        _scopeFactory = scopeFactory;
         _protector = (dataProtectionProvider ?? throw new ArgumentNullException(nameof(dataProtectionProvider)))
             .CreateProtector(ProtectorPurpose);
     }

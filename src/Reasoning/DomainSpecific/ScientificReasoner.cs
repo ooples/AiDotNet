@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
 using AiDotNet.Reasoning.Verification;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.DomainSpecific;
 
@@ -119,7 +120,8 @@ public class ScientificReasoner<T>
         IChatModel<T> chatModel,
         bool enableCriticalValidation = false)
     {
-        _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
+        Guard.NotNull(chatModel);
+        _chatModel = chatModel;
         _criticModel = enableCriticalValidation ? new CriticModel<T>(chatModel) : null;
         _numOps = MathHelper.GetNumericOperations<T>();
 

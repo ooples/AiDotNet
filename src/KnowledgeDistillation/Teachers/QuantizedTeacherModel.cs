@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
 
@@ -49,7 +50,8 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
         ITeacherModel<Vector<T>, Vector<T>> baseTeacher,
         int quantizationBits = 8)
     {
-        _baseTeacher = baseTeacher ?? throw new ArgumentNullException(nameof(baseTeacher));
+        Guard.NotNull(baseTeacher);
+        _baseTeacher = baseTeacher;
         _quantizationBits = quantizationBits;
         _outputDim = baseTeacher.OutputDimension;
         _jitCompilableBase = null;
@@ -88,7 +90,8 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
         T? zeroPoint = default,
         bool symmetric = true)
     {
-        _jitCompilableBase = jitCompilableBase ?? throw new ArgumentNullException(nameof(jitCompilableBase));
+        Guard.NotNull(jitCompilableBase);
+        _jitCompilableBase = jitCompilableBase;
         _quantizationBits = quantizationBits;
         _outputDim = outputDimension;
         _baseTeacher = null;

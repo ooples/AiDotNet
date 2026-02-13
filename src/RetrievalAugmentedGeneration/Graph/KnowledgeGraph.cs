@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -59,7 +60,8 @@ public class KnowledgeGraph<T>
     /// <param name="store">The graph store implementation to use for storage.</param>
     public KnowledgeGraph(IGraphStore<T> store)
     {
-        _store = store ?? throw new ArgumentNullException(nameof(store));
+        Guard.NotNull(store);
+        _store = store;
     }
 
     /// <summary>

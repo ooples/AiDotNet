@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -45,7 +46,8 @@ public class StatefulDataLoader<T, TInput, TOutput> :
     /// <param name="inner">The data loader to wrap.</param>
     public StatefulDataLoader(InputOutputDataLoaderBase<T, TInput, TOutput> inner)
     {
-        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        Guard.NotNull(inner);
+        _inner = inner;
     }
 
     /// <inheritdoc/>

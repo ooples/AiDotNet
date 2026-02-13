@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ContinualLearning;
 
@@ -71,7 +72,7 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void BeforeTask(INeuralNetwork<T> network, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         // Initialize if first task
         if (_omega.Length == 0)
@@ -85,7 +86,7 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void AfterTask(INeuralNetwork<T> network, (Tensor<T> inputs, Tensor<T> targets) taskData, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
         _ = taskData.inputs ?? throw new ArgumentNullException(nameof(taskData));
 
         // Compute importance using output sensitivity (unsupervised)
@@ -105,7 +106,7 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public T ComputeLoss(INeuralNetwork<T> network)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         if (_taskCount == 0)
         {
@@ -131,8 +132,8 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public Vector<T> ModifyGradients(INeuralNetwork<T> network, Vector<T> gradients)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = gradients ?? throw new ArgumentNullException(nameof(gradients));
+        Guard.NotNull(network);
+        Guard.NotNull(gradients);
 
         if (_taskCount == 0)
         {

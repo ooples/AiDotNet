@@ -2,6 +2,7 @@ using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ContinualLearning;
 
@@ -95,7 +96,7 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void BeforeTask(INeuralNetwork<T> network, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         var paramCount = network.ParameterCount;
 
@@ -127,7 +128,7 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void AfterTask(INeuralNetwork<T> network, (Tensor<T> inputs, Tensor<T> targets) taskData, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         // Store the current posterior (network parameters represent the mean)
         _posteriorMean = network.GetParameters().Clone();
@@ -150,7 +151,7 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public T ComputeLoss(INeuralNetwork<T> network)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         if (_taskCount == 0 || _priorMean.Length == 0)
         {
@@ -203,8 +204,8 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public Vector<T> ModifyGradients(INeuralNetwork<T> network, Vector<T> gradients)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = gradients ?? throw new ArgumentNullException(nameof(gradients));
+        Guard.NotNull(network);
+        Guard.NotNull(gradients);
 
         if (_taskCount == 0 || _priorMean.Length == 0)
         {
@@ -256,7 +257,7 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
     /// </remarks>
     public Vector<T> SampleWeights(INeuralNetwork<T> network)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         if (_posteriorMean.Length == 0)
         {
@@ -287,7 +288,7 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
     /// <param name="learningRate">Learning rate for variance update.</param>
     public void UpdateVariance(Vector<T> gradients, double learningRate)
     {
-        _ = gradients ?? throw new ArgumentNullException(nameof(gradients));
+        Guard.NotNull(gradients);
 
         if (_posteriorLogVar.Length == 0 || _posteriorLogVar.Length != gradients.Length)
         {

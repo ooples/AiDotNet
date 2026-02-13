@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -666,7 +667,8 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// </example>
     public MetaSGDOptions(IFullModel<T, TInput, TOutput> metaModel)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
     }
 
     #endregion

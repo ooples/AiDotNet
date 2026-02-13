@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Tokenization.Models
 {
@@ -67,8 +68,10 @@ namespace AiDotNet.Tokenization.Models
         /// <exception cref="ArgumentException">Thrown when tokens and tokenIds have different counts.</exception>
         public TokenizationResult(List<string> tokens, List<int> tokenIds)
         {
-            Tokens = tokens ?? throw new ArgumentNullException(nameof(tokens));
-            TokenIds = tokenIds ?? throw new ArgumentNullException(nameof(tokenIds));
+            Guard.NotNull(tokens);
+            Tokens = tokens;
+            Guard.NotNull(tokenIds);
+            TokenIds = tokenIds;
 
             if (tokens.Count != tokenIds.Count)
             {

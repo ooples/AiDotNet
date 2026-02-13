@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -50,7 +51,8 @@ public class GraphQueryMatcher<T>
     /// <param name="graph">The knowledge graph to query.</param>
     public GraphQueryMatcher(KnowledgeGraph<T> graph)
     {
-        _graph = graph ?? throw new ArgumentNullException(nameof(graph));
+        Guard.NotNull(graph);
+        _graph = graph;
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.ModelCompression;
 using AiDotNet.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.FitnessCalculators;
 
@@ -70,7 +71,8 @@ public class CompressionAwareFitnessCalculator<T, TInput, TOutput> : IFitnessCal
         double compressionWeight = 0.3,
         double speedWeight = 0.2)
     {
-        _baseFitnessCalculator = baseFitnessCalculator ?? throw new ArgumentNullException(nameof(baseFitnessCalculator));
+        Guard.NotNull(baseFitnessCalculator);
+        _baseFitnessCalculator = baseFitnessCalculator;
 
         if (accuracyWeight < 0 || compressionWeight < 0 || speedWeight < 0)
         {

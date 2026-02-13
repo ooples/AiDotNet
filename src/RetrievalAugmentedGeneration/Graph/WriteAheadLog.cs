@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -53,7 +54,8 @@ public class WriteAheadLog : IDisposable
     /// <param name="walFilePath">Path to the WAL file.</param>
     public WriteAheadLog(string walFilePath)
     {
-        _walFilePath = walFilePath ?? throw new ArgumentNullException(nameof(walFilePath));
+        Guard.NotNull(walFilePath);
+        _walFilePath = walFilePath;
 
         // Ensure directory exists
         var directory = Path.GetDirectoryName(walFilePath);

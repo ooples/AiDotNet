@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
 
@@ -53,7 +54,8 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// </remarks>
     public SelfTeacherModel(IJitCompilable<T> model, int outputDimension)
     {
-        _underlyingModel = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        _underlyingModel = model;
         _outputDim = outputDimension;
     }
 

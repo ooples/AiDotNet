@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Deployment.Optimization.Quantization.Training;
 
@@ -56,7 +57,8 @@ public class QATTrainingHook<T>
     /// <param name="config">Quantization configuration</param>
     public QATTrainingHook(QuantizationConfiguration config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
         _quantizationEnabled = config.QATWarmupEpochs == 0;
     }
 

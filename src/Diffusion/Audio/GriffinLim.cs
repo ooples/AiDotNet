@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.WindowFunctions;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -178,7 +179,8 @@ public class GriffinLim<T>
         if (momentum < 0 || momentum >= 1)
             throw new ArgumentOutOfRangeException(nameof(momentum), "Momentum must be in [0, 1).");
 
-        _stft = stft ?? throw new ArgumentNullException(nameof(stft));
+        Guard.NotNull(stft);
+        _stft = stft;
         _iterations = iterations;
         _momentum = momentum;
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();

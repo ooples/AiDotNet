@@ -10,6 +10,7 @@ using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Inference;
 
@@ -72,7 +73,8 @@ internal class InferenceOptimizer<T>
     /// <param name="config">The inference optimization configuration.</param>
     public InferenceOptimizer(InferenceOptimizationConfig config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
     }
 
     /// <summary>
@@ -1195,7 +1197,8 @@ internal class InferenceOptimizer<T>
     /// <exception cref="ArgumentNullException">Thrown when draftModel is null.</exception>
     public void SetCustomDraftModel(IDraftModel<T> draftModel)
     {
-        _draftModel = draftModel ?? throw new ArgumentNullException(nameof(draftModel));
+        Guard.NotNull(draftModel);
+        _draftModel = draftModel;
     }
 
     /// <summary>

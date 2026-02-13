@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Finance.Data;
 
@@ -86,7 +87,8 @@ public sealed class FinancialDataLoader<T> : InputOutputDataLoaderBase<T, Tensor
         int batchSize = 32)
         : base(batchSize)
     {
-        _series = series ?? throw new ArgumentNullException(nameof(series));
+        Guard.NotNull(series);
+        _series = series;
         _sequenceLength = sequenceLength;
         _predictionHorizon = predictionHorizon;
         _includeVolume = includeVolume;

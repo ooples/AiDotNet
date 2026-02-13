@@ -470,8 +470,10 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
         public RlhfFineTunedPredictiveModel(IPredictiveModel<T, Vector<T>, Vector<T>> baseModel, Func<Vector<T>, Vector<T>, double> rewardModel, double klCoefficient)
         {
-            _baseModel = baseModel ?? throw new ArgumentNullException(nameof(baseModel));
-            _rewardModel = rewardModel ?? throw new ArgumentNullException(nameof(rewardModel));
+            Guard.NotNull(baseModel);
+            _baseModel = baseModel;
+            Guard.NotNull(rewardModel);
+            _rewardModel = rewardModel;
             _klCoefficient = klCoefficient;
         }
 
@@ -528,9 +530,12 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
         public ConstitutionalPredictiveModel(IPredictiveModel<T, Vector<T>, Vector<T>> inner, RLHFAlignment<T> alignment, string[] principles)
         {
-            _inner = inner ?? throw new ArgumentNullException(nameof(inner));
-            _alignment = alignment ?? throw new ArgumentNullException(nameof(alignment));
-            _principles = principles ?? throw new ArgumentNullException(nameof(principles));
+            Guard.NotNull(inner);
+            _inner = inner;
+            Guard.NotNull(alignment);
+            _alignment = alignment;
+            Guard.NotNull(principles);
+            _principles = principles;
         }
 
         public Vector<T> Predict(Vector<T> input)

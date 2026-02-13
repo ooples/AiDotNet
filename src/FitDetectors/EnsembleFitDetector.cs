@@ -62,7 +62,8 @@ public class EnsembleFitDetector<T, TInput, TOutput> : FitDetectorBase<T, TInput
     /// </remarks>
     public EnsembleFitDetector(List<IFitDetector<T, TInput, TOutput>> detectors, EnsembleFitDetectorOptions? options = null)
     {
-        _detectors = detectors ?? throw new ArgumentNullException(nameof(detectors));
+        Guard.NotNull(detectors);
+        _detectors = detectors;
         if (_detectors.Count == 0)
             throw new ArgumentException("At least one detector must be provided.", nameof(detectors));
         _options = options ?? new EnsembleFitDetectorOptions();

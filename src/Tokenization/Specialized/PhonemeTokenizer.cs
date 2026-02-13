@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using AiDotNet.Tokenization.Core;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Tokenization.Specialized
 {
@@ -32,7 +33,8 @@ namespace AiDotNet.Tokenization.Specialized
             PhonemeSet phonemeSet = PhonemeSet.IPA)
             : base(vocabulary, specialTokens)
         {
-            _g2pRules = g2pRules ?? throw new ArgumentNullException(nameof(g2pRules));
+            Guard.NotNull(g2pRules);
+            _g2pRules = g2pRules;
             _phonemeSet = phonemeSet;
         }
 

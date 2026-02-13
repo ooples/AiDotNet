@@ -1,5 +1,6 @@
 using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Audio;
 
@@ -49,7 +50,8 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     /// </summary>
     public AudioFileDataset(AudioFileDatasetOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
 
         if (string.IsNullOrWhiteSpace(options.RootDirectory))
         {

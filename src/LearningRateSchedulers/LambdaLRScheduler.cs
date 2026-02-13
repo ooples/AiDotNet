@@ -46,7 +46,8 @@ public class LambdaLRScheduler : LearningRateSchedulerBase
         double minLearningRate = 0.0)
         : base(baseLearningRate, minLearningRate)
     {
-        _lrLambda = lrLambda ?? throw new ArgumentNullException(nameof(lrLambda));
+        Guard.NotNull(lrLambda);
+        _lrLambda = lrLambda;
     }
 
     /// <inheritdoc/>

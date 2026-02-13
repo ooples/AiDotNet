@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -107,8 +108,10 @@ public class OcclusionExplainer<T> : ILocalExplainer<T, OcclusionExplanation<T>>
         T? baselineValue = default,
         OcclusionShape shape = OcclusionShape.Rectangular)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
-        _windowShape = windowShape ?? throw new ArgumentNullException(nameof(windowShape));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
+        Guard.NotNull(windowShape);
+        _windowShape = windowShape;
         _strides = strides ?? windowShape; // Default: non-overlapping
         _baselineValue = baselineValue ?? NumOps.Zero;
         _shape = shape;

@@ -6,6 +6,7 @@ using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -1027,10 +1028,14 @@ public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
         MANNOptions<T, TInput, TOutput> options,
         INumericOperations<T> numOps)
     {
-        _controller = controller ?? throw new ArgumentNullException(nameof(controller));
-        _memory = memory ?? throw new ArgumentNullException(nameof(memory));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
-        _numOps = numOps ?? throw new ArgumentNullException(nameof(numOps));
+        Guard.NotNull(controller);
+        _controller = controller;
+        Guard.NotNull(memory);
+        _memory = memory;
+        Guard.NotNull(options);
+        _options = options;
+        Guard.NotNull(numOps);
+        _numOps = numOps;
     }
 
     /// <summary>Gets the model metadata.</summary>

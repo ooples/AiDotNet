@@ -9,6 +9,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PhysicsInformed.PINNs
 {
@@ -115,7 +116,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _options = options ?? new VariationalPINNOptions();
             Options = _options;
 
-            _weakFormResidual = weakFormResidual ?? throw new ArgumentNullException(nameof(weakFormResidual));
+            Guard.NotNull(weakFormResidual);
+            _weakFormResidual = weakFormResidual;
             _numTestFunctions = numTestFunctions;
             _numQuadraturePoints = numQuadraturePoints;
             _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

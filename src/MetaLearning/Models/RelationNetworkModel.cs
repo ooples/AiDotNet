@@ -6,6 +6,7 @@ using AiDotNet.MetaLearning.Modules;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Models;
 
@@ -54,11 +55,14 @@ public class RelationNetworkModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
         TOutput supportOutputs,
         RelationNetworkOptions<T, TInput, TOutput> options)
     {
-        _featureEncoder = featureEncoder ?? throw new ArgumentNullException(nameof(featureEncoder));
-        _relationModule = relationModule ?? throw new ArgumentNullException(nameof(relationModule));
+        Guard.NotNull(featureEncoder);
+        _featureEncoder = featureEncoder;
+        Guard.NotNull(relationModule);
+        _relationModule = relationModule;
         _supportInputs = supportInputs;
         _supportOutputs = supportOutputs;
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
 
         // Pre-compute support features and extract labels
         _supportFeatures = new List<Vector<T>>();

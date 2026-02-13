@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Augmentation;
 
@@ -112,8 +113,10 @@ public class LabelMixingEventArgs<T> : EventArgs
         int sampleIndex2,
         MixingStrategy strategy)
     {
-        OriginalLabels1 = originalLabels1 ?? throw new ArgumentNullException(nameof(originalLabels1));
-        OriginalLabels2 = originalLabels2 ?? throw new ArgumentNullException(nameof(originalLabels2));
+        Guard.NotNull(originalLabels1);
+        OriginalLabels1 = originalLabels1;
+        Guard.NotNull(originalLabels2);
+        OriginalLabels2 = originalLabels2;
         MixingLambda = mixingLambda;
         SampleIndex1 = sampleIndex1;
         SampleIndex2 = sampleIndex2;

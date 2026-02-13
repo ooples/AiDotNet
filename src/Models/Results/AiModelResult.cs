@@ -41,6 +41,7 @@ using AiDotNet.Tokenization.Configuration;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 using AiDotNet.TrainingMonitoring;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Models.Results;
 
@@ -1622,7 +1623,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             AiModelResult<T, TInput, TOutput> result,
             AiDotNet.Configuration.InferenceOptimizationConfig? config)
         {
-            _result = result ?? throw new ArgumentNullException(nameof(result));
+            Guard.NotNull(result);
+            _result = result;
             _config = config;
         }
 
@@ -1688,7 +1690,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             AiDotNet.Configuration.InferenceOptimizationConfig? config,
             string? multiLoRATask)
         {
-            _result = result ?? throw new ArgumentNullException(nameof(result));
+            Guard.NotNull(result);
+            _result = result;
             _config = config;
             _multiLoRATask = multiLoRATask;
         }

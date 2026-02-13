@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.CurriculumLearning.Interfaces;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.CurriculumLearning;
 
@@ -201,7 +202,8 @@ public class CurriculumLearnerConfigBuilder<T> : ICurriculumLearnerConfigBuilder
     /// <inheritdoc/>
     public ICurriculumLearnerConfigBuilder<T> WithLogAction(Action<string> logAction)
     {
-        _logAction = logAction ?? throw new ArgumentNullException(nameof(logAction));
+        Guard.NotNull(logAction);
+        _logAction = logAction;
         return this;
     }
 

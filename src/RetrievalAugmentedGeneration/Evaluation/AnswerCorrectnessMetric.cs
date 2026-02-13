@@ -1,5 +1,6 @@
 
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 
@@ -27,8 +28,10 @@ public class AnswerCorrectnessMetric<T> : RAGMetricBase<T>
     /// <param name="llmApiKey">The API key for the LLM service.</param>
     public AnswerCorrectnessMetric(string llmEndpoint, string llmApiKey)
     {
-        _llmEndpoint = llmEndpoint ?? throw new ArgumentNullException(nameof(llmEndpoint));
-        _llmApiKey = llmApiKey ?? throw new ArgumentNullException(nameof(llmApiKey));
+        Guard.NotNull(llmEndpoint);
+        _llmEndpoint = llmEndpoint;
+        Guard.NotNull(llmApiKey);
+        _llmApiKey = llmApiKey;
     }
 
     protected override T EvaluateCore(GroundedAnswer<T> answer, string? groundTruth)

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PromptEngineering.Analysis;
 
@@ -44,7 +45,8 @@ public abstract class PromptAnalyzerBase : IPromptAnalyzer
         decimal costPerThousandTokens = 0.03m,
         Func<string, int>? tokenCounter = null)
     {
-        Name = name ?? throw new ArgumentNullException(nameof(name));
+        Guard.NotNull(name);
+        Name = name;
         _modelName = modelName;
         _costPerThousandTokens = costPerThousandTokens;
         _tokenCounter = tokenCounter;

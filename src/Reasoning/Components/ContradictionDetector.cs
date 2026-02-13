@@ -5,6 +5,7 @@ using AiDotNet.Reasoning.Models;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.Components;
 
@@ -53,7 +54,8 @@ internal class ContradictionDetector<T> : IContradictionDetector<T>
     /// <param name="chatModel">The chat model used for contradiction detection.</param>
     public ContradictionDetector(IChatModel<T> chatModel)
     {
-        _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
+        Guard.NotNull(chatModel);
+        _chatModel = chatModel;
     }
 
     /// <inheritdoc/>

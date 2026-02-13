@@ -11,6 +11,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PhysicsInformed.PINNs
 {
@@ -119,8 +120,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _options = options ?? new MultiScalePINNOptions();
             Options = _options;
 
-            _multiScalePDE = multiScalePDE ?? throw new ArgumentNullException(nameof(multiScalePDE));
-            _boundaryConditions = boundaryConditions ?? throw new ArgumentNullException(nameof(boundaryConditions));
+            Guard.NotNull(multiScalePDE);
+            _multiScalePDE = multiScalePDE;
+            Guard.NotNull(boundaryConditions);
+            _boundaryConditions = boundaryConditions;
             _initialCondition = initialCondition;
             _numCollocationPointsPerScale = numCollocationPointsPerScale;
             _trainingOptions = trainingOptions ?? new MultiScaleTrainingOptions<T>();

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Security;
 
@@ -8,7 +9,8 @@ public sealed class ServingRequestContextMiddleware
 
     public ServingRequestContextMiddleware(RequestDelegate next)
     {
-        _next = next ?? throw new ArgumentNullException(nameof(next));
+        Guard.NotNull(next);
+        _next = next;
     }
 
     public async Task InvokeAsync(

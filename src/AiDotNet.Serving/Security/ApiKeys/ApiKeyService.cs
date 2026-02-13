@@ -5,6 +5,7 @@ using AiDotNet.Serving.Persistence.Entities;
 using AiDotNet.Serving.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Security.ApiKeys;
 
@@ -24,8 +25,10 @@ public sealed class ApiKeyService : IApiKeyService
 
     public ApiKeyService(ServingDbContext db, ILogger<ApiKeyService> logger)
     {
-        _db = db ?? throw new ArgumentNullException(nameof(db));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        Guard.NotNull(db);
+        _db = db;
+        Guard.NotNull(logger);
+        _logger = logger;
     }
 
     public async Task<ApiKeyAuthenticationResult?> AuthenticateAsync(string apiKey, CancellationToken cancellationToken = default)

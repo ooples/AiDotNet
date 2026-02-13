@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 
@@ -24,7 +25,8 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
 
     public DynaQAgent(DynaQOptions<T> options) : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _model = new Dictionary<string, Dictionary<int, (string, T)>>();
         _visitedStateActions = new List<(string, int)>();

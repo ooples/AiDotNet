@@ -10,6 +10,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PhysicsInformed.PINNs
 {
@@ -123,8 +124,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
-            _inverseProblem = inverseProblem ?? throw new ArgumentNullException(nameof(inverseProblem));
-            _boundaryConditions = boundaryConditions ?? throw new ArgumentNullException(nameof(boundaryConditions));
+            Guard.NotNull(inverseProblem);
+            _inverseProblem = inverseProblem;
+            Guard.NotNull(boundaryConditions);
+            _boundaryConditions = boundaryConditions;
             _initialCondition = initialCondition;
             _numCollocationPoints = numCollocationPoints;
             _options = options ?? new InverseProblemOptions<T>();

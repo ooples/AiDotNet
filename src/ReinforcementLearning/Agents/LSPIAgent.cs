@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 
@@ -23,7 +24,8 @@ public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
 
     public LSPIAgent(LSPIOptions<T> options) : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
         _samples = new List<(Vector<T>, int, T, Vector<T>, bool)>();
         _iterations = 0;

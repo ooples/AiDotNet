@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -123,9 +124,11 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
         string[]? featureNames = null,
         int? randomState = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
         _gradientFunction = gradientFunction;
-        _backgroundData = backgroundData ?? throw new ArgumentNullException(nameof(backgroundData));
+        Guard.NotNull(backgroundData);
+        _backgroundData = backgroundData;
 
         if (backgroundData.Rows == 0)
             throw new ArgumentException("Background data must have at least one row.", nameof(backgroundData));
@@ -197,7 +200,8 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
     {
         if (neuralNetwork is null)
             throw new ArgumentNullException(nameof(neuralNetwork));
-        _backgroundData = backgroundData ?? throw new ArgumentNullException(nameof(backgroundData));
+        Guard.NotNull(backgroundData);
+        _backgroundData = backgroundData;
 
         if (backgroundData.Rows == 0)
             throw new ArgumentException("Background data must have at least one row.", nameof(backgroundData));

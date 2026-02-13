@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 
@@ -119,7 +120,8 @@ public class MultiModalEmbeddingModel<T> : EmbeddingModelBase<T>
         bool normalizeEmbeddings,
         int dimension)
     {
-        _modelPath = modelPath ?? throw new ArgumentNullException(nameof(modelPath));
+        Guard.NotNull(modelPath);
+        _modelPath = modelPath;
         _normalizeEmbeddings = normalizeEmbeddings;
         _dimension = dimension;
     }

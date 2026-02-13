@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Security;
 
@@ -9,7 +10,8 @@ public sealed class ServingRequestContextResolver : IServingRequestContextResolv
     public ServingRequestContextResolver(
         ITierResolver tierResolver)
     {
-        _tierResolver = tierResolver ?? throw new ArgumentNullException(nameof(tierResolver));
+        Guard.NotNull(tierResolver);
+        _tierResolver = tierResolver;
     }
 
     public Task<ServingRequestContext> ResolveAsync(HttpContext httpContext, CancellationToken cancellationToken)

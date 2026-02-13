@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Inference;
 using AiDotNet.Inference.SpeculativeDecoding;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.ContinuousBatching;
 
@@ -103,7 +104,8 @@ internal class ContinuousBatcher<T> : IDisposable
         KVCache<T>? kvCache = null,
         IDraftModel<T>? draftModel = null)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
         _model = model;
         _kvCache = kvCache;
         _draftModelOverride = draftModel;

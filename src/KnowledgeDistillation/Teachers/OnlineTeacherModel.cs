@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
 
@@ -99,7 +100,8 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         double updateRate = 0.999,
         int updateFrequency = 1)
     {
-        _teacherForward = teacherForward ?? throw new ArgumentNullException(nameof(teacherForward));
+        Guard.NotNull(teacherForward);
+        _teacherForward = teacherForward;
         _teacherUpdate = teacherUpdate;
         _inputDim = inputDimension;
         OutputDimension = outputDimension;
@@ -139,7 +141,8 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         double updateRate = 0.999,
         int updateFrequency = 1)
     {
-        _jitCompilableModel = jitCompilableModel ?? throw new ArgumentNullException(nameof(jitCompilableModel));
+        Guard.NotNull(jitCompilableModel);
+        _jitCompilableModel = jitCompilableModel;
         _teacherUpdate = teacherUpdate;
         _inputDim = inputDimension;
         OutputDimension = outputDimension;

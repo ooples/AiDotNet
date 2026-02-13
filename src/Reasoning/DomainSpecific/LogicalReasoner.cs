@@ -3,6 +3,7 @@ using AiDotNet.Reasoning.Components;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
 using AiDotNet.Reasoning.Verification;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.DomainSpecific;
 
@@ -146,7 +147,8 @@ public class LogicalReasoner<T>
         IChatModel<T> chatModel,
         bool enableContradictionDetection = false)
     {
-        _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
+        Guard.NotNull(chatModel);
+        _chatModel = chatModel;
         _contradictionDetector = enableContradictionDetection ? new ContradictionDetector<T>(chatModel) : null;
         _numOps = MathHelper.GetNumericOperations<T>();
 

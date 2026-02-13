@@ -1,5 +1,6 @@
 using AiDotNet.ProgramSynthesis.Execution;
 using AiDotNet.Serving.Security;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.ProgramSynthesis;
 
@@ -9,7 +10,8 @@ public sealed class ServingProgramEvaluateIoResponseRedactor : IServingProgramEv
 
     public ServingProgramEvaluateIoResponseRedactor(IServingProgramExecuteResponseRedactor executeResponseRedactor)
     {
-        _executeResponseRedactor = executeResponseRedactor ?? throw new ArgumentNullException(nameof(executeResponseRedactor));
+        Guard.NotNull(executeResponseRedactor);
+        _executeResponseRedactor = executeResponseRedactor;
     }
 
     public ProgramEvaluateIoResponse Redact(ProgramEvaluateIoResponse response, ServingRequestContext requestContext)

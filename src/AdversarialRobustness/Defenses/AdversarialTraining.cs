@@ -322,8 +322,10 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
 
         public PreprocessingFullModel(IFullModel<T, TInput, TOutput> inner, AdversarialTraining<T, TInput, TOutput> defense)
         {
-            _inner = inner ?? throw new ArgumentNullException(nameof(inner));
-            _defense = defense ?? throw new ArgumentNullException(nameof(defense));
+            Guard.NotNull(inner);
+            _inner = inner;
+            Guard.NotNull(defense);
+            _defense = defense;
         }
 
         /// <inheritdoc/>

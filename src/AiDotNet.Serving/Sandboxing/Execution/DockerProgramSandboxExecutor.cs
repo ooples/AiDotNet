@@ -4,6 +4,7 @@ using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Sandboxing.Docker;
 using AiDotNet.Serving.Security;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Sandboxing.Execution;
 
@@ -26,8 +27,10 @@ public sealed class DockerProgramSandboxExecutor : IProgramSandboxExecutor
         ILogger<DockerProgramSandboxExecutor> logger)
     {
         _sandboxOptions = sandboxOptions?.Value ?? throw new ArgumentNullException(nameof(sandboxOptions));
-        _dockerRunner = dockerRunner ?? throw new ArgumentNullException(nameof(dockerRunner));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        Guard.NotNull(dockerRunner);
+        _dockerRunner = dockerRunner;
+        Guard.NotNull(logger);
+        _logger = logger;
 
         _freeConcurrency = new SemaphoreSlim(Math.Max(1, _sandboxOptions.Free.MaxConcurrentExecutions));
         _premiumConcurrency = new SemaphoreSlim(Math.Max(1, _sandboxOptions.Premium.MaxConcurrentExecutions));

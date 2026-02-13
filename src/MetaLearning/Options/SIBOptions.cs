@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -144,7 +145,8 @@ public class SIBOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     /// <param name="metaModel">The feature extractor model (required).</param>
     public SIBOptions(IFullModel<T, TInput, TOutput> metaModel)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
     }
 
     #endregion

@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ContinualLearning;
 
@@ -110,7 +111,7 @@ public class PackNet<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void BeforeTask(INeuralNetwork<T> network, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         _currentTaskId = taskId;
         _totalParameters = network.ParameterCount;
@@ -125,7 +126,7 @@ public class PackNet<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void AfterTask(INeuralNetwork<T> network, (Tensor<T> inputs, Tensor<T> targets) taskData, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         // Prune weights and assign to current task
         var currentParams = network.GetParameters();
@@ -147,8 +148,8 @@ public class PackNet<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public Vector<T> ModifyGradients(INeuralNetwork<T> network, Vector<T> gradients)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = gradients ?? throw new ArgumentNullException(nameof(gradients));
+        Guard.NotNull(network);
+        Guard.NotNull(gradients);
 
         // Zero out gradients for frozen weights (belonging to previous tasks)
         for (int i = 0; i < gradients.Length; i++)
@@ -195,7 +196,7 @@ public class PackNet<T> : IContinualLearningStrategy<T>
     /// </remarks>
     public void ApplyTaskMask(INeuralNetwork<T> network, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         if (!_taskMasks.ContainsKey(taskId))
         {

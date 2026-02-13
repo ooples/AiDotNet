@@ -8,6 +8,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
 using MySqlConnector;
 using Npgsql;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Sandboxing.Sql;
 
@@ -25,8 +26,10 @@ public sealed class SqlSandboxExecutor : ISqlSandboxExecutor
         ILogger<SqlSandboxExecutor> logger)
     {
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
-        _dockerRunner = dockerRunner ?? throw new ArgumentNullException(nameof(dockerRunner));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        Guard.NotNull(dockerRunner);
+        _dockerRunner = dockerRunner;
+        Guard.NotNull(logger);
+        _logger = logger;
 
         _dbContextsById = CreateLookup(_options.DbContexts, nameof(_options.DbContexts), x => x.Id);
         _datasetsById = CreateLookup(_options.Datasets, nameof(_options.Datasets), x => x.Id);

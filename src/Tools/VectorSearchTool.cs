@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Tools;
 
@@ -72,7 +73,8 @@ public class VectorSearchTool<T> : ITool
     /// </remarks>
     public VectorSearchTool(IRetriever<T> retriever, int topK = 5, bool includeMetadata = true)
     {
-        _retriever = retriever ?? throw new ArgumentNullException(nameof(retriever));
+        Guard.NotNull(retriever);
+        _retriever = retriever;
 
         if (topK < 1)
         {

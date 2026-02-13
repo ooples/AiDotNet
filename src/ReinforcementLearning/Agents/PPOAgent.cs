@@ -7,6 +7,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ReinforcementLearning.Common;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.PPO;
 
@@ -68,7 +69,8 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             BatchSize = options.MiniBatchSize
         })
     {
-        _ppoOptions = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _ppoOptions = options;
         _trajectory = new Trajectory<T>();
 
         // Build policy network

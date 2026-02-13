@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 
@@ -24,7 +25,8 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
 
     public LSTDAgent(LSTDOptions<T> options) : base(options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
         _A = new Matrix<T>(_options.FeatureSize, _options.FeatureSize);
         _b = new Vector<T>(_options.FeatureSize);

@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -102,7 +103,8 @@ public class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAblationExp
         string[]? featureNames = null,
         bool perturbEachSeparately = true)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
         _baseline = baseline;
         _featureGroups = featureGroups;
         _featureNames = featureNames;
@@ -131,7 +133,8 @@ public class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAblationExp
         string[]? featureNames = null,
         bool perturbEachSeparately = true)
     {
-        _tensorPredictFunction = tensorPredictFunction ?? throw new ArgumentNullException(nameof(tensorPredictFunction));
+        Guard.NotNull(tensorPredictFunction);
+        _tensorPredictFunction = tensorPredictFunction;
         _featureGroups = featureGroups;
         _featureNames = featureNames;
         _perturbEachSeparately = perturbEachSeparately;

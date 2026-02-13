@@ -7,6 +7,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.SAC;
 
@@ -74,7 +75,8 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
             WarmupSteps = options.WarmupSteps
         })
     {
-        _sacOptions = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _sacOptions = options;
         _replayBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(options.ReplayBufferSize, options.Seed);
         _steps = 0;
         _logAlpha = NumOps.FromDouble(Math.Log(NumOps.ToDouble(options.InitialTemperature)));

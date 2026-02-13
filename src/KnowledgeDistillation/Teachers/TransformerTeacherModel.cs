@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
 
@@ -47,7 +48,8 @@ public class TransformerTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
         int inputDimension,
         int outputDimension)
     {
-        _forwardFunc = forwardFunc ?? throw new ArgumentNullException(nameof(forwardFunc));
+        Guard.NotNull(forwardFunc);
+        _forwardFunc = forwardFunc;
         if (inputDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputDimension),
                 "Input dimension must be positive.");
@@ -76,7 +78,8 @@ public class TransformerTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
         int inputDimension,
         int outputDimension)
     {
-        _jitCompilableModel = jitCompilableModel ?? throw new ArgumentNullException(nameof(jitCompilableModel));
+        Guard.NotNull(jitCompilableModel);
+        _jitCompilableModel = jitCompilableModel;
         if (inputDimension <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputDimension),
                 "Input dimension must be positive.");

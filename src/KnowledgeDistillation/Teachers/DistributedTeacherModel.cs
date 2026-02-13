@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
 
@@ -18,7 +19,8 @@ public class DistributedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>,
         ITeacherModel<Vector<T>, Vector<T>>[] workers,
         AggregationMode aggregation = AggregationMode.Average)
     {
-        _workers = workers ?? throw new ArgumentNullException(nameof(workers));
+        Guard.NotNull(workers);
+        _workers = workers;
 
         // Validate workers array is non-empty
         if (_workers.Length == 0)

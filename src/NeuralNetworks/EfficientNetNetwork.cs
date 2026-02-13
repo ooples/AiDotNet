@@ -104,7 +104,8 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     {
         _options = options ?? new EfficientNetOptions();
         Options = _options;
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        Guard.NotNull(configuration);
+        _configuration = configuration;
 
         ArchitectureValidator.ValidateInputType(
             architecture,

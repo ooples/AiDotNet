@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Models;
 
@@ -37,10 +38,12 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         bool enableBatching = true,
         bool enableSpeculativeDecoding = false)
     {
-        _modelName = modelName ?? throw new ArgumentNullException(nameof(modelName));
+        Guard.NotNull(modelName);
+        _modelName = modelName;
         _inputDimension = inputDimension;
         _outputDimension = outputDimension;
-        _predictFunc = predictFunc ?? throw new ArgumentNullException(nameof(predictFunc));
+        Guard.NotNull(predictFunc);
+        _predictFunc = predictFunc;
         _predictBatchFunc = predictBatchFunc;
         _enableBatching = enableBatching;
         _enableSpeculativeDecoding = enableSpeculativeDecoding;
@@ -61,7 +64,8 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         bool enableBatching = true,
         bool enableSpeculativeDecoding = false)
     {
-        _modelName = modelName ?? throw new ArgumentNullException(nameof(modelName));
+        Guard.NotNull(modelName);
+        _modelName = modelName;
         _inputDimension = inputDimension;
         _outputDimension = 1; // Regression models typically output a single value
         _enableBatching = enableBatching;

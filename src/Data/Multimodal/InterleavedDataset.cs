@@ -210,7 +210,8 @@ public class InterleavedSegment<T>
     public InterleavedSegment(ModalityType modality, Tensor<T> data, int position, string? key = null)
     {
         Modality = modality;
-        Data = data ?? throw new ArgumentNullException(nameof(data));
+        Guard.NotNull(data);
+        Data = data;
         Position = position;
         Key = key ?? $"{modality.ToString().ToLowerInvariant()}_{position}";
     }

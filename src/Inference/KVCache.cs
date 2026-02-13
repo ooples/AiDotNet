@@ -98,7 +98,8 @@ internal class KVCache<T>
     /// <param name="config">Cache configuration.</param>
     public KVCache(KVCacheConfig config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
 
         _keyCache = new Tensor<T>[config.NumLayers];
         _valueCache = new Tensor<T>[config.NumLayers];

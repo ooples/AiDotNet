@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Metrics;
 
@@ -402,7 +403,8 @@ public class AestheticScore<T> where T : struct
         string[]? positivePrompts = null,
         string[]? negativePrompts = null)
     {
-        _clipModel = clipModel ?? throw new ArgumentNullException(nameof(clipModel));
+        Guard.NotNull(clipModel);
+        _clipModel = clipModel;
         _numOps = MathHelper.GetNumericOperations<T>();
         _aestheticWeights = aestheticWeights;
         _positivePrompts = positivePrompts ?? DefaultPositivePrompts;

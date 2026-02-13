@@ -1,6 +1,7 @@
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Models;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Services;
 
@@ -20,10 +21,13 @@ public sealed class ModelArtifactService : IModelArtifactService
         IModelArtifactProtector protector,
         IModelArtifactStore store)
     {
-        _modelRepository = modelRepository ?? throw new ArgumentNullException(nameof(modelRepository));
+        Guard.NotNull(modelRepository);
+        _modelRepository = modelRepository;
         _servingOptions = servingOptions?.Value ?? throw new ArgumentNullException(nameof(servingOptions));
-        _protector = protector ?? throw new ArgumentNullException(nameof(protector));
-        _store = store ?? throw new ArgumentNullException(nameof(store));
+        Guard.NotNull(protector);
+        _protector = protector;
+        Guard.NotNull(store);
+        _store = store;
     }
 
     public string GetPlainArtifactPath(string modelName)

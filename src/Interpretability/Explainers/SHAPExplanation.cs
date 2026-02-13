@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -62,7 +63,8 @@ public class SHAPExplanation<T>
         T prediction,
         string[]? featureNames = null)
     {
-        ShapValues = shapValues ?? throw new ArgumentNullException(nameof(shapValues));
+        Guard.NotNull(shapValues);
+        ShapValues = shapValues;
         BaselineValue = baselineValue;
         Prediction = prediction;
         FeatureNames = featureNames;
@@ -195,7 +197,8 @@ public class GlobalSHAPExplanation<T>
     /// </summary>
     public GlobalSHAPExplanation(SHAPExplanation<T>[] localExplanations, string[]? featureNames = null)
     {
-        LocalExplanations = localExplanations ?? throw new ArgumentNullException(nameof(localExplanations));
+        Guard.NotNull(localExplanations);
+        LocalExplanations = localExplanations;
         if (localExplanations.Length == 0)
             throw new ArgumentException("At least one local explanation is required.", nameof(localExplanations));
 

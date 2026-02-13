@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PromptEngineering.Chains;
 
@@ -61,7 +62,8 @@ public class RouterChain<TInput, TOutput> : ChainBase<TInput, TOutput>
     /// <returns>This chain instance for method chaining.</returns>
     public RouterChain<TInput, TOutput> SetClassifier(Func<TInput, string> classifier)
     {
-        _syncClassifier = classifier ?? throw new ArgumentNullException(nameof(classifier));
+        Guard.NotNull(classifier);
+        _syncClassifier = classifier;
         return this;
     }
 
@@ -72,7 +74,8 @@ public class RouterChain<TInput, TOutput> : ChainBase<TInput, TOutput>
     /// <returns>This chain instance for method chaining.</returns>
     public RouterChain<TInput, TOutput> SetClassifierAsync(Func<TInput, CancellationToken, Task<string>> classifier)
     {
-        _asyncClassifier = classifier ?? throw new ArgumentNullException(nameof(classifier));
+        Guard.NotNull(classifier);
+        _asyncClassifier = classifier;
         return this;
     }
 
@@ -117,7 +120,8 @@ public class RouterChain<TInput, TOutput> : ChainBase<TInput, TOutput>
     /// <returns>This chain instance for method chaining.</returns>
     public RouterChain<TInput, TOutput> SetDefaultRoute(IChain<TInput, TOutput> chain)
     {
-        _defaultRoute = chain ?? throw new ArgumentNullException(nameof(chain));
+        Guard.NotNull(chain);
+        _defaultRoute = chain;
         return this;
     }
 

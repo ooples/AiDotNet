@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
 using AiDotNet.Reasoning.Verification;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.DomainSpecific;
 
@@ -60,7 +61,8 @@ public class CodeReasoner<T>
     /// <param name="tools">Optional code-related tools (code execution, linters, etc.).</param>
     public CodeReasoner(IChatModel<T> chatModel, IEnumerable<ITool>? tools = null)
     {
-        _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
+        Guard.NotNull(chatModel);
+        _chatModel = chatModel;
         _cotStrategy = new ChainOfThoughtStrategy<T>(chatModel, tools);
         _totStrategy = new TreeOfThoughtsStrategy<T>(chatModel, tools);
         _criticModel = new CriticModel<T>(chatModel);

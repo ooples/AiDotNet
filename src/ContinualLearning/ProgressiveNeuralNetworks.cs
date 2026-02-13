@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ContinualLearning;
 
@@ -110,7 +111,7 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void BeforeTask(INeuralNetwork<T> network, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         _currentTaskId = taskId;
 
@@ -133,7 +134,7 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void AfterTask(INeuralNetwork<T> network, (Tensor<T> inputs, Tensor<T> targets) taskData, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         // Find the column for this task and store its parameters
         var column = _columns.FirstOrDefault(c => c.TaskId == taskId);
@@ -155,8 +156,8 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public Vector<T> ModifyGradients(INeuralNetwork<T> network, Vector<T> gradients)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = gradients ?? throw new ArgumentNullException(nameof(gradients));
+        Guard.NotNull(network);
+        Guard.NotNull(gradients);
 
         // In a true progressive network implementation, the frozen columns
         // would be separate networks. Here we simulate by zeroing gradients

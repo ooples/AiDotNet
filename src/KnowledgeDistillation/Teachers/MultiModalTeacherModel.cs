@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation.Teachers;
 
@@ -18,7 +19,8 @@ public class MultiModalTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
         ITeacherModel<Vector<T>, Vector<T>>[] modalityTeachers,
         double[]? modalityWeights = null)
     {
-        _modalityTeachers = modalityTeachers ?? throw new ArgumentNullException(nameof(modalityTeachers));
+        Guard.NotNull(modalityTeachers);
+        _modalityTeachers = modalityTeachers;
 
         // Validate modality teachers array is non-empty
         if (_modalityTeachers.Length == 0)

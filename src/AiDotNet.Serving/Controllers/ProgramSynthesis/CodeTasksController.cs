@@ -6,6 +6,7 @@ using AiDotNet.Serving.ProgramSynthesis;
 using AiDotNet.Serving.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Controllers.ProgramSynthesis;
 
@@ -31,13 +32,19 @@ public sealed class CodeTasksController : ControllerBase
         IOptions<ServingProgramSynthesisOptions> options,
         ILogger<CodeTasksController> logger)
     {
-        _executor = executor ?? throw new ArgumentNullException(nameof(executor));
-        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
-        _redactor = redactor ?? throw new ArgumentNullException(nameof(redactor));
-        _requestContextAccessor = requestContextAccessor ?? throw new ArgumentNullException(nameof(requestContextAccessor));
-        _concurrencyLimiter = concurrencyLimiter ?? throw new ArgumentNullException(nameof(concurrencyLimiter));
+        Guard.NotNull(executor);
+        _executor = executor;
+        Guard.NotNull(validator);
+        _validator = validator;
+        Guard.NotNull(redactor);
+        _redactor = redactor;
+        Guard.NotNull(requestContextAccessor);
+        _requestContextAccessor = requestContextAccessor;
+        Guard.NotNull(concurrencyLimiter);
+        _concurrencyLimiter = concurrencyLimiter;
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        Guard.NotNull(logger);
+        _logger = logger;
     }
 
     [HttpPost("completion")]

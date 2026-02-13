@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Embedded;
 
@@ -75,7 +76,8 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int[]? columnIndices = null)
         : base(columnIndices)
     {
-        _importanceFunc = importanceFunc ?? throw new ArgumentNullException(nameof(importanceFunc));
+        Guard.NotNull(importanceFunc);
+        _importanceFunc = importanceFunc;
         _precomputedImportances = null;
         _thresholdType = thresholdType;
         _thresholdValue = thresholdValue;
@@ -99,7 +101,8 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         : base(columnIndices)
     {
         _importanceFunc = null;
-        _precomputedImportances = featureImportances ?? throw new ArgumentNullException(nameof(featureImportances));
+        Guard.NotNull(featureImportances);
+        _precomputedImportances = featureImportances;
         _thresholdType = thresholdType;
         _thresholdValue = thresholdValue;
         _maxFeatures = maxFeatures;

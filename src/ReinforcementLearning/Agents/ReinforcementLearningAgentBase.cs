@@ -4,6 +4,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents;
 
@@ -92,7 +93,8 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// <param name="options">Configuration options for the agent.</param>
     protected ReinforcementLearningAgentBase(ReinforcementLearningOptions<T> options)
     {
-        Options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        Options = options;
         NumOps = MathHelper.GetNumericOperations<T>();
         Random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
 

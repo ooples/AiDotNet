@@ -46,6 +46,7 @@ using AiDotNet.Preprocessing.DataPreparation;
 using AiDotNet.Preprocessing.Imputers;
 using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet;
 
@@ -584,7 +585,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
         IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null)
     {
-        _federatedLearningOptions = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _federatedLearningOptions = options;
         _federatedAggregationStrategy = aggregationStrategy;
         _federatedClientSelectionStrategy = clientSelectionStrategy;
         _federatedServerOptimizer = serverOptimizer;

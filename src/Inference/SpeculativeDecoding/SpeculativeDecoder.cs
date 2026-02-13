@@ -1,5 +1,6 @@
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Inference.SpeculativeDecoding;
 
@@ -107,8 +108,10 @@ internal class SpeculativeDecoder<T>
         Func<Vector<int>, Matrix<T>> targetForward,
         SpeculativeDecodingConfig<T>? config = null)
     {
-        _draftModel = draftModel ?? throw new ArgumentNullException(nameof(draftModel));
-        _targetForward = targetForward ?? throw new ArgumentNullException(nameof(targetForward));
+        Guard.NotNull(draftModel);
+        _draftModel = draftModel;
+        Guard.NotNull(targetForward);
+        _targetForward = targetForward;
         _config = config ?? new SpeculativeDecodingConfig<T>();
         _maxDraftTokens = Math.Max(1, _config.NumDraftTokens);
         _maxTreeDepth = Math.Max(1, _config.MaxTreeDepth);

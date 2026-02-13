@@ -1,4 +1,5 @@
 using AiDotNet.Extensions;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Genetics;
 
@@ -12,7 +13,8 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
         IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
         : base(fitnessCalculator)
     {
-        _modelFactory = modelFactory ?? throw new ArgumentNullException(nameof(modelFactory));
+        Guard.NotNull(modelFactory);
+        _modelFactory = modelFactory;
     }
 
     protected override ModelParameterGene<T> MutateGene(ModelParameterGene<T> gene)

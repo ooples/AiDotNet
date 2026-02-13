@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.Components;
 
@@ -37,7 +38,8 @@ internal class ThoughtGenerator<T> : IThoughtGenerator<T>
     /// <param name="chatModel">The chat model used to generate thoughts.</param>
     public ThoughtGenerator(IChatModel<T> chatModel)
     {
-        _chatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
+        Guard.NotNull(chatModel);
+        _chatModel = chatModel;
     }
 
     /// <inheritdoc/>

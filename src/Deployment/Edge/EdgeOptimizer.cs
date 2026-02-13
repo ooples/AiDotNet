@@ -1,6 +1,7 @@
 using AiDotNet.Deployment.Export;
 using AiDotNet.Deployment.Optimization.Quantization;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Deployment.Edge;
 
@@ -17,7 +18,8 @@ public class EdgeOptimizer<T, TInput, TOutput>
 
     public EdgeOptimizer(EdgeConfiguration config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
     }
 
     /// <summary>

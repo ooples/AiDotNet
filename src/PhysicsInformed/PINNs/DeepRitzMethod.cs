@@ -9,6 +9,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PhysicsInformed.PINNs
 {
@@ -104,7 +105,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _options = options ?? new DeepRitzMethodOptions();
             Options = _options;
 
-            _energyFunctional = energyFunctional ?? throw new ArgumentNullException(nameof(energyFunctional));
+            Guard.NotNull(energyFunctional);
+            _energyFunctional = energyFunctional;
             _boundaryCheck = boundaryCheck;
             _boundaryValue = boundaryValue;
             _numQuadraturePoints = numQuadraturePoints;

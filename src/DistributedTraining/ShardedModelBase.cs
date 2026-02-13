@@ -2,6 +2,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
+using AiDotNet.Validation;
 
 
 namespace AiDotNet.DistributedTraining;
@@ -130,8 +131,10 @@ public abstract class ShardedModelBase<T, TInput, TOutput> : IShardedModel<T, TI
     /// <exception cref="ArgumentNullException">Thrown if model or config is null</exception>
     protected ShardedModelBase(IFullModel<T, TInput, TOutput> wrappedModel, IShardingConfiguration<T> config)
     {
-        _wrappedModel = wrappedModel ?? throw new ArgumentNullException(nameof(wrappedModel));
-        Config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(wrappedModel);
+        _wrappedModel = wrappedModel;
+        Guard.NotNull(config);
+        Config = config;
         NumOps = MathHelper.GetNumericOperations<T>();
 
         // Initialize communication backend if needed

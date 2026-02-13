@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.NeuralNetworks;
@@ -208,7 +209,8 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
             _imageEncoder = imageEncoder;
             _textEncoder = textEncoder;
             _audioEncoder = audioEncoder;
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+            Guard.NotNull(tokenizer);
+            _tokenizer = tokenizer;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
             InitializeLayers();

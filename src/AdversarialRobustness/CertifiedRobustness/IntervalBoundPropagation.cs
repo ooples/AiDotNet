@@ -8,6 +8,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 
@@ -70,7 +71,8 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
     /// <param name="options">The configuration options for IBP.</param>
     public IntervalBoundPropagation(CertifiedDefenseOptions<T> options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
         _options.CertificationMethod = "IBP";
     }
 

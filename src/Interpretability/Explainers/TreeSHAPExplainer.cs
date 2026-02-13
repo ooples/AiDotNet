@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -94,7 +95,8 @@ public class TreeSHAPExplainer<T> : ILocalExplainer<T, TreeSHAPExplanation<T>>, 
         T expectedValue,
         string[]? featureNames = null)
     {
-        _singleTree = tree ?? throw new ArgumentNullException(nameof(tree));
+        Guard.NotNull(tree);
+        _singleTree = tree;
         _ensemble = null;
         _numFeatures = numFeatures > 0 ? numFeatures : throw new ArgumentException("Number of features must be positive.", nameof(numFeatures));
         _expectedValue = expectedValue;

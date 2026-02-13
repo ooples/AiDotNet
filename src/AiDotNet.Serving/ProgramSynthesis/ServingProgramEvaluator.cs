@@ -5,6 +5,7 @@ using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Sandboxing.Execution;
 using AiDotNet.Serving.Security;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.ProgramSynthesis;
 
@@ -21,10 +22,13 @@ public sealed class ServingProgramEvaluator : IServingProgramEvaluator
         IOptions<ServingProgramSynthesisOptions> options,
         ILogger<ServingProgramEvaluator> logger)
     {
-        _executor = executor ?? throw new ArgumentNullException(nameof(executor));
-        _executeResponseRedactor = executeResponseRedactor ?? throw new ArgumentNullException(nameof(executeResponseRedactor));
+        Guard.NotNull(executor);
+        _executor = executor;
+        Guard.NotNull(executeResponseRedactor);
+        _executeResponseRedactor = executeResponseRedactor;
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        Guard.NotNull(logger);
+        _logger = logger;
     }
 
     public async Task<ProgramEvaluateIoResponse> EvaluateIoAsync(

@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Models;
 
@@ -34,8 +35,10 @@ public class ServableClipModel<T> : IServableMultimodalModel<T>
     /// <exception cref="ArgumentNullException">Thrown when clipModel or modelName is null.</exception>
     public ServableClipModel(IMultimodalEmbedding<T> clipModel, string modelName)
     {
-        _clipModel = clipModel ?? throw new ArgumentNullException(nameof(clipModel));
-        _modelName = modelName ?? throw new ArgumentNullException(nameof(modelName));
+        Guard.NotNull(clipModel);
+        _clipModel = clipModel;
+        Guard.NotNull(modelName);
+        _modelName = modelName;
     }
 
     /// <inheritdoc/>

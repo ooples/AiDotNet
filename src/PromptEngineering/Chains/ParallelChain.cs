@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PromptEngineering.Chains;
 
@@ -108,7 +109,8 @@ public class ParallelChain<TInput, TOutput> : ChainBase<TInput, TOutput>
     /// <returns>This chain instance for method chaining.</returns>
     public ParallelChain<TInput, TOutput> SetReducer(Func<Dictionary<string, object>, TOutput> reducer)
     {
-        _syncReducer = reducer ?? throw new ArgumentNullException(nameof(reducer));
+        Guard.NotNull(reducer);
+        _syncReducer = reducer;
         return this;
     }
 
@@ -120,7 +122,8 @@ public class ParallelChain<TInput, TOutput> : ChainBase<TInput, TOutput>
     public ParallelChain<TInput, TOutput> SetReducerAsync(
         Func<Dictionary<string, object>, CancellationToken, Task<TOutput>> reducer)
     {
-        _asyncReducer = reducer ?? throw new ArgumentNullException(nameof(reducer));
+        Guard.NotNull(reducer);
+        _asyncReducer = reducer;
         return this;
     }
 

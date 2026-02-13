@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.FineTuning;
 
@@ -59,7 +60,8 @@ public class GroupRelativePolicyOptimization<T, TInput, TOutput> : FineTuningBas
     /// <param name="rewardFunction">A function that takes (input, output) and returns a reward score.</param>
     public void SetRewardFunction(Func<TInput, TOutput, double> rewardFunction)
     {
-        _rewardFunction = rewardFunction ?? throw new ArgumentNullException(nameof(rewardFunction));
+        Guard.NotNull(rewardFunction);
+        _rewardFunction = rewardFunction;
     }
 
     /// <inheritdoc/>

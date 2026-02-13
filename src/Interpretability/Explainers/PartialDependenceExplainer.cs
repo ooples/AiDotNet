@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -70,8 +71,10 @@ public class PartialDependenceExplainer<T> : IGlobalExplainer<T, PartialDependen
         bool computeIce = true,
         string[]? featureNames = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
-        _backgroundData = backgroundData ?? throw new ArgumentNullException(nameof(backgroundData));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
+        Guard.NotNull(backgroundData);
+        _backgroundData = backgroundData;
 
         if (backgroundData.Rows == 0)
             throw new ArgumentException("Background data must have at least one row.", nameof(backgroundData));

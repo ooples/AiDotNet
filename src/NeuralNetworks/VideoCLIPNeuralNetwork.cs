@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.NeuralNetworks;
@@ -183,7 +184,8 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             textEncoder = new InferenceSession(textEncoderPath);
             _videoEncoder = videoEncoder;
             _textEncoder = textEncoder;
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+            Guard.NotNull(tokenizer);
+            _tokenizer = tokenizer;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
             InitializeLayers();

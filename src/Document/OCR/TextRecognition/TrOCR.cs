@@ -11,6 +11,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Document.OCR.TextRecognition;
 
@@ -160,7 +161,8 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         if (!File.Exists(decoderPath))
             throw new FileNotFoundException($"Decoder model not found: {decoderPath}", decoderPath);
 
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
         _encoderHiddenDim = encoderHiddenDim;
         _decoderHiddenDim = decoderHiddenDim;

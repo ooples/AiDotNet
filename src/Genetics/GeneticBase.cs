@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Genetics;
 
@@ -90,7 +91,8 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <param name="fitnessCalculator">The fitness calculator to use.</param>
     protected GeneticBase(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
     {
-        FitnessCalculator = fitnessCalculator ?? throw new ArgumentNullException(nameof(fitnessCalculator));
+        Guard.NotNull(fitnessCalculator);
+        FitnessCalculator = fitnessCalculator;
         Population = new List<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>>();
         GeneticParams = new GeneticParameters();
         Random = RandomHelper.CreateSecureRandom();
@@ -327,7 +329,8 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <param name="fitnessCalculator">The fitness calculator to use.</param>
     public void SetFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> fitnessCalculator)
     {
-        FitnessCalculator = fitnessCalculator ?? throw new ArgumentNullException(nameof(fitnessCalculator));
+        Guard.NotNull(fitnessCalculator);
+        FitnessCalculator = fitnessCalculator;
         CurrentStats = new EvolutionStats<T, TInput, TOutput>(fitnessCalculator);
     }
 
@@ -1312,7 +1315,8 @@ public abstract class GeneticBase<T, TInput, TOutput> :
     /// <param name="parameters">The genetic algorithm parameters to use.</param>
     public virtual void ConfigureGeneticParameters(GeneticParameters parameters)
     {
-        GeneticParams = parameters ?? throw new ArgumentNullException(nameof(parameters));
+        Guard.NotNull(parameters);
+        GeneticParams = parameters;
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Evaluation.CrossValidation;
 
@@ -34,7 +35,8 @@ public class GroupKFoldStrategy<T> : ICrossValidationStrategy<T>
     /// <param name="k">Number of folds. If null or greater than number of unique groups, uses number of unique groups.</param>
     public GroupKFoldStrategy(int[] groups, int? k = null)
     {
-        _groups = groups ?? throw new ArgumentNullException(nameof(groups));
+        Guard.NotNull(groups);
+        _groups = groups;
         var uniqueGroups = groups.Distinct().Count();
         _k = k.HasValue ? Math.Min(k.Value, uniqueGroups) : Math.Min(5, uniqueGroups);
 

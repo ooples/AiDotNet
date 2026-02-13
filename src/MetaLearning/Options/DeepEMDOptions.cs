@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -164,7 +165,8 @@ public class DeepEMDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// <param name="metaModel">The feature extractor model (required).</param>
     public DeepEMDOptions(IFullModel<T, TInput, TOutput> metaModel)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
     }
 
     #endregion

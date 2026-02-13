@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Serving.Models;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Services;
 
@@ -38,8 +39,10 @@ public class ModelRegistryLoader<T, TInput, TOutput>
     /// <param name="repository">The model repository to load models into.</param>
     public ModelRegistryLoader(IModelRegistry<T, TInput, TOutput> registry, IModelRepository repository)
     {
-        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
-        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        Guard.NotNull(registry);
+        _registry = registry;
+        Guard.NotNull(repository);
+        _repository = repository;
     }
 
     /// <summary>

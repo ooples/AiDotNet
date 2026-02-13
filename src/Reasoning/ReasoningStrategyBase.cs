@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning;
 
@@ -68,7 +69,8 @@ public abstract class ReasoningStrategyBase<T> : IReasoningStrategy<T>
     /// </remarks>
     protected ReasoningStrategyBase(IChatModel<T> chatModel, IEnumerable<ITool>? tools = null)
     {
-        ChatModel = chatModel ?? throw new ArgumentNullException(nameof(chatModel));
+        Guard.NotNull(chatModel);
+        ChatModel = chatModel;
         _tools = tools?.ToList() ?? new List<ITool>();
         _reasoningTrace = new System.Text.StringBuilder();
     }

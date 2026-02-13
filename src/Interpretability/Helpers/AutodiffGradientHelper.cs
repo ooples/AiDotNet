@@ -2,6 +2,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Helpers;
 
@@ -78,7 +79,8 @@ public class AutodiffGradientHelper<T>
     /// </remarks>
     public AutodiffGradientHelper(Func<ComputationNode<T>, ComputationNode<T>> modelFunction)
     {
-        _modelFunction = modelFunction ?? throw new ArgumentNullException(nameof(modelFunction));
+        Guard.NotNull(modelFunction);
+        _modelFunction = modelFunction;
     }
 
     /// <summary>

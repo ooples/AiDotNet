@@ -12,6 +12,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PhysicsInformed.PINNs
 {
@@ -141,8 +142,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _options = options ?? new PhysicsInformedNeuralNetworkOptions();
             Options = _options;
 
-            _pdeSpecification = pdeSpecification ?? throw new ArgumentNullException(nameof(pdeSpecification));
-            _boundaryConditions = boundaryConditions ?? throw new ArgumentNullException(nameof(boundaryConditions));
+            Guard.NotNull(pdeSpecification);
+            _pdeSpecification = pdeSpecification;
+            Guard.NotNull(boundaryConditions);
+            _boundaryConditions = boundaryConditions;
             _initialCondition = initialCondition;
             _numCollocationPoints = numCollocationPoints;
 
