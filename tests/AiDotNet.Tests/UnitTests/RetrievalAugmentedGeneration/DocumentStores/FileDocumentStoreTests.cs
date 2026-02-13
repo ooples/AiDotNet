@@ -207,6 +207,8 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             // Assert
             Assert.Equal(2, results.Count);
             Assert.True(results[0].HasRelevanceScore);
+            Assert.Equal("doc1", results[0].Id);
+            Assert.True(results[0].RelevanceScore >= results[1].RelevanceScore);
         }
 
         [Fact]

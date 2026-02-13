@@ -46,6 +46,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// - Medium datasets (up to ~1M documents depending on RAM)
 /// - Single-process applications (not for multi-process concurrent access)
 /// - Scenarios where you want an embedded vector database without external dependencies
+///
+/// <b>Thread-safety:</b> While <see cref="ConcurrentDictionary{TKey, TValue}"/> is used
+/// internally for document/metadata storage, HNSW index operations (AddVectors, RemoveVectors,
+/// Search/Query) are <b>not</b> protected by internal locks. Concurrent mutations from multiple
+/// threads are unsupported. Concurrent read-only/search operations may work depending on the
+/// HNSW implementation but are not guaranteed. For safe in-process concurrency, serialize writes
+/// with an external lock or implement internal synchronization around HNSW accesses.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector operations.</typeparam>
@@ -685,13 +692,8 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         // the physical disk (not just the OS buffer) on every write.
         var fileOptions = _options.SyncWalWrites ? FileOptions.WriteThrough : FileOptions.None;
         var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read, 4096, fileOptions);
+        _walSize = stream.Length;
         _walWriter = new StreamWriter(stream) { AutoFlush = true };
-
-        if (File.Exists(path))
-        {
-            var fileInfo = new FileInfo(path);
-            _walSize = fileInfo.Length;
-        }
     }
 
     /// <summary>
@@ -757,56 +759,56 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
 
         using (reader)
         {
-        string? line;
-        while ((line = reader.ReadLine()) != null)
-        {
-            if (string.IsNullOrWhiteSpace(line))
-                continue;
-
-            WalEntry? entry;
-            try
+            string? line;
+            while ((line = reader.ReadLine()) != null)
             {
-                entry = JsonConvert.DeserializeObject<WalEntry>(line);
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"FileDocumentStore: Corrupted WAL entry skipped: {ex.Message}");
-                continue; // Skip corrupted WAL entries
-            }
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
 
-            if (entry == null)
-                continue;
+                WalEntry? entry;
+                try
+                {
+                    entry = JsonConvert.DeserializeObject<WalEntry>(line);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"FileDocumentStore: Corrupted WAL entry skipped: {ex.Message}");
+                    continue; // Skip corrupted WAL entries
+                }
 
-            switch (entry.Operation)
-            {
-                case WalOperation.Add:
-                    if (entry.Document != null && entry.VectorData != null)
-                    {
-                        var doc = new Document<T>(entry.DocumentId, entry.Document.Content, entry.Document.Metadata);
-                        var vector = DoubleArrayToVector(entry.VectorData);
-                        var vd = new VectorDocument<T>(doc, vector);
+                if (entry == null)
+                    continue;
 
-                        bool alreadyExists = _store.ContainsKey(entry.DocumentId);
-                        _tombstones.Remove(entry.DocumentId);
-                        _store[entry.DocumentId] = vd;
-
-                        // Remove from HNSW first if updating existing entry
-                        if (alreadyExists)
+                switch (entry.Operation)
+                {
+                    case WalOperation.Add:
+                        if (entry.Document != null && entry.VectorData != null)
                         {
-                            _hnswIndex.Remove(entry.DocumentId);
-                        }
-                        _hnswIndex.Add(entry.DocumentId, vector);
-                    }
-                    break;
+                            var doc = new Document<T>(entry.DocumentId, entry.Document.Content, entry.Document.Metadata);
+                            var vector = DoubleArrayToVector(entry.VectorData);
+                            var vd = new VectorDocument<T>(doc, vector);
 
-                case WalOperation.Remove:
-                    _store.TryRemove(entry.DocumentId, out _);
-                    _hnswIndex.Remove(entry.DocumentId);
-                    _tombstones.Add(entry.DocumentId);
-                    break;
+                            bool alreadyExists = _store.ContainsKey(entry.DocumentId);
+                            _tombstones.Remove(entry.DocumentId);
+                            _store[entry.DocumentId] = vd;
+
+                            // Remove from HNSW first if updating existing entry
+                            if (alreadyExists)
+                            {
+                                _hnswIndex.Remove(entry.DocumentId);
+                            }
+                            _hnswIndex.Add(entry.DocumentId, vector);
+                        }
+                        break;
+
+                    case WalOperation.Remove:
+                        _store.TryRemove(entry.DocumentId, out _);
+                        _hnswIndex.Remove(entry.DocumentId);
+                        _tombstones.Add(entry.DocumentId);
+                        break;
+                }
             }
         }
-        } // end using reader
     }
 
     /// <summary>
@@ -863,6 +865,7 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         if (currentWalSize > _options.MaxWalSizeBytes)
         {
             Flush();
+            return;
         }
 
         // Auto-compact when tombstone ratio exceeds threshold.

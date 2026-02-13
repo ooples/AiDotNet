@@ -57,6 +57,20 @@ public class FileDocumentStoreOptions
     public bool FlushOnEveryWrite { get; set; }
 
     /// <summary>
+    /// Gets or sets whether WAL writes should be synchronous (fsync on every write).
+    /// When true, uses <see cref="System.IO.FileOptions.WriteThrough"/> to guarantee data
+    /// reaches the physical disk, not just the OS buffer. Default is false for better performance.
+    /// </summary>
+    public bool SyncWalWrites { get; set; }
+
+    /// <summary>
+    /// Gets or sets the minimum total document count (live + tombstones) required before
+    /// automatic compaction is considered. Prevents thrashing on small stores.
+    /// Default is 10.
+    /// </summary>
+    public int MinimumDocumentCountForCompaction { get; set; } = 10;
+
+    /// <summary>
     /// Gets or sets the random seed for the HNSW index.
     /// Use a fixed value for reproducible behavior.
     /// </summary>
