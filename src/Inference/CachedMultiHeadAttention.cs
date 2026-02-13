@@ -1,4 +1,5 @@
 
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -41,6 +42,15 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
     private readonly int _embeddingDimension;
     private readonly bool _useFlashAttention;
     private readonly bool _useCausalMask;
+
+    // Positional encoding
+    private RotaryPositionalEncodingLayer<T>? _ropeLayer;
+    private ALiBiPositionalBiasLayer<T>? _alibiLayer;
+
+    /// <summary>
+    /// Gets the positional encoding type used by this attention layer.
+    /// </summary>
+    public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
 
     // Projection weights
     private Matrix<T> _queryWeights;
@@ -166,6 +176,39 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
         InitializeParameters();
     }
 
+    /// <summary>
+    /// Configures positional encoding for this cached attention layer.
+    /// </summary>
+    /// <param name="encodingType">The type of positional encoding to use.</param>
+    /// <param name="ropeTheta">Base frequency for RoPE (default: 10000.0).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length for pre-computation.</param>
+    public void ConfigurePositionalEncoding(
+        PositionalEncodingType encodingType,
+        double ropeTheta = 10000.0,
+        int maxSequenceLength = 2048)
+    {
+        PositionalEncoding = encodingType;
+        _ropeLayer = null;
+        _alibiLayer = null;
+
+        switch (encodingType)
+        {
+            case PositionalEncodingType.Rotary:
+                _ropeLayer = new RotaryPositionalEncodingLayer<T>(
+                    maxSequenceLength, _headDimension, ropeTheta);
+                break;
+            case PositionalEncodingType.ALiBi:
+                _alibiLayer = new ALiBiPositionalBiasLayer<T>(_headCount, maxSequenceLength);
+                break;
+            case PositionalEncodingType.None:
+                break;
+            default:
+                throw new ArgumentException(
+                    $"Unsupported positional encoding type for CachedMultiHeadAttention: {encodingType}.",
+                    nameof(encodingType));
+        }
+    }
+
     private void InitializeParameters()
     {
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_queryWeights.Rows + _queryWeights.Columns)));
@@ -239,20 +282,31 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
         newKeys = newKeys.Reshape(batchSize, seqLen, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
         newValues = newValues.Reshape(batchSize, seqLen, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
 
+        // Apply RoPE with position offset for incremental decoding
+        if (_ropeLayer != null)
+        {
+            int startPosition = _cache!.CurrentLength;
+            (queries, newKeys) = _ropeLayer.ApplyRoPE(queries, newKeys, startPosition);
+        }
+
         // Append to cache and get full K, V
         var (keys, values) = _cache!.Append(_layerIndex, newKeys, newValues);
 
         // Compute attention using cached K, V
         Tensor<T> attentionOutput;
-        if (_useFlashAttention)
+        if (_useFlashAttention || _alibiLayer != null)
         {
+            // Use FlashAttention for both flash-enabled and ALiBi paths
+            // (ALiBi bias is injected via attentionBias parameter)
             var config = FlashAttentionConfig.Default;
             config.UseCausalMask = _useCausalMask;
 
             int seqLenKV = keys.Shape[2];
             int seqLenQ = queries.Shape[2];
             int queryOffset = Math.Max(0, seqLenKV - seqLenQ);
-            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config, queryOffset: queryOffset);
+
+            Tensor<T>? aliBiBias = _alibiLayer?.ComputeBias(seqLenQ, seqLenKV, _useCausalMask);
+            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config, queryOffset: queryOffset, attentionBias: aliBiBias);
             attentionOutput = flashOutput;
         }
         else
@@ -288,13 +342,21 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
         keys = keys.Reshape(batchSize, seqLen, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
         values = values.Reshape(batchSize, seqLen, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
 
+        // Apply RoPE to Q and K if configured (position starts at 0 for standard forward)
+        if (_ropeLayer != null)
+        {
+            (queries, keys) = _ropeLayer.ApplyRoPE(queries, keys, startPosition: 0);
+        }
+
         // Compute attention
         Tensor<T> attentionOutput;
-        if (_useFlashAttention)
+        if (_useFlashAttention || _alibiLayer != null)
         {
             var config = FlashAttentionConfig.Default;
             config.UseCausalMask = _useCausalMask;
-            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config);
+
+            Tensor<T>? aliBiBias = _alibiLayer?.ComputeBias(seqLen, seqLen, _useCausalMask);
+            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config, attentionBias: aliBiBias);
             attentionOutput = flashOutput;
         }
         else
@@ -537,6 +599,7 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
         diagnostics["InferenceMode"] = InferenceMode.ToString();
         diagnostics["UsesFlashAttention"] = _useFlashAttention.ToString();
         diagnostics["UsesCausalMask"] = _useCausalMask.ToString();
+        diagnostics["PositionalEncoding"] = PositionalEncoding.ToString();
         diagnostics["LayerIndex"] = _layerIndex.ToString();
         diagnostics["CacheAttached"] = (_cache != null).ToString();
 

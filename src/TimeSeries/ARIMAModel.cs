@@ -487,6 +487,145 @@ public class ARIMAModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
+    /// Forecasts future values using the trained ARIMA model, properly handling differencing.
+    /// </summary>
+    /// <param name="history">The historical time series values.</param>
+    /// <param name="steps">The number of future steps to forecast.</param>
+    /// <returns>A vector of forecasted values in the original (undifferenced) scale.</returns>
+    public override Vector<T> Forecast(Vector<T> history, int steps)
+    {
+        if (!IsTrained)
+        {
+            throw new InvalidOperationException("The model must be trained before forecasting.");
+        }
+
+        if (history == null)
+        {
+            throw new ArgumentNullException(nameof(history), "History cannot be null.");
+        }
+
+        if (steps <= 0)
+        {
+            throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
+        }
+
+        int d = _arimaOptions.D;
+
+        if (d > 0 && history.Length < d + 1)
+        {
+            throw new ArgumentException(
+                $"History length ({history.Length}) must be at least {d + 1} to support differencing order {d}.",
+                nameof(history));
+        }
+
+        // If no differencing, fall back to base class behavior
+        if (d == 0)
+        {
+            return base.Forecast(history, steps);
+        }
+
+        // Difference the history to get the series that the AR/MA coefficients were trained on
+        Vector<T> diffHistory = TimeSeriesHelper<T>.DifferenceSeries(history, d);
+
+        // Build a working list of differenced values we can extend
+        List<T> extendedDiffHistory = new List<T>(diffHistory.Length + steps);
+        for (int i = 0; i < diffHistory.Length; i++)
+        {
+            extendedDiffHistory.Add(diffHistory[i]);
+        }
+
+        // Generate forecasts on the differenced scale
+        Vector<T> diffForecasts = new Vector<T>(steps);
+        for (int step = 0; step < steps; step++)
+        {
+            T prediction = _constant;
+
+            // AR component: use the most recent p differenced values
+            for (int j = 0; j < _arCoefficients.Length && j < extendedDiffHistory.Count; j++)
+            {
+                prediction = NumOps.Add(prediction, NumOps.Multiply(
+                    _arCoefficients[j], extendedDiffHistory[extendedDiffHistory.Count - 1 - j]));
+            }
+
+            // MA component is assumed zero for future predictions (no actual errors available)
+
+            diffForecasts[step] = prediction;
+            extendedDiffHistory.Add(prediction);
+        }
+
+        // Undifference the forecasts back to the original scale
+        return UndifferenceForecasts(diffForecasts, history, d, steps);
+    }
+
+    /// <summary>
+    /// Undifferences forecasted values back to the original scale by reversing the differencing
+    /// that was applied during training.
+    /// </summary>
+    /// <param name="diffForecasts">The forecasts on the differenced scale.</param>
+    /// <param name="history">The original (undifferenced) history to derive tail values from.</param>
+    /// <param name="d">The differencing order.</param>
+    /// <param name="steps">The number of forecast steps.</param>
+    /// <returns>A vector of forecasts on the original (undifferenced) scale.</returns>
+    private Vector<T> UndifferenceForecasts(Vector<T> diffForecasts, Vector<T> history, int d, int steps)
+    {
+        T[] tailValues = ComputeIntegrationTailValues(history, d);
+
+        // Undifference d times (in reverse order of differencing)
+        var currentForecasts = new List<T>(steps);
+        for (int i = 0; i < steps; i++)
+        {
+            currentForecasts.Add(diffForecasts[i]);
+        }
+
+        for (int level = d - 1; level >= 0; level--)
+        {
+            T lastVal = tailValues[level];
+            for (int i = 0; i < currentForecasts.Count; i++)
+            {
+                T undiff = NumOps.Add(currentForecasts[i], lastVal);
+                currentForecasts[i] = undiff;
+                lastVal = undiff;
+            }
+        }
+
+        Vector<T> result = new Vector<T>(steps);
+        for (int i = 0; i < steps; i++)
+        {
+            result[i] = currentForecasts[i];
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes the tail value at each integration (differencing) level from the history,
+    /// needed for undifferencing forecasts back to the original scale.
+    /// </summary>
+    private T[] ComputeIntegrationTailValues(Vector<T> history, int d)
+    {
+        var tailValues = new T[d];
+        var tempTail = new List<T>();
+        int tailStart = Math.Max(0, history.Length - d);
+        for (int i = tailStart; i < history.Length; i++)
+        {
+            tempTail.Add(history[i]);
+        }
+
+        for (int level = 0; level < d; level++)
+        {
+            tailValues[level] = tempTail[tempTail.Count - 1];
+            var newTail = new List<T>();
+            for (int i = 1; i < tempTail.Count; i++)
+            {
+                newTail.Add(NumOps.Subtract(tempTail[i], tempTail[i - 1]));
+            }
+            tempTail = newTail;
+        }
+
+        return tailValues;
+    }
+
+    /// <summary>
     /// Gets metadata about the model, including its type, parameters, and configuration.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the model.</returns>
