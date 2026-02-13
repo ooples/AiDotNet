@@ -193,4 +193,54 @@ public sealed class SchedulerConfig<T>
             clipSample: false,
             predictionType: DiffusionPredictionType.Epsilon);
     }
+
+    /// <summary>
+    /// Creates a configuration for rectified flow models (SD3, FLUX.1).
+    /// </summary>
+    /// <returns>A scheduler configuration with rectified flow defaults.</returns>
+    /// <remarks>
+    /// <para>
+    /// Uses values for rectified flow matching:
+    /// - 1000 training timesteps
+    /// - Beta start: 0.0001
+    /// - Beta end: 1.0
+    /// - Linear beta schedule
+    /// - V-prediction (velocity prediction)
+    /// </para>
+    /// </remarks>
+    public static SchedulerConfig<T> CreateRectifiedFlow()
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        return new SchedulerConfig<T>(
+            trainTimesteps: 1000,
+            betaStart: ops.FromDouble(0.0001),
+            betaEnd: ops.FromDouble(1.0),
+            betaSchedule: BetaSchedule.Linear,
+            clipSample: false,
+            predictionType: DiffusionPredictionType.VPrediction);
+    }
+
+    /// <summary>
+    /// Creates a configuration for LCM (Latent Consistency Model) sampling.
+    /// </summary>
+    /// <returns>A scheduler configuration with LCM defaults.</returns>
+    /// <remarks>
+    /// <para>
+    /// Uses values optimized for LCM:
+    /// - 1000 training timesteps
+    /// - Scaled linear beta schedule (same as Stable Diffusion base)
+    /// - Epsilon prediction
+    /// </para>
+    /// </remarks>
+    public static SchedulerConfig<T> CreateLCM()
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        return new SchedulerConfig<T>(
+            trainTimesteps: 1000,
+            betaStart: ops.FromDouble(0.00085),
+            betaEnd: ops.FromDouble(0.012),
+            betaSchedule: BetaSchedule.ScaledLinear,
+            clipSample: false,
+            predictionType: DiffusionPredictionType.Epsilon);
+    }
 }

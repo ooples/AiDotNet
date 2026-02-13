@@ -190,30 +190,7 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     public int CrossAttentionDim => _crossAttentionDim;
 
     /// <summary>
-    /// Initializes a new instance of SDXLModel with default parameters.
-    /// </summary>
-    /// <remarks>
-    /// Creates an SDXL model with standard parameters:
-    /// - 1024x1024 native resolution
-    /// - 2048 cross-attention dimension
-    /// - Dual text encoder support
-    /// - DDIM scheduler with 50 steps
-    /// </remarks>
-    public SDXLModel()
-        : this(
-            options: null,
-            scheduler: null,
-            unet: null,
-            vae: null,
-            conditioner1: null,
-            conditioner2: null,
-            refiner: null,
-            useDualEncoder: true)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of SDXLModel with custom parameters.
+    /// Initializes a new instance of SDXLModel with full customization support.
     /// </summary>
     /// <param name="options">Configuration options for the diffusion model.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>

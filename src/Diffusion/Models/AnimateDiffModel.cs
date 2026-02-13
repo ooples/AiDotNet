@@ -181,23 +181,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     public int ContextOverlap { get; set; } = 4;
 
     /// <summary>
-    /// Initializes a new instance of AnimateDiffModel with default parameters.
-    /// </summary>
-    public AnimateDiffModel()
-        : this(
-            options: null,
-            scheduler: null,
-            unet: null,
-            vae: null,
-            conditioner: null,
-            motionConfig: null,
-            defaultNumFrames: 16,
-            defaultFPS: 8)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of AnimateDiffModel with custom parameters.
+    /// Initializes a new instance of AnimateDiffModel with full customization support.
     /// </summary>
     /// <param name="options">Configuration options for the diffusion model.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>

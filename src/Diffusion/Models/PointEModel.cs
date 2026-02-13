@@ -157,22 +157,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     public bool UsesTwoStage => _useTwoStage;
 
     /// <summary>
-    /// Initializes a new Point-E model with default parameters.
-    /// </summary>
-    public PointEModel()
-        : this(
-            options: null,
-            scheduler: null,
-            pointCloudPredictor: null,
-            imageGenerator: null,
-            conditioner: null,
-            defaultPointCount: PointCounts.Medium,
-            useTwoStage: true)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new Point-E model with custom parameters.
+    /// Initializes a new Point-E model with full customization support.
     /// </summary>
     /// <param name="options">Configuration options.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>

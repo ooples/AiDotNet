@@ -141,20 +141,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     public SpectrogramConfig SpectrogramConfiguration => _spectrogramConfig;
 
     /// <summary>
-    /// Initializes a new instance of RiffusionModel with default parameters.
-    /// </summary>
-    public RiffusionModel()
-        : this(
-            options: null,
-            scheduler: null,
-            conditioner: null,
-            spectrogramConfig: null,
-            seed: null)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of RiffusionModel with custom parameters.
+    /// Initializes a new instance of RiffusionModel with full customization support.
     /// </summary>
     /// <param name="options">Configuration options.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>

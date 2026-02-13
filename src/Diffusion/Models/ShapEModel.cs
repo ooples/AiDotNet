@@ -160,21 +160,7 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     public int LatentDimension => SHAPE_LATENT_DIM;
 
     /// <summary>
-    /// Initializes a new Shap-E model with default parameters.
-    /// </summary>
-    public ShapEModel()
-        : this(
-            options: null,
-            scheduler: null,
-            latentPredictor: null,
-            conditioner: null,
-            useSDFMode: true,
-            defaultPointCount: 4096)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new Shap-E model with custom parameters.
+    /// Initializes a new Shap-E model with full customization support.
     /// </summary>
     /// <param name="options">Configuration options.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>

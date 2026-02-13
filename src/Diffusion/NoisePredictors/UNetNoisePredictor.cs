@@ -1,9 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.Attention;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -125,6 +127,11 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private readonly int _numHeads;
 
+    /// <summary>
+    /// The neural network architecture configuration, if provided.
+    /// </summary>
+    private readonly NeuralNetworkArchitecture<T>? _architecture;
+
     /// <inheritdoc />
     public override int InputChannels => _inputChannels;
 
@@ -150,8 +157,13 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override int ContextDimension => _contextDim;
 
     /// <summary>
-    /// Initializes a new instance of the UNetNoisePredictor class with default Stable Diffusion configuration.
+    /// Initializes a new instance of the UNetNoisePredictor class with full customization support.
     /// </summary>
+    /// <param name="architecture">
+    /// Optional neural network architecture with custom layers. If the architecture's Layers
+    /// list contains layers, those will be used for the encoder blocks. If null or empty,
+    /// industry-standard layers from the Stable Diffusion paper are created automatically.
+    /// </param>
     /// <param name="inputChannels">Number of input channels (default: 4 for latent diffusion).</param>
     /// <param name="outputChannels">Number of output channels (default: same as input).</param>
     /// <param name="baseChannels">Base channel count (default: 320 for SD).</param>
@@ -160,9 +172,42 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <param name="attentionResolutions">Resolution indices for attention (default: [1, 2, 3]).</param>
     /// <param name="contextDim">Context dimension for cross-attention (default: 768 for CLIP).</param>
     /// <param name="numHeads">Number of attention heads (default: 8).</param>
+    /// <param name="encoderBlocks">
+    /// Optional custom encoder blocks. If provided, these blocks are used instead of creating
+    /// default blocks. This allows full customization of the encoder path.
+    /// </param>
+    /// <param name="middleBlocks">
+    /// Optional custom middle (bottleneck) blocks.
+    /// </param>
+    /// <param name="decoderBlocks">
+    /// Optional custom decoder blocks.
+    /// </param>
     /// <param name="lossFunction">Optional loss function (default: MSE).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> All parameters are optional with industry-standard defaults
+    /// from the original Stable Diffusion paper. You can create a ready-to-use U-Net
+    /// with no arguments, or customize any component:
+    ///
+    /// <code>
+    /// // Default configuration (recommended for most users)
+    /// var unet = new UNetNoisePredictor&lt;float&gt;();
+    ///
+    /// // Custom layers via NeuralNetworkArchitecture
+    /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(..., layers: myCustomLayers);
+    /// var unet = new UNetNoisePredictor&lt;float&gt;(architecture: arch);
+    ///
+    /// // SDXL configuration
+    /// var unet = new UNetNoisePredictor&lt;float&gt;(
+    ///     baseChannels: 320,
+    ///     channelMultipliers: new[] { 1, 2, 4 },
+    ///     contextDim: 2048);
+    /// </code>
+    /// </para>
+    /// </remarks>
     public UNetNoisePredictor(
+        NeuralNetworkArchitecture<T>? architecture = null,
         int inputChannels = 4,
         int? outputChannels = null,
         int baseChannels = 320,
@@ -171,16 +216,20 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         int[]? attentionResolutions = null,
         int contextDim = 768,
         int numHeads = 8,
+        List<UNetBlock>? encoderBlocks = null,
+        List<UNetBlock>? middleBlocks = null,
+        List<UNetBlock>? decoderBlocks = null,
         ILossFunction<T>? lossFunction = null,
         int? seed = null)
         : base(lossFunction, seed)
     {
+        _architecture = architecture;
         _inputChannels = inputChannels;
         _outputChannels = outputChannels ?? inputChannels;
         _baseChannels = baseChannels;
-        _channelMultipliers = channelMultipliers ?? new[] { 1, 2, 4, 4 };
+        _channelMultipliers = channelMultipliers ?? [1, 2, 4, 4];
         _numResBlocks = numResBlocks;
-        _attentionResolutions = attentionResolutions ?? new[] { 1, 2, 3 };
+        _attentionResolutions = attentionResolutions ?? [1, 2, 3];
         _contextDim = contextDim;
         _numHeads = numHeads;
         _timeEmbeddingDim = baseChannels * 4;
@@ -189,16 +238,33 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         _middleBlocks = new List<UNetBlock>();
         _decoderBlocks = new List<UNetBlock>();
 
-        // Initialize layers
-        InitializeLayers();
+        InitializeLayers(architecture, encoderBlocks, middleBlocks, decoderBlocks);
     }
 
     /// <summary>
-    /// Initializes all layers of the U-Net.
+    /// Initializes all layers of the U-Net, using custom layers from the user
+    /// if provided or creating industry-standard layers from the Stable Diffusion paper.
     /// </summary>
-    private void InitializeLayers()
+    /// <param name="architecture">Optional architecture with custom layers.</param>
+    /// <param name="customEncoderBlocks">Optional custom encoder blocks.</param>
+    /// <param name="customMiddleBlocks">Optional custom middle blocks.</param>
+    /// <param name="customDecoderBlocks">Optional custom decoder blocks.</param>
+    /// <remarks>
+    /// <para>
+    /// Layer resolution order:
+    /// 1. If custom encoder/middle/decoder blocks are provided directly, use those
+    /// 2. If a NeuralNetworkArchitecture with layers is provided, wrap those as encoder blocks
+    /// 3. Otherwise, create industry-standard layers from the Stable Diffusion paper
+    /// </para>
+    /// </remarks>
+    [MemberNotNull(nameof(_inputConv), nameof(_outputConv), nameof(_timeEmbedMlp1), nameof(_timeEmbedMlp2))]
+    private void InitializeLayers(
+        NeuralNetworkArchitecture<T>? architecture,
+        List<UNetBlock>? customEncoderBlocks,
+        List<UNetBlock>? customMiddleBlocks,
+        List<UNetBlock>? customDecoderBlocks)
     {
-        // Input convolution: [inputChannels] -> [baseChannels]
+        // Always create input/output convolutions and time embedding MLP
         _inputConv = new ConvolutionalLayer<T>(
             inputDepth: _inputChannels,
             outputDepth: _baseChannels,
@@ -209,7 +275,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             padding: 1,
             activationFunction: new IdentityActivation<T>());
 
-        // Time embedding MLP
         _timeEmbedMlp1 = new DenseLayer<T>(
             _timeEmbeddingDim / 4,
             _timeEmbeddingDim,
@@ -220,7 +285,50 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             _timeEmbeddingDim,
             (IActivationFunction<T>)new SiLUActivation<T>());
 
-        // Build encoder
+        _outputConv = new ConvolutionalLayer<T>(
+            inputDepth: _baseChannels,
+            outputDepth: _outputChannels,
+            kernelSize: 3,
+            inputHeight: 64,
+            inputWidth: 64,
+            stride: 1,
+            padding: 1,
+            activationFunction: new IdentityActivation<T>());
+
+        // Priority 1: Use custom blocks passed directly
+        if (customEncoderBlocks != null && customEncoderBlocks.Count > 0 &&
+            customMiddleBlocks != null && customMiddleBlocks.Count > 0 &&
+            customDecoderBlocks != null && customDecoderBlocks.Count > 0)
+        {
+            _encoderBlocks.AddRange(customEncoderBlocks);
+            _middleBlocks.AddRange(customMiddleBlocks);
+            _decoderBlocks.AddRange(customDecoderBlocks);
+            return;
+        }
+
+        // Priority 2: Use layers from NeuralNetworkArchitecture as encoder ResBlocks
+        if (architecture?.Layers != null && architecture.Layers.Count > 0)
+        {
+            foreach (var layer in architecture.Layers)
+            {
+                _encoderBlocks.Add(new UNetBlock { ResBlock = layer });
+            }
+            CreateDefaultMiddleBlocks(_baseChannels * _channelMultipliers[^1]);
+            CreateDefaultDecoderBlocks();
+            return;
+        }
+
+        // Priority 3: Create industry-standard layers from the Stable Diffusion paper
+        CreateDefaultEncoderBlocks();
+        CreateDefaultMiddleBlocks(_baseChannels * _channelMultipliers[^1]);
+        CreateDefaultDecoderBlocks();
+    }
+
+    /// <summary>
+    /// Creates industry-standard encoder blocks based on the Stable Diffusion U-Net.
+    /// </summary>
+    private void CreateDefaultEncoderBlocks()
+    {
         var inChannels = _baseChannels;
         for (int level = 0; level < _channelMultipliers.Length; level++)
         {
@@ -247,20 +355,31 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 });
             }
         }
+    }
 
-        // Build middle
+    /// <summary>
+    /// Creates industry-standard middle (bottleneck) blocks.
+    /// </summary>
+    private void CreateDefaultMiddleBlocks(int channels)
+    {
         _middleBlocks.Add(new UNetBlock
         {
-            ResBlock = CreateResBlock(inChannels, inChannels),
-            AttentionBlock = CreateAttentionBlock(inChannels),
-            CrossAttentionBlock = _contextDim > 0 ? CreateCrossAttentionBlock(inChannels) : null
+            ResBlock = CreateResBlock(channels, channels),
+            AttentionBlock = CreateAttentionBlock(channels),
+            CrossAttentionBlock = _contextDim > 0 ? CreateCrossAttentionBlock(channels) : null
         });
         _middleBlocks.Add(new UNetBlock
         {
-            ResBlock = CreateResBlock(inChannels, inChannels)
+            ResBlock = CreateResBlock(channels, channels)
         });
+    }
 
-        // Build decoder (reverse of encoder)
+    /// <summary>
+    /// Creates industry-standard decoder blocks (reverse of encoder).
+    /// </summary>
+    private void CreateDefaultDecoderBlocks()
+    {
+        var inChannels = _baseChannels * _channelMultipliers[^1];
         for (int level = _channelMultipliers.Length - 1; level >= 0; level--)
         {
             var outChannels = _baseChannels * _channelMultipliers[level];
@@ -290,17 +409,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 });
             }
         }
-
-        // Output convolution: [baseChannels] -> [outputChannels]
-        _outputConv = new ConvolutionalLayer<T>(
-            inputDepth: _baseChannels,
-            outputDepth: _outputChannels,
-            kernelSize: 3,
-            inputHeight: 64,
-            inputWidth: 64,
-            stride: 1,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
     }
 
     /// <inheritdoc />
@@ -717,15 +825,15 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override INoisePredictor<T> Clone()
     {
         var clone = new UNetNoisePredictor<T>(
-            _inputChannels,
-            _outputChannels,
-            _baseChannels,
-            _channelMultipliers,
-            _numResBlocks,
-            _attentionResolutions,
-            _contextDim,
-            _numHeads,
-            LossFunction);
+            inputChannels: _inputChannels,
+            outputChannels: _outputChannels,
+            baseChannels: _baseChannels,
+            channelMultipliers: _channelMultipliers,
+            numResBlocks: _numResBlocks,
+            attentionResolutions: _attentionResolutions,
+            contextDim: _contextDim,
+            numHeads: _numHeads,
+            lossFunction: LossFunction);
 
         clone.SetParameters(GetParameters());
         return clone;
@@ -740,9 +848,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     #endregion
 
     /// <summary>
-    /// Internal structure for U-Net blocks.
+    /// Structure for U-Net blocks containing residual, attention, and sampling layers.
     /// </summary>
-    private class UNetBlock
+    public class UNetBlock
     {
         public ILayer<T>? ResBlock { get; set; }
         public ILayer<T>? AttentionBlock { get; set; }

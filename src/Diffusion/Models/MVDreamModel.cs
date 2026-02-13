@@ -169,23 +169,7 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     public MVDreamConfig Config => _config;
 
     /// <summary>
-    /// Initializes a new MVDream model with default parameters.
-    /// </summary>
-    public MVDreamModel()
-        : this(
-            options: null,
-            scheduler: null,
-            multiViewUNet: null,
-            imageVAE: null,
-            textConditioner: null,
-            imageConditioner: null,
-            config: MVDreamConfig.Default,
-            seed: null)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new MVDream model with custom parameters.
+    /// Initializes a new MVDream model with full customization support.
     /// </summary>
     /// <param name="options">Configuration options for the diffusion model.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>

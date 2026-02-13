@@ -193,20 +193,8 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
     /// - DDPM scheduler with 1000 training steps
     /// - Image conditioning enabled
     /// </remarks>
-    public StableVideoDiffusion()
-        : this(
-            options: null,
-            scheduler: null,
-            videoUNet: null,
-            temporalVAE: null,
-            conditioner: null,
-            defaultNumFrames: 25,
-            defaultFPS: 7)
-    {
-    }
-
     /// <summary>
-    /// Initializes a new instance of StableVideoDiffusion with custom parameters.
+    /// Initializes a new instance of StableVideoDiffusion with full customization support.
     /// </summary>
     /// <param name="options">Configuration options for the diffusion model.</param>
     /// <param name="scheduler">Optional custom scheduler. Defaults to DDPM with 1000 steps.</param>

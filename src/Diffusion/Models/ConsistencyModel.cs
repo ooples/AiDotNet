@@ -177,22 +177,8 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// - Sigma range: 0.002 to 80
     /// - Rho: 7 (for sigma schedule)
     /// </remarks>
-    public ConsistencyModel()
-        : this(
-            options: null,
-            scheduler: null,
-            conditioner: null,
-            numTrainSteps: 18,
-            sigmaMin: 0.002,
-            sigmaMax: 80.0,
-            rho: 7.0,
-            isDistilled: false,
-            seed: null)
-    {
-    }
-
     /// <summary>
-    /// Initializes a new instance of ConsistencyModel with custom parameters.
+    /// Initializes a new instance of ConsistencyModel with full customization support.
     /// </summary>
     /// <param name="options">Configuration options for the diffusion model.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>

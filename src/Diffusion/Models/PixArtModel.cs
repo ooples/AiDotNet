@@ -201,13 +201,8 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     /// - 16 attention heads
     /// - 28 transformer layers
     /// </remarks>
-    public PixArtModel()
-        : this(modelSize: DefaultModelSize)
-    {
-    }
-
     /// <summary>
-    /// Initializes a new instance of PixArtModel with specified model size.
+    /// Initializes a new instance of PixArtModel with full customization support.
     /// </summary>
     /// <param name="modelSize">Model variant: "alpha" (1024px), "sigma" (512px), or "delta" (256px).</param>
     /// <param name="conditioner">Optional conditioning module for text encoding.</param>

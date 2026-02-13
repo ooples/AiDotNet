@@ -172,21 +172,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <summary>
-    /// Initializes a new instance of ControlNetModel with default parameters.
-    /// </summary>
-    /// <param name="controlType">The type of control signal (default: Canny edges).</param>
-    public ControlNetModel(ControlType controlType = ControlType.Canny)
-        : this(
-            options: null,
-            scheduler: null,
-            conditioner: null,
-            controlType: controlType,
-            seed: null)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of ControlNetModel with custom parameters.
+    /// Initializes a new instance of ControlNetModel with full customization support.
     /// </summary>
     /// <param name="options">Configuration options for the diffusion model.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>
