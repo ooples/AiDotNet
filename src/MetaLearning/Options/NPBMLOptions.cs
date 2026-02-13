@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -81,7 +82,7 @@ public class NPBMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     #region Constructors
     /// <summary>Initializes a new instance of NPBMLOptions.</summary>
     public NPBMLOptions(IFullModel<T, TInput, TOutput> metaModel)
-    { MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel)); }
+    { Guard.NotNull(metaModel); MetaModel = metaModel; }
     #endregion
 
     #region IMetaLearnerOptions Implementation

@@ -3407,7 +3407,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <exception cref="ArgumentNullException">Thrown when model is null.</exception>
     public virtual void SetBaseModel<TInput, TOutput>(IFullModel<T, TInput, TOutput> model)
     {
-        _baseModel = (model ?? throw new ArgumentNullException(nameof(model))) as IFullModel<T, Tensor<T>, Tensor<T>>;
+        Guard.NotNull(model);
+        _baseModel = model as IFullModel<T, Tensor<T>, Tensor<T>>;
     }
 
     /// <summary>

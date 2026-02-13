@@ -304,7 +304,8 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         if (imageData == null || imageData.Length == 0)
             throw new ArgumentException("Image data cannot be null or empty", nameof(imageData));
 
-        var labelList = labels?.ToList() ?? throw new ArgumentNullException(nameof(labels));
+        Guard.NotNull(labels);
+        var labelList = labels.ToList();
         if (labelList.Count == 0)
             throw new ArgumentException("Labels collection cannot be empty", nameof(labels));
 

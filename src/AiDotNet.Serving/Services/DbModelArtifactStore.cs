@@ -21,8 +21,8 @@ public sealed class DbModelArtifactStore : IModelArtifactStore
     {
         Guard.NotNull(scopeFactory);
         _scopeFactory = scopeFactory;
-        _protector = (dataProtectionProvider ?? throw new ArgumentNullException(nameof(dataProtectionProvider)))
-            .CreateProtector(ProtectorPurpose);
+        Guard.NotNull(dataProtectionProvider);
+        _protector = dataProtectionProvider.CreateProtector(ProtectorPurpose);
     }
 
     public bool TryGet(string modelName, out ProtectedModelArtifact? artifact)
