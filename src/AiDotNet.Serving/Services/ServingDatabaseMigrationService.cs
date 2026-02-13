@@ -22,7 +22,8 @@ public sealed class ServingDatabaseMigrationService : IHostedService
     {
         Guard.NotNull(scopeFactory);
         _scopeFactory = scopeFactory;
-        _dbOptions = dbOptions?.Value ?? throw new ArgumentNullException(nameof(dbOptions));
+        Guard.NotNull(dbOptions);
+        _dbOptions = dbOptions.Value;
         Guard.NotNull(logger);
         _logger = logger;
     }

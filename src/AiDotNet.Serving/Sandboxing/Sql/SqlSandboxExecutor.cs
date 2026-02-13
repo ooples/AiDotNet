@@ -25,7 +25,8 @@ public sealed class SqlSandboxExecutor : ISqlSandboxExecutor
         IDockerRunner dockerRunner,
         ILogger<SqlSandboxExecutor> logger)
     {
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options.Value;
         Guard.NotNull(dockerRunner);
         _dockerRunner = dockerRunner;
         Guard.NotNull(logger);

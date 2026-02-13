@@ -1,6 +1,7 @@
 using AiDotNet.Serving.Configuration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Security;
 
@@ -13,7 +14,8 @@ public sealed class HeaderTierResolver : ITierResolver
 
     public HeaderTierResolver(IOptions<TierEnforcementOptions> options)
     {
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options.Value;
     }
 
     public SubscriptionTier ResolveTier(HttpContext httpContext)

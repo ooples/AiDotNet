@@ -67,7 +67,8 @@ public class RequestBatcher : IRequestBatcher, IDisposable
         _modelRepository = modelRepository;
         Guard.NotNull(logger);
         _logger = logger;
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options.Value;
 
         // Initialize request channel with bounded capacity for backpressure
         var channelOptions = new BoundedChannelOptions(_options.MaxQueueSize > 0 ? _options.MaxQueueSize : 1000)

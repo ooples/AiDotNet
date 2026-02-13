@@ -26,7 +26,8 @@ public sealed class ServingProgramEvaluator : IServingProgramEvaluator
         _executor = executor;
         Guard.NotNull(executeResponseRedactor);
         _executeResponseRedactor = executeResponseRedactor;
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options.Value;
         Guard.NotNull(logger);
         _logger = logger;
     }

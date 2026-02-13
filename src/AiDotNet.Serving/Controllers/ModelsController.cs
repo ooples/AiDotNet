@@ -51,7 +51,8 @@ public class ModelsController : ControllerBase
         _modelRepository = modelRepository;
         Guard.NotNull(logger);
         _logger = logger;
-        _servingOptions = servingOptions?.Value ?? throw new ArgumentNullException(nameof(servingOptions));
+        Guard.NotNull(servingOptions);
+        _servingOptions = servingOptions.Value;
         Guard.NotNull(tierResolver);
         _tierResolver = tierResolver;
         Guard.NotNull(tierPolicyProvider);

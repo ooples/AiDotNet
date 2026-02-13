@@ -42,7 +42,8 @@ public sealed class CodeTasksController : ControllerBase
         _requestContextAccessor = requestContextAccessor;
         Guard.NotNull(concurrencyLimiter);
         _concurrencyLimiter = concurrencyLimiter;
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options.Value;
         Guard.NotNull(logger);
         _logger = logger;
     }

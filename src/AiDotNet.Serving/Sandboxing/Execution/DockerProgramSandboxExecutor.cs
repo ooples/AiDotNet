@@ -26,7 +26,8 @@ public sealed class DockerProgramSandboxExecutor : IProgramSandboxExecutor
         IDockerRunner dockerRunner,
         ILogger<DockerProgramSandboxExecutor> logger)
     {
-        _sandboxOptions = sandboxOptions?.Value ?? throw new ArgumentNullException(nameof(sandboxOptions));
+        Guard.NotNull(sandboxOptions);
+        _sandboxOptions = sandboxOptions.Value;
         Guard.NotNull(dockerRunner);
         _dockerRunner = dockerRunner;
         Guard.NotNull(logger);

@@ -24,7 +24,8 @@ public sealed class DevelopmentAttestationVerifier : IAttestationVerifier
     {
         Guard.NotNull(environment);
         _environment = environment;
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options.Value;
         _jwtOptions = _options.Jwt;
         _jwtParameters = _jwtOptions != null ? BuildJwtValidationParameters(_jwtOptions) : null;
     }

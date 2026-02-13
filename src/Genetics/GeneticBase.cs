@@ -1345,7 +1345,8 @@ public abstract class GeneticBase<T, TInput, TOutput> :
             throw new ArgumentException("Operator name cannot be null or empty.", nameof(name));
         }
 
-        CrossoverOperators[name] = crossoverOperator ?? throw new ArgumentNullException(nameof(crossoverOperator));
+        Guard.NotNull(crossoverOperator);
+        CrossoverOperators[name] = crossoverOperator;
     }
 
     /// <summary>
@@ -1364,7 +1365,8 @@ public abstract class GeneticBase<T, TInput, TOutput> :
             throw new ArgumentException("Operator name cannot be null or empty.", nameof(name));
         }
 
-        MutationOperators[name] = mutationOperator ?? throw new ArgumentNullException(nameof(mutationOperator));
+        Guard.NotNull(mutationOperator);
+        MutationOperators[name] = mutationOperator;
     }
 
     /// <summary>

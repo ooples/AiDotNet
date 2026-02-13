@@ -103,8 +103,8 @@ public class OnlineEWC<T> : IContinualLearningStrategy<T>
     public void AfterTask(INeuralNetwork<T> network, (Tensor<T> inputs, Tensor<T> targets) taskData, int taskId)
     {
         Guard.NotNull(network);
-        _ = taskData.inputs ?? throw new ArgumentNullException(nameof(taskData));
-        _ = taskData.targets ?? throw new ArgumentNullException(nameof(taskData));
+        Guard.NotNull(taskData.inputs);
+        Guard.NotNull(taskData.targets);
 
         var currentParams = network.GetParameters();
         var newFisher = ComputeFisherDiagonal(network, taskData.inputs, taskData.targets);

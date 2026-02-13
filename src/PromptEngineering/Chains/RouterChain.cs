@@ -92,7 +92,8 @@ public class RouterChain<TInput, TOutput> : ChainBase<TInput, TOutput>
             throw new ArgumentException("Route name cannot be empty.", nameof(routeName));
         }
 
-        _routes[routeName] = chain ?? throw new ArgumentNullException(nameof(chain));
+        Guard.NotNull(chain);
+        _routes[routeName] = chain;
         return this;
     }
 

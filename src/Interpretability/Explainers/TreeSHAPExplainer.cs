@@ -129,7 +129,8 @@ public class TreeSHAPExplainer<T> : ILocalExplainer<T, TreeSHAPExplanation<T>>, 
         T expectedValue,
         string[]? featureNames = null)
     {
-        _ensemble = trees?.ToList() ?? throw new ArgumentNullException(nameof(trees));
+        Guard.NotNull(trees);
+        _ensemble = trees.ToList();
         if (_ensemble.Count == 0)
             throw new ArgumentException("Ensemble must contain at least one tree.", nameof(trees));
 

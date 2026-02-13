@@ -10,6 +10,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Audio.AudioGen;
 
@@ -402,9 +403,8 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             OnnxModel = audioDecoder;
 
             // Tokenizer is required for ONNX mode - must match the text encoder
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
-                "Tokenizer is required for ONNX mode. AudioGen uses T5-based text encoders. " +
-                "Use AutoTokenizer.FromPretrained(\"t5-base\") or the tokenizer matching your text encoder.");
+            Guard.NotNull(tokenizer);
+            _tokenizer = tokenizer;
 
             _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();

@@ -1,4 +1,5 @@
 using AiDotNet.Augmentation.Image;
+using AiDotNet.Validation;
 
 
 
@@ -118,7 +119,8 @@ public class SomeOf<T, TData> : IAugmentation<T, TData>, ISpatialAugmentation<T,
         if (maxN < minN)
             throw new ArgumentException("MaxN must be >= MinN", nameof(maxN));
 
-        _augmentations = augmentations?.ToList() ?? throw new ArgumentNullException(nameof(augmentations));
+        Guard.NotNull(augmentations);
+        _augmentations = augmentations.ToList();
         if (_augmentations.Count == 0)
             throw new ArgumentException("At least one augmentation is required", nameof(augmentations));
 

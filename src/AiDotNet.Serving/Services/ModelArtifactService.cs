@@ -23,7 +23,8 @@ public sealed class ModelArtifactService : IModelArtifactService
     {
         Guard.NotNull(modelRepository);
         _modelRepository = modelRepository;
-        _servingOptions = servingOptions?.Value ?? throw new ArgumentNullException(nameof(servingOptions));
+        Guard.NotNull(servingOptions);
+        _servingOptions = servingOptions.Value;
         Guard.NotNull(protector);
         _protector = protector;
         Guard.NotNull(store);

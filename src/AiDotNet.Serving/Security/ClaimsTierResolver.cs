@@ -2,6 +2,7 @@ using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Security.ApiKeys;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Security;
 
@@ -14,7 +15,8 @@ public sealed class ClaimsTierResolver : ITierResolver
 
     public ClaimsTierResolver(IOptions<TierEnforcementOptions> options)
     {
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options.Value;
     }
 
     public SubscriptionTier ResolveTier(HttpContext httpContext)

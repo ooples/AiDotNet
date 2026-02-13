@@ -49,8 +49,8 @@ public class CLIPScore<T> where T : struct
     /// <param name="clipModel">A CLIP model implementing IMultimodalEmbedding interface</param>
     public CLIPScore(IMultimodalEmbedding<T> clipModel)
     {
-        _clipModel = clipModel ?? throw new ArgumentNullException(nameof(clipModel),
-            "A CLIP model is required for CLIPScore computation");
+        Guard.NotNull(clipModel);
+        _clipModel = clipModel;
         _numOps = MathHelper.GetNumericOperations<T>();
     }
 

@@ -9,6 +9,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.NeuralNetworks;
@@ -380,8 +381,8 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             _languageModel = languageModel;
 
             // Tokenizer is required for ONNX mode - must match the language model backbone
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
-                $"Tokenizer is required for ONNX mode. Use AutoTokenizer.FromPretrained(\"{Tokenization.LanguageModelTokenizerFactory.GetHuggingFaceModelName(languageModelBackbone)}\") or equivalent.");
+            Guard.NotNull(tokenizer);
+            _tokenizer = tokenizer;
 
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new ContrastiveLoss<T>();

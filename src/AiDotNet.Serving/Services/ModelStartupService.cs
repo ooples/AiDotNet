@@ -59,7 +59,8 @@ public class ModelStartupService : IHostedService
         _modelRepository = modelRepository;
         Guard.NotNull(logger);
         _logger = logger;
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options.Value;
     }
 
     /// <summary>
