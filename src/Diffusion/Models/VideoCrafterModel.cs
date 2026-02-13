@@ -170,23 +170,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     public bool UseDualConditioning { get; set; } = true;
 
     /// <summary>
-    /// Initializes a new instance of VideoCrafterModel with default parameters.
-    /// </summary>
-    public VideoCrafterModel()
-        : this(
-            options: null,
-            scheduler: null,
-            videoUNet: null,
-            temporalVAE: null,
-            textConditioner: null,
-            imageConditioner: null,
-            defaultNumFrames: 16,
-            defaultFPS: 8)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of VideoCrafterModel with custom parameters.
+    /// Initializes a new instance of VideoCrafterModel with full customization support.
     /// </summary>
     /// <param name="options">Configuration options.</param>
     /// <param name="scheduler">Optional scheduler.</param>

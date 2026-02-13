@@ -109,23 +109,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
     public int SampleRate { get; }
 
     /// <summary>
-    /// Initializes a new instance of DiffWaveModel with default parameters.
-    /// </summary>
-    public DiffWaveModel()
-        : this(
-            options: null,
-            scheduler: null,
-            residualChannels: 64,
-            residualLayers: 30,
-            dilationCycle: 10,
-            melChannels: 80,
-            sampleRate: DEFAULT_SAMPLE_RATE,
-            seed: null)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of DiffWaveModel with custom parameters.
+    /// Initializes a new instance of DiffWaveModel with full customization support.
     /// </summary>
     /// <param name="options">Configuration options.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>

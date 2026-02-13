@@ -144,19 +144,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <summary>
-    /// Initializes a new instance of IPAdapterModel with default parameters.
-    /// </summary>
-    public IPAdapterModel()
-        : this(
-            options: null,
-            scheduler: null,
-            conditioner: null,
-            seed: null)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of IPAdapterModel with custom parameters.
+    /// Initializes a new instance of IPAdapterModel with full customization support.
     /// </summary>
     /// <param name="options">Configuration options for the diffusion model.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>

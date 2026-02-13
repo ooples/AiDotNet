@@ -129,7 +129,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         : base(options, scheduler)
     {
         // Initialize components
-        _vae = new StandardVAE<T>(LATENT_CHANNELS, VAE_SCALE_FACTOR);
+        _vae = new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS);
         _unet = new UNetNoisePredictor<T>(
             inputChannels: LATENT_CHANNELS,
             outputChannels: LATENT_CHANNELS,

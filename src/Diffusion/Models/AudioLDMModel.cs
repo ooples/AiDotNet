@@ -144,24 +144,7 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
     public AudioVAE<T> AudioVAE => _audioVAE;
 
     /// <summary>
-    /// Initializes a new AudioLDM model with default parameters.
-    /// </summary>
-    public AudioLDMModel()
-        : this(
-            options: null,
-            scheduler: null,
-            unet: null,
-            audioVAE: null,
-            conditioner: null,
-            sampleRate: AUDIOLDM_SAMPLE_RATE,
-            defaultDurationSeconds: 10.0,
-            melChannels: AUDIOLDM_MEL_CHANNELS,
-            isVersion2: false)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new AudioLDM model with custom parameters.
+    /// Initializes a new AudioLDM model with full customization support.
     /// </summary>
     /// <param name="options">Configuration options for the diffusion model.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>

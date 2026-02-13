@@ -84,6 +84,26 @@ namespace System.Diagnostics.CodeAnalysis
 
         public bool ReturnValue { get; }
     }
+
+    /// <summary>
+    /// Specifies that the method or property will ensure that the listed field and property members
+    /// have non-null values when returning with the specified return value condition.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = true, Inherited = false)]
+    public sealed class MemberNotNullAttribute : Attribute
+    {
+        public MemberNotNullAttribute(string member)
+        {
+            Members = [member];
+        }
+
+        public MemberNotNullAttribute(params string[] members)
+        {
+            Members = members;
+        }
+
+        public string[] Members { get; }
+    }
 }
 
 #endif

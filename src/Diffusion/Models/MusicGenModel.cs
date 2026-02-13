@@ -180,24 +180,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
     public AudioVAE<T> MusicVAE => _musicVAE;
 
     /// <summary>
-    /// Initializes a new MusicGen model with default parameters.
-    /// </summary>
-    public MusicGenModel()
-        : this(
-            options: null,
-            scheduler: null,
-            unet: null,
-            musicVAE: null,
-            textConditioner: null,
-            modelSize: MusicGenSize.Medium,
-            sampleRate: MUSICGEN_SAMPLE_RATE,
-            defaultDurationSeconds: 30.0,
-            seed: null)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new MusicGen model with custom parameters.
+    /// Initializes a new MusicGen model with full customization support.
     /// </summary>
     /// <param name="options">Configuration options for the diffusion model.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>

@@ -125,19 +125,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         _imageEncoder.ParameterCount + _poseEncoder.ParameterCount;
 
     /// <summary>
-    /// Initializes a new instance of Zero123Model with default parameters.
-    /// </summary>
-    public Zero123Model()
-        : this(
-            options: null,
-            scheduler: null,
-            imageSize: DEFAULT_IMAGE_SIZE,
-            seed: null)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of Zero123Model with custom parameters.
+    /// Initializes a new instance of Zero123Model with full customization support.
     /// </summary>
     /// <param name="options">Configuration options.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>
