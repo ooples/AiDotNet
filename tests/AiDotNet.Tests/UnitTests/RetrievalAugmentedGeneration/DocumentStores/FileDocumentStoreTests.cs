@@ -241,7 +241,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var filters = new Dictionary<string, object> { { "category", "animals" } };
 
             // Act
-            var results = store.GetSimilarWithFilters(queryVector, topK: 10, filters).ToList();
+            var results = store.GetSimilarWithFilters(queryVector, topK: 10, metadataFilters: filters).ToList();
 
             // Assert
             Assert.Equal(2, results.Count);

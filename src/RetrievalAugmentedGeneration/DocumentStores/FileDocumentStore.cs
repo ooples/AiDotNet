@@ -37,7 +37,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 ///   store.meta       - Store header (version, dimensions, count, config)
 ///   documents.json   - All document content and metadata
 ///   vectors.bin      - Binary vector data (compact, fast to read)
-///   hnsw.bin         - Serialized HNSW graph structure
+///   hnsw.bin         - Clean-shutdown marker (HNSW is rebuilt from vectors on load)
 ///   wal.jsonl        - Write-ahead log (journal of recent operations)
 /// </code>
 ///
@@ -163,6 +163,12 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         if (File.Exists(Path.Combine(_directoryPath, MetaFileName)))
         {
             LoadFromDisk();
+
+            if (_vectorDimension != vectorDimension)
+            {
+                throw new InvalidOperationException(
+                    $"Vector dimension mismatch between existing store ({_vectorDimension}) and requested dimension ({vectorDimension}).");
+            }
         }
 
         ReplayWal();
@@ -315,25 +321,29 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     protected override bool RemoveCore(string documentId)
     {
         ThrowIfDisposed();
-        if (_store.TryRemove(documentId, out _))
+
+        // Check existence before proceeding
+        if (!_store.ContainsKey(documentId))
+            return false;
+
+        // Write to WAL first for durability (before modifying in-memory state)
+        WriteWalEntry(new WalEntry
         {
-            _hnswIndex.Remove(documentId);
+            Operation = WalOperation.Remove,
+            DocumentId = documentId
+        });
 
-            lock (_walLock)
-            {
-                _tombstones.Add(documentId);
-            }
+        // Then update in-memory structures
+        _store.TryRemove(documentId, out _);
+        _hnswIndex.Remove(documentId);
 
-            WriteWalEntry(new WalEntry
-            {
-                Operation = WalOperation.Remove,
-                DocumentId = documentId
-            });
-
-            CheckAutoFlush();
-            return true;
+        lock (_walLock)
+        {
+            _tombstones.Add(documentId);
         }
-        return false;
+
+        CheckAutoFlush();
+        return true;
     }
 
     /// <summary>
@@ -439,18 +449,16 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             // Flush all data to disk before closing
             try
             {
-                if (_store.Count > 0)
+                lock (_persistLock)
                 {
-                    lock (_persistLock)
-                    {
-                        PersistToDisk();
-                        ClearWal();
-                    }
+                    PersistToDisk();
+                    ClearWal();
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Best-effort flush on dispose
+                // Best-effort flush on dispose - log but don't throw
+                System.Diagnostics.Debug.WriteLine($"FileDocumentStore: Flush on dispose failed: {ex.Message}");
             }
 
             CloseWalWriter();
@@ -467,19 +475,14 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     private void PersistToDisk()
     {
         var allDocuments = _store.ToArray();
-        if (allDocuments.Length == 0)
-            return;
 
-        // Write metadata header
+        // Always write a snapshot, even when the store is empty.
+        // For an empty store, this writes metadata with count = 0,
+        // overwrites documents as an empty collection, and ensures vector
+        // and index files are consistent with the empty state.
         WriteMetadata(allDocuments.Length);
-
-        // Write documents (content + metadata) as JSON
         WriteDocuments(allDocuments);
-
-        // Write vectors as binary
         WriteVectors(allDocuments);
-
-        // Write HNSW graph
         WriteHnswGraph();
     }
 
@@ -617,6 +620,12 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         if (!File.Exists(path))
             return null;
 
+        // Validate file has expected size to detect truncation from crash during write
+        var fileInfo = new FileInfo(path);
+        long expectedSize = (long)documentCount * vectorDimension * sizeof(double);
+        if (fileInfo.Length < expectedSize)
+            return null;
+
         var vectors = new List<Vector<T>>(documentCount);
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         using var reader = new BinaryReader(stream);
@@ -636,14 +645,13 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     }
 
     /// <summary>
-    /// Writes the HNSW graph structure to a binary file.
-    /// This is a no-op placeholder - the HNSW index is rebuilt from vectors on load.
-    /// Future optimization: serialize the graph adjacency lists directly.
+    /// Writes the HNSW graph marker file.
+    /// Currently, the HNSW index is rebuilt from vectors on load for simplicity.
+    /// A future optimization could serialize the graph adjacency lists directly
+    /// to speed up load times for large stores.
     /// </summary>
     private void WriteHnswGraph()
     {
-        // The HNSW graph is rebuilt from vectors on load.
-        // Writing a marker file so we know the store was cleanly flushed.
         string path = Path.Combine(_directoryPath, HnswFileName);
         File.WriteAllText(path, "HNSW_OK");
     }
@@ -718,8 +726,9 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         {
             lines = File.ReadAllLines(path);
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"FileDocumentStore: WAL file read failed: {ex.Message}");
             return; // WAL file may be corrupted or locked
         }
 
@@ -733,8 +742,9 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             {
                 entry = JsonConvert.DeserializeObject<WalEntry>(line);
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"FileDocumentStore: Corrupted WAL entry skipped: {ex.Message}");
                 continue; // Skip corrupted WAL entries
             }
 
