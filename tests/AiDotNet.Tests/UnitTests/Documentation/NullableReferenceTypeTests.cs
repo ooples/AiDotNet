@@ -1,6 +1,4 @@
-#nullable disable
-// Nullable disabled because these tests deliberately pass null through non-nullable parameters
-// to demonstrate that NRT annotations are compile-time only.
+#nullable enable
 
 using Xunit;
 
@@ -32,20 +30,24 @@ public class NullableReferenceTypeTests
     [Fact]
     public void NonNullableParameter_CanReceiveNull_AtRuntime()
     {
-        // This compiles without warning because we have #nullable disable at the top.
-        // At runtime, the string parameter IS null despite the method signature saying it's non-nullable.
+        // Suppress the nullable warning at the call site to simulate a caller without NRT.
+        // The method signature says non-nullable, but we force null through at runtime.
+#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
         string result = AcceptNonNullableString(null);
+#pragma warning restore CS8625
         Assert.Null(result);
     }
 
     /// <summary>
     /// Demonstrates that a non-nullable property can be set to null via an object initializer
-    /// when NRT is disabled.
+    /// when a caller suppresses NRT warnings.
     /// </summary>
     [Fact]
     public void NonNullableProperty_CanBeNull_WhenSetFromDisabledContext()
     {
+#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference type.
         var holder = new StringHolder { Value = null };
+#pragma warning restore CS8625
         Assert.Null(holder.Value);
     }
 
@@ -69,13 +71,15 @@ public class NullableReferenceTypeTests
     [Fact]
     public void CastingThroughObject_ErasesNullability()
     {
-        object boxed = null;
+#pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable type.
+        object? boxed = null;
         // This cast succeeds at runtime even though the target type is "non-nullable".
         string value = (string)boxed;
+#pragma warning restore CS8600
         Assert.Null(value);
     }
 
-    // Helper method with a non-nullable parameter (when #nullable is enabled elsewhere)
+    // Helper method with a non-nullable parameter
     private static string AcceptNonNullableString(string value)
     {
         // Without a guard, this silently returns null.

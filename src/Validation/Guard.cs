@@ -26,11 +26,13 @@ namespace AiDotNet.Validation;
 /// _model = model;
 /// </code>
 ///
-/// On .NET 6+, the parameter name is captured automatically. On .NET Framework 4.7.1,
-/// pass <c>nameof(param)</c> explicitly for the best error messages.
+/// When using a C# compiler that supports CallerArgumentExpression (Roslyn with
+/// <c>LangVersion</c> 10 or later), the parameter name is captured automatically, even
+/// when targeting .NET Framework via the polyfill attribute. With older compilers or
+/// language versions, pass <c>nameof(param)</c> explicitly for the best error messages.
 /// </para>
 /// </remarks>
-public static class Guard
+internal static class Guard
 {
     /// <summary>
     /// Throws <see cref="ArgumentNullException"/> if <paramref name="value"/> is <c>null</c>.
@@ -38,8 +40,8 @@ public static class Guard
     /// <typeparam name="T">The type of the value being checked.</typeparam>
     /// <param name="value">The value to check for null.</param>
     /// <param name="parameterName">
-    /// The name of the parameter. On .NET 6+ this is auto-filled by the compiler.
-    /// On .NET Framework, pass <c>nameof(param)</c> explicitly.
+    /// The name of the parameter. Auto-filled by the compiler when using C# 10+ with
+    /// CallerArgumentExpression support. Pass <c>nameof(param)</c> explicitly on older compilers.
     /// </param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
     /// <remarks>
@@ -64,8 +66,8 @@ public static class Guard
     /// </summary>
     /// <param name="value">The string value to check.</param>
     /// <param name="parameterName">
-    /// The name of the parameter. On .NET 6+ this is auto-filled by the compiler.
-    /// On .NET Framework, pass <c>nameof(param)</c> explicitly.
+    /// The name of the parameter. Auto-filled by the compiler when using C# 10+ with
+    /// CallerArgumentExpression support. Pass <c>nameof(param)</c> explicitly on older compilers.
     /// </param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="value"/> is empty.</exception>
@@ -90,8 +92,8 @@ public static class Guard
     /// </summary>
     /// <param name="value">The string value to check.</param>
     /// <param name="parameterName">
-    /// The name of the parameter. On .NET 6+ this is auto-filled by the compiler.
-    /// On .NET Framework, pass <c>nameof(param)</c> explicitly.
+    /// The name of the parameter. Auto-filled by the compiler when using C# 10+ with
+    /// CallerArgumentExpression support. Pass <c>nameof(param)</c> explicitly on older compilers.
     /// </param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="value"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="value"/> is empty or whitespace.</exception>
@@ -115,7 +117,8 @@ public static class Guard
     /// </summary>
     /// <param name="value">The integer value to check.</param>
     /// <param name="parameterName">
-    /// The name of the parameter. On .NET 6+ this is auto-filled by the compiler.
+    /// The name of the parameter. Auto-filled by the compiler when using C# 10+ with
+    /// CallerArgumentExpression support. Pass <c>nameof(param)</c> explicitly on older compilers.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="value"/> is &lt;= 0.</exception>
     public static void Positive(
@@ -134,7 +137,8 @@ public static class Guard
     /// </summary>
     /// <param name="value">The double value to check.</param>
     /// <param name="parameterName">
-    /// The name of the parameter. On .NET 6+ this is auto-filled by the compiler.
+    /// The name of the parameter. Auto-filled by the compiler when using C# 10+ with
+    /// CallerArgumentExpression support. Pass <c>nameof(param)</c> explicitly on older compilers.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="value"/> is &lt;= 0, NaN, or infinity.</exception>
     public static void Positive(
@@ -152,7 +156,8 @@ public static class Guard
     /// </summary>
     /// <param name="value">The integer value to check.</param>
     /// <param name="parameterName">
-    /// The name of the parameter. On .NET 6+ this is auto-filled by the compiler.
+    /// The name of the parameter. Auto-filled by the compiler when using C# 10+ with
+    /// CallerArgumentExpression support. Pass <c>nameof(param)</c> explicitly on older compilers.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="value"/> is &lt; 0.</exception>
     public static void NonNegative(
@@ -171,7 +176,8 @@ public static class Guard
     /// </summary>
     /// <param name="value">The double value to check.</param>
     /// <param name="parameterName">
-    /// The name of the parameter. On .NET 6+ this is auto-filled by the compiler.
+    /// The name of the parameter. Auto-filled by the compiler when using C# 10+ with
+    /// CallerArgumentExpression support. Pass <c>nameof(param)</c> explicitly on older compilers.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="value"/> is &lt; 0, NaN, or infinity.</exception>
     public static void NonNegative(
@@ -192,7 +198,8 @@ public static class Guard
     /// <param name="min">The minimum allowed value (inclusive).</param>
     /// <param name="max">The maximum allowed value (inclusive).</param>
     /// <param name="parameterName">
-    /// The name of the parameter. On .NET 6+ this is auto-filled by the compiler.
+    /// The name of the parameter. Auto-filled by the compiler when using C# 10+ with
+    /// CallerArgumentExpression support. Pass <c>nameof(param)</c> explicitly on older compilers.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="value"/> is outside the range.</exception>
     public static void InRange(
@@ -201,6 +208,11 @@ public static class Guard
         int max,
         [CallerArgumentExpression(nameof(value))] string? parameterName = null)
     {
+        if (min > max)
+        {
+            throw new ArgumentException("min must be less than or equal to max.", nameof(min));
+        }
+
         if (value < min || value > max)
         {
             throw new ArgumentOutOfRangeException(parameterName, value,
@@ -217,7 +229,8 @@ public static class Guard
     /// <param name="min">The minimum allowed value (inclusive).</param>
     /// <param name="max">The maximum allowed value (inclusive).</param>
     /// <param name="parameterName">
-    /// The name of the parameter. On .NET 6+ this is auto-filled by the compiler.
+    /// The name of the parameter. Auto-filled by the compiler when using C# 10+ with
+    /// CallerArgumentExpression support. Pass <c>nameof(param)</c> explicitly on older compilers.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="value"/> is outside the range, NaN, or infinity.</exception>
     public static void InRange(
@@ -226,6 +239,21 @@ public static class Guard
         double max,
         [CallerArgumentExpression(nameof(value))] string? parameterName = null)
     {
+        if (double.IsNaN(min) || double.IsInfinity(min))
+        {
+            throw new ArgumentOutOfRangeException(nameof(min), min, "Min must be a finite number.");
+        }
+
+        if (double.IsNaN(max) || double.IsInfinity(max))
+        {
+            throw new ArgumentOutOfRangeException(nameof(max), max, "Max must be a finite number.");
+        }
+
+        if (min > max)
+        {
+            throw new ArgumentException("min must be less than or equal to max.", nameof(min));
+        }
+
         if (double.IsNaN(value) || double.IsInfinity(value) || value < min || value > max)
         {
             throw new ArgumentOutOfRangeException(parameterName, value,

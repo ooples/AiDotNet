@@ -65,8 +65,10 @@ namespace System.Runtime.CompilerServices
     /// <summary>
     /// Polyfill for CallerArgumentExpressionAttribute, introduced in C# 10 / .NET 6.
     /// Allows methods to capture the expression passed to a parameter as a string.
-    /// On .NET Framework, the compiler does not populate this automatically,
-    /// so callers must pass <c>nameof(param)</c> explicitly.
+    /// When using a C# compiler that supports CallerArgumentExpression (for example, Roslyn with
+    /// <c>LangVersion</c> 10 or later), the compiler will populate this automatically even when
+    /// targeting older frameworks such as .NET Framework. With older compilers or language versions
+    /// that do not support CallerArgumentExpression, callers must pass <c>nameof(param)</c> explicitly.
     /// </summary>
     [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
     internal sealed class CallerArgumentExpressionAttribute : Attribute

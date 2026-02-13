@@ -266,6 +266,34 @@ public class GuardTests
         Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(double.NegativeInfinity, 0.0, 1.0));
     }
 
+    // ───────────────── InRange bound validation ─────────────────
+
+    [Fact]
+    public void InRange_Int_WithMinGreaterThanMax_ThrowsArgumentException()
+    {
+        var ex = Assert.Throws<ArgumentException>(() => Guard.InRange(5, 10, 1));
+        Assert.Equal("min", ex.ParamName);
+    }
+
+    [Fact]
+    public void InRange_Double_WithMinGreaterThanMax_ThrowsArgumentException()
+    {
+        var ex = Assert.Throws<ArgumentException>(() => Guard.InRange(0.5, 1.0, 0.0));
+        Assert.Equal("min", ex.ParamName);
+    }
+
+    [Fact]
+    public void InRange_Double_WithNaNMin_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(0.5, double.NaN, 1.0));
+    }
+
+    [Fact]
+    public void InRange_Double_WithInfinityMax_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => Guard.InRange(0.5, 0.0, double.PositiveInfinity));
+    }
+
     // ───────────────── Parameter name propagation ─────────────────
 
     [Fact]
