@@ -405,8 +405,12 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         ThrowIfDisposed();
         lock (_persistLock)
         {
-            PersistToDisk();
-            ClearWal();
+            lock (_walLock)
+            {
+                PersistToDisk();
+                ClearWal();
+                _tombstones.Clear();
+            }
         }
     }
 
@@ -427,10 +431,9 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             lock (_walLock)
             {
                 _tombstones.Clear();
+                PersistToDisk();
+                ClearWal();
             }
-
-            PersistToDisk();
-            ClearWal();
         }
     }
 
@@ -459,8 +462,11 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             {
                 lock (_persistLock)
                 {
-                    PersistToDisk();
-                    ClearWal();
+                    lock (_walLock)
+                    {
+                        PersistToDisk();
+                        ClearWal();
+                    }
                 }
             }
             catch (Exception ex)
@@ -724,7 +730,8 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
 
             string json = JsonConvert.SerializeObject(entry, Formatting.None);
             _walWriter.WriteLine(json);
-            _walSize += json.Length + Environment.NewLine.Length;
+            _walWriter.Flush();
+            _walSize = _walWriter.BaseStream.Length;
         }
     }
 
@@ -737,10 +744,10 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         if (!File.Exists(path))
             return;
 
-        string[] lines;
+        StreamReader? reader;
         try
         {
-            lines = File.ReadAllLines(path);
+            reader = new StreamReader(path);
         }
         catch (Exception ex)
         {
@@ -748,7 +755,10 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             return; // WAL file may be corrupted or locked
         }
 
-        foreach (string line in lines)
+        using (reader)
+        {
+        string? line;
+        while ((line = reader.ReadLine()) != null)
         {
             if (string.IsNullOrWhiteSpace(line))
                 continue;
@@ -796,6 +806,7 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
                     break;
             }
         }
+        } // end using reader
     }
 
     /// <summary>
@@ -806,7 +817,23 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         CloseWalWriter();
 
         string path = Path.Combine(_directoryPath, WalFileName);
+
+        // First, attempt to delete the WAL file.
         DeleteFileIfExists(path);
+
+        // If deletion failed (e.g., file locked by AV scan), fall back to truncating it.
+        try
+        {
+            if (File.Exists(path))
+            {
+                using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+                // FileMode.Create truncates the file to zero length
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"FileDocumentStore: Failed to truncate WAL file '{path}': {ex.Message}");
+        }
 
         _walSize = 0;
         OpenWalWriter();

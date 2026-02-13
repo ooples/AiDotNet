@@ -501,17 +501,17 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
         #region WAL Tests
 
         [Fact]
-        public void Wal_RecoversPendingAddsAfterReopen()
+        public void Checkpoint_RecoversPendingAddsAfterReopen()
         {
-            // Arrange - add without flush, just dispose (which does flush)
+            // Arrange - add without explicit flush; Dispose checkpoints to disk
             var options = CreateOptions();
             using (var store = new FileDocumentStore<float>(3, options))
             {
                 store.Add(CreateTestDocument("doc1", "WAL test", 3, new float[] { 1, 0, 0 }));
-                // Don't call Flush explicitly - Dispose will handle it
+                // Don't call Flush explicitly - Dispose will checkpoint
             }
 
-            // Act - reopen
+            // Act - reopen (data recovered from checkpoint files, not WAL replay)
             using var reopened = new FileDocumentStore<float>(3, options);
 
             // Assert
@@ -522,26 +522,26 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
         }
 
         [Fact]
-        public void Wal_RecoversRemovesAfterReopen()
+        public void Checkpoint_RecoversRemovesAfterReopen()
         {
-            // Arrange - add, flush, then remove without flush
+            // Arrange - add documents and let Dispose checkpoint them
             var options = CreateOptions();
             using (var store = new FileDocumentStore<float>(3, options))
             {
                 store.Add(CreateTestDocument("doc1", "Keep", 3, new float[] { 1, 0, 0 }));
                 store.Add(CreateTestDocument("doc2", "Remove", 3, new float[] { 0, 1, 0 }));
-                // Dispose flushes everything
+                // Dispose checkpoints everything
             }
 
-            // Reopen, remove doc2, close
+            // Reopen, remove doc2, close (Dispose checkpoints the removal)
             using (var store = new FileDocumentStore<float>(3, options))
             {
                 Assert.Equal(2, store.DocumentCount);
                 store.Remove("doc2");
-                // Dispose flushes
+                // Dispose checkpoints
             }
 
-            // Act - reopen and verify
+            // Act - reopen and verify (data recovered from checkpoint, not WAL)
             using var reopened = new FileDocumentStore<float>(3, options);
 
             // Assert
@@ -624,9 +624,13 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             var store = new FileDocumentStore<float>(3, CreateOptions());
             store.Add(CreateTestDocument("doc1", "Test", 3));
 
-            // Act & Assert - should not throw
-            store.Dispose();
-            store.Dispose();
+            // Act & Assert - calling Dispose twice should not throw
+            var ex = Record.Exception(() =>
+            {
+                store.Dispose();
+                store.Dispose();
+            });
+            Assert.Null(ex);
         }
 
         #endregion
