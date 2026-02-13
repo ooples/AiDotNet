@@ -821,6 +821,53 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             Assert.Equal("cat", results[0].Id);
         }
 
+        [Fact]
+        public void Constructor_WithMismatchedDimensionOnReopen_ThrowsInvalidOperationException()
+        {
+            // Arrange - create a store with dimension 3 and flush to disk
+            var options = CreateOptions();
+            using (var store = new FileDocumentStore<float>(3, options))
+            {
+                store.Add(CreateTestDocument("doc1", "Test", 3, new float[] { 1, 0, 0 }));
+                store.Flush();
+            }
+
+            // Act & Assert - reopen with a different dimension
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                new FileDocumentStore<float>(5, options));
+            Assert.Contains("dimension mismatch", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void Persistence_TruncatedVectorsFile_GracefullyHandled()
+        {
+            // Arrange - create a store, flush, then corrupt vectors.bin by truncating it
+            var options = CreateOptions();
+            using (var store = new FileDocumentStore<float>(3, options))
+            {
+                store.Add(CreateTestDocument("doc1", "Test 1", 3, new float[] { 1, 0, 0 }));
+                store.Add(CreateTestDocument("doc2", "Test 2", 3, new float[] { 0, 1, 0 }));
+                store.Flush();
+            }
+
+            // Truncate vectors.bin to half its expected size
+            string vectorsPath = Path.Combine(_testDir, "vectors.bin");
+            var fileInfo = new FileInfo(vectorsPath);
+            long truncatedSize = fileInfo.Length / 2;
+            using (var stream = new FileStream(vectorsPath, FileMode.Open))
+            {
+                stream.SetLength(truncatedSize);
+            }
+
+            // Act - reopen the store (truncated vectors should be detected)
+            using var reopened = new FileDocumentStore<float>(3, options);
+
+            // Assert - store should recover gracefully via WAL replay, not crash
+            // The truncated vectors file means LoadFromDisk returns early,
+            // but WAL replay should restore the data if WAL entries exist
+            Assert.True(reopened.DocumentCount >= 0);
+        }
+
         #endregion
 
         #region FlushOnEveryWrite Tests

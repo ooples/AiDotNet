@@ -182,6 +182,15 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     protected override void AddCore(VectorDocument<T> vectorDocument)
     {
         ThrowIfDisposed();
+
+        // Validate embedding dimension matches the store
+        if (vectorDocument.Embedding.Length != _vectorDimension)
+        {
+            throw new ArgumentException(
+                $"Vector dimension mismatch. Expected {_vectorDimension}, got {vectorDocument.Embedding.Length} for document {vectorDocument.Document.Id}",
+                nameof(vectorDocument));
+        }
+
         string docId = vectorDocument.Document.Id;
 
         // Write to WAL first for durability (before modifying in-memory state)
@@ -248,13 +257,12 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         // Then update in-memory structures
         var hnswBatch = new Dictionary<string, Vector<T>>();
 
-        foreach (var vd in vectorDocuments)
+        lock (_walLock)
         {
-            string docId = vd.Document.Id;
-            hnswBatch[docId] = vd.Embedding;
-
-            lock (_walLock)
+            foreach (var vd in vectorDocuments)
             {
+                string docId = vd.Document.Id;
+                hnswBatch[docId] = vd.Embedding;
                 _tombstones.Remove(docId);
             }
         }
@@ -666,7 +674,11 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     private void OpenWalWriter()
     {
         string path = Path.Combine(_directoryPath, WalFileName);
-        var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+
+        // When SyncWalWrites is enabled, use WriteThrough to guarantee data reaches
+        // the physical disk (not just the OS buffer) on every write.
+        var fileOptions = _options.SyncWalWrites ? FileOptions.WriteThrough : FileOptions.None;
+        var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read, 4096, fileOptions);
         _walWriter = new StreamWriter(stream) { AutoFlush = true };
 
         if (File.Exists(path))
@@ -704,7 +716,10 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         lock (_walLock)
         {
             if (_walWriter == null)
-                return;
+            {
+                throw new InvalidOperationException(
+                    "WAL writer is not initialized. The store may have been disposed or not fully constructed.");
+            }
 
             string json = JsonConvert.SerializeObject(entry, Formatting.None);
             _walWriter.WriteLine(json);
@@ -809,22 +824,25 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         }
 
         // Auto-flush when WAL exceeds max size
-        if (_walSize > _options.MaxWalSizeBytes)
+        long currentWalSize;
+        int tombstoneCount;
+        lock (_walLock)
+        {
+            currentWalSize = _walSize;
+            tombstoneCount = _tombstones.Count;
+        }
+
+        if (currentWalSize > _options.MaxWalSizeBytes)
         {
             Flush();
         }
 
         // Auto-compact when tombstone ratio exceeds threshold.
         // Only compact when there are live documents (compacting an empty store is pointless)
-        // and when we have at least 10 total entries to avoid thrashing on small stores.
+        // and when we have enough total entries to avoid thrashing on small stores.
         int liveCount = _store.Count;
-        int tombstoneCount;
-        lock (_walLock)
-        {
-            tombstoneCount = _tombstones.Count;
-        }
         int totalDocs = liveCount + tombstoneCount;
-        if (liveCount > 0 && tombstoneCount > 0 && totalDocs >= 10)
+        if (liveCount > 0 && tombstoneCount > 0 && totalDocs >= _options.MinimumDocumentCountForCompaction)
         {
             double ratio = (double)tombstoneCount / totalDocs;
             if (ratio >= _options.CompactionTombstoneRatio)
@@ -885,9 +903,9 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             if (File.Exists(path))
                 File.Delete(path);
         }
-        catch
+        catch (Exception ex)
         {
-            // Best-effort deletion
+            System.Diagnostics.Debug.WriteLine($"FileDocumentStore: Failed to delete file '{path}': {ex.Message}");
         }
     }
 
