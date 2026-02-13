@@ -201,9 +201,6 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// </summary>
     protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
     {
-        if (vectorDocuments.Count == 0)
-            return;
-
         // Validate dimensions
         foreach (var vd in vectorDocuments)
         {
@@ -776,11 +773,15 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             Flush();
         }
 
-        // Auto-compact when tombstone ratio exceeds threshold
-        int totalDocs = _store.Count + _tombstones.Count;
-        if (totalDocs > 0 && _tombstones.Count > 0)
+        // Auto-compact when tombstone ratio exceeds threshold.
+        // Only compact when there are live documents (compacting an empty store is pointless)
+        // and when we have at least 10 total entries to avoid thrashing on small stores.
+        int liveCount = _store.Count;
+        int tombstoneCount = _tombstones.Count;
+        int totalDocs = liveCount + tombstoneCount;
+        if (liveCount > 0 && tombstoneCount > 0 && totalDocs >= 10)
         {
-            double ratio = (double)_tombstones.Count / totalDocs;
+            double ratio = (double)tombstoneCount / totalDocs;
             if (ratio >= _options.CompactionTombstoneRatio)
             {
                 Compact();
