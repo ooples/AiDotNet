@@ -674,6 +674,180 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
 
         #endregion
 
+        #region ObjectDisposedException Tests
+
+        [Fact]
+        public void Add_AfterDispose_ThrowsObjectDisposedException()
+        {
+            // Arrange
+            var store = new FileDocumentStore<float>(3, CreateOptions());
+            store.Dispose();
+
+            // Act & Assert
+            Assert.Throws<ObjectDisposedException>(() =>
+                store.Add(CreateTestDocument("doc1", "Test", 3)));
+        }
+
+        [Fact]
+        public void GetById_AfterDispose_ThrowsObjectDisposedException()
+        {
+            // Arrange
+            var store = new FileDocumentStore<float>(3, CreateOptions());
+            store.Add(CreateTestDocument("doc1", "Test", 3));
+            store.Dispose();
+
+            // Act & Assert
+            Assert.Throws<ObjectDisposedException>(() => store.GetById("doc1"));
+        }
+
+        [Fact]
+        public void GetSimilar_AfterDispose_ThrowsObjectDisposedException()
+        {
+            // Arrange
+            var store = new FileDocumentStore<float>(3, CreateOptions());
+            store.Dispose();
+
+            // Act & Assert
+            Assert.Throws<ObjectDisposedException>(() =>
+                store.GetSimilar(new Vector<float>(new float[] { 1, 0, 0 }), 1).ToList());
+        }
+
+        [Fact]
+        public void Clear_AfterDispose_ThrowsObjectDisposedException()
+        {
+            // Arrange
+            var store = new FileDocumentStore<float>(3, CreateOptions());
+            store.Dispose();
+
+            // Act & Assert
+            Assert.Throws<ObjectDisposedException>(() => store.Clear());
+        }
+
+        [Fact]
+        public void Flush_AfterDispose_ThrowsObjectDisposedException()
+        {
+            // Arrange
+            var store = new FileDocumentStore<float>(3, CreateOptions());
+            store.Dispose();
+
+            // Act & Assert
+            Assert.Throws<ObjectDisposedException>(() => store.Flush());
+        }
+
+        #endregion
+
+        #region Double Type Tests
+
+        [Fact]
+        public void DoubleType_AddAndRetrieve_WorksCorrectly()
+        {
+            // Arrange
+            var dir = Path.Combine(_testDir, "double_test");
+            var options = new FileDocumentStoreOptions { DirectoryPath = dir };
+            using var store = new FileDocumentStore<double>(3, options);
+
+            var doc = new VectorDocument<double>
+            {
+                Document = new Document<double>("doc1", "Double precision test"),
+                Embedding = new Vector<double>(new double[] { 0.123456789012345, 0.987654321098765, 0.555555555555555 })
+            };
+
+            // Act
+            store.Add(doc);
+            var result = store.GetById("doc1");
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal("Double precision test", result.Content);
+        }
+
+        [Fact]
+        public void DoubleType_PersistenceAndReload_PreservesPrecision()
+        {
+            // Arrange
+            var dir = Path.Combine(_testDir, "double_persist");
+            var options = new FileDocumentStoreOptions { DirectoryPath = dir };
+            double[] originalValues = { 0.123456789012345, 0.987654321098765, 0.555555555555555 };
+
+            using (var store = new FileDocumentStore<double>(3, options))
+            {
+                store.Add(new VectorDocument<double>
+                {
+                    Document = new Document<double>("doc1", "Precision test"),
+                    Embedding = new Vector<double>(originalValues)
+                });
+                store.Flush();
+            }
+
+            // Act - reopen and search
+            using var reopened = new FileDocumentStore<double>(3, options);
+            var queryVector = new Vector<double>(originalValues);
+            var results = reopened.GetSimilar(queryVector, topK: 1).ToList();
+
+            // Assert
+            Assert.Single(results);
+            Assert.Equal("doc1", results[0].Id);
+        }
+
+        [Fact]
+        public void DoubleType_SimilaritySearch_WorksCorrectly()
+        {
+            // Arrange
+            var dir = Path.Combine(_testDir, "double_search");
+            var options = new FileDocumentStoreOptions { DirectoryPath = dir };
+            using var store = new FileDocumentStore<double>(3, options);
+
+            store.AddBatch(new List<VectorDocument<double>>
+            {
+                new VectorDocument<double>
+                {
+                    Document = new Document<double>("cat", "Cat content"),
+                    Embedding = new Vector<double>(new double[] { 1.0, 0.0, 0.0 })
+                },
+                new VectorDocument<double>
+                {
+                    Document = new Document<double>("dog", "Dog content"),
+                    Embedding = new Vector<double>(new double[] { 0.0, 1.0, 0.0 })
+                }
+            });
+
+            var queryVector = new Vector<double>(new double[] { 1.0, 0.0, 0.0 });
+
+            // Act
+            var results = store.GetSimilar(queryVector, topK: 1).ToList();
+
+            // Assert
+            Assert.Single(results);
+            Assert.Equal("cat", results[0].Id);
+        }
+
+        #endregion
+
+        #region FlushOnEveryWrite Tests
+
+        [Fact]
+        public void FlushOnEveryWrite_PersistsImmediately()
+        {
+            // Arrange
+            var options = new FileDocumentStoreOptions
+            {
+                DirectoryPath = _testDir,
+                FlushOnEveryWrite = true
+            };
+
+            using (var store = new FileDocumentStore<float>(3, options))
+            {
+                // Act - add a document (should flush immediately)
+                store.Add(CreateTestDocument("doc1", "Immediate persist", 3, new float[] { 1, 0, 0 }));
+
+                // Assert - files should exist immediately (not just after Dispose)
+                Assert.True(File.Exists(Path.Combine(_testDir, "store.meta")));
+                Assert.True(File.Exists(Path.Combine(_testDir, "documents.json")));
+            }
+        }
+
+        #endregion
+
         #region Helper Methods
 
         private VectorDocument<float> CreateTestDocument(

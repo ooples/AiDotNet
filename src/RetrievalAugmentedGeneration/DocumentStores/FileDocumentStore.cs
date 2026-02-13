@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
 
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -84,7 +83,16 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// <summary>
     /// Gets the number of tombstoned (soft-deleted) documents awaiting compaction.
     /// </summary>
-    public int TombstoneCount => _tombstones.Count;
+    public int TombstoneCount
+    {
+        get
+        {
+            lock (_walLock)
+            {
+                return _tombstones.Count;
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the directory path where store files are located.
@@ -167,19 +175,10 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// </summary>
     protected override void AddCore(VectorDocument<T> vectorDocument)
     {
+        ThrowIfDisposed();
         string docId = vectorDocument.Document.Id;
 
-        // Remove tombstone if re-adding a previously deleted document
-        lock (_walLock)
-        {
-            _tombstones.Remove(docId);
-        }
-
-        // Update in-memory structures
-        _hnswIndex.Add(docId, vectorDocument.Embedding);
-        _store[docId] = vectorDocument;
-
-        // Write to WAL for durability
+        // Write to WAL first for durability (before modifying in-memory state)
         WriteWalEntry(new WalEntry
         {
             Operation = WalOperation.Add,
@@ -193,6 +192,15 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             VectorData = VectorToDoubleArray(vectorDocument.Embedding)
         });
 
+        // Then update in-memory structures
+        lock (_walLock)
+        {
+            _tombstones.Remove(docId);
+        }
+
+        _hnswIndex.Add(docId, vectorDocument.Embedding);
+        _store[docId] = vectorDocument;
+
         CheckAutoFlush();
     }
 
@@ -201,6 +209,8 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// </summary>
     protected override void AddBatchCore(IList<VectorDocument<T>> vectorDocuments)
     {
+        ThrowIfDisposed();
+
         // Validate dimensions
         foreach (var vd in vectorDocuments)
         {
@@ -212,24 +222,13 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             }
         }
 
-        // Add to HNSW and store, write WAL entries
-        var hnswBatch = new Dictionary<string, Vector<T>>();
-        var walEntries = new List<WalEntry>();
-
+        // Write WAL entries first for durability (before modifying in-memory state)
         foreach (var vd in vectorDocuments)
         {
-            string docId = vd.Document.Id;
-            hnswBatch[docId] = vd.Embedding;
-
-            lock (_walLock)
-            {
-                _tombstones.Remove(docId);
-            }
-
-            walEntries.Add(new WalEntry
+            WriteWalEntry(new WalEntry
             {
                 Operation = WalOperation.Add,
-                DocumentId = docId,
+                DocumentId = vd.Document.Id,
                 Document = new SerializableDocument
                 {
                     Id = vd.Document.Id,
@@ -240,17 +239,25 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             });
         }
 
+        // Then update in-memory structures
+        var hnswBatch = new Dictionary<string, Vector<T>>();
+
+        foreach (var vd in vectorDocuments)
+        {
+            string docId = vd.Document.Id;
+            hnswBatch[docId] = vd.Embedding;
+
+            lock (_walLock)
+            {
+                _tombstones.Remove(docId);
+            }
+        }
+
         _hnswIndex.AddBatch(hnswBatch);
 
         foreach (var vd in vectorDocuments)
         {
             _store[vd.Document.Id] = vd;
-        }
-
-        // Write all WAL entries
-        foreach (var entry in walEntries)
-        {
-            WriteWalEntry(entry);
         }
 
         CheckAutoFlush();
@@ -261,6 +268,7 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// </summary>
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
+        ThrowIfDisposed();
         bool hasFilters = metadataFilters.Count > 0;
         int fetchCount = hasFilters ? Math.Min(topK * 10, Math.Max(_store.Count, topK)) : topK;
 
@@ -297,6 +305,7 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// </summary>
     protected override Document<T>? GetByIdCore(string documentId)
     {
+        ThrowIfDisposed();
         return _store.TryGetValue(documentId, out var vd) ? vd.Document : null;
     }
 
@@ -305,6 +314,7 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// </summary>
     protected override bool RemoveCore(string documentId)
     {
+        ThrowIfDisposed();
         if (_store.TryRemove(documentId, out _))
         {
             _hnswIndex.Remove(documentId);
@@ -331,6 +341,7 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// </summary>
     protected override IEnumerable<Document<T>> GetAllCore()
     {
+        ThrowIfDisposed();
         return _store.Values.Select(vd => vd.Document).ToList();
     }
 
@@ -339,6 +350,7 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// </summary>
     public override void Clear()
     {
+        ThrowIfDisposed();
         _store.Clear();
         _hnswIndex.Clear();
 
@@ -372,6 +384,7 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// </remarks>
     public void Flush()
     {
+        ThrowIfDisposed();
         lock (_persistLock)
         {
             PersistToDisk();
@@ -390,6 +403,7 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// </remarks>
     public void Compact()
     {
+        ThrowIfDisposed();
         lock (_persistLock)
         {
             lock (_walLock)
@@ -427,7 +441,11 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             {
                 if (_store.Count > 0)
                 {
-                    Flush();
+                    lock (_persistLock)
+                    {
+                        PersistToDisk();
+                        ClearWal();
+                    }
                 }
             }
             catch
@@ -474,6 +492,12 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         var meta = ReadMetadata();
         if (meta == null)
             return;
+
+        if (meta.Version != FormatVersion)
+        {
+            throw new InvalidOperationException(
+                $"Unsupported store format version {meta.Version}. Expected {FormatVersion}.");
+        }
 
         _vectorDimension = meta.VectorDimension;
 
@@ -767,6 +791,13 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// </summary>
     private void CheckAutoFlush()
     {
+        // Flush on every write if configured for maximum durability
+        if (_options.FlushOnEveryWrite)
+        {
+            Flush();
+            return;
+        }
+
         // Auto-flush when WAL exceeds max size
         if (_walSize > _options.MaxWalSizeBytes)
         {
@@ -777,7 +808,11 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         // Only compact when there are live documents (compacting an empty store is pointless)
         // and when we have at least 10 total entries to avoid thrashing on small stores.
         int liveCount = _store.Count;
-        int tombstoneCount = _tombstones.Count;
+        int tombstoneCount;
+        lock (_walLock)
+        {
+            tombstoneCount = _tombstones.Count;
+        }
         int totalDocs = liveCount + tombstoneCount;
         if (liveCount > 0 && tombstoneCount > 0 && totalDocs >= 10)
         {
@@ -786,6 +821,17 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             {
                 Compact();
             }
+        }
+    }
+
+    /// <summary>
+    /// Throws ObjectDisposedException if the store has been disposed.
+    /// </summary>
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(FileDocumentStore<T>));
         }
     }
 
