@@ -700,9 +700,10 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
                 _walWriter.Flush();
                 _walWriter.Dispose();
             }
-            catch
+            catch (Exception ex)
             {
-                // Best-effort close
+                // Best-effort close - log but don't throw
+                System.Diagnostics.Debug.WriteLine($"FileDocumentStore: Failed to close WAL writer: {ex.Message}");
             }
             _walWriter = null;
         }

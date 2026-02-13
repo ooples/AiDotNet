@@ -862,10 +862,12 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
             // Act - reopen the store (truncated vectors should be detected)
             using var reopened = new FileDocumentStore<float>(3, options);
 
-            // Assert - store should recover gracefully via WAL replay, not crash
-            // The truncated vectors file means LoadFromDisk returns early,
-            // but WAL replay should restore the data if WAL entries exist
-            Assert.True(reopened.DocumentCount >= 0);
+            // Assert - store should handle truncation gracefully
+            // Since WAL was cleared by Flush(), and vectors.bin is truncated,
+            // LoadFromDisk returns early with no documents loaded
+            Assert.Equal(0, reopened.DocumentCount);
+            Assert.Null(reopened.GetById("doc1"));
+            Assert.Null(reopened.GetById("doc2"));
         }
 
         #endregion
