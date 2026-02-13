@@ -38,7 +38,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         bool enableBatching = true,
         bool enableSpeculativeDecoding = false)
     {
-        Guard.NotNull(modelName);
+        Guard.NotNullOrWhiteSpace(modelName);
         _modelName = modelName;
         _inputDimension = inputDimension;
         _outputDimension = outputDimension;
@@ -64,7 +64,7 @@ public class ServableModelWrapper<T> : IServableModel<T>, IServableModelInferenc
         bool enableBatching = true,
         bool enableSpeculativeDecoding = false)
     {
-        Guard.NotNull(modelName);
+        Guard.NotNullOrWhiteSpace(modelName);
         _modelName = modelName;
         _inputDimension = inputDimension;
         _outputDimension = 1; // Regression models typically output a single value

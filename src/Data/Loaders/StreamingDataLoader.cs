@@ -236,7 +236,7 @@ public class CsvStreamingDataLoader<T, TInput, TOutput> : StreamingDataLoaderBas
         int numWorkers = 4)
         : base(batchSize, prefetchCount, numWorkers)
     {
-        Guard.NotNull(filePath);
+        Guard.NotNullOrWhiteSpace(filePath);
         _filePath = filePath;
         Guard.NotNull(lineParser);
         _lineParser = lineParser;

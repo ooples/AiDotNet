@@ -29,8 +29,7 @@ public class EdgeOptimizer<T, TInput, TOutput>
     /// <returns>The optimized model</returns>
     public IFullModel<T, TInput, TOutput> OptimizeForEdge(IFullModel<T, TInput, TOutput> model)
     {
-        if (model == null)
-            throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
 
         var optimizedModel = model;
 
@@ -71,8 +70,7 @@ public class EdgeOptimizer<T, TInput, TOutput>
     /// <returns>Partitioned model structure</returns>
     public PartitionedModel<T, TInput, TOutput> PartitionModel(IFullModel<T, TInput, TOutput> model)
     {
-        if (model == null)
-            throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
 
         var partitioned = new PartitionedModel<T, TInput, TOutput>
         {

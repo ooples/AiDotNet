@@ -137,10 +137,7 @@ internal sealed class RandomSearchRLAutoML<T>
 
     private static void RecordFailedTrial(AutoMLRunSummary summary, int trialId, DateTime trialStartUtc, Exception exception)
     {
-        if (summary is null)
-        {
-            throw new ArgumentNullException(nameof(summary));
-        }
+        Guard.NotNull(summary);
 
         var completedUtc = DateTime.UtcNow;
         var duration = completedUtc - trialStartUtc;

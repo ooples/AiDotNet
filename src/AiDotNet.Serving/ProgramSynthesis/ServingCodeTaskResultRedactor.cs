@@ -14,6 +14,7 @@ public sealed class ServingCodeTaskResultRedactor : IServingCodeTaskResultRedact
     public ServingCodeTaskResultRedactor(IOptions<ServingProgramSynthesisOptions> options)
     {
         Guard.NotNull(options);
+        Guard.NotNull(options.Value);
         _options = options.Value;
     }
 

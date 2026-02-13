@@ -177,7 +177,12 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
         set
         {
             Guard.NotNull(value);
-            WeightsArray = value.ToArray();
+            var array = value.ToArray();
+            if (array.Length == 0)
+            {
+                throw new ArgumentException("Weights cannot be empty.", nameof(value));
+            }
+            WeightsArray = array;
             ComputeCumulativeProbabilities();
         }
     }

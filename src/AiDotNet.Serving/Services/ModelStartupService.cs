@@ -60,6 +60,7 @@ public class ModelStartupService : IHostedService
         Guard.NotNull(logger);
         _logger = logger;
         Guard.NotNull(options);
+        Guard.NotNull(options.Value);
         _options = options.Value;
     }
 

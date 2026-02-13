@@ -15,6 +15,7 @@ public sealed class HeaderTierResolver : ITierResolver
     public HeaderTierResolver(IOptions<TierEnforcementOptions> options)
     {
         Guard.NotNull(options);
+        Guard.NotNull(options.Value);
         _options = options.Value;
     }
 
