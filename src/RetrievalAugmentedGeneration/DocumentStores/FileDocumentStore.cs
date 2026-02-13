@@ -729,20 +729,16 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
                         var vector = DoubleArrayToVector(entry.VectorData);
                         var vd = new VectorDocument<T>(doc, vector);
 
+                        bool alreadyExists = _store.ContainsKey(entry.DocumentId);
                         _tombstones.Remove(entry.DocumentId);
                         _store[entry.DocumentId] = vd;
 
-                        // Only add to HNSW if not already present (idempotent replay)
-                        if (_hnswIndex.Count == 0 || !_store.ContainsKey(entry.DocumentId))
+                        // Remove from HNSW first if updating existing entry
+                        if (alreadyExists)
                         {
-                            _hnswIndex.Add(entry.DocumentId, vector);
-                        }
-                        else
-                        {
-                            // Update existing entry
                             _hnswIndex.Remove(entry.DocumentId);
-                            _hnswIndex.Add(entry.DocumentId, vector);
                         }
+                        _hnswIndex.Add(entry.DocumentId, vector);
                     }
                     break;
 
