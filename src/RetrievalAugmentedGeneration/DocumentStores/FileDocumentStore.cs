@@ -200,7 +200,17 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
 
         string docId = vectorDocument.Document.Id;
 
-        // Write to WAL first for durability (before modifying in-memory state)
+        // Update in-memory structures first so that if they throw,
+        // no WAL entry is written and the failed add won't be replayed on reopen.
+        lock (_walLock)
+        {
+            _tombstones.Remove(docId);
+        }
+
+        _hnswIndex.Add(docId, vectorDocument.Embedding);
+        _store[docId] = vectorDocument;
+
+        // Write to WAL after in-memory success for durability
         WriteWalEntry(new WalEntry
         {
             Operation = WalOperation.Add,
@@ -213,15 +223,6 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             },
             VectorData = VectorToDoubleArray(vectorDocument.Embedding)
         });
-
-        // Then update in-memory structures
-        lock (_walLock)
-        {
-            _tombstones.Remove(docId);
-        }
-
-        _hnswIndex.Add(docId, vectorDocument.Embedding);
-        _store[docId] = vectorDocument;
 
         CheckAutoFlush();
     }
@@ -244,24 +245,8 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             }
         }
 
-        // Write WAL entries first for durability (before modifying in-memory state)
-        foreach (var vd in vectorDocuments)
-        {
-            WriteWalEntry(new WalEntry
-            {
-                Operation = WalOperation.Add,
-                DocumentId = vd.Document.Id,
-                Document = new SerializableDocument
-                {
-                    Id = vd.Document.Id,
-                    Content = vd.Document.Content,
-                    Metadata = vd.Document.Metadata
-                },
-                VectorData = VectorToDoubleArray(vd.Embedding)
-            });
-        }
-
-        // Then update in-memory structures
+        // Update in-memory structures first so that if they throw,
+        // no WAL entries are written and the failed batch won't be replayed on reopen.
         var hnswBatch = new Dictionary<string, Vector<T>>();
 
         lock (_walLock)
@@ -281,6 +266,23 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
             _store[vd.Document.Id] = vd;
         }
 
+        // Write WAL entries after in-memory success for durability
+        foreach (var vd in vectorDocuments)
+        {
+            WriteWalEntry(new WalEntry
+            {
+                Operation = WalOperation.Add,
+                DocumentId = vd.Document.Id,
+                Document = new SerializableDocument
+                {
+                    Id = vd.Document.Id,
+                    Content = vd.Document.Content,
+                    Metadata = vd.Document.Metadata
+                },
+                VectorData = VectorToDoubleArray(vd.Embedding)
+            });
+        }
+
         CheckAutoFlush();
     }
 
@@ -290,11 +292,15 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
     {
         ThrowIfDisposed();
-        bool hasFilters = metadataFilters.Count > 0;
-        int fetchCount = hasFilters ? Math.Min(topK * 10, Math.Max(_store.Count, topK)) : topK;
 
-        if (_hnswIndex.Count == 0)
+        int availableCount = Math.Min(_store.Count, _hnswIndex.Count);
+        if (availableCount == 0)
             return Enumerable.Empty<Document<T>>();
+
+        bool hasFilters = metadataFilters.Count > 0;
+        int fetchCount = hasFilters
+            ? Math.Min(topK * 10, availableCount)
+            : Math.Min(topK, availableCount);
 
         var hnswResults = _hnswIndex.Search(queryVector, fetchCount);
         var results = new List<Document<T>>();
@@ -337,25 +343,24 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     {
         ThrowIfDisposed();
 
-        // Check existence before proceeding
-        if (!_store.ContainsKey(documentId))
+        // Atomically attempt to remove the document from the in-memory store
+        if (!_store.TryRemove(documentId, out _))
             return false;
 
-        // Write to WAL first for durability (before modifying in-memory state)
-        WriteWalEntry(new WalEntry
-        {
-            Operation = WalOperation.Remove,
-            DocumentId = documentId
-        });
-
-        // Then update in-memory structures
-        _store.TryRemove(documentId, out _);
+        // Update HNSW index and tombstones
         _hnswIndex.Remove(documentId);
 
         lock (_walLock)
         {
             _tombstones.Add(documentId);
         }
+
+        // Write to WAL after in-memory success for durability
+        WriteWalEntry(new WalEntry
+        {
+            Operation = WalOperation.Remove,
+            DocumentId = documentId
+        });
 
         CheckAutoFlush();
         return true;
@@ -574,8 +579,19 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         if (!File.Exists(path))
             return null;
 
-        string json = File.ReadAllText(path);
-        return JsonConvert.DeserializeObject<StoreMetadata>(json);
+        try
+        {
+            string json = File.ReadAllText(path);
+            if (string.IsNullOrWhiteSpace(json))
+                return null;
+
+            return JsonConvert.DeserializeObject<StoreMetadata>(json);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"FileDocumentStore: Failed to read metadata from '{path}': {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>
@@ -603,12 +619,23 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
         if (!File.Exists(path))
             return null;
 
-        string json = File.ReadAllText(path);
-        var serializedDocs = JsonConvert.DeserializeObject<List<SerializableDocument>>(json);
-        if (serializedDocs == null)
-            return null;
+        try
+        {
+            string json = File.ReadAllText(path);
+            if (string.IsNullOrWhiteSpace(json))
+                return null;
 
-        return serializedDocs.Select(sd => new Document<T>(sd.Id, sd.Content, sd.Metadata)).ToList();
+            var serializedDocs = JsonConvert.DeserializeObject<List<SerializableDocument>>(json);
+            if (serializedDocs == null)
+                return null;
+
+            return serializedDocs.Select(sd => new Document<T>(sd.Id, sd.Content, sd.Metadata)).ToList();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"FileDocumentStore: Failed to read documents from '{path}': {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>
