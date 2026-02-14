@@ -82,6 +82,7 @@ public interface IClassificationMetric<T> : IMetric<T>
 /// Interface for classification metrics that use probabilities.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ProbabilisticClassificationMetric")]
 public interface IProbabilisticClassificationMetric<T> : IMetric<T>
 {
     /// <summary>
@@ -109,6 +110,7 @@ public interface IProbabilisticClassificationMetric<T> : IMetric<T>
 /// Interface for regression metrics.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("RegressionMetric")]
 public interface IRegressionMetric<T> : IMetric<T>
 {
     /// <summary>
@@ -135,6 +137,7 @@ public interface IRegressionMetric<T> : IMetric<T>
 /// Interface for ranking/recommendation metrics.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("RankingMetric")]
 public interface IRankingMetric<T> : IMetric<T>
 {
     /// <summary>
@@ -151,6 +154,7 @@ public interface IRankingMetric<T> : IMetric<T>
 /// Interface for time series forecasting metrics.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("TimeSeriesMetric")]
 public interface ITimeSeriesMetric<T> : IMetric<T>
 {
     /// <summary>

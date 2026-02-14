@@ -33,6 +33,7 @@ namespace AiDotNet.Interfaces;
 /// - Understandable: Clear flow from input to output
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Chain")]
 public interface IChain<TInput, TOutput>
 {
     /// <summary>

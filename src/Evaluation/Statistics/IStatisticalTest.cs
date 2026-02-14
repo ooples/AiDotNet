@@ -128,6 +128,7 @@ public interface IMultipleSampleTest<T>
 /// Interface for paired comparison tests (e.g., comparing same samples under different conditions).
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("PairedTest")]
 public interface IPairedTest<T>
 {
     /// <summary>
@@ -154,6 +155,7 @@ public interface IPairedTest<T>
 /// Interface for general statistical tests.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("StatisticalTest")]
 public interface IStatisticalTest<T>
 {
     /// <summary>
@@ -181,6 +183,7 @@ public interface IStatisticalTest<T>
 /// Interface for tests comparing multiple classifiers or groups.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("MultipleComparisonTest")]
 public interface IMultipleComparisonTest<T> : IStatisticalTest<T>
 {
     /// <summary>
@@ -195,6 +198,7 @@ public interface IMultipleComparisonTest<T> : IStatisticalTest<T>
 /// Interface for tests comparing multiple classifier predictions against ground truth.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ClassifierComparisonTest")]
 public interface IClassifierComparisonTest<T> : IStatisticalTest<T>
 {
     /// <summary>
