@@ -65,6 +65,10 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
         // Discover all concrete implementations for interface parameters.
         var sections = AnalyzeSections(configureMethods, compilation);
 
+        // Discover additional types marked with [YamlConfigurable] attribute.
+        var attributeSections = DiscoverAttributeMarkedTypes(compilation, sections);
+        sections.AddRange(attributeSections);
+
         // Emit helper types.
         EmitYamlTypeSection(context);
         EmitYamlPipelineSection(context);
@@ -199,6 +203,74 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
         var visitor = new ImplementationFinder(interfaceType, implementations);
         visitor.Visit(compilation.GlobalNamespace);
         return implementations;
+    }
+
+    /// <summary>
+    /// Discovers interfaces and abstract classes marked with [YamlConfigurable("SectionName")]
+    /// and returns SectionInfo objects for each, skipping sections already covered by Configure methods.
+    /// </summary>
+    private static List<SectionInfo> DiscoverAttributeMarkedTypes(
+        Compilation compilation,
+        List<SectionInfo> existingSections)
+    {
+        var results = new List<SectionInfo>();
+        var existingNames = new HashSet<string>(
+            existingSections.Select(s => s.Method.SectionName),
+            StringComparer.OrdinalIgnoreCase);
+
+        // Find the YamlConfigurableAttribute type in the compilation.
+        var attrType = compilation.GetTypeByMetadataName("AiDotNet.Configuration.YamlConfigurableAttribute");
+        if (attrType is null) return results;
+
+        // Walk all types looking for the attribute.
+        var visitor = new AttributeTypeFinder(attrType);
+        visitor.Visit(compilation.GlobalNamespace);
+
+        foreach (var (markedType, sectionName) in visitor.DiscoveredTypes)
+        {
+            // Skip if a Configure method already covers this section name.
+            if (existingNames.Contains(sectionName)) continue;
+
+            var info = new ConfigureMethodInfo
+            {
+                MethodName = "",
+                SectionName = sectionName,
+                ParameterType = markedType,
+                ParameterTypeName = markedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                IsNullable = false,
+                IsAbstract = true,
+                IsAttributeDiscovered = true,
+            };
+
+            if (markedType.TypeKind == TypeKind.Interface)
+            {
+                info.Category = SectionCategory.Interface;
+            }
+            else if (markedType.TypeKind == TypeKind.Class)
+            {
+                info.Category = SectionCategory.PocoConfig;
+            }
+            else
+            {
+                info.Category = SectionCategory.Unknown;
+            }
+
+            var section = new SectionInfo
+            {
+                Method = info,
+                YamlPropertyName = ToCamelCase(sectionName),
+                ConcreteImplementations = FindImplementations(markedType, compilation),
+            };
+
+            // Only add if implementations were found.
+            if (section.ConcreteImplementations.Count > 0)
+            {
+                existingNames.Add(sectionName);
+                results.Add(section);
+            }
+        }
+
+        return results;
     }
 
     // ───────────────────────────────────────────────────────────────
@@ -374,6 +446,7 @@ internal static class YamlParamsHelper
             "ABTesting", "Telemetry", "Export", "GpuAcceleration", "Profiling",
             "JitCompilation", "MixedPrecision", "Reasoning", "Benchmarking",
             "InferenceOptimizations", "Interpretability", "MemoryManagement",
+            "TimeSeriesModel",
         };
 
         var sb = new StringBuilder();
@@ -399,8 +472,12 @@ internal static class YamlParamsHelper
             var propType = GetYamlPropertyType(section);
             var propName = ToPascalCase(section.Method.SectionName);
 
+            var docText = section.Method.IsAttributeDiscovered
+                ? $"YAML configuration for the {section.Method.SectionName} section."
+                : $"YAML configuration for {section.Method.MethodName}().";
+
             sb.AppendLine($"    /// <summary>");
-            sb.AppendLine($"    /// YAML configuration for {section.Method.MethodName}().");
+            sb.AppendLine($"    /// {docText}");
             sb.AppendLine($"    /// </summary>");
             sb.AppendLine($"    public {propType}? {propName} {{ get; set; }}");
             sb.AppendLine();
@@ -420,6 +497,7 @@ internal static class YamlParamsHelper
             "ABTesting", "Telemetry", "Export", "GpuAcceleration", "Profiling",
             "JitCompilation", "MixedPrecision", "Reasoning", "Benchmarking",
             "InferenceOptimizations", "Interpretability", "MemoryManagement",
+            "TimeSeriesModel",
         };
 
         var sb = new StringBuilder();
@@ -445,6 +523,9 @@ internal static class YamlParamsHelper
             if (existingSections.Contains(section.Method.SectionName)) continue;
             if (section.Method.SectionName == "Model" &&
                 section.Method.ParameterTypeName.Contains("IFullModel")) continue;
+
+            // Attribute-discovered sections have no Configure method — registry-only.
+            if (section.Method.IsAttributeDiscovered) continue;
 
             var propName = ToPascalCase(section.Method.SectionName);
 
@@ -824,6 +905,7 @@ internal static class YamlParamsHelper
             "ABTesting", "Telemetry", "Export", "GpuAcceleration", "Profiling",
             "JitCompilation", "MixedPrecision", "Reasoning", "Benchmarking",
             "InferenceOptimizations", "Interpretability", "MemoryManagement",
+            "TimeSeriesModel",
         };
 
         var sb = new StringBuilder();
@@ -1034,6 +1116,7 @@ internal static class YamlParamsHelper
         public bool HasParameterlessCtor { get; set; }
         public SectionCategory Category { get; set; }
         public ITypeSymbol? ActionInnerType { get; set; }
+        public bool IsAttributeDiscovered { get; set; }
     }
 
     private class SectionInfo
@@ -1194,6 +1277,52 @@ internal static class YamlParamsHelper
             }
 
             return true;
+        }
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // Attribute finder — discovers [YamlConfigurable] marked types
+    // ───────────────────────────────────────────────────────────────
+
+    private class AttributeTypeFinder : SymbolVisitor
+    {
+        private readonly INamedTypeSymbol _attributeType;
+        public List<(INamedTypeSymbol Type, string SectionName)> DiscoveredTypes { get; } = new();
+
+        public AttributeTypeFinder(INamedTypeSymbol attributeType)
+        {
+            _attributeType = attributeType;
+        }
+
+        public override void VisitNamespace(INamespaceSymbol symbol)
+        {
+            foreach (var member in symbol.GetMembers())
+            {
+                member.Accept(this);
+            }
+        }
+
+        public override void VisitNamedType(INamedTypeSymbol symbol)
+        {
+            foreach (var attr in symbol.GetAttributes())
+            {
+                if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, _attributeType) ||
+                    SymbolEqualityComparer.Default.Equals(attr.AttributeClass?.OriginalDefinition, _attributeType))
+                {
+                    if (attr.ConstructorArguments.Length > 0 &&
+                        attr.ConstructorArguments[0].Value is string sectionName &&
+                        !string.IsNullOrEmpty(sectionName))
+                    {
+                        DiscoveredTypes.Add((symbol, sectionName));
+                    }
+                }
+            }
+
+            // Visit nested types.
+            foreach (var nestedType in symbol.GetTypeMembers())
+            {
+                nestedType.Accept(this);
+            }
         }
     }
 }
