@@ -29,6 +29,7 @@ namespace AiDotNet.Interfaces;
 /// Decision values can be any real number.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DecisionFunctionClassifier")]
 public interface IDecisionFunctionClassifier<T> : IClassifier<T>
 {
     /// <summary>

@@ -42,6 +42,7 @@ namespace AiDotNet.Interfaces;
 /// loading, gradients, checkpointing, etc.).
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DiffusionModel")]
 public interface IDiffusionModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>

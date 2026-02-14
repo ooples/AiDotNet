@@ -26,6 +26,7 @@ namespace AiDotNet.Interfaces;
 /// The "Gaussian" part refers to the normal distribution (bell curve) used to represent uncertainty.
 /// The "Process" part means it works with functions rather than simple values.
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("GaussianProcess")]
 public interface IGaussianProcess<T>
 {
     /// <summary>

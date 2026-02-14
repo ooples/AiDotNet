@@ -19,6 +19,7 @@ namespace AiDotNet.Interfaces;
 /// </list>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("OnnxModel")]
 public interface IOnnxModel<T> : IDisposable
 {
     /// <summary>

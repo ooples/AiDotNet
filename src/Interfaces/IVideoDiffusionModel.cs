@@ -34,6 +34,7 @@ namespace AiDotNet.Interfaces;
 /// This interface extends <see cref="IDiffusionModel{T}"/> with video-specific operations.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("VideoDiffusionModel")]
 public interface IVideoDiffusionModel<T> : IDiffusionModel<T>
 {
     /// <summary>

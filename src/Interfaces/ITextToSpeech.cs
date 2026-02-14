@@ -33,6 +33,7 @@ namespace AiDotNet.Interfaces;
 /// This interface extends <see cref="IFullModel{T, TInput, TOutput}"/> for Tensor-based audio processing.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("TextToSpeech")]
 public interface ITextToSpeech<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>

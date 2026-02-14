@@ -18,6 +18,7 @@ namespace AiDotNet.Interfaces;
 /// fingerprinting to identify songs from short recordings.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AudioFingerprinter")]
 public interface IAudioFingerprinter<T>
 {
     /// <summary>

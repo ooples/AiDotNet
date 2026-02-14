@@ -26,6 +26,7 @@ namespace AiDotNet.Interfaces;
 /// - Tensors (N-D): Convolutional filters, attention weights
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ModelCompressionStrategy")]
 public interface IModelCompressionStrategy<T>
 {
     #region Vector Operations (1D)

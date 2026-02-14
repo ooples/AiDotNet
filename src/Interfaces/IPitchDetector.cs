@@ -40,6 +40,7 @@ namespace AiDotNet.Interfaces;
 /// - Autocorrelation: Classic signal processing method
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("PitchDetector")]
 public interface IPitchDetector<T>
 {
     /// <summary>

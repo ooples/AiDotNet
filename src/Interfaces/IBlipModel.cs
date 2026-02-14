@@ -27,6 +27,7 @@ namespace AiDotNet.Interfaces;
 /// technique that improves the quality of training data automatically.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("BlipModel")]
 public interface IBlipModel<T> : IMultimodalEmbedding<T>
 {
     /// <summary>

@@ -14,6 +14,7 @@ namespace AiDotNet.Interfaces;
 /// This is the "run my experiment" interface.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Trainer")]
 public interface ITrainer<T>
 {
     /// <summary>
