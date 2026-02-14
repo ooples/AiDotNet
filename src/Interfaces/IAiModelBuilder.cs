@@ -766,11 +766,19 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="backend">Communication backend. If null, uses InMemoryCommunicationBackend.</param>
     /// <param name="strategy">Distributed training strategy. Default is DDP (most common).</param>
     /// <param name="configuration">Sharding configuration. If null, created from backend with defaults.</param>
+    /// <param name="pipelineSchedule">Pipeline schedule (PipelineParallel only). Null = GPipeSchedule.</param>
+    /// <param name="pipelinePartitionStrategy">Partition strategy (PipelineParallel only). Null = uniform.</param>
+    /// <param name="pipelineCheckpointConfig">Activation checkpointing config (PipelineParallel only). Null = disabled.</param>
+    /// <param name="pipelineMicroBatchSize">Micro-batch count for pipeline execution (PipelineParallel only). Default: 1.</param>
     /// <returns>This builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
         ICommunicationBackend<T>? backend = null,
         DistributedStrategy strategy = DistributedStrategy.DDP,
-        IShardingConfiguration<T>? configuration = null);
+        IShardingConfiguration<T>? configuration = null,
+        IPipelineSchedule? pipelineSchedule = null,
+        IPipelinePartitionStrategy<T>? pipelinePartitionStrategy = null,
+        ActivationCheckpointConfig? pipelineCheckpointConfig = null,
+        int pipelineMicroBatchSize = 1);
 
     /// <summary>
     /// Configures the cross-validation strategy for model evaluation.

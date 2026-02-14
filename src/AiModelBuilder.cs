@@ -164,6 +164,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private ICommunicationBackend<T>? _distributedBackend;
     private DistributedStrategy _distributedStrategy = DistributedStrategy.DDP;
     private IShardingConfiguration<T>? _distributedConfiguration;
+    private IPipelinePartitionStrategy<T>? _pipelinePartitionStrategy;
+    private IPipelineSchedule? _pipelineSchedule;
+    private ActivationCheckpointConfig? _pipelineCheckpointConfig;
+    private int _pipelineMicroBatchSize = 1;
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
     private AgentConfiguration<T>? _agentConfig;
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
@@ -1682,7 +1686,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                         new DistributedTraining.ZeRO3Model<T, TInput, TOutput>(_model, shardingConfig),
                         new DistributedTraining.ZeRO3Optimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
                     DistributedStrategy.PipelineParallel => CreateDistributedPair(
-                        new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(_model, shardingConfig),
+                        new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(
+                            _model, shardingConfig,
+                            microBatchSize: _pipelineMicroBatchSize,
+                            partitionStrategy: _pipelinePartitionStrategy,
+                            schedule: _pipelineSchedule,
+                            checkpointConfig: _pipelineCheckpointConfig),
                         new DistributedTraining.PipelineParallelOptimizer<T, TInput, TOutput>(optimizer, shardingConfig)),
                     DistributedStrategy.TensorParallel => CreateDistributedPair(
                         new DistributedTraining.TensorParallelModel<T, TInput, TOutput>(_model, shardingConfig),
@@ -3691,6 +3700,24 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <param name="backend">Communication backend to use. If null, uses InMemoryCommunicationBackend.</param>
     /// <param name="strategy">Distributed training strategy. Default is DDP.</param>
     /// <param name="configuration">Optional sharding configuration for advanced settings like gradient compression, parameter grouping, etc.</param>
+    /// <param name="pipelineSchedule">
+    /// Pipeline execution schedule (only used when strategy is PipelineParallel).
+    /// If null, uses GPipeSchedule. Use <see cref="DistributedTraining.OneForwardOneBackwardSchedule"/>
+    /// for reduced pipeline bubble (~12-15% vs ~50%).
+    /// </param>
+    /// <param name="pipelinePartitionStrategy">
+    /// Strategy for partitioning layers across pipeline stages (only used when strategy is PipelineParallel).
+    /// If null, uses uniform partitioning. Use <see cref="DistributedTraining.LoadBalancedPartitionStrategy{T}"/>
+    /// to balance computational cost across stages.
+    /// </param>
+    /// <param name="pipelineCheckpointConfig">
+    /// Activation checkpointing configuration (only used when strategy is PipelineParallel).
+    /// If null, checkpointing is disabled. Enable to reduce memory from O(L) to O(sqrt(L)).
+    /// </param>
+    /// <param name="pipelineMicroBatchSize">
+    /// Number of micro-batches for pipeline execution (only used when strategy is PipelineParallel).
+    /// Higher values reduce pipeline bubble but increase memory. Default: 1.
+    /// </param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <para>
@@ -3710,15 +3737,38 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///
     /// You just train as normal - the distributed magic happens behind the scenes!
     /// </para>
+    /// <para>
+    /// <b>Pipeline Parallel Options:</b> When using <c>DistributedStrategy.PipelineParallel</c>,
+    /// you can optionally configure scheduling, partitioning, and activation checkpointing:
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining(
+    ///         strategy: DistributedStrategy.PipelineParallel,
+    ///         pipelineSchedule: new OneForwardOneBackwardSchedule(),
+    ///         pipelinePartitionStrategy: new LoadBalancedPartitionStrategy&lt;double&gt;(estimatedLayerSize: 1024),
+    ///         pipelineCheckpointConfig: new ActivationCheckpointConfig { Enabled = true },
+    ///         pipelineMicroBatchSize: 8)
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
         ICommunicationBackend<T>? backend = null,
         DistributedStrategy strategy = DistributedStrategy.DDP,
-        IShardingConfiguration<T>? configuration = null)
+        IShardingConfiguration<T>? configuration = null,
+        IPipelineSchedule? pipelineSchedule = null,
+        IPipelinePartitionStrategy<T>? pipelinePartitionStrategy = null,
+        ActivationCheckpointConfig? pipelineCheckpointConfig = null,
+        int pipelineMicroBatchSize = 1)
     {
         _distributedBackend = backend;
         _distributedStrategy = strategy;
         _distributedConfiguration = configuration;
+        _pipelineSchedule = pipelineSchedule;
+        _pipelinePartitionStrategy = pipelinePartitionStrategy;
+        _pipelineCheckpointConfig = pipelineCheckpointConfig;
+        _pipelineMicroBatchSize = pipelineMicroBatchSize;
         return this;
     }
 
