@@ -20,6 +20,7 @@ namespace AiDotNet.Interfaces
     /// This interface extends IFullModel to provide AutoML-specific functionality like search space configuration,
     /// trial management, and optimization settings.
     /// </remarks>
+    [AiDotNet.Configuration.YamlConfigurable("AutoMLModel")]
     public interface IAutoMLModel<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
     {
         /// <summary>

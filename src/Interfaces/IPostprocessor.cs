@@ -24,6 +24,7 @@ namespace AiDotNet.Interfaces;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 /// <typeparam name="TInput">The input data type (model output).</typeparam>
 /// <typeparam name="TOutput">The output data type after postprocessing.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("Postprocessor")]
 public interface IPostprocessor<T, TInput, TOutput>
 {
     /// <summary>
