@@ -36,6 +36,7 @@ namespace AiDotNet.Finance.Interfaces;
 /// - Fundamental factors: Earnings, book value, leverage
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("FactorModel")]
 public interface IFactorModel<T> : IFinancialModel<T>
 {
     /// <summary>

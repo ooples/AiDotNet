@@ -30,6 +30,7 @@ namespace AiDotNet.Document.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DocumentModel")]
 public interface IDocumentModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     #region Document-Specific Properties
