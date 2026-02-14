@@ -2500,4 +2500,69 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureTool(ITool tool);
 
+    // ── Extended Coverage: Diffusion, RL Environments, Adversarial, Audio, Similarity ──
+
+    /// <summary>
+    /// Configures a noise scheduler for diffusion model training and sampling.
+    /// </summary>
+    /// <param name="scheduler">The noise scheduler implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureNoiseScheduler(INoiseScheduler<T> scheduler);
+
+    /// <summary>
+    /// Configures a reinforcement learning environment for agent training.
+    /// </summary>
+    /// <param name="environment">The environment implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureEnvironment(IEnvironment<T> environment);
+
+    /// <summary>
+    /// Configures an adversarial attack method for evaluating model robustness.
+    /// </summary>
+    /// <param name="attack">The adversarial attack implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAdversarialAttack(IAdversarialAttack<T, TInput, TOutput> attack);
+
+    /// <summary>
+    /// Configures an adversarial defense method for improving model robustness.
+    /// </summary>
+    /// <param name="defense">The adversarial defense implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAdversarialDefense(IAdversarialDefense<T, TInput, TOutput> defense);
+
+    /// <summary>
+    /// Configures a certified defense for providing formal robustness guarantees.
+    /// </summary>
+    /// <param name="defense">The certified defense implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCertifiedDefense(ICertifiedDefense<T, TInput, TOutput> defense);
+
+    /// <summary>
+    /// Configures a query strategy for active learning sample selection.
+    /// </summary>
+    /// <param name="strategy">The query strategy implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureQueryStrategy(ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput> strategy);
+
+    /// <summary>
+    /// Configures an audio enhancer for improving audio quality.
+    /// </summary>
+    /// <param name="enhancer">The audio enhancer implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEnhancer(IAudioEnhancer<T> enhancer);
+
+    /// <summary>
+    /// Configures an audio generator for creating audio from various inputs.
+    /// </summary>
+    /// <param name="generator">The audio generator implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureAudioGenerator(IAudioGenerator<T> generator);
+
+    /// <summary>
+    /// Configures a similarity metric for vector similarity search operations.
+    /// </summary>
+    /// <param name="metric">The similarity metric implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSimilarityMetric(RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T> metric);
+
 }

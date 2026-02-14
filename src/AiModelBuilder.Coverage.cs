@@ -38,6 +38,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IDistillationStrategy<T>? _configuredDistillationStrategy;
     private IModelCompressionStrategy<T>? _configuredModelCompressionStrategy;
     private ITool? _configuredTool;
+    private INoiseScheduler<T>? _configuredNoiseScheduler;
+    private IEnvironment<T>? _configuredEnvironment;
+    private IAdversarialAttack<T, TInput, TOutput>? _configuredAdversarialAttack;
+    private IAdversarialDefense<T, TInput, TOutput>? _configuredAdversarialDefense;
+    private ICertifiedDefense<T, TInput, TOutput>? _configuredCertifiedDefense;
+    private ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput>? _configuredQueryStrategy;
+    private IAudioEnhancer<T>? _configuredAudioEnhancer;
+    private IAudioGenerator<T>? _configuredAudioGenerator;
+    private RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T>? _configuredSimilarityMetric;
 
     /// <summary>
     /// Configures a data transformer for preprocessing or postprocessing data transformations.
@@ -338,6 +347,153 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureTool(ITool tool)
     {
         _configuredTool = tool;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a noise scheduler for diffusion model training and sampling.
+    /// </summary>
+    /// <param name="scheduler">The noise scheduler implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Noise schedulers control how noise is added and removed during
+    /// diffusion model training and generation. They define the noise schedule (how quickly noise
+    /// increases), which affects generation quality and speed. Common schedulers include DDPM,
+    /// DDIM, Euler, DPM-Solver, and PNDM.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureNoiseScheduler(INoiseScheduler<T> scheduler)
+    {
+        _configuredNoiseScheduler = scheduler;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a reinforcement learning environment for agent training.
+    /// </summary>
+    /// <param name="environment">The environment implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> An RL environment defines the world an agent interacts with.
+    /// It provides observations, accepts actions, and returns rewards. Environments can simulate
+    /// games, robotics tasks, trading scenarios, or any sequential decision-making problem.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureEnvironment(IEnvironment<T> environment)
+    {
+        _configuredEnvironment = environment;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures an adversarial attack method for evaluating model robustness.
+    /// </summary>
+    /// <param name="attack">The adversarial attack implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Adversarial attacks generate small, carefully crafted perturbations
+    /// to test whether your model can be fooled. Understanding these attacks helps build more robust
+    /// models. Common methods include FGSM, PGD, C&amp;W, and DeepFool.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureAdversarialAttack(IAdversarialAttack<T, TInput, TOutput> attack)
+    {
+        _configuredAdversarialAttack = attack;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures an adversarial defense method for improving model robustness.
+    /// </summary>
+    /// <param name="defense">The adversarial defense implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Adversarial defenses protect models against adversarial attacks.
+    /// They make models more robust to small input perturbations. Techniques include adversarial
+    /// training, input preprocessing, gradient masking, and certified defenses.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureAdversarialDefense(IAdversarialDefense<T, TInput, TOutput> defense)
+    {
+        _configuredAdversarialDefense = defense;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a certified defense for providing formal robustness guarantees.
+    /// </summary>
+    /// <param name="defense">The certified defense implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Certified defenses provide mathematical guarantees about model
+    /// robustness. Unlike empirical defenses, they can prove that no adversarial perturbation within
+    /// a given radius can change the prediction. Methods include randomized smoothing, interval bound
+    /// propagation, and convex relaxation.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureCertifiedDefense(ICertifiedDefense<T, TInput, TOutput> defense)
+    {
+        _configuredCertifiedDefense = defense;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a query strategy for active learning sample selection.
+    /// </summary>
+    /// <param name="strategy">The query strategy implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Query strategies determine which unlabeled samples to select for
+    /// labeling in active learning. The goal is to choose the most informative samples that will
+    /// improve the model most efficiently. Common strategies include uncertainty sampling,
+    /// query-by-committee, expected model change, and diversity sampling.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureQueryStrategy(ActiveLearning.Interfaces.IQueryStrategy<T, TInput, TOutput> strategy)
+    {
+        _configuredQueryStrategy = strategy;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures an audio enhancer for improving audio quality.
+    /// </summary>
+    /// <param name="enhancer">The audio enhancer implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Audio enhancers improve the quality of audio signals through
+    /// techniques like noise reduction, speech enhancement, bandwidth extension, and
+    /// dereverberation. They are used in telecommunications, hearing aids, and audio production.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioEnhancer(IAudioEnhancer<T> enhancer)
+    {
+        _configuredAudioEnhancer = enhancer;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures an audio generator for creating audio from various inputs.
+    /// </summary>
+    /// <param name="generator">The audio generator implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Audio generators create audio content from text descriptions,
+    /// musical notation, or other inputs. They power text-to-speech, music generation,
+    /// sound effect synthesis, and audio style transfer applications.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureAudioGenerator(IAudioGenerator<T> generator)
+    {
+        _configuredAudioGenerator = generator;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures a similarity metric for vector similarity search operations.
+    /// </summary>
+    /// <param name="metric">The similarity metric implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Similarity metrics measure how alike two vectors are, which is
+    /// essential for nearest-neighbor search and retrieval systems. Common metrics include cosine
+    /// similarity, dot product, Euclidean distance, and Jaccard similarity.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureSimilarityMetric(RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T> metric)
+    {
+        _configuredSimilarityMetric = metric;
         return this;
     }
 }
