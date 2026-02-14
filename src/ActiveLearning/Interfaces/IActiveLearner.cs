@@ -31,6 +31,7 @@ namespace AiDotNet.ActiveLearning.Interfaces;
 /// <item><description>Model can benefit from strategic sample selection</description></item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ActiveLearner")]
 public interface IActiveLearner<T, TInput, TOutput>
 {
     /// <summary>

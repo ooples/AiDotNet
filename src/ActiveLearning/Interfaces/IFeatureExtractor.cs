@@ -18,6 +18,7 @@ namespace AiDotNet.ActiveLearning.Interfaces;
 /// <item><description>Similarity-based sample selection</description></item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ALFeatureExtractor")]
 public interface IFeatureExtractor<T, TInput>
 {
     /// <summary>

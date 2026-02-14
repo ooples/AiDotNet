@@ -12,6 +12,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// For example, the heat equation describes how temperature changes over both space and time.
     /// This interface allows you to define any PDE in a way that neural networks can learn to solve it.
     /// </remarks>
+    [AiDotNet.Configuration.YamlConfigurable("PDESpecification")]
     public interface IPDESpecification<T>
     {
         /// <summary>
@@ -45,6 +46,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// Provides gradients of the PDE residual with respect to outputs and derivatives.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
+    [AiDotNet.Configuration.YamlConfigurable("PDEResidualGradient")]
     public interface IPDEResidualGradient<T>
     {
         /// <summary>
@@ -61,6 +63,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// Provides gradients for boundary residuals with respect to outputs and derivatives.
     /// </summary>
     /// <typeparam name="T">The numeric type.</typeparam>
+    [AiDotNet.Configuration.YamlConfigurable("BoundaryConditionGradient")]
     public interface IBoundaryConditionGradient<T>
     {
         /// <summary>
@@ -165,6 +168,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// - Neumann: The derivative is specified at the boundary (e.g., heat flux = 0, meaning insulated)
     /// - Robin: A combination of value and derivative
     /// </remarks>
+    [AiDotNet.Configuration.YamlConfigurable("BoundaryCondition")]
     public interface IBoundaryCondition<T>
     {
         /// <summary>
@@ -199,6 +203,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
     /// Initial conditions specify the state of the system at the starting time (t=0).
     /// For example, in a heat equation, you might specify the initial temperature distribution.
     /// </remarks>
+    [AiDotNet.Configuration.YamlConfigurable("InitialCondition")]
     public interface IInitialCondition<T>
     {
         /// <summary>

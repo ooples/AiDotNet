@@ -39,6 +39,7 @@ namespace AiDotNet.ContinualLearning.Interfaces;
 /// </list>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ContinualLearner")]
 public interface IContinualLearner<T, TInput, TOutput>
 {
     /// <summary>
