@@ -489,6 +489,7 @@ public interface IUnifiedMultimodalModel<T>
 /// content token-by-token regardless of modality.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AutoregressiveMultimodalModel")]
 public interface IAutoregressiveMultimodalModel<T> : IUnifiedMultimodalModel<T>
 {
     /// <summary>

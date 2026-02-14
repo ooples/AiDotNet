@@ -213,6 +213,7 @@ public class TranscriptionSegment<T>
 /// Interface for streaming transcription sessions.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("StreamingTranscriptionSession")]
 public interface IStreamingTranscriptionSession<T> : IDisposable
 {
     /// <summary>

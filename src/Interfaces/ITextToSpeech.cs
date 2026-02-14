@@ -235,6 +235,7 @@ public enum VoiceGender
 /// Interface for streaming TTS synthesis sessions.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("StreamingSynthesisSession")]
 public interface IStreamingSynthesisSession<T> : IDisposable
 {
     /// <summary>

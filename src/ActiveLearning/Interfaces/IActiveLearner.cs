@@ -160,6 +160,7 @@ public interface IActiveLearner<T, TInput, TOutput>
 /// In real applications, this is typically a human expert. In experiments, it can be
 /// a simulator using ground-truth labels.</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Oracle")]
 public interface IOracle<TInput, TOutput>
 {
     /// <summary>
