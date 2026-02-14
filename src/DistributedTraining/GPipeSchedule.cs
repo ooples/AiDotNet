@@ -38,6 +38,9 @@ public class GPipeSchedule : IPipelineSchedule
     public string Name => "GPipe";
 
     /// <inheritdoc/>
+    public int VirtualStagesPerRank => 1;
+
+    /// <inheritdoc/>
     public IReadOnlyList<PipelineOperation> GetSchedule(int stageId, int numStages, int numMicroBatches)
     {
         if (stageId < 0 || stageId >= numStages)

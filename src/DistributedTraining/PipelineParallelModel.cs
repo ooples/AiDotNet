@@ -84,6 +84,9 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     // Activation storage for checkpointing
     private readonly Dictionary<int, Vector<T>> _checkpointedActivations = new();
 
+    // Cached gradients from BackwardInput for later use by BackwardWeight (Zero Bubble)
+    private readonly Dictionary<int, Vector<T>> _cachedInputGradients = new();
+
     /// <summary>
     /// Gets the pipeline schedule used by this model.
     /// </summary>
@@ -222,6 +225,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         // Clear checkpointed activations from previous iteration
         _checkpointedActivations.Clear();
+        _cachedInputGradients.Clear();
 
         foreach (var op in scheduleOps)
         {
@@ -245,63 +249,52 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                 // Send activations to next stage
                 SendActivationsForward(stageOutput, tag: op.MicroBatchIndex * 10);
             }
-            else // Backward
+            else if (op.Type == PipelineOperationType.Backward)
             {
-                // Get the input for this micro-batch (from cache or recompute from checkpoint)
-                TInput microBatchInput;
-                if (microBatchInputs.TryGetValue(op.MicroBatchIndex, out var cachedInput))
-                {
-                    microBatchInput = cachedInput;
-                }
-                else if (_checkpointConfig.Enabled && _checkpointedActivations.TryGetValue(op.MicroBatchIndex, out var checkpointedVector))
-                {
-                    microBatchInput = ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(checkpointedVector);
-                }
-                else
-                {
-                    microBatchInput = GetStageInput(input, op.MicroBatchIndex);
-                }
-
-                // Compute gradients for this micro-batch
+                // Combined backward: compute all gradients and communicate in one step
+                // Used by traditional schedules (GPipe, 1F1B)
+                var microBatchInput = GetMicroBatchInput(op.MicroBatchIndex, microBatchInputs, input);
                 var gradientVector = WrappedModel.ComputeGradients(microBatchInput, expectedOutput);
 
-                // Receive and accumulate gradients from next stage
-                if (_stageId < _numStages - 1)
-                {
-                    Vector<T> nextStageGradients = Config.CommunicationBackend.Receive(
-                        _stageId + 1, gradientVector.Length, tag: 1000 + op.MicroBatchIndex);
+                ReceiveAndAccumulateDownstreamGradients(gradientVector, op.MicroBatchIndex);
+                SendGradientsUpstream(gradientVector, op.MicroBatchIndex);
+                accumulatedGradients = AccumulateGradients(accumulatedGradients, gradientVector);
 
-                    for (int i = 0; i < gradientVector.Length; i++)
-                    {
-                        gradientVector[i] = NumOps.Add(gradientVector[i], nextStageGradients[i]);
-                    }
-                }
+                FreeNonCheckpointedActivations(op.MicroBatchIndex, microBatchInputs, microBatchOutputs);
+            }
+            else if (op.Type == PipelineOperationType.BackwardInput)
+            {
+                // Zero Bubble B step: compute activation gradients only (critical path)
+                // Must be done promptly - upstream stage depends on these gradients
+                var microBatchInput = GetMicroBatchInput(op.MicroBatchIndex, microBatchInputs, input);
+                var gradientVector = WrappedModel.ComputeGradients(microBatchInput, expectedOutput);
 
-                // Send gradients to previous stage
-                if (_stageId > 0)
-                {
-                    Config.CommunicationBackend.Send(gradientVector, _stageId - 1, tag: 1000 + op.MicroBatchIndex);
-                }
+                ReceiveAndAccumulateDownstreamGradients(gradientVector, op.MicroBatchIndex);
+                SendGradientsUpstream(gradientVector, op.MicroBatchIndex);
 
-                // Accumulate gradients across micro-batches
-                if (accumulatedGradients is null)
+                // Cache gradients so BackwardWeight can use them later
+                _cachedInputGradients[op.MicroBatchIndex] = gradientVector;
+            }
+            else if (op.Type == PipelineOperationType.BackwardWeight)
+            {
+                // Zero Bubble W step: compute weight gradients (can fill bubbles)
+                // Uses cached gradients from the BackwardInput step
+                Vector<T> gradientVector;
+                if (_cachedInputGradients.TryGetValue(op.MicroBatchIndex, out var cached))
                 {
-                    accumulatedGradients = gradientVector;
+                    gradientVector = cached;
+                    _cachedInputGradients.Remove(op.MicroBatchIndex);
                 }
                 else
                 {
-                    for (int i = 0; i < accumulatedGradients.Length; i++)
-                    {
-                        accumulatedGradients[i] = NumOps.Add(accumulatedGradients[i], gradientVector[i]);
-                    }
+                    // Fallback: recompute if not cached
+                    var microBatchInput = GetMicroBatchInput(op.MicroBatchIndex, microBatchInputs, input);
+                    gradientVector = WrappedModel.ComputeGradients(microBatchInput, expectedOutput);
                 }
 
-                // Free non-checkpointed activations to save memory
-                if (!ShouldCheckpointActivation(op.MicroBatchIndex))
-                {
-                    microBatchInputs.Remove(op.MicroBatchIndex);
-                    microBatchOutputs.Remove(op.MicroBatchIndex);
-                }
+                accumulatedGradients = AccumulateGradients(accumulatedGradients, gradientVector);
+
+                FreeNonCheckpointedActivations(op.MicroBatchIndex, microBatchInputs, microBatchOutputs);
             }
         }
 
@@ -326,6 +319,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         // Clean up activation storage
         _checkpointedActivations.Clear();
+        _cachedInputGradients.Clear();
 
         // Synchronize parameters across stages for consistency
         if (Config.AutoSyncGradients)
@@ -388,6 +382,82 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         // Interval-based checkpointing
         return microBatchIndex % _checkpointConfig.CheckpointEveryNLayers == 0;
+    }
+
+    /// <summary>
+    /// Retrieves the input for a micro-batch from cache, checkpoint, or original input.
+    /// </summary>
+    private TInput GetMicroBatchInput(int microBatchIndex, Dictionary<int, TInput> microBatchInputs, TInput input)
+    {
+        if (microBatchInputs.TryGetValue(microBatchIndex, out var cachedInput))
+        {
+            return cachedInput;
+        }
+
+        if (_checkpointConfig.Enabled && _checkpointedActivations.TryGetValue(microBatchIndex, out var checkpointedVector))
+        {
+            return ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(checkpointedVector);
+        }
+
+        return GetStageInput(input, microBatchIndex);
+    }
+
+    /// <summary>
+    /// Receives gradients from the downstream (next) stage and accumulates them into the gradient vector.
+    /// </summary>
+    private void ReceiveAndAccumulateDownstreamGradients(Vector<T> gradientVector, int microBatchIndex)
+    {
+        if (_stageId < _numStages - 1)
+        {
+            Vector<T> nextStageGradients = Config.CommunicationBackend.Receive(
+                _stageId + 1, gradientVector.Length, tag: 1000 + microBatchIndex);
+
+            for (int i = 0; i < gradientVector.Length; i++)
+            {
+                gradientVector[i] = NumOps.Add(gradientVector[i], nextStageGradients[i]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sends gradients to the upstream (previous) stage.
+    /// </summary>
+    private void SendGradientsUpstream(Vector<T> gradientVector, int microBatchIndex)
+    {
+        if (_stageId > 0)
+        {
+            Config.CommunicationBackend.Send(gradientVector, _stageId - 1, tag: 1000 + microBatchIndex);
+        }
+    }
+
+    /// <summary>
+    /// Accumulates gradients across micro-batches.
+    /// </summary>
+    private Vector<T> AccumulateGradients(Vector<T>? accumulated, Vector<T> newGradients)
+    {
+        if (accumulated is null)
+        {
+            return newGradients;
+        }
+
+        for (int i = 0; i < accumulated.Length; i++)
+        {
+            accumulated[i] = NumOps.Add(accumulated[i], newGradients[i]);
+        }
+
+        return accumulated;
+    }
+
+    /// <summary>
+    /// Frees non-checkpointed activations to save memory.
+    /// </summary>
+    private void FreeNonCheckpointedActivations(int microBatchIndex, Dictionary<int, TInput> microBatchInputs, Dictionary<int, TOutput> microBatchOutputs)
+    {
+        if (!ShouldCheckpointActivation(microBatchIndex))
+        {
+            microBatchInputs.Remove(microBatchIndex);
+            microBatchOutputs.Remove(microBatchIndex);
+        }
     }
 
     /// <inheritdoc/>

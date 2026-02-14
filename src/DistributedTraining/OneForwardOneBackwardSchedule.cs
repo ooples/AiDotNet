@@ -44,6 +44,9 @@ public class OneForwardOneBackwardSchedule : IPipelineSchedule
     public string Name => "1F1B";
 
     /// <inheritdoc/>
+    public int VirtualStagesPerRank => 1;
+
+    /// <inheritdoc/>
     public IReadOnlyList<PipelineOperation> GetSchedule(int stageId, int numStages, int numMicroBatches)
     {
         if (stageId < 0 || stageId >= numStages)
