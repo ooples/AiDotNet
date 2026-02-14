@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -97,6 +98,7 @@ public class RAPHAELModel<T> : LatentDiffusionModelBase<T>
     /// Initializes a new instance of RAPHAELModel with full customization support.
     /// </summary>
     public RAPHAELModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -111,7 +113,8 @@ public class RAPHAELModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.012,
                 BetaSchedule = BetaSchedule.ScaledLinear
             },
-            scheduler ?? new DPMSolverMultistepScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DPMSolverMultistepScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         InitializeLayers(unet, vae, seed);
@@ -128,6 +131,7 @@ public class RAPHAELModel<T> : LatentDiffusionModelBase<T>
         int? seed)
     {
         _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: LATENT_CHANNELS,
             outputChannels: LATENT_CHANNELS,
             baseChannels: 320,

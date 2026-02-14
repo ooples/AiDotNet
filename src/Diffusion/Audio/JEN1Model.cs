@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.Audio;
@@ -134,6 +135,7 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
     /// <param name="conditioner">Text encoder conditioning module (typically FLAN-T5).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public JEN1Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -151,7 +153,8 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             JEN1_SAMPLE_RATE,
             JEN1_DEFAULT_DURATION,
-            melChannels: 128)
+            melChannels: 128,
+            architecture: architecture)
     {
         _conditioner = conditioner;
 
@@ -179,6 +182,7 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
             numResBlocks: 2,
             attentionResolutions: [4, 2, 1],
             contextDim: JEN1_CROSS_ATTENTION_DIM,
+            architecture: Architecture,
             seed: seed);
 
         // 1D Audio VAE for waveform encoding/decoding

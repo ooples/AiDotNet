@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -177,6 +178,7 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
     /// <param name="version">Model version: "2.2" or "3.0" (default: "3.0").</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public KandinskyModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? priorUnet = null,
@@ -193,7 +195,8 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.02,
                 BetaSchedule = BetaSchedule.Linear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         _version = version;
@@ -222,6 +225,7 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
         // Prior: Diffusion model in CLIP image embedding space
         // Maps text embeddings (1280-dim) to image embeddings (1280-dim)
         _priorUnet = priorUnet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: KANDINSKY_IMAGE_EMBEDDING_DIM,
             outputChannels: KANDINSKY_IMAGE_EMBEDDING_DIM,
             baseChannels: 384,
@@ -234,6 +238,7 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
         // Decoder: Latent diffusion U-Net (~1.2B parameters)
         // Generates images conditioned on image embeddings from the prior
         _decoderUnet = decoderUnet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: KANDINSKY_LATENT_CHANNELS,
             outputChannels: KANDINSKY_LATENT_CHANNELS,
             baseChannels: 384,

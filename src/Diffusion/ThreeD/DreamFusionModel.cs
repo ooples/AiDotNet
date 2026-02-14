@@ -7,6 +7,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -108,11 +109,12 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     /// <param name="conditioner">Optional conditioning module.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public DreamFusionModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         IDiffusionModel<T>? diffusionPrior = null,
         DreamFusionConfig? config = null,
         IConditioningModule<T>? conditioner = null,
         int? seed = null)
-        : base(CreateDefaultOptions(), CreateDefaultScheduler())
+        : base(CreateDefaultOptions(), CreateDefaultScheduler(), architecture)
     {
         _config = config ?? new DreamFusionConfig();
         _conditioner = conditioner;
@@ -145,13 +147,14 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
         return new DDIMScheduler<T>(config);
     }
 
-    private static UNetNoisePredictor<T> CreateDefaultUNet(int? seed)
+    private UNetNoisePredictor<T> CreateDefaultUNet(int? seed)
     {
         return new UNetNoisePredictor<T>(
             inputChannels: DREAM_LATENT_CHANNELS,
             outputChannels: DREAM_LATENT_CHANNELS,
             baseChannels: 64,
             numResBlocks: 2,
+            architecture: Architecture,
             seed: seed);
     }
 

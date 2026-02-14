@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -160,6 +161,7 @@ public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
     /// </param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public PlaygroundV25Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -174,7 +176,8 @@ public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.012,
                 BetaSchedule = BetaSchedule.ScaledLinear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
 
@@ -201,6 +204,7 @@ public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
         // SDXL-architecture U-Net (~2.6B parameters)
         // Uses dual text encoder conditioning (2048-dim combined)
         _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: PG_LATENT_CHANNELS,
             outputChannels: PG_LATENT_CHANNELS,
             baseChannels: 320,

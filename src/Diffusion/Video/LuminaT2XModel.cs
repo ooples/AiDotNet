@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.Video;
@@ -84,6 +85,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     #region Constructor
 
     public LuminaT2XModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         DiTNoisePredictor<T>? dit = null,
@@ -96,7 +98,8 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
                 TrainTimesteps = 1000, BetaStart = 0.0001,
                 BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear
             },
-            scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateDefault()))
+            scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateDefault()),
+            architecture)
     {
         _conditioner = conditioner;
         InitializeLayers(dit, vae, seed);

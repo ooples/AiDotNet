@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.Control;
@@ -183,6 +184,7 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
     /// </param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public T2IAdapterModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -199,7 +201,8 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.012,
                 BetaSchedule = BetaSchedule.ScaledLinear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         _adapterScale = adapterScale;
@@ -227,6 +230,7 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
     {
         // Base U-Net: Standard SD 1.5 architecture (frozen during adapter training)
         _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: ADAPTER_LATENT_CHANNELS,
             outputChannels: ADAPTER_LATENT_CHANNELS,
             baseChannels: 320,
@@ -239,6 +243,7 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
         // Adapter network: Lightweight encoder (~77M parameters)
         // Processes spatial conditions and produces multi-scale features
         _adapterNetwork = adapterNetwork ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: ADAPTER_CONDITION_CHANNELS,
             outputChannels: ADAPTER_LATENT_CHANNELS,
             baseChannels: 64,

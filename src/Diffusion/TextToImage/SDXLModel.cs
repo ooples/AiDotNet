@@ -5,7 +5,9 @@ using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -202,6 +204,7 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     /// <param name="crossAttentionDim">Cross-attention dimension (2048 for SDXL).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public SDXLModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -212,7 +215,7 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
         bool useDualEncoder = true,
         int crossAttentionDim = 2048,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler())
+        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), architecture)
     {
         _crossAttentionDim = crossAttentionDim;
         _useDualEncoder = useDualEncoder;
@@ -259,6 +262,7 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     {
         // SDXL uses larger U-Net with [1, 2, 4, 4] channel multipliers
         return new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: SDXL_LATENT_CHANNELS,
             outputChannels: SDXL_LATENT_CHANNELS,
             baseChannels: 320,

@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -176,6 +177,7 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
     /// </param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public DeepFloydIFModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? stageIUnet = null,
@@ -192,7 +194,8 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.02,
                 BetaSchedule = BetaSchedule.SquaredCosine
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         _useDynamicThresholding = useDynamicThresholding;
@@ -221,6 +224,7 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
         // Stage I: Base generation model (~900M parameters)
         // Generates 64x64 RGB images directly in pixel space
         _stageIUnet = stageIUnet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: IF_PIXEL_CHANNELS,
             outputChannels: IF_PIXEL_CHANNELS,
             baseChannels: 256,
@@ -233,6 +237,7 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
         // Stage II: Super-resolution model (~450M parameters)
         // Upscales 64x64 → 256x256, takes concatenated [noisy_256, low_res_64] input
         _stageIIUnet = stageIIUnet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: IF_STAGE2_INPUT_CHANNELS,
             outputChannels: IF_PIXEL_CHANNELS,
             baseChannels: 128,

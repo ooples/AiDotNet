@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.FastGeneration;
@@ -161,6 +162,7 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// </param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public LatentConsistencyModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -176,7 +178,8 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.012,
                 BetaSchedule = BetaSchedule.ScaledLinear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         _baseModel = baseModel;
@@ -217,6 +220,7 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
             numResBlocks: 2,
             attentionResolutions: [4, 2, 1],
             contextDim: contextDim,
+            architecture: Architecture,
             seed: seed);
 
         // Standard SD VAE

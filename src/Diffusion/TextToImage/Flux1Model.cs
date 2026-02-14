@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -167,6 +168,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
     /// <param name="variant">Model variant: "dev", "schnell", or "pro" (default: "dev").</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public Flux1Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         MMDiTNoisePredictor<T>? mmdit = null,
@@ -182,7 +184,8 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 1.0,
                 BetaSchedule = BetaSchedule.Linear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         _variant = variant;

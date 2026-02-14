@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -184,6 +185,7 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
     /// </param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public ImagenModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? baseUnet = null,
@@ -200,7 +202,8 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.02,
                 BetaSchedule = BetaSchedule.SquaredCosine
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         _dynamicThresholdPercentile = dynamicThresholdPercentile;
@@ -229,6 +232,7 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
         // Base model: Efficient U-Net (~2B parameters)
         // Generates 64x64 RGB images from T5-XXL text embeddings
         _baseUnet = baseUnet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: IMAGEN_PIXEL_CHANNELS,
             outputChannels: IMAGEN_PIXEL_CHANNELS,
             baseChannels: 256,
@@ -241,6 +245,7 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
         // Super-resolution 1: Efficient U-Net (~600M parameters)
         // Upscales 64x64 → 256x256 with noise conditioning augmentation
         _superRes1Unet = superRes1Unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: IMAGEN_PIXEL_CHANNELS * 2,
             outputChannels: IMAGEN_PIXEL_CHANNELS,
             baseChannels: 128,

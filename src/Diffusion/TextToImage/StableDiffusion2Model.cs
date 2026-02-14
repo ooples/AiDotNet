@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -167,6 +168,7 @@ public class StableDiffusion2Model<T> : LatentDiffusionModelBase<T>
     /// </param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public StableDiffusion2Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -182,7 +184,8 @@ public class StableDiffusion2Model<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.012,
                 BetaSchedule = BetaSchedule.ScaledLinear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         _useVPrediction = useVPrediction;
@@ -209,6 +212,7 @@ public class StableDiffusion2Model<T> : LatentDiffusionModelBase<T>
         // Use custom U-Net from user, or create industry-standard SD 2.x U-Net
         // Key difference: 1024-dim cross-attention (OpenCLIP ViT-H/14)
         _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: SD2_LATENT_CHANNELS,
             outputChannels: SD2_LATENT_CHANNELS,
             baseChannels: 320,

@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -167,6 +168,7 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
     /// </param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public DallE2Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? priorUnet = null,
@@ -182,7 +184,8 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.02,
                 BetaSchedule = BetaSchedule.Linear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
 
@@ -210,6 +213,7 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
         // Diffusion Prior: Maps CLIP text embeddings (768) to CLIP image embeddings (768)
         // Uses a transformer-based architecture
         _priorUnet = priorUnet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: DALLE2_CLIP_DIM,
             outputChannels: DALLE2_CLIP_DIM,
             baseChannels: 256,
@@ -222,6 +226,7 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
         // Decoder: Modified GLIDE U-Net (~3.5B parameters)
         // Generates 64x64 RGB images conditioned on CLIP image embeddings
         _decoderUnet = decoderUnet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: DALLE2_PIXEL_CHANNELS,
             outputChannels: DALLE2_PIXEL_CHANNELS,
             baseChannels: 320,

@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.FastGeneration;
@@ -83,6 +84,7 @@ public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
     #region Constructor
 
     public AuraFlowModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         DiTNoisePredictor<T>? dit = null,
@@ -97,7 +99,8 @@ public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.02,
                 BetaSchedule = BetaSchedule.Linear
             },
-            scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateDefault()))
+            scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateDefault()),
+            architecture)
     {
         _conditioner = conditioner;
         InitializeLayers(dit, vae, seed);

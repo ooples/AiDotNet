@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -171,6 +172,7 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
     /// </param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public StableCascadeModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? priorUnet = null,
@@ -186,7 +188,8 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.02,
                 BetaSchedule = BetaSchedule.Linear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
 
@@ -214,6 +217,7 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
         // Stage C: Prior U-Net (~1B parameters)
         // Generates 24-channel 24×24 latent from text conditioning
         _priorUnet = priorUnet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: CASCADE_LATENT_CHANNELS,
             outputChannels: CASCADE_LATENT_CHANNELS,
             baseChannels: 384,
@@ -226,6 +230,7 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
         // Stage B: Decoder U-Net (~700M parameters)
         // Expands prior latent to 4-channel 256×256 latent
         _decoderUnet = decoderUnet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: CASCADE_STAGE_B_LATENT_CHANNELS,
             outputChannels: CASCADE_STAGE_B_LATENT_CHANNELS,
             baseChannels: 320,

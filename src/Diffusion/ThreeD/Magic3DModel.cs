@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.ThreeD;
@@ -143,6 +144,7 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
     /// <param name="defaultPointCount">Default point count for point clouds.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public Magic3DModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? coarseUnet = null,
@@ -160,7 +162,8 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
                 BetaSchedule = BetaSchedule.ScaledLinear
             },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
-            defaultPointCount)
+            defaultPointCount,
+            architecture)
     {
         _conditioner = conditioner;
 
@@ -189,6 +192,7 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
             numResBlocks: 3,
             attentionResolutions: [4, 2, 1],
             contextDim: MAGIC3D_CROSS_ATTENTION_DIM,
+            architecture: Architecture,
             seed: seed);
 
         // Fine stage: Latent-space U-Net for high-res SDS (SD 1.5 architecture)
@@ -200,6 +204,7 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
             numResBlocks: 2,
             attentionResolutions: [4, 2, 1],
             contextDim: MAGIC3D_CROSS_ATTENTION_DIM,
+            architecture: Architecture,
             seed: seed);
 
         // Standard SD 1.5 VAE for fine stage

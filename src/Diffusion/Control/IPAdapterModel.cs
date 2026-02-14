@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -154,6 +155,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// <param name="embedDim">Image embedding dimension.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public IPAdapterModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? baseUNet = null,
@@ -161,7 +163,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
         IConditioningModule<T>? conditioner = null,
         int embedDim = CLIP_EMBED_DIM,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler())
+        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), architecture)
     {
         _conditioner = conditioner;
 
@@ -217,6 +219,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     private UNetNoisePredictor<T> CreateDefaultUNet(int? seed)
     {
         return new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: IPA_LATENT_CHANNELS,
             outputChannels: IPA_LATENT_CHANNELS,
             baseChannels: 320,

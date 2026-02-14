@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -150,6 +151,7 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
     /// <param name="variant">Model variant: "3-Medium", "3.5-Large", or "3.5-Large-Turbo" (default: "3-Medium").</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public StableDiffusion3Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         MMDiTNoisePredictor<T>? mmdit = null,
@@ -165,7 +167,8 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 1.0,
                 BetaSchedule = BetaSchedule.Linear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         _variant = variant;

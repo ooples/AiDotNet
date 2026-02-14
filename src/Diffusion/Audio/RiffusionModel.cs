@@ -7,6 +7,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -151,6 +152,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <param name="spectrogramConfig">Spectrogram configuration.</param>
     /// <param name="seed">Optional random seed.</param>
     public RiffusionModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -158,7 +160,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         IConditioningModule<T>? conditioner = null,
         SpectrogramConfig? spectrogramConfig = null,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler())
+        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), architecture)
     {
         _conditioner = conditioner;
         _spectrogramConfig = spectrogramConfig ?? new SpectrogramConfig();
@@ -223,6 +225,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
             numResBlocks: 2,
             attentionResolutions: new[] { 4, 2, 1 },
             contextDim: 768,
+            architecture: Architecture,
             seed: seed);
     }
 

@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -99,6 +100,7 @@ public class KolorsModel<T> : LatentDiffusionModelBase<T>
     /// Initializes a new instance of KolorsModel with full customization support.
     /// </summary>
     public KolorsModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -113,7 +115,8 @@ public class KolorsModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.012,
                 BetaSchedule = BetaSchedule.ScaledLinear
             },
-            scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         InitializeLayers(unet, vae, seed);
@@ -131,6 +134,7 @@ public class KolorsModel<T> : LatentDiffusionModelBase<T>
     {
         // SDXL-like U-Net with ChatGLM3 cross-attention dimension
         _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: LATENT_CHANNELS,
             outputChannels: LATENT_CHANNELS,
             baseChannels: 320,

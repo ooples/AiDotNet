@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.ImageEditing;
@@ -123,6 +124,7 @@ public class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <param name="conditioner">Text encoder conditioning module.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public BlendedDiffusionModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -137,7 +139,8 @@ public class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.012,
                 BetaSchedule = BetaSchedule.ScaledLinear
             },
-            scheduler ?? new DDPMScheduler<T>(SchedulerConfig<T>.CreateDefault()))
+            scheduler ?? new DDPMScheduler<T>(SchedulerConfig<T>.CreateDefault()),
+            architecture)
     {
         _conditioner = conditioner;
 
@@ -161,6 +164,7 @@ public class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
         int? seed)
     {
         _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: LATENT_CHANNELS,
             outputChannels: LATENT_CHANNELS,
             baseChannels: 320,

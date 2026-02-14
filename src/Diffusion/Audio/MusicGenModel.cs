@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.Audio;
@@ -191,6 +192,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
     /// <param name="defaultDurationSeconds">Default music duration.</param>
     /// <param name="seed">Optional random seed.</param>
     public MusicGenModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -205,7 +207,8 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
             scheduler ?? CreateDefaultScheduler(),
             sampleRate,
             defaultDurationSeconds,
-            MUSICGEN_MEL_CHANNELS)
+            MUSICGEN_MEL_CHANNELS,
+            architecture)
     {
         _modelSize = modelSize;
         _textConditioner = textConditioner;
@@ -287,6 +290,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
             numResBlocks: numResBlocks,
             attentionResolutions: new[] { 8, 4, 2, 1 }, // More attention levels for music
             contextDim: MUSICGEN_CONTEXT_DIM,
+            architecture: Architecture,
             seed: seed);
     }
 

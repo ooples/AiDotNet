@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.ImageEditing;
@@ -135,6 +136,7 @@ public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
     /// <param name="conditioner">Image encoder conditioning module (typically CLIP image encoder).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public PaintByExampleModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -149,7 +151,8 @@ public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.012,
                 BetaSchedule = BetaSchedule.ScaledLinear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
 
@@ -174,6 +177,7 @@ public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
     {
         // U-Net with 9 input channels: 4 noisy latent + 4 masked source latent + 1 binary mask
         _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: INPUT_CHANNELS,
             outputChannels: LATENT_CHANNELS,
             baseChannels: 320,

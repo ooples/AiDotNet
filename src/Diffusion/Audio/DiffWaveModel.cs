@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -119,6 +120,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
     /// <param name="sampleRate">Audio sample rate in Hz.</param>
     /// <param name="seed">Optional random seed.</param>
     public DiffWaveModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         int residualChannels = 64,
@@ -127,7 +129,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
         int melChannels = 80,
         int sampleRate = DEFAULT_SAMPLE_RATE,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(seed))
+        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(seed), architecture)
     {
         _residualChannels = residualChannels;
         _residualLayers = residualLayers;

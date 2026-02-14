@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -108,6 +109,7 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
     /// <param name="isImagen3">Whether to use Imagen 3 configuration (default: false).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public Imagen2Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -123,7 +125,8 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.02,
                 BetaSchedule = BetaSchedule.Linear
             },
-            scheduler ?? new DDPMScheduler<T>(SchedulerConfig<T>.CreateDefault()))
+            scheduler ?? new DDPMScheduler<T>(SchedulerConfig<T>.CreateDefault()),
+            architecture)
     {
         _conditioner = conditioner;
         _isImagen3 = isImagen3;
@@ -144,6 +147,7 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
         int contextDim = _isImagen3 ? 4096 : CROSS_ATTENTION_DIM;
 
         _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: LATENT_CHANNELS,
             outputChannels: LATENT_CHANNELS,
             baseChannels: baseChannels,

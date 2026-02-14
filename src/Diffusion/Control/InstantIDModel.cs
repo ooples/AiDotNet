@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.Control;
@@ -92,6 +93,7 @@ public class InstantIDModel<T> : LatentDiffusionModelBase<T>
     #region Constructor
 
     public InstantIDModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -104,7 +106,8 @@ public class InstantIDModel<T> : LatentDiffusionModelBase<T>
                 TrainTimesteps = 1000, BetaStart = 0.00085,
                 BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear
             },
-            scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         InitializeLayers(unet, vae, seed);
@@ -118,7 +121,7 @@ public class InstantIDModel<T> : LatentDiffusionModelBase<T>
     private void InitializeLayers(UNetNoisePredictor<T>? unet, StandardVAE<T>? vae, int? seed)
     {
         _unet = unet ?? new UNetNoisePredictor<T>(
-            inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
+            architecture: Architecture, inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
             baseChannels: 320, channelMultipliers: [1, 2, 4],
             numResBlocks: 2, attentionResolutions: [4, 2],
             contextDim: CROSS_ATTENTION_DIM, seed: seed);

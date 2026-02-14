@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.FastGeneration;
@@ -192,6 +193,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <param name="isDistilled">Whether the model was trained via distillation.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public ConsistencyModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? noisePredictor = null,
@@ -203,7 +205,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
         double rho = 7.0,
         bool isDistilled = false,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler())
+        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), architecture)
     {
         _numTrainSteps = numTrainSteps;
         _sigmaMin = sigmaMin;
@@ -258,6 +260,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
             numResBlocks: 2,
             attentionResolutions: new[] { 4, 2, 1 },
             contextDim: 768,
+            architecture: Architecture,
             seed: seed);
     }
 

@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -209,11 +210,12 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     /// <param name="scheduler">Optional custom scheduler.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public PixArtModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         string modelSize = DefaultModelSize,
         IConditioningModule<T>? conditioner = null,
         INoiseScheduler<T>? scheduler = null,
         int? seed = null)
-        : base(CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(seed))
+        : base(CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(seed), architecture)
     {
         _modelSize = modelSize.ToLowerInvariant();
         _conditioner = conditioner;

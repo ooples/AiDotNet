@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.Video;
@@ -191,6 +192,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// <param name="defaultNumFrames">Default number of frames to generate.</param>
     /// <param name="defaultFPS">Default frames per second.</param>
     public AnimateDiffModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -199,7 +201,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         MotionModuleConfig? motionConfig = null,
         int defaultNumFrames = 16,
         int defaultFPS = 8)
-        : base(options, scheduler ?? CreateDefaultScheduler(), defaultNumFrames, defaultFPS)
+        : base(options, scheduler ?? CreateDefaultScheduler(), defaultNumFrames, defaultFPS, architecture)
     {
         _motionConfig = motionConfig ?? new MotionModuleConfig();
         _unet = unet ?? CreateDefaultUNet();
@@ -230,6 +232,7 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
             numResBlocks: 2,
             attentionResolutions: new[] { 4, 2, 1 },
             contextDim: 768,
+            architecture: Architecture,
             numHeads: 8);
     }
 

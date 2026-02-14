@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.Video;
@@ -180,6 +181,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     /// <param name="defaultNumFrames">Default number of frames.</param>
     /// <param name="defaultFPS">Default FPS.</param>
     public VideoCrafterModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         VideoUNetPredictor<T>? videoUNet = null,
@@ -188,7 +190,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         IConditioningModule<T>? imageConditioner = null,
         int defaultNumFrames = 16,
         int defaultFPS = 8)
-        : base(options, scheduler ?? CreateDefaultScheduler(), defaultNumFrames, defaultFPS)
+        : base(options, scheduler ?? CreateDefaultScheduler(), defaultNumFrames, defaultFPS, architecture)
     {
         _videoUNet = videoUNet ?? CreateDefaultVideoUNet();
         _temporalVAE = temporalVAE ?? CreateDefaultTemporalVAE();

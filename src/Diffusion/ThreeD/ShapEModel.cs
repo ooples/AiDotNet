@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.ThreeD;
@@ -169,6 +170,7 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     /// <param name="defaultPointCount">Default point count for point cloud extraction.</param>
     /// <param name="seed">Optional random seed.</param>
     public ShapEModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         DiTNoisePredictor<T>? latentPredictor = null,
@@ -176,7 +178,7 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         bool useSDFMode = true,
         int defaultPointCount = 4096,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), defaultPointCount)
+        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), defaultPointCount, architecture)
     {
         _useSDFMode = useSDFMode;
         _conditioner = conditioner;

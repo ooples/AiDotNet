@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.ThreeD;
@@ -179,6 +180,7 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     /// <param name="config">Model configuration.</param>
     /// <param name="seed">Optional random seed.</param>
     public MVDreamModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         MultiViewUNet<T>? multiViewUNet = null,
@@ -190,7 +192,8 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         : base(
             options ?? CreateDefaultOptions(),
             scheduler ?? CreateDefaultScheduler(),
-            defaultPointCount: 8192)
+            defaultPointCount: 8192,
+            architecture: architecture)
     {
         _config = config ?? MVDreamConfig.Default;
         _textConditioner = textConditioner;

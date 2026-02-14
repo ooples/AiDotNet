@@ -7,6 +7,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -135,13 +136,14 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
     /// <param name="imageSize">Image size for generation.</param>
     /// <param name="seed">Optional random seed.</param>
     public Zero123Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
         StandardVAE<T>? vae = null,
         int imageSize = DEFAULT_IMAGE_SIZE,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler())
+        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), architecture)
     {
         // Create U-Net with image+pose conditioning
         _unet = unet ?? CreateDefaultUNet(seed);
@@ -200,6 +202,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
             numResBlocks: 2,
             attentionResolutions: new[] { 4, 2, 1 },
             contextDim: 768,
+            architecture: Architecture,
             seed: seed);
     }
 

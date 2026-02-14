@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.Audio;
@@ -182,6 +183,7 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
     /// <param name="defaultDurationSeconds">Default audio duration.</param>
     /// <param name="seed">Optional random seed.</param>
     public AudioLDM2Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -197,7 +199,8 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
             scheduler ?? CreateDefaultScheduler(),
             sampleRate,
             defaultDurationSeconds,
-            AUDIOLDM2_MEL_CHANNELS)
+            AUDIOLDM2_MEL_CHANNELS,
+            architecture)
     {
         _variant = variant;
         _clapConditioner = clapConditioner;
@@ -271,6 +274,7 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
             numResBlocks: numResBlocks,
             attentionResolutions: new[] { 4, 2, 1 },
             contextDim: AUDIOLDM2_CONTEXT_DIM,
+            architecture: Architecture,
             seed: seed);
     }
 

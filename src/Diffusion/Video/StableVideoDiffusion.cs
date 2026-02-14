@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.Video;
@@ -203,6 +204,7 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
     /// <param name="defaultNumFrames">Default number of frames to generate.</param>
     /// <param name="defaultFPS">Default frames per second.</param>
     public StableVideoDiffusion(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         VideoUNetPredictor<T>? videoUNet = null,
@@ -211,7 +213,7 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         int defaultNumFrames = 25,
         int defaultFPS = 7,
         double noiseAugmentStrength = DEFAULT_NOISE_AUG_STRENGTH)
-        : base(options, scheduler ?? CreateDefaultScheduler(), defaultNumFrames, defaultFPS)
+        : base(options, scheduler ?? CreateDefaultScheduler(), defaultNumFrames, defaultFPS, architecture)
     {
         // Create default VideoUNet if not provided
         _videoUNet = videoUNet ?? CreateDefaultVideoUNet();

@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -182,6 +183,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// <param name="controlType">The type of control signal.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public ControlNetModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? baseUNet = null,
@@ -189,7 +191,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         IConditioningModule<T>? conditioner = null,
         ControlType controlType = ControlType.Canny,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler())
+        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), architecture)
     {
         _controlType = controlType;
         _conditioner = conditioner;
@@ -244,6 +246,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     private UNetNoisePredictor<T> CreateDefaultUNet(int? seed)
     {
         return new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: CN_LATENT_CHANNELS,
             outputChannels: CN_LATENT_CHANNELS,
             baseChannels: 320,

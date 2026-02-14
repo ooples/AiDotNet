@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Tensors.Helpers;
 
@@ -122,15 +123,17 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
     /// <param name="conditioner">Optional conditioning module for text encoding.</param>
     /// <param name="seed">Optional seed for reproducibility.</param>
     public DallE3Model(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         IConditioningModule<T>? conditioner = null,
         int? seed = null)
-        : base(options, scheduler)
+        : base(options, scheduler, architecture)
     {
         // Initialize components
         _vae = new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS);
         _unet = new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: LATENT_CHANNELS,
             outputChannels: LATENT_CHANNELS,
             baseChannels: 320,

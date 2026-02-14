@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.Audio;
@@ -156,6 +157,7 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
     /// <param name="isVersion2">Whether to use AudioLDM 2 configuration.</param>
     /// <param name="seed">Optional random seed.</param>
     public AudioLDMModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -171,7 +173,8 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
             scheduler ?? CreateDefaultScheduler(),
             sampleRate,
             defaultDurationSeconds,
-            melChannels)
+            melChannels,
+            architecture)
     {
         _isVersion2 = isVersion2;
         _conditioner = conditioner;
@@ -237,6 +240,7 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
             numResBlocks: 2,
             attentionResolutions: new[] { 4, 2, 1 },
             contextDim: contextDim,
+            architecture: Architecture,
             seed: seed);
     }
 

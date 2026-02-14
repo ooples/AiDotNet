@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.ThreeD;
@@ -167,6 +168,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     /// <param name="useTwoStage">Whether to use two-stage generation.</param>
     /// <param name="seed">Optional random seed.</param>
     public PointEModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         DiTNoisePredictor<T>? pointCloudPredictor = null,
@@ -175,7 +177,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
         int defaultPointCount = 4096,
         bool useTwoStage = true,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), defaultPointCount)
+        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), defaultPointCount, architecture)
     {
         _useTwoStage = useTwoStage;
         _imageGenerator = imageGenerator;

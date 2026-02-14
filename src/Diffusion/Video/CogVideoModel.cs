@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.Video;
@@ -145,6 +146,7 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
     /// <param name="defaultFPS">Default FPS (default: 8).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public CogVideoModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         VideoUNetPredictor<T>? videoUnet = null,
@@ -164,7 +166,8 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
             },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             defaultNumFrames,
-            defaultFPS)
+            defaultFPS,
+            architecture)
     {
         _conditioner = conditioner;
         _variant = variant;

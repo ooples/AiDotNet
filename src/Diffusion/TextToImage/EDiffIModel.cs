@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.TextToImage;
@@ -103,6 +104,7 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
     /// Initializes a new instance of EDiffIModel with full customization support.
     /// </summary>
     public EDiffIModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -117,7 +119,8 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.02,
                 BetaSchedule = BetaSchedule.Linear
             },
-            scheduler ?? new DDPMScheduler<T>(SchedulerConfig<T>.CreateDefault()))
+            scheduler ?? new DDPMScheduler<T>(SchedulerConfig<T>.CreateDefault()),
+            architecture)
     {
         _conditioner = conditioner;
         InitializeLayers(unet, vae, seed);
@@ -134,6 +137,7 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
         int? seed)
     {
         _unet = unet ?? new UNetNoisePredictor<T>(
+            architecture: Architecture,
             inputChannels: LATENT_CHANNELS,
             outputChannels: LATENT_CHANNELS,
             baseChannels: 320,

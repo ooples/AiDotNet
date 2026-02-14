@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.FastGeneration;
@@ -160,6 +161,7 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
     /// </param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public SDTurboModel(
+        NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         UNetNoisePredictor<T>? unet = null,
@@ -175,7 +177,8 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
                 BetaEnd = 0.012,
                 BetaSchedule = BetaSchedule.ScaledLinear
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()))
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         _isXLVariant = isXLVariant;
@@ -211,6 +214,7 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
                 numResBlocks: 2,
                 attentionResolutions: [4, 2],
                 contextDim: 2048,
+                architecture: Architecture,
                 seed: seed);
         }
         else
@@ -224,6 +228,7 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
                 numResBlocks: 2,
                 attentionResolutions: [4, 2, 1],
                 contextDim: TURBO_CROSS_ATTENTION_DIM,
+                architecture: Architecture,
                 seed: seed);
         }
 
