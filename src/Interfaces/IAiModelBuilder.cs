@@ -2366,4 +2366,138 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureRLAgent(IAgent<T> agent);
 
+    // ── Extended Coverage: Data Transformers, Splitting, Metrics, Vectorization, Storage ──
+
+    /// <summary>
+    /// Configures a data transformer for preprocessing or postprocessing data transformations.
+    /// </summary>
+    /// <param name="transformer">The data transformer implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDataTransformer(IDataTransformer<T, TInput, TInput> transformer);
+
+    /// <summary>
+    /// Configures a data splitting strategy for dividing datasets into train/test/validation sets.
+    /// </summary>
+    /// <param name="splitter">The data splitter implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDataSplitter(Preprocessing.DataPreparation.IDataSplitter<T> splitter);
+
+    /// <summary>
+    /// Configures a classification metric for evaluating classifier performance.
+    /// </summary>
+    /// <param name="metric">The classification metric implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureClassificationMetric(Evaluation.Metrics.IClassificationMetric<T> metric);
+
+    /// <summary>
+    /// Configures a regression metric for evaluating regression model performance.
+    /// </summary>
+    /// <param name="metric">The regression metric implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureRegressionMetric(Evaluation.Metrics.IRegressionMetric<T> metric);
+
+    /// <summary>
+    /// Configures a text vectorizer for converting text data into numeric feature vectors.
+    /// </summary>
+    /// <param name="vectorizer">The text vectorizer implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTextVectorizer(ITextVectorizer<T> vectorizer);
+
+    /// <summary>
+    /// Configures a document store for persisting and retrieving documents with vector similarity search.
+    /// </summary>
+    /// <param name="store">The document store implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDocumentStore(IDocumentStore<T> store);
+
+    /// <summary>
+    /// Configures a benchmark for evaluating and comparing model performance.
+    /// </summary>
+    /// <param name="benchmark">The benchmark implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureBenchmark(IBenchmark<T> benchmark);
+
+    // ── Extended Coverage: Physics, Clustering Evaluation, Curriculum Learning ──
+
+    /// <summary>
+    /// Configures a PDE specification for physics-informed neural network training.
+    /// </summary>
+    /// <param name="specification">The PDE specification implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePDESpecification(PhysicsInformed.Interfaces.IPDESpecification<T> specification);
+
+    /// <summary>
+    /// Configures an internal cluster metric for evaluating clustering quality without ground truth labels.
+    /// </summary>
+    /// <param name="metric">The cluster metric implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureClusterMetric(Clustering.Evaluation.IClusterMetric<T> metric);
+
+    /// <summary>
+    /// Configures an external cluster metric for evaluating clustering quality against ground truth labels.
+    /// </summary>
+    /// <param name="metric">The external cluster metric implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureExternalClusterMetric(Clustering.Evaluation.IExternalClusterMetric<T> metric);
+
+    /// <summary>
+    /// Configures a curriculum scheduler for ordering training samples by difficulty.
+    /// </summary>
+    /// <param name="scheduler">The curriculum scheduler implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCurriculumScheduler(CurriculumLearning.Interfaces.ICurriculumScheduler<T> scheduler);
+
+    // ── Extended Coverage: RL Exploration, SSL, Active Learning, Time Series ──
+
+    /// <summary>
+    /// Configures an exploration strategy for reinforcement learning agents.
+    /// </summary>
+    /// <param name="strategy">The exploration strategy implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureExplorationStrategy(ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T> strategy);
+
+    /// <summary>
+    /// Configures a self-supervised learning method for learning representations without labeled data.
+    /// </summary>
+    /// <param name="method">The SSL method implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSSLMethod(SelfSupervisedLearning.ISSLMethod<T> method);
+
+    /// <summary>
+    /// Configures a stopping criterion for active learning loops.
+    /// </summary>
+    /// <param name="criterion">The stopping criterion implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureStoppingCriterion(ActiveLearning.Interfaces.IStoppingCriterion<T> criterion);
+
+    /// <summary>
+    /// Configures a time series decomposition method for separating time series into components.
+    /// </summary>
+    /// <param name="decomposition">The time series decomposition implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTimeSeriesDecomposition(ITimeSeriesDecomposition<T> decomposition);
+
+    // ── Extended Coverage: Distillation, Compression, Tools ──
+
+    /// <summary>
+    /// Configures a knowledge distillation strategy for transferring knowledge between models.
+    /// </summary>
+    /// <param name="strategy">The distillation strategy implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureDistillationStrategy(IDistillationStrategy<T> strategy);
+
+    /// <summary>
+    /// Configures a model compression strategy for reducing model size and inference cost.
+    /// </summary>
+    /// <param name="strategy">The model compression strategy implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModelCompressionStrategy(IModelCompressionStrategy<T> strategy);
+
+    /// <summary>
+    /// Configures a tool for agent-based systems and function calling.
+    /// </summary>
+    /// <param name="tool">The tool implementation to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTool(ITool tool);
+
 }
