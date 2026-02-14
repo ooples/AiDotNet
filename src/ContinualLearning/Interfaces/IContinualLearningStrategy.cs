@@ -24,6 +24,7 @@ namespace AiDotNet.ContinualLearning.Interfaces;
 ///
 /// <para><b>Reference:</b> De Lange et al. "A Continual Learning Survey: Defying Forgetting" (2021)</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ContinualLearningStrategy")]
 public interface IContinualLearningStrategy<T, TInput, TOutput>
 {
     /// <summary>
@@ -145,6 +146,7 @@ public interface IContinualLearningStrategy<T, TInput, TOutput>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("MemoryBasedStrategy")]
 public interface IMemoryBasedStrategy<T, TInput, TOutput> : IContinualLearningStrategy<T, TInput, TOutput>
 {
     /// <summary>
@@ -182,6 +184,7 @@ public interface IMemoryBasedStrategy<T, TInput, TOutput> : IContinualLearningSt
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ContinualDistillationStrategy")]
 public interface IDistillationStrategy<T, TInput, TOutput> : IContinualLearningStrategy<T, TInput, TOutput>
 {
     /// <summary>
@@ -214,6 +217,7 @@ public interface IDistillationStrategy<T, TInput, TOutput> : IContinualLearningS
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("GradientConstraintStrategy")]
 public interface IGradientConstraintStrategy<T, TInput, TOutput> : IMemoryBasedStrategy<T, TInput, TOutput>
 {
     /// <summary>

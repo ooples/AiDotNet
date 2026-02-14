@@ -24,6 +24,7 @@ namespace AiDotNet.Document.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DocumentClassifier")]
 public interface IDocumentClassifier<T> : IDocumentModel<T>
 {
     /// <summary>

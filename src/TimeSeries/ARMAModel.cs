@@ -134,6 +134,11 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     private readonly double _tolerance;
 
     /// <summary>
+    /// The time series values used during training. Stored for producing in-sample predictions.
+    /// </summary>
+    private Vector<T> _trainedSeries;
+
+    /// <summary>
     /// Creates a new ARMA model with the specified options.
     /// </summary>
     /// <param name="options">Options for the ARMA model, including AR order, MA order, and training parameters.</param>
@@ -158,6 +163,7 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
         _tolerance = options.Tolerance;
         _arCoefficients = Vector<T>.Empty();
         _maCoefficients = Vector<T>.Empty();
+        _trainedSeries = Vector<T>.Empty();
     }
 
     /// <summary>
@@ -289,10 +295,22 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        Vector<T> predictions = new Vector<T>(input.Rows);
-        for (int t = 0; t < input.Rows; t++)
+        // Use the stored training series for in-sample predictions.
+        // The matrix rows indicate how many predictions to make.
+        var series = _trainedSeries ?? new Vector<T>(input.Rows);
+        int horizon = input.Rows;
+        Vector<T> predictions = new Vector<T>(horizon);
+        for (int t = 0; t < horizon; t++)
         {
-            predictions[t] = Predict(input.GetRow(t), t);
+            if (t < series.Length)
+            {
+                predictions[t] = Predict(series, t);
+            }
+            else
+            {
+                // Out-of-sample: predict using available history
+                predictions[t] = Predict(series, series.Length - 1);
+            }
         }
 
         return predictions;
@@ -718,6 +736,9 @@ public class ARMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store training series for in-sample predictions
+        _trainedSeries = y;
+
         // Initialize coefficients
         _arCoefficients = new Vector<T>(_arOrder);
         _maCoefficients = new Vector<T>(_maOrder);

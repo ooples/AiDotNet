@@ -34,6 +34,7 @@ namespace AiDotNet.Interfaces;
 /// - Parallel keys: C major and C minor (same root, different mode)
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("KeyDetector")]
 public interface IKeyDetector<T>
 {
     /// <summary>

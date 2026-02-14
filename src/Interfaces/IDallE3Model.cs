@@ -63,6 +63,7 @@ public enum DallE3Style
 /// 4. Quality Enhancement: Upscaling and refinement
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DallE3Model")]
 public interface IDallE3Model<T>
 {
     /// <summary>

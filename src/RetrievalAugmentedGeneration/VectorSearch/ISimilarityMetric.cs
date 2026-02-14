@@ -6,6 +6,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch
     /// Interface for similarity/distance metrics used in vector search.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [AiDotNet.Configuration.YamlConfigurable("SimilarityMetric")]
     public interface ISimilarityMetric<T>
     {
         /// <summary>

@@ -9,6 +9,7 @@ namespace AiDotNet.Interfaces;
 /// which can improve stability and convergence, especially with non-IID data.
 /// </remarks>
 /// <typeparam name="T">Numeric type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("FederatedServerOptimizer")]
 public interface IFederatedServerOptimizer<T>
 {
     /// <summary>

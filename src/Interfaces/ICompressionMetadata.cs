@@ -23,6 +23,7 @@ namespace AiDotNet.Interfaces;
 /// Without this metadata, you couldn't restore the original weights from the compressed data.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("CompressionMetadata")]
 public interface ICompressionMetadata<T>
 {
     /// <summary>

@@ -30,6 +30,7 @@ namespace AiDotNet.Interfaces;
 /// - Clustering algorithms
 /// - Any algorithm that needs to measure similarity between complex data points
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("KernelFunction")]
 public interface IKernelFunction<T>
 {
     /// <summary>

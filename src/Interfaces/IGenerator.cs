@@ -34,6 +34,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("Generator")]
 public interface IGenerator<T>
 {
     /// <summary>

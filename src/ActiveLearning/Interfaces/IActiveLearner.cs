@@ -31,6 +31,7 @@ namespace AiDotNet.ActiveLearning.Interfaces;
 /// <item><description>Model can benefit from strategic sample selection</description></item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ActiveLearner")]
 public interface IActiveLearner<T, TInput, TOutput>
 {
     /// <summary>
@@ -159,6 +160,7 @@ public interface IActiveLearner<T, TInput, TOutput>
 /// In real applications, this is typically a human expert. In experiments, it can be
 /// a simulator using ground-truth labels.</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Oracle")]
 public interface IOracle<TInput, TOutput>
 {
     /// <summary>

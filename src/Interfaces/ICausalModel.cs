@@ -26,6 +26,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("CausalModel")]
 public interface ICausalModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 {
     /// <summary>

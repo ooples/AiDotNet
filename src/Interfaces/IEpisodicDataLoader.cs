@@ -34,6 +34,7 @@ namespace AiDotNet.Interfaces;
 /// The episodic data loader creates these mini-tasks for training.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("EpisodicDataLoader")]
 public interface IEpisodicDataLoader<T, TInput, TOutput> :
     IDataLoader<T>,
     IBatchIterable<MetaLearningTask<T, TInput, TOutput>>

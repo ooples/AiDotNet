@@ -22,6 +22,7 @@ namespace AiDotNet.Interfaces;
 /// its weights during training to reduce the loss.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("LossFunction")]
 public interface ILossFunction<T>
 {
     /// <summary>

@@ -25,6 +25,7 @@ namespace AiDotNet.Document.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("PageSegmenter")]
 public interface IPageSegmenter<T> : IDocumentModel<T>
 {
     /// <summary>

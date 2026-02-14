@@ -38,6 +38,7 @@ namespace AiDotNet.Video.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("VideoModel")]
 public interface IVideoModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     #region Video-Specific Properties

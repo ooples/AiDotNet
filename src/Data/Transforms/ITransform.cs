@@ -16,6 +16,7 @@ namespace AiDotNet.Data.Transforms;
 /// a label integer to a one-hot encoded vector.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Transform")]
 public interface ITransform<in TInput, out TOutput>
 {
     /// <summary>

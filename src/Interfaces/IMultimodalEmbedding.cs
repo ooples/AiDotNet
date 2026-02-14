@@ -18,6 +18,7 @@ namespace AiDotNet.Interfaces;
 /// into similar vectors, allowing direct comparison between text and images.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("MultimodalEmbedding")]
 public interface IMultimodalEmbedding<T>
 {
     /// <summary>

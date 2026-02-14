@@ -18,6 +18,7 @@ using AiDotNet.Models.Results;
 /// This is crucial for safety-critical applications like medical diagnosis or autonomous vehicles.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("UncertaintyEstimator")]
 public interface IUncertaintyEstimator<T>
 {
     /// <summary>

@@ -34,6 +34,7 @@ namespace AiDotNet.Interfaces;
 /// - Can leverage larger LLMs for better generation
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Blip2Model")]
 public interface IBlip2Model<T> : IMultimodalEmbedding<T>
 {
     /// <summary>

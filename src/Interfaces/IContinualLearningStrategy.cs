@@ -37,6 +37,7 @@ namespace AiDotNet.Interfaces;
 /// strategy.AfterTask(network, taskData, taskId: 1);
 /// </code>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ContinualLearningStrategy")]
 public interface IContinualLearningStrategy<T>
 {
     /// <summary>

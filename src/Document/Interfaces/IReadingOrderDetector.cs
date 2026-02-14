@@ -4,6 +4,7 @@ namespace AiDotNet.Document.Interfaces;
 /// Interface for reading order detection models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ReadingOrderDetector")]
 public interface IReadingOrderDetector<T> : IDocumentModel<T>
 {
     /// <summary>

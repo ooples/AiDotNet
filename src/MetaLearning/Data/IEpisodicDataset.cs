@@ -20,6 +20,7 @@ namespace AiDotNet.MetaLearning.Data;
 /// This allows the model to practice learning new tasks quickly, which is the core idea of meta-learning.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("MetaLearningEpisodicDataset")]
 public interface IEpisodicDataset<T, TInput, TOutput>
 {
     /// <summary>

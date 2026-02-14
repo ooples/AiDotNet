@@ -11,6 +11,7 @@ namespace AiDotNet.DistributedTraining;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ShardingConfiguration")]
 public interface IShardingConfiguration<T>
 {
     /// <summary>

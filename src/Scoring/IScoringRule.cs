@@ -20,6 +20,7 @@ namespace AiDotNet.Scoring;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ScoringRule")]
 public interface IScoringRule<T>
 {
     /// <summary>

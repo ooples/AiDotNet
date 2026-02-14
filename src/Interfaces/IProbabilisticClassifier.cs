@@ -29,6 +29,7 @@ namespace AiDotNet.Interfaces;
 /// - Random Forest (outputs probabilities via vote counting)
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ProbabilisticClassifier")]
 public interface IProbabilisticClassifier<T> : IClassifier<T>
 {
     /// <summary>

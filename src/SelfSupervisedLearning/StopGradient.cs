@@ -157,6 +157,7 @@ public static class StopGradient<T>
 /// <para>This can be used to mark tensors at compile time as non-differentiable.
 /// Useful for type-safe gradient handling in advanced scenarios.</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DetachedTensor")]
 public interface IDetachedTensor<T>
 {
     /// <summary>

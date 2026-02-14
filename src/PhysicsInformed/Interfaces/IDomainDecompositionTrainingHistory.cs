@@ -17,6 +17,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces;
 /// - Interface continuity losses
 /// - Overall convergence metrics
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DomainDecompositionTrainingHistory")]
 public interface IDomainDecompositionTrainingHistory<T>
 {
     /// <summary>

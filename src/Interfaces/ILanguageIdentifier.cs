@@ -34,6 +34,7 @@ namespace AiDotNet.Interfaces;
 /// - Short utterances (harder to identify with less audio)
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("LanguageIdentifier")]
 public interface ILanguageIdentifier<T>
 {
     /// <summary>

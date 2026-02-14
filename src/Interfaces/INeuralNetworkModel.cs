@@ -29,6 +29,7 @@ namespace AiDotNet.Interfaces;
 /// comprehensive access to their internal structure and computations.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("NeuralNetworkModel")]
 public interface INeuralNetworkModel<T> : INeuralNetwork<T>
 {
     /// <summary>

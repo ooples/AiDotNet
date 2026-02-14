@@ -630,6 +630,7 @@ public enum DistanceMetric
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ALFeatureExtractor")]
 public interface IFeatureExtractor<T, TInput>
 {
     /// <summary>

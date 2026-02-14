@@ -7,6 +7,7 @@ namespace AiDotNet.Interfaces;
 /// Models both backpropagation and attention mechanisms as associative memory.
 /// </summary>
 /// <typeparam name="T">The numeric type</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("AssociativeMemory")]
 public interface IAssociativeMemory<T>
 {
     /// <summary>

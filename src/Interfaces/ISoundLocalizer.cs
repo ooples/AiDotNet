@@ -34,6 +34,7 @@ namespace AiDotNet.Interfaces;
 /// - Hearing aids (enhance sounds from specific directions)
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("SoundLocalizer")]
 public interface ISoundLocalizer<T>
 {
     /// <summary>

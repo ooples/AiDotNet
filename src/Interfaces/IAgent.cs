@@ -24,6 +24,7 @@ namespace AiDotNet.Interfaces;
 ///
 /// This is called the ReAct pattern: Reasoning + Acting.
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Agent")]
 public interface IAgent<T>
 {
     /// <summary>

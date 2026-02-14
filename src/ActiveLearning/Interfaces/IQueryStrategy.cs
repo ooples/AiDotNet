@@ -19,6 +19,7 @@ namespace AiDotNet.ActiveLearning.Interfaces;
 /// <item><description><b>Diversity Sampling:</b> Select samples that are diverse in feature space</description></item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("QueryStrategy")]
 public interface IQueryStrategy<T, TInput, TOutput>
 {
     /// <summary>
@@ -86,6 +87,7 @@ public interface IQueryStrategy<T, TInput, TOutput>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("UncertaintyStrategy")]
 public interface IUncertaintyStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutput>
 {
     /// <summary>
@@ -111,6 +113,7 @@ public interface IUncertaintyStrategy<T, TInput, TOutput> : IQueryStrategy<T, TI
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("CommitteeStrategy")]
 public interface ICommitteeStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutput>
 {
     /// <summary>
@@ -138,6 +141,7 @@ public interface ICommitteeStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInp
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("DensityWeightedStrategy")]
 public interface IDensityWeightedStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutput>
 {
     /// <summary>
@@ -162,6 +166,7 @@ public interface IDensityWeightedStrategy<T, TInput, TOutput> : IQueryStrategy<T
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("BayesianStrategy")]
 public interface IBayesianStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutput>
 {
     /// <summary>

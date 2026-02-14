@@ -34,6 +34,7 @@ namespace AiDotNet.Interfaces;
 /// This interface extends <see cref="IDiffusionModel{T}"/> with audio-specific operations.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AudioDiffusionModel")]
 public interface IAudioDiffusionModel<T> : IDiffusionModel<T>
 {
     /// <summary>

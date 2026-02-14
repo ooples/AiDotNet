@@ -31,6 +31,7 @@ namespace AiDotNet.Interfaces;
 /// - Spatial: Add control signals directly to features at each resolution
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ConditioningModule")]
 public interface IConditioningModule<T>
 {
     /// <summary>

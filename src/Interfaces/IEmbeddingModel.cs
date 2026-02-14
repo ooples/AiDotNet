@@ -24,6 +24,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for vector calculations (typically float or double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("EmbeddingModel")]
 public interface IEmbeddingModel<T>
 {
     /// <summary>

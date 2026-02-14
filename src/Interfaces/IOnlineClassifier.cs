@@ -32,6 +32,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("OnlineClassifier")]
 public interface IOnlineClassifier<T> : IClassifier<T>
 {
     /// <summary>

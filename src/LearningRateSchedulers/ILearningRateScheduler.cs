@@ -14,6 +14,7 @@ namespace AiDotNet.LearningRateSchedulers;
 /// you go faster on the highway (early training) and slow down as you approach your destination (later training).
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("LearningRateScheduler")]
 public interface ILearningRateScheduler
 {
     /// <summary>

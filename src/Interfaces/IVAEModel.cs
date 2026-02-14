@@ -34,6 +34,7 @@ namespace AiDotNet.Interfaces;
 /// model capabilities (training, saving, loading, gradients, checkpointing, etc.).
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("VAEModel")]
 public interface IVAEModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>

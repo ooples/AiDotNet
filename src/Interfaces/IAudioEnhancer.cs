@@ -35,6 +35,7 @@ namespace AiDotNet.Interfaces;
 /// should sound like, producing much better results than traditional methods.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AudioEnhancer")]
 public interface IAudioEnhancer<T>
 {
     /// <summary>

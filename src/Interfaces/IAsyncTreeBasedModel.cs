@@ -25,6 +25,7 @@ namespace AiDotNet.Interfaces;
 /// This interface inherits all the regular methods from ITreeBasedModel but adds async
 /// versions of the training and prediction methods.
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AsyncTreeBasedModel")]
 public interface IAsyncTreeBasedModel<T> : ITreeBasedRegression<T>
 {
     /// <summary>

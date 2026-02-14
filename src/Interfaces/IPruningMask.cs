@@ -22,6 +22,7 @@ namespace AiDotNet.Interfaces;
 /// - The mask can be applied to weight matrices to zero out pruned weights
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("PruningMask")]
 public interface IPruningMask<T>
 {
     /// <summary>

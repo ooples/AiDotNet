@@ -7,6 +7,7 @@ namespace AiDotNet.Interfaces;
 /// Exposes token embedding lookup for models that maintain a token embedding table.
 /// </summary>
 /// <typeparam name="T">The numeric type used for computations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("TokenEmbedding")]
 public interface ITokenEmbedding<T>
 {
     /// <summary>

@@ -36,6 +36,7 @@ namespace AiDotNet.Interfaces;
 /// string response = model.Generate("Explain quantum computing");
 /// </code>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("LanguageModel")]
 public interface ILanguageModel<T>
 {
     /// <summary>

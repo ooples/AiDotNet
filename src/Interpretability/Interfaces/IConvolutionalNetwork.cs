@@ -11,6 +11,7 @@ namespace AiDotNet.Interpretability.Interfaces;
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input type.</typeparam>
 /// <typeparam name="TOutput">The output type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ConvolutionalNetwork")]
 public interface IConvolutionalNetwork<T, TInput, TOutput>
 {
     /// <summary>

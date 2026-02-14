@@ -27,6 +27,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// memoryBank.Enqueue(currentEmbeddings);  // Add new embeddings
 /// </code>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("MemoryBank")]
 public interface IMemoryBank<T>
 {
     /// <summary>

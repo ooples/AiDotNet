@@ -41,6 +41,7 @@ namespace AiDotNet.Interfaces;
 /// This interface extends <see cref="IFullModel{T, TInput, TOutput}"/> for Tensor-based audio processing.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("MusicSourceSeparator")]
 public interface IMusicSourceSeparator<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>

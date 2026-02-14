@@ -8,6 +8,7 @@ namespace AiDotNet.Interfaces;
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 /// <typeparam name="TInput">The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
 /// <typeparam name="TOutput">The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;, double[]).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("EpisodicDataset")]
 public interface IEpisodicDataset<T, TInput, TOutput>
 {
     /// <summary>

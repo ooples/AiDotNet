@@ -69,6 +69,7 @@ namespace AiDotNet.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AuxiliaryLossLayer")]
 public interface IAuxiliaryLossLayer<T> : IDiagnosticsProvider
 {
     /// <summary>

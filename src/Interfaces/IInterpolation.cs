@@ -28,6 +28,7 @@ namespace AiDotNet.Interfaces;
 /// - Estimating values between training examples
 /// - Generating new data points based on existing ones
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Interpolation")]
 public interface IInterpolation<T>
 {
     /// <summary>

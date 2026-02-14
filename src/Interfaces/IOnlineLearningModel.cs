@@ -42,6 +42,7 @@ namespace AiDotNet.Interfaces;
 /// - Domingos &amp; Hulten (2000). "Mining High-Speed Data Streams"
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("OnlineLearningModel")]
 public interface IOnlineLearningModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
@@ -156,6 +157,7 @@ public interface IOnlineLearningModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
 /// - Bifet &amp; Gavaldà (2007). "Learning from Time-Changing Data with Adaptive Windowing"
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DriftDetector")]
 public interface IDriftDetector<T>
 {
     /// <summary>

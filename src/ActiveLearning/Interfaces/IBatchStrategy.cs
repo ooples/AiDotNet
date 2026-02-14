@@ -18,6 +18,7 @@ namespace AiDotNet.ActiveLearning.Interfaces;
 /// <item><description><b>Submodular:</b> Optimize a submodular function for diversity + informativeness</description></item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("BatchStrategy")]
 public interface IBatchStrategy<T, TInput, TOutput>
 {
     /// <summary>
@@ -66,6 +67,7 @@ public interface IBatchStrategy<T, TInput, TOutput>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ClusteringBatchStrategy")]
 public interface IClusteringBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T, TInput, TOutput>
 {
     /// <summary>
@@ -100,6 +102,7 @@ public interface IClusteringBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T
 /// <para><b>For Beginners:</b> Submodular functions have a "diminishing returns" property:
 /// adding more similar samples provides less benefit. This naturally encourages diversity.</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("SubmodularBatchStrategy")]
 public interface ISubmodularBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T, TInput, TOutput>
 {
     /// <summary>
@@ -137,6 +140,7 @@ public interface ISubmodularBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T
 /// <para><b>For Beginners:</b> BADGE (Batch Active learning by Diverse Gradient Embeddings)
 /// uses gradient embeddings to represent samples, then selects a diverse set using k-means++.</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("GradientBatchStrategy")]
 public interface IGradientBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T, TInput, TOutput>
 {
     /// <summary>

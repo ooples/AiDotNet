@@ -26,6 +26,7 @@ namespace AiDotNet.Interfaces;
 /// for different applications.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("WindowFunction")]
 public interface IWindowFunction<T>
 {
     /// <summary>

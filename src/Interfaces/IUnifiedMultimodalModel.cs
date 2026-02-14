@@ -204,6 +204,7 @@ public class MultimodalOutput<T>
 /// 4. Cross-Attention: Allow modalities to attend to each other
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("UnifiedMultimodalModel")]
 public interface IUnifiedMultimodalModel<T>
 {
     /// <summary>
@@ -488,6 +489,7 @@ public interface IUnifiedMultimodalModel<T>
 /// content token-by-token regardless of modality.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AutoregressiveMultimodalModel")]
 public interface IAutoregressiveMultimodalModel<T> : IUnifiedMultimodalModel<T>
 {
     /// <summary>

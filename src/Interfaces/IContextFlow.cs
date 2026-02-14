@@ -8,6 +8,7 @@ namespace AiDotNet.Interfaces;
 /// Core component of nested learning paradigm.
 /// </summary>
 /// <typeparam name="T">The numeric type</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ContextFlow")]
 public interface IContextFlow<T>
 {
     /// <summary>

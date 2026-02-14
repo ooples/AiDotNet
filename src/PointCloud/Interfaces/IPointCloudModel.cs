@@ -22,6 +22,7 @@ namespace AiDotNet.PointCloud.Interfaces;
 ///
 /// This interface defines operations for processing point cloud data with neural networks.
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("PointCloudModel")]
 public interface IPointCloudModel<T> : INeuralNetwork<T>
 {
     /// <summary>

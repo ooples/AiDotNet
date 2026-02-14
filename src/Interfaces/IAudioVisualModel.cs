@@ -51,6 +51,7 @@ public class AudioVisualEvent
 /// - Clapping sound → The model locates hands in the video
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AudioVisualCorrespondenceModel")]
 public interface IAudioVisualCorrespondenceModel<T>
 {
     /// <summary>
@@ -214,6 +215,7 @@ public interface IAudioVisualCorrespondenceModel<T>
 /// - Content moderation: Detect and locate inappropriate audio-visual content
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AudioVisualEventLocalizationModel")]
 public interface IAudioVisualEventLocalizationModel<T>
 {
     /// <summary>

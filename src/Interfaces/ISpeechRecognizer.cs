@@ -34,6 +34,7 @@ namespace AiDotNet.Interfaces;
 /// This interface extends <see cref="IFullModel{T, TInput, TOutput}"/> for Tensor-based audio processing.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("SpeechRecognizer")]
 public interface ISpeechRecognizer<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>
@@ -212,6 +213,7 @@ public class TranscriptionSegment<T>
 /// Interface for streaming transcription sessions.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("StreamingTranscriptionSession")]
 public interface IStreamingTranscriptionSession<T> : IDisposable
 {
     /// <summary>

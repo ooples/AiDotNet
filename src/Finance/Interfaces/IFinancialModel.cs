@@ -29,6 +29,7 @@ namespace AiDotNet.Finance.Interfaces;
 /// - Integration with the AiDotNet ecosystem (serialization, checkpointing, etc.)
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("FinancialModel")]
 public interface IFinancialModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>

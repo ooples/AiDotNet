@@ -31,6 +31,7 @@ namespace AiDotNet.Interfaces;
 /// - The posterior is not analytically tractable, requiring approximation methods
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("GaussianProcessClassifier")]
 public interface IGaussianProcessClassifier<T>
 {
     /// <summary>

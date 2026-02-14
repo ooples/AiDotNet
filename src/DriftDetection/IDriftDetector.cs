@@ -30,6 +30,7 @@ namespace AiDotNet.DriftDetection;
 /// fraud detection, recommendation systems, sensor monitoring, financial trading, etc.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("DriftDetectorStandalone")]
 public interface IDriftDetector<T>
 {
     /// <summary>

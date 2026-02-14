@@ -31,6 +31,7 @@ namespace AiDotNet.Interfaces;
 /// - Identify weak points in your system
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("RAGMetric")]
 public interface IRAGMetric<T>
 {
     /// <summary>

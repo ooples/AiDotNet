@@ -32,6 +32,7 @@ namespace AiDotNet.Interfaces;
 /// aggregate information from neighbors during message passing.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("GraphDataLoader")]
 public interface IGraphDataLoader<T> : IDataLoader<T>, IBatchIterable<GraphData<T>>
 {
     /// <summary>

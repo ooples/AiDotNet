@@ -23,6 +23,7 @@ namespace AiDotNet.PointCloud.Interfaces;
 /// - Archaeological artifact classification
 /// - Medical imaging (classify anatomical structures)
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("PointCloudClassification")]
 public interface IPointCloudClassification<T> : IPointCloudModel<T>
 {
     /// <summary>

@@ -460,6 +460,7 @@ public enum ShardingStrategy
 /// Interface for layers that accept context (conditioning).
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ContextualLayer")]
 public interface IContextualLayer<T> : ILayer<T>
 {
     /// <summary>

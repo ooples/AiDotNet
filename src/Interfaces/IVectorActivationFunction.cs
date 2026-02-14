@@ -28,6 +28,7 @@ namespace AiDotNet.Interfaces;
 /// - Tanh: Outputs values between -1 and 1
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("VectorActivationFunction")]
 public interface IVectorActivationFunction<T>
 {
     /// <summary>

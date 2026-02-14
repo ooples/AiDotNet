@@ -25,6 +25,7 @@ namespace AiDotNet.Interfaces;
 /// - RL agents: trained by interacting with environments and getting rewards
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("RLAgent")]
 public interface IRLAgent<T> : IFullModel<T, Vector<T>, Vector<T>>
 {
     /// <summary>

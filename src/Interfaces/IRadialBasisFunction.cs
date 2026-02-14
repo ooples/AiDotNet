@@ -21,6 +21,7 @@ namespace AiDotNet.Interfaces;
 /// - Time series prediction (forecasting future values)
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("RadialBasisFunction")]
 public interface IRadialBasisFunction<T>
 {
     /// <summary>

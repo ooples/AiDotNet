@@ -35,6 +35,7 @@ namespace AiDotNet.Interfaces;
 /// This interface extends <see cref="IDiffusionModel{T}"/> with latent-space specific operations.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("LatentDiffusionModel")]
 public interface ILatentDiffusionModel<T> : IDiffusionModel<T>
 {
     /// <summary>

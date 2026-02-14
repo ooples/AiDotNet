@@ -31,6 +31,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// var embeddings = simclr.Encode(newData);
 /// </code>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("SSLMethod")]
 public interface ISSLMethod<T>
 {
     /// <summary>

@@ -23,6 +23,7 @@ namespace AiDotNet.Clustering.Evaluation;
 ///    - Normalized Mutual Information: Information shared with ground truth
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ClusterMetric")]
 public interface IClusterMetric<T>
 {
     /// <summary>
@@ -43,6 +44,7 @@ public interface IClusterMetric<T>
 /// Interface for external cluster metrics that require ground truth.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ExternalClusterMetric")]
 public interface IExternalClusterMetric<T>
 {
     /// <summary>

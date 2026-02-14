@@ -27,6 +27,7 @@ namespace AiDotNet.Interfaces;
 /// ```
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("WeightLoadable")]
 public interface IWeightLoadable<T>
 {
     /// <summary>

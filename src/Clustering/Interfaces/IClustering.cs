@@ -24,6 +24,7 @@ namespace AiDotNet.Clustering.Interfaces;
 /// The algorithm decides how many groups exist and which points belong together.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Clustering")]
 public interface IClustering<T> : IFullModel<T, Matrix<T>, Vector<T>>
 {
     /// <summary>

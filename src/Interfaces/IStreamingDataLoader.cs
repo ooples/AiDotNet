@@ -28,6 +28,7 @@ namespace AiDotNet.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("StreamingDataLoader")]
 public interface IStreamingDataLoader<T, TInput, TOutput> : IDataLoader<T>
 {
     /// <summary>

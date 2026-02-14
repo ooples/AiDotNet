@@ -113,6 +113,7 @@ public interface IBatchSampler : IDataSampler
 /// Interface for samplers that use sample weights.
 /// </summary>
 /// <typeparam name="T">The numeric type for weights.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("WeightedSampler")]
 public interface IWeightedSampler<T> : IDataSampler
 {
     /// <summary>

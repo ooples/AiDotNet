@@ -27,6 +27,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("LinkFunction")]
 public interface ILinkFunction<T>
 {
     /// <summary>

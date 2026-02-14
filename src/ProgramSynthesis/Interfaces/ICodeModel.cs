@@ -30,6 +30,7 @@ namespace AiDotNet.ProgramSynthesis.Interfaces;
 /// This interface defines what capabilities a code model should have.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("CodeModel")]
 public interface ICodeModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>

@@ -32,6 +32,7 @@ namespace AiDotNet.Interfaces;
 /// - Cover song detection (comparing harmonic content)
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ChordRecognizer")]
 public interface IChordRecognizer<T>
 {
     /// <summary>

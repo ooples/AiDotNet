@@ -20,6 +20,7 @@ namespace AiDotNet.Interfaces;
 /// </list>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AudioFeatureExtractor")]
 public interface IAudioFeatureExtractor<T>
 {
     /// <summary>

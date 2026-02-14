@@ -26,6 +26,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Student model benefits from structured learning progression
 /// - You want to prevent overwhelming the student early in training</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("CurriculumDistillationStrategy")]
 public interface ICurriculumDistillationStrategy<T>
 {
     /// <summary>

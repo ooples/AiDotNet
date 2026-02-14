@@ -31,6 +31,7 @@ namespace AiDotNet.Finance.Interfaces;
 /// - Process high-dimensional data
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("RiskModel")]
 public interface IRiskModel<T> : IFinancialModel<T>
 {
     /// <summary>

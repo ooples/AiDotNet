@@ -27,6 +27,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para><b>Used by:</b> MoCo, MoCo v2, MoCo v3, BYOL, DINO</para>
 /// <para><b>Not used by:</b> SimCLR, SimSiam (uses stop-gradient instead), Barlow Twins</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("MomentumEncoder")]
 public interface IMomentumEncoder<T>
 {
     /// <summary>

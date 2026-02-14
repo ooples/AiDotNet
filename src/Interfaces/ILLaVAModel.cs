@@ -33,6 +33,7 @@ namespace AiDotNet.Interfaces;
 /// - Efficient training with visual instruction tuning
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("LLaVAModel")]
 public interface ILLaVAModel<T> : IMultimodalEmbedding<T>
 {
     /// <summary>

@@ -739,16 +739,13 @@ public class DistributedTrainingIntegrationTests
     }
 
     [Fact]
-    public void ParameterAnalyzer_CalculateDistributionStats_NullList_ReturnsEmptyDict()
+    public void ParameterAnalyzer_CalculateDistributionStats_NullList_ThrowsArgumentNullException()
     {
         // Arrange
         var analyzer = new ParameterAnalyzer<double>();
 
-        // Act
-        var stats = analyzer.CalculateDistributionStats(null!);
-
-        // Assert
-        Assert.Empty(stats);
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => analyzer.CalculateDistributionStats(null));
     }
 
     [Fact]

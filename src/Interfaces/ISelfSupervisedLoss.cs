@@ -36,6 +36,7 @@ namespace AiDotNet.Interfaces;
 /// - <b>Contrastive Learning:</b> Learn to distinguish similar vs dissimilar examples
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("SelfSupervisedLoss")]
 public interface ISelfSupervisedLoss<T>
 {
     /// <summary>

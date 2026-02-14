@@ -18,6 +18,7 @@ namespace AiDotNet.Interfaces;
 /// each client's local data separately, so federated learning can train realistically.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("FederatedClientDataLoader")]
 public interface IFederatedClientDataLoader<T, TInput, TOutput> : IInputOutputDataLoader<T, TInput, TOutput>
 {
     /// <summary>

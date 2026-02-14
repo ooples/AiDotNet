@@ -35,6 +35,7 @@ namespace AiDotNet.Interfaces;
 /// - Provides batches of experiences for learning
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("RLDataLoader")]
 public interface IRLDataLoader<T> : IDataLoader<T>, IBatchIterable<Experience<T, Vector<T>, Vector<T>>>
 {
     /// <summary>

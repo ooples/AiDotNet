@@ -22,6 +22,7 @@ namespace AiDotNet.Interfaces;
 /// This interface ensures all environments work consistently with AiDotNet's RL agents.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Environment")]
 public interface IEnvironment<T>
 {
     /// <summary>

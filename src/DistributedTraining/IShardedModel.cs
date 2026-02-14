@@ -21,6 +21,7 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type for operations</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ShardedModel")]
 public interface IShardedModel<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>

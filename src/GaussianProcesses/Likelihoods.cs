@@ -20,6 +20,7 @@ namespace AiDotNet.GaussianProcesses;
 /// - What kind of predictions we can make
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Likelihood")]
 public interface ILikelihood<T>
 {
     /// <summary>

@@ -10,6 +10,7 @@ namespace AiDotNet.Interfaces;
 /// This interface lets AiDotNet swap in different correction methods while keeping the public facade simple.
 /// </remarks>
 /// <typeparam name="T">Numeric type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("FederatedHeterogeneityCorrection")]
 public interface IFederatedHeterogeneityCorrection<T>
 {
     /// <summary>

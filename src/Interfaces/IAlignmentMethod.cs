@@ -26,6 +26,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 /// - Helps models generalize human values to new situations
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("AlignmentMethod")]
 public interface IAlignmentMethod<T> : IModelSerializer
 {
     /// <summary>

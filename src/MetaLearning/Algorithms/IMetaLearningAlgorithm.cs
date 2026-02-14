@@ -26,6 +26,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// - Can solve new tasks with just a few examples (few-shot learning)
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("MetaLearningAlgorithm")]
 public interface IMetaLearningAlgorithm<T, TInput, TOutput>
 {
     /// <summary>

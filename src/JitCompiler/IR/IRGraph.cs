@@ -168,25 +168,9 @@ public class IRGraph
             }
 
             // Mark ALL outputs as produced (support multi-output operations like gradient ops)
-            // Use per-output shapes from OutputShapes array for proper multi-output support
-            var outputShapes = op.OutputShapes;
             for (int i = 0; i < op.OutputIds.Length; i++)
             {
-                var outputId = op.OutputIds[i];
-                producedTensors.Add(outputId);
-
-                // Ensure output shape is defined for each output using per-output shape
-                // Use double-checked locking for thread-safety
-                if (!TensorShapes.ContainsKey(outputId))
-                {
-                    lock (_tensorShapesLock)
-                    {
-                        if (!TensorShapes.ContainsKey(outputId))
-                        {
-                            TensorShapes[outputId] = i < outputShapes.Length ? outputShapes[i] : op.OutputShape;
-                        }
-                    }
-                }
+                producedTensors.Add(op.OutputIds[i]);
             }
         }
 

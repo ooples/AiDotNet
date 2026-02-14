@@ -4,6 +4,7 @@ namespace AiDotNet.Interfaces;
 /// Interface for models that have optimizable parameters.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("Parameterizable")]
 public interface IParameterizable<T, TInput, TOutput>
 {
     /// <summary>

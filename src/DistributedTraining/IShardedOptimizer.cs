@@ -19,6 +19,7 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type for operations</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ShardedOptimizer")]
 public interface IShardedOptimizer<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>
 {
     /// <summary>

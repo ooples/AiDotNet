@@ -75,6 +75,7 @@ public class StatisticalTestResult<T>
 /// Interface for statistical tests comparing two groups or samples.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("TwoSampleTest")]
 public interface ITwoSampleTest<T>
 {
     /// <summary>
@@ -101,6 +102,7 @@ public interface ITwoSampleTest<T>
 /// Interface for statistical tests comparing multiple groups.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("MultipleSampleTest")]
 public interface IMultipleSampleTest<T>
 {
     /// <summary>
@@ -126,6 +128,7 @@ public interface IMultipleSampleTest<T>
 /// Interface for paired comparison tests (e.g., comparing same samples under different conditions).
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("PairedTest")]
 public interface IPairedTest<T>
 {
     /// <summary>
@@ -152,6 +155,7 @@ public interface IPairedTest<T>
 /// Interface for general statistical tests.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("StatisticalTest")]
 public interface IStatisticalTest<T>
 {
     /// <summary>
@@ -179,6 +183,7 @@ public interface IStatisticalTest<T>
 /// Interface for tests comparing multiple classifiers or groups.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("MultipleComparisonTest")]
 public interface IMultipleComparisonTest<T> : IStatisticalTest<T>
 {
     /// <summary>
@@ -193,6 +198,7 @@ public interface IMultipleComparisonTest<T> : IStatisticalTest<T>
 /// Interface for tests comparing multiple classifier predictions against ground truth.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ClassifierComparisonTest")]
 public interface IClassifierComparisonTest<T> : IStatisticalTest<T>
 {
     /// <summary>

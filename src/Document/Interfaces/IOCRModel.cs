@@ -24,6 +24,7 @@ namespace AiDotNet.Document.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("OCRModel")]
 public interface IOCRModel<T> : IDocumentModel<T>
 {
     /// <summary>

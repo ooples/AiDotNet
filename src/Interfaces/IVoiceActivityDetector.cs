@@ -31,6 +31,7 @@ namespace AiDotNet.Interfaces;
 /// - Latency: How quickly it detects speech onset
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("VoiceActivityDetector")]
 public interface IVoiceActivityDetector<T>
 {
     /// <summary>

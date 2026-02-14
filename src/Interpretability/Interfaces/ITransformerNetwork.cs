@@ -14,6 +14,7 @@ namespace AiDotNet.Interpretability.Interfaces;
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input type.</typeparam>
 /// <typeparam name="TOutput">The output type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("TransformerNetwork")]
 public interface ITransformerNetwork<T, TInput, TOutput>
 {
     /// <summary>

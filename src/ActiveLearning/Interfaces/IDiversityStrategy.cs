@@ -19,6 +19,7 @@ namespace AiDotNet.ActiveLearning.Interfaces;
 /// <item><description><b>Density-Weighted:</b> Samples from high-density regions</description></item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DiversityStrategy")]
 public interface IDiversityStrategy<T, TInput, TOutput>
 {
     /// <summary>

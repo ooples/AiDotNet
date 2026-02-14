@@ -24,6 +24,7 @@ namespace AiDotNet.Interfaces;
 /// - **Online Trainer**: Teacher updates during student training
 /// - **Mutual Learning Trainer**: Multiple students learn from each other</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("KnowledgeDistillationTrainer")]
 public interface IKnowledgeDistillationTrainer<T, TInput, TOutput>
 {
     /// <summary>

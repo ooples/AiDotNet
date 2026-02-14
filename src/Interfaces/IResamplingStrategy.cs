@@ -29,6 +29,7 @@ namespace AiDotNet.Interfaces;
 /// After resampling, the model sees a more balanced dataset and learns to recognize both classes.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ResamplingStrategy")]
 public interface IResamplingStrategy<T>
 {
     /// <summary>

@@ -26,6 +26,7 @@ namespace AiDotNet.Finance.Interfaces;
 /// - <b>Forecast:</b> Our prediction for the future
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("VolatilityModel")]
 public interface IVolatilityModel<T> : IFinancialModel<T>
 {
     /// <summary>

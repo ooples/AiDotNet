@@ -16,6 +16,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces;
 ///
 /// Implementing this interface signals that the PINN can use GPU resources when available.
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("GpuAcceleratedPINN")]
 public interface IGpuAcceleratedPINN<T>
 {
     /// <summary>

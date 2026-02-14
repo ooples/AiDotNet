@@ -38,6 +38,7 @@ namespace AiDotNet.Interfaces;
 /// be applied in step 1.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("GradientComputable")]
 public interface IGradientComputable<T, TInput, TOutput>
 {
     /// <summary>

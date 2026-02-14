@@ -32,6 +32,7 @@ namespace AiDotNet.Interfaces;
 /// ```
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Benchmark")]
 public interface IBenchmark<T>
 {
     /// <summary>

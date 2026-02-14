@@ -38,6 +38,7 @@ namespace AiDotNet.Interfaces;
 /// - Mixed emotions (happy but nervous)
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("EmotionRecognizer")]
 public interface IEmotionRecognizer<T>
 {
     /// <summary>

@@ -20,6 +20,7 @@ namespace AiDotNet.Interfaces;
 /// 4. Optionally use <see cref="DecisionFunction"/> to get anomaly scores
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("OutlierDetector")]
 public interface IOutlierDetector<T>
 {
     /// <summary>

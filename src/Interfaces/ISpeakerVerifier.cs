@@ -35,6 +35,7 @@ namespace AiDotNet.Interfaces;
 /// This interface extends <see cref="IFullModel{T, TInput, TOutput}"/> for Tensor-based audio processing.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("SpeakerVerifier")]
 public interface ISpeakerVerifier<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>

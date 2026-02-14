@@ -26,6 +26,7 @@ namespace AiDotNet.Interfaces;
 /// - Speed up calculations that would otherwise be too slow or unstable
 /// </remarks>
 /// <typeparam name="T">The numeric data type used in the matrix (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("MatrixDecomposition")]
 public interface IMatrixDecomposition<T>
 {
     /// <summary>

@@ -32,6 +32,7 @@ namespace AiDotNet.Video.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("VideoEnhancer")]
 public interface IVideoEnhancer<T> : IVideoModel<T>
 {
     #region Properties

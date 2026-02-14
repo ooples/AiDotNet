@@ -33,6 +33,7 @@ namespace AiDotNet.Interfaces
     /// <see cref="Models.Options.InterpretabilityOptions"/>.
     /// </para>
     /// </remarks>
+    [AiDotNet.Configuration.YamlConfigurable("InterpretableModel")]
     public interface IInterpretableModel<T>
     {
         /// <summary>

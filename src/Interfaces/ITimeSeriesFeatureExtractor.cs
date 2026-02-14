@@ -23,6 +23,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("TimeSeriesFeatureExtractor")]
 public interface ITimeSeriesFeatureExtractor<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>

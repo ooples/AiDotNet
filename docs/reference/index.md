@@ -50,6 +50,25 @@ public class AiModelResult<T, TInput, TOutput>
 
 [Full documentation →](./prediction-model-result)
 
+## YAML Configuration
+
+AiDotNet supports full YAML-based configuration for `AiModelBuilder`. Define your entire pipeline in a YAML file:
+
+```yaml
+optimizer:
+  type: "Adam"
+preprocessing:
+  steps:
+    - type: "StandardScaler"
+```
+
+```csharp
+var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>("config.yaml");
+var result = await builder.BuildAsync();
+```
+
+[Full YAML Configuration Reference](./yaml-configuration.md) | [JSON Schema for autocomplete](https://github.com/ooples/AiDotNet/blob/master/schemas/aidotnet-config.schema.json)
+
 ## Configuration Classes
 
 | Class | Purpose |
@@ -69,3 +88,4 @@ public class AiModelResult<T, TInput, TOutput>
 - [Reinforcement Learning](./reinforcement-learning) - All 80+ agents
 - [Optimizers](./optimizers) - All 42+ optimizers
 - [Loss Functions](./loss-functions) - All 37+ loss functions
+- [YAML Configuration](./yaml-configuration) - Full YAML config reference

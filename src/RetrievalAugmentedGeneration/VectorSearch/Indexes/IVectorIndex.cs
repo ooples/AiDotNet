@@ -7,6 +7,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     /// Interface for vector search indexes.
     /// </summary>
     /// <typeparam name="T">The numeric type for vector operations.</typeparam>
+    [AiDotNet.Configuration.YamlConfigurable("VectorIndex")]
     public interface IVectorIndex<T>
     {
         /// <summary>

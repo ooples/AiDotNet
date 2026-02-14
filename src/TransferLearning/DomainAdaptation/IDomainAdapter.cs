@@ -16,6 +16,7 @@ namespace AiDotNet.TransferLearning.DomainAdaptation;
 /// objects are the same, but your perception needs to adapt to the new lighting conditions.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DomainAdapter")]
 public interface IDomainAdapter<T>
 {
     /// <summary>

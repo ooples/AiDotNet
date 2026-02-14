@@ -25,6 +25,7 @@ namespace AiDotNet.Document.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("TableExtractor")]
 public interface ITableExtractor<T> : IDocumentModel<T>
 {
     /// <summary>

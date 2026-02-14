@@ -30,6 +30,7 @@ namespace AiDotNet.Interfaces;
 /// through the functionality inherited from IFullModel.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("NonLinearRegression")]
 public interface INonLinearRegression<T> : IRegression<T>
 {
     // This interface inherits all methods and properties from IFullModel<T>

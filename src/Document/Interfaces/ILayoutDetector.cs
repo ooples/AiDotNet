@@ -24,6 +24,7 @@ namespace AiDotNet.Document.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("LayoutDetector")]
 public interface ILayoutDetector<T> : IDocumentModel<T>
 {
     /// <summary>

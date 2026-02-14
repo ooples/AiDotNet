@@ -1154,6 +1154,7 @@ public class NTMMemory<T>
 /// Interface for NTM controller.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("NTMController")]
 public interface INTMController<T>
 {
     /// <summary>

@@ -25,6 +25,7 @@ public interface IFeatureAware
 /// Interface for models that can provide feature importance scores.
 /// </summary>
 /// <typeparam name="T">The numeric type used for feature importance scores.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("FeatureImportance")]
 public interface IFeatureImportance<T>
 {
     /// <summary>

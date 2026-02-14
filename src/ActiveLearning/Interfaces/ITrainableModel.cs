@@ -18,6 +18,7 @@ namespace AiDotNet.ActiveLearning.Interfaces;
 /// <item><description>Continual learning trains models on sequential tasks</description></item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("TrainableModel")]
 public interface ITrainableModel<T, TInput, TOutput>
 {
     /// <summary>

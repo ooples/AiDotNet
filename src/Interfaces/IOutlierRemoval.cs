@@ -12,6 +12,7 @@ namespace AiDotNet.Interfaces;
 /// techniques. By removing outliers, you can often improve the accuracy and reliability of your
 /// machine learning models.
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("OutlierRemoval")]
 public interface IOutlierRemoval<T, TInput, TOutput>
 {
     /// <summary>

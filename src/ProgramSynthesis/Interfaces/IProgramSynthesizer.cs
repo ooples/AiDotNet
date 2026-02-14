@@ -27,6 +27,7 @@ namespace AiDotNet.ProgramSynthesis.Interfaces;
 /// This is like having an AI assistant that can code for you!
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ProgramSynthesizer")]
 public interface IProgramSynthesizer<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>

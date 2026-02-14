@@ -16,6 +16,7 @@ namespace AiDotNet.Interfaces;
 /// - Get information about how the model was created and how well it performs
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("PredictiveModel")]
 public interface IPredictiveModel<T, TInput, TOutput> : IModelSerializer
 {
     /// <summary>

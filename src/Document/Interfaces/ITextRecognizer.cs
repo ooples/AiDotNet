@@ -22,6 +22,7 @@ namespace AiDotNet.Document.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("TextRecognizer")]
 public interface ITextRecognizer<T> : IDocumentModel<T>
 {
     /// <summary>

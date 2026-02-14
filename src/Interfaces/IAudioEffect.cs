@@ -33,6 +33,7 @@ namespace AiDotNet.Interfaces;
 /// - Offline: Process entire files for best quality
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AudioEffect")]
 public interface IAudioEffect<T>
 {
     /// <summary>

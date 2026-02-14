@@ -28,6 +28,7 @@ namespace AiDotNet.Interfaces;
 /// 4. Multi-modal Attention: Allows text to attend to relevant image regions
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Gpt4VisionModel")]
 public interface IGpt4VisionModel<T> : IMultimodalEmbedding<T>
 {
     /// <summary>

@@ -20,6 +20,7 @@ namespace AiDotNet.Interfaces;
 /// - Feature importance: Which features were most useful for classification
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("TreeBasedClassifier")]
 public interface ITreeBasedClassifier<T> : IProbabilisticClassifier<T>
 {
     /// <summary>

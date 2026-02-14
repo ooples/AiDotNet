@@ -709,6 +709,7 @@ public class GPUExplainerHelper<T> : IDisposable
 /// 3. Explanations will automatically use GPU when beneficial
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("GPUAcceleratedExplainer")]
 public interface IGPUAcceleratedExplainer<T>
 {
     /// <summary>

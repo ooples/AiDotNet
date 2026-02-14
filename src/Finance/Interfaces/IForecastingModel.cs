@@ -27,6 +27,7 @@ namespace AiDotNet.Finance.Interfaces;
 /// - Cryptocurrency price prediction
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ForecastingModel")]
 public interface IForecastingModel<T> : IFinancialModel<T>
 {
     /// <summary>

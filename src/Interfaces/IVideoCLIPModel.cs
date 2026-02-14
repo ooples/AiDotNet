@@ -30,6 +30,7 @@ namespace AiDotNet.Interfaces;
 /// - Learns motion and action patterns
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("VideoCLIPModel")]
 public interface IVideoCLIPModel<T> : IMultimodalEmbedding<T>
 {
     /// <summary>
