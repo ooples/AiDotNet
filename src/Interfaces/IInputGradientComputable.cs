@@ -31,6 +31,7 @@ namespace AiDotNet.Interfaces;
 /// that fools the classifier.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("InputGradientComputable")]
 public interface IInputGradientComputable<T>
 {
     /// <summary>

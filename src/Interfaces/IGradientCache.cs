@@ -25,6 +25,7 @@ namespace AiDotNet.Interfaces;
 /// - Models that use the same calculations repeatedly
 /// - Training scenarios where speed is important
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("GradientCache")]
 public interface IGradientCache<T>
 {
     /// <summary>

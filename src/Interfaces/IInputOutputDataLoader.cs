@@ -28,6 +28,7 @@ namespace AiDotNet.Interfaces;
 /// and provides it in the format your model needs for training.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("InputOutputDataLoader")]
 public interface IInputOutputDataLoader<T, TInput, TOutput> :
     IDataLoader<T>,
     IBatchIterable<(TInput Features, TOutput Labels)>,
