@@ -75,6 +75,7 @@ public class StatisticalTestResult<T>
 /// Interface for statistical tests comparing two groups or samples.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("TwoSampleTest")]
 public interface ITwoSampleTest<T>
 {
     /// <summary>
@@ -101,6 +102,7 @@ public interface ITwoSampleTest<T>
 /// Interface for statistical tests comparing multiple groups.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("MultipleSampleTest")]
 public interface IMultipleSampleTest<T>
 {
     /// <summary>

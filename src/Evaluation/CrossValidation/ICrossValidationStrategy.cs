@@ -18,6 +18,7 @@ namespace AiDotNet.Evaluation.CrossValidation;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for data elements.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("CrossValidationStrategy")]
 public interface ICrossValidationStrategy<T>
 {
     /// <summary>

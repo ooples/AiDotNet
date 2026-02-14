@@ -440,6 +440,7 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("GradientModel")]
 public interface IGradientModel<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>

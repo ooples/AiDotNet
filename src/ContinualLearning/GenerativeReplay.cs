@@ -346,6 +346,7 @@ public class GenerativeReplay<T> : IContinualLearningStrategy<T>
 /// Interface for generative models used with GenerativeReplay.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("GenerativeModel")]
 public interface IGenerativeModel<T>
 {
     /// <summary>

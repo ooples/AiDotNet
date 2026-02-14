@@ -16,6 +16,7 @@ namespace AiDotNet.TransferLearning.FeatureMapping;
 /// helps bridge that gap by finding a common representation.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("FeatureMapper")]
 public interface IFeatureMapper<T>
 {
     /// <summary>

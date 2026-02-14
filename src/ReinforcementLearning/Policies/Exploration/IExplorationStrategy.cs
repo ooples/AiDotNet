@@ -7,6 +7,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// Interface for exploration strategies used by policies.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    [AiDotNet.Configuration.YamlConfigurable("ExplorationStrategy")]
     public interface IExplorationStrategy<T>
     {
         /// <summary>

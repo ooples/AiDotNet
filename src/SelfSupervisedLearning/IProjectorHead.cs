@@ -23,6 +23,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <item><b>Symmetric:</b> Predictor network in BYOL/SimSiam</item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ProjectorHead")]
 public interface IProjectorHead<T>
 {
     /// <summary>

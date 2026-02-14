@@ -7,6 +7,7 @@ namespace AiDotNet.Evaluation.Metrics;
 /// Base interface for all evaluation metrics.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("Metric")]
 public interface IMetric<T>
 {
     /// <summary>
@@ -54,6 +55,7 @@ public interface IMetric<T>
 /// Interface for classification metrics.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ClassificationMetric")]
 public interface IClassificationMetric<T> : IMetric<T>
 {
     /// <summary>
