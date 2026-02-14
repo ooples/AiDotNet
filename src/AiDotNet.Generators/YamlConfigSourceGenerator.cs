@@ -181,9 +181,9 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
                 // Find all non-abstract, non-interface types that implement this interface.
                 section.ConcreteImplementations = FindImplementations(method.ParameterType, compilation);
             }
-            else if (method.Category == SectionCategory.PocoConfig && method.IsAbstract && ContainsTypeParameters(method.ParameterType))
+            else if (method.Category == SectionCategory.PocoConfig && method.IsAbstract)
             {
-                // Abstract classes with generic type params need implementation lookup (subclass discovery).
+                // Abstract classes (generic or non-generic) need implementation lookup (subclass discovery).
                 section.ConcreteImplementations = FindImplementations(method.ParameterType, compilation);
             }
 
@@ -452,6 +452,17 @@ internal static class YamlParamsHelper
 
             switch (section.Method.Category)
             {
+                case SectionCategory.PocoConfig when !hasGenericParams && section.Method.IsAbstract:
+                    // Non-generic abstract class — use registry to find concrete subclass (e.g., ModelOptions).
+                    sb.AppendLine($"        if (config.{propName} is not null && !string.IsNullOrWhiteSpace(config.{propName}.Type))");
+                    sb.AppendLine($"        {{");
+                    sb.AppendLine($"            var instance = YamlTypeRegistry<T, TInput, TOutput>.CreateInstance<{section.Method.ParameterTypeName}>(");
+                    sb.AppendLine($"                \"{section.Method.SectionName}\", config.{propName}.Type, config.{propName}.Params);");
+                    sb.AppendLine($"            builder.{section.Method.MethodName}(instance);");
+                    sb.AppendLine($"        }}");
+                    sb.AppendLine();
+                    break;
+
                 case SectionCategory.PocoConfig when !hasGenericParams:
                     // Non-generic POCO — pass directly from config.
                     sb.AppendLine($"        if (config.{propName} is not null)");
@@ -523,11 +534,11 @@ internal static class YamlParamsHelper
 
     private static void EmitYamlTypeRegistry(SourceProductionContext context, List<SectionInfo> sections)
     {
-        // Include both interface sections and abstract generic POCO sections that have implementations.
+        // Include both interface sections and abstract POCO sections (generic or non-generic) that have implementations.
         var interfaceSections = sections
             .Where(s => s.ConcreteImplementations.Count > 0 &&
                 (s.Method.Category == SectionCategory.Interface ||
-                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract && ContainsTypeParameters(s.Method.ParameterType))))
+                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract)))
             .ToList();
 
         var sb = new StringBuilder();
@@ -762,11 +773,11 @@ internal static class YamlParamsHelper
 
     private static void EmitYamlRegisteredTypeNames(SourceProductionContext context, List<SectionInfo> sections)
     {
-        // Collect interface sections and abstract generic POCOs that have implementations.
+        // Collect interface sections and abstract POCOs (generic or non-generic) that have implementations.
         var registrySections = sections
             .Where(s => s.ConcreteImplementations.Count > 0 &&
                 (s.Method.Category == SectionCategory.Interface ||
-                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract && ContainsTypeParameters(s.Method.ParameterType))))
+                 (s.Method.Category == SectionCategory.PocoConfig && s.Method.IsAbstract)))
             .ToList();
 
         var sb = new StringBuilder();
@@ -842,7 +853,8 @@ internal static class YamlParamsHelper
             var category = section.Method.Category switch
             {
                 SectionCategory.Interface => "Interface",
-                SectionCategory.PocoConfig when ContainsTypeParameters(section.Method.ParameterType) && section.Method.IsAbstract => "AbstractGeneric",
+                SectionCategory.PocoConfig when section.Method.IsAbstract && !ContainsTypeParameters(section.Method.ParameterType) => "AbstractNonGeneric",
+                SectionCategory.PocoConfig when section.Method.IsAbstract && ContainsTypeParameters(section.Method.ParameterType) => "AbstractGeneric",
                 SectionCategory.PocoConfig when ContainsTypeParameters(section.Method.ParameterType) => "ConcreteGeneric",
                 SectionCategory.PocoConfig => "Poco",
                 SectionCategory.ActionBuilder => "Pipeline",
@@ -852,9 +864,9 @@ internal static class YamlParamsHelper
             var propName = ToPascalCase(section.Method.SectionName);
             var isExisting = existingSections.Contains(section.Method.SectionName);
 
-            // For POCO types, extract public property names and types.
+            // For POCO types (non-abstract), extract public property names and types.
             var pocoProps = new List<string>();
-            if (section.Method.Category == SectionCategory.PocoConfig && !ContainsTypeParameters(section.Method.ParameterType))
+            if (section.Method.Category == SectionCategory.PocoConfig && !ContainsTypeParameters(section.Method.ParameterType) && !section.Method.IsAbstract)
             {
                 if (section.Method.ParameterType is INamedTypeSymbol namedType)
                 {
@@ -958,6 +970,7 @@ internal static class YamlParamsHelper
         {
             SectionCategory.Interface => "YamlTypeSection",
             SectionCategory.ActionBuilder => "YamlPipelineSection",
+            SectionCategory.PocoConfig when section.Method.IsAbstract => "YamlTypeSection",
             SectionCategory.PocoConfig when ContainsTypeParameters(section.Method.ParameterType) => "YamlTypeSection",
             SectionCategory.PocoConfig => section.Method.ParameterType.ToDisplayString(
                 SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", ""),

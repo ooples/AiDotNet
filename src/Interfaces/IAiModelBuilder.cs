@@ -2366,7 +2366,14 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureRLAgent(IAgent<T> agent);
 
-    // ── Extended Coverage: Data Transformers, Splitting, Metrics, Vectorization, Storage ──
+    // ── Extended Coverage: Model Options, Data Transformers, Splitting, Metrics, Vectorization, Storage ──
+
+    /// <summary>
+    /// Configures model options that control training behavior and hyperparameters.
+    /// </summary>
+    /// <param name="options">The model options to apply.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureModelOptions(Models.Options.ModelOptions options);
 
     /// <summary>
     /// Configures a data transformer for preprocessing or postprocessing data transformations.

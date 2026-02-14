@@ -3,6 +3,7 @@ using AiDotNet.Clustering.Evaluation;
 using AiDotNet.CurriculumLearning.Interfaces;
 using AiDotNet.Evaluation.Metrics;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 using AiDotNet.Preprocessing.DataPreparation;
 using AiDotNet.SelfSupervisedLearning;
 
@@ -20,6 +21,7 @@ namespace AiDotNet;
 /// <typeparam name="TOutput">The output type.</typeparam>
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
+    private ModelOptions? _configuredModelOptions;
     private IDataTransformer<T, TInput, TInput>? _configuredDataTransformer;
     private IDataSplitter<T>? _configuredDataSplitter;
     private IClassificationMetric<T>? _configuredClassificationMetric;
@@ -47,6 +49,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private IAudioEnhancer<T>? _configuredAudioEnhancer;
     private IAudioGenerator<T>? _configuredAudioGenerator;
     private RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T>? _configuredSimilarityMetric;
+
+    /// <summary>
+    /// Configures model options that control training behavior and hyperparameters.
+    /// </summary>
+    /// <param name="options">The model options to apply.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Model options are configuration objects that control how your model
+    /// trains and behaves. Each algorithm has its own options class (e.g., NeuralNetworkOptions,
+    /// ClusteringOptions, RegressionOptions) that inherits from ModelOptions. Options control things
+    /// like learning rate, number of epochs, regularization strength, and algorithm-specific parameters.
+    /// All options support setting a random seed for reproducibility.</para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureModelOptions(ModelOptions options)
+    {
+        _configuredModelOptions = options;
+        return this;
+    }
 
     /// <summary>
     /// Configures a data transformer for preprocessing or postprocessing data transformations.
