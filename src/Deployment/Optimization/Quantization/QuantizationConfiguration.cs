@@ -512,12 +512,16 @@ public class QuantizationConfiguration
     {
         if (CategoryBitWidths is not null && CategoryBitWidths.TryGetValue(category, out int bitWidth))
         {
-            // Validate: bit widths must be positive
-            if (bitWidth > 0)
+            if (bitWidth <= 0)
             {
-                return bitWidth;
+                throw new ArgumentException(
+                    $"CategoryBitWidths contains an invalid bit-width ({bitWidth}) for category '{category}'. " +
+                    "Bit-widths must be positive.");
             }
+
+            return bitWidth;
         }
+
         return EffectiveBitWidth;
     }
 

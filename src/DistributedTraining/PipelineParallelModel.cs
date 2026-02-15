@@ -220,15 +220,44 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                 }
             }
 
-            // If we found a valid boundary, use it; otherwise keep consuming
+            // If we found a valid boundary, use it
             if (candidateBoundary >= 0)
             {
                 currentLayer = candidateBoundary;
             }
-            else if (layersInStage == 0 && currentLayer < layerCount)
+            else
             {
-                // Ensure at least one layer per stage
-                currentLayer++;
+                // No valid forward boundary found; try backward search from currentLayer
+                // to find the nearest valid partition point within this stage's range
+                int searchStart = currentLayer - 1;
+                int searchEnd = stageStartLayer[stage];
+                bool foundBackward = false;
+
+                for (int probe = searchStart; probe > searchEnd; probe--)
+                {
+                    if (layeredModel.ValidatePartitionPoint(probe - 1))
+                    {
+                        currentLayer = probe;
+                        foundBackward = true;
+                        break;
+                    }
+                }
+
+                if (!foundBackward)
+                {
+                    if (layersInStage == 0 && currentLayer < layerCount)
+                    {
+                        // Ensure at least one layer per stage
+                        currentLayer++;
+                    }
+                    else if (currentLayer <= stageStartLayer[stage])
+                    {
+                        throw new InvalidOperationException(
+                            $"Cannot find a valid partition point for stage {stage} " +
+                            $"in layer range [{stageStartLayer[stage]}, {currentLayer}). " +
+                            "The model's ValidatePartitionPoint rejected all candidates.");
+                    }
+                }
             }
 
             stageStartLayer[stage + 1] = currentLayer;
@@ -254,9 +283,23 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         int stageParamStart = allLayerInfo[firstLayerInStage].ParameterOffset;
         long stageParamEndLong = (long)allLayerInfo[lastLayerInStage].ParameterOffset +
                                  allLayerInfo[lastLayerInStage].ParameterCount;
-        int stageParamEnd = stageParamEndLong > int.MaxValue
-            ? fullParameters.Length
-            : (int)stageParamEndLong;
+
+        if (stageParamEndLong > fullParameters.Length)
+        {
+            throw new InvalidOperationException(
+                $"Stage {_stageId} parameter range [{stageParamStart}, {stageParamEndLong}) exceeds " +
+                $"total parameter count ({fullParameters.Length}). " +
+                "LayerInfo metadata may be stale or inconsistent with the model parameters.");
+        }
+
+        if (stageParamEndLong > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"Stage {_stageId} parameter end ({stageParamEndLong}) exceeds int.MaxValue. " +
+                "Models with more than int.MaxValue parameters are not supported.");
+        }
+
+        int stageParamEnd = (int)stageParamEndLong;
 
         ShardStartIndex = stageParamStart;
         ShardSize = stageParamEnd - stageParamStart;

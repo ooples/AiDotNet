@@ -2847,8 +2847,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         // Invalidate caches after loading all layers
+        // (InvalidateParameterCountCache already calls InvalidateLayerInfoCache)
         InvalidateParameterCountCache();
-        InvalidateLayerInfoCache();
 
         // Read network-specific data
         DeserializeNetworkSpecificData(reader);
@@ -4140,9 +4140,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             parameterOffset += layer.ParameterCount;
         }
 
-        _cachedLayerInfo = result;
+        _cachedLayerInfo = result.AsReadOnly();
         _cachedLayerCount = _layers.Count;
-        return result;
+        return _cachedLayerInfo;
     }
 
     /// <summary>

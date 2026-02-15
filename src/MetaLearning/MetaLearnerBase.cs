@@ -785,6 +785,11 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
                 info.ParameterOffset + info.ParameterCount > parameters.Length ||
                 info.ParameterOffset + info.ParameterCount > gradients.Length)
             {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[MetaLearnerBase] Skipping layer '{info.Name}' (index {info.Index}): " +
+                    $"ParameterOffset={info.ParameterOffset}, ParameterCount={info.ParameterCount} " +
+                    $"is out of bounds (parameters.Length={parameters.Length}, gradients.Length={gradients.Length}). " +
+                    "LayerInfo metadata may be stale or misconfigured.");
                 continue;
             }
 
