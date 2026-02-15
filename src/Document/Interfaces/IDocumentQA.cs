@@ -21,6 +21,7 @@ namespace AiDotNet.Document.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DocumentQA")]
 public interface IDocumentQA<T> : IDocumentModel<T>
 {
     /// <summary>

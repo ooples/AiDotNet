@@ -24,6 +24,7 @@ namespace AiDotNet.Interfaces;
 /// the answer, even if they don't use the exact same words you used.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Retriever")]
 public interface IRetriever<T>
 {
     /// <summary>

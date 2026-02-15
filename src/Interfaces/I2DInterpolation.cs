@@ -16,6 +16,7 @@ namespace AiDotNet.Interfaces;
 /// This interface defines a standard way to perform this estimation for any type of
 /// two-dimensional interpolation algorithm.
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("TwoDInterpolation")]
 public interface I2DInterpolation<T>
 {
     /// <summary>

@@ -24,6 +24,7 @@ namespace AiDotNet.Interfaces;
 /// which category or categories something belongs to.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Classifier")]
 public interface IClassifier<T> : IFullModel<T, Matrix<T>, Vector<T>>
 {
     /// <summary>

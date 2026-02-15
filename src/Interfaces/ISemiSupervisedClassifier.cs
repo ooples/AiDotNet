@@ -29,6 +29,7 @@ namespace AiDotNet.Interfaces;
 /// as regular classifiers and inherit all the IFullModel capabilities like serialization and checkpointing.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("SemiSupervisedClassifier")]
 public interface ISemiSupervisedClassifier<T> : IClassifier<T>
 {
     /// <summary>

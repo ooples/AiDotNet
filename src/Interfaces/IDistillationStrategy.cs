@@ -29,6 +29,7 @@ namespace AiDotNet.Interfaces;
 /// numeric operations. All input/output types are Matrix&lt;T&gt; for batch processing. There is no
 /// second type parameter TOutput - the output type is always Matrix&lt;T&gt; for gradients and T for loss values.</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DistillationStrategy")]
 public interface IDistillationStrategy<T>
 {
     /// <summary>

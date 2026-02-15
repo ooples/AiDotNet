@@ -1092,6 +1092,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input type.</typeparam>
 /// <typeparam name="TOutput">The output type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("GradientCapable")]
 public interface IGradientCapable<T, TInput, TOutput>
 {
     /// <summary>

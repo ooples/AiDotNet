@@ -57,6 +57,7 @@ public enum ModalityType
 /// - Universal multimodal understanding!
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ImageBindModel")]
 public interface IImageBindModel<T>
 {
     /// <summary>

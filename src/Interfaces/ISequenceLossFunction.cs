@@ -4,6 +4,7 @@ namespace AiDotNet.Interfaces;
 /// Interface for sequence loss functions that operate on variable-length sequences.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("SequenceLossFunction")]
 public interface ISequenceLossFunction<T>
 {
     /// <summary>

@@ -246,6 +246,86 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // Memory management configuration for gradient checkpointing, activation pooling, and model sharding
     private Training.Memory.TrainingMemoryConfig? _memoryConfig;
 
+    // Internal accessors for test verification (visible to AiDotNetTests via InternalsVisibleTo)
+    internal IOptimizer<T, TInput, TOutput>? ConfiguredOptimizer => _optimizer;
+    internal CacheConfig? ConfiguredCaching => _cacheConfig;
+    internal AiDotNet.Configuration.JitCompilationConfig? ConfiguredJitCompilation => _jitCompilationConfig;
+    internal AiDotNet.Configuration.InferenceOptimizationConfig? ConfiguredInferenceOptimizations => _inferenceOptimizationConfig;
+    internal InterpretabilityOptions? ConfiguredInterpretability => _interpretabilityOptions;
+    internal Training.Memory.TrainingMemoryConfig? ConfiguredMemoryManagement => _memoryConfig;
+
+    /// <summary>
+    /// Creates a new <see cref="AiModelBuilder{T, TInput, TOutput}"/> with configuration loaded from a YAML file.
+    /// </summary>
+    /// <param name="configFilePath">The path to a YAML configuration file.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Instead of configuring everything in C# code, you can write your
+    /// configuration in a YAML file and load it automatically. The YAML file sets the base
+    /// configuration, and you can still override any setting using the fluent <c>.Configure*()</c>
+    /// methods afterwards.
+    /// </para>
+    /// <para>
+    /// <b>Example YAML file (training-recipe.yaml):</b>
+    /// </para>
+    /// <code>
+    /// optimizer:
+    ///   type: "Adam"
+    ///
+    /// quantization:
+    ///   mode: Int8
+    ///   targetBitWidth: 4
+    ///
+    /// caching:
+    ///   enabled: true
+    ///   maxCacheSize: 1000
+    ///
+    /// jitCompilation:
+    ///   enabled: true
+    ///   throwOnFailure: false
+    /// </code>
+    /// <para>
+    /// <b>Usage:</b>
+    /// </para>
+    /// <code>
+    /// // YAML base + optional code overrides
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;("config.yaml")
+    ///     .ConfigureOptimizer(customOptimizer)  // Override YAML optimizer
+    ///     .BuildAsync();
+    /// </code>
+    /// </remarks>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="configFilePath"/> is null or empty.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the YAML file does not exist.</exception>
+    public AiModelBuilder(string configFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(configFilePath))
+        {
+            throw new ArgumentException("Config file path cannot be null or empty.", nameof(configFilePath));
+        }
+
+        var fullPath = Path.GetFullPath(configFilePath);
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("YAML config file not found.", fullPath);
+        }
+
+        var config = YamlConfigLoader.LoadFromFile(fullPath);
+        YamlConfigApplier<T, TInput, TOutput>.Apply(config, this);
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="AiModelBuilder{T, TInput, TOutput}"/> with default (empty) configuration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this when you want to configure everything via the fluent
+    /// <c>.Configure*()</c> methods in C# code.
+    /// </para>
+    /// </remarks>
+    public AiModelBuilder()
+    {
+    }
+
     /// <summary>
     /// Configures a preprocessing pipeline using a builder action.
     /// </summary>

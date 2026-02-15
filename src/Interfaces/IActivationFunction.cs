@@ -24,6 +24,7 @@ namespace AiDotNet.Interfaces;
 /// 
 /// This interface defines the standard methods that all activation functions must implement.
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ActivationFunction")]
 public interface IActivationFunction<T>
 {
     /// <summary>

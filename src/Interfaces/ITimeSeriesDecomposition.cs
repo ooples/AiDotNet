@@ -18,6 +18,7 @@ namespace AiDotNet.Interfaces;
 /// This makes it easier to understand what's really happening in your data and make better predictions.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("TimeSeriesDecomposition")]
 public interface ITimeSeriesDecomposition<T>
 {
     /// <summary>

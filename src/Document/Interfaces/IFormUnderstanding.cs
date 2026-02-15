@@ -25,6 +25,7 @@ namespace AiDotNet.Document.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("FormUnderstanding")]
 public interface IFormUnderstanding<T> : IDocumentModel<T>
 {
     /// <summary>
