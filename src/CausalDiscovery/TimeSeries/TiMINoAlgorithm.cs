@@ -27,7 +27,7 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
     public override string Name => "TiMINo";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     public TiMINoAlgorithm(CausalDiscoveryOptions? options = null)
     {

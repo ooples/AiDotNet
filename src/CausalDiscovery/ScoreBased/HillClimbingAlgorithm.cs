@@ -122,7 +122,7 @@ public class HillClimbingAlgorithm<T> : ScoreBasedBase<T>
 
                     var testParentsFrom = new HashSet<int>(parentSets[from]) { to };
 
-                    // Check cycle with reversed edge
+                    // Check cycle with reversed edge (shallow clone is safe — we replace entries below)
                     var tempParents = (HashSet<int>[])parentSets.Clone();
                     tempParents[to] = testParentsTo;
                     tempParents[from] = testParentsFrom;

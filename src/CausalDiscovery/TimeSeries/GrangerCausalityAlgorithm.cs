@@ -31,7 +31,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
+internal class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     private readonly double _significanceLevel = 0.05;
 
@@ -48,7 +48,13 @@ public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
     {
         ApplyTimeSeriesOptions(options);
         if (options?.SignificanceLevel.HasValue == true)
+        {
+            if (options.SignificanceLevel.Value <= 0 || options.SignificanceLevel.Value >= 1)
+                throw new ArgumentOutOfRangeException(nameof(options), "SignificanceLevel must be in (0, 1).");
             _significanceLevel = options.SignificanceLevel.Value;
+        }
+        if (MaxLag <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "MaxLag must be > 0.");
     }
 
     /// <inheritdoc/>

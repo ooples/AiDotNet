@@ -27,7 +27,7 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
     public override string Name => "CASTLE";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     public CASTLEAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
 

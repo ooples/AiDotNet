@@ -72,11 +72,11 @@ public class GESAlgorithm<T> : ScoreBasedBase<T>
 
         // Forward phase: add edges
         bool improved = true;
-        int iteration = 0;
-        while (improved && iteration < MaxIterations)
+        int forwardIter = 0;
+        while (improved && forwardIter < MaxIterations)
         {
             improved = false;
-            iteration++;
+            forwardIter++;
 
             int bestFrom = -1, bestTo = -1;
             double bestImprovement = 0;
@@ -111,12 +111,13 @@ public class GESAlgorithm<T> : ScoreBasedBase<T>
             }
         }
 
-        // Backward phase: remove edges
+        // Backward phase: remove edges (separate iteration counter)
         improved = true;
-        while (improved && iteration < MaxIterations)
+        int backwardIter = 0;
+        while (improved && backwardIter < MaxIterations)
         {
             improved = false;
-            iteration++;
+            backwardIter++;
 
             int bestFrom = -1, bestTo = -1;
             double bestImprovement = 0;

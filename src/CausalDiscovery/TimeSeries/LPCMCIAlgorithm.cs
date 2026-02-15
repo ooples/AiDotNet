@@ -31,7 +31,7 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
     public override bool SupportsNonlinear => false;
 
     /// <inheritdoc/>
-    public override bool SupportsLatentConfounders => true;
+    public override bool SupportsLatentConfounders => false;
 
     public LPCMCIAlgorithm(CausalDiscoveryOptions? options = null)
     {

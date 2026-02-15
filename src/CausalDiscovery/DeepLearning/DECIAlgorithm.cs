@@ -27,7 +27,7 @@ public class DECIAlgorithm<T> : DeepCausalBase<T>
     public override string Name => "DECI";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     public DECIAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
 

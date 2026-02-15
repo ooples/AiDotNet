@@ -28,7 +28,7 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
     public override string Name => "BayesDAG";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     public BayesDAGAlgorithm(CausalDiscoveryOptions? options = null) { ApplyBayesianOptions(options); }
 

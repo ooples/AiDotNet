@@ -5,14 +5,23 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// PNL (Post-Nonlinear Causal Model) — Y = g(f(X) + N).
 /// </summary>
 /// <remarks>
+/// <para>
+/// This is a baseline implementation that delegates to ANM.
+/// A full PNL implementation with post-nonlinear noise testing is planned.
+/// </para>
 /// <para>Reference: Zhang and Hyvarinen (2009), "On the Identifiability of the
 /// Post-Nonlinear Causal Model", UAI.</para>
 /// </remarks>
-public class PNLAlgorithm<T> : FunctionalBase<T>
+internal class PNLAlgorithm<T> : FunctionalBase<T>
 {
+    private readonly CausalDiscoveryOptions? _options;
     public override string Name => "PNL";
-    public override bool SupportsNonlinear => true;
-    public PNLAlgorithm(CausalDiscoveryOptions? options = null) { }
+    public override bool SupportsNonlinear => false;
+    public PNLAlgorithm(CausalDiscoveryOptions? options = null)
+    {
+        _options = options;
+
+    }
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data) =>
-        new ANMAlgorithm<T>().DiscoverStructure(data).AdjacencyMatrix;
+        new ANMAlgorithm<T>(_options).DiscoverStructure(data).AdjacencyMatrix;
 }

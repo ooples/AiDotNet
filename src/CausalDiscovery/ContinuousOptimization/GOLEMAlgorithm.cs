@@ -268,6 +268,13 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
 
         double logDetImW = ComputeLogAbsDeterminant(ImW, d);
 
+        // Guard against singular I-W: return large penalty to steer optimization away
+        if (double.IsNegativeInfinity(logDetImW) || double.IsNaN(logDetImW))
+        {
+            var zeroGrad = new double[d, d];
+            return (double.MaxValue / 2, zeroGrad);
+        }
+
         double score = -n * logDetImW;
         for (int j = 0; j < d; j++)
         {

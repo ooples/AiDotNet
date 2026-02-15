@@ -82,10 +82,13 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
     /// <summary>
     /// Initializes DAGMA Nonlinear with optional configuration.
     /// </summary>
+    private int _seed = 42;
+
     public DAGMANonlinear(CausalDiscoveryOptions? options = null)
     {
         Lambda1 = DAGMA_DEFAULT_LAMBDA1;
         ApplyOptions(options);
+        if (options?.Seed.HasValue == true) _seed = options.Seed.Value;
         _sValues = [1.0, 0.9, 0.8, 0.7, 0.6];
     }
 
@@ -153,7 +156,7 @@ public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
 
     private void InitializeMLPParameters(int d, int h)
     {
-        var rng = new Random(42);
+        var rng = new Random(_seed);
         double scale = Math.Sqrt(2.0 / d);
 
         _W1 = new double[d][,]; _b1 = new double[d][];

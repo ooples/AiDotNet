@@ -3,27 +3,24 @@ using AiDotNet.Models.Options;
 namespace AiDotNet.CausalDiscovery.ScoreBased;
 
 /// <summary>
-/// FGES (Fast Greedy Equivalence Search) — parallelized version of GES for large datasets.
+/// FGES (Fast Greedy Equivalence Search) — optimized version of GES with score caching.
 /// </summary>
 /// <remarks>
 /// <para>
-/// FGES improves on GES by parallelizing the edge scoring computations and using caching
-/// to avoid redundant score calculations. This makes it practical for datasets with
-/// hundreds or thousands of variables.
+/// FGES improves on GES by using score caching to avoid redundant BIC calculations.
+/// This makes it more practical for datasets with many variables.
 /// </para>
 /// <para>
 /// <b>Key improvements over GES:</b>
 /// <list type="bullet">
 /// <item>Score caching: avoids recomputing BIC for unchanged parent sets</item>
-/// <item>Parallel edge evaluation in forward/backward phases</item>
 /// <item>Faithfulness-based pruning to skip unpromising edges</item>
 /// </list>
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> FGES does the same thing as GES but much faster. It remembers
-/// previous calculations (caching) and evaluates multiple potential edges at the same
-/// time (parallelization). This makes it suitable for datasets with many variables
-/// where standard GES would be too slow.
+/// <b>For Beginners:</b> FGES does the same thing as GES but faster. It remembers
+/// previous calculations (caching) so it doesn't redo work unnecessarily. This makes
+/// it suitable for datasets with many variables where standard GES would be too slow.
 /// </para>
 /// <para>
 /// Reference: Ramsey et al. (2017), "A Million Variables and More: The Fast Greedy

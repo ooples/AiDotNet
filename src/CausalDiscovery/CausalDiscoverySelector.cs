@@ -98,6 +98,9 @@ public class CausalDiscoverySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int[]? columnIndices = null)
         : base(columnIndices)
     {
+        Guard.NotNull(algorithm);
+        Guard.Positive(maxFeatures);
+        Guard.NonNegative(edgeThreshold);
         _algorithm = algorithm;
         _maxFeatures = maxFeatures;
         _edgeThreshold = edgeThreshold;

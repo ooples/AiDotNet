@@ -27,7 +27,7 @@ public class DiBSAlgorithm<T> : BayesianCausalBase<T>
     public override string Name => "DiBS";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     public DiBSAlgorithm(CausalDiscoveryOptions? options = null) { ApplyBayesianOptions(options); }
 

@@ -185,55 +185,53 @@ public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
         if (condSet.Count == 0)
             return ComputeMI(X, feature, target, n);
 
-        double totalMI = 0;
-        int condCount = 0;
-
-        foreach (int condFeature in condSet)
+        // Group by the JOINT configuration of all conditioning variables
+        var condVars = condSet.ToArray();
+        var groups = new Dictionary<string, List<int>>();
+        for (int i = 0; i < n; i++)
         {
-            var groups = Enumerable.Range(0, n)
-                .GroupBy(i => X[i, condFeature])
-                .Where(g => g.Count() > 5)
-                .ToList();
-
-            if (groups.Count == 0) continue;
-
-            double condMI = 0;
-            foreach (var group in groups)
+            var key = string.Join(",", condVars.Select(c => X[i, c].ToString()));
+            if (!groups.TryGetValue(key, out var list))
             {
-                var indices = group.ToList();
-                int groupN = indices.Count;
-
-                var jointCounts = new Dictionary<(int, int), int>();
-                var xCounts = new int[_nBins];
-                var yCounts = new int[_nBins];
-
-                foreach (int i in indices)
-                {
-                    int xVal = X[i, feature], yVal = X[i, target];
-                    xCounts[xVal]++;
-                    yCounts[yVal]++;
-                    var key = (xVal, yVal);
-                    jointCounts[key] = jointCounts.GetValueOrDefault(key) + 1;
-                }
-
-                double groupMI = 0;
-                foreach (var kvp in jointCounts)
-                {
-                    double pxy = (double)kvp.Value / groupN;
-                    double px = (double)xCounts[kvp.Key.Item1] / groupN;
-                    double py = (double)yCounts[kvp.Key.Item2] / groupN;
-                    if (pxy > 0 && px > 0 && py > 0)
-                        groupMI += pxy * Math.Log(pxy / (px * py));
-                }
-
-                condMI += groupMI * ((double)groupN / n);
+                list = [];
+                groups[key] = list;
             }
-
-            totalMI += condMI;
-            condCount++;
+            list.Add(i);
         }
 
-        return condCount > 0 ? totalMI / condCount : ComputeMI(X, feature, target, n);
+        double condMI = 0;
+        foreach (var group in groups.Values)
+        {
+            if (group.Count <= 5) continue;
+            int groupN = group.Count;
+
+            var jointCounts = new Dictionary<(int, int), int>();
+            var xCounts = new int[_nBins];
+            var yCounts = new int[_nBins];
+
+            foreach (int i in group)
+            {
+                int xVal = X[i, feature], yVal = X[i, target];
+                xCounts[xVal]++;
+                yCounts[yVal]++;
+                var key = (xVal, yVal);
+                jointCounts[key] = jointCounts.GetValueOrDefault(key) + 1;
+            }
+
+            double groupMI = 0;
+            foreach (var kvp in jointCounts)
+            {
+                double pxy = (double)kvp.Value / groupN;
+                double px = (double)xCounts[kvp.Key.Item1] / groupN;
+                double py = (double)yCounts[kvp.Key.Item2] / groupN;
+                if (pxy > 0 && px > 0 && py > 0)
+                    groupMI += pxy * Math.Log(pxy / (px * py));
+            }
+
+            condMI += groupMI * ((double)groupN / n);
+        }
+
+        return condMI;
     }
 
     private Matrix<T> DoubleArrayToMatrix(double[,] data)

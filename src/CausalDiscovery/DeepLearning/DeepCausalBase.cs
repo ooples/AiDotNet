@@ -46,6 +46,8 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     {
         if (options == null) return;
         if (options.MaxIterations.HasValue) MaxEpochs = options.MaxIterations.Value;
+        if (options.SparsityPenalty.HasValue) LearningRate = options.SparsityPenalty.Value;
+        if (options.MaxParents.HasValue) HiddenUnits = options.MaxParents.Value;
     }
 
     /// <summary>

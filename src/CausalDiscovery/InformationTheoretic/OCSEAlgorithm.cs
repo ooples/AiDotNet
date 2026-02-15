@@ -28,7 +28,7 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
     public override string Name => "oCSE";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     /// <inheritdoc/>
     public override bool SupportsTimeSeries => true;

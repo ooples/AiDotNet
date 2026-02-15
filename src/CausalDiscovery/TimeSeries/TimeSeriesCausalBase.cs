@@ -37,7 +37,12 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
     protected void ApplyTimeSeriesOptions(Models.Options.CausalDiscoveryOptions? options)
     {
         if (options == null) return;
-        if (options.MaxIterations.HasValue) MaxLag = options.MaxIterations.Value;
+        if (options.MaxIterations.HasValue)
+        {
+            if (options.MaxIterations.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), "MaxLag (MaxIterations) must be > 0.");
+            MaxLag = options.MaxIterations.Value;
+        }
     }
 
     /// <summary>
@@ -47,6 +52,10 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
     protected (double[,] LaggedX, double[] Target) CreateLaggedData(
         double[,] X, int n, int d, int targetCol, int maxLag)
     {
+        if (targetCol < 0 || targetCol >= d)
+            throw new ArgumentOutOfRangeException(nameof(targetCol), $"targetCol must be in [0, {d - 1}].");
+        if (maxLag <= 0 || maxLag >= n)
+            throw new ArgumentOutOfRangeException(nameof(maxLag), $"maxLag must be in [1, {n - 1}].");
         int effectiveN = n - maxLag;
         var laggedX = new double[effectiveN, d * maxLag];
         var target = new double[effectiveN];
@@ -126,7 +135,10 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
         {
             x[i] = aug[i, size];
             for (int j = i + 1; j < size; j++) x[i] -= aug[i, j] * x[j];
-            x[i] /= (Math.Abs(aug[i, i]) > 1e-10 ? aug[i, i] : 1);
+            if (Math.Abs(aug[i, i]) > 1e-10)
+                x[i] /= aug[i, i];
+            else
+                x[i] = 0; // Near-singular pivot — set coefficient to zero
         }
 
         return x;

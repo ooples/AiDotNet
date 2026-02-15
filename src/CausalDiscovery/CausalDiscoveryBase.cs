@@ -220,8 +220,11 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     {
         double partialCorr = ComputePartialCorrelation(correlationMatrix, i, j, conditioningSet);
 
+        // Clamp to avoid log(0) or log(negative) in Fisher's z-transform
+        partialCorr = Math.Max(-1 + 1e-15, Math.Min(1 - 1e-15, partialCorr));
+
         // Fisher's z-transform
-        double z = 0.5 * Math.Log((1 + partialCorr) / (1 - partialCorr + 1e-15));
+        double z = 0.5 * Math.Log((1 + partialCorr) / (1 - partialCorr));
         double testStat = Math.Abs(z) * Math.Sqrt(nSamples - conditioningSet.Length - 3);
 
         // Compare with standard normal critical value

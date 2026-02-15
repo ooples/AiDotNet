@@ -28,7 +28,7 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
     public override string Name => "AmortizedCD";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     public AmortizedCDAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
 

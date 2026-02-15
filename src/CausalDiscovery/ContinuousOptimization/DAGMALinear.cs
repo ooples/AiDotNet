@@ -152,10 +152,11 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             double s = _sValues[t];
             int maxInner = (t < T - 1) ? DEFAULT_WARM_ITER : DEFAULT_MAX_ITER;
 
-            W = SolveInnerProblem(X, W, mu, s, d, maxInner);
+            int actualIter;
+            (W, actualIter) = SolveInnerProblem(X, W, mu, s, d, maxInner);
 
             mu *= DEFAULT_MU_FACTOR;
-            _lastIterations += maxInner;
+            _lastIterations += actualIter;
         }
 
         // Compute final metrics
@@ -174,7 +175,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
     /// Solves the inner optimization problem using Adam optimizer.
     /// Minimizes: score(W) + mu * h(W, s)
     /// </summary>
-    private double[,] SolveInnerProblem(double[,] X, double[,] W, double mu, double s, int d, int maxIter)
+    private (double[,] W, int ActualIterations) SolveInnerProblem(double[,] X, double[,] W, double mu, double s, int d, int maxIter)
     {
         int vecLen = d * d;
         double[] w = FlattenMatrix(W, d);
@@ -184,6 +185,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
         double[] v = new double[vecLen]; // Second moment
 
         double prevObj = double.MaxValue;
+        int actualIter = 0;
 
         for (int iter = 1; iter <= maxIter; iter++)
         {
@@ -230,6 +232,8 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             }
 
             // Convergence check at checkpoint intervals
+            actualIter = iter;
+
             if (iter % CHECKPOINT_INTERVAL == 0)
             {
                 if (Math.Abs(obj - prevObj) / (Math.Abs(prevObj) + 1e-15) < INNER_CONVERGENCE_TOL)
@@ -241,7 +245,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             }
         }
 
-        return UnflattenMatrix(w, d);
+        return (UnflattenMatrix(w, d), actualIter);
     }
 
     #endregion

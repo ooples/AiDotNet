@@ -32,7 +32,7 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     public override string Name => "CORL";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     /// <summary>
     /// Initializes CORL with optional configuration.

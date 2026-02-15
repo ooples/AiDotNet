@@ -14,8 +14,8 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 public class CDNODAlgorithm<T> : ConstraintBasedBase<T>
 {
     public override string Name => "CD-NOD";
-    public override bool SupportsLatentConfounders => true;
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsLatentConfounders => false;
+    public override bool SupportsNonlinear => false;
 
     public CDNODAlgorithm(CausalDiscoveryOptions? options = null) { ApplyConstraintOptions(options); }
 

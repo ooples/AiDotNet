@@ -28,7 +28,7 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
     public override string Name => "NTS-NOTEARS";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     public NTSNOTEARSAlgorithm(CausalDiscoveryOptions? options = null)
     {

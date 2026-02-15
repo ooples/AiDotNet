@@ -253,8 +253,9 @@ public class InterventionalDistribution<T>
     /// <inheritdoc/>
     public override string ToString()
     {
+        var ci = ConfidenceInterval();
         return $"P({TargetVariableName} | do({InterventionVariableName} = {NumOps.ToDouble(InterventionValue):F3})) " +
                $"~ Mean={Mean:F4}, Std={StandardDeviation:F4}, ACE={AverageCausalEffect:F4}, " +
-               $"95% CI=[{ConfidenceInterval().Lower:F4}, {ConfidenceInterval().Upper:F4}]";
+               $"95% CI=[{ci.Lower:F4}, {ci.Upper:F4}]";
     }
 }

@@ -12,6 +12,10 @@ namespace AiDotNet.CausalDiscovery;
 /// corresponding algorithm implementations. It supports all 72 algorithms in the framework.
 /// </para>
 /// <para>
+/// <b>Maintenance note:</b> The <c>Create</c> and <c>GetCategory</c> switch statements must be
+/// kept in sync. When adding a new algorithm, update both methods.
+/// </para>
+/// <para>
 /// <b>For Beginners:</b> Use this factory when you want to create an algorithm by name
 /// (e.g., from configuration) rather than directly instantiating a class. Just pass the
 /// algorithm type and optional settings, and the factory creates the right algorithm.

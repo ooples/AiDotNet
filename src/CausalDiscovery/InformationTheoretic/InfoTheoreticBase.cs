@@ -34,7 +34,8 @@ public abstract class InfoTheoreticBase<T> : CausalDiscoveryBase<T>
     protected void ApplyInfoOptions(Models.Options.CausalDiscoveryOptions? options)
     {
         if (options == null) return;
-        if (options.MaxConditioningSetSize.HasValue) KNeighbors = options.MaxConditioningSetSize.Value;
+        // KNeighbors uses MaxParents as a reasonable general-purpose integer setting
+        if (options.MaxParents.HasValue) KNeighbors = options.MaxParents.Value;
     }
 
     /// <summary>

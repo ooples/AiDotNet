@@ -28,7 +28,7 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
     public override string Name => "BCD-Nets";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     public BCDNetsAlgorithm(CausalDiscoveryOptions? options = null) { ApplyBayesianOptions(options); }
 

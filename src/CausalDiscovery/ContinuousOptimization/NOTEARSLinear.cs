@@ -147,8 +147,8 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
         double alpha = 0.0;
         double rho = DEFAULT_RHO_INIT;
 
-        // Initial constraint value
-        var (hOld, _) = ComputeNOTEARSConstraint(W);
+        // Initialize hOld to infinity so the first iteration is always considered progress
+        double hOld = double.PositiveInfinity;
 
         _lastIterations = 0;
 
@@ -214,7 +214,7 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
         int vecLen = d * d;
         double[] w = FlattenMatrix(W, d);
         double[] prevW = (double[])w.Clone();
-        double[] prevGrad = new double[vecLen];
+        double[]? prevGrad = null; // null signals no valid previous gradient yet
 
         // L-BFGS memory
         var sVectors = new List<double[]>();
@@ -302,31 +302,35 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
                 }
             }
 
-            // Update L-BFGS memory
-            var s = new double[vecLen];
-            var y = new double[vecLen];
+            // Update L-BFGS memory (skip first iteration since we have no valid previous gradient)
             var newGrad = FlattenMatrix(ComputeAugmentedLagrangianGradient(X, UnflattenMatrix(w, d), alpha, rho, d).Gradient, d);
 
-            for (int i = 0; i < vecLen; i++)
+            if (prevGrad != null)
             {
-                s[i] = w[i] - prevW[i];
-                y[i] = newGrad[i] - prevGrad[i];
-            }
+                var s = new double[vecLen];
+                var y = new double[vecLen];
 
-            double sy = 0;
-            for (int i = 0; i < vecLen; i++)
-            {
-                sy += s[i] * y[i];
-            }
-
-            if (sy > 1e-10) // Curvature condition
-            {
-                sVectors.Add(s);
-                yVectors.Add(y);
-                if (sVectors.Count > LBFGS_MEMORY)
+                for (int i = 0; i < vecLen; i++)
                 {
-                    sVectors.RemoveAt(0);
-                    yVectors.RemoveAt(0);
+                    s[i] = w[i] - prevW[i];
+                    y[i] = newGrad[i] - prevGrad[i];
+                }
+
+                double sy = 0;
+                for (int i = 0; i < vecLen; i++)
+                {
+                    sy += s[i] * y[i];
+                }
+
+                if (sy > 1e-10) // Curvature condition
+                {
+                    sVectors.Add(s);
+                    yVectors.Add(y);
+                    if (sVectors.Count > LBFGS_MEMORY)
+                    {
+                        sVectors.RemoveAt(0);
+                        yVectors.RemoveAt(0);
+                    }
                 }
             }
 

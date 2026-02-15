@@ -28,7 +28,7 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
     public override string Name => "TransferEntropy";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     /// <inheritdoc/>
     public override bool SupportsTimeSeries => true;

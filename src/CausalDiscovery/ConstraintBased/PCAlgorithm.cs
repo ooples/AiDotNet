@@ -152,16 +152,6 @@ public class PCAlgorithm<T> : ConstraintBasedBase<T>
         return neighbors;
     }
 
-    private double[,] DoubleArrayToDoubleArray(Matrix<T> data)
-    {
-        int n = data.Rows, d = data.Columns;
-        var result = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                result[i, j] = NumOps.ToDouble(data[i, j]);
-        return result;
-    }
-
     private Matrix<T> DoubleArrayToMatrix(double[,] data)
     {
         int rows = data.GetLength(0), cols = data.GetLength(1);

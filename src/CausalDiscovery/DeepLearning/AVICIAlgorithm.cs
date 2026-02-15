@@ -27,7 +27,7 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
     public override string Name => "AVICI";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     public AVICIAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
 

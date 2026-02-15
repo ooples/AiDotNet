@@ -113,8 +113,10 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
                     if (sepSets.TryGetValue((i, j), out var sepSet) && sepSet.Contains(k))
                         continue;
 
-                    edgeMark[i, k] = 2; // i → k
-                    edgeMark[j, k] = 2; // j → k
+                    edgeMark[i, k] = 2; // arrowhead at k on i-k edge
+                    edgeMark[k, i] = 1; // tail at i on i-k edge
+                    edgeMark[j, k] = 2; // arrowhead at k on j-k edge
+                    edgeMark[k, j] = 1; // tail at j on j-k edge
                 }
             }
         }
@@ -158,6 +160,50 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
                         if (case1 || case2)
                         {
                             edgeMark[i, k] = 2;
+                            changed = true;
+                        }
+                    }
+                }
+            }
+
+            // R3: If i *→ j ←* k, i *—o l o—* k, i and k not adjacent, l *—o j, orient l *→ j
+            for (int j = 0; j < d; j++)
+            {
+                for (int i = 0; i < d; i++)
+                {
+                    if (!adj[i, j] || edgeMark[i, j] != 2) continue;
+                    for (int k = 0; k < d; k++)
+                    {
+                        if (k <= i || !adj[k, j] || edgeMark[k, j] != 2 || adj[i, k]) continue;
+                        for (int l = 0; l < d; l++)
+                        {
+                            if (l == i || l == j || l == k) continue;
+                            if (!adj[i, l] || !adj[k, l] || !adj[l, j]) continue;
+                            if (edgeMark[l, j] != 3) continue;
+                            // l is adjacent to both i and k (with circle marks) and l o—o j
+                            edgeMark[l, j] = 2;
+                            changed = true;
+                        }
+                    }
+                }
+            }
+
+            // R4 (simplified discriminating path): If i → j → k, i o→ k, and i-j-k is a discriminating path,
+            // then orient j → k. We approximate: if j is a definite non-ancestor of k, orient j → k.
+            for (int j = 0; j < d; j++)
+            {
+                for (int k = 0; k < d; k++)
+                {
+                    if (!adj[j, k] || edgeMark[j, k] != 3) continue;
+                    // Check if there exists an i such that i → j → ... forms a discriminating path
+                    for (int i = 0; i < d; i++)
+                    {
+                        if (i == j || i == k) continue;
+                        if (!adj[i, j] || edgeMark[i, j] != 2 || edgeMark[j, i] != 1) continue;
+                        if (!adj[i, k]) continue;
+                        if (edgeMark[j, k] == 3)
+                        {
+                            edgeMark[j, k] = 2;
                             changed = true;
                         }
                     }

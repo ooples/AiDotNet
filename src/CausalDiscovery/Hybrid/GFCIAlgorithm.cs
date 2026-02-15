@@ -31,7 +31,7 @@ public class GFCIAlgorithm<T> : HybridBase<T>
     public override bool SupportsNonlinear => false;
 
     /// <inheritdoc/>
-    public override bool SupportsLatentConfounders => true;
+    public override bool SupportsLatentConfounders => false;
 
     public GFCIAlgorithm(CausalDiscoveryOptions? options = null) { ApplyHybridOptions(options); }
 

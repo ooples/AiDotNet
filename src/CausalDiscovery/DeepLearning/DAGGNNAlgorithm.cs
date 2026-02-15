@@ -27,7 +27,7 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
     public override string Name => "DAG-GNN";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     public DAGGNNAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
 

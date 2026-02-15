@@ -74,6 +74,11 @@ public class CausalGraph<T>
                 nameof(featureNames));
         }
 
+        if (featureNames.Length != new HashSet<string>(featureNames).Count)
+        {
+            throw new ArgumentException("Feature names must be unique.", nameof(featureNames));
+        }
+
         AdjacencyMatrix = adjacencyMatrix;
         NumVariables = adjacencyMatrix.Rows;
         FeatureNames = featureNames;

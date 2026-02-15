@@ -86,7 +86,7 @@ public class CausalDiscoveryResult<T>
     public Dictionary<string, double>? AdditionalMetrics { get; }
 
     /// <summary>
-    /// Initializes a new CausalDiscoveryResult.
+    /// Initializes a new CausalDiscoveryResult with full convergence metrics.
     /// </summary>
     public CausalDiscoveryResult(
         CausalGraph<T> graph,
@@ -99,6 +99,7 @@ public class CausalDiscoveryResult<T>
         TimeSpan elapsedTime,
         Dictionary<string, double>? additionalMetrics = null)
     {
+        Guard.NotNull(graph);
         Graph = graph;
         AlgorithmUsed = algorithmUsed;
         Category = category;
@@ -108,5 +109,23 @@ public class CausalDiscoveryResult<T>
         Converged = converged;
         ElapsedTime = elapsedTime;
         AdditionalMetrics = additionalMetrics;
+    }
+
+    /// <summary>
+    /// Initializes a new CausalDiscoveryResult from a graph and elapsed time only.
+    /// Convergence metrics are not available when the algorithm does not expose them.
+    /// </summary>
+    internal CausalDiscoveryResult(
+        CausalGraph<T> graph,
+        CausalDiscoveryAlgorithmType algorithmUsed,
+        CausalDiscoveryCategory category,
+        TimeSpan elapsedTime)
+    {
+        Guard.NotNull(graph);
+        Graph = graph;
+        AlgorithmUsed = algorithmUsed;
+        Category = category;
+        Converged = graph.IsDAG();
+        ElapsedTime = elapsedTime;
     }
 }

@@ -30,7 +30,7 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
     public override string Name => "MCSL";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     /// <summary>
     /// Initializes MCSL with optional configuration.

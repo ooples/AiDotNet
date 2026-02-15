@@ -1902,27 +1902,17 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
                 cdStopwatch.Stop();
 
-                // Retrieve convergence metrics from the graph's adjacency matrix
                 var category = CausalDiscovery.CausalDiscoveryAlgorithmFactory<T>.GetCategory(algorithmType);
 
                 causalDiscoveryResult = new CausalDiscovery.CausalDiscoveryResult<T>(
                     graph: causalGraph,
                     algorithmUsed: algorithmType,
                     category: category,
-                    iterations: 0,
-                    finalLoss: 0.0,
-                    acyclicityConstraint: 0.0,
-                    converged: causalGraph.IsDAG(),
                     elapsedTime: cdStopwatch.Elapsed);
-
-                Console.WriteLine($"Causal discovery ({algorithm.Name}) complete: " +
-                    $"{causalGraph.EdgeCount} edges, density={causalGraph.Density:F3}, " +
-                    $"time={cdStopwatch.Elapsed.TotalSeconds:F2}s");
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"Warning: Causal discovery failed: {ex.Message}");
-                Console.WriteLine("Proceeding with model building without causal analysis.");
+                // Causal discovery is optional — silently continue with model building
             }
         }
 

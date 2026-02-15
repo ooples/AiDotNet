@@ -28,7 +28,7 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
     public override string Name => "CausalVAE";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     public CausalVAEAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
 

@@ -15,7 +15,7 @@ namespace AiDotNet.CausalDiscovery.ScoreBased;
 /// <b>Algorithm:</b>
 /// <list type="number">
 /// <item>Start with empty graph or initial structure</item>
-/// <item>At each step, apply the best non-tabu operation (add/remove/reverse edge)</item>
+/// <item>At each step, apply the best non-tabu operation (add/remove edge)</item>
 /// <item>Add the reverse of the operation to the tabu list</item>
 /// <item>Allow tabu moves if they improve upon the best-known solution (aspiration)</item>
 /// <item>Continue for a fixed number of iterations or until convergence</item>
@@ -74,6 +74,8 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
         // Tabu list: stores (operation_type, from, to) tuples
         var tabuList = new Queue<(int type, int from, int to)>();
 
+        double currentTotal = scores.Sum();
+
         for (int iteration = 0; iteration < MaxIterations; iteration++)
         {
             double bestImprovement = double.NegativeInfinity;
@@ -96,7 +98,7 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
                         double imp = ComputeBIC(X, n, to, testParents) - scores[to];
 
                         // Aspiration criterion: allow tabu move if it improves global best
-                        double newTotal = scores.Sum() + imp;
+                        double newTotal = currentTotal + imp;
                         if (isTabu && newTotal <= bestTotalScore) continue;
 
                         if (imp > bestImprovement)
@@ -118,7 +120,7 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
                     testParents.Remove(from);
                     double imp = ComputeBIC(X, n, to, testParents) - scores[to];
 
-                    double newTotal = scores.Sum() + imp;
+                    double newTotal = currentTotal + imp;
                     if (isTabu && newTotal <= bestTotalScore) continue;
 
                     if (imp > bestImprovement)
@@ -153,7 +155,7 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
                 tabuList.Dequeue();
 
             // Track best solution
-            double currentTotal = scores.Sum();
+            currentTotal = scores.Sum();
             if (currentTotal > bestTotalScore)
             {
                 bestTotalScore = currentTotal;

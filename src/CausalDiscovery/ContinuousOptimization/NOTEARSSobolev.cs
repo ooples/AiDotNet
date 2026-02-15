@@ -28,7 +28,7 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
     public override string Name => "NOTEARS Sobolev";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     /// <summary>
     /// Initializes NOTEARS Sobolev with optional configuration.

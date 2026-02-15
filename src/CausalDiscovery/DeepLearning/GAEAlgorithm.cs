@@ -27,7 +27,7 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
     public override string Name => "GAE";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => true;
+    public override bool SupportsNonlinear => false;
 
     public GAEAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
 
