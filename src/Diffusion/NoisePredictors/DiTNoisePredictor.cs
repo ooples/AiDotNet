@@ -323,12 +323,20 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         {
             foreach (var layer in architecture.Layers)
             {
+                // Use a provided DenseLayer<T> for MLP1 if available; otherwise create a
+                // standard MLP layer with dimensions (_hiddenSize -> _hiddenSize * _mlpRatio).
+                // Note: if the provided DenseLayer has different dimensions, it will auto-resize
+                // weights on the first forward pass via EnsureWeightShapeForInput.
+                var mlp1 = layer as DenseLayer<T>
+                    ?? new DenseLayer<T>(_hiddenSize, (int)(_hiddenSize * _mlpRatio),
+                        (IActivationFunction<T>)new GELUActivation<T>());
+
                 _blocks.Add(new DiTBlock
                 {
                     Norm1 = new LayerNormalizationLayer<T>(_hiddenSize),
                     Attention = CreateAttentionLayer(),
                     Norm2 = new LayerNormalizationLayer<T>(_hiddenSize),
-                    MLP1 = (layer is DenseLayer<T>) ? (DenseLayer<T>)layer : new DenseLayer<T>(_hiddenSize, (int)(_hiddenSize * _mlpRatio), (IActivationFunction<T>)new GELUActivation<T>()),
+                    MLP1 = mlp1,
                     MLP2 = new DenseLayer<T>((int)(_hiddenSize * _mlpRatio), _hiddenSize, activationFunction: null),
                     AdaLNModulation = new DenseLayer<T>(timeEmbedDim, _hiddenSize * 6, activationFunction: null),
                     CrossAttnNorm = new LayerNormalizationLayer<T>(_hiddenSize),

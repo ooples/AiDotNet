@@ -89,6 +89,16 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
     /// <inheritdoc />
     public int[] Timesteps => _timesteps;
 
+    /// <summary>
+    /// Sets the timestep array directly. Used by derived schedulers that compute
+    /// custom timestep schedules (e.g., LCM, DPM-Solver).
+    /// </summary>
+    /// <param name="timesteps">The timestep array to use.</param>
+    protected void SetTimestepArray(int[] timesteps)
+    {
+        _timesteps = timesteps ?? Array.Empty<int>();
+    }
+
     /// <inheritdoc />
     public int TrainTimesteps => Config.TrainTimesteps;
 

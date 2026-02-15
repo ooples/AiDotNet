@@ -104,9 +104,8 @@ public sealed class LCMScheduler<T> : NoiseSchedulerBase<T>
             timestepList.Add(timestep);
         }
 
-        // Use reflection or base class mechanism to set timesteps
-        // Since base.SetTimesteps computes its own schedule, we call it then override
-        base.SetTimesteps(inferenceSteps);
+        // Apply LCM-specific timestep schedule
+        SetTimestepArray(timestepList.ToArray());
     }
 
     /// <summary>

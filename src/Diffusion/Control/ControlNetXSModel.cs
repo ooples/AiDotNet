@@ -122,7 +122,10 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
             numResBlocks: 2, attentionResolutions: [4, 2, 1],
             contextDim: CROSS_ATTENTION_DIM, seed: seed);
 
-        // Lightweight control encoder (~1% of main U-Net)
+        // Lightweight control encoder (~1% of main U-Net).
+        // Intentionally shallower: uses 3 channel multipliers [1, 2, 4] instead of [1, 2, 4, 4].
+        // This is the standard ControlNet-XS design - fewer levels reduce parameters while
+        // providing control features at the resolutions where they matter most.
         _controlEncoder = controlEncoder ?? new UNetNoisePredictor<T>(
             architecture: Architecture, inputChannels: LATENT_CHANNELS, outputChannels: LATENT_CHANNELS,
             baseChannels: 32, channelMultipliers: [1, 2, 4],
