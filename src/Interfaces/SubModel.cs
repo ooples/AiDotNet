@@ -2,24 +2,25 @@ namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// Represents a contiguous sub-model extracted from a larger <see cref="ILayeredModel{T}"/>.
-/// Contains a slice of layers that can be independently forwarded through.
+/// Contains a slice of layers that can be independently forwarded through and further partitioned.
 /// </summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> When you split a neural network across GPUs for pipeline
 /// parallelism, each GPU gets a sub-model - a consecutive sequence of layers from the
 /// original network. This class represents that slice.</para>
 ///
-/// <para>A sub-model is not a full neural network - it doesn't own the parameters or
-/// support training directly. It provides read-only access to the layers and enables
-/// sequential forward passes through them.</para>
+/// <para>A sub-model implements <see cref="ILayeredModel{T}"/> itself, so you can extract
+/// sub-models of sub-models, enabling hierarchical partitioning (e.g., virtual pipeline stages
+/// in Megatron-LM).</para>
 ///
 /// <para><b>Reference:</b> Inspired by PyTorch's <c>split_module()</c> which returns
 /// <c>nn.Sequential</c> modules for each pipeline stage.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class SubModel<T>
+public class SubModel<T> : ILayeredModel<T>
 {
     private readonly IReadOnlyList<ILayer<T>> _layers;
+    private readonly IReadOnlyList<LayerInfo<T>> _layerInfos;
 
     /// <summary>
     /// Gets the ordered list of layers in this sub-model.
@@ -54,7 +55,7 @@ public class SubModel<T>
     /// <summary>
     /// Gets the layer metadata for all layers in this sub-model.
     /// </summary>
-    public IReadOnlyList<LayerInfo<T>> LayerInfos { get; }
+    public IReadOnlyList<LayerInfo<T>> LayerInfos => _layerInfos;
 
     /// <summary>
     /// Creates a new sub-model from the specified layers and metadata.
@@ -80,7 +81,7 @@ public class SubModel<T>
         }
 
         _layers = layers;
-        LayerInfos = layerInfos;
+        _layerInfos = layerInfos;
         StartIndex = startIndex;
         EndIndex = endIndex;
 
@@ -124,4 +125,90 @@ public class SubModel<T>
     /// Gets the output shape produced by the last layer in this sub-model.
     /// </summary>
     public int[] GetOutputShape() => _layers[_layers.Count - 1].GetOutputShape();
+
+    /// <inheritdoc/>
+    public LayerInfo<T> GetLayerInfo(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= _layerInfos.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerIndex),
+                $"Layer index must be between 0 and {_layerInfos.Count - 1}.");
+        }
+
+        return _layerInfos[layerIndex];
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<LayerInfo<T>> GetAllLayerInfo() => _layerInfos;
+
+    /// <inheritdoc/>
+    public bool ValidatePartitionPoint(int afterLayerIndex)
+    {
+        if (afterLayerIndex < 0 || afterLayerIndex >= _layers.Count - 1)
+        {
+            return false;
+        }
+
+        var currentOutput = _layers[afterLayerIndex].GetOutputShape();
+        var nextInput = _layers[afterLayerIndex + 1].GetInputShape();
+
+        if (currentOutput.Length != nextInput.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < currentOutput.Length; i++)
+        {
+            if (currentOutput[i] != nextInput[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public SubModel<T> ExtractSubModel(int startLayer, int endLayer)
+    {
+        if (startLayer < 0 || startLayer >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startLayer),
+                $"Start layer must be between 0 and {_layers.Count - 1}.");
+        }
+        if (endLayer < startLayer || endLayer >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(endLayer),
+                $"End layer must be between {startLayer} and {_layers.Count - 1}.");
+        }
+
+        int count = endLayer - startLayer + 1;
+        var subLayers = new List<ILayer<T>>(count);
+        var subInfos = new List<LayerInfo<T>>(count);
+
+        int localOffset = 0;
+        for (int i = startLayer; i <= endLayer; i++)
+        {
+            subLayers.Add(_layers[i]);
+            var original = _layerInfos[i];
+            subInfos.Add(new LayerInfo<T>
+            {
+                Index = i - startLayer,
+                Name = original.Name,
+                Category = original.Category,
+                Layer = original.Layer,
+                ParameterOffset = localOffset,
+                ParameterCount = original.ParameterCount,
+                InputShape = original.InputShape,
+                OutputShape = original.OutputShape,
+                IsTrainable = original.IsTrainable,
+                EstimatedFlops = original.EstimatedFlops,
+                EstimatedActivationMemory = original.EstimatedActivationMemory
+            });
+            localOffset += original.ParameterCount;
+        }
+
+        return new SubModel<T>(subLayers, subInfos,
+            StartIndex + startLayer, StartIndex + endLayer);
+    }
 }
