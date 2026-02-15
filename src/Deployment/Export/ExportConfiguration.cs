@@ -39,6 +39,15 @@ public class ExportConfiguration
     public int[]? InputShape { get; set; }
 
     /// <summary>
+    /// Gets or sets the output shape dimensions (excluding batch dimension).
+    /// </summary>
+    /// <remarks>
+    /// <para>If not specified and the model implements <see cref="AiDotNet.Interfaces.ILayeredModel{T}"/>,
+    /// the output shape will be inferred from the last layer's output shape.</para>
+    /// </remarks>
+    public int[]? OutputShape { get; set; }
+
+    /// <summary>
     /// Gets or sets whether to include metadata in the exported model (default: true).
     /// </summary>
     public bool IncludeMetadata { get; set; } = true;

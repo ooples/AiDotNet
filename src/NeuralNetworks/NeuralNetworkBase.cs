@@ -1857,6 +1857,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected void InvalidateParameterCountCache()
     {
         _cachedParameterCount = null;
+        InvalidateLayerInfoCache();
+    }
+
+    /// <summary>
+    /// Invalidates the cached layer info so that <see cref="GetAllLayerInfo"/> recomputes
+    /// layer metadata on the next call. Called automatically from all layer mutation methods
+    /// and deserialization.
+    /// </summary>
+    private void InvalidateLayerInfoCache()
+    {
+        _cachedLayerInfo = null;
+        _cachedLayerCount = -1;
     }
 
     /// <summary>
@@ -2834,7 +2846,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             _layers.Add(layer);
         }
 
-        // Invalidate parameter count cache after loading all layers
+        // Invalidate caches after loading all layers
+        // (InvalidateParameterCountCache already calls InvalidateLayerInfoCache)
         InvalidateParameterCountCache();
 
         // Read network-specific data
@@ -4046,6 +4059,196 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return layer.ExportComputationGraph(layerInputs);
     }
 
+
+    #endregion
+
+    #region ILayeredModel<T> Implementation
+
+    /// <summary>
+    /// Gets the ordered list of layers in this model (explicit interface implementation).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides read-only access to the model's layers
+    /// for tools that need to inspect the model structure without modifying it.</para>
+    /// </remarks>
+    IReadOnlyList<ILayer<T>> ILayeredModel<T>.Layers => _layers.AsReadOnly();
+
+    /// <summary>
+    /// Gets metadata for a specific layer including its parameter offset
+    /// within the flat parameter vector.
+    /// </summary>
+    /// <param name="layerIndex">Zero-based index of the layer.</param>
+    /// <returns>Metadata about the layer at the specified index.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="layerIndex"/> is negative or greater than or equal to <see cref="LayerCount"/>.
+    /// </exception>
+    public LayerInfo<T> GetLayerInfo(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerIndex),
+                $"Layer index {layerIndex} is out of range. Valid range: 0 to {_layers.Count - 1}.");
+        }
+
+        // Use cached layer info to avoid O(n) offset computation per call
+        var allInfo = GetAllLayerInfo();
+        return allInfo[layerIndex];
+    }
+
+    /// <summary>
+    /// Cached layer info list, invalidated when layers change.
+    /// </summary>
+    private IReadOnlyList<LayerInfo<T>>? _cachedLayerInfo;
+    private int _cachedLayerCount = -1;
+
+    /// <summary>
+    /// Gets metadata for all layers, including parameter offsets, types,
+    /// shapes, names, and cost estimates.
+    /// </summary>
+    /// <returns>An ordered list of layer metadata.</returns>
+    public IReadOnlyList<LayerInfo<T>> GetAllLayerInfo()
+    {
+        // Return cached result if layer count hasn't changed
+        if (_cachedLayerInfo is not null && _cachedLayerCount == _layers.Count)
+        {
+            return _cachedLayerInfo;
+        }
+
+        var result = new List<LayerInfo<T>>(_layers.Count);
+        int parameterOffset = 0;
+
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            var layer = _layers[i];
+            var layerBase = layer as LayerBase<T>;
+
+            result.Add(new LayerInfo<T>
+            {
+                Index = i,
+                Name = layer.LayerName,
+                Category = layerBase?.GetLayerCategory() ?? LayerCategory.Other,
+                Layer = layer,
+                ParameterOffset = parameterOffset,
+                ParameterCount = layer.ParameterCount,
+                InputShape = layer.GetInputShape(),
+                OutputShape = layer.GetOutputShape(),
+                IsTrainable = layer.SupportsTraining && layer.ParameterCount > 0,
+                EstimatedFlops = layerBase?.EstimateFlops() ?? 2L * layer.ParameterCount,
+                EstimatedActivationMemory = layerBase?.EstimateActivationMemory() ?? 0L,
+            });
+
+            parameterOffset += layer.ParameterCount;
+        }
+
+        _cachedLayerInfo = result.AsReadOnly();
+        _cachedLayerCount = _layers.Count;
+        return _cachedLayerInfo;
+    }
+
+    /// <summary>
+    /// Validates that a partition point between layers is valid for pipeline parallelism.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When splitting a neural network across multiple GPUs,
+    /// each GPU handles a different set of layers. The split must happen at a point where
+    /// the output of one group of layers is compatible with the input of the next group.</para>
+    ///
+    /// <para>This method checks that the output shape of the layer at <paramref name="afterLayerIndex"/>
+    /// matches the input shape of the next layer, ensuring a valid split point.</para>
+    /// </remarks>
+    /// <param name="afterLayerIndex">The index of the layer after which to partition.
+    /// Must be between 0 and <see cref="LayerCount"/> - 2.</param>
+    /// <returns>True if the partition point is valid; false otherwise.</returns>
+    public bool ValidatePartitionPoint(int afterLayerIndex)
+    {
+        if (afterLayerIndex < 0 || afterLayerIndex >= _layers.Count - 1)
+        {
+            return false;
+        }
+
+        var currentLayer = _layers[afterLayerIndex];
+        var nextLayer = _layers[afterLayerIndex + 1];
+
+        var outputShape = currentLayer.GetOutputShape();
+        var inputShape = nextLayer.GetInputShape();
+
+        // Shapes are compatible if they have the same number of dimensions
+        // and each dimension matches
+        if (outputShape.Length != inputShape.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < outputShape.Length; i++)
+        {
+            if (outputShape[i] != inputShape[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Extracts a contiguous sub-model from <paramref name="startLayer"/> to
+    /// <paramref name="endLayer"/> (inclusive).
+    /// </summary>
+    /// <param name="startLayer">Zero-based index of the first layer to include.</param>
+    /// <param name="endLayer">Zero-based index of the last layer to include (inclusive).</param>
+    /// <returns>A sub-model containing the specified layer range with metadata.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when layer indices are out of range or startLayer > endLayer.
+    /// </exception>
+    public SubModel<T> ExtractSubModel(int startLayer, int endLayer)
+    {
+        if (startLayer < 0 || startLayer >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startLayer),
+                $"Start layer index {startLayer} is out of range. Valid range: 0 to {_layers.Count - 1}.");
+        }
+        if (endLayer < 0 || endLayer >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(endLayer),
+                $"End layer index {endLayer} is out of range. Valid range: 0 to {_layers.Count - 1}.");
+        }
+        if (startLayer > endLayer)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startLayer),
+                $"Start layer index {startLayer} cannot be greater than end layer index {endLayer}.");
+        }
+
+        int count = endLayer - startLayer + 1;
+        var subLayers = new List<ILayer<T>>(count);
+        var subInfos = new List<LayerInfo<T>>(count);
+
+        int localOffset = 0;
+        for (int i = startLayer; i <= endLayer; i++)
+        {
+            var layer = _layers[i];
+            var layerBase = layer as LayerBase<T>;
+
+            subLayers.Add(layer);
+            subInfos.Add(new LayerInfo<T>
+            {
+                Index = i - startLayer,
+                Name = layer.LayerName,
+                Category = layerBase?.GetLayerCategory() ?? LayerCategory.Other,
+                Layer = layer,
+                ParameterOffset = localOffset,
+                ParameterCount = layer.ParameterCount,
+                InputShape = layer.GetInputShape(),
+                OutputShape = layer.GetOutputShape(),
+                IsTrainable = layer.SupportsTraining && layer.ParameterCount > 0,
+                EstimatedFlops = layerBase?.EstimateFlops() ?? 2L * layer.ParameterCount,
+                EstimatedActivationMemory = layerBase?.EstimateActivationMemory() ?? 0L,
+            });
+
+            localOffset += layer.ParameterCount;
+        }
+
+        return new SubModel<T>(subLayers, subInfos, startLayer, endLayer);
+    }
 
     #endregion
 
