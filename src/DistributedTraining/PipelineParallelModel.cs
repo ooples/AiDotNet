@@ -100,7 +100,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// </summary>
     /// <remarks>
     /// This property is internal. Configure the schedule via <c>AiModelBuilder</c> methods
-    /// (e.g., <c>ConfigureDistributedTraining</c>) rather than accessing this directly.
+    /// (e.g., <c>ConfigurePipelineParallelism</c>) rather than accessing this directly.
     /// </remarks>
     internal IPipelineSchedule Schedule => _schedule;
 
@@ -203,17 +203,34 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             // Multi-stage schedule: partition into totalVirtualStages chunks,
             // then assign V non-contiguous chunks to this rank.
             // Rank i gets virtual stages: i, i+P, i+2P, ...
-            int baseChunkSize = totalParams / _totalVirtualStages;
-            int remainder = totalParams % _totalVirtualStages;
+            (int StartIndex, int Size)[] vsPartitions;
 
-            // Compute partition boundaries for all virtual stages
-            var vsPartitions = new (int Start, int Size)[_totalVirtualStages];
-            int offset = 0;
-            for (int vs = 0; vs < _totalVirtualStages; vs++)
+            if (_partitionStrategy is not null)
             {
-                int size = baseChunkSize + (vs < remainder ? 1 : 0);
-                vsPartitions[vs] = (offset, size);
-                offset += size;
+                // Use the configured partition strategy for load-balanced partitioning
+                // across all virtual stages (not just physical stages)
+                vsPartitions = _partitionStrategy.ComputePartition(totalParams, _totalVirtualStages);
+
+                if (vsPartitions is null || vsPartitions.Length != _totalVirtualStages)
+                {
+                    throw new InvalidOperationException(
+                        $"Partition strategy returned {(vsPartitions is null ? "null" : $"{vsPartitions.Length} partitions")} " +
+                        $"but expected exactly {_totalVirtualStages} partitions for {_virtualStagesPerRank} virtual stages per rank.");
+                }
+            }
+            else
+            {
+                // Uniform partitioning
+                vsPartitions = new (int StartIndex, int Size)[_totalVirtualStages];
+                int baseChunkSize = totalParams / _totalVirtualStages;
+                int remainder = totalParams % _totalVirtualStages;
+                int offset = 0;
+                for (int vs = 0; vs < _totalVirtualStages; vs++)
+                {
+                    int size = baseChunkSize + (vs < remainder ? 1 : 0);
+                    vsPartitions[vs] = (offset, size);
+                    offset += size;
+                }
             }
 
             // Assign this rank's virtual stages
@@ -478,7 +495,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         Dictionary<int, TOutput> forwardOutputs,
         int opKey)
     {
-        var stageInput = GetStageInput(microBatches, op.MicroBatchIndex, op.VirtualStageIndex);
+        var stageInput = GetStageInput(microBatches, op.MicroBatchIndex, op.VirtualStageIndex, forwardOutputs);
 
         // Checkpoint activation if configured
         if (ShouldCheckpointActivation(opKey))
@@ -519,12 +536,9 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         }
         catch (InvalidOperationException)
         {
-            // If conversion fails (type not convertible to vector), use the same data for all micro-batches
-            for (int i = 0; i < _microBatchSize; i++)
-            {
-                slices[i] = fullData;
-            }
-            return slices;
+            throw new InvalidOperationException(
+                $"Cannot slice input of type {typeof(TInput).Name} into micro-batches. " +
+                "The input must be convertible to a vector for pipeline parallel training with micro-batches > 1.");
         }
 
         int totalElements = fullVector.Length;
@@ -532,11 +546,9 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         if (microBatchElements <= 0)
         {
-            for (int i = 0; i < _microBatchSize; i++)
-            {
-                slices[i] = fullData;
-            }
-            return slices;
+            throw new InvalidOperationException(
+                $"Cannot slice {totalElements} elements into {_microBatchSize} micro-batches. " +
+                $"Reduce pipelineMicroBatchSize to at most {totalElements}.");
         }
 
         var fullArray = fullVector.ToArray();
@@ -578,11 +590,9 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         }
         catch (InvalidOperationException)
         {
-            for (int i = 0; i < _microBatchSize; i++)
-            {
-                slices[i] = fullTarget;
-            }
-            return slices;
+            throw new InvalidOperationException(
+                $"Cannot slice target of type {typeof(TOutput).Name} into micro-batches. " +
+                "The target must be convertible to a vector for pipeline parallel training with micro-batches > 1.");
         }
 
         int totalElements = fullVector.Length;
@@ -590,11 +600,9 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         if (microBatchElements <= 0)
         {
-            for (int i = 0; i < _microBatchSize; i++)
-            {
-                slices[i] = fullTarget;
-            }
-            return slices;
+            throw new InvalidOperationException(
+                $"Cannot slice {totalElements} target elements into {_microBatchSize} micro-batches. " +
+                $"Reduce pipelineMicroBatchSize to at most {totalElements}.");
         }
 
         var fullArray = fullVector.ToArray();
@@ -628,10 +636,12 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// Gets the input for this stage, receiving from previous stage if needed.
     /// For multi-stage schedules, routes based on virtual stage index.
     /// </summary>
-    private TInput GetStageInput(Dictionary<int, TInput> microBatches, int microBatchIndex, int virtualStageIndex)
+    private TInput GetStageInput(
+        Dictionary<int, TInput> microBatches, int microBatchIndex, int virtualStageIndex,
+        Dictionary<int, TOutput>? forwardOutputs = null)
     {
         // For virtual stage 0 of this rank, receive from the previous rank's last virtual stage
-        // For subsequent virtual stages, receive from this rank's previous virtual stage output
+        // For subsequent virtual stages, use the forward output from this rank's previous virtual stage
         bool isFirstVirtualStageOnRank = virtualStageIndex == 0;
 
         if (isFirstVirtualStageOnRank && _stageId > 0)
@@ -654,19 +664,26 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             return microBatch;
         }
 
-        // For non-first virtual stages on this rank: the input should come from the
-        // forward output of the previous virtual stage. This is stored in forwardOutputs
-        // and routed via the communication backend when going between ranks.
-        // Within the same rank, the scheduler handles ordering so the previous virtual
-        // stage's output is available.
-        if (microBatches.TryGetValue(microBatchIndex, out var fallback))
+        // For non-first virtual stages on this rank: use the forward output from the
+        // previous virtual stage on the same micro-batch.
+        if (!isFirstVirtualStageOnRank && forwardOutputs is not null)
         {
-            return fallback;
+            int prevVStageKey = GetOperationKey(microBatchIndex, virtualStageIndex - 1);
+            if (forwardOutputs.TryGetValue(prevVStageKey, out var prevOutput))
+            {
+                // Convert the previous virtual stage's output to an input for the next stage
+                var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(prevOutput);
+                return ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(outputVector);
+            }
         }
 
         // Should not reach here in normal operation
         throw new InvalidOperationException(
-            $"No input available for micro-batch {microBatchIndex}, virtual stage {virtualStageIndex}.");
+            $"No input available for micro-batch {microBatchIndex}, virtual stage {virtualStageIndex}. " +
+            (isFirstVirtualStageOnRank
+                ? "Expected micro-batch input was not found."
+                : $"Forward output from virtual stage {virtualStageIndex - 1} was not found. " +
+                  "Ensure the schedule processes virtual stages in order."));
     }
 
     /// <summary>
@@ -767,9 +784,12 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         // Check if there's a nearby checkpoint to recompute from
         if (_checkpointConfig.Enabled && _checkpointConfig.RecomputeStrategy != RecomputeStrategy.None)
         {
-            // Find the nearest earlier checkpoint
+            // Find the nearest earlier checkpoint within the SAME micro-batch.
+            // opKey = microBatchIndex * _virtualStagesPerRank + virtualStageIndex,
+            // so the current micro-batch's first key is microBatchIndex * _virtualStagesPerRank.
+            int microBatchStartKey = op.MicroBatchIndex * _virtualStagesPerRank;
             int nearestCheckpointKey = -1;
-            for (int searchKey = opKey - 1; searchKey >= 0; searchKey--)
+            for (int searchKey = opKey - 1; searchKey >= microBatchStartKey; searchKey--)
             {
                 if (_checkpointedActivations.ContainsKey(searchKey))
                 {

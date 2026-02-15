@@ -766,19 +766,33 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="backend">Communication backend. If null, uses InMemoryCommunicationBackend.</param>
     /// <param name="strategy">Distributed training strategy. Default is DDP (most common).</param>
     /// <param name="configuration">Sharding configuration. If null, created from backend with defaults.</param>
-    /// <param name="pipelineSchedule">Pipeline schedule (PipelineParallel only). Null = GPipeSchedule.</param>
-    /// <param name="pipelinePartitionStrategy">Partition strategy (PipelineParallel only). Null = uniform.</param>
-    /// <param name="pipelineCheckpointConfig">Activation checkpointing config (PipelineParallel only). Null = disabled.</param>
-    /// <param name="pipelineMicroBatchSize">Micro-batch count for pipeline execution (PipelineParallel only). Default: 1.</param>
     /// <returns>This builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
         ICommunicationBackend<T>? backend = null,
         DistributedStrategy strategy = DistributedStrategy.DDP,
-        IShardingConfiguration<T>? configuration = null,
-        IPipelineSchedule? pipelineSchedule = null,
-        IPipelinePartitionStrategy<T>? pipelinePartitionStrategy = null,
-        ActivationCheckpointConfig? pipelineCheckpointConfig = null,
-        int pipelineMicroBatchSize = 1);
+        IShardingConfiguration<T>? configuration = null);
+
+    /// <summary>
+    /// Configures pipeline-specific options for pipeline parallel training.
+    /// </summary>
+    /// <remarks>
+    /// <para>Call this after <see cref="ConfigureDistributedTraining"/> with
+    /// <c>DistributedStrategy.PipelineParallel</c> to customize pipeline scheduling,
+    /// partitioning, activation checkpointing, and micro-batch count.</para>
+    /// <para><b>For Beginners:</b> This method fine-tunes how pipeline parallelism works.
+    /// You only need to call it if you want to change the defaults (GPipe schedule,
+    /// uniform partitioning, no checkpointing, 1 micro-batch).</para>
+    /// </remarks>
+    /// <param name="schedule">Pipeline schedule. Null = GPipeSchedule.</param>
+    /// <param name="partitionStrategy">Partition strategy. Null = uniform.</param>
+    /// <param name="checkpointConfig">Activation checkpointing config. Null = disabled.</param>
+    /// <param name="microBatchSize">Number of micro-batches. Default: 1.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigurePipelineParallelism(
+        IPipelineSchedule? schedule = null,
+        IPipelinePartitionStrategy<T>? partitionStrategy = null,
+        ActivationCheckpointConfig? checkpointConfig = null,
+        int microBatchSize = 1);
 
     /// <summary>
     /// Configures the cross-validation strategy for model evaluation.

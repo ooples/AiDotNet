@@ -3700,24 +3700,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <param name="backend">Communication backend to use. If null, uses InMemoryCommunicationBackend.</param>
     /// <param name="strategy">Distributed training strategy. Default is DDP.</param>
     /// <param name="configuration">Optional sharding configuration for advanced settings like gradient compression, parameter grouping, etc.</param>
-    /// <param name="pipelineSchedule">
-    /// Pipeline execution schedule (only used when strategy is PipelineParallel).
-    /// If null, uses GPipeSchedule. Use <see cref="DistributedTraining.OneForwardOneBackwardSchedule"/>
-    /// for reduced pipeline bubble (~12-15% vs ~50%).
-    /// </param>
-    /// <param name="pipelinePartitionStrategy">
-    /// Strategy for partitioning layers across pipeline stages (only used when strategy is PipelineParallel).
-    /// If null, uses uniform partitioning. Use <see cref="DistributedTraining.LoadBalancedPartitionStrategy{T}"/>
-    /// to balance computational cost across stages.
-    /// </param>
-    /// <param name="pipelineCheckpointConfig">
-    /// Activation checkpointing configuration (only used when strategy is PipelineParallel).
-    /// If null, checkpointing is disabled. Enable to reduce memory from O(L) to O(sqrt(L)).
-    /// </param>
-    /// <param name="pipelineMicroBatchSize">
-    /// Number of micro-batches for pipeline execution (only used when strategy is PipelineParallel).
-    /// Higher values reduce pipeline bubble but increase memory. Default: 1.
-    /// </param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <para>
@@ -3738,37 +3720,78 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// You just train as normal - the distributed magic happens behind the scenes!
     /// </para>
     /// <para>
-    /// <b>Pipeline Parallel Options:</b> When using <c>DistributedStrategy.PipelineParallel</c>,
-    /// you can optionally configure scheduling, partitioning, and activation checkpointing:
-    /// <code>
-    /// var result = builder
-    ///     .ConfigureModel(myModel)
-    ///     .ConfigureDistributedTraining(
-    ///         strategy: DistributedStrategy.PipelineParallel,
-    ///         pipelineSchedule: new OneForwardOneBackwardSchedule(),
-    ///         pipelinePartitionStrategy: new LoadBalancedPartitionStrategy&lt;double&gt;(estimatedLayerSize: 1024),
-    ///         pipelineCheckpointConfig: new ActivationCheckpointConfig { Enabled = true },
-    ///         pipelineMicroBatchSize: 8)
-    ///     .Build(xTrain, yTrain);
-    /// </code>
+    /// For pipeline parallelism, call <see cref="ConfigurePipelineParallelism"/> after this method
+    /// to customize scheduling, partitioning, and activation checkpointing.
     /// </para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDistributedTraining(
         ICommunicationBackend<T>? backend = null,
         DistributedStrategy strategy = DistributedStrategy.DDP,
-        IShardingConfiguration<T>? configuration = null,
-        IPipelineSchedule? pipelineSchedule = null,
-        IPipelinePartitionStrategy<T>? pipelinePartitionStrategy = null,
-        ActivationCheckpointConfig? pipelineCheckpointConfig = null,
-        int pipelineMicroBatchSize = 1)
+        IShardingConfiguration<T>? configuration = null)
     {
         _distributedBackend = backend;
         _distributedStrategy = strategy;
         _distributedConfiguration = configuration;
-        _pipelineSchedule = pipelineSchedule;
-        _pipelinePartitionStrategy = pipelinePartitionStrategy;
-        _pipelineCheckpointConfig = pipelineCheckpointConfig;
-        _pipelineMicroBatchSize = pipelineMicroBatchSize;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures pipeline-specific options for pipeline parallel training.
+    /// </summary>
+    /// <param name="schedule">
+    /// Pipeline execution schedule. If null, uses GPipeSchedule.
+    /// Use <see cref="DistributedTraining.OneForwardOneBackwardSchedule"/> for reduced pipeline bubble (~12-15% vs ~50%).
+    /// </param>
+    /// <param name="partitionStrategy">
+    /// Strategy for partitioning layers across pipeline stages.
+    /// If null, uses uniform partitioning. Use <see cref="DistributedTraining.LoadBalancedPartitionStrategy{T}"/>
+    /// to balance computational cost across stages.
+    /// </param>
+    /// <param name="checkpointConfig">
+    /// Activation checkpointing configuration.
+    /// If null, checkpointing is disabled. Enable to reduce memory from O(L) to O(sqrt(L)).
+    /// </param>
+    /// <param name="microBatchSize">
+    /// Number of micro-batches for pipeline execution.
+    /// Higher values reduce pipeline bubble but increase memory. Default: 1.
+    /// </param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Call this after <see cref="ConfigureDistributedTraining"/> with
+    /// <c>DistributedStrategy.PipelineParallel</c> to customize pipeline scheduling,
+    /// partitioning, activation checkpointing, and micro-batch count.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method fine-tunes how pipeline parallelism works.
+    /// You only need to call it if you want to change the defaults (GPipe schedule,
+    /// uniform partitioning, no checkpointing, 1 micro-batch).
+    /// </para>
+    /// <para>
+    /// <b>Example:</b>
+    /// <code>
+    /// var result = builder
+    ///     .ConfigureModel(myModel)
+    ///     .ConfigureDistributedTraining(strategy: DistributedStrategy.PipelineParallel)
+    ///     .ConfigurePipelineParallelism(
+    ///         schedule: new OneForwardOneBackwardSchedule(),
+    ///         partitionStrategy: new LoadBalancedPartitionStrategy&lt;double&gt;(estimatedLayerSize: 1024),
+    ///         checkpointConfig: new ActivationCheckpointConfig { Enabled = true },
+    ///         microBatchSize: 8)
+    ///     .Build(xTrain, yTrain);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigurePipelineParallelism(
+        IPipelineSchedule? schedule = null,
+        IPipelinePartitionStrategy<T>? partitionStrategy = null,
+        ActivationCheckpointConfig? checkpointConfig = null,
+        int microBatchSize = 1)
+    {
+        _pipelineSchedule = schedule;
+        _pipelinePartitionStrategy = partitionStrategy;
+        _pipelineCheckpointConfig = checkpointConfig;
+        _pipelineMicroBatchSize = microBatchSize;
         return this;
     }
 
