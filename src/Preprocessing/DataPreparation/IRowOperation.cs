@@ -26,6 +26,7 @@ namespace AiDotNet.Preprocessing.DataPreparation;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("RowOperation")]
 public interface IRowOperation<T>
 {
     /// <summary>

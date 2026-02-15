@@ -14,6 +14,7 @@ namespace AiDotNet.Interfaces;
 /// the epoch over. This saves significant time for large datasets.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("StatefulDataLoader")]
 public interface IStatefulDataLoader<T> : IDataLoader<T>
 {
     /// <summary>

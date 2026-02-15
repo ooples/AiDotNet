@@ -25,6 +25,7 @@ namespace AiDotNet.CurriculumLearning.Interfaces;
 /// <item><description><b>Difficulty Threshold:</b> Maximum difficulty of samples in current phase</description></item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("CurriculumScheduler")]
 public interface ICurriculumScheduler<T>
 {
     /// <summary>
@@ -119,6 +120,7 @@ public interface ICurriculumScheduler<T>
 /// Interface for self-paced curriculum schedulers that adapt based on model performance.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("SelfPacedScheduler")]
 public interface ISelfPacedScheduler<T> : ICurriculumScheduler<T>
 {
     /// <summary>
@@ -147,6 +149,7 @@ public interface ISelfPacedScheduler<T> : ICurriculumScheduler<T>
 /// Interface for competence-based curriculum schedulers.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("CompetenceBasedScheduler")]
 public interface ICompetenceBasedScheduler<T> : ICurriculumScheduler<T>
 {
     /// <summary>

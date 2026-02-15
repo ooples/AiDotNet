@@ -26,6 +26,7 @@ namespace AiDotNet.Finance.Interfaces;
 /// - Maximum diversification
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("PortfolioOptimizer")]
 public interface IPortfolioOptimizer<T> : IFinancialModel<T>
 {
     /// <summary>

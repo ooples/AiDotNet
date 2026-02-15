@@ -91,6 +91,92 @@ public static class OptimizerFactory<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Creates an optimizer of the specified type with default options and no model.
+    /// The model should be set later via <see cref="IOptimizer{T, TInput, TOutput}.SetModel"/>
+    /// or will be set automatically when used with <see cref="AiModelBuilder{T, TInput, TOutput}"/>.
+    /// </summary>
+    /// <param name="optimizerTypeEnum">The type of optimizer to create.</param>
+    /// <returns>An implementation of IOptimizer for the specified optimizer type with default options.</returns>
+    /// <exception cref="ArgumentException">Thrown when an unknown optimizer type is specified.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when instance creation fails.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is a convenience method that creates an optimizer with sensible default settings.
+    /// Use this when you want to select an optimizer type (like "Adam") without specifying detailed options.
+    /// The optimizer is created without a model reference; call <c>SetModel()</c> before optimizing.
+    /// </para>
+    /// </remarks>
+    internal static IOptimizer<T, TInput, TOutput> CreateOptimizer(OptimizerType optimizerTypeEnum)
+    {
+        if (!_optimizerTypes.TryGetValue(optimizerTypeEnum, out Type? optimizerGenericType))
+        {
+            throw new ArgumentException($"Unknown optimizer type: {optimizerTypeEnum}");
+        }
+
+        if (optimizerGenericType == null)
+        {
+            throw new InvalidOperationException($"Optimizer type {optimizerTypeEnum} is registered but null.");
+        }
+
+        // When OptimizerFactory<T, TInput, TOutput> is constructed with concrete type args,
+        // the registered types are already closed generics. Only call MakeGenericType if needed.
+        Type concreteType = optimizerGenericType.IsGenericTypeDefinition
+            ? optimizerGenericType.MakeGenericType(typeof(T))
+            : optimizerGenericType;
+
+        // Optimizer constructors have varying signatures: (model, options?, [engine?], [extras?]).
+        // All pass model to OptimizerBase which stores it as IFullModel? (nullable).
+        // We pass null for all parameters: model=null (set later via SetModel), options=null (use defaults).
+        var constructors = concreteType.GetConstructors();
+        if (constructors.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"No public constructors found on {concreteType.Name}.");
+        }
+
+        // Pick the best constructor: prefer parameterless, then fewest required (non-default) parameters,
+        // then fewest total parameters. This is more stable than purely fewest-parameter selection.
+        var ctor = constructors
+            .OrderBy(c => c.GetParameters().Length == 0 ? 0 : 1)  // prefer parameterless
+            .ThenBy(c => c.GetParameters().Count(p => !p.HasDefaultValue))  // then fewest required
+            .ThenBy(c => c.GetParameters().Length)  // then fewest total
+            .First();
+        var parameters = ctor.GetParameters();
+        // Provide default values based on parameter types to avoid null-related constructor failures.
+        // Nullable reference types and optional parameters get null; value types get their defaults.
+        var args = new object?[parameters.Length];
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var paramType = parameters[i].ParameterType;
+            if (parameters[i].HasDefaultValue)
+            {
+                args[i] = parameters[i].DefaultValue;
+            }
+            else if (paramType.IsValueType)
+            {
+                args[i] = Activator.CreateInstance(paramType);
+            }
+            // else: null for reference types - optimizer constructors should handle null options with defaults
+        }
+
+        object? instance;
+        try
+        {
+            instance = ctor.Invoke(args);
+        }
+        catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            throw new InvalidOperationException(
+                $"Failed to create optimizer '{optimizerTypeEnum}': {ex.InnerException.Message}",
+                ex.InnerException);
+        }
+
+        return instance == null
+            ? throw new InvalidOperationException($"Failed to create instance of {concreteType.Name}")
+            : (IOptimizer<T, TInput, TOutput>)instance;
+    }
+
+    /// <summary>
     /// Creates an optimizer of the specified type with the given options.
     /// </summary>
     /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
@@ -130,7 +216,12 @@ public static class OptimizerFactory<T, TInput, TOutput>
             throw new InvalidOperationException($"Optimizer type {optimizerTypeEnum} is registered but null.");
         }
 
-        Type concreteOptimizerType = optimizerGenericType.MakeGenericType(typeof(T));
+        // When OptimizerFactory<T, TInput, TOutput> is constructed with concrete type args
+        // (e.g., OptimizerFactory<double, Matrix<double>, Vector<double>>), the registered
+        // types are already closed generics. Only call MakeGenericType if needed.
+        Type concreteOptimizerType = optimizerGenericType.IsGenericTypeDefinition
+            ? optimizerGenericType.MakeGenericType(typeof(T))
+            : optimizerGenericType;
         object? instance = Activator.CreateInstance(concreteOptimizerType, options);
 
         return instance == null

@@ -10,6 +10,7 @@ namespace AiDotNet.Deployment.Export;
 /// <typeparam name="T">The numeric type used in the model (e.g., float, double)</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ModelExporter")]
 public interface IModelExporter<T, TInput, TOutput>
 {
     /// <summary>

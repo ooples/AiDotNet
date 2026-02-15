@@ -17,6 +17,7 @@ namespace AiDotNet.GaussianProcesses;
 /// The GP then models deviations from this mean using the kernel function.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("MeanFunction")]
 public interface IMeanFunction<T>
 {
     /// <summary>

@@ -16,6 +16,7 @@ namespace AiDotNet.AdversarialRobustness.Safety;
 /// subtle forms of harmful content that simple pattern matching would miss.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ContentClassifier")]
 public interface IContentClassifier<T>
 {
     /// <summary>

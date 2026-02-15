@@ -25,6 +25,7 @@ namespace AiDotNet.ContinualLearning.Interfaces;
 ///
 /// <para><b>Reference:</b> Parisi et al. "Continual Lifelong Learning with Neural Networks: A Review" (2019)</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ContinualLearnerConfig")]
 public interface IContinualLearnerConfig<T>
 {
     #region Core Training Parameters

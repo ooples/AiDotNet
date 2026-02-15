@@ -34,6 +34,7 @@ namespace AiDotNet.Finance.Interfaces;
 /// - Cumulative Return: Total portfolio growth
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("TradingAgent")]
 public interface ITradingAgent<T>
 {
     /// <summary>

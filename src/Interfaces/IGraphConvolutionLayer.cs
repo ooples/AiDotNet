@@ -22,6 +22,7 @@ namespace AiDotNet.Interfaces;
 /// which nodes are connected to which other nodes. That's what the adjacency matrix provides.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("GraphConvolutionLayer")]
 public interface IGraphConvolutionLayer<T> : ILayer<T>
 {
     /// <summary>

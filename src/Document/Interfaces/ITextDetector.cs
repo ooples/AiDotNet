@@ -25,6 +25,7 @@ namespace AiDotNet.Document.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("TextDetector")]
 public interface ITextDetector<T> : IDocumentModel<T>
 {
     /// <summary>

@@ -30,6 +30,7 @@ namespace AiDotNet.Interfaces;
 /// Pruning can remove 50-99% of weights with minimal accuracy loss!
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("PruningStrategy")]
 public interface IPruningStrategy<T>
 {
     #region Importance Scoring

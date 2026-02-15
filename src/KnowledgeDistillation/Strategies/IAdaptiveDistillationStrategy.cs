@@ -21,6 +21,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// - Student performance is uneven across samples
 /// - You want automatic temperature tuning instead of manual selection</para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AdaptiveDistillationStrategy")]
 public interface IAdaptiveDistillationStrategy<T>
 {
     /// <summary>

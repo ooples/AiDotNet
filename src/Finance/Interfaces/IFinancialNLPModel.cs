@@ -31,6 +31,7 @@ namespace AiDotNet.Finance.Interfaces;
 /// - Relationship extraction from financial documents
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("FinancialNLPModel")]
 public interface IFinancialNLPModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>

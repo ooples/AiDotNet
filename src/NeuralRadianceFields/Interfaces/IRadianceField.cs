@@ -36,6 +36,7 @@ namespace AiDotNet.NeuralRadianceFields.Interfaces;
 /// - Robotics: Build 3D maps of environments
 /// - Cultural heritage: Digitally preserve historical sites
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("RadianceField")]
 public interface IRadianceField<T> : INeuralNetwork<T>
 {
     /// <summary>

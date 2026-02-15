@@ -36,6 +36,7 @@ namespace AiDotNet.Interfaces;
 /// // Both produce: "2 + 2 equals 4."
 /// </code>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ChatModel")]
 public interface IChatModel<T> : ILanguageModel<T>
 {
     /// <summary>

@@ -24,6 +24,7 @@ namespace AiDotNet.Augmentation.Tabular.Undersampling;
 /// (e.g., SMOTE-Tomek, SMOTE-ENN).</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("UnderSampler")]
 public interface IUnderSampler<T>
 {
     /// <summary>

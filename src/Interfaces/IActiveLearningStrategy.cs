@@ -45,6 +45,7 @@ namespace AiDotNet.Interfaces;
 /// }
 /// </code>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ActiveLearningStrategy")]
 public interface IActiveLearningStrategy<T>
 {
     /// <summary>

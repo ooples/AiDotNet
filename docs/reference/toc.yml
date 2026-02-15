@@ -12,3 +12,5 @@
   href: lora-adapters.md
 - name: Distributed Strategies
   href: distributed-strategies.md
+- name: YAML Configuration
+  href: yaml-configuration.md
