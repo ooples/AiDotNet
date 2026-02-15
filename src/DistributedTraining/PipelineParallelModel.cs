@@ -92,8 +92,8 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     // Communication tag ranges to prevent collisions between forward activations,
     // backward gradients, and predict-time messages.
     private const int ActivationTagBase = 0;
-    private const int GradientTagBase = 100_000;
-    private const int PredictTagBase = 200_000;
+    private const int GradientTagBase = 1_000_000;
+    private const int PredictTagBase = 2_000_000;
 
     /// <summary>
     /// Gets the pipeline schedule used by this model.

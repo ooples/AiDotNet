@@ -177,6 +177,6 @@ public class ZeroBubbleH2Schedule : IPipelineSchedule
         }
 
         // Fallback estimate for small M
-        return (double)(numStages - numMicroBatches) / (3L * numMicroBatches + numStages);
+        return (double)((long)numStages - numMicroBatches) / (3L * numMicroBatches + numStages);
     }
 }

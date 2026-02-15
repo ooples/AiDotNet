@@ -142,8 +142,8 @@ public class OneForwardOneBackwardSchedule : IPipelineSchedule
 
         // 1F1B bubble fraction: (P-1) / (2*M + P - 1) where P = stages, M = micro-batches
         // This is approximately half of GPipe's bubble for large M
-        int p = numStages;
-        int m = numMicroBatches;
-        return (double)(p - 1) / (2L * m + p - 1);
+        long p = numStages;
+        long m = numMicroBatches;
+        return (double)(p - 1) / (2 * m + p - 1);
     }
 }

@@ -181,9 +181,9 @@ public class Interleaved1F1BSchedule : IPipelineSchedule
 
         // Interleaved 1F1B bubble: (P-1) / (2*M*V + P - 1)
         // V times smaller than standard 1F1B
-        int p = numStages;
-        int m = numMicroBatches;
-        int v = _virtualStagesPerRank;
-        return (double)(p - 1) / (2L * m * v + p - 1);
+        long p = numStages;
+        long m = numMicroBatches;
+        long v = _virtualStagesPerRank;
+        return (double)(p - 1) / (2 * m * v + p - 1);
     }
 }
