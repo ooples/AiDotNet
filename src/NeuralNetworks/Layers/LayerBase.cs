@@ -1083,6 +1083,8 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         }
         catch (ArgumentException)
         {
+            System.Diagnostics.Debug.WriteLine(
+                $"[LayerBase] Marshal.SizeOf<{typeof(T).Name}>() failed; defaulting to 4 bytes.");
             return 4; // Default to 4 bytes if Marshal.SizeOf can't determine the size for T
         }
     }

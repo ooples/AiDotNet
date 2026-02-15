@@ -91,5 +91,5 @@ public class IntermediateActivations<T>
     /// <summary>
     /// Gets the names of all layers with stored activations.
     /// </summary>
-    public IEnumerable<string> LayerNames => _activations.Keys.ToList();
+    public IEnumerable<string> LayerNames => _activations.Keys;
 }

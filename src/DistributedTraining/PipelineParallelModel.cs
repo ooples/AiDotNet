@@ -256,6 +256,12 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                             $"in layer range [{stageStartLayer[stage]}, {currentLayer}). " +
                             "The model's ValidatePartitionPoint rejected all candidates.");
                     }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[PipelineParallel] Stage {stage}: Backward search exhausted " +
+                            $"at layer {currentLayer} with {layersInStage} layer(s) already assigned.");
+                    }
                 }
             }
 

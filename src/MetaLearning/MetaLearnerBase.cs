@@ -771,6 +771,12 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
         }
 
         var parameters = model.GetParameters();
+        if (gradients.Length != parameters.Length)
+        {
+            throw new InvalidOperationException(
+                $"Gradient length ({gradients.Length}) does not match parameter length ({parameters.Length}).");
+        }
+
         var allLayerInfo = layeredModel.GetAllLayerInfo();
         var updated = new Vector<T>(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)

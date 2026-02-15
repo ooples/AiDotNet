@@ -4502,6 +4502,15 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                     TotalTrainableParameters = totalParams;
                     TotalEstimatedFlops = totalFlops;
                 }
+                else
+                {
+                    // Clear stale layer-metadata fields so callers don't see data
+                    // from a previous ILayeredModel that no longer applies.
+                    LayerCount = null;
+                    _layerCategorySummary = null;
+                    TotalTrainableParameters = null;
+                    TotalEstimatedFlops = null;
+                }
             }
             else
             {

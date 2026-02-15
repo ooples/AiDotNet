@@ -4222,13 +4222,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var subLayers = new List<ILayer<T>>(count);
         var subInfos = new List<LayerInfo<T>>(count);
 
-        // Compute the parameter offset for the first layer in the sub-model
-        int baseOffset = 0;
-        for (int i = 0; i < startLayer; i++)
-        {
-            baseOffset += _layers[i].ParameterCount;
-        }
-
         int localOffset = 0;
         for (int i = startLayer; i <= endLayer; i++)
         {

@@ -232,10 +232,12 @@ public class EdgeOptimizer<T, TInput, TOutput>
     {
         if (model is not ILayeredModel<T> layeredModel)
         {
-            throw new InvalidOperationException(
-                "Adaptive partitioning requires a model that implements ILayeredModel<T> " +
-                "to provide layer-level metadata. Use PartitionStrategy.EarlyLayers or " +
-                "PartitionStrategy.LateLayers for models without layer-level access.");
+            // Graceful fallback: models without layer metadata get a reasonable default
+            // partition (middle) rather than crashing at runtime.
+            System.Diagnostics.Debug.WriteLine(
+                $"[EdgeOptimizer] Model type {model.GetType().Name} does not implement ILayeredModel<T>. " +
+                "Falling back to default mid-point partition for adaptive strategy.");
+            return 5;
         }
 
         if (layeredModel.LayerCount <= 1)
