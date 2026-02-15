@@ -33,12 +33,14 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
 {
     private readonly Func<int, double>? _costEstimator;
     private readonly int[] _layerBoundaries;
+    private readonly bool _isAutoDetect;
 
     /// <summary>
     /// Creates a load-balanced partition strategy with explicit layer boundaries and optional cost estimator.
     /// </summary>
     /// <param name="layerBoundaries">
-    /// Array of parameter indices where each layer starts. For example, if a model has 3 layers
+    /// Array of parameter indices where each layer starts, in strictly increasing order.
+    /// All values must be non-negative. For example, if a model has 3 layers
     /// with 100, 200, and 150 parameters respectively, pass [0, 100, 300].
     /// The total parameter count is inferred as layerBoundaries[last] + size of last layer.
     /// <para><b>For Beginners:</b> This tells the partitioner where each layer's parameters begin
@@ -51,7 +53,8 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
     /// <para><b>For Beginners:</b> This function converts "number of parameters" into "how long
     /// this layer takes to compute." The default assumes dense matrix multiplication.</para>
     /// </param>
-    /// <exception cref="ArgumentException">Thrown when layerBoundaries is null or empty.</exception>
+    /// <exception cref="ArgumentException">Thrown when layerBoundaries is null, empty,
+    /// contains negative values, or is not strictly increasing.</exception>
     public LoadBalancedPartitionStrategy(int[] layerBoundaries, Func<int, double>? costEstimator = null)
     {
         if (layerBoundaries is null || layerBoundaries.Length == 0)
@@ -59,8 +62,35 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
             throw new ArgumentException("Layer boundaries must be provided and non-empty.", nameof(layerBoundaries));
         }
 
+        // Validate all boundaries are non-negative and strictly increasing
+        if (layerBoundaries[0] < 0)
+        {
+            throw new ArgumentException(
+                $"Layer boundary at index 0 is negative ({layerBoundaries[0]}). All boundaries must be non-negative.",
+                nameof(layerBoundaries));
+        }
+
+        for (int i = 1; i < layerBoundaries.Length; i++)
+        {
+            if (layerBoundaries[i] < 0)
+            {
+                throw new ArgumentException(
+                    $"Layer boundary at index {i} is negative ({layerBoundaries[i]}). All boundaries must be non-negative.",
+                    nameof(layerBoundaries));
+            }
+
+            if (layerBoundaries[i] <= layerBoundaries[i - 1])
+            {
+                throw new ArgumentException(
+                    $"Layer boundaries must be strictly increasing, but boundary[{i}]={layerBoundaries[i]} " +
+                    $"<= boundary[{i - 1}]={layerBoundaries[i - 1]}.",
+                    nameof(layerBoundaries));
+            }
+        }
+
         _layerBoundaries = layerBoundaries;
         _costEstimator = costEstimator;
+        _isAutoDetect = false;
     }
 
     /// <summary>
@@ -83,6 +113,7 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
 
         _layerBoundaries = new[] { estimatedLayerSize };
         _costEstimator = costEstimator;
+        _isAutoDetect = true;
     }
 
     /// <inheritdoc/>
@@ -111,9 +142,9 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
 
     private int[] BuildLayerSizes(int totalParameters)
     {
-        if (_layerBoundaries.Length == 1)
+        if (_isAutoDetect)
         {
-            // Auto-detect mode: use estimated layer size to create boundaries
+            // Auto-detect mode: use estimated layer size to create synthetic boundaries
             int estimatedLayerSize = _layerBoundaries[0];
             int numLayers = Math.Max(1, totalParameters / estimatedLayerSize);
             var sizes = new int[numLayers];
@@ -128,13 +159,21 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
             return sizes;
         }
 
-        // Explicit boundaries mode
+        // Explicit boundaries mode: compute sizes from consecutive boundary differences
+        if (_layerBoundaries[_layerBoundaries.Length - 1] > totalParameters)
+        {
+            throw new ArgumentException(
+                $"Last layer boundary ({_layerBoundaries[_layerBoundaries.Length - 1]}) exceeds " +
+                $"total parameters ({totalParameters}).",
+                nameof(totalParameters));
+        }
+
         var layerSizes = new int[_layerBoundaries.Length];
         for (int i = 0; i < _layerBoundaries.Length; i++)
         {
             int start = _layerBoundaries[i];
             int end = (i + 1 < _layerBoundaries.Length) ? _layerBoundaries[i + 1] : totalParameters;
-            layerSizes[i] = Math.Max(0, end - start);
+            layerSizes[i] = end - start;
         }
 
         return layerSizes;

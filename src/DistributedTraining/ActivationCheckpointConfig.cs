@@ -28,6 +28,9 @@ namespace AiDotNet.DistributedTraining;
 /// </remarks>
 public class ActivationCheckpointConfig
 {
+    private int _checkpointEveryNLayers = 10;
+    private int _maxActivationsInMemory;
+
     /// <summary>
     /// Gets or sets whether activation checkpointing is enabled.
     /// </summary>
@@ -49,7 +52,21 @@ public class ActivationCheckpointConfig
     ///
     /// Default: 10 layers between checkpoints.</para>
     /// </remarks>
-    public int CheckpointEveryNLayers { get; set; } = 10;
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is less than 1.</exception>
+    public int CheckpointEveryNLayers
+    {
+        get => _checkpointEveryNLayers;
+        set
+        {
+            if (value < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value),
+                    $"CheckpointEveryNLayers must be at least 1, but was {value}. " +
+                    "A value of 0 would cause division-by-zero in interval-based checkpointing.");
+            }
+            _checkpointEveryNLayers = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the recomputation strategy to use during the backward pass.
@@ -72,7 +89,21 @@ public class ActivationCheckpointConfig
     /// A non-zero value overrides CheckpointEveryNLayers by dynamically adjusting
     /// the checkpoint frequency to stay within the memory budget.</para>
     /// </remarks>
-    public int MaxActivationsInMemory { get; set; }
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when value is negative.</exception>
+    public int MaxActivationsInMemory
+    {
+        get => _maxActivationsInMemory;
+        set
+        {
+            if (value < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value),
+                    $"MaxActivationsInMemory must be non-negative, but was {value}. " +
+                    "Use 0 for no limit.");
+            }
+            _maxActivationsInMemory = value;
+        }
+    }
 
     /// <summary>
     /// Gets or sets whether to checkpoint the very first layer's input.

@@ -125,6 +125,31 @@
 	  <Compile Remove="Polyfills\LanguageFeaturePolyfills.cs" />
 	</ItemGroup>
 
+	<!-- Source generator for auto-generating YAML configuration mappings -->
+	<ItemGroup>
+	  <ProjectReference Include="AiDotNet.Generators\AiDotNet.Generators.csproj"
+	                     OutputItemType="Analyzer"
+	                     ReferenceOutputAssembly="false" />
+	</ItemGroup>
+
+	<!-- Exclude the source generator project files from this project's compilation -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Generators\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Generators\**\*" />
+	  <None Remove="AiDotNet.Generators\**\*" />
+	</ItemGroup>
+
+	<!-- Emit generated source files to disk for inspection/debugging -->
+	<PropertyGroup>
+	  <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+	  <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
+	</PropertyGroup>
+
+	<!-- Exclude emitted generated files from compilation (they're already in-memory from the generator) -->
+	<ItemGroup>
+	  <Compile Remove="Generated\**\*.cs" />
+	</ItemGroup>
+
 	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo) -->
 	<ItemGroup>
 	  <PackageReference Include="AiDotNet.Tensors" Version="0.7.0" />

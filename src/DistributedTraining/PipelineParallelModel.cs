@@ -89,20 +89,38 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     // Whether the wrapped model supports true B/W decomposition
     private bool _supportsDecomposedBackward;
 
+    // Communication tag ranges to prevent collisions between forward activations,
+    // backward gradients, and predict-time messages.
+    private const int ActivationTagBase = 0;
+    private const int GradientTagBase = 100_000;
+    private const int PredictTagBase = 200_000;
+
     /// <summary>
     /// Gets the pipeline schedule used by this model.
     /// </summary>
-    public IPipelineSchedule Schedule => _schedule;
+    /// <remarks>
+    /// This property is internal. Configure the schedule via <c>AiModelBuilder</c> methods
+    /// (e.g., <c>ConfigureDistributedTraining</c>) rather than accessing this directly.
+    /// </remarks>
+    internal IPipelineSchedule Schedule => _schedule;
 
     /// <summary>
     /// Gets the activation checkpoint configuration.
     /// </summary>
-    public ActivationCheckpointConfig CheckpointConfig => _checkpointConfig;
+    /// <remarks>
+    /// This property is internal. Configure checkpointing via <c>AiModelBuilder</c> methods
+    /// rather than accessing this directly.
+    /// </remarks>
+    internal ActivationCheckpointConfig CheckpointConfig => _checkpointConfig;
 
     /// <summary>
     /// Gets the partition strategy, or null if using uniform partitioning.
     /// </summary>
-    public IPipelinePartitionStrategy<T>? PartitionStrategy => _partitionStrategy;
+    /// <remarks>
+    /// This property is internal. Configure the partition strategy via <c>AiModelBuilder</c> methods
+    /// rather than accessing this directly.
+    /// </remarks>
+    internal IPipelinePartitionStrategy<T>? PartitionStrategy => _partitionStrategy;
 
     /// <summary>
     /// Gets the estimated pipeline bubble fraction for the current configuration.
@@ -143,6 +161,18 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         _partitionStrategy = partitionStrategy;
         _schedule = schedule ?? new GPipeSchedule();
         _checkpointConfig = checkpointConfig ?? new ActivationCheckpointConfig();
+
+        // Activation checkpointing recomputation strategies (Selective, Full) require
+        // layer-level forward pass decomposition that is not yet implemented.
+        // Only interval-based checkpoint storage is currently functional.
+        if (_checkpointConfig.Enabled &&
+            _checkpointConfig.RecomputeStrategy != RecomputeStrategy.None)
+        {
+            throw new NotImplementedException(
+                $"Activation checkpointing with RecomputeStrategy.{_checkpointConfig.RecomputeStrategy} " +
+                "is not yet implemented. Use RecomputeStrategy.None to enable checkpoint storage " +
+                "without recomputation, or disable checkpointing entirely.");
+        }
     }
 
     /// <summary>
@@ -218,8 +248,26 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             if (_partitionStrategy is not null)
             {
                 var partitions = _partitionStrategy.ComputePartition(totalParams, _numStages);
-                ShardStartIndex = partitions[_stageId].StartIndex;
-                ShardSize = partitions[_stageId].Size;
+
+                if (partitions is null || partitions.Length != _numStages)
+                {
+                    throw new InvalidOperationException(
+                        $"Partition strategy returned {(partitions is null ? "null" : $"{partitions.Length} partitions")} " +
+                        $"but expected exactly {_numStages} partitions.");
+                }
+
+                var stagePartition = partitions[_stageId];
+                if (stagePartition.StartIndex < 0 || stagePartition.Size < 0 ||
+                    stagePartition.StartIndex + stagePartition.Size > totalParams)
+                {
+                    throw new InvalidOperationException(
+                        $"Partition strategy returned invalid partition for stage {_stageId}: " +
+                        $"StartIndex={stagePartition.StartIndex}, Size={stagePartition.Size}, " +
+                        $"but total parameters is {totalParams}.");
+                }
+
+                ShardStartIndex = stagePartition.StartIndex;
+                ShardSize = stagePartition.Size;
             }
             else
             {
@@ -661,18 +709,20 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
     /// <summary>
     /// Computes a unique communication tag for forward pass activations.
+    /// Tags are in the range [ActivationTagBase, GradientTagBase).
     /// </summary>
     private int ComputeForwardTag(int microBatchIndex, int virtualStageIndex)
     {
-        return microBatchIndex * (_virtualStagesPerRank + 1) * 10 + virtualStageIndex * 10;
+        return ActivationTagBase + microBatchIndex * (_virtualStagesPerRank + 1) + virtualStageIndex;
     }
 
     /// <summary>
     /// Computes a unique communication tag for backward pass gradients.
+    /// Tags are in the range [GradientTagBase, PredictTagBase).
     /// </summary>
     private int ComputeBackwardTag(int microBatchIndex, int virtualStageIndex)
     {
-        return 10000 + microBatchIndex * (_virtualStagesPerRank + 1) + virtualStageIndex;
+        return GradientTagBase + microBatchIndex * (_virtualStagesPerRank + 1) + virtualStageIndex;
     }
 
     /// <summary>
@@ -843,10 +893,11 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         if (_stageId > 0)
         {
-            Vector<T> sizeHeader = Config.CommunicationBackend.Receive(_stageId - 1, count: 1, tag: 10);
+            int tag = PredictTagBase;
+            Vector<T> sizeHeader = Config.CommunicationBackend.Receive(_stageId - 1, count: 1, tag: tag);
             int activationSize = NumOps.ToInt32(sizeHeader[0]);
 
-            Vector<T> receivedActivations = Config.CommunicationBackend.Receive(_stageId - 1, activationSize, tag: 10);
+            Vector<T> receivedActivations = Config.CommunicationBackend.Receive(_stageId - 1, activationSize, tag: tag);
             stageInput = ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(receivedActivations);
         }
 
@@ -854,11 +905,12 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         if (_stageId < _numStages - 1)
         {
+            int tag = PredictTagBase;
             Vector<T> activationsToSend = ConversionsHelper.ConvertToVector<T, TOutput>(stageOutput);
 
             var sizeHeader = new Vector<T>(new[] { NumOps.FromDouble(activationsToSend.Length) });
-            Config.CommunicationBackend.Send(sizeHeader, _stageId + 1, tag: 10);
-            Config.CommunicationBackend.Send(activationsToSend, _stageId + 1, tag: 10);
+            Config.CommunicationBackend.Send(sizeHeader, _stageId + 1, tag: tag);
+            Config.CommunicationBackend.Send(activationsToSend, _stageId + 1, tag: tag);
         }
 
         return stageOutput;
