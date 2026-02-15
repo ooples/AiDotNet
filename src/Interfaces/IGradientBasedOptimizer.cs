@@ -32,6 +32,7 @@ namespace AiDotNet.Interfaces;
 /// - Adam: A more sophisticated approach that adapts the step size for each parameter
 /// - RMSProp: Adjusts step sizes based on recent gradient history
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("GradientBasedOptimizer")]
 public interface IGradientBasedOptimizer<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>
 {
     /// <summary>

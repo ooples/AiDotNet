@@ -70,6 +70,7 @@ public abstract class InputOutputDataLoaderBase<T, TInput, TOutput> :
     protected InputOutputDataLoaderBase(int batchSize = 32)
         : base(batchSize)
     {
+        _batchSize = Math.Max(1, batchSize);
     }
 
     /// <inheritdoc/>

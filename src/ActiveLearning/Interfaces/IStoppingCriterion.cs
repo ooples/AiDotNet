@@ -17,6 +17,7 @@ namespace AiDotNet.ActiveLearning.Interfaces;
 /// <item><description><b>Prediction Stability:</b> Predictions are stable across iterations</description></item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("StoppingCriterion")]
 public interface IStoppingCriterion<T>
 {
     /// <summary>
@@ -129,6 +130,7 @@ public class ActiveLearningContext<T>
 /// Interface for composite stopping criteria (multiple criteria combined).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("CompositeCriterion")]
 public interface ICompositeCriterion<T> : IStoppingCriterion<T>
 {
     /// <summary>
@@ -156,6 +158,7 @@ public interface ICompositeCriterion<T> : IStoppingCriterion<T>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("PredictionBasedCriterion")]
 public interface IPredictionBasedCriterion<T, TInput, TOutput> : IStoppingCriterion<T>
 {
     /// <summary>
@@ -178,6 +181,7 @@ public interface IPredictionBasedCriterion<T, TInput, TOutput> : IStoppingCriter
 /// Interface for uncertainty-based stopping criteria.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("UncertaintyBasedCriterion")]
 public interface IUncertaintyBasedCriterion<T> : IStoppingCriterion<T>
 {
     /// <summary>

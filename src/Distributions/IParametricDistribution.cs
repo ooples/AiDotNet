@@ -18,6 +18,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ParametricDistribution")]
 public interface IParametricDistribution<T>
 {
     /// <summary>

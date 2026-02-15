@@ -17,6 +17,7 @@ namespace AiDotNet.DistributedTraining;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for operations (float, double, etc.)</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("CommunicationBackend")]
 public interface ICommunicationBackend<T>
 {
     /// <summary>

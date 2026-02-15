@@ -28,6 +28,7 @@ namespace AiDotNet.Interfaces;
 /// with <c>DetectorBasedFilter</c> to integrate them into <c>PreprocessingPipeline</c>.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AnomalyDetector")]
 public interface IAnomalyDetector<T>
 {
     /// <summary>

@@ -3,6 +3,7 @@ namespace AiDotNet.Interfaces;
 /// <summary>
 /// Interface for individuals supporting multi-objective optimization.
 /// </summary>
+[AiDotNet.Configuration.YamlConfigurable("MultiObjectiveIndividual")]
 public interface IMultiObjectiveIndividual<T>
 {
     /// <summary>

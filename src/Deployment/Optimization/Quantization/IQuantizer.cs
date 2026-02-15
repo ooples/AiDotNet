@@ -12,6 +12,7 @@ namespace AiDotNet.Deployment.Optimization.Quantization;
 /// <typeparam name="T">The numeric type used in the model</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("Quantizer")]
 public interface IQuantizer<T, TInput, TOutput>
 {
     /// <summary>

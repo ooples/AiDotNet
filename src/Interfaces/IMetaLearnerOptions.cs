@@ -21,6 +21,7 @@ namespace AiDotNet.Interfaces;
 /// - AdaptationSteps: How many gradient updates per task
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("MetaLearnerOptions")]
 public interface IMetaLearnerOptions<T>
 {
     /// <summary>

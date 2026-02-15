@@ -4,6 +4,7 @@ namespace AiDotNet.Interfaces;
 /// Represents a gradient for optimization algorithms.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("GradientModel")]
 public interface IGradientModel<T>
 {
     /// <summary>

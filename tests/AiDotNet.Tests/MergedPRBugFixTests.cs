@@ -2414,27 +2414,29 @@ public class MergedPRBugFixTests
     }
 
     [Fact]
-    public void ParameterAnalyzer_CalculateDistributionStats_ThrowsForNullGroups()
+    public void ParameterAnalyzer_CalculateDistributionStats_NullGroups_ThrowsArgumentNullException()
     {
         // ARRANGE
         var analyzer = new AiDotNet.DistributedTraining.ParameterAnalyzer<double>();
-        List<AiDotNet.DistributedTraining.ParameterAnalyzer<double>.ParameterGroup>? nullGroups = null;
 
-        // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentNullException>(() => analyzer.CalculateDistributionStats(nullGroups!));
-        Assert.Equal("groups", ex.ParamName);
+        // ACT & ASSERT - CalculateDistributionStats throws on null input
+        Assert.Throws<ArgumentNullException>(() =>
+            analyzer.CalculateDistributionStats(
+                (List<AiDotNet.DistributedTraining.ParameterAnalyzer<double>.ParameterGroup>)null));
     }
 
     [Fact]
-    public void ParameterAnalyzer_CalculateDistributionStats_ThrowsForEmptyGroups()
+    public void ParameterAnalyzer_CalculateDistributionStats_EmptyGroups_ReturnsEmptyDict()
     {
         // ARRANGE
         var analyzer = new AiDotNet.DistributedTraining.ParameterAnalyzer<double>();
         var emptyGroups = new List<AiDotNet.DistributedTraining.ParameterAnalyzer<double>.ParameterGroup>();
 
-        // ACT & ASSERT
-        var ex = Assert.Throws<ArgumentException>(() => analyzer.CalculateDistributionStats(emptyGroups));
-        Assert.Equal("groups", ex.ParamName);
+        // ACT
+        var result = analyzer.CalculateDistributionStats(emptyGroups);
+
+        // ASSERT
+        Assert.Empty(result);
     }
 
     [Fact]

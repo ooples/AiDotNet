@@ -22,6 +22,7 @@ namespace AiDotNet.PointCloud.Interfaces;
 /// - Robotics: Recognize and grasp specific parts of objects
 /// - 3D scene understanding: Parse indoor/outdoor environments
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("PointCloudSegmentation")]
 public interface IPointCloudSegmentation<T> : IPointCloudModel<T>
 {
     /// <summary>

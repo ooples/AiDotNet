@@ -35,6 +35,7 @@ namespace AiDotNet.Interfaces;
 /// </code>
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ReasoningStrategy")]
 public interface IReasoningStrategy<T>
 {
     /// <summary>

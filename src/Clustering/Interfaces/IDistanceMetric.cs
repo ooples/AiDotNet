@@ -21,6 +21,7 @@ namespace AiDotNet.Clustering.Interfaces;
 /// The choice of distance metric can significantly affect clustering results.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DistanceMetric")]
 public interface IDistanceMetric<T>
 {
     /// <summary>

@@ -29,6 +29,7 @@ namespace AiDotNet.CurriculumLearning.Interfaces;
 /// <item><description>Weinshall et al. (2018): Transfer teacher approach</description></item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("DifficultyEstimator")]
 public interface IDifficultyEstimator<T, TInput, TOutput>
 {
     /// <summary>
@@ -102,6 +103,7 @@ public interface IDifficultyEstimator<T, TInput, TOutput>
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ConfidentDifficultyEstimator")]
 public interface IConfidentDifficultyEstimator<T, TInput, TOutput> : IDifficultyEstimator<T, TInput, TOutput>
 {
     /// <summary>
@@ -123,6 +125,7 @@ public interface IConfidentDifficultyEstimator<T, TInput, TOutput> : IDifficulty
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("EnsembleDifficultyEstimator")]
 public interface IEnsembleDifficultyEstimator<T, TInput, TOutput> : IDifficultyEstimator<T, TInput, TOutput>
 {
     /// <summary>

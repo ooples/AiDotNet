@@ -35,6 +35,7 @@ namespace AiDotNet.Interfaces;
 /// - Easy to interpret (you can see exactly how each feature affects the prediction)
 /// - Often surprisingly effective despite their simplicity
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("LinearRegression")]
 public interface ILinearRegression<T> : IRegression<T>
 {
     /// <summary>

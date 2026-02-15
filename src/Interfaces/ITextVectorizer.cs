@@ -21,6 +21,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for the output matrix (e.g., float, double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("TextVectorizer")]
 public interface ITextVectorizer<T>
 {
     /// <summary>

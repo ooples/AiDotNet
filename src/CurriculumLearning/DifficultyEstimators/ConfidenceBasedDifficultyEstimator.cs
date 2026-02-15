@@ -324,6 +324,7 @@ public enum ConfidenceMetricType
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input type.</typeparam>
 /// <typeparam name="TOutput">The output type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ProbabilisticModel")]
 public interface IProbabilisticModel<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>

@@ -19,6 +19,7 @@ namespace AiDotNet.Interfaces;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type after transformation.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("DataTransformer")]
 public interface IDataTransformer<T, TInput, TOutput>
 {
     /// <summary>

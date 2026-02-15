@@ -10,6 +10,7 @@ namespace AiDotNet.Interfaces;
 /// <b>For Beginners:</b> The provider hides cryptographic details (keys, ciphertexts, parameters) behind a simple interface.
 /// </remarks>
 /// <typeparam name="T">Numeric type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("HomomorphicEncryptionProvider")]
 public interface IHomomorphicEncryptionProvider<T>
 {
     /// <summary>
