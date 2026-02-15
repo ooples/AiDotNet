@@ -99,31 +99,6 @@
 	  <Folder Include="WaveletFunctions\" />
 	</ItemGroup>
 
-	<!-- Source generator for auto-generating YAML configuration mappings -->
-	<ItemGroup>
-	  <ProjectReference Include="AiDotNet.Generators\AiDotNet.Generators.csproj"
-	                     OutputItemType="Analyzer"
-	                     ReferenceOutputAssembly="false" />
-	</ItemGroup>
-
-	<!-- Exclude the source generator project files from this project's compilation -->
-	<ItemGroup>
-	  <Compile Remove="AiDotNet.Generators\**\*.cs" />
-	  <EmbeddedResource Remove="AiDotNet.Generators\**\*" />
-	  <None Remove="AiDotNet.Generators\**\*" />
-	</ItemGroup>
-
-	<!-- Emit generated source files to disk for inspection/debugging -->
-	<PropertyGroup>
-	  <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
-	  <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
-	</PropertyGroup>
-
-	<!-- Exclude emitted generated files from compilation (they're already in-memory from the generator) -->
-	<ItemGroup>
-	  <Compile Remove="Generated\**\*.cs" />
-	</ItemGroup>
-
 	<!-- Exclude the AiDotNet.Serving project files from this project -->
 	<ItemGroup>
 	  <Compile Remove="AiDotNet.Serving\**\*.cs" />
@@ -155,7 +130,8 @@
 	<ItemGroup>
 	  <ProjectReference Include="AiDotNet.Generators\AiDotNet.Generators.csproj"
 	                     OutputItemType="Analyzer"
-	                     ReferenceOutputAssembly="false" />
+	                     ReferenceOutputAssembly="false"
+	                     SetTargetFramework="TargetFramework=netstandard2.0" />
 	</ItemGroup>
 
 	<!-- Exclude the source generator project files from this project's compilation -->
