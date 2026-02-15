@@ -557,8 +557,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// - Planning per-category operations like mixed-precision quantization
     /// </para>
     /// </remarks>
-    [JsonProperty]
-    public Dictionary<LayerCategory, int>? LayerCategorySummary { get; internal set; }
+    [JsonProperty("LayerCategorySummary")]
+    private Dictionary<LayerCategory, int>? _layerCategorySummary;
+
+    /// <inheritdoc cref="_layerCategorySummary"/>
+    [JsonIgnore]
+    public IReadOnlyDictionary<LayerCategory, int>? LayerCategorySummary => _layerCategorySummary;
 
     /// <summary>
     /// Gets the total number of trainable parameters across all layers.
@@ -1231,9 +1235,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             for (int i = 0; i < allLayerInfo.Count; i++)
             {
                 var info = allLayerInfo[i];
-                if (categorySummary.ContainsKey(info.Category))
+                if (categorySummary.TryGetValue(info.Category, out int count))
                 {
-                    categorySummary[info.Category]++;
+                    categorySummary[info.Category] = count + 1;
                 }
                 else
                 {
@@ -1245,7 +1249,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 }
                 totalFlops += info.EstimatedFlops;
             }
-            LayerCategorySummary = categorySummary;
+            _layerCategorySummary = categorySummary;
             TotalTrainableParameters = totalParams;
             TotalEstimatedFlops = totalFlops;
         }
@@ -4477,6 +4481,32 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 {
                     Model.Deserialize(modelBytes);
                     OptimizationResult.BestSolution = Model;
+                }
+
+                // Recompute layer metadata from the live model (serialized snapshots may be stale)
+                if (Model is ILayeredModel<T> layeredModel)
+                {
+                    LayerCount = layeredModel.LayerCount;
+                    var allLayerInfo = layeredModel.GetAllLayerInfo();
+                    var categorySummary = new Dictionary<LayerCategory, int>();
+                    long totalParams = 0;
+                    long totalFlops = 0;
+                    for (int i = 0; i < allLayerInfo.Count; i++)
+                    {
+                        var info = allLayerInfo[i];
+                        if (categorySummary.TryGetValue(info.Category, out int cnt))
+                            categorySummary[info.Category] = cnt + 1;
+                        else
+                            categorySummary[info.Category] = 1;
+
+                        if (info.IsTrainable)
+                            totalParams += info.ParameterCount;
+
+                        totalFlops += info.EstimatedFlops;
+                    }
+                    _layerCategorySummary = categorySummary;
+                    TotalTrainableParameters = totalParams;
+                    TotalEstimatedFlops = totalFlops;
                 }
             }
             else

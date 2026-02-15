@@ -512,7 +512,11 @@ public class QuantizationConfiguration
     {
         if (CategoryBitWidths is not null && CategoryBitWidths.TryGetValue(category, out int bitWidth))
         {
-            return bitWidth;
+            // Validate: bit widths must be positive
+            if (bitWidth > 0)
+            {
+                return bitWidth;
+            }
         }
         return EffectiveBitWidth;
     }
@@ -557,6 +561,13 @@ public class QuantizationConfiguration
     public static QuantizationConfiguration ForMixedPrecision(
         int sensitiveBitWidth = 8, int aggressiveBitWidth = 4, int groupSize = 128)
     {
+        if (sensitiveBitWidth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sensitiveBitWidth), "Bit width must be positive.");
+        if (aggressiveBitWidth <= 0)
+            throw new ArgumentOutOfRangeException(nameof(aggressiveBitWidth), "Bit width must be positive.");
+        if (groupSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(groupSize), "Group size must be positive.");
+
         return new QuantizationConfiguration
         {
             Mode = QuantizationMode.Int8,

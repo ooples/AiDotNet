@@ -139,7 +139,8 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             ShardStartIndex = _stageId * baseShardSize + Math.Min(_stageId, remainder);
 
             var shardData = new T[ShardSize];
-            Array.Copy(fullParameters.ToArray(), ShardStartIndex, shardData, 0, ShardSize);
+            var paramArray = fullParameters.ToArray();
+            Array.Copy(paramArray, ShardStartIndex, shardData, 0, ShardSize);
             LocalShard = new Vector<T>(shardData);
         }
 
@@ -156,13 +157,14 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     {
         var allLayerInfo = layeredModel.GetAllLayerInfo();
         int layerCount = allLayerInfo.Count;
+        var paramArray = fullParameters.ToArray();
 
         if (layerCount == 0 || _numStages <= 1)
         {
             // Single stage or no layers: take all parameters
             ShardStartIndex = 0;
             ShardSize = fullParameters.Length;
-            LocalShard = new Vector<T>(fullParameters.ToArray());
+            LocalShard = new Vector<T>(paramArray);
             return;
         }
 
@@ -234,8 +236,11 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         // Use LayerInfo parameter offsets for precise slicing
         int stageParamStart = allLayerInfo[firstLayerInStage].ParameterOffset;
-        int stageParamEnd = allLayerInfo[lastLayerInStage].ParameterOffset +
-                            allLayerInfo[lastLayerInStage].ParameterCount;
+        long stageParamEndLong = (long)allLayerInfo[lastLayerInStage].ParameterOffset +
+                                 allLayerInfo[lastLayerInStage].ParameterCount;
+        int stageParamEnd = stageParamEndLong > int.MaxValue
+            ? fullParameters.Length
+            : (int)stageParamEndLong;
 
         ShardStartIndex = stageParamStart;
         ShardSize = stageParamEnd - stageParamStart;
@@ -243,7 +248,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         if (ShardSize > 0)
         {
             var shardData = new T[ShardSize];
-            Array.Copy(fullParameters.ToArray(), ShardStartIndex, shardData, 0, ShardSize);
+            Array.Copy(paramArray, ShardStartIndex, shardData, 0, ShardSize);
             LocalShard = new Vector<T>(shardData);
         }
         else

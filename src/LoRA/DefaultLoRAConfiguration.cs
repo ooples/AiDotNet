@@ -396,6 +396,11 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
     /// <returns>A list of layers where eligible layers have been wrapped with LoRA adapters.</returns>
     public IReadOnlyList<ILayer<T>> ApplyLoRAToModel(ILayeredModel<T> layeredModel)
     {
+        if (layeredModel is null)
+        {
+            throw new ArgumentNullException(nameof(layeredModel));
+        }
+
         var allLayerInfo = layeredModel.GetAllLayerInfo();
         var adaptedLayers = new List<ILayer<T>>(allLayerInfo.Count);
 

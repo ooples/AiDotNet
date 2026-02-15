@@ -4058,7 +4058,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <para><b>For Beginners:</b> This provides read-only access to the model's layers
     /// for tools that need to inspect the model structure without modifying it.</para>
     /// </remarks>
-    IReadOnlyList<ILayer<T>> ILayeredModel<T>.Layers => _layers;
+    IReadOnlyList<ILayer<T>> ILayeredModel<T>.Layers => _layers.AsReadOnly();
 
     /// <summary>
     /// Gets metadata for a specific layer including its parameter offset
@@ -4077,31 +4077,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 $"Layer index {layerIndex} is out of range. Valid range: 0 to {_layers.Count - 1}.");
         }
 
-        // Compute parameter offset by summing parameter counts of preceding layers
-        int parameterOffset = 0;
-        for (int i = 0; i < layerIndex; i++)
-        {
-            parameterOffset += _layers[i].ParameterCount;
-        }
-
-        var layer = _layers[layerIndex];
-        var layerBase = layer as LayerBase<T>;
-
-        return new LayerInfo<T>
-        {
-            Index = layerIndex,
-            Name = layer.LayerName,
-            Category = layerBase?.GetLayerCategory() ?? LayerCategory.Other,
-            Layer = layer,
-            ParameterOffset = parameterOffset,
-            ParameterCount = layer.ParameterCount,
-            InputShape = layer.GetInputShape(),
-            OutputShape = layer.GetOutputShape(),
-            IsTrainable = layer.SupportsTraining && layer.ParameterCount > 0,
-            EstimatedFlops = layerBase?.EstimateFlops() ?? 2L * layer.ParameterCount,
-            EstimatedActivationMemory = layerBase?.EstimateActivationMemory() ?? 0L,
-        };
+        // Use cached layer info to avoid O(n) offset computation per call
+        var allInfo = GetAllLayerInfo();
+        return allInfo[layerIndex];
     }
+
+    /// <summary>
+    /// Cached layer info list, invalidated when layers change.
+    /// </summary>
+    private IReadOnlyList<LayerInfo<T>>? _cachedLayerInfo;
+    private int _cachedLayerCount = -1;
 
     /// <summary>
     /// Gets metadata for all layers, including parameter offsets, types,
@@ -4110,6 +4095,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <returns>An ordered list of layer metadata.</returns>
     public IReadOnlyList<LayerInfo<T>> GetAllLayerInfo()
     {
+        // Return cached result if layer count hasn't changed
+        if (_cachedLayerInfo is not null && _cachedLayerCount == _layers.Count)
+        {
+            return _cachedLayerInfo;
+        }
+
         var result = new List<LayerInfo<T>>(_layers.Count);
         int parameterOffset = 0;
 
@@ -4136,6 +4127,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             parameterOffset += layer.ParameterCount;
         }
 
+        _cachedLayerInfo = result;
+        _cachedLayerCount = _layers.Count;
         return result;
     }
 

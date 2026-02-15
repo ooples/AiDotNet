@@ -1051,7 +1051,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     public virtual long EstimateActivationMemory()
     {
         // Default: output shape elements * sizeof(T)
-        // Assume sizeof(T) is 4 bytes (float) as a reasonable default
         var outputShape = GetOutputShape();
         long elements = 1;
         foreach (var dim in outputShape)
@@ -1059,7 +1058,33 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             elements *= dim;
         }
 
-        return elements * 4; // 4 bytes per element (float assumption)
+        int bytesPerElement = GetBytesPerElement();
+        return elements * bytesPerElement;
+    }
+
+    /// <summary>
+    /// Gets the number of bytes per element for the numeric type <typeparamref name="T"/>.
+    /// </summary>
+    private static int GetBytesPerElement()
+    {
+        if (typeof(T) == typeof(double))
+            return 8;
+        if (typeof(T) == typeof(float))
+            return 4;
+        if (typeof(T) == typeof(decimal))
+            return 16;
+        if (typeof(T) == typeof(Half))
+            return 2;
+
+        // Fallback: try System.Runtime.InteropServices.Marshal.SizeOf
+        try
+        {
+            return System.Runtime.InteropServices.Marshal.SizeOf<T>();
+        }
+        catch
+        {
+            return 4; // Default to 4 bytes if we can't determine the size
+        }
     }
 
     /// <summary>

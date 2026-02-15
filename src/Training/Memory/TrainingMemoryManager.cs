@@ -164,6 +164,11 @@ public class TrainingMemoryManager<T> : IDisposable
     /// <param name="layeredModel">The model with layer-level metadata access.</param>
     public void ComputeCheckpointIndices(ILayeredModel<T> layeredModel)
     {
+        if (layeredModel is null)
+        {
+            throw new ArgumentNullException(nameof(layeredModel));
+        }
+
         _checkpointIndices.Clear();
 
         if (!Config.UseGradientCheckpointing)
@@ -196,8 +201,7 @@ public class TrainingMemoryManager<T> : IDisposable
             }
 
             // High activation memory layers benefit most from checkpointing
-            // Checkpoint layers that use more than 1MB of activation memory
-            if (info.EstimatedActivationMemory > 1_048_576)
+            if (info.EstimatedActivationMemory > Config.HighActivationMemoryThresholdBytes)
             {
                 shouldCheckpoint = true;
             }

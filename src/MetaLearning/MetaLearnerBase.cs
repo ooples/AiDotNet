@@ -773,13 +773,13 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
         var parameters = model.GetParameters();
         var allLayerInfo = layeredModel.GetAllLayerInfo();
         var updated = new Vector<T>(parameters.Length);
-        Array.Copy(parameters.ToArray(), updated.ToArray(), parameters.Length);
-
-        foreach (var info in allLayerInfo)
+        for (int i = 0; i < parameters.Length; i++)
         {
-            if (info.ParameterCount == 0)
-                continue;
+            updated[i] = parameters[i];
+        }
 
+        foreach (var info in allLayerInfo.Where(l => l.ParameterCount > 0))
+        {
             double lr = perLayerLearningRates.TryGetValue(info.Index, out double layerLr)
                 ? layerLr
                 : defaultLearningRate;

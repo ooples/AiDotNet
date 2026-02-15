@@ -79,6 +79,21 @@ public class SubModel<T> : ILayeredModel<T>
         {
             throw new ArgumentException("Sub-model must contain at least one layer.", nameof(layers));
         }
+        if (layers.Count != layerInfos.Count)
+        {
+            throw new ArgumentException(
+                $"Layer count ({layers.Count}) must match layer info count ({layerInfos.Count}).",
+                nameof(layerInfos));
+        }
+        if (startIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startIndex), "Start index cannot be negative.");
+        }
+        if (endIndex < startIndex)
+        {
+            throw new ArgumentOutOfRangeException(nameof(endIndex),
+                $"End index ({endIndex}) must be >= start index ({startIndex}).");
+        }
 
         _layers = layers;
         _layerInfos = layerInfos;

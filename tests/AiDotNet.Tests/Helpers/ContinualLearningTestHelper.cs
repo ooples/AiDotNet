@@ -115,35 +115,33 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
             throw new ArgumentOutOfRangeException(nameof(layerIndex));
         }
 
-        int parameterOffset = 0;
-        for (int i = 0; i < layerIndex; i++)
-        {
-            parameterOffset += _layers[i].ParameterCount;
-        }
-
-        var layer = _layers[layerIndex];
-        return new LayerInfo<T>
-        {
-            Index = layerIndex,
-            Name = layer.LayerName,
-            Category = LayerCategory.Dense,
-            Layer = layer,
-            ParameterOffset = parameterOffset,
-            ParameterCount = layer.ParameterCount,
-            InputShape = layer.GetInputShape(),
-            OutputShape = layer.GetOutputShape(),
-            IsTrainable = layer.SupportsTraining,
-            EstimatedFlops = 2L * layer.ParameterCount,
-            EstimatedActivationMemory = layer.GetOutputShape().Aggregate(1L, (a, b) => a * b) * 4
-        };
+        var allInfo = GetAllLayerInfo();
+        return allInfo[layerIndex];
     }
 
     public IReadOnlyList<LayerInfo<T>> GetAllLayerInfo()
     {
         var result = new List<LayerInfo<T>>(_layers.Count);
+        int parameterOffset = 0;
+
         for (int i = 0; i < _layers.Count; i++)
         {
-            result.Add(GetLayerInfo(i));
+            var layer = _layers[i];
+            result.Add(new LayerInfo<T>
+            {
+                Index = i,
+                Name = layer.LayerName,
+                Category = LayerCategory.Dense,
+                Layer = layer,
+                ParameterOffset = parameterOffset,
+                ParameterCount = layer.ParameterCount,
+                InputShape = layer.GetInputShape(),
+                OutputShape = layer.GetOutputShape(),
+                IsTrainable = layer.SupportsTraining,
+                EstimatedFlops = 2L * layer.ParameterCount,
+                EstimatedActivationMemory = layer.GetOutputShape().Aggregate(1L, (a, b) => a * b) * 8
+            });
+            parameterOffset += layer.ParameterCount;
         }
         return result;
     }
@@ -154,6 +152,23 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
         {
             return false;
         }
+
+        var currentOutput = _layers[afterLayerIndex].GetOutputShape();
+        var nextInput = _layers[afterLayerIndex + 1].GetInputShape();
+
+        if (currentOutput.Length != nextInput.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < currentOutput.Length; i++)
+        {
+            if (currentOutput[i] != nextInput[i])
+            {
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -192,7 +207,7 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
                 OutputShape = layer.GetOutputShape(),
                 IsTrainable = layer.SupportsTraining,
                 EstimatedFlops = 2L * layer.ParameterCount,
-                EstimatedActivationMemory = 40
+                EstimatedActivationMemory = layer.GetOutputShape().Aggregate(1L, (a, b) => a * b) * 8
             });
             localOffset += layer.ParameterCount;
         }

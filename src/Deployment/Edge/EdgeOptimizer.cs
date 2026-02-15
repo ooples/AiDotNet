@@ -279,7 +279,7 @@ public class EdgeOptimizer<T, TInput, TOutput>
         // Find the layer boundary where cumulative FLOPs are closest to half
         long halfFlops = totalFlops / 2;
         long cumulative = 0;
-        int bestPartition = allLayerInfo.Count / 2;
+        int bestPartition = -1;
         long bestDiff = long.MaxValue;
 
         for (int i = 0; i < allLayerInfo.Count - 1; i++)
@@ -298,6 +298,12 @@ public class EdgeOptimizer<T, TInput, TOutput>
                 bestDiff = diff;
                 bestPartition = i + 1; // Partition after this layer
             }
+        }
+
+        // If no structurally valid partition point was found, fallback to midpoint
+        if (bestPartition < 0)
+        {
+            bestPartition = allLayerInfo.Count / 2;
         }
 
         return bestPartition;

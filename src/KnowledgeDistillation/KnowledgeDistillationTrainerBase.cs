@@ -847,7 +847,10 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
             {
                 // Convert tensor output to matrix: [batchSize, features]
                 var outputShape = current.Shape;
-                int batchSize = outputShape[0];
+                if (outputShape.Length == 0 || outputShape[0] <= 0 || current.Length == 0)
+                    continue;
+
+                int batchSize = outputShape.Length >= 2 ? outputShape[0] : 1;
                 int features = current.Length / batchSize;
 
                 var matrix = new Matrix<T>(batchSize, features);
@@ -904,9 +907,15 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
                 continue;
             }
 
+            // Require matching dimensions - mismatched shapes indicate a configuration error
+            if (studentMatrix.Rows != teacherMatrix.Rows || studentMatrix.Columns != teacherMatrix.Columns)
+            {
+                continue;
+            }
+
             // Compute per-element MSE between student and teacher activations
-            int rows = Math.Min(studentMatrix.Rows, teacherMatrix.Rows);
-            int cols = Math.Min(studentMatrix.Columns, teacherMatrix.Columns);
+            int rows = studentMatrix.Rows;
+            int cols = studentMatrix.Columns;
 
             T layerLoss = NumOps.Zero;
             int elementCount = rows * cols;
@@ -930,7 +939,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         }
 
         // Average across matched layers
-        if (matchedLayers > 1)
+        if (matchedLayers > 0)
         {
             totalLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(matchedLayers));
         }
