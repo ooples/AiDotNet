@@ -3751,8 +3751,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// Activation checkpointing configuration.
     /// If null, checkpointing is disabled. Enable to reduce memory from O(L) to O(sqrt(L)).
     /// </param>
-    /// <param name="microBatchSize">
-    /// Number of micro-batches for pipeline execution.
+    /// <param name="microBatchCount">
+    /// Number of micro-batches to split the full batch into for pipeline execution.
     /// Higher values reduce pipeline bubble but increase memory. Default: 1.
     /// </param>
     /// <returns>This builder instance for method chaining.</returns>
@@ -3777,7 +3777,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///         schedule: new OneForwardOneBackwardSchedule(),
     ///         partitionStrategy: new LoadBalancedPartitionStrategy&lt;double&gt;(estimatedLayerSize: 1024),
     ///         checkpointConfig: new ActivationCheckpointConfig { Enabled = true },
-    ///         microBatchSize: 8)
+    ///         microBatchCount: 8)
     ///     .Build(xTrain, yTrain);
     /// </code>
     /// </para>
@@ -3786,12 +3786,18 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         IPipelineSchedule? schedule = null,
         IPipelinePartitionStrategy<T>? partitionStrategy = null,
         ActivationCheckpointConfig? checkpointConfig = null,
-        int microBatchSize = 1)
+        int microBatchCount = 1)
     {
+        if (microBatchCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(microBatchCount),
+                $"Micro-batch count must be at least 1, but was {microBatchCount}.");
+        }
+
         _pipelineSchedule = schedule;
         _pipelinePartitionStrategy = partitionStrategy;
         _pipelineCheckpointConfig = checkpointConfig;
-        _pipelineMicroBatchSize = microBatchSize;
+        _pipelineMicroBatchSize = microBatchCount;
         return this;
     }
 

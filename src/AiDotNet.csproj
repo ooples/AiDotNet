@@ -139,8 +139,8 @@
 	  <None Remove="AiDotNet.Generators\**\*" />
 	</ItemGroup>
 
-	<!-- Emit generated source files to disk for inspection/debugging -->
-	<PropertyGroup>
+	<!-- Emit generated source files to disk for inspection/debugging (Debug only) -->
+	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
 	  <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
 	  <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
 	</PropertyGroup>

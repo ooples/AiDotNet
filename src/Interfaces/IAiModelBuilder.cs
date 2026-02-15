@@ -786,13 +786,13 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="schedule">Pipeline schedule. Null = GPipeSchedule.</param>
     /// <param name="partitionStrategy">Partition strategy. Null = uniform.</param>
     /// <param name="checkpointConfig">Activation checkpointing config. Null = disabled.</param>
-    /// <param name="microBatchSize">Number of micro-batches. Default: 1.</param>
+    /// <param name="microBatchCount">Number of micro-batches to split the full batch into. Default: 1.</param>
     /// <returns>This builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigurePipelineParallelism(
         IPipelineSchedule? schedule = null,
         IPipelinePartitionStrategy<T>? partitionStrategy = null,
         ActivationCheckpointConfig? checkpointConfig = null,
-        int microBatchSize = 1);
+        int microBatchCount = 1);
 
     /// <summary>
     /// Configures the cross-validation strategy for model evaluation.

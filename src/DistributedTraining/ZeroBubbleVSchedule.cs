@@ -124,6 +124,8 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
                backwardInputCount0 < numMicroBatches ||
                backwardInputCount1 < numMicroBatches)
         {
+            bool isCooldown = forwardCount0 >= numMicroBatches && forwardCount1 >= numMicroBatches;
+
             // Forward on chunk 0 (if available)
             if (forwardCount0 < numMicroBatches)
             {
@@ -155,7 +157,6 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
             // BackwardInput on chunk 1 (reverse order - B step, critical path)
             if (backwardInputCount1 < forwardCount1 && backwardInputCount1 < numMicroBatches)
             {
-                bool isCooldown = forwardCount0 >= numMicroBatches && forwardCount1 >= numMicroBatches;
                 ops.Add(new PipelineOperation
                 {
                     Type = PipelineOperationType.BackwardInput,
@@ -170,7 +171,6 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
             // BackwardInput on chunk 0 (after chunk 1's B is done for this microbatch)
             if (backwardInputCount0 < backwardInputCount1 && backwardInputCount0 < numMicroBatches)
             {
-                bool isCooldown = forwardCount0 >= numMicroBatches && forwardCount1 >= numMicroBatches;
                 ops.Add(new PipelineOperation
                 {
                     Type = PipelineOperationType.BackwardInput,
@@ -191,7 +191,7 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
                     MicroBatchIndex = backwardWeightCount1,
                     VirtualStageIndex = 1,
                     IsWarmup = false,
-                    IsCooldown = true
+                    IsCooldown = isCooldown
                 });
                 backwardWeightCount1++;
             }
@@ -204,7 +204,7 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
                     MicroBatchIndex = backwardWeightCount0,
                     VirtualStageIndex = 0,
                     IsWarmup = false,
-                    IsCooldown = true
+                    IsCooldown = isCooldown
                 });
                 backwardWeightCount0++;
             }

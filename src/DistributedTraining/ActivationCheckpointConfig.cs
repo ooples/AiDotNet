@@ -60,7 +60,7 @@ public class ActivationCheckpointConfig
         {
             if (value < 1)
             {
-                throw new ArgumentOutOfRangeException(nameof(value),
+                throw new ArgumentOutOfRangeException(nameof(CheckpointEveryNLayers),
                     $"CheckpointEveryNLayers must be at least 1, but was {value}. " +
                     "A value of 0 would cause division-by-zero in interval-based checkpointing.");
             }
@@ -97,7 +97,7 @@ public class ActivationCheckpointConfig
         {
             if (value < 0)
             {
-                throw new ArgumentOutOfRangeException(nameof(value),
+                throw new ArgumentOutOfRangeException(nameof(MaxActivationsInMemory),
                     $"MaxActivationsInMemory must be non-negative, but was {value}. " +
                     "Use 0 for no limit.");
             }

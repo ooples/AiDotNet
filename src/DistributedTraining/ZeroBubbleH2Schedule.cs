@@ -56,8 +56,10 @@ public class ZeroBubbleH2Schedule : IPipelineSchedule
         // The key difference from ZB-H1: we allow up to (numStages - 1) additional in-flight
         // micro-batches, which uses more memory but fills all bubbles.
 
-        // Extended warmup: allow up to numStages warmup forwards (vs numStages-1-stageId in 1F1B)
-        int numWarmupForwards = Math.Min(numStages, numMicroBatches);
+        // Extended warmup: later stages (higher stageId) get fewer warmup forwards
+        // because their inputs arrive later in the pipeline.
+        // Stage 0 gets up to numStages warmup forwards, stage (numStages-1) gets 1.
+        int numWarmupForwards = Math.Min(numStages - stageId, numMicroBatches);
 
         // Phase 1: Extended warmup - more forward passes to fill pipeline completely
         int forwardIdx = 0;

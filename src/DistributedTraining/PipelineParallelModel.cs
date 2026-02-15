@@ -125,7 +125,19 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <summary>
     /// Gets the estimated pipeline bubble fraction for the current configuration.
     /// </summary>
-    public double EstimatedBubbleFraction => _schedule.EstimateBubbleFraction(_numStages, _microBatchSize);
+    public double EstimatedBubbleFraction
+    {
+        get
+        {
+            if (_numStages <= 0)
+            {
+                throw new InvalidOperationException(
+                    "EstimatedBubbleFraction cannot be computed before sharding is initialized.");
+            }
+
+            return _schedule.EstimateBubbleFraction(_numStages, _microBatchSize);
+        }
+    }
 
     /// <summary>
     /// Creates a new Pipeline Parallel model.
@@ -216,6 +228,18 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                     throw new InvalidOperationException(
                         $"Partition strategy returned {(vsPartitions is null ? "null" : $"{vsPartitions.Length} partitions")} " +
                         $"but expected exactly {_totalVirtualStages} partitions for {_virtualStagesPerRank} virtual stages per rank.");
+                }
+
+                // Validate bounds for all virtual stage partitions
+                for (int vs = 0; vs < _totalVirtualStages; vs++)
+                {
+                    var (start, size) = vsPartitions[vs];
+                    if (start < 0 || size < 0 || start + size > totalParams)
+                    {
+                        throw new InvalidOperationException(
+                            $"Partition strategy returned invalid partition for virtual stage {vs}: " +
+                            $"StartIndex={start}, Size={size}, but total parameters is {totalParams}.");
+                    }
                 }
             }
             else
@@ -808,6 +832,8 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         }
 
         // Check if there's a nearby checkpoint to recompute from
+        // NOTE: Currently unreachable because the constructor rejects RecomputeStrategy != None.
+        // This is infrastructure for future recompute support (Selective/Full strategies).
         if (_checkpointConfig.Enabled && _checkpointConfig.RecomputeStrategy != RecomputeStrategy.None)
         {
             // Find the nearest earlier checkpoint within the SAME micro-batch.
@@ -900,6 +926,13 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                 copy[i] = newGradients[i];
             }
             return new Vector<T>(copy);
+        }
+
+        if (accumulated.Length != newGradients.Length)
+        {
+            throw new InvalidOperationException(
+                $"Gradient length mismatch: accumulated has {accumulated.Length} elements " +
+                $"but new gradients have {newGradients.Length} elements.");
         }
 
         for (int i = 0; i < accumulated.Length; i++)
