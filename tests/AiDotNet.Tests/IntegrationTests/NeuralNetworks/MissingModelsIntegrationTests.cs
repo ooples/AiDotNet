@@ -1,8 +1,8 @@
 using System;
 using System.IO;
+using AiDotNet.Diffusion;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Diffusion;
 using AiDotNet.NeuralNetworks.Tasks.Graph;
 using AiDotNet.Tensors;
 using AiDotNet.Tokenization;

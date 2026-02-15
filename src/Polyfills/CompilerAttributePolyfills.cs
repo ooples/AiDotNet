@@ -108,6 +108,26 @@ namespace System.Diagnostics.CodeAnalysis
     }
 
     /// <summary>
+    /// Specifies that the method or property will ensure that the listed field and property members
+    /// have non-null values when returning with the specified return value condition.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = true, Inherited = false)]
+    public sealed class MemberNotNullAttribute : Attribute
+    {
+        public MemberNotNullAttribute(string member)
+        {
+            Members = [member];
+        }
+
+        public MemberNotNullAttribute(params string[] members)
+        {
+            Members = members;
+        }
+
+        public string[] Members { get; }
+    }
+
+    /// <summary>
     /// Specifies that an output is not null even if the corresponding type allows it.
     /// Applied to Guard.NotNull's parameter to tell the compiler the value is non-null after the call.
     /// </summary>
