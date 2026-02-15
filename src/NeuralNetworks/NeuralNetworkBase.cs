@@ -4049,5 +4049,142 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     #endregion
 
+    #region ILayeredModel<T> Implementation
+
+    /// <summary>
+    /// Gets the ordered list of layers in this model (explicit interface implementation).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This provides read-only access to the model's layers
+    /// for tools that need to inspect the model structure without modifying it.</para>
+    /// </remarks>
+    IReadOnlyList<ILayer<T>> ILayeredModel<T>.Layers => _layers;
+
+    /// <summary>
+    /// Gets metadata for a specific layer including its parameter offset
+    /// within the flat parameter vector.
+    /// </summary>
+    /// <param name="layerIndex">Zero-based index of the layer.</param>
+    /// <returns>Metadata about the layer at the specified index.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="layerIndex"/> is negative or greater than or equal to <see cref="LayerCount"/>.
+    /// </exception>
+    public LayerInfo<T> GetLayerInfo(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerIndex),
+                $"Layer index {layerIndex} is out of range. Valid range: 0 to {_layers.Count - 1}.");
+        }
+
+        // Compute parameter offset by summing parameter counts of preceding layers
+        int parameterOffset = 0;
+        for (int i = 0; i < layerIndex; i++)
+        {
+            parameterOffset += _layers[i].ParameterCount;
+        }
+
+        var layer = _layers[layerIndex];
+        var layerBase = layer as LayerBase<T>;
+
+        return new LayerInfo<T>
+        {
+            Index = layerIndex,
+            Name = layer.LayerName,
+            Category = layerBase?.GetLayerCategory() ?? LayerCategory.Other,
+            Layer = layer,
+            ParameterOffset = parameterOffset,
+            ParameterCount = layer.ParameterCount,
+            InputShape = layer.GetInputShape(),
+            OutputShape = layer.GetOutputShape(),
+            IsTrainable = layer.SupportsTraining && layer.ParameterCount > 0,
+            EstimatedFlops = layerBase?.EstimateFlops() ?? 2L * layer.ParameterCount,
+            EstimatedActivationMemory = layerBase?.EstimateActivationMemory() ?? 0L,
+        };
+    }
+
+    /// <summary>
+    /// Gets metadata for all layers, including parameter offsets, types,
+    /// shapes, names, and cost estimates.
+    /// </summary>
+    /// <returns>An ordered list of layer metadata.</returns>
+    public IReadOnlyList<LayerInfo<T>> GetAllLayerInfo()
+    {
+        var result = new List<LayerInfo<T>>(_layers.Count);
+        int parameterOffset = 0;
+
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            var layer = _layers[i];
+            var layerBase = layer as LayerBase<T>;
+
+            result.Add(new LayerInfo<T>
+            {
+                Index = i,
+                Name = layer.LayerName,
+                Category = layerBase?.GetLayerCategory() ?? LayerCategory.Other,
+                Layer = layer,
+                ParameterOffset = parameterOffset,
+                ParameterCount = layer.ParameterCount,
+                InputShape = layer.GetInputShape(),
+                OutputShape = layer.GetOutputShape(),
+                IsTrainable = layer.SupportsTraining && layer.ParameterCount > 0,
+                EstimatedFlops = layerBase?.EstimateFlops() ?? 2L * layer.ParameterCount,
+                EstimatedActivationMemory = layerBase?.EstimateActivationMemory() ?? 0L,
+            });
+
+            parameterOffset += layer.ParameterCount;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Validates that a partition point between layers is valid for pipeline parallelism.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When splitting a neural network across multiple GPUs,
+    /// each GPU handles a different set of layers. The split must happen at a point where
+    /// the output of one group of layers is compatible with the input of the next group.</para>
+    ///
+    /// <para>This method checks that the output shape of the layer at <paramref name="afterLayerIndex"/>
+    /// matches the input shape of the next layer, ensuring a valid split point.</para>
+    /// </remarks>
+    /// <param name="afterLayerIndex">The index of the layer after which to partition.
+    /// Must be between 0 and <see cref="LayerCount"/> - 2.</param>
+    /// <returns>True if the partition point is valid; false otherwise.</returns>
+    public bool ValidatePartitionPoint(int afterLayerIndex)
+    {
+        if (afterLayerIndex < 0 || afterLayerIndex >= _layers.Count - 1)
+        {
+            return false;
+        }
+
+        var currentLayer = _layers[afterLayerIndex];
+        var nextLayer = _layers[afterLayerIndex + 1];
+
+        var outputShape = currentLayer.GetOutputShape();
+        var inputShape = nextLayer.GetInputShape();
+
+        // Shapes are compatible if they have the same number of dimensions
+        // and each dimension matches
+        if (outputShape.Length != inputShape.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < outputShape.Length; i++)
+        {
+            if (outputShape[i] != inputShape[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    #endregion
+
 }
 

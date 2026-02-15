@@ -877,6 +877,192 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     public virtual string LayerName => $"{GetType().Name}_{_instanceId}";
 
     /// <summary>
+    /// Gets the category classification for this layer, used by automated per-layer tools
+    /// like quantizers, pruners, pipeline partitioners, and LoRA adapters.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Different types of layers (dense, convolution, attention, etc.)
+    /// often need different treatment. For example, a quantizer might keep attention layers at
+    /// higher precision while reducing dense layers to lower precision.</para>
+    ///
+    /// <para>This method classifies the layer based on its type name. Subclasses can override
+    /// this to return a more specific category if the default name-based classification
+    /// is not accurate.</para>
+    /// </remarks>
+    /// <returns>The <see cref="LayerCategory"/> that best describes this layer type.</returns>
+    public virtual LayerCategory GetLayerCategory()
+    {
+        var typeName = GetType().Name;
+
+        // Remove generic arity suffix (e.g., "`1")
+        int backtickIndex = typeName.IndexOf('`');
+        if (backtickIndex >= 0)
+        {
+            typeName = typeName[..backtickIndex];
+        }
+
+        // Attention layers
+        if (typeName.Contains("Attention", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Transformer", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Attention;
+        }
+
+        // Graph layers
+        if (typeName.Contains("Graph", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("MessagePassing", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Mesh", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Graph;
+        }
+
+        // Convolution layers (check before Dense since some names overlap)
+        if (typeName.Contains("Conv", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Deconv", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Convolution;
+        }
+
+        // Recurrent layers
+        if (typeName.Contains("LSTM", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("GRU", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Recurrent", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Bidirectional", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Recurrent;
+        }
+
+        // Normalization layers
+        if (typeName.Contains("Norm", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("BatchNorm", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Normalization;
+        }
+
+        // Pooling layers
+        if (typeName.Contains("Pool", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Pooling;
+        }
+
+        // Activation layers
+        if (typeName.Contains("Activation", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("GatedLinearUnit", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Activation;
+        }
+
+        // Embedding layers
+        if (typeName.Contains("Embedding", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Positional", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Embedding;
+        }
+
+        // Regularization layers
+        if (typeName.Contains("Dropout", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("GaussianNoise", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Regularization;
+        }
+
+        // Residual/skip layers
+        if (typeName.Contains("Residual", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Highway", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("SqueezeAndExcitation", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Residual;
+        }
+
+        // Feed-forward / MLP block layers
+        if (typeName.Contains("FeedForward", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("MixtureOfExperts", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Expert", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.FeedForward;
+        }
+
+        // Structural layers
+        if (typeName.Contains("Flatten", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Reshape", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Concatenate", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Split", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Add", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Multiply", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Cropping", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Padding", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Upsampling", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("PixelShuffle", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Mean", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("SequenceLast", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Structural;
+        }
+
+        // Input layers
+        if (typeName.Contains("Input", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Input;
+        }
+
+        // Dense/fully-connected layers
+        if (typeName.Contains("Dense", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("FullyConnected", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Linear", StringComparison.OrdinalIgnoreCase) ||
+            typeName.Contains("Readout", StringComparison.OrdinalIgnoreCase))
+        {
+            return LayerCategory.Dense;
+        }
+
+        return LayerCategory.Other;
+    }
+
+    /// <summary>
+    /// Estimates the computational cost (FLOPs) for a single forward pass through this layer.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> FLOPs (Floating-Point Operations) measure how much
+    /// computation this layer requires. Pipeline schedulers use this to distribute layers
+    /// evenly across GPUs so no single GPU is a bottleneck.</para>
+    ///
+    /// <para>The default implementation estimates based on parameter count. Dense layers
+    /// override this with <c>2 * inputSize * outputSize</c>. Subclasses should override
+    /// for more accurate estimates.</para>
+    /// </remarks>
+    /// <returns>Estimated FLOPs for one forward pass.</returns>
+    public virtual long EstimateFlops()
+    {
+        // Default: roughly 2 FLOPs per parameter (multiply + accumulate)
+        return 2L * ParameterCount;
+    }
+
+    /// <summary>
+    /// Estimates the activation memory (in bytes) needed during a forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> During training, each layer saves its output (activation)
+    /// so the backward pass can compute gradients. This method estimates how much memory
+    /// that output will consume.</para>
+    ///
+    /// <para>Selective activation checkpointing uses this to decide which layers to
+    /// recompute versus which to keep in memory.</para>
+    /// </remarks>
+    /// <returns>Estimated activation memory in bytes.</returns>
+    public virtual long EstimateActivationMemory()
+    {
+        // Default: output shape elements * sizeof(T)
+        // Assume sizeof(T) is 4 bytes (float) as a reasonable default
+        var outputShape = GetOutputShape();
+        long elements = 1;
+        foreach (var dim in outputShape)
+        {
+            elements *= dim;
+        }
+
+        return elements * 4; // 4 bytes per element (float assumption)
+    }
+
+    /// <summary>
     /// Gets whether mixed-precision training is currently active.
     /// </summary>
     /// <remarks>
