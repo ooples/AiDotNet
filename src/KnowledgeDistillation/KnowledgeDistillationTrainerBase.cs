@@ -787,4 +787,177 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
         // Track validation metric for checkpointing
         _lastValidationMetric = accuracy;
     }
+
+    /// <summary>
+    /// Collects intermediate activations from a layered model by performing a forward pass
+    /// and recording the output of each layer.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method runs input data through the model layer by layer,
+    /// recording what each layer outputs. These intermediate outputs (activations) can then be
+    /// compared between a teacher and student model for hint-based distillation (FitNets-style).</para>
+    ///
+    /// <para><b>How it works:</b></para>
+    /// <list type="number">
+    /// <item><description>The model must implement <see cref="ILayeredModel{T}"/></description></item>
+    /// <item><description>For each layer, it performs a forward pass and records the output as a matrix</description></item>
+    /// <item><description>Activations are keyed by layer name for matching between teacher and student</description></item>
+    /// </list>
+    ///
+    /// <para><b>Research References:</b></para>
+    /// <list type="bullet">
+    /// <item><description>FitNets (Romero et al., 2015): Hint-based distillation matching intermediate features</description></item>
+    /// <item><description>Attention Transfer (Zagoruyko &amp; Komodakis, 2017): Transfer attention maps between layers</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="model">The neural network model (must implement <see cref="ILayeredModel{T}"/>).</param>
+    /// <param name="input">The input tensor to forward through the model.</param>
+    /// <param name="targetCategories">Optional set of layer categories to collect activations from.
+    /// If null, collects from all trainable layers.</param>
+    /// <returns>An <see cref="IntermediateActivations{T}"/> containing per-layer activations,
+    /// or an empty instance if the model is not layer-aware.</returns>
+    protected IntermediateActivations<T> CollectIntermediateActivations(
+        IFullModel<T, Tensor<T>, Tensor<T>> model,
+        Tensor<T> input,
+        HashSet<LayerCategory>? targetCategories = null)
+    {
+        var activations = new IntermediateActivations<T>();
+
+        if (model is not ILayeredModel<T> layeredModel)
+        {
+            return activations;
+        }
+
+        var allInfo = layeredModel.GetAllLayerInfo();
+        var current = input;
+
+        for (int i = 0; i < allInfo.Count; i++)
+        {
+            var info = allInfo[i];
+
+            // Forward through this layer
+            current = info.Layer.Forward(current);
+
+            // Only collect from targeted categories (or all trainable if no filter)
+            bool shouldCollect = targetCategories is not null
+                ? targetCategories.Contains(info.Category)
+                : info.IsTrainable;
+
+            if (shouldCollect)
+            {
+                // Convert tensor output to matrix: [batchSize, features]
+                var outputShape = current.Shape;
+                if (outputShape.Length == 0 || outputShape[0] <= 0 || current.Length == 0)
+                    continue;
+
+                int batchSize = outputShape.Length >= 2 ? outputShape[0] : 1;
+
+                if (current.Length % batchSize != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Tensor length ({current.Length}) is not evenly divisible by batch size ({batchSize}) " +
+                        $"at layer '{info.Name}' (index {i}). The output shape {string.Join("x", outputShape)} " +
+                        "is not compatible with batch-major flattening.");
+                }
+
+                int features = current.Length / batchSize;
+
+                var matrix = new Matrix<T>(batchSize, features);
+                var flatData = current.ToVector();
+
+                for (int b = 0; b < batchSize; b++)
+                {
+                    for (int f = 0; f < features; f++)
+                    {
+                        matrix[b, f] = flatData[b * features + f];
+                    }
+                }
+
+                activations.Add(info.Name, matrix);
+            }
+        }
+
+        return activations;
+    }
+
+    /// <summary>
+    /// Computes intermediate activation loss between teacher and student for hint-based distillation.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> After collecting activations from both teacher and student, this method
+    /// computes how different their internal representations are. The student is then trained to minimize
+    /// this difference, which helps it learn not just the final outputs but also the internal reasoning
+    /// patterns of the teacher.</para>
+    /// </remarks>
+    /// <param name="studentActivations">The student's intermediate activations.</param>
+    /// <param name="teacherActivations">The teacher's intermediate activations.</param>
+    /// <returns>The total intermediate loss across all matched layers.</returns>
+    protected T ComputeIntermediateActivationLoss(
+        IntermediateActivations<T> studentActivations,
+        IntermediateActivations<T> teacherActivations)
+    {
+        // If the distillation strategy supports intermediate activations, delegate to it
+        if (DistillationStrategy is IIntermediateActivationStrategy<T> intermediateStrategy)
+        {
+            return intermediateStrategy.ComputeIntermediateLoss(studentActivations, teacherActivations);
+        }
+
+        // Default: compute MSE loss between matched layers
+        T totalLoss = NumOps.Zero;
+        int matchedLayers = 0;
+
+        foreach (var layerName in studentActivations.LayerNames)
+        {
+            var studentMatrix = studentActivations.Get(layerName);
+            var teacherMatrix = teacherActivations.Get(layerName);
+
+            if (studentMatrix is null || teacherMatrix is null)
+            {
+                continue;
+            }
+
+            // Require matching dimensions - mismatched shapes indicate a configuration error
+            if (studentMatrix.Rows != teacherMatrix.Rows || studentMatrix.Columns != teacherMatrix.Columns)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[KnowledgeDistillation] Skipping layer '{layerName}': shape mismatch between " +
+                    $"student ({studentMatrix.Rows}x{studentMatrix.Columns}) and " +
+                    $"teacher ({teacherMatrix.Rows}x{teacherMatrix.Columns}). " +
+                    "Ensure teacher and student layer mappings produce matching dimensions.");
+                continue;
+            }
+
+            // Compute per-element MSE between student and teacher activations
+            int rows = studentMatrix.Rows;
+            int cols = studentMatrix.Columns;
+
+            T layerLoss = NumOps.Zero;
+            int elementCount = rows * cols;
+
+            for (int r = 0; r < rows; r++)
+            {
+                for (int c = 0; c < cols; c++)
+                {
+                    T diff = NumOps.Subtract(studentMatrix[r, c], teacherMatrix[r, c]);
+                    layerLoss = NumOps.Add(layerLoss, NumOps.Multiply(diff, diff));
+                }
+            }
+
+            if (elementCount > 0)
+            {
+                layerLoss = NumOps.Divide(layerLoss, NumOps.FromDouble(elementCount));
+            }
+
+            totalLoss = NumOps.Add(totalLoss, layerLoss);
+            matchedLayers++;
+        }
+
+        // Average across matched layers
+        if (matchedLayers > 0)
+        {
+            totalLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(matchedLayers));
+        }
+
+        return totalLoss;
+    }
 }

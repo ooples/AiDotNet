@@ -83,6 +83,16 @@ public class TrainingMemoryConfig
     /// </summary>
     public bool CheckpointResidualBlocks { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets the activation memory threshold (in bytes) above which a layer
+    /// is automatically checkpointed regardless of other settings.
+    /// </summary>
+    /// <remarks>
+    /// <para>Default is 1 MB (1,048,576 bytes). Layers with estimated activation memory
+    /// exceeding this threshold benefit most from checkpointing.</para>
+    /// </remarks>
+    public long HighActivationMemoryThresholdBytes { get; set; } = 1_048_576;
+
     #endregion
 
     #region Activation Pooling

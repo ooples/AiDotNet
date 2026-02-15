@@ -230,32 +230,75 @@ public class EdgeOptimizer<T, TInput, TOutput>
 
     private int CalculateAdaptivePartitionPoint(IFullModel<T, TInput, TOutput> model)
     {
-        // Adaptive partitioning based on runtime conditions
-        // Analysis factors:
-        // 1. Network bandwidth: higher bandwidth → more layers on cloud
-        // 2. Edge compute power: stronger edge → more layers on edge
-        // 3. Battery level: low battery → fewer layers on edge
-        // 4. Model complexity: analyze parameter count to estimate compute
-
-        var parameterCount = model.GetParameters().Length;
-
-        // Heuristic: larger models benefit more from cloud processing
-        // Small models (< 1M params): process mostly on edge (partition at 70%)
-        // Medium models (1M-10M params): balanced (partition at 50%)
-        // Large models (> 10M params): process mostly on cloud (partition at 30%)
-
-        if (parameterCount < 1_000_000)
+        if (model is not ILayeredModel<T> layeredModel)
         {
-            return 7; // 70% on edge
+            // Graceful fallback: models without layer metadata get a reasonable default
+            // partition (middle) rather than crashing at runtime.
+            System.Diagnostics.Debug.WriteLine(
+                $"[EdgeOptimizer] Model type {model.GetType().Name} does not implement ILayeredModel<T>. " +
+                "Falling back to default mid-point partition for adaptive strategy.");
+            return 5;
         }
-        else if (parameterCount < 10_000_000)
+
+        if (layeredModel.LayerCount <= 1)
         {
-            return 5; // 50% on edge
+            return 0;
         }
-        else
+
+        return CalculateLoadBalancedPartitionPoint(layeredModel);
+    }
+
+    /// <summary>
+    /// Calculates the optimal partition point by balancing estimated FLOPs between edge and cloud.
+    /// </summary>
+    /// <remarks>
+    /// <para>Uses <see cref="LayerInfo{T}.EstimatedFlops"/> from <see cref="ILayeredModel{T}"/> to find
+    /// the layer boundary where cumulative FLOPs are closest to half the total model FLOPs.
+    /// This ensures both edge and cloud portions have roughly equal compute cost.</para>
+    ///
+    /// <para><b>Reference:</b> Inspired by Megatron-LM's cost-aware pipeline partition strategy,
+    /// which uses per-layer FLOP estimates for balanced stage assignment.</para>
+    /// </remarks>
+    private int CalculateLoadBalancedPartitionPoint(ILayeredModel<T> layeredModel)
+    {
+        var allLayerInfo = layeredModel.GetAllLayerInfo();
+        long totalFlops = 0;
+        for (int i = 0; i < allLayerInfo.Count; i++)
         {
-            return 3; // 30% on edge
+            totalFlops += allLayerInfo[i].EstimatedFlops;
         }
+
+        // Find the layer boundary where cumulative FLOPs are closest to half
+        long halfFlops = totalFlops / 2;
+        long cumulative = 0;
+        int bestPartition = -1;
+        long bestDiff = long.MaxValue;
+
+        for (int i = 0; i < allLayerInfo.Count - 1; i++)
+        {
+            cumulative += allLayerInfo[i].EstimatedFlops;
+
+            // Validate the partition point is structurally valid
+            if (!layeredModel.ValidatePartitionPoint(i))
+            {
+                continue;
+            }
+
+            long diff = Math.Abs(cumulative - halfFlops);
+            if (diff < bestDiff)
+            {
+                bestDiff = diff;
+                bestPartition = i + 1; // Partition after this layer
+            }
+        }
+
+        // If no structurally valid partition point was found, fallback to midpoint
+        if (bestPartition < 0)
+        {
+            bestPartition = allLayerInfo.Count / 2;
+        }
+
+        return bestPartition;
     }
 
     private IFullModel<T, TInput, TOutput>? ExtractEdgeLayers(IFullModel<T, TInput, TOutput> model, int start, int end)

@@ -206,6 +206,11 @@ public enum SparsityPattern
 /// <summary>
 /// Configuration for pruning operations.
 /// </summary>
+/// <remarks>
+/// <para><b>Layer-aware pruning:</b> When used with models implementing <see cref="ILayeredModel{T}"/>,
+/// the <see cref="CategorySparsityTargets"/> property enables per-category sparsity levels.
+/// For example, attention layers can be pruned less aggressively than dense layers.</para>
+/// </remarks>
 public class PruningConfig
 {
     /// <summary>
@@ -252,6 +257,20 @@ public class PruningConfig
     /// Per-layer sparsity targets (layer name → sparsity).
     /// </summary>
     public Dictionary<string, double>? LayerSparsityTargets { get; set; }
+
+    /// <summary>
+    /// Per-category sparsity targets (category → sparsity).
+    /// </summary>
+    /// <remarks>
+    /// <para>When <see cref="LayerWiseSparsity"/> is true and the model implements
+    /// <see cref="ILayeredModel{T}"/>, these category-level sparsity targets are applied
+    /// to all layers of that category. Layer-specific targets in <see cref="LayerSparsityTargets"/>
+    /// take precedence over category targets.</para>
+    ///
+    /// <para>Example: Set attention layers to 30% sparsity (sensitive) while dense layers
+    /// use 70% sparsity (more tolerant).</para>
+    /// </remarks>
+    public Dictionary<LayerCategory, double>? CategorySparsityTargets { get; set; }
 
     /// <summary>
     /// Whether to fine-tune after pruning.
