@@ -851,6 +851,15 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
                     continue;
 
                 int batchSize = outputShape.Length >= 2 ? outputShape[0] : 1;
+
+                if (current.Length % batchSize != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Tensor length ({current.Length}) is not evenly divisible by batch size ({batchSize}) " +
+                        $"at layer '{info.Name}' (index {i}). The output shape {string.Join("x", outputShape)} " +
+                        "is not compatible with batch-major flattening.");
+                }
+
                 int features = current.Length / batchSize;
 
                 var matrix = new Matrix<T>(batchSize, features);
@@ -910,6 +919,11 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
             // Require matching dimensions - mismatched shapes indicate a configuration error
             if (studentMatrix.Rows != teacherMatrix.Rows || studentMatrix.Columns != teacherMatrix.Columns)
             {
+                System.Diagnostics.Debug.WriteLine(
+                    $"[KnowledgeDistillation] Skipping layer '{layerName}': shape mismatch between " +
+                    $"student ({studentMatrix.Rows}x{studentMatrix.Columns}) and " +
+                    $"teacher ({teacherMatrix.Rows}x{teacherMatrix.Columns}). " +
+                    "Ensure teacher and student layer mappings produce matching dimensions.");
                 continue;
             }
 

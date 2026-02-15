@@ -174,6 +174,20 @@ public class TrainingMemoryManager<T> : IDisposable
         if (!Config.UseGradientCheckpointing)
             return;
 
+        if (Config.CheckpointEveryNLayers <= 0)
+        {
+            throw new ArgumentException(
+                $"CheckpointEveryNLayers must be positive, but was {Config.CheckpointEveryNLayers}.",
+                nameof(Config));
+        }
+
+        if (Config.HighActivationMemoryThresholdBytes < 0)
+        {
+            throw new ArgumentException(
+                $"HighActivationMemoryThresholdBytes must be non-negative, but was {Config.HighActivationMemoryThresholdBytes}.",
+                nameof(Config));
+        }
+
         var allLayerInfo = layeredModel.GetAllLayerInfo();
 
         for (int i = 0; i < allLayerInfo.Count; i++)

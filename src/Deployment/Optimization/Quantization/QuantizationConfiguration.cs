@@ -536,8 +536,15 @@ public class QuantizationConfiguration
 
         // Name-based override takes highest priority
         if (CustomLayerParams.TryGetValue(layerInfo.Name, out var layerParams) &&
-            layerParams.BitWidth.HasValue && layerParams.BitWidth.Value > 0)
+            layerParams.BitWidth.HasValue)
         {
+            if (layerParams.BitWidth.Value <= 0)
+            {
+                throw new ArgumentException(
+                    $"CustomLayerParams entry for layer '{layerInfo.Name}' has invalid BitWidth " +
+                    $"{layerParams.BitWidth.Value}. BitWidth must be a positive integer.",
+                    nameof(layerInfo));
+            }
             return layerParams.BitWidth.Value;
         }
 
@@ -555,7 +562,16 @@ public class QuantizationConfiguration
     /// Creates a mixed-precision configuration for layer-aware quantization.
     /// Attention and embedding layers get higher precision while dense/MLP layers get lower.
     /// </summary>
-    /// <param name="sensitiveBitWidth">Bit-width for sensitive layers (attention, embedding, normalization). Default: 8.</param>
+    /// <remarks>
+    /// <para><see cref="LayerCategory.Normalization"/> layers are always set to 16-bit regardless of
+    /// <paramref name="sensitiveBitWidth"/>. Normalization layers (e.g., BatchNorm, LayerNorm)
+    /// are extremely sensitive to quantization noise because small shifts in their statistics
+    /// propagate through all subsequent layers, so they require higher precision than other
+    /// sensitive layers.</para>
+    /// </remarks>
+    /// <param name="sensitiveBitWidth">Bit-width for sensitive layers (attention, embedding). Default: 8.
+    /// Note: <see cref="LayerCategory.Normalization"/> layers are overridden to 16-bit and will
+    /// not follow this parameter.</param>
     /// <param name="aggressiveBitWidth">Bit-width for tolerant layers (dense, feedforward). Default: 4.</param>
     /// <param name="groupSize">Group size for per-group quantization. Default: 128.</param>
     public static QuantizationConfiguration ForMixedPrecision(

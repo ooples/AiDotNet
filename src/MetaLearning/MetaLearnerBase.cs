@@ -778,8 +778,16 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
             updated[i] = parameters[i];
         }
 
-        foreach (var info in allLayerInfo.Where(l => l.ParameterCount > 0))
+        foreach (var info in allLayerInfo.Where(l => l.ParameterCount > 0 && l.IsTrainable))
         {
+            // Validate that the layer's parameter range is within bounds
+            if (info.ParameterOffset < 0 ||
+                info.ParameterOffset + info.ParameterCount > parameters.Length ||
+                info.ParameterOffset + info.ParameterCount > gradients.Length)
+            {
+                continue;
+            }
+
             double lr = perLayerLearningRates.TryGetValue(info.Index, out double layerLr)
                 ? layerLr
                 : defaultLearningRate;
@@ -789,11 +797,8 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
             for (int i = 0; i < info.ParameterCount; i++)
             {
                 int idx = info.ParameterOffset + i;
-                if (idx < parameters.Length && idx < gradients.Length)
-                {
-                    updated[idx] = NumOps.Subtract(parameters[idx],
-                        NumOps.Multiply(gradients[idx], lrT));
-                }
+                updated[idx] = NumOps.Subtract(parameters[idx],
+                    NumOps.Multiply(gradients[idx], lrT));
             }
         }
 

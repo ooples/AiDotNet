@@ -188,6 +188,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         {
             long stageFlops = 0;
             int layersInStage = 0;
+            int candidateBoundary = -1;
 
             // Add layers until we exceed the target FLOPs or run out of layers
             // Always assign at least one layer per stage
@@ -205,13 +206,28 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
                 if (stageFlops >= targetFlopsPerStage && remainingLayers >= remainingStages)
                 {
-                    break;
+                    // Validate the partition point before accepting it
+                    int partitionAfter = currentLayer - 1;
+                    if (partitionAfter < layerCount - 1 &&
+                        layeredModel.ValidatePartitionPoint(partitionAfter))
+                    {
+                        candidateBoundary = currentLayer;
+                        break;
+                    }
+
+                    // Partition point not valid here; continue consuming layers
+                    // to find the next valid boundary
                 }
             }
 
-            // Ensure at least one layer per stage
-            if (layersInStage == 0 && currentLayer < layerCount)
+            // If we found a valid boundary, use it; otherwise keep consuming
+            if (candidateBoundary >= 0)
             {
+                currentLayer = candidateBoundary;
+            }
+            else if (layersInStage == 0 && currentLayer < layerCount)
+            {
+                // Ensure at least one layer per stage
                 currentLayer++;
             }
 

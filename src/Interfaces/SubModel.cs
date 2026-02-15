@@ -100,14 +100,21 @@ public class SubModel<T> : ILayeredModel<T>
         StartIndex = startIndex;
         EndIndex = endIndex;
 
-        int totalParams = 0;
+        long totalParamsLong = 0;
         long totalFlops = 0;
         for (int i = 0; i < layerInfos.Count; i++)
         {
-            totalParams += layerInfos[i].ParameterCount;
+            totalParamsLong += layerInfos[i].ParameterCount;
             totalFlops += layerInfos[i].EstimatedFlops;
         }
-        ParameterCount = totalParams;
+
+        if (totalParamsLong > int.MaxValue)
+        {
+            throw new OverflowException(
+                $"Total parameter count ({totalParamsLong}) exceeds Int32.MaxValue. " +
+                "The sub-model is too large for the current ParameterCount representation.");
+        }
+        ParameterCount = (int)totalParamsLong;
         TotalEstimatedFlops = totalFlops;
     }
 
@@ -201,18 +208,26 @@ public class SubModel<T> : ILayeredModel<T>
         var subLayers = new List<ILayer<T>>(count);
         var subInfos = new List<LayerInfo<T>>(count);
 
-        int localOffset = 0;
+        long localOffsetLong = 0;
         for (int i = startLayer; i <= endLayer; i++)
         {
             subLayers.Add(_layers[i]);
             var original = _layerInfos[i];
+
+            if (localOffsetLong > int.MaxValue)
+            {
+                throw new OverflowException(
+                    $"Cumulative parameter offset ({localOffsetLong}) exceeds Int32.MaxValue " +
+                    $"at layer '{original.Name}' (index {i - startLayer}).");
+            }
+
             subInfos.Add(new LayerInfo<T>
             {
                 Index = i - startLayer,
                 Name = original.Name,
                 Category = original.Category,
                 Layer = original.Layer,
-                ParameterOffset = localOffset,
+                ParameterOffset = (int)localOffsetLong,
                 ParameterCount = original.ParameterCount,
                 InputShape = original.InputShape,
                 OutputShape = original.OutputShape,
@@ -220,7 +235,7 @@ public class SubModel<T> : ILayeredModel<T>
                 EstimatedFlops = original.EstimatedFlops,
                 EstimatedActivationMemory = original.EstimatedActivationMemory
             });
-            localOffset += original.ParameterCount;
+            localOffsetLong += original.ParameterCount;
         }
 
         return new SubModel<T>(subLayers, subInfos,

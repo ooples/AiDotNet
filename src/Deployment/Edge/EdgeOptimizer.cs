@@ -230,30 +230,20 @@ public class EdgeOptimizer<T, TInput, TOutput>
 
     private int CalculateAdaptivePartitionPoint(IFullModel<T, TInput, TOutput> model)
     {
-        // If the model supports layer-level access, use FLOPs-based load balancing
-        if (model is ILayeredModel<T> layeredModel && layeredModel.LayerCount > 1)
+        if (model is not ILayeredModel<T> layeredModel)
         {
-            return CalculateLoadBalancedPartitionPoint(layeredModel);
+            throw new InvalidOperationException(
+                "Adaptive partitioning requires a model that implements ILayeredModel<T> " +
+                "to provide layer-level metadata. Use PartitionStrategy.EarlyLayers or " +
+                "PartitionStrategy.LateLayers for models without layer-level access.");
         }
 
-        // Fallback: heuristic based on total parameter count
-        var parameterCount = model.GetParameters().Length;
+        if (layeredModel.LayerCount <= 1)
+        {
+            return 0;
+        }
 
-        // Small models (< 1M params): process mostly on edge (partition at 70%)
-        // Medium models (1M-10M params): balanced (partition at 50%)
-        // Large models (> 10M params): process mostly on cloud (partition at 30%)
-        if (parameterCount < 1_000_000)
-        {
-            return 7;
-        }
-        else if (parameterCount < 10_000_000)
-        {
-            return 5;
-        }
-        else
-        {
-            return 3;
-        }
+        return CalculateLoadBalancedPartitionPoint(layeredModel);
     }
 
     /// <summary>
