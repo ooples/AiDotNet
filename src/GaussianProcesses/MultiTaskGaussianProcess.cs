@@ -464,7 +464,8 @@ public class MultiTaskGaussianProcess<T>
     /// <param name="kernel">The new kernel function.</param>
     public void UpdateKernel(IKernelFunction<T> kernel)
     {
-        _kernel = kernel ?? throw new ArgumentNullException(nameof(kernel));
+        Guard.NotNull(kernel);
+        _kernel = kernel;
         if (!_X.IsEmpty && !_Y.IsEmpty)
         {
             BuildCombinedKernel();

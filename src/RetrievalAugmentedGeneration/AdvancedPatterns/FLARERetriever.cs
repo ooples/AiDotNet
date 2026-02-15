@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -117,8 +118,10 @@ public class FLARERetriever<T>
         RetrieverBase<T> baseRetriever,
         double uncertaintyThreshold = 0.5)
     {
-        _generator = generator ?? throw new ArgumentNullException(nameof(generator));
-        _baseRetriever = baseRetriever ?? throw new ArgumentNullException(nameof(baseRetriever));
+        Guard.NotNull(generator);
+        _generator = generator;
+        Guard.NotNull(baseRetriever);
+        _baseRetriever = baseRetriever;
 
         if (uncertaintyThreshold < 0.0 || uncertaintyThreshold > 1.0)
             throw new ArgumentOutOfRangeException(nameof(uncertaintyThreshold), "Threshold must be between 0 and 1");

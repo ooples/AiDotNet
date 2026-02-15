@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -97,7 +98,8 @@ public class LayerwiseRelevancePropagationExplainer<T> : ILocalExplainer<T, LRPE
         double epsilon = 1e-4,
         double gamma = 0.25)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
         _getLayerActivations = getLayerActivations;
         _getLayerWeights = getLayerWeights;
         _numFeatures = numFeatures;

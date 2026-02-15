@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ContinualLearning;
 
@@ -67,7 +68,7 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void BeforeTask(INeuralNetwork<T> network, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
         // EWC doesn't need to do anything else before a task starts.
         // All the work happens in AfterTask when we compute the Fisher information.
     }
@@ -75,9 +76,9 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void AfterTask(INeuralNetwork<T> network, (Tensor<T> inputs, Tensor<T> targets) taskData, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = taskData.inputs ?? throw new ArgumentNullException(nameof(taskData));
-        _ = taskData.targets ?? throw new ArgumentNullException(nameof(taskData));
+        Guard.NotNull(network);
+        Guard.NotNull(taskData.inputs);
+        Guard.NotNull(taskData.targets);
 
         // Store the optimal parameters for this task
         var currentParams = network.GetParameters();
@@ -91,7 +92,7 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public T ComputeLoss(INeuralNetwork<T> network)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         if (_fisherDiagonals.Count == 0)
         {
@@ -128,8 +129,8 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
         // The gradients from the EWC loss are added during backpropagation.
         // However, we can compute the EWC gradient here for convenience.
 
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = gradients ?? throw new ArgumentNullException(nameof(gradients));
+        Guard.NotNull(network);
+        Guard.NotNull(gradients);
 
         if (_fisherDiagonals.Count == 0)
         {

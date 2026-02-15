@@ -11,6 +11,7 @@ using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PINNs;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PhysicsInformed;
 
@@ -66,7 +67,8 @@ public class GpuPINNTrainer<T>
         PhysicsInformedNeuralNetwork<T> pinn,
         GpuPINNTrainingOptions? options = null)
     {
-        _pinn = pinn ?? throw new ArgumentNullException(nameof(pinn));
+        Guard.NotNull(pinn);
+        _pinn = pinn;
         _options = options ?? GpuPINNTrainingOptions.Default;
         _numOps = MathHelper.GetNumericOperations<T>();
         _gpuInitialized = false;
@@ -294,7 +296,8 @@ public class GpuPINNTrainer<T>
     /// <param name="options">New options to apply.</param>
     public void UpdateOptions(GpuPINNTrainingOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
 
         if (_options.EnableGpu && !_gpuInitialized)
         {

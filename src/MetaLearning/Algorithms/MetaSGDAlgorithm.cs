@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
@@ -1100,9 +1101,12 @@ public class MetaSGDAdaptedModel<T, TInput, TOutput> : IModel<TInput, TOutput, M
         PerParameterOptimizer<T, TInput, TOutput> optimizer,
         MetaSGDOptions<T, TInput, TOutput> options)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
-        _optimizer = optimizer ?? throw new ArgumentNullException(nameof(optimizer));
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(model);
+        _model = model;
+        Guard.NotNull(optimizer);
+        _optimizer = optimizer;
+        Guard.NotNull(options);
+        _options = options;
     }
 
     /// <summary>

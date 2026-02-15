@@ -3,6 +3,7 @@ using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ContinualLearning.Strategies;
 
@@ -57,7 +58,8 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
     /// <param name="lossFunction">The loss function to use.</param>
     protected ContinualLearningStrategyBase(ILossFunction<T> lossFunction)
     {
-        LossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
+        Guard.NotNull(lossFunction);
+        LossFunction = lossFunction;
         CreatedAt = DateTime.UtcNow;
         Metrics = new Dictionary<string, object>();
     }

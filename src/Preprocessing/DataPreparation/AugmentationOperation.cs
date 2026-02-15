@@ -2,6 +2,7 @@ using AiDotNet.Augmentation.Tabular;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Preprocessing.DataPreparation;
 
@@ -57,7 +58,8 @@ public class AugmentationOperation<T> : IRowOperation<T>
         TabularAugmenterBase<T> augmenter,
         Vector<T>? targetLabels = null)
     {
-        _augmenter = augmenter ?? throw new ArgumentNullException(nameof(augmenter));
+        Guard.NotNull(augmenter);
+        _augmenter = augmenter;
         _targetLabels = targetLabels;
     }
 

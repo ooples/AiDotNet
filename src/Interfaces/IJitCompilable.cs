@@ -30,6 +30,7 @@ namespace AiDotNet.Interfaces;
 /// This is planned for a future update.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("JitCompilable")]
 public interface IJitCompilable<T>
 {
     /// <summary>

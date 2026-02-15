@@ -7,6 +7,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using System.IO;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Finance.Trading.Agents;
 
@@ -68,7 +69,8 @@ public class FinRLAgent<T> : TradingAgentBase<T>
         _options = options as FinRLAgentOptions<T> ?? new FinRLAgentOptions<T>();
 
         _algorithm = algorithm;
-        _primaryArchitecture = primaryArchitecture ?? throw new ArgumentNullException(nameof(primaryArchitecture));
+        Guard.NotNull(primaryArchitecture);
+        _primaryArchitecture = primaryArchitecture;
         _secondaryArchitecture = secondaryArchitecture;
         _innerAgent = CreateInnerAgent(primaryArchitecture, secondaryArchitecture, options, algorithm);
     }

@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Deployment.Optimization.Quantization.Training;
 
@@ -88,7 +89,8 @@ public class EfficientQATOptimizer<T>
     /// <param name="totalEpochs">Total number of training epochs</param>
     public EfficientQATOptimizer(QuantizationConfiguration config, int totalEpochs = 10)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
         _totalEpochs = totalEpochs;
         _currentBitWidth = Math.Min(32, _config.EffectiveBitWidth * 2); // Start at higher precision
         _qatHook = new QATTrainingHook<T>(config);

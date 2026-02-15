@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Security.ApiKeys;
 
@@ -19,7 +20,8 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAu
         IApiKeyService apiKeys)
         : base(options, logger, encoder)
     {
-        _apiKeys = apiKeys ?? throw new ArgumentNullException(nameof(apiKeys));
+        Guard.NotNull(apiKeys);
+        _apiKeys = apiKeys;
     }
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()

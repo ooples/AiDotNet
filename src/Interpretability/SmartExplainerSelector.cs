@@ -4,6 +4,7 @@ using AiDotNet.Interpretability.Explainers;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.LinearAlgebra;
 using System.Collections.Concurrent;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability;
 
@@ -91,7 +92,8 @@ public class SmartExplainerSelector<T>
         Matrix<T>? backgroundData = null,
         SmartExplainerOptions? options = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
         _numFeatures = numFeatures;
         _featureNames = featureNames;
         _backgroundData = backgroundData ?? CreateDefaultBackground(numFeatures);

@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -108,8 +109,10 @@ public class SHAPExplainer<T> : ILocalExplainer<T, SHAPExplanation<T>>, IGlobalE
         string[]? featureNames = null,
         int? randomState = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
-        _backgroundData = backgroundData ?? throw new ArgumentNullException(nameof(backgroundData));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
+        Guard.NotNull(backgroundData);
+        _backgroundData = backgroundData;
 
         if (backgroundData.Rows == 0)
             throw new ArgumentException("Background data must have at least one row.", nameof(backgroundData));

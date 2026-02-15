@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Reasoning.Models;
 using AiDotNet.Reasoning.Strategies;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.Training;
 
@@ -207,8 +208,10 @@ internal class ReinforcementLearner<T>
         IRewardModel<T> rewardModel,
         RLConfig? config = null)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
-        _rewardModel = rewardModel ?? throw new ArgumentNullException(nameof(rewardModel));
+        Guard.NotNull(model);
+        _model = model;
+        Guard.NotNull(rewardModel);
+        _rewardModel = rewardModel;
         _config = config ?? RLConfig.Default;
 
         _trainer = new PolicyGradientTrainer<T>(

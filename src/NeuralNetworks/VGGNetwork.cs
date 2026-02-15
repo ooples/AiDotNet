@@ -136,7 +136,8 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
         _options = options ?? new VGGOptions();
         Options = _options;
 
-        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        Guard.NotNull(configuration);
+        _configuration = configuration;
 
         ArchitectureValidator.ValidateInputType(
             architecture,

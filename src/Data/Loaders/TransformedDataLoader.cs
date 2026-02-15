@@ -1,6 +1,7 @@
 using System.Buffers;
 using AiDotNet.Data.Transforms;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -70,8 +71,10 @@ public class TransformedDataLoader<T> :
         InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T>> inner,
         ITransform<T[], T[]> transform)
     {
-        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
-        _transform = transform ?? throw new ArgumentNullException(nameof(transform));
+        Guard.NotNull(inner);
+        _inner = inner;
+        Guard.NotNull(transform);
+        _transform = transform;
     }
 
     /// <inheritdoc/>

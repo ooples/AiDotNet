@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Classification.MultiLabel;
 
@@ -119,7 +120,8 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
-        _classifierFactory = classifierFactory ?? throw new ArgumentNullException(nameof(classifierFactory));
+        Guard.NotNull(classifierFactory);
+        _classifierFactory = classifierFactory;
     }
 
     #endregion

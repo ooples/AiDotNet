@@ -50,7 +50,8 @@ public class ModalitySample<T>
         IReadOnlyDictionary<string, object>? metadata = null)
     {
         Modality = modality;
-        Data = data ?? throw new ArgumentNullException(nameof(data));
+        Guard.NotNull(data);
+        Data = data;
         Key = key ?? modality.ToString().ToLowerInvariant();
         Metadata = metadata ?? new Dictionary<string, object>();
     }

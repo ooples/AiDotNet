@@ -75,11 +75,11 @@ public class LoRAValidationTests
     }
 
     [Fact]
-    public void LoRALayer_InvalidRank_ExceedsMinDimension_ThrowsArgumentException()
+    public void LoRALayer_InvalidRank_ExceedsMinDimension_ThrowsArgumentOutOfRangeException()
     {
         // Rank cannot exceed min(inputSize, outputSize)
         // Arrange & Act & Assert
-        var ex = Assert.Throws<ArgumentException>(() =>
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             new LoRALayer<double>(inputSize: 5, outputSize: 10, rank: 6)); // rank > min(5, 10) = 5
 
         Assert.Contains("cannot exceed", ex.Message);

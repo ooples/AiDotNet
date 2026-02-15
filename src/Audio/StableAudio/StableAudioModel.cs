@@ -10,6 +10,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Audio.StableAudio;
 
@@ -164,8 +165,8 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         _options = options ?? new StableAudioOptions();
         Options = _options;
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
-            "Tokenizer is required. Use T5 tokenizer or compatible tokenizer.");
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
 
         // Set dimensions based on model size

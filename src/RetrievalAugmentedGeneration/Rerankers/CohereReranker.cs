@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Rerankers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
 
@@ -109,8 +110,10 @@ public class CohereReranker<T> : RerankerBase<T>
     /// </remarks>
     public CohereReranker(string apiKey, string model)
     {
-        _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
-        _model = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(apiKey);
+        _apiKey = apiKey;
+        Guard.NotNull(model);
+        _model = model;
     }
 
     /// <summary>

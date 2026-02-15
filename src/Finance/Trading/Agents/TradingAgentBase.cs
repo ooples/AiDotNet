@@ -6,6 +6,7 @@ using AiDotNet.ReinforcementLearning.Agents;
 using AiDotNet.LossFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Finance.Trading.Agents;
 
@@ -171,7 +172,8 @@ public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, I
     protected TradingAgentBase(TradingAgentOptions<T> options)
         : base(CreateBaseOptions(options))
     {
-        TradingOptions = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        TradingOptions = options;
         if (TradingOptions.LossFunction == null)
         {
             TradingOptions.LossFunction = new MeanSquaredErrorLoss<T>();

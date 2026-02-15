@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.ReinforcementLearning.Policies.Exploration;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Policies
 {
@@ -46,10 +47,14 @@ namespace AiDotNet.ReinforcementLearning.Policies
             Random? random = null)
             : base(random)
         {
-            _discreteNetwork = discreteNetwork ?? throw new ArgumentNullException(nameof(discreteNetwork));
-            _continuousNetwork = continuousNetwork ?? throw new ArgumentNullException(nameof(continuousNetwork));
-            _discreteExploration = discreteExploration ?? throw new ArgumentNullException(nameof(discreteExploration));
-            _continuousExploration = continuousExploration ?? throw new ArgumentNullException(nameof(continuousExploration));
+            Guard.NotNull(discreteNetwork);
+            _discreteNetwork = discreteNetwork;
+            Guard.NotNull(continuousNetwork);
+            _continuousNetwork = continuousNetwork;
+            Guard.NotNull(discreteExploration);
+            _discreteExploration = discreteExploration;
+            Guard.NotNull(continuousExploration);
+            _continuousExploration = continuousExploration;
             _discreteActionSize = discreteActionSize;
             _continuousActionSize = continuousActionSize;
             _sharedFeatures = sharedFeatures;

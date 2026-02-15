@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.SelfSupervisedLearning.Losses;
+using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -69,8 +70,10 @@ public class MoCoV3<T> : SSLMethodBase<T>
         SSLConfig? config = null)
         : base(encoder, projector, config ?? CreateMoCoV3Config())
     {
-        _momentumEncoder = momentumEncoder ?? throw new ArgumentNullException(nameof(momentumEncoder));
-        _momentumProjector = momentumProjector ?? throw new ArgumentNullException(nameof(momentumProjector));
+        Guard.NotNull(momentumEncoder);
+        _momentumEncoder = momentumEncoder;
+        Guard.NotNull(momentumProjector);
+        _momentumProjector = momentumProjector;
         _predictor = predictor;
 
         var temperature = _config.Temperature ?? 0.2; // MoCo v3 uses higher temperature

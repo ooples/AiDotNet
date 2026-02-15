@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -98,9 +99,12 @@ public class LayerGradCAMExplainer<T> : ILocalExplainer<T, LayerGradCAMExplanati
         int numChannels,
         int[]? inputShape = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
-        _layerActivationFunction = layerActivationFunction ?? throw new ArgumentNullException(nameof(layerActivationFunction));
-        _layerGradientFunction = layerGradientFunction ?? throw new ArgumentNullException(nameof(layerGradientFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
+        Guard.NotNull(layerActivationFunction);
+        _layerActivationFunction = layerActivationFunction;
+        Guard.NotNull(layerGradientFunction);
+        _layerGradientFunction = layerGradientFunction;
         _layerHeight = layerHeight;
         _layerWidth = layerWidth;
         _numChannels = numChannels;
@@ -124,7 +128,8 @@ public class LayerGradCAMExplainer<T> : ILocalExplainer<T, LayerGradCAMExplanati
         int numChannels,
         int[]? inputShape = null)
     {
-        _network = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
+        _network = network;
         _layerHeight = layerHeight;
         _layerWidth = layerWidth;
         _numChannels = numChannels;

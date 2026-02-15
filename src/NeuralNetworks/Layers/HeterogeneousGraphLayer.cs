@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -206,7 +207,8 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         IActivationFunction<T>? activationFunction = null)
         : base([0], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
-        _metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
+        Guard.NotNull(metadata);
+        _metadata = metadata;
         _outputFeatures = outputFeatures;
         _useBasis = useBasis && metadata.EdgeTypes.Length > numBases;
         _numBases = numBases;

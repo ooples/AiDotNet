@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -81,7 +82,7 @@ public class HyperShotOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOp
     #region Constructors
     /// <summary>Initializes a new instance of HyperShotOptions.</summary>
     public HyperShotOptions(IFullModel<T, TInput, TOutput> metaModel)
-    { MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel)); }
+    { Guard.NotNull(metaModel); MetaModel = metaModel; }
     #endregion
 
     #region IMetaLearnerOptions Implementation

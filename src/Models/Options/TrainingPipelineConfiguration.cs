@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Models.Options;
 
@@ -295,7 +296,8 @@ public class TrainingPipelineConfiguration<T, TInput, TOutput>
     /// <returns>This configuration for method chaining.</returns>
     public TrainingPipelineConfiguration<T, TInput, TOutput> AddStage(TrainingStage<T, TInput, TOutput> stage)
     {
-        Stages.Add(stage ?? throw new ArgumentNullException(nameof(stage)));
+        Guard.NotNull(stage);
+        Stages.Add(stage);
         return this;
     }
 

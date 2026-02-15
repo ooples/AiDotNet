@@ -11,6 +11,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.NeuralNetworks;
@@ -170,8 +171,8 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             _visionEncoder = visionEncoder;
             _languageModel = languageModel;
             // Tokenizer is required for ONNX mode - must match the language model backbone
-            _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer),
-                $"Tokenizer is required for ONNX mode. Use AutoTokenizer.FromPretrained(\"{Tokenization.LanguageModelTokenizerFactory.GetHuggingFaceModelName(_languageModelBackbone)}\") or equivalent.");
+            Guard.NotNull(tokenizer);
+            _tokenizer = tokenizer;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
             InitializeLayers();

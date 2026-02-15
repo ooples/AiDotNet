@@ -38,6 +38,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ChainableComputationGraph")]
 public interface IChainableComputationGraph<T>
 {
     /// <summary>

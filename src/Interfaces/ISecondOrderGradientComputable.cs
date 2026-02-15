@@ -30,6 +30,7 @@ namespace AiDotNet.Interfaces;
 /// Reptile and first-order MAML approximate this with only first-order gradients.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("SecondOrderGradientComputable")]
 public interface ISecondOrderGradientComputable<T, TInput, TOutput> : IGradientComputable<T, TInput, TOutput>
 {
     /// <summary>

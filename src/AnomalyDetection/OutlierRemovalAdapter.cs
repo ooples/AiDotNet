@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.AnomalyDetection;
 
@@ -48,7 +49,8 @@ public class OutlierRemovalAdapter<T, TInput, TOutput> : IOutlierRemoval<T, TInp
     /// <exception cref="ArgumentNullException">Thrown when detector is null.</exception>
     public OutlierRemovalAdapter(IAnomalyDetector<T> detector)
     {
-        _detector = detector ?? throw new ArgumentNullException(nameof(detector));
+        Guard.NotNull(detector);
+        _detector = detector;
     }
 
     /// <summary>

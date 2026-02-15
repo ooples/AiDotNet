@@ -322,6 +322,7 @@ public class UncertaintySamplingStrategy<T, TInput, TOutput> : IUncertaintyStrat
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("ALProbabilisticModel")]
 public interface IProbabilisticModel<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
 {
     /// <summary>

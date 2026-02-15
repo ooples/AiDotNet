@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Sampling;
 
@@ -85,7 +86,8 @@ public class CurriculumSampler<T> : EpochAdaptiveSamplerBase<T>
         int? seed = null)
         : base(totalEpochs, seed)
     {
-        _difficulties = difficulties?.ToArray() ?? throw new ArgumentNullException(nameof(difficulties));
+        Guard.NotNull(difficulties);
+        _difficulties = difficulties.ToArray();
         _strategy = strategy;
         _competence = 0.0;
     }

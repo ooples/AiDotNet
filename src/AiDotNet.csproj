@@ -72,6 +72,7 @@
 	  <PackageReference Include="TreeSitter.DotNet" Version="1.2.0" />
 	  <PackageReference Include="FftSharp" Version="2.2.0" />
 	  <PackageReference Include="Parquet.Net" Version="4.24.0" />
+	  <PackageReference Include="YamlDotNet" Version="16.3.0" />
 	</ItemGroup>
 
 	<!-- ImageSharp for PNG/JPEG/GIF/TIFF support (requires .NET 6+) -->
@@ -96,6 +97,31 @@
 	  <Folder Include="Validation\" />
 	  <Folder Include="WindowFunctions\" />
 	  <Folder Include="WaveletFunctions\" />
+	</ItemGroup>
+
+	<!-- Source generator for auto-generating YAML configuration mappings -->
+	<ItemGroup>
+	  <ProjectReference Include="AiDotNet.Generators\AiDotNet.Generators.csproj"
+	                     OutputItemType="Analyzer"
+	                     ReferenceOutputAssembly="false" />
+	</ItemGroup>
+
+	<!-- Exclude the source generator project files from this project's compilation -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Generators\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Generators\**\*" />
+	  <None Remove="AiDotNet.Generators\**\*" />
+	</ItemGroup>
+
+	<!-- Emit generated source files to disk for inspection/debugging -->
+	<PropertyGroup>
+	  <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+	  <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
+	</PropertyGroup>
+
+	<!-- Exclude emitted generated files from compilation (they're already in-memory from the generator) -->
+	<ItemGroup>
+	  <Compile Remove="Generated\**\*.cs" />
 	</ItemGroup>
 
 	<!-- Exclude the AiDotNet.Serving project files from this project -->

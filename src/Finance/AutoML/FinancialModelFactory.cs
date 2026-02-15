@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Finance.AutoML;
 
@@ -40,7 +41,8 @@ internal sealed class FinancialModelFactory<T>
     /// </remarks>
     public FinancialModelFactory(NeuralNetworkArchitecture<T> architecture)
     {
-        _architecture = architecture ?? throw new ArgumentNullException(nameof(architecture));
+        Guard.NotNull(architecture);
+        _architecture = architecture;
     }
 
     /// <summary>

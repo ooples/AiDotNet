@@ -1,6 +1,7 @@
 using AiDotNet.Data.Loaders;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Vision;
 
@@ -73,7 +74,8 @@ public class ImageFolderDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
     /// </summary>
     public ImageFolderDataset(ImageFolderDatasetOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
 
         if (string.IsNullOrWhiteSpace(options.RootDirectory))
         {

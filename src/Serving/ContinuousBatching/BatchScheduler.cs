@@ -69,7 +69,8 @@ public class BatchScheduler<T>
     /// </summary>
     public BatchScheduler(BatchSchedulerConfig config)
     {
-        _config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        _config = config;
         _waitingQueue = new PriorityQueue<SequenceState<T>, int>();
         _runningSequences = new List<SequenceState<T>>();
         _preemptedSequences = new List<SequenceState<T>>();

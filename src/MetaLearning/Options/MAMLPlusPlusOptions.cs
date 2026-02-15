@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Options;
 
@@ -301,7 +302,8 @@ public class MAMLPlusPlusOptions<T, TInput, TOutput> : ModelOptions, IMetaLearne
     /// <exception cref="ArgumentNullException">Thrown when metaModel is null.</exception>
     public MAMLPlusPlusOptions(IFullModel<T, TInput, TOutput> metaModel)
     {
-        MetaModel = metaModel ?? throw new ArgumentNullException(nameof(metaModel));
+        Guard.NotNull(metaModel);
+        MetaModel = metaModel;
     }
 
     #endregion

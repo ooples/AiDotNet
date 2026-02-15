@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.NeuralNetworks;
@@ -170,7 +171,8 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         _useNativeMode = false;
         _visionEncoderPath = visionEncoderPath;
         _languageModelPath = languageModelPath;
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _embeddingDimension = embeddingDimension;
         _visionEmbeddingDim = visionEmbeddingDim;
         _maxSequenceLength = maxSequenceLength;
@@ -214,7 +216,8 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         _options = options ?? new Gpt4VisionOptions();
         Options = _options;
         _useNativeMode = true;
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _embeddingDimension = embeddingDimension;
         _visionEmbeddingDim = visionEmbeddingDim;
         _maxSequenceLength = maxSequenceLength;

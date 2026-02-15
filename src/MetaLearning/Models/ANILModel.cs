@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Models;
 
@@ -52,10 +53,13 @@ public class ANILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
         Vector<T>? headBias,
         ANILOptions<T, TInput, TOutput> options)
     {
-        _featureExtractor = featureExtractor ?? throw new ArgumentNullException(nameof(featureExtractor));
-        _headWeights = headWeights ?? throw new ArgumentNullException(nameof(headWeights));
+        Guard.NotNull(featureExtractor);
+        _featureExtractor = featureExtractor;
+        Guard.NotNull(headWeights);
+        _headWeights = headWeights;
         _headBias = headBias;
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
     }
 
     /// <inheritdoc/>

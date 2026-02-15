@@ -1,6 +1,7 @@
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ContinualLearning;
 
@@ -86,7 +87,7 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void BeforeTask(INeuralNetwork<T> network, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
+        Guard.NotNull(network);
 
         // Update reference gradients for all stored tasks before starting new task
         UpdateReferenceGradients(network);
@@ -95,9 +96,9 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public void AfterTask(INeuralNetwork<T> network, (Tensor<T> inputs, Tensor<T> targets) taskData, int taskId)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = taskData.inputs ?? throw new ArgumentNullException(nameof(taskData));
-        _ = taskData.targets ?? throw new ArgumentNullException(nameof(taskData));
+        Guard.NotNull(network);
+        Guard.NotNull(taskData.inputs);
+        Guard.NotNull(taskData.targets);
 
         // Sample and store examples from the completed task
         var sampledData = SampleMemory(taskData.inputs, taskData.targets);
@@ -119,8 +120,8 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
     /// <inheritdoc />
     public Vector<T> ModifyGradients(INeuralNetwork<T> network, Vector<T> gradients)
     {
-        _ = network ?? throw new ArgumentNullException(nameof(network));
-        _ = gradients ?? throw new ArgumentNullException(nameof(gradients));
+        Guard.NotNull(network);
+        Guard.NotNull(gradients);
 
         if (_referenceGradients.Count == 0)
         {

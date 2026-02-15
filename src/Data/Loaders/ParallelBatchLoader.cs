@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Loaders;
 
@@ -92,8 +93,10 @@ public class ParallelBatchLoader<TBatch> : IDisposable
         int? numWorkers = null,
         int? prefetchCount = null)
     {
-        _indexProvider = indexProvider ?? throw new ArgumentNullException(nameof(indexProvider));
-        _batchFactory = batchFactory ?? throw new ArgumentNullException(nameof(batchFactory));
+        Guard.NotNull(indexProvider);
+        _indexProvider = indexProvider;
+        Guard.NotNull(batchFactory);
+        _batchFactory = batchFactory;
         _batchSize = batchSize > 0 ? batchSize : throw new ArgumentOutOfRangeException(nameof(batchSize));
 
         _numWorkers = numWorkers ?? Environment.ProcessorCount;

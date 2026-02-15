@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {
@@ -43,7 +44,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         /// <param name="seed">Random seed for reproducibility (default: 42).</param>
         public LSHIndex(ISimilarityMetric<T> metric, int numHashTables = 10, int numHashFunctions = 4, int seed = 42)
         {
-            _metric = metric ?? throw new ArgumentNullException(nameof(metric));
+            Guard.NotNull(metric);
+            _metric = metric;
             if (numHashTables <= 0)
                 throw new ArgumentException("Number of hash tables must be positive", nameof(numHashTables));
             if (numHashFunctions <= 0)

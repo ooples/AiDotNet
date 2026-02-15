@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PromptEngineering.Templates;
 
@@ -167,7 +168,9 @@ public class ChatMessage
     /// <param name="content">The message content.</param>
     public ChatMessage(string role, string content)
     {
-        Role = role ?? throw new ArgumentNullException(nameof(role));
-        Content = content ?? throw new ArgumentNullException(nameof(content));
+        Guard.NotNull(role);
+        Role = role;
+        Guard.NotNull(content);
+        Content = content;
     }
 }

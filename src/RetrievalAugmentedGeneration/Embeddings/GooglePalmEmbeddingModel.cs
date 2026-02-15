@@ -9,6 +9,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 
@@ -51,10 +52,14 @@ public class GooglePalmEmbeddingModel<T> : EmbeddingModelBase<T>
         int dimension = 768,
         HttpClient? httpClient = null)
     {
-        _projectId = projectId ?? throw new ArgumentNullException(nameof(projectId));
-        _location = location ?? throw new ArgumentNullException(nameof(location));
-        _model = model ?? throw new ArgumentNullException(nameof(model));
-        _apiKey = apiKey ?? throw new ArgumentNullException(nameof(apiKey));
+        Guard.NotNull(projectId);
+        _projectId = projectId;
+        Guard.NotNull(location);
+        _location = location;
+        Guard.NotNull(model);
+        _model = model;
+        Guard.NotNull(apiKey);
+        _apiKey = apiKey;
         _dimension = dimension;
         _ownsHttpClient = httpClient == null;
         _httpClient = httpClient ?? new HttpClient();

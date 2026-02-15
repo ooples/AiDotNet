@@ -36,6 +36,7 @@ namespace AiDotNet.Interfaces;
 /// model capabilities (training, saving, loading, gradients, checkpointing, etc.).
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("NoisePredictor")]
 public interface INoisePredictor<T> : IFullModel<T, Tensor<T>, Tensor<T>>
 {
     /// <summary>

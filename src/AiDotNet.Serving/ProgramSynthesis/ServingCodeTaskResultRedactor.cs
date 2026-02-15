@@ -3,6 +3,7 @@ using AiDotNet.ProgramSynthesis.Results;
 using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Security;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.ProgramSynthesis;
 
@@ -12,7 +13,9 @@ public sealed class ServingCodeTaskResultRedactor : IServingCodeTaskResultRedact
 
     public ServingCodeTaskResultRedactor(IOptions<ServingProgramSynthesisOptions> options)
     {
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        Guard.NotNull(options.Value);
+        _options = options.Value;
     }
 
     public CodeTaskResultBase Redact(CodeTaskResultBase result, ServingRequestContext requestContext)

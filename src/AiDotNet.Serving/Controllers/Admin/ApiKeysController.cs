@@ -1,6 +1,7 @@
 using AiDotNet.Serving.Security.ApiKeys;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Controllers.Admin;
 
@@ -16,7 +17,8 @@ public sealed class ApiKeysController : ControllerBase
 
     public ApiKeysController(IApiKeyService apiKeys)
     {
-        _apiKeys = apiKeys ?? throw new ArgumentNullException(nameof(apiKeys));
+        Guard.NotNull(apiKeys);
+        _apiKeys = apiKeys;
     }
 
     /// <summary>

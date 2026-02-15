@@ -2,6 +2,7 @@ using AiDotNet.Serving.Configuration;
 using AiDotNet.Serving.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Services;
 
@@ -19,9 +20,12 @@ public sealed class ServingDatabaseMigrationService : IHostedService
         IOptions<ServingDatabaseOptions> dbOptions,
         ILogger<ServingDatabaseMigrationService> logger)
     {
-        _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
-        _dbOptions = dbOptions?.Value ?? throw new ArgumentNullException(nameof(dbOptions));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        Guard.NotNull(scopeFactory);
+        _scopeFactory = scopeFactory;
+        Guard.NotNull(dbOptions);
+        _dbOptions = dbOptions.Value;
+        Guard.NotNull(logger);
+        _logger = logger;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)

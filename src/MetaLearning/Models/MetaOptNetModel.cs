@@ -4,6 +4,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MetaLearning.Models;
 
@@ -50,10 +51,13 @@ public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, Model
         T temperature,
         MetaOptNetOptions<T, TInput, TOutput> options)
     {
-        _featureEncoder = featureEncoder ?? throw new ArgumentNullException(nameof(featureEncoder));
-        _classifierWeights = classifierWeights ?? throw new ArgumentNullException(nameof(classifierWeights));
+        Guard.NotNull(featureEncoder);
+        _featureEncoder = featureEncoder;
+        Guard.NotNull(classifierWeights);
+        _classifierWeights = classifierWeights;
         _temperature = temperature;
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
 
         // Validate embedding dimension
         if (options.EmbeddingDimension <= 0)

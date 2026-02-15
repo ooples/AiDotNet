@@ -1,6 +1,7 @@
 
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation;
 
@@ -61,7 +62,8 @@ public class TeacherModelWrapper<T> : ITeacherModel<Vector<T>, Vector<T>>
         if (outputDimension <= 0)
             throw new ArgumentException("Output dimension must be positive", nameof(outputDimension));
 
-        _forwardFunc = forwardFunc ?? throw new ArgumentNullException(nameof(forwardFunc));
+        Guard.NotNull(forwardFunc);
+        _forwardFunc = forwardFunc;
         OutputDimension = outputDimension;
     }
 

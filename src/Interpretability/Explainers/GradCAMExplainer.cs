@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -83,11 +84,14 @@ public class GradCAMExplainer<T> : ILocalExplainer<T, GradCAMExplanation<T>>
         int[] featureMapShape,
         bool useGradCAMPlusPlus = false)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
         _featureMapFunction = featureMapFunction;
         _gradientFunction = gradientFunction;
-        _inputShape = inputShape ?? throw new ArgumentNullException(nameof(inputShape));
-        _featureMapShape = featureMapShape ?? throw new ArgumentNullException(nameof(featureMapShape));
+        Guard.NotNull(inputShape);
+        _inputShape = inputShape;
+        Guard.NotNull(featureMapShape);
+        _featureMapShape = featureMapShape;
         _useGradCAMPlusPlus = useGradCAMPlusPlus;
     }
 

@@ -260,7 +260,8 @@ internal class BlockTableManager<T>
     /// </summary>
     public BlockTableManager(BlockManager<T> blockManager)
     {
-        _blockManager = blockManager ?? throw new ArgumentNullException(nameof(blockManager));
+        Guard.NotNull(blockManager);
+        _blockManager = blockManager;
         _blockTables = new Dictionary<long, BlockTable>();
     }
 

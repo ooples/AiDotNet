@@ -2,6 +2,7 @@ using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Requests;
 using AiDotNet.ProgramSynthesis.Results;
 using AiDotNet.Serving.Security;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.ProgramSynthesis;
 
@@ -13,7 +14,8 @@ public sealed class ServingCodeTaskExecutor : IServingCodeTaskExecutor
     public ServingCodeTaskExecutor(ILogger<ServingCodeTaskExecutor> logger)
     {
         _model = ServingHeuristicCodeModel.CreateDefault();
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        Guard.NotNull(logger);
+        _logger = logger;
     }
 
     public Task<CodeTaskResultBase> ExecuteAsync(

@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -94,9 +95,12 @@ public class LayerAttributionExplainer<T> : IGPUAcceleratedExplainer<T>
         LayerAttributionMethod method = LayerAttributionMethod.IntegratedGradients,
         int integrationSteps = 50)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
-        _layerActivationFunction = layerActivationFunction ?? throw new ArgumentNullException(nameof(layerActivationFunction));
-        _layerGradientFunction = layerGradientFunction ?? throw new ArgumentNullException(nameof(layerGradientFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
+        Guard.NotNull(layerActivationFunction);
+        _layerActivationFunction = layerActivationFunction;
+        Guard.NotNull(layerGradientFunction);
+        _layerGradientFunction = layerGradientFunction;
         _layerSize = layerSize;
         _inputSize = inputSize;
         _method = method;

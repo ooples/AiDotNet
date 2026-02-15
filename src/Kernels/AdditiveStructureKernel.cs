@@ -1,3 +1,5 @@
+using AiDotNet.Validation;
+
 namespace AiDotNet.Kernels;
 
 /// <summary>
@@ -103,8 +105,10 @@ public class AdditiveStructureKernel<T> : IKernelFunction<T>
 
         for (int i = 0; i < _numComponents; i++)
         {
-            _componentKernels[i] = componentKernels[i] ?? throw new ArgumentNullException($"componentKernels[{i}]");
-            _featureGroups[i] = featureGroups[i] ?? throw new ArgumentNullException($"featureGroups[{i}]");
+            Guard.NotNull(componentKernels[i], $"componentKernels[{i}]");
+            Guard.NotNull(featureGroups[i], $"featureGroups[{i}]");
+            _componentKernels[i] = componentKernels[i];
+            _featureGroups[i] = featureGroups[i];
             if (_featureGroups[i].Length == 0)
                 throw new ArgumentException($"Feature group {i} cannot be empty.");
         }

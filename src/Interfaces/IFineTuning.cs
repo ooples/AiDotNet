@@ -26,6 +26,7 @@ using AiDotNet.Models.Options;
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("FineTuning")]
 public interface IFineTuning<T, TInput, TOutput> : IModelSerializer
 {
     /// <summary>

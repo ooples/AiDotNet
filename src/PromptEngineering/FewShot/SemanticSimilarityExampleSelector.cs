@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PromptEngineering.FewShot;
 
@@ -69,7 +70,8 @@ public class SemanticSimilarityExampleSelector<T> : FewShotExampleSelectorBase<T
     /// </remarks>
     public SemanticSimilarityExampleSelector(Func<string, Vector<T>> embeddingFunction)
     {
-        _embeddingFunction = embeddingFunction ?? throw new ArgumentNullException(nameof(embeddingFunction));
+        Guard.NotNull(embeddingFunction);
+        _embeddingFunction = embeddingFunction;
         _exampleEmbeddings = new Dictionary<FewShotExample, Vector<T>>();
     }
 

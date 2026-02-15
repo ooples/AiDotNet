@@ -1,4 +1,5 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.MixedPrecision;
 
@@ -117,7 +118,8 @@ public class MixedPrecisionScope : IDisposable
     /// </remarks>
     public MixedPrecisionScope(MixedPrecisionContext context, LayerPrecisionPolicy? policy = null)
     {
-        _context = context ?? throw new ArgumentNullException(nameof(context));
+        Guard.NotNull(context);
+        _context = context;
         _policy = policy ?? LayerPrecisionPolicy.ForFP16();
         _fp32Tensors = new Dictionary<string, Tensor<float>>();
         _fp16Tensors = new Dictionary<string, Tensor<Half>>();

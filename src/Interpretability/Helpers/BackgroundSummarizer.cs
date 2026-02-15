@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Helpers;
 
@@ -575,8 +576,10 @@ public class BackgroundSummary<T>
     /// </summary>
     public BackgroundSummary(Matrix<T> data, Vector<T> weights)
     {
-        Data = data ?? throw new ArgumentNullException(nameof(data));
-        Weights = weights ?? throw new ArgumentNullException(nameof(weights));
+        Guard.NotNull(data);
+        Data = data;
+        Guard.NotNull(weights);
+        Weights = weights;
 
         if (data.Rows != weights.Length)
         {

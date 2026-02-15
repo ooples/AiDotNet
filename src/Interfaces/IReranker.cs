@@ -32,6 +32,7 @@ namespace AiDotNet.Interfaces;
 /// more sophisticated analysis, ensuring the best results appear first.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("Reranker")]
 public interface IReranker<T>
 {
     /// <summary>

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 {
@@ -29,7 +30,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         /// <param name="metric">The similarity metric to use for search.</param>
         public FlatIndex(ISimilarityMetric<T> metric)
         {
-            _metric = metric ?? throw new ArgumentNullException(nameof(metric));
+            Guard.NotNull(metric);
+            _metric = metric;
             _vectors = new Dictionary<string, Vector<T>>();
         }
 

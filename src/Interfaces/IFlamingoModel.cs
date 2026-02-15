@@ -36,6 +36,7 @@ namespace AiDotNet.Interfaces;
 /// - Strong performance with minimal examples
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("FlamingoModel")]
 public interface IFlamingoModel<T> : IMultimodalEmbedding<T>
 {
     /// <summary>

@@ -34,6 +34,7 @@ namespace AiDotNet.Interfaces;
 /// This interface extends <see cref="IDiffusionModel{T}"/> with 3D-specific operations.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ThreeDDiffusionModel")]
 public interface I3DDiffusionModel<T> : IDiffusionModel<T>
 {
     /// <summary>

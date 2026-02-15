@@ -11,6 +11,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Document.LayoutAware;
 
@@ -142,7 +143,8 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
         _numClasses = numClasses;
         _hiddenDim = hiddenDim;

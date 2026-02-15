@@ -46,7 +46,8 @@ public class PerceptualLoss<T> : LossFunctionBase<T>
     /// <param name="layerWeights">Weights for each feature layer.</param>
     public PerceptualLoss(Func<Matrix<T>, Vector<Vector<T>>> featureExtractor, Vector<T> layerWeights)
     {
-        _featureExtractor = featureExtractor ?? throw new ArgumentNullException(nameof(featureExtractor));
+        Guard.NotNull(featureExtractor);
+        _featureExtractor = featureExtractor;
         _layerWeights = layerWeights;
     }
 

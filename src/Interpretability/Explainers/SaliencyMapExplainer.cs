@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -90,7 +91,8 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
         string[]? featureNames = null,
         int? randomState = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
 
         if (numFeatures < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(numFeatures));

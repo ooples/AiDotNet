@@ -2,6 +2,7 @@ using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.Helpers;
 using Parquet;
 using Parquet.Schema;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Data.Formats;
 
@@ -92,7 +93,8 @@ public class ParquetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
     /// <param name="options">Configuration options.</param>
     public ParquetDataLoader(ParquetDataLoaderOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        _options = options;
 
         if (string.IsNullOrWhiteSpace(options.FilePath))
             throw new ArgumentException("FilePath cannot be empty.", nameof(options));

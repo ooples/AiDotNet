@@ -45,6 +45,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("SyntheticTabularGenerator")]
 public interface ISyntheticTabularGenerator<T>
 {
     /// <summary>

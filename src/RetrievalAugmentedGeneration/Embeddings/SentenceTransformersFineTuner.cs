@@ -5,6 +5,7 @@ using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Embeddings;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 
@@ -117,7 +118,7 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
     private readonly double _learningRate;
     private readonly int _dimension;
 
-    private ONNXSentenceTransformer<T> _baseModel;
+    private ONNXSentenceTransformer<T>? _baseModel;
     private bool _isFineTuned;
     private Dictionary<string, Vector<T>> _fineTunedEmbeddingsCache;
     private bool _disposed;
@@ -137,8 +138,10 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
         T learningRate,
         int dimension)
     {
-        _baseModelPath = baseModelPath ?? throw new ArgumentNullException(nameof(baseModelPath));
-        _outputModelPath = outputModelPath ?? throw new ArgumentNullException(nameof(outputModelPath));
+        Guard.NotNull(baseModelPath);
+        _baseModelPath = baseModelPath;
+        Guard.NotNull(outputModelPath);
+        _outputModelPath = outputModelPath;
 
         if (epochs <= 0)
             throw new ArgumentOutOfRangeException(nameof(epochs), "Epochs must be positive");
@@ -147,9 +150,23 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
         _learningRate = Convert.ToDouble(learningRate);
         _dimension = dimension;
 
-        _baseModel = new ONNXSentenceTransformer<T>(_baseModelPath, _dimension, MaxTokens);
         _isFineTuned = false;
         _fineTunedEmbeddingsCache = new Dictionary<string, Vector<T>>();
+    }
+
+    /// <summary>
+    /// Gets the base ONNX model, loading it lazily on first access.
+    /// </summary>
+    private ONNXSentenceTransformer<T> BaseModel
+    {
+        get
+        {
+            if (_baseModel == null)
+            {
+                _baseModel = new ONNXSentenceTransformer<T>(_baseModelPath, _dimension, MaxTokens);
+            }
+            return _baseModel;
+        }
     }
 
     /// <inheritdoc />
@@ -191,9 +208,9 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
             foreach (var (anchor, positive, negative) in pairs)
             {
                 // Get base embeddings
-                var anchorEmb = _baseModel.Embed(anchor);
-                var positiveEmb = _baseModel.Embed(positive);
-                var negativeEmb = _baseModel.Embed(negative);
+                var anchorEmb = BaseModel.Embed(anchor);
+                var positiveEmb = BaseModel.Embed(positive);
+                var negativeEmb = BaseModel.Embed(negative);
 
                 // Calculate triplet loss components
                 var posDistance = CalculateDistance(anchorEmb, positiveEmb);
@@ -222,7 +239,7 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
         // Apply adjustments to cache
         foreach (var kvp in adjustmentVectors)
         {
-            var baseEmb = _baseModel.Embed(kvp.Key);
+            var baseEmb = BaseModel.Embed(kvp.Key);
             _fineTunedEmbeddingsCache[kvp.Key] = ApplyAdjustment(baseEmb, kvp.Value);
         }
 
@@ -240,7 +257,7 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
         }
 
         // Fall back to base model
-        return _baseModel.Embed(text);
+        return BaseModel.Embed(text);
     }
 
     private double CalculateDistance(Vector<T> v1, Vector<T> v2)

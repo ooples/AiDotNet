@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
 
@@ -119,8 +120,10 @@ public class GraphRAG<T>
         RetrieverBase<T> vectorRetriever,
         int maxHops = 2)
     {
-        _generator = generator ?? throw new ArgumentNullException(nameof(generator));
-        _vectorRetriever = vectorRetriever ?? throw new ArgumentNullException(nameof(vectorRetriever));
+        Guard.NotNull(generator);
+        _generator = generator;
+        Guard.NotNull(vectorRetriever);
+        _vectorRetriever = vectorRetriever;
 
         if (maxHops < 1)
             throw new ArgumentOutOfRangeException(nameof(maxHops), "maxHops must be at least 1");

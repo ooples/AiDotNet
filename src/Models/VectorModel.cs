@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -9,6 +9,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Interpretability.Explainers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Models;
 
@@ -125,7 +126,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// </remarks>
     public VectorModel(Vector<T> coefficients, ILossFunction<T>? lossFunction = null)
     {
-        Coefficients = coefficients ?? throw new ArgumentNullException(nameof(coefficients));
+        Guard.NotNull(coefficients);
+        Coefficients = coefficients;
         _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
@@ -1521,7 +1523,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// </summary>
     public virtual void SetBaseModel(IFullModel<T, Matrix<T>, Vector<T>> model)
     {
-        _baseModel = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        _baseModel = model;
     }
 
     /// <summary>
@@ -1540,7 +1543,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// </summary>
     public virtual void ConfigureFairness(Vector<int> sensitiveFeatures, params FairnessMetric[] fairnessMetrics)
     {
-        _sensitiveFeatures = sensitiveFeatures ?? throw new ArgumentNullException(nameof(sensitiveFeatures));
+        Guard.NotNull(sensitiveFeatures);
+        _sensitiveFeatures = sensitiveFeatures;
         _fairnessMetrics.Clear();
         _fairnessMetrics.AddRange(fairnessMetrics);
     }

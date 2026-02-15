@@ -26,6 +26,7 @@ namespace AiDotNet.Interfaces;
 /// - Still get accurate answers from the compressed context
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ContextCompressor")]
 public interface IContextCompressor<T>
 {
     /// <summary>

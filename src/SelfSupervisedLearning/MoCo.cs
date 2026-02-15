@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.SelfSupervisedLearning.Losses;
+using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -77,7 +78,8 @@ public class MoCo<T> : SSLMethodBase<T>
         SSLConfig? config = null)
         : base(encoder, projector, config ?? new SSLConfig { Method = SSLMethodType.MoCoV2 })
     {
-        _momentumEncoder = momentumEncoder ?? throw new ArgumentNullException(nameof(momentumEncoder));
+        Guard.NotNull(momentumEncoder);
+        _momentumEncoder = momentumEncoder;
         _momentumProjector = momentumProjector;
 
         var mocoConfig = _config.MoCo ?? new MoCoConfig();

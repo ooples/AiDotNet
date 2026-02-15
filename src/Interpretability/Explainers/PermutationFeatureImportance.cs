@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -87,8 +88,10 @@ public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImport
         string[]? featureNames = null,
         int? randomState = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
-        _scoreFunction = scoreFunction ?? throw new ArgumentNullException(nameof(scoreFunction));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
+        Guard.NotNull(scoreFunction);
+        _scoreFunction = scoreFunction;
 
         if (nRepeats < 1)
             throw new ArgumentException("Number of repeats must be at least 1.", nameof(nRepeats));
@@ -342,8 +345,10 @@ public class FeatureImportanceResult<T>
         T baselineScore,
         string[]? featureNames = null)
     {
-        Importances = importances ?? throw new ArgumentNullException(nameof(importances));
-        ImportanceStds = importanceStds ?? throw new ArgumentNullException(nameof(importanceStds));
+        Guard.NotNull(importances);
+        Importances = importances;
+        Guard.NotNull(importanceStds);
+        ImportanceStds = importanceStds;
         BaselineScore = baselineScore;
         FeatureNames = featureNames;
     }

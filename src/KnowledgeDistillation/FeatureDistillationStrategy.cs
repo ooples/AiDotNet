@@ -1,6 +1,7 @@
 
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.KnowledgeDistillation;
 
@@ -78,7 +79,8 @@ public class FeatureDistillationStrategy<T>
             throw new ArgumentException("Feature weight must be between 0 and 1", nameof(featureWeight));
 
         _numOps = MathHelper.GetNumericOperations<T>();
-        _layerPairs = layerPairs ?? throw new ArgumentNullException(nameof(layerPairs));
+        Guard.NotNull(layerPairs);
+        _layerPairs = layerPairs;
         _featureWeight = featureWeight;
 
         if (_layerPairs.Length == 0)

@@ -21,6 +21,7 @@ namespace AiDotNet.Interfaces;
 /// classifier on the adapted features instead of relying solely on the backbone's predictions.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("AdaptedMetaModel")]
 public interface IAdaptedMetaModel<T>
 {
     /// <summary>

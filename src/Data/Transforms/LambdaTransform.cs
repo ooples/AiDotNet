@@ -24,7 +24,8 @@ public class LambdaTransform<TInput, TOutput> : ITransform<TInput, TOutput>
     /// <param name="func">The function to wrap as a transform.</param>
     public LambdaTransform(Func<TInput, TOutput> func)
     {
-        _func = func ?? throw new ArgumentNullException(nameof(func));
+        Guard.NotNull(func);
+        _func = func;
     }
 
     /// <inheritdoc/>

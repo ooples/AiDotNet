@@ -9,6 +9,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Core interface for RL policies - defines how to select actions.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    [AiDotNet.Configuration.YamlConfigurable("RLPolicy")]
     public interface IPolicy<T> : IDisposable
     {
         /// <summary>

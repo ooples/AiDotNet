@@ -16,6 +16,7 @@ namespace AiDotNet.Interfaces;
 /// you just try different button combinations and observe what comes out.
 /// </para>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("ModelExplainer")]
 public interface IModelExplainer<T>
 {
     /// <summary>

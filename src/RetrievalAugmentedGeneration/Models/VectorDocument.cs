@@ -1,4 +1,5 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Models;
 
@@ -80,7 +81,9 @@ public class VectorDocument<T>
     /// <param name="embedding">The vector embedding of the document.</param>
     public VectorDocument(Document<T> document, Vector<T> embedding)
     {
-        Document = document ?? throw new ArgumentNullException(nameof(document));
-        Embedding = embedding ?? throw new ArgumentNullException(nameof(embedding));
+        Guard.NotNull(document);
+        Document = document;
+        Guard.NotNull(embedding);
+        Embedding = embedding;
     }
 }

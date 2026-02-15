@@ -6,6 +6,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Services;
 
@@ -54,9 +55,13 @@ public class ModelStartupService : IHostedService
         ILogger<ModelStartupService> logger,
         IOptions<ServingOptions> options)
     {
-        _modelRepository = modelRepository ?? throw new ArgumentNullException(nameof(modelRepository));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(modelRepository);
+        _modelRepository = modelRepository;
+        Guard.NotNull(logger);
+        _logger = logger;
+        Guard.NotNull(options);
+        Guard.NotNull(options.Value);
+        _options = options.Value;
     }
 
     /// <summary>

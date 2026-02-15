@@ -1,6 +1,7 @@
 using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Diffusion.Schedulers;
 
@@ -99,7 +100,8 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
     /// <exception cref="NotSupportedException">Thrown when an unsupported beta schedule is specified.</exception>
     protected NoiseSchedulerBase(SchedulerConfig<T> config)
     {
-        Config = config ?? throw new ArgumentNullException(nameof(config));
+        Guard.NotNull(config);
+        Config = config;
 
         int steps = config.TrainTimesteps;
         Betas = new Vector<T>(steps);

@@ -13,6 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
+using AiDotNet.Validation;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.Document.PixelToSequence;
@@ -188,7 +189,8 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         if (!File.Exists(decoderPath))
             throw new FileNotFoundException($"Decoder model not found: {decoderPath}", decoderPath);
 
-        _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
         _useNativeMode = false;
         _onnxEncoderModelPath = encoderPath;
         _onnxDecoderModelPath = decoderPath;

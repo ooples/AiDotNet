@@ -5,6 +5,7 @@ using System.Text;
 using AiDotNet.Tokenization.Core;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Tokenization.Algorithms
 {
@@ -32,7 +33,8 @@ namespace AiDotNet.Tokenization.Algorithms
             bool treatWhitespaceAsSpecialToken = true)
             : base(vocabulary, specialTokens ?? SpecialTokens.T5())
         {
-            _pieceScores = pieceScores ?? throw new ArgumentNullException(nameof(pieceScores));
+            Guard.NotNull(pieceScores);
+            _pieceScores = pieceScores;
             _treatWhitespaceAsSpecialToken = treatWhitespaceAsSpecialToken;
         }
 

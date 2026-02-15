@@ -4,6 +4,7 @@ using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.ActiveLearning.Results;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.ActiveLearning.Core;
 
@@ -105,8 +106,10 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
         IQueryStrategy<T, TInput, TOutput> queryStrategy,
         ActiveLearnerConfig<T>? config = null)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
-        _queryStrategy = queryStrategy ?? throw new ArgumentNullException(nameof(queryStrategy));
+        Guard.NotNull(model);
+        _model = model;
+        Guard.NotNull(queryStrategy);
+        _queryStrategy = queryStrategy;
         _config = config ?? new ActiveLearnerConfig<T>();
 
         _stopwatch = new Stopwatch();
@@ -127,8 +130,10 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
         IDataset<T, TInput, TOutput> initialLabeled,
         IDataset<T, TInput, TOutput> unlabeledPool)
     {
-        _labeledPool = initialLabeled ?? throw new ArgumentNullException(nameof(initialLabeled));
-        _unlabeledPool = unlabeledPool ?? throw new ArgumentNullException(nameof(unlabeledPool));
+        Guard.NotNull(initialLabeled);
+        _labeledPool = initialLabeled;
+        Guard.NotNull(unlabeledPool);
+        _unlabeledPool = unlabeledPool;
 
         // Optionally split off a validation set
         if (_config.EvaluatePerIteration ?? true)

@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Validation;
 
 namespace AiDotNet.FineTuning;
 
@@ -54,7 +55,8 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
     /// <param name="rewardFunction">A function that takes (input, output) and returns a reward score.</param>
     public void SetRewardFunction(Func<TInput, TOutput, double> rewardFunction)
     {
-        _rewardFunction = rewardFunction ?? throw new ArgumentNullException(nameof(rewardFunction));
+        Guard.NotNull(rewardFunction);
+        _rewardFunction = rewardFunction;
     }
 
     /// <summary>
@@ -63,7 +65,8 @@ public class ReinforcementLearningHumanFeedback<T, TInput, TOutput> : FineTuning
     /// <param name="valueModel">The value model for critic.</param>
     public void SetValueModel(IFullModel<T, TInput, TOutput> valueModel)
     {
-        _valueModel = valueModel ?? throw new ArgumentNullException(nameof(valueModel));
+        Guard.NotNull(valueModel);
+        _valueModel = valueModel;
     }
 
     /// <inheritdoc/>

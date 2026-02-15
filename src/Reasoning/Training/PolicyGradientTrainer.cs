@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Reasoning.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Reasoning.Training;
 
@@ -163,7 +164,8 @@ internal class PolicyGradientTrainer<T>
         double entropyCoefficient = 0.01,
         bool useBaseline = true)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        _model = model;
         _rewardModel = rewardModel;
         _numOps = MathHelper.GetNumericOperations<T>();
         _learningRate = learningRate;

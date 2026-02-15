@@ -5,6 +5,7 @@ using AiDotNet.Serving.Models;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Security.Attestation;
 
@@ -21,8 +22,10 @@ public sealed class DevelopmentAttestationVerifier : IAttestationVerifier
 
     public DevelopmentAttestationVerifier(IHostEnvironment environment, IOptions<AttestationOptions> options)
     {
-        _environment = environment ?? throw new ArgumentNullException(nameof(environment));
-        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(environment);
+        _environment = environment;
+        Guard.NotNull(options);
+        _options = options.Value;
         _jwtOptions = _options.Jwt;
         _jwtParameters = _jwtOptions != null ? BuildJwtValidationParameters(_jwtOptions) : null;
     }

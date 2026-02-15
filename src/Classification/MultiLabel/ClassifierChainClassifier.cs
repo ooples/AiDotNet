@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Classification.MultiLabel;
 
@@ -138,7 +139,8 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
-        _classifierFactory = classifierFactory ?? throw new ArgumentNullException(nameof(classifierFactory));
+        Guard.NotNull(classifierFactory);
+        _classifierFactory = classifierFactory;
         _specifiedOrder = chainOrder;
         _useRandomOrder = useRandomOrder;
         _random = seed.HasValue

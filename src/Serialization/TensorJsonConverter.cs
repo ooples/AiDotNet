@@ -76,6 +76,11 @@ namespace AiDotNet.Serialization
                 throw new JsonSerializationException($"Cannot serialize tensor: Shape or Length property returned null.");
             }
             var shape = (int[])shapeObj;
+            // Normalize scalar tensors to shape [1] for consistent round-trip behavior
+            if (shape.Length == 0)
+            {
+                shape = new[] { 1 };
+            }
             var length = (int)lengthObj;
 
             // Get the ToArray method to extract all data
@@ -123,7 +128,14 @@ namespace AiDotNet.Serialization
                 throw new JsonSerializationException("Tensor JSON must contain 'shape' property.");
             }
 
-            // Validate that all dimensions are non-negative (empty shape = scalar is valid)
+            // Handle scalar tensors: empty shape is treated as a 1-element tensor [1]
+            // This provides backward compatibility with legacy JSON that may have empty shapes
+            if (shape.Length == 0)
+            {
+                shape = new[] { 1 };
+            }
+
+            // Validate that all dimensions are non-negative
             for (int i = 0; i < shape.Length; i++)
             {
                 if (shape[i] < 0)

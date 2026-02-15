@@ -2,6 +2,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Serving.Models;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Services;
 
@@ -38,8 +39,10 @@ public class ModelRegistryLoader<T, TInput, TOutput>
     /// <param name="repository">The model repository to load models into.</param>
     public ModelRegistryLoader(IModelRegistry<T, TInput, TOutput> registry, IModelRepository repository)
     {
-        _registry = registry ?? throw new ArgumentNullException(nameof(registry));
-        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+        Guard.NotNull(registry);
+        _registry = registry;
+        Guard.NotNull(repository);
+        _repository = repository;
     }
 
     /// <summary>
@@ -192,15 +195,8 @@ public class ModelRegistryLoader<T, TInput, TOutput>
         IServableModel<T> servableModel,
         string? servingName = null)
     {
-        if (string.IsNullOrWhiteSpace(modelName))
-        {
-            throw new ArgumentException("Model name cannot be null or empty.", nameof(modelName));
-        }
-
-        if (servableModel == null)
-        {
-            throw new ArgumentNullException(nameof(servableModel));
-        }
+        Guard.NotNullOrWhiteSpace(modelName);
+        Guard.NotNull(servableModel);
 
         // Get the registered model metadata
         RegisteredModel<T, TInput, TOutput> registeredModel;
@@ -264,15 +260,8 @@ public class ModelRegistryLoader<T, TInput, TOutput>
     /// <returns>True if the refresh was successful, false otherwise.</returns>
     public bool RefreshModel(string modelName, IServableModel<T> servableModel)
     {
-        if (string.IsNullOrWhiteSpace(modelName))
-        {
-            throw new ArgumentException("Model name cannot be null or empty.", nameof(modelName));
-        }
-
-        if (servableModel == null)
-        {
-            throw new ArgumentNullException(nameof(servableModel));
-        }
+        Guard.NotNullOrWhiteSpace(modelName);
+        Guard.NotNull(servableModel);
 
         // Lock to make unload + load atomic, preventing race conditions where
         // another thread could access a non-existent model between operations

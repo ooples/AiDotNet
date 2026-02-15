@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -124,10 +125,14 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         double scale = 10.0,
         int? randomState = null)
     {
-        _network = network ?? throw new ArgumentNullException(nameof(network));
-        _lossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
-        _trainingData = trainingData ?? throw new ArgumentNullException(nameof(trainingData));
-        _trainingLabels = trainingLabels ?? throw new ArgumentNullException(nameof(trainingLabels));
+        Guard.NotNull(network);
+        _network = network;
+        Guard.NotNull(lossFunction);
+        _lossFunction = lossFunction;
+        Guard.NotNull(trainingData);
+        _trainingData = trainingData;
+        Guard.NotNull(trainingLabels);
+        _trainingLabels = trainingLabels;
         _method = method;
         _damping = damping;
         _maxIterations = maxIterations;
@@ -176,11 +181,16 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         double scale = 10.0,
         int? randomState = null)
     {
-        _predictFunction = predictFunction ?? throw new ArgumentNullException(nameof(predictFunction));
-        _lossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
-        _gradientFunction = gradientFunction ?? throw new ArgumentNullException(nameof(gradientFunction));
-        _trainingData = trainingData ?? throw new ArgumentNullException(nameof(trainingData));
-        _trainingLabels = trainingLabels ?? throw new ArgumentNullException(nameof(trainingLabels));
+        Guard.NotNull(predictFunction);
+        _predictFunction = predictFunction;
+        Guard.NotNull(lossFunction);
+        _lossFunction = lossFunction;
+        Guard.NotNull(gradientFunction);
+        _gradientFunction = gradientFunction;
+        Guard.NotNull(trainingData);
+        _trainingData = trainingData;
+        Guard.NotNull(trainingLabels);
+        _trainingLabels = trainingLabels;
         _method = method;
         _damping = damping;
         _maxIterations = maxIterations;

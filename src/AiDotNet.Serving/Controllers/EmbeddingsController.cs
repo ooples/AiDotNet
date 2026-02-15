@@ -4,6 +4,7 @@ using AiDotNet.Serving.Models;
 using AiDotNet.Serving.Services;
 using AiDotNet.Tensors.LinearAlgebra;
 using Microsoft.AspNetCore.Mvc;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Controllers;
 
@@ -29,8 +30,10 @@ public class EmbeddingsController : ControllerBase
         IModelRepository modelRepository,
         ILogger<EmbeddingsController> logger)
     {
-        _modelRepository = modelRepository ?? throw new ArgumentNullException(nameof(modelRepository));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        Guard.NotNull(modelRepository);
+        _modelRepository = modelRepository;
+        Guard.NotNull(logger);
+        _logger = logger;
     }
 
     /// <summary>

@@ -17,6 +17,7 @@ namespace AiDotNet.CurriculumLearning.Interfaces;
 /// <item><description><b>Difficulty Settings:</b> Recalculation frequency, normalization</description></item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("CurriculumLearnerConfig")]
 public interface ICurriculumLearnerConfig<T>
 {
     /// <summary>
@@ -135,6 +136,7 @@ public interface ICurriculumLearnerConfig<T>
 /// Builder for curriculum learner configuration.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
+[AiDotNet.Configuration.YamlConfigurable("CurriculumLearnerConfigBuilder")]
 public interface ICurriculumLearnerConfigBuilder<T>
 {
     /// <summary>

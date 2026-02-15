@@ -5,6 +5,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
+using AiDotNet.Validation;
 
 namespace AiDotNet.AdversarialRobustness.Attacks;
 
@@ -42,7 +43,8 @@ public abstract class AdversarialAttackBase<T, TInput, TOutput> : IAdversarialAt
     /// <param name="options">The configuration options for the attack.</param>
     protected AdversarialAttackBase(AdversarialAttackOptions<T> options)
     {
-        Options = options ?? throw new ArgumentNullException(nameof(options));
+        Guard.NotNull(options);
+        Options = options;
         Random = RandomHelper.CreateSeededRandom(Options.RandomSeed);
     }
 

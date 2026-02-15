@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.PromptEngineering.FewShot;
 
@@ -90,7 +91,8 @@ public class MMRExampleSelector<T> : FewShotExampleSelectorBase<T>
     /// </remarks>
     public MMRExampleSelector(Func<string, Vector<T>> embeddingFunction, T lambda)
     {
-        _embeddingFunction = embeddingFunction ?? throw new ArgumentNullException(nameof(embeddingFunction));
+        Guard.NotNull(embeddingFunction);
+        _embeddingFunction = embeddingFunction;
         _lambda = ClampToUnitInterval(lambda);
         _exampleEmbeddings = new Dictionary<FewShotExample, Vector<T>>();
     }

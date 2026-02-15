@@ -117,29 +117,52 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
             throw new ArgumentException("Input dimensions do not match the model.");
         }
 
-        if (input.Rows < _varOptions.Lag)
+        int n = input.Rows;
+        int p = _varOptions.Lag;
+
+        // Produce in-sample predictions: one scalar per row (first variable).
+        var predictions = new Vector<T>(n);
+
+        for (int t = 0; t < n; t++)
         {
-            throw new ArgumentException(
-                $"Input must contain at least {_varOptions.Lag} rows to form lagged values. Found {input.Rows}.");
+            if (t < p)
+            {
+                // Not enough lag history, use intercept only
+                predictions[t] = _intercepts[0];
+                continue;
+            }
+
+            // Use the lag window ending at row t as input for a single-step prediction
+            var window = input.Slice(t - p, p);
+            var stepPrediction = PredictSingleStep(window);
+            predictions[t] = stepPrediction[0]; // first variable
         }
 
-        Vector<T> prediction = new Vector<T>(_varOptions.OutputDimension);
+        return predictions;
+    }
 
-        // Build flattened lag vector (matches PrepareLaggedData ordering)
+    /// <summary>
+    /// Produces a single-step multivariate prediction from a lag window.
+    /// </summary>
+    /// <param name="lagWindow">A matrix of shape [Lag, OutputDimension] containing the most recent observations.</param>
+    /// <returns>A vector of size OutputDimension with the next-step prediction for each variable.</returns>
+    private Vector<T> PredictSingleStep(Matrix<T> lagWindow)
+    {
         int m = _varOptions.OutputDimension;
         int p = _varOptions.Lag;
+
+        var prediction = new Vector<T>(m);
         var laggedValues = new Vector<T>(m * p);
         for (int lag = 0; lag < p; lag++)
         {
-            int rowIndex = input.Rows - lag - 1; // most recent row first
+            int rowIndex = lagWindow.Rows - lag - 1;
             for (int col = 0; col < m; col++)
             {
-                laggedValues[lag * m + col] = input[rowIndex, col];
+                laggedValues[lag * m + col] = lagWindow[rowIndex, col];
             }
         }
 
-        // Vectorized prediction using Engine.DotProduct for each output dimension
-        for (int i = 0; i < _varOptions.OutputDimension; i++)
+        for (int i = 0; i < m; i++)
         {
             var coeffRow = _coefficients.GetRow(i);
             T dotProductResult = Engine.DotProduct(coeffRow, laggedValues);
@@ -417,7 +440,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
 
         for (int i = _varOptions.Lag; i < n; i++)
         {
-            Vector<T> predicted = Predict(x.Slice(i - _varOptions.Lag, _varOptions.Lag));
+            Vector<T> predicted = PredictSingleStep(x.Slice(i - _varOptions.Lag, _varOptions.Lag));
             Vector<T> actual = x.GetRow(i);
             residuals.SetRow(i - _varOptions.Lag, actual.Subtract(predicted));
         }
@@ -453,10 +476,14 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        // Validate input dimensions
+        // Auto-configure OutputDimension from the data if it doesn't match.
+        // This allows users to omit OutputDimension and have it inferred.
         if (x.Columns != _varOptions.OutputDimension)
         {
-            throw new ArgumentException($"The number of columns in x ({x.Columns}) must match the OutputDimension ({_varOptions.OutputDimension}).");
+            _varOptions.OutputDimension = x.Columns;
+            _coefficients = new Matrix<T>(_varOptions.OutputDimension, _varOptions.OutputDimension * _varOptions.Lag);
+            _intercepts = new Vector<T>(_varOptions.OutputDimension);
+            _residuals = new Matrix<T>(0, _varOptions.OutputDimension);
         }
 
         int n = x.Rows;
@@ -713,7 +740,7 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
             }
 
             // Generate forecast for current step
-            Vector<T> forecast = Predict(recentHistory);
+            Vector<T> forecast = PredictSingleStep(recentHistory);
 
             // Store forecast
             forecasts.SetRow(step, forecast);

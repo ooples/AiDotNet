@@ -38,6 +38,7 @@ namespace AiDotNet.CurriculumLearning.Interfaces;
 /// <item><description>Soviany et al. "Curriculum Learning: A Survey" (IJCV 2022)</description></item>
 /// </list>
 /// </remarks>
+[AiDotNet.Configuration.YamlConfigurable("CurriculumLearner")]
 public interface ICurriculumLearner<T, TInput, TOutput>
 {
     /// <summary>

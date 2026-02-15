@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 
@@ -58,7 +59,8 @@ public class BTreeIndex : IDisposable
     /// <param name="indexFilePath">The path to the index file on disk.</param>
     public BTreeIndex(string indexFilePath)
     {
-        _indexFilePath = indexFilePath ?? throw new ArgumentNullException(nameof(indexFilePath));
+        Guard.NotNull(indexFilePath);
+        _indexFilePath = indexFilePath;
         _index = new SortedDictionary<string, long>();
         _isDirty = false;
 

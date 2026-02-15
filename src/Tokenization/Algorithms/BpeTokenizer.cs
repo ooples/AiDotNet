@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using AiDotNet.Tokenization.Core;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Tokenization.Algorithms
 {
@@ -66,7 +67,8 @@ namespace AiDotNet.Tokenization.Algorithms
             string? pattern = null)
             : base(vocabulary, specialTokens ?? SpecialTokens.Gpt())
         {
-            _bpeMerges = merges ?? throw new ArgumentNullException(nameof(merges));
+            Guard.NotNull(merges);
+            _bpeMerges = merges;
             _cache = new Dictionary<string, List<string>>();
 
             // Default GPT-2 pattern for pre-tokenization

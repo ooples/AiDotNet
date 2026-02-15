@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -85,9 +86,12 @@ public class NoiseTunnelExplainer<T, TExplanation>
         double stdDev = 0.15,
         int? seed = null)
     {
-        _baseExplainer = baseExplainer ?? throw new ArgumentNullException(nameof(baseExplainer));
-        _attributionExtractor = attributionExtractor ?? throw new ArgumentNullException(nameof(attributionExtractor));
-        _attributionReplacer = attributionReplacer ?? throw new ArgumentNullException(nameof(attributionReplacer));
+        Guard.NotNull(baseExplainer);
+        _baseExplainer = baseExplainer;
+        Guard.NotNull(attributionExtractor);
+        _attributionExtractor = attributionExtractor;
+        Guard.NotNull(attributionReplacer);
+        _attributionReplacer = attributionReplacer;
         _noiseTunnelType = noiseTunnelType;
         _numSamples = numSamples > 0 ? numSamples : throw new ArgumentException("numSamples must be positive");
         _stdDev = stdDev > 0 ? stdDev : throw new ArgumentException("stdDev must be positive");

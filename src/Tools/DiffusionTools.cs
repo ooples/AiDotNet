@@ -4,6 +4,7 @@ using AiDotNet.Diffusion.TextToImage;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json.Linq;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Tools;
 
@@ -45,7 +46,8 @@ public class TextToImageTool<T> : ToolBase
     /// <param name="model">The diffusion model to use for generation.</param>
     public TextToImageTool(IDiffusionModel<T> model)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        _model = model;
         _generateFunc = null;
     }
 
@@ -55,7 +57,8 @@ public class TextToImageTool<T> : ToolBase
     /// <param name="generateFunc">Custom function (prompt, steps, guidance, seed) -> image.</param>
     public TextToImageTool(Func<string, int, double, int?, Tensor<T>> generateFunc)
     {
-        _generateFunc = generateFunc ?? throw new ArgumentNullException(nameof(generateFunc));
+        Guard.NotNull(generateFunc);
+        _generateFunc = generateFunc;
         _model = null;
     }
 
@@ -155,7 +158,8 @@ public class TextToAudioTool<T> : ToolBase
     /// <param name="model">The audio diffusion model.</param>
     public TextToAudioTool(AudioDiffusionModelBase<T> model)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        _model = model;
         _generateFunc = null;
     }
 
@@ -165,7 +169,8 @@ public class TextToAudioTool<T> : ToolBase
     /// <param name="generateFunc">Custom function.</param>
     public TextToAudioTool(Func<string, double, int, double, int?, Tensor<T>> generateFunc)
     {
-        _generateFunc = generateFunc ?? throw new ArgumentNullException(nameof(generateFunc));
+        Guard.NotNull(generateFunc);
+        _generateFunc = generateFunc;
         _model = null;
     }
 
@@ -259,7 +264,8 @@ public class TextToMusicTool<T> : ToolBase
     /// <param name="model">The audio diffusion model.</param>
     public TextToMusicTool(AudioDiffusionModelBase<T> model)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        _model = model;
         _musicGenModel = model as MusicGenModel<T>;
     }
 
@@ -355,7 +361,8 @@ public class ImageTo3DTool<T> : ToolBase
     /// <param name="model">The 3D diffusion model.</param>
     public ImageTo3DTool(I3DDiffusionModel<T> model)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        _model = model;
     }
 
     /// <inheritdoc />
@@ -472,7 +479,8 @@ public class TextTo3DTool<T> : ToolBase
     /// <param name="model">The 3D diffusion model.</param>
     public TextTo3DTool(I3DDiffusionModel<T> model)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        _model = model;
     }
 
     /// <inheritdoc />
@@ -559,7 +567,8 @@ public class AudioTransformTool<T> : ToolBase
     /// <param name="model">The audio diffusion model.</param>
     public AudioTransformTool(AudioDiffusionModelBase<T> model)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        _model = model;
     }
 
     /// <inheritdoc />
@@ -696,7 +705,8 @@ public class ScoreDistillationTool<T> : ToolBase
     /// <param name="model">The 3D diffusion model.</param>
     public ScoreDistillationTool(I3DDiffusionModel<T> model)
     {
-        _model = model ?? throw new ArgumentNullException(nameof(model));
+        Guard.NotNull(model);
+        _model = model;
     }
 
     /// <inheritdoc />
