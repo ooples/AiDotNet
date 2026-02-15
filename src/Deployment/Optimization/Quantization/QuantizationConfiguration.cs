@@ -291,9 +291,43 @@ public class QuantizationConfiguration
     public double[] AWQScaleSearchOptions { get; set; } = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0];
 
     /// <summary>
-    /// Gets or sets custom quantization parameters per layer.
+    /// Gets or sets custom quantization parameters per layer (by layer name).
     /// </summary>
     public Dictionary<string, LayerQuantizationParams> CustomLayerParams { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets per-category bit-width overrides for mixed-precision quantization.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Different layer types have different sensitivity to quantization.
+    /// Attention layers are typically more sensitive and benefit from higher precision, while
+    /// dense/MLP layers are more tolerant of aggressive quantization.</para>
+    ///
+    /// <para><b>How it works:</b> When the model implements <see cref="AiDotNet.Interfaces.ILayeredModel{T}"/>,
+    /// quantizers can look up each layer's <see cref="AiDotNet.Interfaces.LayerCategory"/> in this dictionary
+    /// to determine the target bit-width. Layers whose category is not present use the default
+    /// <see cref="EffectiveBitWidth"/>.</para>
+    ///
+    /// <para><b>Example (common mixed-precision config):</b></para>
+    /// <code>
+    /// config.CategoryBitWidths = new Dictionary&lt;LayerCategory, int&gt;
+    /// {
+    ///     { LayerCategory.Attention, 8 },    // Keep attention at 8-bit (sensitive)
+    ///     { LayerCategory.Embedding, 8 },     // Embeddings are sensitive too
+    ///     { LayerCategory.Dense, 4 },          // Dense/MLP can handle 4-bit
+    ///     { LayerCategory.FeedForward, 4 },    // Feed-forward blocks too
+    ///     { LayerCategory.Normalization, 16 }, // Keep normalization at higher precision
+    /// };
+    /// </code>
+    ///
+    /// <para><b>Research References:</b></para>
+    /// <list type="bullet">
+    /// <item><description>CoopQ (2025): Cooperative game theory for per-layer bit-width allocation</description></item>
+    /// <item><description>AWQ (MLSys 2024): Per-channel activation-aware weight quantization</description></item>
+    /// <item><description>Layer-Sensitive Quantization (2025): Layer sensitivity metrics for mixed-precision</description></item>
+    /// </list>
+    /// </remarks>
+    public Dictionary<AiDotNet.Interfaces.LayerCategory, int>? CategoryBitWidths { get; set; }
 
     /// <summary>
     /// Creates a configuration for INT8 quantization.
@@ -465,6 +499,83 @@ public class QuantizationConfiguration
             QuantizeActivations = false,
             UseQuantizationAwareTraining = true,
             QATMethod = QATMethod.QABLoRA
+        };
+    }
+
+    /// <summary>
+    /// Gets the effective bit-width for a specific layer category, considering
+    /// per-category overrides in <see cref="CategoryBitWidths"/>.
+    /// </summary>
+    /// <param name="category">The layer category to look up.</param>
+    /// <returns>The bit-width for this category, or <see cref="EffectiveBitWidth"/> if no override exists.</returns>
+    public int GetBitWidthForCategory(AiDotNet.Interfaces.LayerCategory category)
+    {
+        if (CategoryBitWidths is not null && CategoryBitWidths.TryGetValue(category, out int bitWidth))
+        {
+            return bitWidth;
+        }
+        return EffectiveBitWidth;
+    }
+
+    /// <summary>
+    /// Gets the effective bit-width for a specific layer, checking name-based overrides first,
+    /// then category-based overrides, then the default.
+    /// </summary>
+    /// <param name="layerInfo">The layer metadata.</param>
+    /// <returns>The effective bit-width for this specific layer.</returns>
+    public int GetBitWidthForLayer<T>(AiDotNet.Interfaces.LayerInfo<T> layerInfo)
+    {
+        if (layerInfo is null)
+        {
+            return EffectiveBitWidth;
+        }
+
+        // Name-based override takes highest priority
+        if (CustomLayerParams.TryGetValue(layerInfo.Name, out var layerParams) &&
+            layerParams.BitWidth.HasValue && layerParams.BitWidth.Value > 0)
+        {
+            return layerParams.BitWidth.Value;
+        }
+
+        // Skip layers get full precision
+        if (SkipLayers.Contains(layerInfo.Name))
+        {
+            return 32;
+        }
+
+        // Category-based override
+        return GetBitWidthForCategory(layerInfo.Category);
+    }
+
+    /// <summary>
+    /// Creates a mixed-precision configuration for layer-aware quantization.
+    /// Attention and embedding layers get higher precision while dense/MLP layers get lower.
+    /// </summary>
+    /// <param name="sensitiveBitWidth">Bit-width for sensitive layers (attention, embedding, normalization). Default: 8.</param>
+    /// <param name="aggressiveBitWidth">Bit-width for tolerant layers (dense, feedforward). Default: 4.</param>
+    /// <param name="groupSize">Group size for per-group quantization. Default: 128.</param>
+    public static QuantizationConfiguration ForMixedPrecision(
+        int sensitiveBitWidth = 8, int aggressiveBitWidth = 4, int groupSize = 128)
+    {
+        return new QuantizationConfiguration
+        {
+            Mode = QuantizationMode.Int8,
+            TargetBitWidth = aggressiveBitWidth,
+            Strategy = QuantizationStrategy.GPTQ,
+            Granularity = QuantizationGranularity.PerGroup,
+            GroupSize = groupSize,
+            CalibrationMethod = CalibrationMethod.MinMax,
+            UseSymmetricQuantization = true,
+            QuantizeActivations = false,
+            CategoryBitWidths = new Dictionary<AiDotNet.Interfaces.LayerCategory, int>
+            {
+                { AiDotNet.Interfaces.LayerCategory.Attention, sensitiveBitWidth },
+                { AiDotNet.Interfaces.LayerCategory.Embedding, sensitiveBitWidth },
+                { AiDotNet.Interfaces.LayerCategory.Normalization, 16 },
+                { AiDotNet.Interfaces.LayerCategory.Dense, aggressiveBitWidth },
+                { AiDotNet.Interfaces.LayerCategory.FeedForward, aggressiveBitWidth },
+                { AiDotNet.Interfaces.LayerCategory.Convolution, aggressiveBitWidth },
+            }
         };
     }
 }

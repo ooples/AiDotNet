@@ -67,4 +67,27 @@ public interface ILayeredModel<T>
     /// Must be between 0 and <see cref="LayerCount"/> - 2.</param>
     /// <returns>True if the partition point is valid; false otherwise.</returns>
     bool ValidatePartitionPoint(int afterLayerIndex);
+
+    /// <summary>
+    /// Extracts a contiguous sub-model from <paramref name="startLayer"/> to
+    /// <paramref name="endLayer"/> (inclusive). The sub-model can be independently
+    /// forwarded through.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is like cutting a tall cake into horizontal slices.
+    /// Each slice is a working mini-model that can process data independently. This is
+    /// essential for pipeline parallelism (each GPU gets a slice) and knowledge distillation
+    /// (comparing intermediate representations).</para>
+    ///
+    /// <para><b>Reference:</b> PyTorch's <c>split_module()</c> and Megatron-LM's
+    /// pipeline stage extraction both split at layer boundaries in the same way.</para>
+    /// </remarks>
+    /// <param name="startLayer">Zero-based index of the first layer to include.</param>
+    /// <param name="endLayer">Zero-based index of the last layer to include (inclusive).</param>
+    /// <returns>A sub-model containing the specified layer range.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="startLayer"/> or <paramref name="endLayer"/> is out of range,
+    /// or when <paramref name="startLayer"/> is greater than <paramref name="endLayer"/>.
+    /// </exception>
+    SubModel<T> ExtractSubModel(int startLayer, int endLayer);
 }

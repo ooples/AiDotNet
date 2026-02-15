@@ -157,6 +157,49 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
         return true;
     }
 
+    public SubModel<T> ExtractSubModel(int startLayer, int endLayer)
+    {
+        if (startLayer < 0 || startLayer >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startLayer));
+        }
+        if (endLayer < 0 || endLayer >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(endLayer));
+        }
+        if (startLayer > endLayer)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startLayer));
+        }
+
+        var subLayers = new List<ILayer<T>>();
+        var subInfos = new List<LayerInfo<T>>();
+        int localOffset = 0;
+
+        for (int i = startLayer; i <= endLayer; i++)
+        {
+            var layer = _layers[i];
+            subLayers.Add(layer);
+            subInfos.Add(new LayerInfo<T>
+            {
+                Index = i - startLayer,
+                Name = layer.LayerName,
+                Category = LayerCategory.Dense,
+                Layer = layer,
+                ParameterOffset = localOffset,
+                ParameterCount = layer.ParameterCount,
+                InputShape = layer.GetInputShape(),
+                OutputShape = layer.GetOutputShape(),
+                IsTrainable = layer.SupportsTraining,
+                EstimatedFlops = 2L * layer.ParameterCount,
+                EstimatedActivationMemory = 40
+            });
+            localOffset += layer.ParameterCount;
+        }
+
+        return new SubModel<T>(subLayers, subInfos, startLayer, endLayer);
+    }
+
     // INeuralNetwork<T> specific members
     public void UpdateParameters(Vector<T> parameters)
     {

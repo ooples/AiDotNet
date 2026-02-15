@@ -4184,6 +4184,73 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return true;
     }
 
+    /// <summary>
+    /// Extracts a contiguous sub-model from <paramref name="startLayer"/> to
+    /// <paramref name="endLayer"/> (inclusive).
+    /// </summary>
+    /// <param name="startLayer">Zero-based index of the first layer to include.</param>
+    /// <param name="endLayer">Zero-based index of the last layer to include (inclusive).</param>
+    /// <returns>A sub-model containing the specified layer range with metadata.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when layer indices are out of range or startLayer > endLayer.
+    /// </exception>
+    public SubModel<T> ExtractSubModel(int startLayer, int endLayer)
+    {
+        if (startLayer < 0 || startLayer >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startLayer),
+                $"Start layer index {startLayer} is out of range. Valid range: 0 to {_layers.Count - 1}.");
+        }
+        if (endLayer < 0 || endLayer >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(endLayer),
+                $"End layer index {endLayer} is out of range. Valid range: 0 to {_layers.Count - 1}.");
+        }
+        if (startLayer > endLayer)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startLayer),
+                $"Start layer index {startLayer} cannot be greater than end layer index {endLayer}.");
+        }
+
+        int count = endLayer - startLayer + 1;
+        var subLayers = new List<ILayer<T>>(count);
+        var subInfos = new List<LayerInfo<T>>(count);
+
+        // Compute the parameter offset for the first layer in the sub-model
+        int baseOffset = 0;
+        for (int i = 0; i < startLayer; i++)
+        {
+            baseOffset += _layers[i].ParameterCount;
+        }
+
+        int localOffset = 0;
+        for (int i = startLayer; i <= endLayer; i++)
+        {
+            var layer = _layers[i];
+            var layerBase = layer as LayerBase<T>;
+
+            subLayers.Add(layer);
+            subInfos.Add(new LayerInfo<T>
+            {
+                Index = i - startLayer,
+                Name = layer.LayerName,
+                Category = layerBase?.GetLayerCategory() ?? LayerCategory.Other,
+                Layer = layer,
+                ParameterOffset = localOffset,
+                ParameterCount = layer.ParameterCount,
+                InputShape = layer.GetInputShape(),
+                OutputShape = layer.GetOutputShape(),
+                IsTrainable = layer.SupportsTraining && layer.ParameterCount > 0,
+                EstimatedFlops = layerBase?.EstimateFlops() ?? 2L * layer.ParameterCount,
+                EstimatedActivationMemory = layerBase?.EstimateActivationMemory() ?? 0L,
+            });
+
+            localOffset += layer.ParameterCount;
+        }
+
+        return new SubModel<T>(subLayers, subInfos, startLayer, endLayer);
+    }
+
     #endregion
 
 }

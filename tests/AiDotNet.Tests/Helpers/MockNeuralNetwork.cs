@@ -301,6 +301,11 @@ public class MockNeuralNetwork : INeuralNetwork<double>
         return false;
     }
 
+    public SubModel<double> ExtractSubModel(int startLayer, int endLayer)
+    {
+        throw new ArgumentOutOfRangeException(nameof(startLayer), "Mock network has no layers.");
+    }
+
     /// <summary>
     /// Sets the parameter gradients directly (useful for testing gradient modification).
     /// </summary>
