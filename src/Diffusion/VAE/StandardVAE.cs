@@ -1,8 +1,9 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
-using AiDotNet.NeuralNetworks.Diffusion;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Diffusion.VAE;
@@ -83,12 +84,12 @@ public class StandardVAE<T> : VAEModelBase<T>
     /// <summary>
     /// Encoder layers.
     /// </summary>
-    private readonly List<ILayer<T>> _encoderLayers;
+    private List<ILayer<T>> _encoderLayers;
 
     /// <summary>
     /// Decoder layers.
     /// </summary>
-    private readonly List<ILayer<T>> _decoderLayers;
+    private List<ILayer<T>> _decoderLayers;
 
     /// <summary>
     /// Mean projection layer for latent distribution.
@@ -150,6 +151,11 @@ public class StandardVAE<T> : VAEModelBase<T>
     /// </summary>
     private readonly double _latentScaleFactor;
 
+    /// <summary>
+    /// The neural network architecture configuration, if provided.
+    /// </summary>
+    private readonly NeuralNetworkArchitecture<T>? _architecture;
+
     /// <inheritdoc />
     public override int InputChannels => _inputChannels;
 
@@ -172,31 +178,69 @@ public class StandardVAE<T> : VAEModelBase<T>
     public override bool SupportsSlicing => true;
 
     /// <summary>
-    /// Initializes a new instance of the StandardVAE class with default Stable Diffusion configuration.
+    /// Initializes a new instance of the StandardVAE class with full customization support.
     /// </summary>
+    /// <param name="architecture">
+    /// Optional neural network architecture with custom layers. If the architecture's Layers
+    /// list contains layers, those will be used directly for the encoder. If null or empty,
+    /// industry-standard layers from the Stable Diffusion paper are created automatically.
+    /// </param>
     /// <param name="inputChannels">Number of input image channels (default: 3 for RGB).</param>
     /// <param name="latentChannels">Number of latent channels (default: 4).</param>
     /// <param name="baseChannels">Base channel count (default: 128).</param>
     /// <param name="channelMultipliers">Channel multipliers per level (default: [1, 2, 4, 4]).</param>
     /// <param name="numResBlocksPerLevel">Residual blocks per level (default: 2).</param>
     /// <param name="latentScaleFactor">Scale factor for latents (default: 0.18215).</param>
+    /// <param name="encoderLayers">
+    /// Optional custom encoder layers. If provided, these layers are used instead of creating
+    /// default layers. This allows full customization of the encoder architecture.
+    /// </param>
+    /// <param name="decoderLayers">
+    /// Optional custom decoder layers. If provided, these layers are used instead of creating
+    /// default layers. This allows full customization of the decoder architecture.
+    /// </param>
     /// <param name="lossFunction">Optional loss function (default: MSE).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> All parameters are optional with industry-standard defaults
+    /// from the original Stable Diffusion paper. You can create a ready-to-use VAE
+    /// with no arguments, or customize any component:
+    ///
+    /// <code>
+    /// // Default configuration (recommended for most users)
+    /// var vae = new StandardVAE&lt;float&gt;();
+    ///
+    /// // Custom layers via NeuralNetworkArchitecture
+    /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(..., layers: myCustomLayers);
+    /// var vae = new StandardVAE&lt;float&gt;(architecture: arch);
+    ///
+    /// // Custom encoder/decoder layers directly
+    /// var vae = new StandardVAE&lt;float&gt;(
+    ///     encoderLayers: myEncoderLayers,
+    ///     decoderLayers: myDecoderLayers);
+    /// </code>
+    /// </para>
+    /// </remarks>
     public StandardVAE(
+        NeuralNetworkArchitecture<T>? architecture = null,
         int inputChannels = 3,
         int latentChannels = 4,
         int baseChannels = 128,
         int[]? channelMultipliers = null,
         int numResBlocksPerLevel = 2,
         double? latentScaleFactor = null,
+        List<ILayer<T>>? encoderLayers = null,
+        List<ILayer<T>>? decoderLayers = null,
         ILossFunction<T>? lossFunction = null,
         int? seed = null)
         : base(lossFunction, seed)
     {
+        _architecture = architecture;
         _inputChannels = inputChannels;
         _latentChannels = latentChannels;
         _baseChannels = baseChannels;
-        _channelMultipliers = channelMultipliers ?? new[] { 1, 2, 4, 4 };
+        _channelMultipliers = channelMultipliers ?? [1, 2, 4, 4];
         _numResBlocksPerLevel = numResBlocksPerLevel;
         _latentScaleFactor = latentScaleFactor ?? SD_LATENT_SCALE;
 
@@ -205,16 +249,69 @@ public class StandardVAE<T> : VAEModelBase<T>
         _numEncoderBlocks = _channelMultipliers.Length * numResBlocksPerLevel;
         _numDecoderBlocks = _channelMultipliers.Length * numResBlocksPerLevel;
 
-        _encoderLayers = new List<ILayer<T>>();
-        _decoderLayers = new List<ILayer<T>>();
-
-        InitializeLayers();
+        InitializeLayers(architecture, encoderLayers, decoderLayers);
     }
 
     /// <summary>
-    /// Initializes all encoder and decoder layers.
+    /// Initializes encoder and decoder layers, using custom layers from the user
+    /// if provided or creating industry-standard layers from the Stable Diffusion paper.
     /// </summary>
-    private void InitializeLayers()
+    /// <param name="architecture">Optional architecture with custom layers.</param>
+    /// <param name="customEncoderLayers">Optional custom encoder layers.</param>
+    /// <param name="customDecoderLayers">Optional custom decoder layers.</param>
+    /// <remarks>
+    /// <para>
+    /// Layer resolution order:
+    /// 1. If custom encoder/decoder layers are provided directly, use those
+    /// 2. If a NeuralNetworkArchitecture with layers is provided, use those for the encoder
+    /// 3. Otherwise, create industry-standard layers from the Stable Diffusion VAE paper
+    ///
+    /// When default layers are created, the architecture follows:
+    /// - Encoder: InputConv -> [ResBlock + Downsample] per level -> MeanConv + LogVarConv -> QuantConv
+    /// - Decoder: PostQuantConv -> [ResBlock + Upsample] per level -> OutputConv
+    ///
+    /// The default configuration matches the Stable Diffusion 1.5 VAE:
+    /// - Base channels: 128, multipliers [1, 2, 4, 4]
+    /// - 2 ResBlocks per level with GroupNorm and SiLU activation
+    /// - Strided convolution for downsampling, transposed convolution for upsampling
+    /// </para>
+    /// </remarks>
+    [MemberNotNull(nameof(_encoderLayers), nameof(_decoderLayers))]
+    private void InitializeLayers(
+        NeuralNetworkArchitecture<T>? architecture,
+        List<ILayer<T>>? customEncoderLayers,
+        List<ILayer<T>>? customDecoderLayers)
+    {
+        // Priority 1: Use custom encoder/decoder layers passed directly
+        if (customEncoderLayers != null && customEncoderLayers.Count > 0 &&
+            customDecoderLayers != null && customDecoderLayers.Count > 0)
+        {
+            _encoderLayers = new List<ILayer<T>>(customEncoderLayers);
+            _decoderLayers = new List<ILayer<T>>(customDecoderLayers);
+            return;
+        }
+
+        // Priority 2: Use layers from NeuralNetworkArchitecture
+        if (architecture?.Layers != null && architecture.Layers.Count > 0)
+        {
+            // Architecture layers are used as encoder; decoder is auto-created as mirror
+            _encoderLayers = new List<ILayer<T>>(architecture.Layers);
+            _decoderLayers = new List<ILayer<T>>();
+            CreateDefaultDecoderLayers();
+            return;
+        }
+
+        // Priority 3: Create industry-standard layers from the Stable Diffusion paper
+        _encoderLayers = new List<ILayer<T>>();
+        _decoderLayers = new List<ILayer<T>>();
+        CreateDefaultEncoderLayers();
+        CreateDefaultDecoderLayers();
+    }
+
+    /// <summary>
+    /// Creates industry-standard encoder layers based on the Stable Diffusion VAE paper.
+    /// </summary>
+    private void CreateDefaultEncoderLayers()
     {
         // Input convolution: [inputChannels] -> [baseChannels]
         _inputConv = new ConvolutionalLayer<T>(
@@ -279,6 +376,14 @@ public class StandardVAE<T> : VAEModelBase<T>
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates industry-standard decoder layers based on the Stable Diffusion VAE paper.
+    /// </summary>
+    private void CreateDefaultDecoderLayers()
+    {
+        var lastEncoderChannels = _baseChannels * _channelMultipliers[^1];
 
         // Post-quant convolution for decoder input
         _postQuantConv = new ConvolutionalLayer<T>(
@@ -292,7 +397,7 @@ public class StandardVAE<T> : VAEModelBase<T>
             activationFunction: new IdentityActivation<T>());
 
         // Build decoder (mirror of encoder)
-        inChannels = lastEncoderChannels;
+        var inChannels = lastEncoderChannels;
         for (int level = _channelMultipliers.Length - 1; level >= 0; level--)
         {
             var outChannels = _baseChannels * _channelMultipliers[level];
@@ -440,23 +545,13 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     private ILayer<T> CreateResBlock(int inChannels, int outChannels)
     {
-        // Use proper VAEResBlock with GroupNorm and skip connections
-        // This follows the Stable Diffusion VAE architecture:
-        // GroupNorm -> SiLU -> Conv3x3 -> GroupNorm -> SiLU -> Conv3x3 + skip
         int numGroups = CalculateGroupCount(inChannels, outChannels);
         return new VAEResBlock<T>(inChannels, outChannels, numGroups, spatialSize: 32);
     }
 
-    /// <summary>
-    /// Calculates the appropriate number of groups for GroupNorm.
-    /// </summary>
-    /// <param name="inChannels">Input channels.</param>
-    /// <param name="outChannels">Output channels.</param>
-    /// <returns>Number of groups that evenly divides both channel counts.</returns>
     private static int CalculateGroupCount(int inChannels, int outChannels)
     {
-        // Common group counts for VAE: 32 for large channels, 16 for medium, 8 for small
-        int[] preferredGroups = new[] { 32, 16, 8, 4, 2, 1 };
+        int[] preferredGroups = [32, 16, 8, 4, 2, 1];
 
         foreach (int groups in preferredGroups)
         {
@@ -471,12 +566,11 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     private ILayer<T> CreateDownsample(int channels)
     {
-        // Strided convolution for 2x downsampling
         return new ConvolutionalLayer<T>(
             inputDepth: channels,
             outputDepth: channels,
             kernelSize: 3,
-            inputHeight: 32,  // Placeholder
+            inputHeight: 32,
             inputWidth: 32,
             stride: 2,
             padding: 1,
@@ -485,11 +579,8 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     private ILayer<T> CreateUpsample(int channels)
     {
-        // Transposed convolution (deconvolution) for upsampling
-        // With stride=2, kernel=4, padding=1: output = (input - 1) * 2 + 4 - 2*1 = 2*input
-        // This doubles the spatial dimensions
         return new DeconvolutionalLayer<T>(
-            inputShape: new[] { 1, channels, 16, 16 },  // [batch, channels, height, width]
+            inputShape: [1, channels, 16, 16],
             outputDepth: channels,
             kernelSize: 4,
             stride: 2,
@@ -547,7 +638,6 @@ public class StandardVAE<T> : VAEModelBase<T>
     {
         var parameters = new List<T>();
 
-        // Collect from all layers
         AddLayerParameters(parameters, _inputConv);
 
         foreach (var layer in _encoderLayers)
@@ -625,13 +715,13 @@ public class StandardVAE<T> : VAEModelBase<T>
     public override IVAEModel<T> Clone()
     {
         var clone = new StandardVAE<T>(
-            _inputChannels,
-            _latentChannels,
-            _baseChannels,
-            _channelMultipliers,
-            _numResBlocksPerLevel,
-            _latentScaleFactor,
-            LossFunction);
+            inputChannels: _inputChannels,
+            latentChannels: _latentChannels,
+            baseChannels: _baseChannels,
+            channelMultipliers: _channelMultipliers,
+            numResBlocksPerLevel: _numResBlocksPerLevel,
+            latentScaleFactor: _latentScaleFactor,
+            lossFunction: LossFunction);
 
         clone.SetParameters(GetParameters());
         return clone;

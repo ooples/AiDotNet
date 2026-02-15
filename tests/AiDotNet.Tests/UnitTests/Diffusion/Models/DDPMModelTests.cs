@@ -1,6 +1,6 @@
+using AiDotNet.Diffusion;
 using AiDotNet.Interfaces;
-using AiDotNet.NeuralNetworks.Diffusion;
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
+using AiDotNet.Diffusion.Schedulers;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
