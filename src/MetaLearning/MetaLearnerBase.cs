@@ -740,6 +740,67 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
     }
 
     /// <summary>
+    /// Applies gradients with per-layer learning rates using <see cref="ILayeredModel{T}"/> metadata.
+    /// </summary>
+    /// <remarks>
+    /// <para>Per-layer learning rates are a key meta-learning technique where different parts of the
+    /// network adapt at different speeds. For example, early (feature extraction) layers might use
+    /// smaller learning rates to preserve general features, while later (task-specific) layers
+    /// use larger rates for faster adaptation.</para>
+    ///
+    /// <para><b>For Beginners:</b> When fine-tuning a neural network for a new task, you often
+    /// want to make small adjustments to early layers (which detect basic patterns) and larger
+    /// adjustments to later layers (which detect task-specific patterns). This method enables
+    /// that by using the layer structure to apply different learning rates to different layers.</para>
+    /// </remarks>
+    /// <param name="model">The model to update (must implement ILayeredModel).</param>
+    /// <param name="gradients">The full gradient vector.</param>
+    /// <param name="perLayerLearningRates">Learning rates for each layer, indexed by layer index.
+    /// If null or missing an index, uses <paramref name="defaultLearningRate"/>.</param>
+    /// <param name="defaultLearningRate">Default learning rate for layers not in the map.</param>
+    /// <returns>Updated parameter vector.</returns>
+    protected virtual Vector<T> ApplyPerLayerGradients(
+        IFullModel<T, TInput, TOutput> model,
+        Vector<T> gradients,
+        Dictionary<int, double>? perLayerLearningRates,
+        double defaultLearningRate)
+    {
+        if (model is not ILayeredModel<T> layeredModel || perLayerLearningRates == null)
+        {
+            return ApplyGradients(model.GetParameters(), gradients, defaultLearningRate);
+        }
+
+        var parameters = model.GetParameters();
+        var allLayerInfo = layeredModel.GetAllLayerInfo();
+        var updated = new Vector<T>(parameters.Length);
+        Array.Copy(parameters.ToArray(), updated.ToArray(), parameters.Length);
+
+        foreach (var info in allLayerInfo)
+        {
+            if (info.ParameterCount == 0)
+                continue;
+
+            double lr = perLayerLearningRates.TryGetValue(info.Index, out double layerLr)
+                ? layerLr
+                : defaultLearningRate;
+
+            T lrT = NumOps.FromDouble(lr);
+
+            for (int i = 0; i < info.ParameterCount; i++)
+            {
+                int idx = info.ParameterOffset + i;
+                if (idx < parameters.Length && idx < gradients.Length)
+                {
+                    updated[idx] = NumOps.Subtract(parameters[idx],
+                        NumOps.Multiply(gradients[idx], lrT));
+                }
+            }
+        }
+
+        return updated;
+    }
+
+    /// <summary>
     /// Clips gradients to prevent exploding gradients.
     /// </summary>
     /// <param name="gradients">Gradients to clip.</param>

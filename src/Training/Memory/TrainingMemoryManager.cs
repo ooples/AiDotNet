@@ -149,6 +149,67 @@ public class TrainingMemoryManager<T> : IDisposable
     }
 
     /// <summary>
+    /// Determines which layers should be checkpointed using layer-aware metadata from an <see cref="ILayeredModel{T}"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>This overload uses <see cref="LayerInfo{T}.EstimatedActivationMemory"/> and
+    /// <see cref="LayerInfo{T}.Category"/> to make smarter checkpointing decisions:</para>
+    /// <list type="bullet">
+    /// <item><description>Attention layers are checkpointed by default (high memory, moderate recompute cost)</description></item>
+    /// <item><description>Residual layers are checkpointed when configured</description></item>
+    /// <item><description>Layers with high activation memory are prioritized for checkpointing</description></item>
+    /// <item><description>The interval-based fallback is still applied for remaining layers</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="layeredModel">The model with layer-level metadata access.</param>
+    public void ComputeCheckpointIndices(ILayeredModel<T> layeredModel)
+    {
+        _checkpointIndices.Clear();
+
+        if (!Config.UseGradientCheckpointing)
+            return;
+
+        var allLayerInfo = layeredModel.GetAllLayerInfo();
+
+        for (int i = 0; i < allLayerInfo.Count; i++)
+        {
+            var info = allLayerInfo[i];
+            bool shouldCheckpoint = false;
+
+            // Interval-based checkpointing
+            if (i % Config.CheckpointEveryNLayers == 0)
+            {
+                shouldCheckpoint = true;
+            }
+
+            // Layer-category-based checkpointing
+            if (Config.CheckpointAttentionLayers &&
+                info.Category == LayerCategory.Attention)
+            {
+                shouldCheckpoint = true;
+            }
+
+            if (Config.CheckpointResidualBlocks &&
+                info.Category == LayerCategory.Residual)
+            {
+                shouldCheckpoint = true;
+            }
+
+            // High activation memory layers benefit most from checkpointing
+            // Checkpoint layers that use more than 1MB of activation memory
+            if (info.EstimatedActivationMemory > 1_048_576)
+            {
+                shouldCheckpoint = true;
+            }
+
+            if (shouldCheckpoint)
+            {
+                _checkpointIndices.Add(i);
+            }
+        }
+    }
+
+    /// <summary>
     /// Determines if a specific layer should be checkpointed.
     /// </summary>
     /// <param name="layerIndex">Index of the layer.</param>

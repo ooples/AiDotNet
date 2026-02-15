@@ -331,6 +331,90 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
     }
 
     /// <summary>
+    /// Determines whether a layer should have LoRA applied based on its <see cref="LayerCategory"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>This method provides a category-based alternative to the type-checking approach in
+    /// <see cref="ApplyLoRA"/>. It uses the <see cref="LayerCategory"/> enum from
+    /// <see cref="ILayeredModel{T}"/> metadata to make decisions, enabling LoRA injection
+    /// without knowing the concrete layer type.</para>
+    ///
+    /// <para><b>Categories that receive LoRA adapters:</b></para>
+    /// <list type="bullet">
+    /// <item><description><see cref="LayerCategory.Dense"/>: Dense/linear layers (most common target)</description></item>
+    /// <item><description><see cref="LayerCategory.Convolution"/>: All convolutional variants</description></item>
+    /// <item><description><see cref="LayerCategory.Attention"/>: Attention and transformer layers</description></item>
+    /// <item><description><see cref="LayerCategory.Recurrent"/>: LSTM, GRU, and other RNN layers</description></item>
+    /// <item><description><see cref="LayerCategory.Embedding"/>: Token and patch embedding layers</description></item>
+    /// <item><description><see cref="LayerCategory.FeedForward"/>: MLP blocks and mixture-of-experts</description></item>
+    /// <item><description><see cref="LayerCategory.Graph"/>: Graph neural network layers</description></item>
+    /// <item><description><see cref="LayerCategory.Residual"/>: Residual blocks with trainable weights</description></item>
+    /// </list>
+    ///
+    /// <para><b>Categories that do NOT receive LoRA adapters:</b></para>
+    /// <list type="bullet">
+    /// <item><description><see cref="LayerCategory.Activation"/>: No trainable parameters</description></item>
+    /// <item><description><see cref="LayerCategory.Pooling"/>: No trainable parameters</description></item>
+    /// <item><description><see cref="LayerCategory.Normalization"/>: Few parameters, sensitive to modification</description></item>
+    /// <item><description><see cref="LayerCategory.Regularization"/>: Dropout/noise layers</description></item>
+    /// <item><description><see cref="LayerCategory.Structural"/>: Reshape/flatten/concat layers</description></item>
+    /// <item><description><see cref="LayerCategory.Input"/>: Input layers</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="category">The layer category to check.</param>
+    /// <returns>True if layers of this category should receive LoRA adapters.</returns>
+    public static bool ShouldApplyLoRA(LayerCategory category)
+    {
+        return category switch
+        {
+            LayerCategory.Dense => true,
+            LayerCategory.Convolution => true,
+            LayerCategory.Attention => true,
+            LayerCategory.Recurrent => true,
+            LayerCategory.Embedding => true,
+            LayerCategory.FeedForward => true,
+            LayerCategory.Graph => true,
+            LayerCategory.Residual => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
+    /// Applies LoRA adapters to all eligible layers in a layered model, returning
+    /// the list of adapted layers.
+    /// </summary>
+    /// <remarks>
+    /// <para>This method iterates through all layers in the model using <see cref="ILayeredModel{T}"/>
+    /// metadata and applies LoRA adapters based on <see cref="LayerCategory"/>. Layers that don't
+    /// benefit from LoRA (activation, pooling, normalization, etc.) are returned unchanged.</para>
+    ///
+    /// <para><b>For Beginners:</b> This method automatically identifies which layers in your
+    /// neural network should be adapted with LoRA and wraps them. You don't need to manually
+    /// specify which layers to adapt - the method uses the layer category metadata to decide.</para>
+    /// </remarks>
+    /// <param name="layeredModel">The model with layer-level access.</param>
+    /// <returns>A list of layers where eligible layers have been wrapped with LoRA adapters.</returns>
+    public IReadOnlyList<ILayer<T>> ApplyLoRAToModel(ILayeredModel<T> layeredModel)
+    {
+        var allLayerInfo = layeredModel.GetAllLayerInfo();
+        var adaptedLayers = new List<ILayer<T>>(allLayerInfo.Count);
+
+        foreach (var info in allLayerInfo)
+        {
+            if (ShouldApplyLoRA(info.Category) && info.IsTrainable)
+            {
+                adaptedLayers.Add(ApplyLoRA(info.Layer));
+            }
+            else
+            {
+                adaptedLayers.Add(info.Layer);
+            }
+        }
+
+        return adaptedLayers;
+    }
+
+    /// <summary>
     /// Creates an instance of the configured LoRA adapter for the given layer.
     /// </summary>
     /// <param name="layer">The layer to wrap with a LoRA adapter.</param>

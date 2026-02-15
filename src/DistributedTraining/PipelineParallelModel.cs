@@ -110,25 +110,146 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <summary>
     /// Initializes pipeline parallelism by partitioning parameters into stages.
     /// </summary>
+    /// <remarks>
+    /// <para>When the wrapped model implements <see cref="ILayeredModel{T}"/>, this method
+    /// uses layer-aware partitioning that respects layer boundaries and balances computational
+    /// cost across stages using estimated FLOPs. This avoids splitting parameters in the
+    /// middle of a layer, which would corrupt that layer's weights.</para>
+    ///
+    /// <para>When the wrapped model does not implement <see cref="ILayeredModel{T}"/>,
+    /// falls back to simple parameter-count-based partitioning.</para>
+    /// </remarks>
     protected override void InitializeSharding()
     {
         var fullParameters = WrappedModel.GetParameters();
         int totalParams = fullParameters.Length;
 
-        // Divide parameters into pipeline stages
-        // Each stage owns a contiguous chunk of parameters (representing layers)
-        int baseShardSize = totalParams / _numStages;
-        int remainder = totalParams % _numStages;
+        // Try layer-aware partitioning first
+        if (WrappedModel is ILayeredModel<T> layeredModel && layeredModel.LayerCount > 0)
+        {
+            InitializeLayerAwareSharding(layeredModel, fullParameters);
+        }
+        else
+        {
+            // Fallback: divide parameters into pipeline stages by count
+            int baseShardSize = totalParams / _numStages;
+            int remainder = totalParams % _numStages;
 
-        ShardSize = baseShardSize + (_stageId < remainder ? 1 : 0);
-        ShardStartIndex = _stageId * baseShardSize + Math.Min(_stageId, remainder);
+            ShardSize = baseShardSize + (_stageId < remainder ? 1 : 0);
+            ShardStartIndex = _stageId * baseShardSize + Math.Min(_stageId, remainder);
 
-        // Extract this stage's parameters
-        var shardData = new T[ShardSize];
-        Array.Copy(fullParameters.ToArray(), ShardStartIndex, shardData, 0, ShardSize);
-        LocalShard = new Vector<T>(shardData);
+            var shardData = new T[ShardSize];
+            Array.Copy(fullParameters.ToArray(), ShardStartIndex, shardData, 0, ShardSize);
+            LocalShard = new Vector<T>(shardData);
+        }
 
         CachedFullParameters = null;
+    }
+
+    /// <summary>
+    /// Performs layer-aware partitioning that respects layer boundaries and balances
+    /// computational cost across pipeline stages.
+    /// </summary>
+    /// <param name="layeredModel">The model with layer-level access.</param>
+    /// <param name="fullParameters">The full parameter vector.</param>
+    private void InitializeLayerAwareSharding(ILayeredModel<T> layeredModel, Vector<T> fullParameters)
+    {
+        var allLayerInfo = layeredModel.GetAllLayerInfo();
+        int layerCount = allLayerInfo.Count;
+
+        if (layerCount == 0 || _numStages <= 1)
+        {
+            // Single stage or no layers: take all parameters
+            ShardStartIndex = 0;
+            ShardSize = fullParameters.Length;
+            LocalShard = new Vector<T>(fullParameters.ToArray());
+            return;
+        }
+
+        // Compute total FLOPs for balanced partitioning
+        long totalFlops = 0;
+        foreach (var info in allLayerInfo)
+        {
+            totalFlops += info.EstimatedFlops;
+        }
+
+        // Target FLOPs per stage for balanced distribution
+        long targetFlopsPerStage = totalFlops / _numStages;
+
+        // Greedily assign layers to stages, trying to balance FLOPs
+        // stageStartLayer[s] = index of first layer in stage s
+        var stageStartLayer = new int[_numStages + 1];
+        stageStartLayer[0] = 0;
+
+        int currentLayer = 0;
+        for (int stage = 0; stage < _numStages - 1; stage++)
+        {
+            long stageFlops = 0;
+            int layersInStage = 0;
+
+            // Add layers until we exceed the target FLOPs or run out of layers
+            // Always assign at least one layer per stage
+            while (currentLayer < layerCount)
+            {
+                long layerFlops = allLayerInfo[currentLayer].EstimatedFlops;
+                stageFlops += layerFlops;
+                currentLayer++;
+                layersInStage++;
+
+                // Check if we've exceeded the target for this stage
+                // But ensure remaining stages each get at least one layer
+                int remainingLayers = layerCount - currentLayer;
+                int remainingStages = _numStages - stage - 1;
+
+                if (stageFlops >= targetFlopsPerStage && remainingLayers >= remainingStages)
+                {
+                    break;
+                }
+            }
+
+            // Ensure at least one layer per stage
+            if (layersInStage == 0 && currentLayer < layerCount)
+            {
+                currentLayer++;
+            }
+
+            stageStartLayer[stage + 1] = currentLayer;
+        }
+
+        // Last stage gets all remaining layers
+        stageStartLayer[_numStages] = layerCount;
+
+        // Compute parameter offset and size for this stage
+        int firstLayerInStage = stageStartLayer[_stageId];
+        int lastLayerInStage = stageStartLayer[_stageId + 1] - 1;
+
+        if (firstLayerInStage >= layerCount || lastLayerInStage < firstLayerInStage)
+        {
+            // This stage has no layers (more stages than layers)
+            ShardStartIndex = 0;
+            ShardSize = 0;
+            LocalShard = new Vector<T>(0);
+            return;
+        }
+
+        // Use LayerInfo parameter offsets for precise slicing
+        int stageParamStart = allLayerInfo[firstLayerInStage].ParameterOffset;
+        int stageParamEnd = allLayerInfo[lastLayerInStage].ParameterOffset +
+                            allLayerInfo[lastLayerInStage].ParameterCount;
+
+        ShardStartIndex = stageParamStart;
+        ShardSize = stageParamEnd - stageParamStart;
+
+        if (ShardSize > 0)
+        {
+            var shardData = new T[ShardSize];
+            Array.Copy(fullParameters.ToArray(), ShardStartIndex, shardData, 0, ShardSize);
+            LocalShard = new Vector<T>(shardData);
+        }
+        else
+        {
+            LocalShard = new Vector<T>(0);
+        }
     }
 
     /// <inheritdoc/>
