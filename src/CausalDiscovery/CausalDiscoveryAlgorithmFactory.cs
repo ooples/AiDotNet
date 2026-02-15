@@ -18,7 +18,7 @@ namespace AiDotNet.CausalDiscovery;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public static class CausalDiscoveryAlgorithmFactory<T>
+internal static class CausalDiscoveryAlgorithmFactory<T>
 {
     /// <summary>
     /// Creates an algorithm instance for the specified type.
@@ -145,15 +145,71 @@ public static class CausalDiscoveryAlgorithmFactory<T>
         => (CausalDiscoveryAlgorithmType[])Enum.GetValues(typeof(CausalDiscoveryAlgorithmType));
 
     /// <summary>
-    /// Gets algorithm types filtered by category.
+    /// Gets the category for a given algorithm type without instantiation.
     /// </summary>
-    public static IEnumerable<CausalDiscoveryAlgorithmType> GetAlgorithmsByCategory(CausalDiscoveryCategory category)
+    internal static CausalDiscoveryCategory GetCategory(CausalDiscoveryAlgorithmType algorithmType)
     {
-        foreach (var algorithmType in GetAvailableAlgorithms())
+        return algorithmType switch
         {
-            var algorithm = Create(algorithmType);
-            if (algorithm.Category == category)
-                yield return algorithmType;
-        }
+            CausalDiscoveryAlgorithmType.NOTEARSLinear or CausalDiscoveryAlgorithmType.NOTEARSNonlinear or
+            CausalDiscoveryAlgorithmType.NOTEARSSobolev or CausalDiscoveryAlgorithmType.NOTEARSLowRank or
+            CausalDiscoveryAlgorithmType.DAGMALinear or CausalDiscoveryAlgorithmType.DAGMANonlinear or
+            CausalDiscoveryAlgorithmType.GOLEM or CausalDiscoveryAlgorithmType.NoCurl or
+            CausalDiscoveryAlgorithmType.MCSL or CausalDiscoveryAlgorithmType.CORL
+                => CausalDiscoveryCategory.ContinuousOptimization,
+
+            CausalDiscoveryAlgorithmType.GES or CausalDiscoveryAlgorithmType.FGES or
+            CausalDiscoveryAlgorithmType.HillClimbing or CausalDiscoveryAlgorithmType.TabuSearch or
+            CausalDiscoveryAlgorithmType.K2 or CausalDiscoveryAlgorithmType.GRaSP or
+            CausalDiscoveryAlgorithmType.BOSS or CausalDiscoveryAlgorithmType.ExactSearch
+                => CausalDiscoveryCategory.ScoreBasedSearch,
+
+            CausalDiscoveryAlgorithmType.PC or CausalDiscoveryAlgorithmType.FCI or
+            CausalDiscoveryAlgorithmType.RFCI or CausalDiscoveryAlgorithmType.MMPC or
+            CausalDiscoveryAlgorithmType.CPC or CausalDiscoveryAlgorithmType.CDNOD or
+            CausalDiscoveryAlgorithmType.IAMB or CausalDiscoveryAlgorithmType.FastIAMB or
+            CausalDiscoveryAlgorithmType.MarkovBlanket
+                => CausalDiscoveryCategory.ConstraintBased,
+
+            CausalDiscoveryAlgorithmType.MMHC or CausalDiscoveryAlgorithmType.H2PC or
+            CausalDiscoveryAlgorithmType.GFCI or CausalDiscoveryAlgorithmType.PCNOTEARS or
+            CausalDiscoveryAlgorithmType.RSMAX2
+                => CausalDiscoveryCategory.Hybrid,
+
+            CausalDiscoveryAlgorithmType.ICALiNGAM or CausalDiscoveryAlgorithmType.DirectLiNGAM or
+            CausalDiscoveryAlgorithmType.VARLiNGAM or CausalDiscoveryAlgorithmType.RCD or
+            CausalDiscoveryAlgorithmType.CAMUV or CausalDiscoveryAlgorithmType.ANM or
+            CausalDiscoveryAlgorithmType.PNL or CausalDiscoveryAlgorithmType.IGCI or
+            CausalDiscoveryAlgorithmType.CAM or CausalDiscoveryAlgorithmType.CCDr
+                => CausalDiscoveryCategory.Functional,
+
+            CausalDiscoveryAlgorithmType.GrangerCausality or CausalDiscoveryAlgorithmType.PCMCI or
+            CausalDiscoveryAlgorithmType.PCMCIPlus or CausalDiscoveryAlgorithmType.DYNOTEARS or
+            CausalDiscoveryAlgorithmType.TiMINo or CausalDiscoveryAlgorithmType.TSFCI or
+            CausalDiscoveryAlgorithmType.LPCMCI or CausalDiscoveryAlgorithmType.NTSNOTEARS or
+            CausalDiscoveryAlgorithmType.CCM or CausalDiscoveryAlgorithmType.NeuralGranger
+                => CausalDiscoveryCategory.TimeSeries,
+
+            CausalDiscoveryAlgorithmType.DAGGNN or CausalDiscoveryAlgorithmType.GraNDAG or
+            CausalDiscoveryAlgorithmType.CASTLE or CausalDiscoveryAlgorithmType.DECI or
+            CausalDiscoveryAlgorithmType.GAE or CausalDiscoveryAlgorithmType.CGNN or
+            CausalDiscoveryAlgorithmType.TCDF or CausalDiscoveryAlgorithmType.AmortizedCD or
+            CausalDiscoveryAlgorithmType.AVICI or CausalDiscoveryAlgorithmType.CausalVAE
+                => CausalDiscoveryCategory.DeepLearning,
+
+            CausalDiscoveryAlgorithmType.OrderMCMC or CausalDiscoveryAlgorithmType.DiBS or
+            CausalDiscoveryAlgorithmType.BCDNets or CausalDiscoveryAlgorithmType.BayesDAG or
+            CausalDiscoveryAlgorithmType.PartitionMCMC or CausalDiscoveryAlgorithmType.IterativeMCMC
+                => CausalDiscoveryCategory.Bayesian,
+
+            CausalDiscoveryAlgorithmType.OCSE or CausalDiscoveryAlgorithmType.TransferEntropy or
+            CausalDiscoveryAlgorithmType.KraskovMI
+                => CausalDiscoveryCategory.InformationTheoretic,
+
+            CausalDiscoveryAlgorithmType.GOBNILP
+                => CausalDiscoveryCategory.Specialized,
+
+            _ => throw new ArgumentOutOfRangeException(nameof(algorithmType))
+        };
     }
 }
