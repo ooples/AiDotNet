@@ -1878,6 +1878,55 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         CrossValidationResult<T, TInput, TOutput>? cvResults = null;
 
         // ============================================================================
+        // Causal Discovery (if configured)
+        // ============================================================================
+        CausalDiscovery.CausalDiscoveryResult<T>? causalDiscoveryResult = null;
+        if (_causalDiscoveryOptions != null)
+        {
+            try
+            {
+                var cdStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                // Select algorithm: user-specified or auto-select based on data characteristics
+                var algorithmType = _causalDiscoveryOptions.Algorithm
+                    ?? AutoSelectCausalAlgorithm(convertedX.Columns);
+
+                var algorithm = CausalDiscovery.CausalDiscoveryAlgorithmFactory<T>.Create(
+                    algorithmType, _causalDiscoveryOptions);
+
+                // Use feature names from options, or generate defaults
+                var featureNames = _causalDiscoveryOptions.FeatureNames;
+
+                // Run causal discovery with target variable for supervised context
+                var causalGraph = algorithm.DiscoverStructure(convertedX, convertedY, featureNames);
+
+                cdStopwatch.Stop();
+
+                // Retrieve convergence metrics from the graph's adjacency matrix
+                var category = CausalDiscovery.CausalDiscoveryAlgorithmFactory<T>.GetCategory(algorithmType);
+
+                causalDiscoveryResult = new CausalDiscovery.CausalDiscoveryResult<T>(
+                    graph: causalGraph,
+                    algorithmUsed: algorithmType,
+                    category: category,
+                    iterations: 0,
+                    finalLoss: 0.0,
+                    acyclicityConstraint: 0.0,
+                    converged: causalGraph.IsDAG(),
+                    elapsedTime: cdStopwatch.Elapsed);
+
+                Console.WriteLine($"Causal discovery ({algorithm.Name}) complete: " +
+                    $"{causalGraph.EdgeCount} edges, density={causalGraph.Density:F3}, " +
+                    $"time={cdStopwatch.Elapsed.TotalSeconds:F2}s");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Warning: Causal discovery failed: {ex.Message}");
+                Console.WriteLine("Proceeding with model building without causal analysis.");
+            }
+        }
+
+        // ============================================================================
         // Start Training Infrastructure (before optimization)
         // ============================================================================
 
@@ -2490,6 +2539,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         finalResult.SetUncertaintyQuantificationOptions(_uncertaintyQuantificationOptions);
         TryComputeAndAttachDeepEnsembleModels(finalResult, deepEnsembleTemplate, optimizationInputData, optimizer, _uncertaintyQuantificationOptions);
         TryComputeAndAttachUncertaintyCalibrationArtifacts(finalResult);
+
+        if (causalDiscoveryResult != null)
+        {
+            finalResult.SetCausalDiscoveryResult(causalDiscoveryResult);
+        }
 
         if (federatedLearningMetadata != null)
         {

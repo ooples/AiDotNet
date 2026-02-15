@@ -1,4 +1,5 @@
 using AiDotNet.CausalDiscovery;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet;
@@ -68,5 +69,23 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         _causalDiscoveryOptions = options ?? new CausalDiscoveryOptions();
         return this;
+    }
+
+    /// <summary>
+    /// Auto-selects a causal discovery algorithm based on data characteristics.
+    /// </summary>
+    /// <param name="numVariables">Number of variables (columns) in the data.</param>
+    /// <returns>The recommended algorithm type.</returns>
+    private static CausalDiscoveryAlgorithmType AutoSelectCausalAlgorithm(int numVariables)
+    {
+        // For small datasets (≤50 variables): NOTEARS Linear is reliable and well-studied
+        // For medium datasets (≤200 variables): DAGMA Linear is faster with comparable accuracy
+        // For large datasets (>200 variables): FGES scales well with parallelized score-based search
+        if (numVariables <= 50)
+            return CausalDiscoveryAlgorithmType.NOTEARSLinear;
+        else if (numVariables <= 200)
+            return CausalDiscoveryAlgorithmType.DAGMALinear;
+        else
+            return CausalDiscoveryAlgorithmType.FGES;
     }
 }
