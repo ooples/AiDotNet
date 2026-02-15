@@ -220,12 +220,8 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                 }
             }
 
-            // If we found a valid boundary, use it
-            if (candidateBoundary >= 0)
-            {
-                currentLayer = candidateBoundary;
-            }
-            else
+            // If we found a valid boundary, it already equals currentLayer (set at line 214)
+            if (candidateBoundary < 0)
             {
                 // No valid forward boundary found; try backward search from currentLayer
                 // to find the nearest valid partition point within this stage's range
@@ -248,6 +244,9 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                     if (layersInStage == 0 && currentLayer < layerCount)
                     {
                         // Ensure at least one layer per stage
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[PipelineParallel] Stage {stage}: No valid partition point found, " +
+                            $"forcing boundary at layer {currentLayer}.");
                         currentLayer++;
                     }
                     else if (currentLayer <= stageStartLayer[stage])

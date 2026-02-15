@@ -510,19 +510,19 @@ public class QuantizationConfiguration
     /// <returns>The bit-width for this category, or <see cref="EffectiveBitWidth"/> if no override exists.</returns>
     public int GetBitWidthForCategory(AiDotNet.Interfaces.LayerCategory category)
     {
-        if (CategoryBitWidths is not null && CategoryBitWidths.TryGetValue(category, out int bitWidth))
+        if (CategoryBitWidths is null || !CategoryBitWidths.TryGetValue(category, out int bitWidth))
         {
-            if (bitWidth <= 0)
-            {
-                throw new ArgumentException(
-                    $"CategoryBitWidths contains an invalid bit-width ({bitWidth}) for category '{category}'. " +
-                    "Bit-widths must be positive.");
-            }
-
-            return bitWidth;
+            return EffectiveBitWidth;
         }
 
-        return EffectiveBitWidth;
+        if (bitWidth <= 0)
+        {
+            throw new ArgumentException(
+                $"CategoryBitWidths contains an invalid bit-width ({bitWidth}) for category '{category}'. " +
+                "Bit-widths must be positive.");
+        }
+
+        return bitWidth;
     }
 
     /// <summary>

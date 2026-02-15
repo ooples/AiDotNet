@@ -1235,14 +1235,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             for (int i = 0; i < allLayerInfo.Count; i++)
             {
                 var info = allLayerInfo[i];
-                if (categorySummary.TryGetValue(info.Category, out int count))
-                {
-                    categorySummary[info.Category] = count + 1;
-                }
-                else
-                {
-                    categorySummary[info.Category] = 1;
-                }
+                categorySummary[info.Category] = categorySummary.TryGetValue(info.Category, out int count)
+                    ? count + 1
+                    : 1;
                 if (info.IsTrainable)
                 {
                     totalParams += info.ParameterCount;
@@ -4494,10 +4489,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                     for (int i = 0; i < allLayerInfo.Count; i++)
                     {
                         var info = allLayerInfo[i];
-                        if (categorySummary.TryGetValue(info.Category, out int cnt))
-                            categorySummary[info.Category] = cnt + 1;
-                        else
-                            categorySummary[info.Category] = 1;
+                        categorySummary[info.Category] = categorySummary.TryGetValue(info.Category, out int cnt)
+                            ? cnt + 1
+                            : 1;
 
                         if (info.IsTrainable)
                             totalParams += info.ParameterCount;

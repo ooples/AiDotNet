@@ -1081,9 +1081,9 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         {
             return System.Runtime.InteropServices.Marshal.SizeOf<T>();
         }
-        catch
+        catch (ArgumentException)
         {
-            return 4; // Default to 4 bytes if we can't determine the size
+            return 4; // Default to 4 bytes if Marshal.SizeOf can't determine the size for T
         }
     }
 
