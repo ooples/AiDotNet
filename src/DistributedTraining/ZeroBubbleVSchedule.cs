@@ -48,12 +48,6 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
     /// <inheritdoc/>
     public IReadOnlyList<PipelineOperation> GetSchedule(int stageId, int numStages, int numMicroBatches)
     {
-        if (stageId < 0 || stageId >= numStages)
-        {
-            throw new ArgumentOutOfRangeException(nameof(stageId),
-                $"Stage ID must be between 0 and {numStages - 1}.");
-        }
-
         if (numStages <= 0)
         {
             throw new ArgumentException("Number of stages must be positive.", nameof(numStages));
@@ -64,8 +58,13 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
             throw new ArgumentException("Number of micro-batches must be positive.", nameof(numMicroBatches));
         }
 
+        if (stageId < 0 || stageId >= numStages)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stageId),
+                $"Stage ID must be between 0 and {numStages - 1}.");
+        }
+
         var ops = new List<PipelineOperation>();
-        int totalVirtualStages = numStages * 2;
 
         // ZB-V uses exactly 2 virtual stages per rank (V=2).
         // Virtual stage IDs for rank stageId: stageId (chunk 0) and stageId + numStages (chunk 1).
@@ -80,7 +79,6 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
         // Warmup: forwards across both virtual stages
         // Number of warmup forwards scales with position in pipeline
         int warmupForwardsPerChunk = Math.Min(numStages - 1 - stageId, numMicroBatches);
-        int totalWarmupForwards = warmupForwardsPerChunk * 2;
 
         int forwardCount0 = 0; // Forward count for virtual stage 0
         int forwardCount1 = 0; // Forward count for virtual stage 1
@@ -259,6 +257,6 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
 
         // For insufficient micro-batches, small residual bubble
         // With V=2 virtual stages, the bubble is reduced compared to ZB-H1
-        return (double)(numStages - numMicroBatches) / (3 * numMicroBatches * 2 + numStages);
+        return (double)(numStages - numMicroBatches) / (6L * numMicroBatches + numStages);
     }
 }

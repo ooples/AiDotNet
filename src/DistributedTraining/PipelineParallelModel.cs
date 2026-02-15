@@ -517,9 +517,9 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         {
             fullVector = ConversionsHelper.ConvertToVector<T, TInput>(fullData);
         }
-        catch
+        catch (InvalidOperationException)
         {
-            // If conversion fails, use the same data for all micro-batches
+            // If conversion fails (type not convertible to vector), use the same data for all micro-batches
             for (int i = 0; i < _microBatchSize; i++)
             {
                 slices[i] = fullData;
@@ -576,7 +576,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         {
             fullVector = ConversionsHelper.ConvertToVector<T, TOutput>(fullTarget);
         }
-        catch
+        catch (InvalidOperationException)
         {
             for (int i = 0; i < _microBatchSize; i++)
             {
@@ -630,9 +630,6 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// </summary>
     private TInput GetStageInput(Dictionary<int, TInput> microBatches, int microBatchIndex, int virtualStageIndex)
     {
-        // Determine the global virtual stage ID for communication routing
-        int globalVirtualStageId = _stageId + virtualStageIndex * _numStages;
-
         // For virtual stage 0 of this rank, receive from the previous rank's last virtual stage
         // For subsequent virtual stages, receive from this rank's previous virtual stage output
         bool isFirstVirtualStageOnRank = virtualStageIndex == 0;
@@ -651,13 +648,10 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             return ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(receivedActivations);
         }
 
-        if (isFirstVirtualStageOnRank)
+        if (isFirstVirtualStageOnRank && microBatches.TryGetValue(microBatchIndex, out var microBatch))
         {
             // First stage, first virtual stage: use the micro-batch input directly
-            if (microBatches.TryGetValue(microBatchIndex, out var microBatch))
-            {
-                return microBatch;
-            }
+            return microBatch;
         }
 
         // For non-first virtual stages on this rank: the input should come from the

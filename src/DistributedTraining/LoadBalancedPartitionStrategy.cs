@@ -185,17 +185,12 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
 
         for (int i = 0; i < layerSizes.Length; i++)
         {
-            if (_costEstimator is not null)
-            {
-                costs[i] = _costEstimator(layerSizes[i]);
-            }
-            else
-            {
-                // Default heuristic: cost scales as paramCount^1.5
-                // This approximates the relationship between matrix dimensions and FLOPs
-                // for dense layers (a matrix of size n*m has n*m params but ~2*n*m FLOPs).
-                costs[i] = Math.Pow(layerSizes[i], 1.5);
-            }
+            // Default heuristic: cost scales as paramCount^1.5
+            // This approximates the relationship between matrix dimensions and FLOPs
+            // for dense layers (a matrix of size n*m has n*m params but ~2*n*m FLOPs).
+            costs[i] = _costEstimator is not null
+                ? _costEstimator(layerSizes[i])
+                : Math.Pow(layerSizes[i], 1.5);
         }
 
         return costs;

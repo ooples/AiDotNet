@@ -70,12 +70,6 @@ public class LoopedBFSSchedule : IPipelineSchedule
     /// <inheritdoc/>
     public IReadOnlyList<PipelineOperation> GetSchedule(int stageId, int numStages, int numMicroBatches)
     {
-        if (stageId < 0 || stageId >= numStages)
-        {
-            throw new ArgumentOutOfRangeException(nameof(stageId),
-                $"Stage ID must be between 0 and {numStages - 1}.");
-        }
-
         if (numStages <= 0)
         {
             throw new ArgumentException("Number of stages must be positive.", nameof(numStages));
@@ -84,6 +78,12 @@ public class LoopedBFSSchedule : IPipelineSchedule
         if (numMicroBatches <= 0)
         {
             throw new ArgumentException("Number of micro-batches must be positive.", nameof(numMicroBatches));
+        }
+
+        if (stageId < 0 || stageId >= numStages)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stageId),
+                $"Stage ID must be between 0 and {numStages - 1}.");
         }
 
         var ops = new List<PipelineOperation>();
@@ -102,8 +102,6 @@ public class LoopedBFSSchedule : IPipelineSchedule
             // Within each loop, apply 1F1B scheduling for this virtual stage
             int numWarmupForwards = Math.Min(numStages - 1 - stageId, numMicroBatches);
             int numSteadyState = Math.Max(0, numMicroBatches - numWarmupForwards);
-            bool isFirstLoop = vStage == 0;
-            bool isLastLoop = vStage == _virtualStagesPerRank - 1;
 
             // Phase 1: Warmup - forward passes only
             int forwardIdx = 0;
@@ -183,6 +181,6 @@ public class LoopedBFSSchedule : IPipelineSchedule
         int p = numStages;
         int m = numMicroBatches;
         int v = _virtualStagesPerRank;
-        return (double)(p - 1) / (2 * m * v + p - 1);
+        return (double)(p - 1) / (2L * m * v + p - 1);
     }
 }

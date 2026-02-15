@@ -67,12 +67,6 @@ public class Interleaved1F1BSchedule : IPipelineSchedule
     /// <inheritdoc/>
     public IReadOnlyList<PipelineOperation> GetSchedule(int stageId, int numStages, int numMicroBatches)
     {
-        if (stageId < 0 || stageId >= numStages)
-        {
-            throw new ArgumentOutOfRangeException(nameof(stageId),
-                $"Stage ID must be between 0 and {numStages - 1}.");
-        }
-
         if (numStages <= 0)
         {
             throw new ArgumentException("Number of stages must be positive.", nameof(numStages));
@@ -81,6 +75,12 @@ public class Interleaved1F1BSchedule : IPipelineSchedule
         if (numMicroBatches <= 0)
         {
             throw new ArgumentException("Number of micro-batches must be positive.", nameof(numMicroBatches));
+        }
+
+        if (stageId < 0 || stageId >= numStages)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stageId),
+                $"Stage ID must be between 0 and {numStages - 1}.");
         }
 
         var ops = new List<PipelineOperation>();
@@ -93,15 +93,8 @@ public class Interleaved1F1BSchedule : IPipelineSchedule
         // Warmup: number of forward passes before steady state begins
         // For interleaved, warmup is proportional to (totalVirtualStages - rank's first virtual stage - 1)
         int numWarmupForwards = Math.Min(
-            (totalVirtualStages - 1 - stageId) / 1, // Each forward covers one virtual stage
+            totalVirtualStages - 1 - stageId,
             numMicroBatches * _virtualStagesPerRank);
-
-        // Cap at actual work available
-        numWarmupForwards = Math.Min(numWarmupForwards, numMicroBatches * _virtualStagesPerRank);
-
-        // Track forward and backward progress per virtual stage
-        var forwardCount = new int[_virtualStagesPerRank];
-        var backwardCount = new int[_virtualStagesPerRank];
 
         int totalForwards = numMicroBatches * _virtualStagesPerRank;
         int totalBackwards = totalForwards;
@@ -126,7 +119,6 @@ public class Interleaved1F1BSchedule : IPipelineSchedule
                     IsWarmup = true,
                     IsCooldown = false
                 });
-                forwardCount[vStage]++;
                 forwardsDone++;
             }
         }
@@ -150,7 +142,6 @@ public class Interleaved1F1BSchedule : IPipelineSchedule
                         IsWarmup = false,
                         IsCooldown = false
                     });
-                    forwardCount[vStage]++;
                     forwardsDone++;
                 }
             }
@@ -172,7 +163,6 @@ public class Interleaved1F1BSchedule : IPipelineSchedule
                         IsWarmup = false,
                         IsCooldown = isCooldown
                     });
-                    backwardCount[vStage]++;
                     backwardsDone++;
                 }
             }
@@ -194,6 +184,6 @@ public class Interleaved1F1BSchedule : IPipelineSchedule
         int p = numStages;
         int m = numMicroBatches;
         int v = _virtualStagesPerRank;
-        return (double)(p - 1) / (2 * m * v + p - 1);
+        return (double)(p - 1) / (2L * m * v + p - 1);
     }
 }

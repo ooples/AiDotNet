@@ -36,12 +36,6 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
     /// <inheritdoc/>
     public IReadOnlyList<PipelineOperation> GetSchedule(int stageId, int numStages, int numMicroBatches)
     {
-        if (stageId < 0 || stageId >= numStages)
-        {
-            throw new ArgumentOutOfRangeException(nameof(stageId),
-                $"Stage ID must be between 0 and {numStages - 1}.");
-        }
-
         if (numStages <= 0)
         {
             throw new ArgumentException("Number of stages must be positive.", nameof(numStages));
@@ -50,6 +44,12 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
         if (numMicroBatches <= 0)
         {
             throw new ArgumentException("Number of micro-batches must be positive.", nameof(numMicroBatches));
+        }
+
+        if (stageId < 0 || stageId >= numStages)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stageId),
+                $"Stage ID must be between 0 and {numStages - 1}.");
         }
 
         var ops = new List<PipelineOperation>();
@@ -109,7 +109,7 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
             // BackwardWeight (W) - fills bubbles, scheduled for earlier micro-batch
             // ZB-H1 constraint: W starts only after enough B steps to maintain
             // the same in-flight count as 1F1B
-            if (backwardWeightIdx < backwardInputIdx - 0 && backwardWeightIdx < numMicroBatches)
+            if (backwardWeightIdx < backwardInputIdx && backwardWeightIdx < numMicroBatches)
             {
                 ops.Add(new PipelineOperation
                 {
@@ -164,6 +164,6 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
         // ZB-H1 bubble: ~(P-1) / (3*M + P - 1)
         int p = numStages;
         int m = numMicroBatches;
-        return (double)(p - 1) / (3 * m + p - 1);
+        return (double)(p - 1) / (3L * m + p - 1);
     }
 }
