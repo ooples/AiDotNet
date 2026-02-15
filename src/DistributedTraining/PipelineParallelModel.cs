@@ -336,6 +336,24 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         // Pipeline parallel training using the configured schedule
         var scheduleOps = _schedule.GetSchedule(_stageId, _numStages, _microBatchSize);
 
+        // Validate schedule output: externally injectable schedules may emit invalid indices
+        foreach (var op in scheduleOps)
+        {
+            if (op.MicroBatchIndex < 0 || op.MicroBatchIndex >= _microBatchSize)
+            {
+                throw new InvalidOperationException(
+                    $"Schedule '{_schedule.Name}' emitted MicroBatchIndex={op.MicroBatchIndex} " +
+                    $"but valid range is [0, {_microBatchSize - 1}].");
+            }
+
+            if (op.VirtualStageIndex < 0 || op.VirtualStageIndex >= _virtualStagesPerRank)
+            {
+                throw new InvalidOperationException(
+                    $"Schedule '{_schedule.Name}' emitted VirtualStageIndex={op.VirtualStageIndex} " +
+                    $"but valid range is [0, {_virtualStagesPerRank - 1}].");
+            }
+        }
+
         // Gather full parameters before training
         var fullParams = GatherFullParameters();
         WrappedModel.SetParameters(fullParams);
@@ -746,13 +764,21 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             return false;
         }
 
+        // MaxActivationsInMemory > 0 overrides interval-based checkpointing
         if (_checkpointConfig.MaxActivationsInMemory > 0)
         {
             return _checkpointedActivations.Count < _checkpointConfig.MaxActivationsInMemory;
         }
 
-        // Interval-based checkpointing
-        return opKey % _checkpointConfig.CheckpointEveryNLayers == 0;
+        // CheckpointFirstLayer: always checkpoint opKey 0 if enabled
+        if (_checkpointConfig.CheckpointFirstLayer && opKey == 0)
+        {
+            return true;
+        }
+
+        // Interval-based checkpointing (CheckpointEveryNLayers validated >= 1 in setter)
+        return _checkpointConfig.CheckpointEveryNLayers > 0
+            && opKey % _checkpointConfig.CheckpointEveryNLayers == 0;
     }
 
     /// <summary>
