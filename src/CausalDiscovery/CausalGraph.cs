@@ -450,6 +450,218 @@ public class CausalGraph<T>
         ? (double)EdgeCount / (NumVariables * (NumVariables - 1))
         : 0.0;
 
+    /// <summary>
+    /// Computes the interventional distribution P(target | do(intervention = value)) using the
+    /// truncated factorization formula from Pearl's do-calculus.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The do-calculus intervention do(X = x) works by:
+    /// <list type="number">
+    /// <item>Removing all incoming edges to the intervention variable (breaking its causes)</item>
+    /// <item>Setting the intervention variable to the specified value</item>
+    /// <item>Propagating the effect forward through the causal graph using the learned relationships</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// For a linear causal model X = W^T X + ε, the truncated factorization produces:
+    /// For each sample, set X_intervention = value, then simulate downstream effects using the
+    /// topological order of the graph, computing each variable from its parents' values.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This answers "what would happen to Y if we FORCE X to be some value?"
+    /// It's like running a simulated experiment using the discovered causal relationships.
+    /// </para>
+    /// </remarks>
+    /// <param name="interventionVariable">Index of the variable being intervened on.</param>
+    /// <param name="interventionValue">The value to set the intervention variable to.</param>
+    /// <param name="targetVariable">Index of the target variable whose distribution we want.</param>
+    /// <param name="observationalData">The original observational data [n_samples x n_variables].</param>
+    /// <returns>An <see cref="InterventionalDistribution{T}"/> representing P(target | do(intervention = value)).</returns>
+    /// <exception cref="ArgumentException">If variable indices are out of range or the same variable is used for both.</exception>
+    public InterventionalDistribution<T> ComputeInterventionalDistribution(
+        int interventionVariable, T interventionValue,
+        int targetVariable, Matrix<T> observationalData)
+    {
+        ValidateIndex(interventionVariable);
+        ValidateIndex(targetVariable);
+
+        if (observationalData.Columns != NumVariables)
+        {
+            throw new ArgumentException(
+                $"Observational data columns ({observationalData.Columns}) must match graph variables ({NumVariables}).",
+                nameof(observationalData));
+        }
+
+        int n = observationalData.Rows;
+        int d = NumVariables;
+
+        // Get topological order for forward propagation
+        int[] topoOrder;
+        try
+        {
+            topoOrder = TopologicalSort();
+        }
+        catch (InvalidOperationException)
+        {
+            // Graph has cycles — fall back to simple linear regression estimate
+            return ComputeInterventionalFallback(
+                interventionVariable, interventionValue, targetVariable, observationalData);
+        }
+
+        // Compute observational mean of target for ACE calculation
+        double obsTargetSum = 0;
+        for (int i = 0; i < n; i++)
+            obsTargetSum += _numOps.ToDouble(observationalData[i, targetVariable]);
+        double obsTargetMean = obsTargetSum / n;
+
+        // For each observational sample, simulate the intervention:
+        // 1. Copy the sample
+        // 2. Set the intervention variable to the intervention value
+        // 3. Propagate forward through topological order using linear structural equations
+        var interventionalSamples = new double[n];
+
+        // Pre-compute the weight matrix as double for efficiency
+        var W = new double[d, d];
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                W[i, j] = _numOps.ToDouble(AdjacencyMatrix[i, j]);
+
+        // Pre-compute residuals (noise) for each variable using observational data
+        // ε_j = X_j - Σ_i W[i,j] * X_i for each sample
+        var residuals = new double[n, d];
+        for (int s = 0; s < n; s++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                double xj = _numOps.ToDouble(observationalData[s, j]);
+                double predicted = 0;
+                for (int i = 0; i < d; i++)
+                {
+                    if (i != j && Math.Abs(W[i, j]) > 1e-10)
+                        predicted += W[i, j] * _numOps.ToDouble(observationalData[s, i]);
+                }
+                residuals[s, j] = xj - predicted;
+            }
+        }
+
+        // Simulate intervention for each sample
+        for (int s = 0; s < n; s++)
+        {
+            var simulated = new double[d];
+
+            // Copy original values as starting point
+            for (int j = 0; j < d; j++)
+                simulated[j] = _numOps.ToDouble(observationalData[s, j]);
+
+            // Apply intervention: set the intervention variable
+            simulated[interventionVariable] = _numOps.ToDouble(interventionValue);
+
+            // Forward propagation in topological order
+            // For variables downstream of the intervention, recompute using structural equations
+            // For variables upstream or not affected, keep the original values + noise
+            var affectedByIntervention = new HashSet<int>(GetDescendants(interventionVariable));
+            affectedByIntervention.Add(interventionVariable);
+
+            foreach (int j in topoOrder)
+            {
+                if (j == interventionVariable)
+                {
+                    // Intervention variable: forced to intervention value
+                    simulated[j] = _numOps.ToDouble(interventionValue);
+                    continue;
+                }
+
+                if (!affectedByIntervention.Contains(j))
+                {
+                    // Not affected by intervention: keep observational value
+                    continue;
+                }
+
+                // Affected downstream variable: recompute from parents + noise
+                double value = residuals[s, j]; // noise term
+                for (int i = 0; i < d; i++)
+                {
+                    if (Math.Abs(W[i, j]) > 1e-10)
+                        value += W[i, j] * simulated[i];
+                }
+                simulated[j] = value;
+            }
+
+            interventionalSamples[s] = simulated[targetVariable];
+        }
+
+        return new InterventionalDistribution<T>(
+            interventionVariableIndex: interventionVariable,
+            interventionVariableName: FeatureNames[interventionVariable],
+            interventionValue: interventionValue,
+            targetVariableIndex: targetVariable,
+            targetVariableName: FeatureNames[targetVariable],
+            samples: interventionalSamples,
+            observationalMean: obsTargetMean);
+    }
+
+    /// <summary>
+    /// Computes the interventional distribution using named variables.
+    /// </summary>
+    /// <param name="interventionVariableName">Name of the intervention variable.</param>
+    /// <param name="interventionValue">The value to set via do-operator.</param>
+    /// <param name="targetVariableName">Name of the target variable.</param>
+    /// <param name="observationalData">The original observational data.</param>
+    /// <returns>An <see cref="InterventionalDistribution{T}"/> representing P(target | do(intervention = value)).</returns>
+    public InterventionalDistribution<T> ComputeInterventionalDistribution(
+        string interventionVariableName, T interventionValue,
+        string targetVariableName, Matrix<T> observationalData)
+    {
+        return ComputeInterventionalDistribution(
+            GetIndex(interventionVariableName), interventionValue,
+            GetIndex(targetVariableName), observationalData);
+    }
+
+    /// <summary>
+    /// Fallback for computing interventional distribution when the graph is not a DAG.
+    /// Uses simple linear regression of target on intervention variable.
+    /// </summary>
+    private InterventionalDistribution<T> ComputeInterventionalFallback(
+        int interventionVariable, T interventionValue,
+        int targetVariable, Matrix<T> observationalData)
+    {
+        int n = observationalData.Rows;
+        double intVal = _numOps.ToDouble(interventionValue);
+
+        // Simple OLS: target = a + b * intervention + noise
+        double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double x = _numOps.ToDouble(observationalData[i, interventionVariable]);
+            double y = _numOps.ToDouble(observationalData[i, targetVariable]);
+            sumX += x; sumY += y; sumXY += x * y; sumX2 += x * x;
+        }
+        double mx = sumX / n, my = sumY / n;
+        double b = (sumXY - n * mx * my) / (sumX2 - n * mx * mx + 1e-10);
+        double a = my - b * mx;
+
+        // Generate interventional samples using the regression residuals
+        var samples = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            double xObs = _numOps.ToDouble(observationalData[i, interventionVariable]);
+            double yObs = _numOps.ToDouble(observationalData[i, targetVariable]);
+            double yPred = a + b * xObs;
+            double noise = yObs - yPred;
+            samples[i] = a + b * intVal + noise;
+        }
+
+        return new InterventionalDistribution<T>(
+            interventionVariableIndex: interventionVariable,
+            interventionVariableName: FeatureNames[interventionVariable],
+            interventionValue: interventionValue,
+            targetVariableIndex: targetVariable,
+            targetVariableName: FeatureNames[targetVariable],
+            samples: samples,
+            observationalMean: my);
+    }
+
     private bool IsZero(T value)
     {
         return _numOps.Equals(value, _numOps.Zero);
