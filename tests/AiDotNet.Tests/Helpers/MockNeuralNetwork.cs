@@ -281,6 +281,26 @@ public class MockNeuralNetwork : INeuralNetwork<double>
         throw new NotSupportedException("JIT compilation not supported in mock model");
     }
 
+    // ILayeredModel<double> implementation
+    IReadOnlyList<ILayer<double>> ILayeredModel<double>.Layers => Array.Empty<ILayer<double>>();
+
+    public int LayerCount => 0;
+
+    public LayerInfo<double> GetLayerInfo(int layerIndex)
+    {
+        throw new ArgumentOutOfRangeException(nameof(layerIndex), "Mock network has no layers.");
+    }
+
+    public IReadOnlyList<LayerInfo<double>> GetAllLayerInfo()
+    {
+        return Array.Empty<LayerInfo<double>>();
+    }
+
+    public bool ValidatePartitionPoint(int afterLayerIndex)
+    {
+        return false;
+    }
+
     /// <summary>
     /// Sets the parameter gradients directly (useful for testing gradient modification).
     /// </summary>

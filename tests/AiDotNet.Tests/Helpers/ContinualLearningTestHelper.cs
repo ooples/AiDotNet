@@ -105,6 +105,58 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
 
     public IReadOnlyList<ILayer<T>> Layers => _layers;
 
+    // ILayeredModel<T> implementation
+    public int LayerCount => _layers.Count;
+
+    public LayerInfo<T> GetLayerInfo(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= _layers.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(layerIndex));
+        }
+
+        int parameterOffset = 0;
+        for (int i = 0; i < layerIndex; i++)
+        {
+            parameterOffset += _layers[i].ParameterCount;
+        }
+
+        var layer = _layers[layerIndex];
+        return new LayerInfo<T>
+        {
+            Index = layerIndex,
+            Name = layer.LayerName,
+            Category = LayerCategory.Dense,
+            Layer = layer,
+            ParameterOffset = parameterOffset,
+            ParameterCount = layer.ParameterCount,
+            InputShape = layer.GetInputShape(),
+            OutputShape = layer.GetOutputShape(),
+            IsTrainable = layer.SupportsTraining,
+            EstimatedFlops = 2L * layer.ParameterCount,
+            EstimatedActivationMemory = layer.GetOutputShape().Aggregate(1L, (a, b) => a * b) * 4
+        };
+    }
+
+    public IReadOnlyList<LayerInfo<T>> GetAllLayerInfo()
+    {
+        var result = new List<LayerInfo<T>>(_layers.Count);
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            result.Add(GetLayerInfo(i));
+        }
+        return result;
+    }
+
+    public bool ValidatePartitionPoint(int afterLayerIndex)
+    {
+        if (afterLayerIndex < 0 || afterLayerIndex >= _layers.Count - 1)
+        {
+            return false;
+        }
+        return true;
+    }
+
     // INeuralNetwork<T> specific members
     public void UpdateParameters(Vector<T> parameters)
     {
