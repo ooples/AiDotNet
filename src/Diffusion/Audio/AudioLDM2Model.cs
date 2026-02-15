@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -70,45 +71,73 @@ namespace AiDotNet.Diffusion.Audio;
 /// </example>
 public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// AudioLDM 2 default sample rate for high-quality audio.
     /// </summary>
+    /// <remarks>
+    /// 16 kHz standard for speech and sound effects. Music variant supports 48 kHz.
+    /// </remarks>
     public const int AUDIOLDM2_SAMPLE_RATE = 16000;
 
     /// <summary>
     /// AudioLDM 2 mel spectrogram channels (increased from 64 to 128).
     /// </summary>
+    /// <remarks>
+    /// Double the mel channels of AudioLDM 1, providing higher frequency resolution
+    /// for better audio quality especially in music generation.
+    /// </remarks>
     public const int AUDIOLDM2_MEL_CHANNELS = 128;
 
     /// <summary>
     /// AudioLDM 2 latent space channels.
     /// </summary>
+    /// <remarks>
+    /// 8 latent channels for rich audio latent representation, matching AudioLDM 1.
+    /// </remarks>
     public const int AUDIOLDM2_LATENT_CHANNELS = 8;
 
     /// <summary>
     /// AudioLDM 2 U-Net base channels (larger than AudioLDM 1).
     /// </summary>
+    /// <remarks>
+    /// 384 base channels (1.5x AudioLDM 1's 256), providing more capacity
+    /// for the larger dual-encoder conditioning architecture.
+    /// </remarks>
     public const int AUDIOLDM2_BASE_CHANNELS = 384;
 
     /// <summary>
     /// Combined context dimension from dual encoders.
     /// </summary>
+    /// <remarks>
+    /// 1024-dimensional combined output from CLAP and T5/GPT-2 encoders
+    /// via the projection layer, providing rich audio-language conditioning.
+    /// </remarks>
     public const int AUDIOLDM2_CONTEXT_DIM = 1024;
 
     /// <summary>
     /// Maximum supported duration in seconds.
     /// </summary>
+    /// <remarks>
+    /// AudioLDM 2 supports up to 30 seconds of audio generation,
+    /// 3x longer than AudioLDM 1's typical 10-second limit.
+    /// </remarks>
     public const double AUDIOLDM2_MAX_DURATION = 30.0;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The U-Net noise predictor optimized for AudioLDM 2.
     /// </summary>
-    private readonly UNetNoisePredictor<T> _unet;
+    private UNetNoisePredictor<T> _unet;
 
     /// <summary>
     /// The AudioVAE for high-resolution mel spectrogram encoding/decoding.
     /// </summary>
-    private readonly AudioVAE<T> _audioVAE;
+    private AudioVAE<T> _audioVAE;
 
     /// <summary>
     /// Primary conditioning module (CLAP encoder for audio-text alignment).
@@ -123,12 +152,16 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
     /// <summary>
     /// Projection layer to combine dual encoder outputs.
     /// </summary>
-    private readonly ProjectionLayer<T> _projectionLayer;
+    private ProjectionLayer<T> _projectionLayer;
 
     /// <summary>
     /// Model variant configuration.
     /// </summary>
     private readonly AudioLDM2Variant _variant;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _unet;
@@ -169,6 +202,10 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
     /// </summary>
     public AudioVAE<T> AudioVAE => _audioVAE;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new AudioLDM 2 model with full customization support.
     /// </summary>
@@ -195,8 +232,14 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
         double defaultDurationSeconds = 10.0,
         int? seed = null)
         : base(
-            options ?? CreateDefaultOptions(),
-            scheduler ?? CreateDefaultScheduler(),
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             sampleRate,
             defaultDurationSeconds,
             AUDIOLDM2_MEL_CHANNELS,
@@ -206,93 +249,60 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
         _clapConditioner = clapConditioner;
         _languageConditioner = languageConditioner;
 
-        // Initialize AudioVAE with higher resolution
-        _audioVAE = audioVAE ?? CreateDefaultAudioVAE(seed);
-
-        // Initialize U-Net with variant-specific parameters
-        _unet = unet ?? CreateDefaultUNet(variant, seed);
-
-        // Initialize projection layer for combining encoder outputs
-        _projectionLayer = CreateProjectionLayer(variant, seed);
+        InitializeLayers(unet, audioVAE, variant, seed);
     }
 
-    /// <summary>
-    /// Creates default options for AudioLDM 2.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 1000,
-            BetaStart = 0.00085,
-            BetaEnd = 0.012,
-            BetaSchedule = BetaSchedule.ScaledLinear
-        };
-    }
+    #endregion
+
+    #region Layer Initialization
 
     /// <summary>
-    /// Creates the default DDIM scheduler.
+    /// Initializes the U-Net, AudioVAE, and projection layers.
     /// </summary>
-    private static DDIMScheduler<T> CreateDefaultScheduler()
+    [MemberNotNull(nameof(_unet), nameof(_audioVAE), nameof(_projectionLayer))]
+    private void InitializeLayers(
+        UNetNoisePredictor<T>? unet,
+        AudioVAE<T>? audioVAE,
+        AudioLDM2Variant variant,
+        int? seed)
     {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
-
-    /// <summary>
-    /// Creates the default AudioVAE with 128 mel channels.
-    /// </summary>
-    private AudioVAE<T> CreateDefaultAudioVAE(int? seed)
-    {
-        return new AudioVAE<T>(
+        _audioVAE = audioVAE ?? new AudioVAE<T>(
             melChannels: AUDIOLDM2_MEL_CHANNELS,
             latentChannels: AUDIOLDM2_LATENT_CHANNELS,
-            baseChannels: 128, // Higher resolution VAE
-            channelMultipliers: new[] { 1, 2, 4, 4, 8 }, // More levels for better quality
-            numResBlocks: 3, // More residual blocks
+            baseChannels: 128,
+            channelMultipliers: new[] { 1, 2, 4, 4, 8 },
+            numResBlocks: 3,
             seed: seed);
-    }
 
-    /// <summary>
-    /// Creates the default U-Net for AudioLDM 2.
-    /// </summary>
-    private UNetNoisePredictor<T> CreateDefaultUNet(AudioLDM2Variant variant, int? seed)
-    {
         var (baseChannels, numResBlocks) = variant switch
         {
             AudioLDM2Variant.Base => (256, 2),
             AudioLDM2Variant.Large => (384, 2),
-            AudioLDM2Variant.Music => (384, 3), // More blocks for music
+            AudioLDM2Variant.Music => (384, 3),
             _ => (384, 2)
         };
 
-        return new UNetNoisePredictor<T>(
+        _unet = unet ?? new UNetNoisePredictor<T>(
             inputChannels: AUDIOLDM2_LATENT_CHANNELS,
             outputChannels: AUDIOLDM2_LATENT_CHANNELS,
             baseChannels: baseChannels,
-            channelMultipliers: new[] { 1, 2, 3, 4, 4 }, // AudioLDM 2 architecture
+            channelMultipliers: new[] { 1, 2, 3, 4, 4 },
             numResBlocks: numResBlocks,
             attentionResolutions: new[] { 4, 2, 1 },
             contextDim: AUDIOLDM2_CONTEXT_DIM,
             architecture: Architecture,
             seed: seed);
-    }
 
-    /// <summary>
-    /// Creates the projection layer for combining dual encoder outputs.
-    /// </summary>
-    private ProjectionLayer<T> CreateProjectionLayer(AudioLDM2Variant variant, int? seed)
-    {
-        // CLAP: 512 dimensions, T5/GPT-2: 768-1024 dimensions
-        // Combined and projected to context dimension
         var clapDim = 512;
         var languageDim = variant == AudioLDM2Variant.Music ? 1024 : 768;
 
-        return new ProjectionLayer<T>(
+        _projectionLayer = new ProjectionLayer<T>(
             inputDim: clapDim + languageDim,
             outputDim: AUDIOLDM2_CONTEXT_DIM,
             seed: seed);
     }
+
+    #endregion
 
     /// <summary>
     /// Combines embeddings from both encoders.

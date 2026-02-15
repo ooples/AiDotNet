@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -70,50 +71,63 @@ namespace AiDotNet.Diffusion.Audio;
 /// </example>
 public class MusicGenModel<T> : AudioDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// MusicGen default sample rate for high-quality music.
     /// </summary>
+    /// <remarks>32 kHz provides sufficient frequency response for music while being more efficient than 44.1 kHz.</remarks>
     public const int MUSICGEN_SAMPLE_RATE = 32000;
 
     /// <summary>
     /// MusicGen mel spectrogram channels.
     /// </summary>
+    /// <remarks>128 mel bands capture fine-grained frequency detail needed for musical content.</remarks>
     public const int MUSICGEN_MEL_CHANNELS = 128;
 
     /// <summary>
     /// MusicGen latent space channels (larger for musical structure).
     /// </summary>
+    /// <remarks>16 channels provide more representational capacity than standard 4-channel image latents, needed for complex musical structure.</remarks>
     public const int MUSICGEN_LATENT_CHANNELS = 16;
 
     /// <summary>
     /// MusicGen U-Net base channels.
     /// </summary>
+    /// <remarks>512 base channels match the Large/Melody variant for maximum quality.</remarks>
     public const int MUSICGEN_BASE_CHANNELS = 512;
 
     /// <summary>
     /// Context dimension for conditioning.
     /// </summary>
+    /// <remarks>1536 accommodates concatenated text, melody, rhythm, and tempo embeddings.</remarks>
     public const int MUSICGEN_CONTEXT_DIM = 1536;
 
     /// <summary>
     /// Maximum supported duration in seconds.
     /// </summary>
+    /// <remarks>60 seconds is the practical limit for memory and quality at 32 kHz sample rate.</remarks>
     public const double MUSICGEN_MAX_DURATION = 60.0;
 
     /// <summary>
     /// Default BPM for music generation.
     /// </summary>
+    /// <remarks>120 BPM is a common moderate tempo suitable for many genres (pop, house, rock).</remarks>
     public const int DEFAULT_BPM = 120;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The U-Net noise predictor optimized for music.
     /// </summary>
-    private readonly UNetNoisePredictor<T> _unet;
+    private UNetNoisePredictor<T> _unet;
 
     /// <summary>
     /// The AudioVAE for high-resolution music encoding/decoding.
     /// </summary>
-    private readonly AudioVAE<T> _musicVAE;
+    private AudioVAE<T> _musicVAE;
 
     /// <summary>
     /// Primary text conditioning module.
@@ -123,17 +137,21 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
     /// <summary>
     /// Melody encoder for melody conditioning.
     /// </summary>
-    private readonly MelodyEncoder<T> _melodyEncoder;
+    private MelodyEncoder<T> _melodyEncoder;
 
     /// <summary>
     /// Rhythm encoder for beat conditioning.
     /// </summary>
-    private readonly RhythmEncoder<T> _rhythmEncoder;
+    private RhythmEncoder<T> _rhythmEncoder;
 
     /// <summary>
     /// Model size variant.
     /// </summary>
     private readonly MusicGenSize _modelSize;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _unet;
@@ -179,9 +197,14 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
     /// </summary>
     public AudioVAE<T> MusicVAE => _musicVAE;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new MusicGen model with full customization support.
     /// </summary>
+    /// <param name="architecture">Optional neural network architecture for custom layer configuration.</param>
     /// <param name="options">Configuration options for the diffusion model.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>
     /// <param name="unet">Optional custom U-Net noise predictor.</param>
@@ -203,8 +226,14 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
         double defaultDurationSeconds = 30.0,
         int? seed = null)
         : base(
-            options ?? CreateDefaultOptions(),
-            scheduler ?? CreateDefaultScheduler(),
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.0001,
+                BetaEnd = 0.02,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             sampleRate,
             defaultDurationSeconds,
             MUSICGEN_MEL_CHANNELS,
@@ -213,11 +242,59 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
         _modelSize = modelSize;
         _textConditioner = textConditioner;
 
-        // Initialize music VAE with high capacity
-        _musicVAE = musicVAE ?? CreateDefaultMusicVAE(seed);
+        InitializeLayers(unet, musicVAE, modelSize, seed);
+    }
 
-        // Initialize U-Net with music-optimized architecture
-        _unet = unet ?? CreateDefaultUNet(modelSize, seed);
+    #endregion
+
+    #region Layer Initialization
+
+    /// <summary>
+    /// Initializes the model layers, using provided components or creating defaults.
+    /// </summary>
+    [MemberNotNull(nameof(_unet), nameof(_musicVAE), nameof(_melodyEncoder), nameof(_rhythmEncoder))]
+    private void InitializeLayers(
+        UNetNoisePredictor<T>? unet,
+        AudioVAE<T>? musicVAE,
+        MusicGenSize modelSize,
+        int? seed)
+    {
+        // Initialize music VAE with high capacity
+        _musicVAE = musicVAE ?? new AudioVAE<T>(
+            melChannels: MUSICGEN_MEL_CHANNELS,
+            latentChannels: MUSICGEN_LATENT_CHANNELS,
+            baseChannels: 128,
+            channelMultipliers: new[] { 1, 2, 4, 8, 8 },
+            numResBlocks: 3,
+            seed: seed);
+
+        // Initialize U-Net with size-dependent architecture
+        if (unet != null)
+        {
+            _unet = unet;
+        }
+        else
+        {
+            var (baseChannels, numResBlocks) = modelSize switch
+            {
+                MusicGenSize.Small => (256, 2),
+                MusicGenSize.Medium => (384, 2),
+                MusicGenSize.Large => (512, 3),
+                MusicGenSize.Melody => (512, 3),
+                _ => (384, 2)
+            };
+
+            _unet = new UNetNoisePredictor<T>(
+                inputChannels: MUSICGEN_LATENT_CHANNELS,
+                outputChannels: MUSICGEN_LATENT_CHANNELS,
+                baseChannels: baseChannels,
+                channelMultipliers: new[] { 1, 2, 4, 4, 8 },
+                numResBlocks: numResBlocks,
+                attentionResolutions: new[] { 8, 4, 2, 1 },
+                contextDim: MUSICGEN_CONTEXT_DIM,
+                architecture: Architecture,
+                seed: seed);
+        }
 
         // Initialize melody encoder
         _melodyEncoder = new MelodyEncoder<T>(
@@ -231,68 +308,9 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
             seed: seed);
     }
 
-    /// <summary>
-    /// Creates default options for MusicGen.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 1000,
-            BetaStart = 0.0001,
-            BetaEnd = 0.02,
-            BetaSchedule = BetaSchedule.ScaledLinear
-        };
-    }
+    #endregion
 
-    /// <summary>
-    /// Creates the default scheduler optimized for music.
-    /// </summary>
-    private static DDIMScheduler<T> CreateDefaultScheduler()
-    {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
-
-    /// <summary>
-    /// Creates the default music VAE.
-    /// </summary>
-    private AudioVAE<T> CreateDefaultMusicVAE(int? seed)
-    {
-        return new AudioVAE<T>(
-            melChannels: MUSICGEN_MEL_CHANNELS,
-            latentChannels: MUSICGEN_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: new[] { 1, 2, 4, 8, 8 }, // Deep VAE for music
-            numResBlocks: 3,
-            seed: seed);
-    }
-
-    /// <summary>
-    /// Creates the default U-Net for music generation.
-    /// </summary>
-    private UNetNoisePredictor<T> CreateDefaultUNet(MusicGenSize size, int? seed)
-    {
-        var (baseChannels, numResBlocks) = size switch
-        {
-            MusicGenSize.Small => (256, 2),
-            MusicGenSize.Medium => (384, 2),
-            MusicGenSize.Large => (512, 3),
-            MusicGenSize.Melody => (512, 3), // Same as Large but different conditioning
-            _ => (384, 2)
-        };
-
-        return new UNetNoisePredictor<T>(
-            inputChannels: MUSICGEN_LATENT_CHANNELS,
-            outputChannels: MUSICGEN_LATENT_CHANNELS,
-            baseChannels: baseChannels,
-            channelMultipliers: new[] { 1, 2, 4, 4, 8 }, // Music-optimized architecture
-            numResBlocks: numResBlocks,
-            attentionResolutions: new[] { 8, 4, 2, 1 }, // More attention levels for music
-            contextDim: MUSICGEN_CONTEXT_DIM,
-            architecture: Architecture,
-            seed: seed);
-    }
+    #region Generation Methods
 
     /// <summary>
     /// Generates music from a text prompt.
@@ -547,6 +565,10 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
         // Blend overlapping region
         return BlendAudio(audioPrompt, continuationAudio, overlapSamples);
     }
+
+    #endregion
+
+    #region Helper Methods
 
     /// <summary>
     /// Core generation method with all conditioning options.
@@ -898,6 +920,8 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
 
         return result;
     }
+
+    #endregion
 
     #region IParameterizable Implementation
 

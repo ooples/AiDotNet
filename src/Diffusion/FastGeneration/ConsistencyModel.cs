@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -83,25 +84,37 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// </example>
 public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
-    /// Standard consistency model latent channels.
+    /// Number of latent channels in the VAE representation.
     /// </summary>
+    /// <remarks>
+    /// Standard 4-channel latent space shared with Stable Diffusion models.
+    /// </remarks>
     private const int CM_LATENT_CHANNELS = 4;
 
     /// <summary>
-    /// Standard VAE scale factor.
+    /// Spatial downsampling factor of the VAE.
     /// </summary>
+    /// <remarks>
+    /// Standard 8x downsampling: a 512x512 image becomes 64x64 in latent space.
+    /// </remarks>
     private const int CM_VAE_SCALE_FACTOR = 8;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The noise predictor (U-Net or DiT).
     /// </summary>
-    private readonly UNetNoisePredictor<T> _noisePredictor;
+    private UNetNoisePredictor<T> _noisePredictor;
 
     /// <summary>
     /// The VAE for encoding/decoding.
     /// </summary>
-    private readonly StandardVAE<T> _vae;
+    private StandardVAE<T> _vae;
 
     /// <summary>
     /// The conditioning module for text encoding.
@@ -138,6 +151,10 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private readonly bool _isDistilled;
 
+    #endregion
+
+    #region Properties
+
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _noisePredictor;
 
@@ -168,6 +185,10 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// Gets whether this model was trained via distillation.
     /// </summary>
     public bool IsDistilled => _isDistilled;
+
+    #endregion
+
+    #region Constructor
 
     /// <summary>
     /// Initializes a new instance of ConsistencyModel with default parameters.
@@ -205,7 +226,16 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
         double rho = 7.0,
         bool isDistilled = false,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), architecture)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 18,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _numTrainSteps = numTrainSteps;
         _sigmaMin = sigmaMin;
@@ -214,45 +244,27 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
         _isDistilled = isDistilled;
         _conditioner = conditioner;
 
-        // Create noise predictor
-        _noisePredictor = noisePredictor ?? CreateDefaultNoisePredictor(seed);
-
-        // Create VAE
-        _vae = vae ?? CreateDefaultVAE(seed);
+        InitializeLayers(noisePredictor, vae, seed);
 
         // Precompute sigma schedule
         _sigmas = ComputeSigmaSchedule();
     }
 
-    /// <summary>
-    /// Creates the default options for Consistency Model.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 18,
-            BetaStart = 0.00085,
-            BetaEnd = 0.012,
-            BetaSchedule = BetaSchedule.ScaledLinear
-        };
-    }
+    #endregion
+
+    #region Layer Initialization
 
     /// <summary>
-    /// Creates the default scheduler.
+    /// Initializes the noise predictor and VAE layers.
     /// </summary>
-    private static INoiseScheduler<T> CreateDefaultScheduler()
+    [MemberNotNull(nameof(_noisePredictor), nameof(_vae))]
+    private void InitializeLayers(
+        UNetNoisePredictor<T>? noisePredictor,
+        StandardVAE<T>? vae,
+        int? seed)
     {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
-
-    /// <summary>
-    /// Creates the default noise predictor.
-    /// </summary>
-    private UNetNoisePredictor<T> CreateDefaultNoisePredictor(int? seed)
-    {
-        return new UNetNoisePredictor<T>(
+        // Consistency-distilled U-Net
+        _noisePredictor = noisePredictor ?? new UNetNoisePredictor<T>(
             inputChannels: CM_LATENT_CHANNELS,
             outputChannels: CM_LATENT_CHANNELS,
             baseChannels: 320,
@@ -262,14 +274,9 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
             contextDim: 768,
             architecture: Architecture,
             seed: seed);
-    }
 
-    /// <summary>
-    /// Creates the default VAE.
-    /// </summary>
-    private StandardVAE<T> CreateDefaultVAE(int? seed)
-    {
-        return new StandardVAE<T>(
+        // Standard SD VAE
+        _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: CM_LATENT_CHANNELS,
             baseChannels: 128,
@@ -277,6 +284,8 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
             numResBlocksPerLevel: 2,
             seed: seed);
     }
+
+    #endregion
 
     /// <summary>
     /// Computes the sigma schedule for the ODE.
@@ -298,6 +307,8 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
 
         return sigmas;
     }
+
+    #region Generation Methods
 
     /// <summary>
     /// Applies the consistency function to map from any noise level to clean data.
@@ -579,6 +590,10 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
         return result;
     }
 
+    #endregion
+
+    #region IParameterizable Implementation
+
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
@@ -588,8 +603,19 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        if (parameters.Length != _noisePredictor.ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {_noisePredictor.ParameterCount} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         _noisePredictor.SetParameters(parameters);
     }
+
+    #endregion
+
+    #region ICloneable Implementation
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
@@ -614,6 +640,10 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
         return clone;
     }
 
+    #endregion
+
+    #region Metadata
+
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -635,4 +665,6 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
 
         return metadata;
     }
+
+    #endregion
 }

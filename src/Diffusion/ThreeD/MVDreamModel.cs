@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -71,40 +72,51 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// </example>
 public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// Default image resolution for each view.
     /// </summary>
+    /// <remarks>256x256 per view balances quality and memory for multi-view generation.</remarks>
     public const int MVDREAM_IMAGE_SIZE = 256;
 
     /// <summary>
     /// MVDream latent channels (Stable Diffusion compatible).
     /// </summary>
+    /// <remarks>4 latent channels match the standard SD VAE architecture for compatibility.</remarks>
     public const int MVDREAM_LATENT_CHANNELS = 4;
 
     /// <summary>
     /// MVDream base channels for U-Net.
     /// </summary>
+    /// <remarks>320 base channels match the SD 1.5 U-Net architecture that MVDream extends.</remarks>
     public const int MVDREAM_BASE_CHANNELS = 320;
 
     /// <summary>
     /// Context dimension for text/image conditioning.
     /// </summary>
+    /// <remarks>1024 accommodates CLIP/T5 text embeddings plus camera position information.</remarks>
     public const int MVDREAM_CONTEXT_DIM = 1024;
 
     /// <summary>
     /// Default camera distance from object.
     /// </summary>
+    /// <remarks>1.5 units provides a good framing for unit-scale objects centered at the origin.</remarks>
     public const double DEFAULT_CAMERA_DISTANCE = 1.5;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The multi-view aware U-Net noise predictor.
     /// </summary>
-    private readonly MultiViewUNet<T> _multiViewUNet;
+    private MultiViewUNet<T> _multiViewUNet;
 
     /// <summary>
     /// The VAE for image encoding/decoding.
     /// </summary>
-    private readonly StandardVAE<T> _imageVAE;
+    private StandardVAE<T> _imageVAE;
 
     /// <summary>
     /// Text conditioning module (CLIP/T5).
@@ -119,12 +131,16 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     /// <summary>
     /// Camera embedding layer.
     /// </summary>
-    private readonly CameraEmbedding<T> _cameraEmbedding;
+    private CameraEmbedding<T> _cameraEmbedding;
 
     /// <summary>
     /// Model configuration.
     /// </summary>
     private readonly MVDreamConfig _config;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _multiViewUNet.BaseUNet;
@@ -168,6 +184,10 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     /// </summary>
     public MVDreamConfig Config => _config;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new MVDream model with full customization support.
     /// </summary>
@@ -190,8 +210,14 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         MVDreamConfig? config = null,
         int? seed = null)
         : base(
-            options ?? CreateDefaultOptions(),
-            scheduler ?? CreateDefaultScheduler(),
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             defaultPointCount: 8192,
             architecture: architecture)
     {
@@ -199,68 +225,46 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         _textConditioner = textConditioner;
         _imageConditioner = imageConditioner;
 
-        // Initialize image VAE
-        _imageVAE = imageVAE ?? CreateDefaultImageVAE(seed);
-
-        // Initialize multi-view U-Net
-        _multiViewUNet = multiViewUNet ?? CreateDefaultMultiViewUNet(seed);
-
-        // Initialize camera embedding
-        _cameraEmbedding = new CameraEmbedding<T>(
-            embeddingDim: MVDREAM_CONTEXT_DIM,
-            seed: seed);
+        InitializeLayers(multiViewUNet, imageVAE, seed);
     }
 
-    /// <summary>
-    /// Creates default options for MVDream.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 1000,
-            BetaStart = 0.00085,
-            BetaEnd = 0.012,
-            BetaSchedule = BetaSchedule.ScaledLinear
-        };
-    }
+    #endregion
+
+    #region Layer Initialization
 
     /// <summary>
-    /// Creates the default DDIM scheduler.
+    /// Initializes the model layers, using provided components or creating defaults.
     /// </summary>
-    private static DDIMScheduler<T> CreateDefaultScheduler()
+    [MemberNotNull(nameof(_multiViewUNet), nameof(_imageVAE), nameof(_cameraEmbedding))]
+    private void InitializeLayers(
+        MultiViewUNet<T>? multiViewUNet,
+        StandardVAE<T>? imageVAE,
+        int? seed)
     {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
-
-    /// <summary>
-    /// Creates the default image VAE.
-    /// </summary>
-    private StandardVAE<T> CreateDefaultImageVAE(int? seed)
-    {
-        return new StandardVAE<T>(
+        _imageVAE = imageVAE ?? new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: MVDREAM_LATENT_CHANNELS,
             baseChannels: 128,
             channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocksPerLevel: 2,
             seed: seed);
-    }
 
-    /// <summary>
-    /// Creates the default multi-view U-Net.
-    /// </summary>
-    private MultiViewUNet<T> CreateDefaultMultiViewUNet(int? seed)
-    {
-        return new MultiViewUNet<T>(
+        _multiViewUNet = multiViewUNet ?? new MultiViewUNet<T>(
             inputChannels: MVDREAM_LATENT_CHANNELS,
             outputChannels: MVDREAM_LATENT_CHANNELS,
             baseChannels: MVDREAM_BASE_CHANNELS,
             numViews: _config.DefaultNumViews,
             contextDim: MVDREAM_CONTEXT_DIM,
             seed: seed);
+
+        _cameraEmbedding = new CameraEmbedding<T>(
+            embeddingDim: MVDREAM_CONTEXT_DIM,
+            seed: seed);
     }
+
+    #endregion
+
+    #region Generation Methods
 
     /// <summary>
     /// Generates multiple consistent views from a text prompt.
@@ -592,6 +596,10 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 
         return gradient;
     }
+
+    #endregion
+
+    #region Helper Methods
 
     /// <summary>
     /// Generates uniformly distributed camera positions around the object.
@@ -1110,6 +1118,8 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 
         return filtered;
     }
+
+    #endregion
 
     #region IParameterizable Implementation
 

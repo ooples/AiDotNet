@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Helpers;
@@ -76,30 +77,40 @@ namespace AiDotNet.Diffusion.Video;
 /// </example>
 public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// Default AnimateDiff width (SD compatible).
     /// </summary>
+    /// <remarks>512 pixels matches the standard Stable Diffusion 1.5 resolution.</remarks>
     public const int DefaultWidth = 512;
 
     /// <summary>
     /// Default AnimateDiff height (SD compatible).
     /// </summary>
+    /// <remarks>512 pixels matches the standard Stable Diffusion 1.5 resolution.</remarks>
     public const int DefaultHeight = 512;
 
     /// <summary>
     /// Standard AnimateDiff latent channels.
     /// </summary>
+    /// <remarks>4 latent channels match the SD 1.5 VAE architecture.</remarks>
     private const int ANIMATEDIFF_LATENT_CHANNELS = 4;
 
     /// <summary>
     /// Standard latent scale factor.
     /// </summary>
+    /// <remarks>0.18215 is the SD 1.5 VAE scaling factor ensuring unit variance in latent space.</remarks>
     private const double LATENT_SCALE = 0.18215;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The U-Net noise predictor with motion modules.
     /// </summary>
-    private readonly UNetNoisePredictor<T> _unet;
+    private UNetNoisePredictor<T> _unet;
 
     /// <summary>
     /// The motion module weights/state.
@@ -109,12 +120,16 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// <summary>
     /// The standard VAE for frame encoding/decoding.
     /// </summary>
-    private readonly StandardVAE<T> _vae;
+    private StandardVAE<T> _vae;
 
     /// <summary>
     /// Optional conditioning module for text guidance.
     /// </summary>
     private readonly IConditioningModule<T>? _conditioner;
+
+    #endregion
+
+    #region Properties
 
     /// <summary>
     /// Gets the noise predictor.
@@ -180,6 +195,10 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// </remarks>
     public int ContextOverlap { get; set; } = 4;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new instance of AnimateDiffModel with full customization support.
     /// </summary>
@@ -201,30 +220,30 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         MotionModuleConfig? motionConfig = null,
         int defaultNumFrames = 16,
         int defaultFPS = 8)
-        : base(options, scheduler ?? CreateDefaultScheduler(), defaultNumFrames, defaultFPS, architecture)
+        : base(
+            options,
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            defaultNumFrames,
+            defaultFPS,
+            architecture)
     {
         _motionConfig = motionConfig ?? new MotionModuleConfig();
-        _unet = unet ?? CreateDefaultUNet();
-        _vae = vae ?? CreateDefaultVAE();
         _conditioner = conditioner;
+
+        InitializeLayers(unet, vae);
     }
 
-    /// <summary>
-    /// Creates the default scheduler for AnimateDiff.
-    /// </summary>
-    private static DDIMScheduler<T> CreateDefaultScheduler()
-    {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
+    #endregion
+
+    #region Layer Initialization
 
     /// <summary>
-    /// Creates the default U-Net predictor.
+    /// Initializes the model layers, using provided components or creating defaults.
     /// </summary>
-    private UNetNoisePredictor<T> CreateDefaultUNet()
+    [MemberNotNull(nameof(_unet), nameof(_vae))]
+    private void InitializeLayers(UNetNoisePredictor<T>? unet, StandardVAE<T>? vae)
     {
-        // Standard SD U-Net architecture
-        return new UNetNoisePredictor<T>(
+        _unet = unet ?? new UNetNoisePredictor<T>(
             inputChannels: ANIMATEDIFF_LATENT_CHANNELS,
             outputChannels: ANIMATEDIFF_LATENT_CHANNELS,
             baseChannels: 320,
@@ -234,20 +253,18 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
             contextDim: 768,
             architecture: Architecture,
             numHeads: 8);
-    }
 
-    /// <summary>
-    /// Creates the default VAE.
-    /// </summary>
-    private StandardVAE<T> CreateDefaultVAE()
-    {
-        return new StandardVAE<T>(
+        _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: ANIMATEDIFF_LATENT_CHANNELS,
             baseChannels: 128,
             channelMultipliers: new[] { 1, 2, 4, 4 },
             latentScaleFactor: LATENT_SCALE);
     }
+
+    #endregion
+
+    #region Generation Methods
 
     /// <summary>
     /// Generates video from text using AnimateDiff.
@@ -316,6 +333,10 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
                 numInferenceSteps,
                 seed);
     }
+
+    #endregion
+
+    #region Helper Methods
 
     /// <summary>
     /// Generates a single window of video frames.
@@ -788,6 +809,8 @@ public class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
 
         return FramesToVideo(frames);
     }
+
+    #endregion
 
     #region IParameterizable Implementation
 

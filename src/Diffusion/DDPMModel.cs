@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -42,6 +43,8 @@ namespace AiDotNet.Diffusion;
 /// </remarks>
 public class DDPMModel<T> : DiffusionModelBase<T>
 {
+    #region Fields
+
     /// <summary>
     /// The noise prediction function (in a full implementation, this would be a neural network).
     /// </summary>
@@ -58,12 +61,21 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     /// </summary>
     private Vector<T> _parameters;
 
+    #endregion
+
+    #region Properties
+
     /// <inheritdoc />
     public override int ParameterCount => _parameters.Length;
+
+    #endregion
+
+    #region Constructor
 
     /// <summary>
     /// Initializes a new instance of the DDPM model.
     /// </summary>
+    /// <param name="architecture">Optional neural network architecture specification.</param>
     /// <param name="options">Configuration options for the diffusion model. If null, uses default options.</param>
     /// <param name="scheduler">Optional custom scheduler. If null, creates one from options.</param>
     /// <param name="noisePredictor">
@@ -138,6 +150,9 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     {
     }
 
+    #endregion
+
+    #region Core Methods
 
     /// <inheritdoc />
     /// <remarks>
@@ -169,55 +184,6 @@ public class DDPMModel<T> : DiffusionModelBase<T>
         return new Tensor<T>(noisySample.Shape, result);
     }
 
-    /// <inheritdoc />
-    public override Vector<T> GetParameters()
-    {
-        // Return a copy to prevent external modification
-        var copy = new Vector<T>(_parameters.Length);
-        for (int i = 0; i < _parameters.Length; i++)
-        {
-            copy[i] = _parameters[i];
-        }
-        return copy;
-    }
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
-    {
-        if (parameters == null)
-            throw new ArgumentNullException(nameof(parameters));
-
-        _parameters = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            _parameters[i] = parameters[i];
-        }
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        var clone = new DDPMModel<T>(scheduler: Scheduler, noisePredictor: _noisePredictor);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        // Clone the scheduler preserving its actual type
-        INoiseScheduler<T> newScheduler = Scheduler switch
-        {
-            PNDMScheduler<T> => new PNDMScheduler<T>(Scheduler.Config),
-            DDIMScheduler<T> => new DDIMScheduler<T>(Scheduler.Config),
-            _ => new DDIMScheduler<T>(Scheduler.Config) // Fallback for unknown types
-        };
-
-        var copy = new DDPMModel<T>(scheduler: newScheduler, noisePredictor: _noisePredictor);
-        copy.SetParameters(GetParameters());
-        return copy;
-    }
-
     /// <summary>
     /// Creates a DDPM model with a custom scheduler configuration.
     /// </summary>
@@ -244,4 +210,74 @@ public class DDPMModel<T> : DiffusionModelBase<T>
         var scheduler = new DDIMScheduler<T>(config);
         return new DDPMModel<T>(scheduler: scheduler, noisePredictor: noisePredictor);
     }
+
+    #endregion
+
+    #region IParameterizable Implementation
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        // Return a copy to prevent external modification
+        var copy = new Vector<T>(_parameters.Length);
+        for (int i = 0; i < _parameters.Length; i++)
+        {
+            copy[i] = _parameters[i];
+        }
+        return copy;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Sets the model parameters from the given vector. DDPMModel accepts any parameter
+    /// length by design since it serves as a flexible placeholder model without a fixed
+    /// neural network architecture. The parameter vector is deep-copied to prevent
+    /// external modification.
+    /// </para>
+    /// </remarks>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters == null)
+            throw new ArgumentNullException(nameof(parameters));
+
+        // Note: No length validation is intentional. DDPMModel is a flexible placeholder
+        // that accepts any parameter vector size, unlike models with fixed architectures
+        // where parameter count must match the layer structure.
+        _parameters = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            _parameters[i] = parameters[i];
+        }
+    }
+
+    #endregion
+
+    #region ICloneable Implementation
+
+    /// <inheritdoc />
+    public override IDiffusionModel<T> Clone()
+    {
+        var clone = new DDPMModel<T>(scheduler: Scheduler, noisePredictor: _noisePredictor);
+        clone.SetParameters(GetParameters());
+        return clone;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        // Clone the scheduler preserving its actual type
+        INoiseScheduler<T> newScheduler = Scheduler switch
+        {
+            PNDMScheduler<T> => new PNDMScheduler<T>(Scheduler.Config),
+            DDIMScheduler<T> => new DDIMScheduler<T>(Scheduler.Config),
+            _ => new DDIMScheduler<T>(Scheduler.Config) // Fallback for unknown types
+        };
+
+        var copy = new DDPMModel<T>(scheduler: newScheduler, noisePredictor: _noisePredictor);
+        copy.SetParameters(GetParameters());
+        return copy;
+    }
+
+    #endregion
 }

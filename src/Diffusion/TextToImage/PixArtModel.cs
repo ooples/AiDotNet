@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -92,30 +93,48 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </example>
 public class PixArtModel<T> : LatentDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// Default model size variant.
     /// </summary>
+    /// <remarks>
+    /// The "alpha" variant is the standard PixArt model with 600M parameters and 1024px default resolution.
+    /// Other supported variants include "sigma" (512px), "delta" (256px), and "xl" (larger 1024px).
+    /// </remarks>
     public const string DefaultModelSize = "alpha";
 
     /// <summary>
     /// Standard PixArt latent channels.
     /// </summary>
+    /// <remarks>
+    /// PixArt uses 4 latent channels matching the standard VAE latent space dimensionality.
+    /// This is consistent with other latent diffusion models like Stable Diffusion.
+    /// </remarks>
     private const int PIXART_LATENT_CHANNELS = 4;
 
     /// <summary>
     /// Standard VAE scale factor.
     /// </summary>
+    /// <remarks>
+    /// The VAE spatially downsamples by a factor of 8, meaning a 1024x1024 image
+    /// becomes a 128x128 latent representation. This reduces computational cost during diffusion.
+    /// </remarks>
     private const int PIXART_VAE_SCALE_FACTOR = 8;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The DiT-based noise predictor.
     /// </summary>
-    private readonly DiTNoisePredictor<T> _dit;
+    private DiTNoisePredictor<T> _dit;
 
     /// <summary>
     /// The VAE for encoding/decoding.
     /// </summary>
-    private readonly StandardVAE<T> _vae;
+    private StandardVAE<T> _vae;
 
     /// <summary>
     /// The conditioning module (T5-style text encoder).
@@ -146,6 +165,10 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     /// Default resolution for this model variant.
     /// </summary>
     private readonly int _defaultResolution;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _dit;
@@ -192,6 +215,10 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     public bool SupportsVariableAspectRatio => true;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new instance of PixArtModel with default parameters.
     /// </summary>
@@ -227,6 +254,21 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
         _numLayers = numLayers;
         _defaultResolution = resolution;
 
+        // Initialize mutable neural network layers
+        InitializeLayers(seed);
+    }
+
+    #endregion
+
+    #region Layer Initialization
+
+    /// <summary>
+    /// Initializes the DiT noise predictor and VAE layers.
+    /// </summary>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    [MemberNotNull(nameof(_dit), nameof(_vae))]
+    private void InitializeLayers(int? seed)
+    {
         // Create VAE
         _vae = new StandardVAE<T>(
             inputChannels: 3,
@@ -239,6 +281,8 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
         // Create DiT noise predictor with PixArt-specific configuration
         _dit = CreateDiTPredictor(seed);
     }
+
+    #endregion
 
     /// <summary>
     /// Creates the default options for PixArt-α.
@@ -300,6 +344,8 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
             patchSize: 2,
             seed: seed);
     }
+
+    #region Generation Methods
 
     /// <summary>
     /// Generates an image with PixArt-α's efficient DiT architecture.
@@ -511,6 +557,10 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
         };
     }
 
+    #endregion
+
+    #region IParameterizable Implementation
+
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
@@ -520,8 +570,19 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        if (parameters.Length != _dit.ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Parameter count mismatch. Expected {_dit.ParameterCount} but received {parameters.Length}.",
+                nameof(parameters));
+        }
+
         _dit.SetParameters(parameters);
     }
+
+    #endregion
+
+    #region ICloneable Implementation
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
@@ -542,6 +603,10 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
 
         return clone;
     }
+
+    #endregion
+
+    #region Metadata
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
@@ -566,6 +631,8 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
 
         return metadata;
     }
+
+    #endregion
 }
 
 /// <summary>

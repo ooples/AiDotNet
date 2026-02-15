@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -74,6 +75,8 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// </example>
 public class PointEModel<T> : ThreeDDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// Standard Point-E point counts.
     /// </summary>
@@ -92,12 +95,57 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     /// <summary>
     /// Standard Point-E latent channels.
     /// </summary>
-    private const int POINTE_LATENT_CHANNELS = 6; // XYZ + RGB per point
+    /// <remarks>
+    /// Point-E uses 6 channels per point: 3 for XYZ coordinates and 3 for RGB color.
+    /// This allows each point to carry both position and appearance information.
+    /// </remarks>
+    private const int POINTE_LATENT_CHANNELS = 6;
+
+    /// <summary>
+    /// Default hidden size for the DiT transformer predictor.
+    /// </summary>
+    /// <remarks>
+    /// The Point-E transformer uses a 512-dimensional hidden space for processing
+    /// point cloud tokens during denoising. This balances quality with efficiency
+    /// for the relatively simple per-point representation.
+    /// </remarks>
+    private const int POINTE_HIDDEN_SIZE = 512;
+
+    /// <summary>
+    /// Default number of transformer layers.
+    /// </summary>
+    /// <remarks>
+    /// Point-E uses 12 transformer layers, which provides sufficient depth for
+    /// learning spatial relationships between points without excessive computation.
+    /// </remarks>
+    private const int POINTE_NUM_LAYERS = 12;
+
+    /// <summary>
+    /// Default number of attention heads.
+    /// </summary>
+    /// <remarks>
+    /// 8 attention heads allow the model to attend to different spatial relationships
+    /// simultaneously (e.g., local geometry, global structure, color consistency).
+    /// </remarks>
+    private const int POINTE_NUM_HEADS = 8;
+
+    /// <summary>
+    /// Context dimension for conditioning (CLIP embedding size).
+    /// </summary>
+    /// <remarks>
+    /// Matches the CLIP ViT-L/14 output dimension (1024), which provides rich
+    /// semantic features for text and image conditioning.
+    /// </remarks>
+    private const int POINTE_CONTEXT_DIM = 1024;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The point cloud noise predictor (transformer-based).
     /// </summary>
-    private readonly DiTNoisePredictor<T> _pointCloudPredictor;
+    private DiTNoisePredictor<T> _pointCloudPredictor;
 
     /// <summary>
     /// The image generator for the first stage (optional).
@@ -112,12 +160,16 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     /// <summary>
     /// Standard VAE for image encoding (used in image-to-3D).
     /// </summary>
-    private readonly StandardVAE<T>? _imageVAE;
+    private StandardVAE<T>? _imageVAE;
 
     /// <summary>
     /// Whether to use the two-stage pipeline.
     /// </summary>
     private readonly bool _useTwoStage;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _pointCloudPredictor;
@@ -135,10 +187,10 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     public override bool SupportsPointCloud => true;
 
     /// <inheritdoc />
-    public override bool SupportsMesh => false; // Point-E generates point clouds only
+    public override bool SupportsMesh => false;
 
     /// <inheritdoc />
-    public override bool SupportsTexture => true; // Points have colors
+    public override bool SupportsTexture => true;
 
     /// <inheritdoc />
     public override bool SupportsNovelView => false;
@@ -156,9 +208,14 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     /// </summary>
     public bool UsesTwoStage => _useTwoStage;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new Point-E model with full customization support.
     /// </summary>
+    /// <param name="architecture">Optional neural network architecture for custom layer configuration.</param>
     /// <param name="options">Configuration options.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>
     /// <param name="pointCloudPredictor">Optional custom point cloud predictor.</param>
@@ -177,69 +234,52 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
         int defaultPointCount = 4096,
         bool useTwoStage = true,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), defaultPointCount, architecture)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1024,
+                BetaStart = 0.0001,
+                BetaEnd = 0.02,
+                BetaSchedule = BetaSchedule.Linear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            defaultPointCount,
+            architecture)
     {
         _useTwoStage = useTwoStage;
         _imageGenerator = imageGenerator;
         _conditioner = conditioner;
 
-        // Initialize point cloud predictor (transformer-based)
-        _pointCloudPredictor = pointCloudPredictor ?? CreateDefaultPredictor(seed);
-
-        // Initialize image VAE for image conditioning
-        _imageVAE = CreateDefaultImageVAE(seed);
+        InitializeLayers(pointCloudPredictor, seed);
     }
 
-    /// <summary>
-    /// Creates default options for Point-E.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 1024,
-            BetaStart = 0.0001,
-            BetaEnd = 0.02,
-            BetaSchedule = BetaSchedule.Linear
-        };
-    }
+    #endregion
+
+    #region Layer Initialization
 
     /// <summary>
-    /// Creates the default DDPM scheduler.
+    /// Initializes the point cloud predictor and image VAE layers.
     /// </summary>
-    private static DDIMScheduler<T> CreateDefaultScheduler()
+    [MemberNotNull(nameof(_pointCloudPredictor))]
+    private void InitializeLayers(DiTNoisePredictor<T>? pointCloudPredictor, int? seed)
     {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
-
-    /// <summary>
-    /// Creates the default point cloud predictor (DiT-based).
-    /// </summary>
-    private DiTNoisePredictor<T> CreateDefaultPredictor(int? seed)
-    {
-        // Point-E uses a transformer for point cloud denoising
-        return new DiTNoisePredictor<T>(
+        _pointCloudPredictor = pointCloudPredictor ?? new DiTNoisePredictor<T>(
             inputChannels: POINTE_LATENT_CHANNELS,
-            hiddenSize: 512,
-            numLayers: 12,
-            numHeads: 8,
-            patchSize: 1, // No patching for point clouds
-            contextDim: 1024,
+            hiddenSize: POINTE_HIDDEN_SIZE,
+            numLayers: POINTE_NUM_LAYERS,
+            numHeads: POINTE_NUM_HEADS,
+            patchSize: 1,
+            contextDim: POINTE_CONTEXT_DIM,
             seed: seed);
-    }
 
-    /// <summary>
-    /// Creates a default image VAE for image conditioning.
-    /// </summary>
-    private StandardVAE<T> CreateDefaultImageVAE(int? seed)
-    {
-        return new StandardVAE<T>(
+        _imageVAE = new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: 4,
             baseChannels: 64,
             seed: seed);
     }
+
+    #endregion
 
     /// <summary>
     /// Creates a dummy VAE for interface compliance (Point-E uses point cloud directly).
@@ -248,6 +288,8 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     {
         return new StandardVAE<T>();
     }
+
+    #region Generation Methods
 
     /// <summary>
     /// Generates a colored point cloud from a text prompt.
@@ -394,6 +436,10 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
 
         return NormalizePointCloud(points);
     }
+
+    #endregion
+
+    #region Helper Methods
 
     /// <summary>
     /// Predicts noise for point cloud denoising.
@@ -558,6 +604,8 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
         return (vertices, faces);
     }
 
+    #endregion
+
     #region IParameterizable Implementation
 
     /// <inheritdoc />
@@ -569,6 +617,13 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        if (parameters.Length != _pointCloudPredictor.ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {_pointCloudPredictor.ParameterCount} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         _pointCloudPredictor.SetParameters(parameters);
     }
 
@@ -591,21 +646,48 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
         // Create a clone of the predictor to preserve trained weights
         var clonedPredictor = new DiTNoisePredictor<T>(
             inputChannels: POINTE_LATENT_CHANNELS,
-            hiddenSize: 512,
-            numLayers: 12,
-            numHeads: 8,
+            hiddenSize: POINTE_HIDDEN_SIZE,
+            numLayers: POINTE_NUM_LAYERS,
+            numHeads: POINTE_NUM_HEADS,
             patchSize: 1,
-            contextDim: 1024);
+            contextDim: POINTE_CONTEXT_DIM);
         clonedPredictor.SetParameters(_pointCloudPredictor.GetParameters());
 
         return new PointEModel<T>(
-            options: null,
-            scheduler: null,
             pointCloudPredictor: clonedPredictor,
             imageGenerator: _imageGenerator,
             conditioner: _conditioner,
             defaultPointCount: DefaultPointCount,
             useTwoStage: _useTwoStage);
+    }
+
+    #endregion
+
+    #region Metadata
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "Point-E",
+            Version = "1.0",
+            ModelType = ModelType.NeuralNetwork,
+            Description = "Point-E text-to-3D point cloud generation using transformer-based diffusion",
+            FeatureCount = ParameterCount,
+            Complexity = ParameterCount
+        };
+
+        metadata.SetProperty("architecture", "dit-point-cloud");
+        metadata.SetProperty("latent_channels", POINTE_LATENT_CHANNELS);
+        metadata.SetProperty("hidden_size", POINTE_HIDDEN_SIZE);
+        metadata.SetProperty("num_layers", POINTE_NUM_LAYERS);
+        metadata.SetProperty("num_heads", POINTE_NUM_HEADS);
+        metadata.SetProperty("context_dim", POINTE_CONTEXT_DIM);
+        metadata.SetProperty("default_point_count", DefaultPointCount);
+        metadata.SetProperty("two_stage", _useTwoStage);
+
+        return metadata;
     }
 
     #endregion

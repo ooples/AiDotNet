@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -70,10 +71,17 @@ namespace AiDotNet.Diffusion.Audio;
 /// </example>
 public class DiffWaveModel<T> : DiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// Default sample rate in Hz.
     /// </summary>
+    /// <remarks>22050 Hz is a standard sample rate for speech synthesis, providing good quality with manageable compute.</remarks>
     private const int DEFAULT_SAMPLE_RATE = 22050;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// Number of residual channels.
@@ -98,7 +106,11 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
     /// <summary>
     /// The diffusion network.
     /// </summary>
-    private readonly DiffWaveNetwork<T> _network;
+    private DiffWaveNetwork<T> _network;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override int ParameterCount => _network.ParameterCount;
@@ -108,9 +120,14 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
     /// </summary>
     public int SampleRate { get; }
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new instance of DiffWaveModel with full customization support.
     /// </summary>
+    /// <param name="architecture">Optional neural network architecture for custom layer configuration.</param>
     /// <param name="options">Configuration options.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>
     /// <param name="residualChannels">Number of residual channels.</param>
@@ -129,7 +146,21 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
         int melChannels = 80,
         int sampleRate = DEFAULT_SAMPLE_RATE,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(seed), architecture)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 200,
+                BetaStart = 0.0001,
+                BetaEnd = 0.05,
+                BetaSchedule = BetaSchedule.Linear
+            },
+            scheduler ?? new DDIMScheduler<T>(new SchedulerConfig<T>(
+                trainTimesteps: 200,
+                betaStart: MathHelper.GetNumericOperations<T>().FromDouble(0.0001),
+                betaEnd: MathHelper.GetNumericOperations<T>().FromDouble(0.05),
+                betaSchedule: BetaSchedule.Linear,
+                predictionType: DiffusionPredictionType.Epsilon)),
+            architecture)
     {
         _residualChannels = residualChannels;
         _residualLayers = residualLayers;
@@ -137,6 +168,24 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
         _melChannels = melChannels;
         SampleRate = sampleRate;
 
+        InitializeLayers(residualChannels, residualLayers, dilationCycle, melChannels, seed);
+    }
+
+    #endregion
+
+    #region Layer Initialization
+
+    /// <summary>
+    /// Initializes the model layers.
+    /// </summary>
+    [MemberNotNull(nameof(_network))]
+    private void InitializeLayers(
+        int residualChannels,
+        int residualLayers,
+        int dilationCycle,
+        int melChannels,
+        int? seed)
+    {
         _network = new DiffWaveNetwork<T>(
             residualChannels: residualChannels,
             residualLayers: residualLayers,
@@ -145,34 +194,9 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
             seed: seed);
     }
 
-    /// <summary>
-    /// Creates the default options.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 200,
-            BetaStart = 0.0001,
-            BetaEnd = 0.05,
-            BetaSchedule = BetaSchedule.Linear
-        };
-    }
+    #endregion
 
-    /// <summary>
-    /// Creates the default scheduler.
-    /// </summary>
-    private static INoiseScheduler<T> CreateDefaultScheduler(int? seed)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var config = new SchedulerConfig<T>(
-            trainTimesteps: 200,
-            betaStart: ops.FromDouble(0.0001),
-            betaEnd: ops.FromDouble(0.05),
-            betaSchedule: BetaSchedule.Linear,
-            predictionType: DiffusionPredictionType.Epsilon);
-        return new DDIMScheduler<T>(config);
-    }
+    #region Generation Methods
 
     /// <summary>
     /// Generates unconditional audio.
@@ -275,6 +299,10 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
         return audio;
     }
 
+    #endregion
+
+    #region Helper Methods
+
     /// <summary>
     /// Samples noise for audio generation.
     /// </summary>
@@ -297,6 +325,10 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
         return _network.Forward(noisySample, timestep, null);
     }
 
+    #endregion
+
+    #region IParameterizable Implementation
+
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
@@ -306,8 +338,16 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        var expected = _network.ParameterCount;
+        if (parameters.Length != expected)
+            throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
+
         _network.SetParameters(parameters);
     }
+
+    #endregion
+
+    #region ICloneable Implementation
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
@@ -330,6 +370,10 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
         return clone;
     }
 
+    #endregion
+
+    #region Metadata
+
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -351,6 +395,8 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
 
         return metadata;
     }
+
+    #endregion
 }
 
 /// <summary>

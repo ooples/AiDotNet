@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -82,35 +83,47 @@ namespace AiDotNet.Diffusion.Control;
 /// </example>
 public class ControlNetModel<T> : LatentDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// Standard ControlNet latent channels.
     /// </summary>
+    /// <remarks>
+    /// 4 latent channels matching the standard SD 1.5 VAE architecture.
+    /// </remarks>
     private const int CN_LATENT_CHANNELS = 4;
 
     /// <summary>
     /// Standard VAE scale factor.
     /// </summary>
+    /// <remarks>
+    /// 8x spatial downsampling from pixel space to latent space.
+    /// </remarks>
     private const int CN_VAE_SCALE_FACTOR = 8;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The base noise predictor (U-Net).
     /// </summary>
-    private readonly UNetNoisePredictor<T> _baseUNet;
+    private UNetNoisePredictor<T> _baseUNet;
 
     /// <summary>
     /// The ControlNet encoder blocks for the primary control type.
     /// </summary>
-    private readonly ControlNetEncoder<T> _controlNetEncoder;
+    private ControlNetEncoder<T> _controlNetEncoder;
 
     /// <summary>
     /// Cache of encoders by control type for multi-control generation.
     /// </summary>
-    private readonly Dictionary<ControlType, ControlNetEncoder<T>> _encoderCache;
+    private Dictionary<ControlType, ControlNetEncoder<T>> _encoderCache;
 
     /// <summary>
     /// The VAE for encoding/decoding.
     /// </summary>
-    private readonly StandardVAE<T> _vae;
+    private StandardVAE<T> _vae;
 
     /// <summary>
     /// The conditioning module for text encoding.
@@ -131,6 +144,10 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// Default conditioning strength.
     /// </summary>
     private double _conditioningStrength = 1.0;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _baseUNet;
@@ -172,6 +189,10 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         set => _conditioningStrength = MathPolyfill.Clamp(value, 0.0, 1.0);
     }
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new instance of ControlNetModel with full customization support.
     /// </summary>
@@ -191,61 +212,35 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         IConditioningModule<T>? conditioner = null,
         ControlType controlType = ControlType.Canny,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), architecture)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _controlType = controlType;
         _conditioner = conditioner;
         _controlChannels = GetControlChannels(controlType);
 
-        // Create base U-Net
-        _baseUNet = baseUNet ?? CreateDefaultUNet(seed);
-
-        // Create VAE
-        _vae = vae ?? CreateDefaultVAE(seed);
-
-        // Create ControlNet encoder
-        _controlNetEncoder = new ControlNetEncoder<T>(
-            inputChannels: _controlChannels,
-            baseChannels: 320,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            seed: seed);
-
-        // Initialize encoder cache with the primary encoder
-        _encoderCache = new Dictionary<ControlType, ControlNetEncoder<T>>
-        {
-            { _controlType, _controlNetEncoder }
-        };
+        InitializeLayers(baseUNet, vae, seed);
     }
 
-    /// <summary>
-    /// Creates the default options.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 1000,
-            BetaStart = 0.00085,
-            BetaEnd = 0.012,
-            BetaSchedule = BetaSchedule.ScaledLinear
-        };
-    }
+    #endregion
+
+    #region Layer Initialization
 
     /// <summary>
-    /// Creates the default scheduler.
+    /// Initializes the U-Net, VAE, and ControlNet encoder layers.
     /// </summary>
-    private static INoiseScheduler<T> CreateDefaultScheduler()
+    [MemberNotNull(nameof(_baseUNet), nameof(_vae), nameof(_controlNetEncoder), nameof(_encoderCache))]
+    private void InitializeLayers(UNetNoisePredictor<T>? baseUNet, StandardVAE<T>? vae, int? seed)
     {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
-
-    /// <summary>
-    /// Creates the default U-Net.
-    /// </summary>
-    private UNetNoisePredictor<T> CreateDefaultUNet(int? seed)
-    {
-        return new UNetNoisePredictor<T>(
+        _baseUNet = baseUNet ?? new UNetNoisePredictor<T>(
             architecture: Architecture,
             inputChannels: CN_LATENT_CHANNELS,
             outputChannels: CN_LATENT_CHANNELS,
@@ -255,21 +250,28 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
             attentionResolutions: new[] { 4, 2, 1 },
             contextDim: 768,
             seed: seed);
-    }
 
-    /// <summary>
-    /// Creates the default VAE.
-    /// </summary>
-    private StandardVAE<T> CreateDefaultVAE(int? seed)
-    {
-        return new StandardVAE<T>(
+        _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: CN_LATENT_CHANNELS,
             baseChannels: 128,
             channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocksPerLevel: 2,
             seed: seed);
+
+        _controlNetEncoder = new ControlNetEncoder<T>(
+            inputChannels: _controlChannels,
+            baseChannels: 320,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            seed: seed);
+
+        _encoderCache = new Dictionary<ControlType, ControlNetEncoder<T>>
+        {
+            { _controlType, _controlNetEncoder }
+        };
     }
+
+    #endregion
 
     /// <summary>
     /// Gets the number of input channels for a control type.

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.Control;
 using AiDotNet.Diffusion.NoisePredictors;
@@ -74,40 +75,62 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// </example>
 public class Zero123Model<T> : LatentDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
-    /// Standard latent channels.
+    /// Number of latent channels in the VAE representation.
     /// </summary>
+    /// <remarks>
+    /// Zero123 uses the same 4-channel latent space as Stable Diffusion,
+    /// encoding color, texture, edge, and structural information.
+    /// </remarks>
     private const int Z123_LATENT_CHANNELS = 4;
 
     /// <summary>
-    /// Standard VAE scale factor.
+    /// Spatial downsampling factor of the VAE.
     /// </summary>
+    /// <remarks>
+    /// The VAE compresses images by 8x spatially, so a 256x256 image
+    /// becomes a 32x32 latent representation.
+    /// </remarks>
     private const int Z123_VAE_SCALE_FACTOR = 8;
 
     /// <summary>
-    /// Default image size.
+    /// Default image size for Zero123 generation.
     /// </summary>
+    /// <remarks>
+    /// Zero123 was trained on 256x256 images. This is the recommended
+    /// resolution for best results.
+    /// </remarks>
     private const int DEFAULT_IMAGE_SIZE = 256;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The U-Net noise predictor.
     /// </summary>
-    private readonly UNetNoisePredictor<T> _unet;
+    private UNetNoisePredictor<T> _unet;
 
     /// <summary>
     /// The VAE for encoding/decoding.
     /// </summary>
-    private readonly StandardVAE<T> _vae;
+    private StandardVAE<T> _vae;
 
     /// <summary>
     /// The image encoder for conditioning.
     /// </summary>
-    private readonly ImageEncoder<T> _imageEncoder;
+    private ImageEncoder<T> _imageEncoder;
 
     /// <summary>
     /// The camera pose encoder.
     /// </summary>
-    private readonly CameraPoseEncoder<T> _poseEncoder;
+    private CameraPoseEncoder<T> _poseEncoder;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _unet;
@@ -126,9 +149,14 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         _unet.ParameterCount + _vae.ParameterCount +
         _imageEncoder.ParameterCount + _poseEncoder.ParameterCount;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new instance of Zero123Model with full customization support.
     /// </summary>
+    /// <param name="architecture">Optional neural network architecture for custom layer configuration.</param>
     /// <param name="options">Configuration options.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>
     /// <param name="unet">Optional custom U-Net.</param>
@@ -143,59 +171,36 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         StandardVAE<T>? vae = null,
         int imageSize = DEFAULT_IMAGE_SIZE,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), architecture)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
-        // Create U-Net with image+pose conditioning
-        _unet = unet ?? CreateDefaultUNet(seed);
-
-        // Create VAE
-        _vae = vae ?? CreateDefaultVAE(seed);
-
-        // Create image encoder
-        _imageEncoder = new ImageEncoder<T>(
-            imageSize: 224,
-            patchSize: 16,
-            embedDim: 768,
-            numLayers: 12,
-            numHeads: 12,
-            seed: seed);
-
-        // Create camera pose encoder
-        _poseEncoder = new CameraPoseEncoder<T>(
-            embedDim: 768,
-            seed: seed);
+        InitializeLayers(unet, vae, seed);
     }
 
-    /// <summary>
-    /// Creates the default options.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 1000,
-            BetaStart = 0.00085,
-            BetaEnd = 0.012,
-            BetaSchedule = BetaSchedule.ScaledLinear
-        };
-    }
+    #endregion
+
+    #region Layer Initialization
 
     /// <summary>
-    /// Creates the default scheduler.
+    /// Initializes the U-Net, VAE, image encoder, and camera pose encoder.
     /// </summary>
-    private static INoiseScheduler<T> CreateDefaultScheduler()
+    [MemberNotNull(nameof(_unet), nameof(_vae), nameof(_imageEncoder), nameof(_poseEncoder))]
+    private void InitializeLayers(
+        UNetNoisePredictor<T>? unet,
+        StandardVAE<T>? vae,
+        int? seed)
     {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
-
-    /// <summary>
-    /// Creates the default U-Net.
-    /// </summary>
-    private UNetNoisePredictor<T> CreateDefaultUNet(int? seed)
-    {
-        return new UNetNoisePredictor<T>(
-            inputChannels: Z123_LATENT_CHANNELS + Z123_LATENT_CHANNELS, // Concat input latent
+        // U-Net with doubled input channels for concatenated input latent
+        _unet = unet ?? new UNetNoisePredictor<T>(
+            inputChannels: Z123_LATENT_CHANNELS + Z123_LATENT_CHANNELS,
             outputChannels: Z123_LATENT_CHANNELS,
             baseChannels: 320,
             channelMultipliers: new[] { 1, 2, 4, 4 },
@@ -204,21 +209,34 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
             contextDim: 768,
             architecture: Architecture,
             seed: seed);
-    }
 
-    /// <summary>
-    /// Creates the default VAE.
-    /// </summary>
-    private StandardVAE<T> CreateDefaultVAE(int? seed)
-    {
-        return new StandardVAE<T>(
+        // Standard SD 1.5 VAE
+        _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: Z123_LATENT_CHANNELS,
             baseChannels: 128,
             channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocksPerLevel: 2,
             seed: seed);
+
+        // CLIP image encoder for conditioning
+        _imageEncoder = new ImageEncoder<T>(
+            imageSize: 224,
+            patchSize: 16,
+            embedDim: 768,
+            numLayers: 12,
+            numHeads: 12,
+            seed: seed);
+
+        // Camera pose encoder for viewpoint control
+        _poseEncoder = new CameraPoseEncoder<T>(
+            embedDim: 768,
+            seed: seed);
     }
+
+    #endregion
+
+    #region Generation Methods
 
     /// <summary>
     /// Generates a novel view of an object.
@@ -381,6 +399,10 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         return views;
     }
 
+    #endregion
+
+    #region Helper Methods
+
     /// <summary>
     /// Combines image and pose embeddings.
     /// </summary>
@@ -437,6 +459,10 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         return result;
     }
 
+    #endregion
+
+    #region IParameterizable Implementation
+
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
@@ -461,6 +487,16 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        var expectedCount = _unet.ParameterCount + _vae.ParameterCount +
+                            _imageEncoder.ParameterCount + _poseEncoder.ParameterCount;
+
+        if (parameters.Length != expectedCount)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedCount} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         var offset = 0;
 
         var unetCount = _unet.ParameterCount;
@@ -496,6 +532,10 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         _poseEncoder.SetParameters(new Vector<T>(poseParams));
     }
 
+    #endregion
+
+    #region ICloneable Implementation
+
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
@@ -511,6 +551,8 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         clone.SetParameters(GetParameters());
         return clone;
     }
+
+    #endregion
 }
 
 /// <summary>

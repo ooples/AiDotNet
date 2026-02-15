@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -98,35 +99,64 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </example>
 public class SDXLModel<T> : LatentDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// Default width for SDXL generation.
     /// </summary>
+    /// <remarks>
+    /// SDXL is trained at 1024x1024 native resolution, 4x higher than SD 1.5's 512x512.
+    /// </remarks>
     public const int DefaultWidth = 1024;
 
     /// <summary>
     /// Default height for SDXL generation.
     /// </summary>
+    /// <remarks>
+    /// SDXL supports multiple aspect ratios through micro-conditioning but defaults to square 1024x1024.
+    /// </remarks>
     public const int DefaultHeight = 1024;
 
     /// <summary>
     /// Standard SDXL latent channels.
     /// </summary>
+    /// <remarks>
+    /// 4 latent channels matching the standard VAE architecture used across
+    /// the Stable Diffusion family of models.
+    /// </remarks>
     private const int SDXL_LATENT_CHANNELS = 4;
 
     /// <summary>
     /// Standard SDXL VAE scale factor.
     /// </summary>
+    /// <remarks>
+    /// 8x spatial downsampling from pixel space to latent space,
+    /// so a 1024x1024 image becomes a 128x128 latent.
+    /// </remarks>
     private const int SDXL_VAE_SCALE_FACTOR = 8;
+
+    /// <summary>
+    /// Default cross-attention dimension for SDXL.
+    /// </summary>
+    /// <remarks>
+    /// 2048-dimensional cross-attention from concatenated CLIP ViT-L/14 (768) and
+    /// OpenCLIP ViT-bigG/14 (1280) embeddings: 768 + 1280 = 2048.
+    /// </remarks>
+    private const int SDXL_CROSS_ATTENTION_DIM = 2048;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The U-Net noise predictor.
     /// </summary>
-    private readonly UNetNoisePredictor<T> _unet;
+    private UNetNoisePredictor<T> _unet;
 
     /// <summary>
     /// The VAE for encoding/decoding.
     /// </summary>
-    private readonly StandardVAE<T> _vae;
+    private StandardVAE<T> _vae;
 
     /// <summary>
     /// The primary conditioning module (CLIP ViT-L).
@@ -152,6 +182,10 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     /// Cross-attention dimension for SDXL (2048).
     /// </summary>
     private readonly int _crossAttentionDim;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _unet;
@@ -190,6 +224,10 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     public int CrossAttentionDim => _crossAttentionDim;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new instance of SDXLModel with full customization support.
     /// </summary>
@@ -215,70 +253,48 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
         bool useDualEncoder = true,
         int crossAttentionDim = 2048,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), architecture)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _crossAttentionDim = crossAttentionDim;
         _useDualEncoder = useDualEncoder;
         _refiner = refiner;
-
-        // Initialize U-Net with SDXL-specific parameters
-        _unet = unet ?? CreateDefaultUNet(seed);
-
-        // Initialize VAE
-        _vae = vae ?? CreateDefaultVAE(seed);
-
-        // Initialize conditioning modules
         _conditioner1 = conditioner1;
         _conditioner2 = useDualEncoder ? conditioner2 : null;
+
+        InitializeLayers(unet, vae, seed);
     }
 
-    /// <summary>
-    /// Creates default options for SDXL.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 1000,
-            BetaStart = 0.00085,
-            BetaEnd = 0.012,
-            BetaSchedule = BetaSchedule.ScaledLinear
-        };
-    }
+    #endregion
+
+    #region Layer Initialization
 
     /// <summary>
-    /// Creates the default DDIM scheduler for SDXL.
+    /// Initializes the U-Net and VAE layers.
     /// </summary>
-    private static DDIMScheduler<T> CreateDefaultScheduler()
+    [MemberNotNull(nameof(_unet), nameof(_vae))]
+    private void InitializeLayers(UNetNoisePredictor<T>? unet, StandardVAE<T>? vae, int? seed)
     {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
-
-    /// <summary>
-    /// Creates the default U-Net for SDXL (2.6B parameters).
-    /// </summary>
-    private UNetNoisePredictor<T> CreateDefaultUNet(int? seed)
-    {
-        // SDXL uses larger U-Net with [1, 2, 4, 4] channel multipliers
-        return new UNetNoisePredictor<T>(
+        _unet = unet ?? new UNetNoisePredictor<T>(
             architecture: Architecture,
             inputChannels: SDXL_LATENT_CHANNELS,
             outputChannels: SDXL_LATENT_CHANNELS,
             baseChannels: 320,
-            channelMultipliers: new[] { 1, 2, 4, 4 }, // Different from SD 1.x
+            channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocks: 2,
             attentionResolutions: new[] { 4, 2, 1 },
-            contextDim: _crossAttentionDim, // 2048 for SDXL
+            contextDim: _crossAttentionDim,
             seed: seed);
-    }
 
-    /// <summary>
-    /// Creates the default VAE for SDXL.
-    /// </summary>
-    private StandardVAE<T> CreateDefaultVAE(int? seed)
-    {
-        return new StandardVAE<T>(
+        _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: SDXL_LATENT_CHANNELS,
             baseChannels: 128,
@@ -286,6 +302,10 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
             numResBlocksPerLevel: 2,
             seed: seed);
     }
+
+    #endregion
+
+    #region Generation Methods
 
     /// <summary>
     /// Generates an image with micro-conditioning for multi-aspect ratio support.
@@ -609,6 +629,8 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
 
         return result;
     }
+
+    #endregion
 
     #region IParameterizable Implementation
 

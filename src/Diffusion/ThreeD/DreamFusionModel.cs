@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -54,32 +55,54 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// </remarks>
 public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// Standard latent channels (same as SD).
     /// </summary>
+    /// <remarks>
+    /// 4 latent channels matching the standard SD 1.5 VAE used as the 2D diffusion prior.
+    /// </remarks>
     private const int DREAM_LATENT_CHANNELS = 4;
 
     /// <summary>
     /// Default timesteps for diffusion.
     /// </summary>
+    /// <remarks>
+    /// 1000 training timesteps matching the SD 1.5 noise schedule used for SDS.
+    /// </remarks>
     private const int DEFAULT_TIMESTEPS = 1000;
 
     /// <summary>
     /// Default beta start value.
     /// </summary>
+    /// <remarks>
+    /// Starting beta for the scaled linear noise schedule, matching SD 1.5 defaults.
+    /// </remarks>
     private const double DEFAULT_BETA_START = 0.00085;
 
     /// <summary>
     /// Default beta end value.
     /// </summary>
+    /// <remarks>
+    /// Ending beta for the scaled linear noise schedule, matching SD 1.5 defaults.
+    /// </remarks>
     private const double DEFAULT_BETA_END = 0.012;
 
-    private readonly NeRFNetwork<T> _nerf;
+    #endregion
+
+    #region Fields
+
+    private NeRFNetwork<T> _nerf;
     private readonly IDiffusionModel<T> _diffusionPrior;
     private readonly DreamFusionConfig _config;
-    private readonly UNetNoisePredictor<T> _unet;
-    private readonly StandardVAE<T> _vae;
+    private UNetNoisePredictor<T> _unet;
+    private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _unet;
@@ -101,9 +124,14 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     public DreamFusionConfig Config => _config;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new instance of the DreamFusionModel.
     /// </summary>
+    /// <param name="architecture">Optional neural network architecture for custom layer configuration.</param>
     /// <param name="diffusionPrior">The 2D diffusion model to use as the prior.</param>
     /// <param name="config">Optional configuration settings.</param>
     /// <param name="conditioner">Optional conditioning module.</param>
@@ -114,59 +142,53 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
         DreamFusionConfig? config = null,
         IConditioningModule<T>? conditioner = null,
         int? seed = null)
-        : base(CreateDefaultOptions(), CreateDefaultScheduler(), architecture)
+        : base(
+            new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = DEFAULT_TIMESTEPS,
+                BetaStart = DEFAULT_BETA_START,
+                BetaEnd = DEFAULT_BETA_END,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _config = config ?? new DreamFusionConfig();
         _conditioner = conditioner;
-
-        // Create internal components
-        _unet = CreateDefaultUNet(seed);
-        _vae = CreateDefaultVAE(seed);
-
-        // Use provided prior or create wrapper around internal UNet
         _diffusionPrior = diffusionPrior ?? this;
 
-        // Initialize NeRF network
-        _nerf = new NeRFNetwork<T>(_config.NeRFHiddenDim, _config.NeRFNumLayers, seed);
+        InitializeLayers(seed);
     }
 
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = DEFAULT_TIMESTEPS,
-            BetaStart = DEFAULT_BETA_START,
-            BetaEnd = DEFAULT_BETA_END,
-            BetaSchedule = BetaSchedule.ScaledLinear
-        };
-    }
+    #endregion
 
-    private static INoiseScheduler<T> CreateDefaultScheduler()
-    {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
+    #region Layer Initialization
 
-    private UNetNoisePredictor<T> CreateDefaultUNet(int? seed)
+    /// <summary>
+    /// Initializes the U-Net, VAE, and NeRF network layers.
+    /// </summary>
+    [MemberNotNull(nameof(_unet), nameof(_vae), nameof(_nerf))]
+    private void InitializeLayers(int? seed)
     {
-        return new UNetNoisePredictor<T>(
+        _unet = new UNetNoisePredictor<T>(
             inputChannels: DREAM_LATENT_CHANNELS,
             outputChannels: DREAM_LATENT_CHANNELS,
             baseChannels: 64,
             numResBlocks: 2,
             architecture: Architecture,
             seed: seed);
-    }
 
-    private static StandardVAE<T> CreateDefaultVAE(int? seed)
-    {
-        return new StandardVAE<T>(
+        _vae = new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: DREAM_LATENT_CHANNELS,
             baseChannels: 64,
             numResBlocksPerLevel: 2,
             seed: seed);
+
+        _nerf = new NeRFNetwork<T>(_config.NeRFHiddenDim, _config.NeRFNumLayers, seed);
     }
+
+    #endregion
 
     /// <summary>
     /// Generates a 3D representation from a text prompt using Score Distillation Sampling.

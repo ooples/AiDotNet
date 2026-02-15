@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Diffusion.NoisePredictors;
@@ -76,30 +77,47 @@ namespace AiDotNet.Diffusion.Audio;
 /// </example>
 public class RiffusionModel<T> : LatentDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
-    /// Standard latent channels for Riffusion (same as SD).
+    /// Number of latent channels for Riffusion (same as SD 1.5).
     /// </summary>
+    /// <remarks>
+    /// Riffusion reuses Stable Diffusion's 4-channel latent space since it
+    /// treats spectrograms as images.
+    /// </remarks>
     private const int RIFF_LATENT_CHANNELS = 4;
 
     /// <summary>
-    /// Standard VAE scale factor.
+    /// Spatial downsampling factor of the VAE.
     /// </summary>
+    /// <remarks>
+    /// Standard 8x downsampling inherited from Stable Diffusion's VAE architecture.
+    /// </remarks>
     private const int RIFF_VAE_SCALE_FACTOR = 8;
 
     /// <summary>
-    /// Default spectrogram size.
+    /// Default spectrogram size in pixels.
     /// </summary>
+    /// <remarks>
+    /// 512x512 spectrograms provide a good balance between audio quality and
+    /// generation speed, matching SD 1.5's native resolution.
+    /// </remarks>
     private const int DEFAULT_SPEC_SIZE = 512;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The U-Net noise predictor.
     /// </summary>
-    private readonly UNetNoisePredictor<T> _unet;
+    private UNetNoisePredictor<T> _unet;
 
     /// <summary>
     /// The VAE for encoding/decoding spectrograms.
     /// </summary>
-    private readonly StandardVAE<T> _vae;
+    private StandardVAE<T> _vae;
 
     /// <summary>
     /// The text conditioning module.
@@ -114,12 +132,16 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// GPU-accelerated Griffin-Lim processor for spectrogram inversion.
     /// </summary>
-    private readonly GriffinLim<T> _griffinLim;
+    private GriffinLim<T> _griffinLim;
 
     /// <summary>
     /// GPU-accelerated mel spectrogram processor.
     /// </summary>
-    private readonly MelSpectrogram<T> _melSpectrogram;
+    private MelSpectrogram<T> _melSpectrogram;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _unet;
@@ -141,9 +163,14 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     public SpectrogramConfig SpectrogramConfiguration => _spectrogramConfig;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new instance of RiffusionModel with full customization support.
     /// </summary>
+    /// <param name="architecture">Optional neural network architecture for custom layer configuration.</param>
     /// <param name="options">Configuration options.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>
     /// <param name="unet">Optional custom U-Net.</param>
@@ -160,18 +187,58 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         IConditioningModule<T>? conditioner = null,
         SpectrogramConfig? spectrogramConfig = null,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), architecture)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
         _spectrogramConfig = spectrogramConfig ?? new SpectrogramConfig();
 
-        // Create U-Net
-        _unet = unet ?? CreateDefaultUNet(seed);
+        InitializeLayers(unet, vae, seed);
+    }
 
-        // Create VAE
-        _vae = vae ?? CreateDefaultVAE(seed);
+    #endregion
 
-        // Create GPU-accelerated audio processors
+    #region Layer Initialization
+
+    /// <summary>
+    /// Initializes the U-Net, VAE, and audio processing components.
+    /// </summary>
+    [MemberNotNull(nameof(_unet), nameof(_vae), nameof(_griffinLim), nameof(_melSpectrogram))]
+    private void InitializeLayers(
+        UNetNoisePredictor<T>? unet,
+        StandardVAE<T>? vae,
+        int? seed)
+    {
+        // Standard SD 1.5 U-Net for spectrogram generation
+        _unet = unet ?? new UNetNoisePredictor<T>(
+            inputChannels: RIFF_LATENT_CHANNELS,
+            outputChannels: RIFF_LATENT_CHANNELS,
+            baseChannels: 320,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocks: 2,
+            attentionResolutions: new[] { 4, 2, 1 },
+            contextDim: 768,
+            architecture: Architecture,
+            seed: seed);
+
+        // Standard SD 1.5 VAE
+        _vae = vae ?? new StandardVAE<T>(
+            inputChannels: 3,
+            latentChannels: RIFF_LATENT_CHANNELS,
+            baseChannels: 128,
+            channelMultipliers: new[] { 1, 2, 4, 4 },
+            numResBlocksPerLevel: 2,
+            seed: seed);
+
+        // GPU-accelerated Griffin-Lim for spectrogram inversion
         _griffinLim = new GriffinLim<T>(
             nFft: _spectrogramConfig.FFTSize,
             hopLength: _spectrogramConfig.HopLength,
@@ -179,6 +246,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
             momentum: 0.99,
             seed: seed);
 
+        // GPU-accelerated mel spectrogram processor
         _melSpectrogram = new MelSpectrogram<T>(
             sampleRate: _spectrogramConfig.SampleRate,
             nFft: _spectrogramConfig.FFTSize,
@@ -189,59 +257,9 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
             logMel: _spectrogramConfig.UseLogScale);
     }
 
-    /// <summary>
-    /// Creates the default options.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 1000,
-            BetaStart = 0.00085,
-            BetaEnd = 0.012,
-            BetaSchedule = BetaSchedule.ScaledLinear
-        };
-    }
+    #endregion
 
-    /// <summary>
-    /// Creates the default scheduler.
-    /// </summary>
-    private static INoiseScheduler<T> CreateDefaultScheduler()
-    {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
-
-    /// <summary>
-    /// Creates the default U-Net.
-    /// </summary>
-    private UNetNoisePredictor<T> CreateDefaultUNet(int? seed)
-    {
-        return new UNetNoisePredictor<T>(
-            inputChannels: RIFF_LATENT_CHANNELS,
-            outputChannels: RIFF_LATENT_CHANNELS,
-            baseChannels: 320,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocks: 2,
-            attentionResolutions: new[] { 4, 2, 1 },
-            contextDim: 768,
-            architecture: Architecture,
-            seed: seed);
-    }
-
-    /// <summary>
-    /// Creates the default VAE.
-    /// </summary>
-    private StandardVAE<T> CreateDefaultVAE(int? seed)
-    {
-        return new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: RIFF_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocksPerLevel: 2,
-            seed: seed);
-    }
+    #region Generation Methods
 
     /// <summary>
     /// Generates a spectrogram from a text prompt.
@@ -477,6 +495,10 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         return SpectrogramToAudio(spectrogram);
     }
 
+    #endregion
+
+    #region Helper Methods
+
     /// <summary>
     /// Calculates spectrogram width from duration.
     /// </summary>
@@ -517,6 +539,10 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         return result;
     }
 
+    #endregion
+
+    #region IParameterizable Implementation
+
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
@@ -544,6 +570,13 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         var unetCount = _unet.ParameterCount;
         var vaeCount = _vae.ParameterCount;
 
+        if (parameters.Length != unetCount + vaeCount)
+        {
+            throw new ArgumentException(
+                $"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         var unetParams = new T[unetCount];
         var vaeParams = new T[vaeCount];
 
@@ -559,6 +592,10 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         _unet.SetParameters(new Vector<T>(unetParams));
         _vae.SetParameters(new Vector<T>(vaeParams));
     }
+
+    #endregion
+
+    #region ICloneable Implementation
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
@@ -577,6 +614,8 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
         clone.SetParameters(GetParameters());
         return clone;
     }
+
+    #endregion
 }
 
 /// <summary>

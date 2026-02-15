@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Helpers;
@@ -70,35 +71,45 @@ namespace AiDotNet.Diffusion.Video;
 /// </example>
 public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// Default VideoCrafter width.
     /// </summary>
+    /// <remarks>1024 pixels is the standard width for VideoCrafter's high-resolution output.</remarks>
     public const int DefaultWidth = 1024;
 
     /// <summary>
     /// Default VideoCrafter height.
     /// </summary>
+    /// <remarks>576 pixels creates a 16:9 aspect ratio at the default width.</remarks>
     public const int DefaultHeight = 576;
 
     /// <summary>
     /// VideoCrafter latent channels.
     /// </summary>
+    /// <remarks>4 latent channels match the standard Stable Diffusion VAE architecture.</remarks>
     private const int LATENT_CHANNELS = 4;
 
     /// <summary>
     /// Standard latent scale factor.
     /// </summary>
+    /// <remarks>0.18215 is the SD VAE scaling factor ensuring unit variance in latent space.</remarks>
     private const double LATENT_SCALE = 0.18215;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The VideoUNet noise predictor with dual conditioning.
     /// </summary>
-    private readonly VideoUNetPredictor<T> _videoUNet;
+    private VideoUNetPredictor<T> _videoUNet;
 
     /// <summary>
     /// The temporal VAE for video encoding/decoding.
     /// </summary>
-    private readonly TemporalVAE<T> _temporalVAE;
+    private TemporalVAE<T> _temporalVAE;
 
     /// <summary>
     /// The text conditioning module.
@@ -109,6 +120,10 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     /// The image conditioning module.
     /// </summary>
     private readonly IConditioningModule<T>? _imageConditioner;
+
+    #endregion
+
+    #region Properties
 
     /// <summary>
     /// Gets the noise predictor.
@@ -169,6 +184,10 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     /// </summary>
     public bool UseDualConditioning { get; set; } = true;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new instance of VideoCrafterModel with full customization support.
     /// </summary>
@@ -190,29 +209,30 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         IConditioningModule<T>? imageConditioner = null,
         int defaultNumFrames = 16,
         int defaultFPS = 8)
-        : base(options, scheduler ?? CreateDefaultScheduler(), defaultNumFrames, defaultFPS, architecture)
+        : base(
+            options,
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            defaultNumFrames,
+            defaultFPS,
+            architecture)
     {
-        _videoUNet = videoUNet ?? CreateDefaultVideoUNet();
-        _temporalVAE = temporalVAE ?? CreateDefaultTemporalVAE();
         _textConditioner = textConditioner;
         _imageConditioner = imageConditioner;
+
+        InitializeLayers(videoUNet, temporalVAE);
     }
 
-    /// <summary>
-    /// Creates the default DDIM scheduler.
-    /// </summary>
-    private static DDIMScheduler<T> CreateDefaultScheduler()
-    {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
+    #endregion
+
+    #region Layer Initialization
 
     /// <summary>
-    /// Creates the default VideoUNet.
+    /// Initializes the model layers, using provided components or creating defaults.
     /// </summary>
-    private VideoUNetPredictor<T> CreateDefaultVideoUNet()
+    [MemberNotNull(nameof(_videoUNet), nameof(_temporalVAE))]
+    private void InitializeLayers(VideoUNetPredictor<T>? videoUNet, TemporalVAE<T>? temporalVAE)
     {
-        return new VideoUNetPredictor<T>(
+        _videoUNet = videoUNet ?? new VideoUNetPredictor<T>(
             inputChannels: LATENT_CHANNELS,
             outputChannels: LATENT_CHANNELS,
             baseChannels: 320,
@@ -223,14 +243,8 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
             numHeads: 8,
             numTemporalLayers: 2,
             supportsImageConditioning: true);
-    }
 
-    /// <summary>
-    /// Creates the default TemporalVAE.
-    /// </summary>
-    private TemporalVAE<T> CreateDefaultTemporalVAE()
-    {
-        return new TemporalVAE<T>(
+        _temporalVAE = temporalVAE ?? new TemporalVAE<T>(
             inputChannels: 3,
             latentChannels: LATENT_CHANNELS,
             baseChannels: 128,
@@ -240,6 +254,10 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
             causalMode: false,
             latentScaleFactor: LATENT_SCALE);
     }
+
+    #endregion
+
+    #region Generation Methods
 
     /// <summary>
     /// Generates video from text prompt.
@@ -457,6 +475,10 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         return DecodeVideoLatents(latents);
     }
 
+    #endregion
+
+    #region Helper Methods
+
     /// <summary>
     /// Predicts noise with dual conditioning.
     /// </summary>
@@ -602,6 +624,8 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     {
         return _temporalVAE.Decode(latents);
     }
+
+    #endregion
 
     #region IParameterizable Implementation
 

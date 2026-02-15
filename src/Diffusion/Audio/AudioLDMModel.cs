@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -74,30 +75,49 @@ namespace AiDotNet.Diffusion.Audio;
 /// </example>
 public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// Standard AudioLDM sample rate.
     /// </summary>
+    /// <remarks>
+    /// AudioLDM uses 16 kHz sample rate, standard for speech and sound effects.
+    /// AudioLDM 2 can support higher sample rates for music.
+    /// </remarks>
     public const int AUDIOLDM_SAMPLE_RATE = 16000;
 
     /// <summary>
     /// Standard AudioLDM mel channels.
     /// </summary>
+    /// <remarks>
+    /// 64 mel frequency bins for the mel spectrogram representation.
+    /// AudioLDM 2 uses 128 channels for higher fidelity audio.
+    /// </remarks>
     public const int AUDIOLDM_MEL_CHANNELS = 64;
 
     /// <summary>
     /// Standard AudioLDM latent channels.
     /// </summary>
+    /// <remarks>
+    /// 8 latent channels provide a rich latent space for audio generation,
+    /// double the 4 channels used in image diffusion models, to capture
+    /// the temporal complexity of audio.
+    /// </remarks>
     public const int AUDIOLDM_LATENT_CHANNELS = 8;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The U-Net noise predictor.
     /// </summary>
-    private readonly UNetNoisePredictor<T> _unet;
+    private UNetNoisePredictor<T> _unet;
 
     /// <summary>
     /// The AudioVAE for mel spectrogram encoding/decoding.
     /// </summary>
-    private readonly AudioVAE<T> _audioVAE;
+    private AudioVAE<T> _audioVAE;
 
     /// <summary>
     /// The conditioning module (CLAP encoder).
@@ -108,6 +128,10 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
     /// Whether this is AudioLDM 2 (larger model).
     /// </summary>
     private readonly bool _isVersion2;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _unet;
@@ -143,6 +167,10 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
     /// </summary>
     public AudioVAE<T> AudioVAE => _audioVAE;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new AudioLDM model with full customization support.
     /// </summary>
@@ -169,8 +197,14 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
         bool isVersion2 = false,
         int? seed = null)
         : base(
-            options ?? CreateDefaultOptions(),
-            scheduler ?? CreateDefaultScheduler(),
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             sampleRate,
             defaultDurationSeconds,
             melChannels,
@@ -179,60 +213,36 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
         _isVersion2 = isVersion2;
         _conditioner = conditioner;
 
-        // Initialize AudioVAE
-        _audioVAE = audioVAE ?? CreateDefaultAudioVAE(melChannels, seed);
-
-        // Initialize U-Net with audio-specific parameters
-        _unet = unet ?? CreateDefaultUNet(isVersion2, seed);
+        InitializeLayers(unet, audioVAE, melChannels, isVersion2, seed);
     }
 
-    /// <summary>
-    /// Creates default options for AudioLDM.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 1000,
-            BetaStart = 0.00085,
-            BetaEnd = 0.012,
-            BetaSchedule = BetaSchedule.ScaledLinear
-        };
-    }
+    #endregion
+
+    #region Layer Initialization
 
     /// <summary>
-    /// Creates the default DDIM scheduler.
+    /// Initializes the U-Net noise predictor and AudioVAE layers.
     /// </summary>
-    private static DDIMScheduler<T> CreateDefaultScheduler()
+    [MemberNotNull(nameof(_unet), nameof(_audioVAE))]
+    private void InitializeLayers(
+        UNetNoisePredictor<T>? unet,
+        AudioVAE<T>? audioVAE,
+        int melChannels,
+        bool isVersion2,
+        int? seed)
     {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
-
-    /// <summary>
-    /// Creates the default AudioVAE.
-    /// </summary>
-    private AudioVAE<T> CreateDefaultAudioVAE(int melChannels, int? seed)
-    {
-        return new AudioVAE<T>(
+        _audioVAE = audioVAE ?? new AudioVAE<T>(
             melChannels: melChannels,
             latentChannels: AUDIOLDM_LATENT_CHANNELS,
             baseChannels: 64,
             channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocks: 2,
             seed: seed);
-    }
 
-    /// <summary>
-    /// Creates the default U-Net for AudioLDM.
-    /// </summary>
-    private UNetNoisePredictor<T> CreateDefaultUNet(bool isVersion2, int? seed)
-    {
-        // AudioLDM uses a U-Net similar to image diffusion but adapted for mel spectrograms
         var baseChannels = isVersion2 ? 384 : 256;
-        var contextDim = isVersion2 ? 1024 : 768; // CLAP embedding dimension
+        var contextDim = isVersion2 ? 1024 : 768;
 
-        return new UNetNoisePredictor<T>(
+        _unet = unet ?? new UNetNoisePredictor<T>(
             inputChannels: AUDIOLDM_LATENT_CHANNELS,
             outputChannels: AUDIOLDM_LATENT_CHANNELS,
             baseChannels: baseChannels,
@@ -243,6 +253,10 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
             architecture: Architecture,
             seed: seed);
     }
+
+    #endregion
+
+    #region Generation Methods
 
     /// <summary>
     /// Generates audio from a text prompt.
@@ -512,6 +526,8 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
 
         return variations;
     }
+
+    #endregion
 
     #region IParameterizable Implementation
 

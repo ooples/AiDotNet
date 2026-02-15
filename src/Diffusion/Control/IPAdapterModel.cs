@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -74,30 +75,46 @@ namespace AiDotNet.Diffusion.Control;
 /// </example>
 public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// Standard IP-Adapter latent channels.
     /// </summary>
+    /// <remarks>
+    /// 4 latent channels matching the standard SD 1.5 VAE architecture.
+    /// </remarks>
     private const int IPA_LATENT_CHANNELS = 4;
 
     /// <summary>
     /// Standard VAE scale factor.
     /// </summary>
+    /// <remarks>
+    /// 8x spatial downsampling from pixel space to latent space.
+    /// </remarks>
     private const int IPA_VAE_SCALE_FACTOR = 8;
 
     /// <summary>
     /// CLIP image embedding dimension.
     /// </summary>
+    /// <remarks>
+    /// 768-dimensional CLIP ViT-L/14 image embeddings used for
+    /// projecting reference images into the cross-attention space.
+    /// </remarks>
     private const int CLIP_EMBED_DIM = 768;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The base noise predictor (U-Net).
     /// </summary>
-    private readonly UNetNoisePredictor<T> _baseUNet;
+    private UNetNoisePredictor<T> _baseUNet;
 
     /// <summary>
     /// The VAE for encoding/decoding.
     /// </summary>
-    private readonly StandardVAE<T> _vae;
+    private StandardVAE<T> _vae;
 
     /// <summary>
     /// The text conditioning module.
@@ -107,17 +124,21 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// The image encoder for extracting image features.
     /// </summary>
-    private readonly ImageEncoder<T> _imageEncoder;
+    private ImageEncoder<T> _imageEncoder;
 
     /// <summary>
     /// The image projection layer.
     /// </summary>
-    private readonly ImageProjector<T> _imageProjector;
+    private ImageProjector<T> _imageProjector;
 
     /// <summary>
     /// Default image prompt weight.
     /// </summary>
     private double _imagePromptWeight = 1.0;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _baseUNet;
@@ -144,6 +165,10 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
         set => _imagePromptWeight = MathPolyfill.Clamp(value, 0.0, 1.0);
     }
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new instance of IPAdapterModel with full customization support.
     /// </summary>
@@ -163,62 +188,33 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
         IConditioningModule<T>? conditioner = null,
         int embedDim = CLIP_EMBED_DIM,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), architecture)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            architecture)
     {
         _conditioner = conditioner;
 
-        // Create base U-Net
-        _baseUNet = baseUNet ?? CreateDefaultUNet(seed);
-
-        // Create VAE
-        _vae = vae ?? CreateDefaultVAE(seed);
-
-        // Create image encoder
-        _imageEncoder = new ImageEncoder<T>(
-            imageSize: 224,
-            patchSize: 16,
-            embedDim: embedDim,
-            numLayers: 12,
-            numHeads: 12,
-            seed: seed);
-
-        // Create image projector
-        _imageProjector = new ImageProjector<T>(
-            inputDim: embedDim,
-            outputDim: 768, // Text embedding dimension
-            numTokens: 4,   // Number of IP tokens
-            seed: seed);
+        InitializeLayers(baseUNet, vae, embedDim, seed);
     }
 
-    /// <summary>
-    /// Creates the default options.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 1000,
-            BetaStart = 0.00085,
-            BetaEnd = 0.012,
-            BetaSchedule = BetaSchedule.ScaledLinear
-        };
-    }
+    #endregion
+
+    #region Layer Initialization
 
     /// <summary>
-    /// Creates the default scheduler.
+    /// Initializes the U-Net, VAE, image encoder, and projector layers.
     /// </summary>
-    private static INoiseScheduler<T> CreateDefaultScheduler()
+    [MemberNotNull(nameof(_baseUNet), nameof(_vae), nameof(_imageEncoder), nameof(_imageProjector))]
+    private void InitializeLayers(UNetNoisePredictor<T>? baseUNet, StandardVAE<T>? vae, int embedDim, int? seed)
     {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
-
-    /// <summary>
-    /// Creates the default U-Net.
-    /// </summary>
-    private UNetNoisePredictor<T> CreateDefaultUNet(int? seed)
-    {
-        return new UNetNoisePredictor<T>(
+        _baseUNet = baseUNet ?? new UNetNoisePredictor<T>(
             architecture: Architecture,
             inputChannels: IPA_LATENT_CHANNELS,
             outputChannels: IPA_LATENT_CHANNELS,
@@ -228,21 +224,31 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
             attentionResolutions: new[] { 4, 2, 1 },
             contextDim: 768,
             seed: seed);
-    }
 
-    /// <summary>
-    /// Creates the default VAE.
-    /// </summary>
-    private StandardVAE<T> CreateDefaultVAE(int? seed)
-    {
-        return new StandardVAE<T>(
+        _vae = vae ?? new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: IPA_LATENT_CHANNELS,
             baseChannels: 128,
             channelMultipliers: new[] { 1, 2, 4, 4 },
             numResBlocksPerLevel: 2,
             seed: seed);
+
+        _imageEncoder = new ImageEncoder<T>(
+            imageSize: 224,
+            patchSize: 16,
+            embedDim: embedDim,
+            numLayers: 12,
+            numHeads: 12,
+            seed: seed);
+
+        _imageProjector = new ImageProjector<T>(
+            inputDim: embedDim,
+            outputDim: 768,
+            numTokens: 4,
+            seed: seed);
     }
+
+    #endregion
 
     /// <summary>
     /// Generates an image with image prompt conditioning.

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -87,25 +88,81 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// </example>
 public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
 {
+    #region Constants
+
     /// <summary>
     /// Standard Shap-E latent dimension.
     /// </summary>
+    /// <remarks>
+    /// Each shape is represented as a 1024-dimensional latent vector that encodes
+    /// the complete parameters of a NeRF/SDF network. This compact representation
+    /// enables efficient diffusion over the space of 3D shapes.
+    /// </remarks>
     private const int SHAPE_LATENT_DIM = 1024;
 
     /// <summary>
     /// Number of MLP layers for NeRF decoder.
     /// </summary>
+    /// <remarks>
+    /// The NeRF decoder uses 8 MLP layers following standard NeRF architecture
+    /// practices. This depth allows learning complex geometry and appearance.
+    /// </remarks>
     private const int NERF_MLP_LAYERS = 8;
 
     /// <summary>
     /// MLP hidden dimension.
     /// </summary>
+    /// <remarks>
+    /// 256-dimensional hidden layers in the NeRF MLP, following the original
+    /// NeRF paper conventions for shape representation networks.
+    /// </remarks>
     private const int NERF_MLP_HIDDEN = 256;
+
+    /// <summary>
+    /// Hidden size for the latent diffusion transformer.
+    /// </summary>
+    /// <remarks>
+    /// Shap-E uses a 768-dimensional hidden space in the DiT transformer,
+    /// matching ViT-Base architecture for processing shape latent tokens.
+    /// </remarks>
+    private const int SHAPE_HIDDEN_SIZE = 768;
+
+    /// <summary>
+    /// Number of transformer layers.
+    /// </summary>
+    /// <remarks>
+    /// 16 transformer layers provide deep processing capacity for learning
+    /// the distribution over shape latents. More layers than Point-E due to
+    /// the higher complexity of implicit neural representations.
+    /// </remarks>
+    private const int SHAPE_NUM_LAYERS = 16;
+
+    /// <summary>
+    /// Number of attention heads.
+    /// </summary>
+    /// <remarks>
+    /// 12 attention heads (768 / 12 = 64 dims per head), following ViT-Base
+    /// configuration for multi-head self-attention over shape tokens.
+    /// </remarks>
+    private const int SHAPE_NUM_HEADS = 12;
+
+    /// <summary>
+    /// Context dimension for conditioning (CLIP embedding size).
+    /// </summary>
+    /// <remarks>
+    /// Matches the CLIP ViT-L/14 output dimension (1024) for rich semantic
+    /// conditioning from text and image inputs.
+    /// </remarks>
+    private const int SHAPE_CONTEXT_DIM = 1024;
+
+    #endregion
+
+    #region Fields
 
     /// <summary>
     /// The latent diffusion transformer.
     /// </summary>
-    private readonly DiTNoisePredictor<T> _latentPredictor;
+    private DiTNoisePredictor<T> _latentPredictor;
 
     /// <summary>
     /// The conditioning module (CLIP for text/image encoding).
@@ -115,12 +172,16 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     /// <summary>
     /// Standard VAE for image encoding.
     /// </summary>
-    private readonly StandardVAE<T>? _imageVAE;
+    private StandardVAE<T>? _imageVAE;
 
     /// <summary>
     /// Whether to generate SDF (Signed Distance Function) or NeRF.
     /// </summary>
     private readonly bool _useSDFMode;
+
+    #endregion
+
+    #region Properties
 
     /// <inheritdoc />
     public override INoisePredictor<T> NoisePredictor => _latentPredictor;
@@ -135,16 +196,16 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     public override int LatentChannels => SHAPE_LATENT_DIM;
 
     /// <inheritdoc />
-    public override bool SupportsPointCloud => true; // Can sample points from SDF
+    public override bool SupportsPointCloud => true;
 
     /// <inheritdoc />
-    public override bool SupportsMesh => true; // Marching cubes on SDF
+    public override bool SupportsMesh => true;
 
     /// <inheritdoc />
-    public override bool SupportsTexture => true; // NeRF includes colors
+    public override bool SupportsTexture => true;
 
     /// <inheritdoc />
-    public override bool SupportsNovelView => true; // Can render from any angle
+    public override bool SupportsNovelView => true;
 
     /// <inheritdoc />
     public override bool SupportsScoreDistillation => true;
@@ -159,9 +220,14 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     /// </summary>
     public int LatentDimension => SHAPE_LATENT_DIM;
 
+    #endregion
+
+    #region Constructor
+
     /// <summary>
     /// Initializes a new Shap-E model with full customization support.
     /// </summary>
+    /// <param name="architecture">Optional neural network architecture for custom layer configuration.</param>
     /// <param name="options">Configuration options.</param>
     /// <param name="scheduler">Optional custom scheduler.</param>
     /// <param name="latentPredictor">Optional custom latent predictor.</param>
@@ -178,67 +244,51 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         bool useSDFMode = true,
         int defaultPointCount = 4096,
         int? seed = null)
-        : base(options ?? CreateDefaultOptions(), scheduler ?? CreateDefaultScheduler(), defaultPointCount, architecture)
+        : base(
+            options ?? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1024,
+                BetaStart = 0.0001,
+                BetaEnd = 0.02,
+                BetaSchedule = BetaSchedule.Linear
+            },
+            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            defaultPointCount,
+            architecture)
     {
         _useSDFMode = useSDFMode;
         _conditioner = conditioner;
 
-        // Initialize latent predictor
-        _latentPredictor = latentPredictor ?? CreateDefaultPredictor(seed);
-
-        // Initialize image VAE for image-to-3D
-        _imageVAE = CreateDefaultImageVAE(seed);
+        InitializeLayers(latentPredictor, seed);
     }
 
-    /// <summary>
-    /// Creates default options for Shap-E.
-    /// </summary>
-    private static DiffusionModelOptions<T> CreateDefaultOptions()
-    {
-        return new DiffusionModelOptions<T>
-        {
-            TrainTimesteps = 1024,
-            BetaStart = 0.0001,
-            BetaEnd = 0.02,
-            BetaSchedule = BetaSchedule.Linear
-        };
-    }
+    #endregion
+
+    #region Layer Initialization
 
     /// <summary>
-    /// Creates the default scheduler.
+    /// Initializes the latent predictor and image VAE layers.
     /// </summary>
-    private static DDIMScheduler<T> CreateDefaultScheduler()
+    [MemberNotNull(nameof(_latentPredictor))]
+    private void InitializeLayers(DiTNoisePredictor<T>? latentPredictor, int? seed)
     {
-        var config = SchedulerConfig<T>.CreateStableDiffusion();
-        return new DDIMScheduler<T>(config);
-    }
-
-    /// <summary>
-    /// Creates the default latent predictor.
-    /// </summary>
-    private DiTNoisePredictor<T> CreateDefaultPredictor(int? seed)
-    {
-        return new DiTNoisePredictor<T>(
+        _latentPredictor = latentPredictor ?? new DiTNoisePredictor<T>(
             inputChannels: SHAPE_LATENT_DIM,
-            hiddenSize: 768,
-            numLayers: 16,
-            numHeads: 12,
+            hiddenSize: SHAPE_HIDDEN_SIZE,
+            numLayers: SHAPE_NUM_LAYERS,
+            numHeads: SHAPE_NUM_HEADS,
             patchSize: 1,
-            contextDim: 1024,
+            contextDim: SHAPE_CONTEXT_DIM,
             seed: seed);
-    }
 
-    /// <summary>
-    /// Creates a default image VAE.
-    /// </summary>
-    private StandardVAE<T> CreateDefaultImageVAE(int? seed)
-    {
-        return new StandardVAE<T>(
+        _imageVAE = new StandardVAE<T>(
             inputChannels: 3,
             latentChannels: 4,
             baseChannels: 64,
             seed: seed);
     }
+
+    #endregion
 
     /// <summary>
     /// Creates a dummy VAE for interface compliance.
@@ -247,6 +297,8 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     {
         return new StandardVAE<T>();
     }
+
+    #region Generation Methods
 
     /// <summary>
     /// Generates a latent representation of a 3D shape from text.
@@ -466,6 +518,10 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
 
         return image;
     }
+
+    #endregion
+
+    #region Helper Methods
 
     /// <summary>
     /// Samples color along a ray using the NeRF representation.
@@ -767,15 +823,6 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         return points;
     }
 
-    /// <summary>
-    /// Flattens an image latent to a conditioning vector.
-    /// </summary>
-    private Tensor<T> FlattenToCondition(Tensor<T> imageLatent)
-    {
-        var flatSize = imageLatent.Shape.Aggregate(1, (a, b) => a * b);
-        return new Tensor<T>(new[] { 1, 1, flatSize }, imageLatent.ToVector());
-    }
-
     /// <inheritdoc />
     public override Tensor<T> GeneratePointCloud(
         string prompt,
@@ -789,6 +836,17 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         return SamplePointCloud(latent, numPoints, seed);
     }
 
+    /// <summary>
+    /// Flattens an image latent to a conditioning vector.
+    /// </summary>
+    private Tensor<T> FlattenToCondition(Tensor<T> imageLatent)
+    {
+        var flatSize = imageLatent.Shape.Aggregate(1, (a, b) => a * b);
+        return new Tensor<T>(new[] { 1, 1, flatSize }, imageLatent.ToVector());
+    }
+
+    #endregion
+
     #region IParameterizable Implementation
 
     /// <inheritdoc />
@@ -800,6 +858,13 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        if (parameters.Length != _latentPredictor.ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {_latentPredictor.ParameterCount} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         _latentPredictor.SetParameters(parameters);
     }
 
@@ -822,11 +887,11 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         // Clone the predictor to preserve trained weights
         var clonedPredictor = new DiTNoisePredictor<T>(
             inputChannels: SHAPE_LATENT_DIM,
-            hiddenSize: 768,
-            numLayers: 16,
-            numHeads: 12,
+            hiddenSize: SHAPE_HIDDEN_SIZE,
+            numLayers: SHAPE_NUM_LAYERS,
+            numHeads: SHAPE_NUM_HEADS,
             patchSize: 1,
-            contextDim: 1024);
+            contextDim: SHAPE_CONTEXT_DIM);
         clonedPredictor.SetParameters(_latentPredictor.GetParameters());
 
         return new ShapEModel<T>(
@@ -836,6 +901,37 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
             conditioner: _conditioner,
             useSDFMode: _useSDFMode,
             defaultPointCount: DefaultPointCount);
+    }
+
+    #endregion
+
+    #region Metadata
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var metadata = new ModelMetadata<T>
+        {
+            Name = "Shap-E",
+            Version = "1.0",
+            ModelType = ModelType.NeuralNetwork,
+            Description = "Shap-E text-to-3D generation with implicit neural representations (NeRF/SDF)",
+            FeatureCount = ParameterCount,
+            Complexity = ParameterCount
+        };
+
+        metadata.SetProperty("architecture", "dit-implicit-neural-rep");
+        metadata.SetProperty("latent_dim", SHAPE_LATENT_DIM);
+        metadata.SetProperty("hidden_size", SHAPE_HIDDEN_SIZE);
+        metadata.SetProperty("num_layers", SHAPE_NUM_LAYERS);
+        metadata.SetProperty("num_heads", SHAPE_NUM_HEADS);
+        metadata.SetProperty("context_dim", SHAPE_CONTEXT_DIM);
+        metadata.SetProperty("nerf_mlp_layers", NERF_MLP_LAYERS);
+        metadata.SetProperty("nerf_mlp_hidden", NERF_MLP_HIDDEN);
+        metadata.SetProperty("sdf_mode", _useSDFMode);
+        metadata.SetProperty("default_point_count", DefaultPointCount);
+
+        return metadata;
     }
 
     #endregion

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.RegularExpressions;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -27,19 +28,30 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
 {
     #region Constants
 
+    /// <remarks>4000 characters allows for detailed prompts including style, composition, and quality descriptors.</remarks>
     private const int MAX_PROMPT_LENGTH = 4000;
+
+    /// <remarks>4 latent channels match the standard SD VAE architecture.</remarks>
     private const int LATENT_CHANNELS = 4;
+
+    /// <remarks>8x spatial downsampling via the VAE encoder (3 downsample blocks with factor 2 each).</remarks>
     private const int VAE_SCALE_FACTOR = 8;
+
+    /// <remarks>1024 pixels is the standard DALL-E 3 square output resolution.</remarks>
     private const int STANDARD_SIZE = 1024;
+
+    /// <remarks>1792 pixels for landscape wide format, maintaining a ~16:9 aspect ratio with 1024 height.</remarks>
     private const int WIDE_WIDTH = 1792;
+
+    /// <remarks>1792 pixels for portrait tall format, maintaining a ~9:16 aspect ratio with 1024 width.</remarks>
     private const int TALL_HEIGHT = 1792;
 
     #endregion
 
     #region Fields
 
-    private readonly UNetNoisePredictor<T> _unet;
-    private readonly StandardVAE<T> _vae;
+    private UNetNoisePredictor<T> _unet;
+    private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
     private readonly IReadOnlyList<DallE3ImageSize> _supportedSizes;
     private readonly int? _userSeed;
@@ -130,7 +142,25 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         int? seed = null)
         : base(options, scheduler, architecture)
     {
-        // Initialize components
+        _conditioner = conditioner;
+        _userSeed = seed;
+
+        _supportedSizes = new List<DallE3ImageSize>
+        {
+            DallE3ImageSize.Square1024,
+            DallE3ImageSize.Wide1792x1024,
+            DallE3ImageSize.Tall1024x1792
+        };
+
+        InitializeLayers(conditioner);
+    }
+
+    /// <summary>
+    /// Initializes the model layers.
+    /// </summary>
+    [MemberNotNull(nameof(_unet), nameof(_vae))]
+    private void InitializeLayers(IConditioningModule<T>? conditioner)
+    {
         _vae = new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS);
         _unet = new UNetNoisePredictor<T>(
             architecture: Architecture,
@@ -142,16 +172,6 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
             attentionResolutions: [4, 2, 1],
             contextDim: conditioner?.EmbeddingDimension ?? 768,
             numHeads: 8);
-
-        _conditioner = conditioner;
-        _userSeed = seed;
-
-        _supportedSizes = new List<DallE3ImageSize>
-        {
-            DallE3ImageSize.Square1024,
-            DallE3ImageSize.Wide1792x1024,
-            DallE3ImageSize.Tall1024x1792
-        };
     }
 
     #endregion
