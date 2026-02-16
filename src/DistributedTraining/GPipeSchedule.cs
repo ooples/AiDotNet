@@ -97,6 +97,8 @@ public class GPipeSchedule : IPipelineSchedule
         }
 
         // GPipe bubble fraction: (P-1) / (P-1+M) where P = stages, M = micro-batches
-        return (double)(numStages - 1) / (numStages - 1 + numMicroBatches);
+        double p = numStages;
+        double m = numMicroBatches;
+        return (p - 1.0) / (p - 1.0 + m);
     }
 }

@@ -257,6 +257,8 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
 
         // For insufficient micro-batches, small residual bubble
         // With V=2 virtual stages, the bubble is reduced compared to ZB-H1
-        return (double)(numStages - numMicroBatches) / (6.0 * numMicroBatches + numStages);
+        double p = numStages;
+        double m = numMicroBatches;
+        return (p - m) / (6.0 * m + p);
     }
 }
