@@ -475,6 +475,19 @@ public class FederatedLearningOptions : ModelOptions
     public FederatedGraphOptions? GraphLearning { get; set; } = null;
 
     /// <summary>
+    /// Gets or sets federated unlearning options (right to be forgotten).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When a client exercises their GDPR right to be forgotten, the system
+    /// must remove their contribution from the trained model. These options configure how unlearning
+    /// is performed, including method selection (exact retraining, gradient ascent, influence functions,
+    /// or diffusive noise) and verification parameters.</para>
+    ///
+    /// <para>Set to null (default) if unlearning is not needed.</para>
+    /// </remarks>
+    public FederatedUnlearningOptions? Unlearning { get; set; } = null;
+
+    /// <summary>
     /// Gets or sets a random seed for reproducibility.
     /// </summary>
     /// <remarks>
