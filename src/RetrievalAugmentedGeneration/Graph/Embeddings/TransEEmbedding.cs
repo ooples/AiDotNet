@@ -75,23 +75,30 @@ public class TransEEmbedding<T> : KGEmbeddingBase<T>
         if (loss <= 0.0) return 0.0;
 
         // Gradient update: push positive closer, negative farther
+        // Per Bordes et al. 2013: loss = [margin + d(h+r,t) - d(h'+r,t')]_+
+        // Relation r appears in both positive and negative distances,
+        // so its gradient is: 2(h+r-t) - 2(h'+r-t')
         T lr = NumOps.FromDouble(learningRate);
-        T negLr = NumOps.FromDouble(-learningRate);
+        T two = NumOps.FromDouble(2.0);
 
         for (int d = 0; d < dim; d++)
         {
             // Positive gradient: 2(h + r - t)
             T posGrad = NumOps.Subtract(NumOps.Add(h[d], r[d]), t[d]);
-            T scaledPosGrad = NumOps.Multiply(NumOps.FromDouble(2.0), posGrad);
+            T scaledPosGrad = NumOps.Multiply(two, posGrad);
 
-            // Negative gradient: -2(nh + r - nt)
+            // Negative gradient: 2(nh + r - nt)
             T negGrad = NumOps.Subtract(NumOps.Add(nh[d], r[d]), nt[d]);
-            T scaledNegGrad = NumOps.Multiply(NumOps.FromDouble(2.0), negGrad);
+            T scaledNegGrad = NumOps.Multiply(two, negGrad);
 
             // Update positive triple embeddings (decrease distance)
             h[d] = NumOps.Subtract(h[d], NumOps.Multiply(lr, scaledPosGrad));
-            r[d] = NumOps.Subtract(r[d], NumOps.Multiply(lr, scaledPosGrad));
             t[d] = NumOps.Add(t[d], NumOps.Multiply(lr, scaledPosGrad));
+
+            // Relation gradient accounts for both positive and negative triples:
+            // grad_r = 2(h+r-t) - 2(h'+r-t')
+            T rGrad = NumOps.Subtract(scaledPosGrad, scaledNegGrad);
+            r[d] = NumOps.Subtract(r[d], NumOps.Multiply(lr, rGrad));
 
             // Update negative triple embeddings (increase distance)
             nh[d] = NumOps.Add(nh[d], NumOps.Multiply(lr, scaledNegGrad));

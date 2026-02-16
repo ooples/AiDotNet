@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 
@@ -59,7 +60,9 @@ public abstract class KGEmbeddingBase<T> : IKnowledgeGraphEmbedding<T>
         if (triples.Count == 0)
             throw new InvalidOperationException("Knowledge graph contains no edges to train on.");
 
-        var rng = opts.Seed.HasValue ? new Random(opts.Seed.Value) : new Random();
+        var rng = opts.GetEffectiveSeed() is int seedVal
+            ? RandomHelper.CreateSeededRandom(seedVal)
+            : RandomHelper.CreateSecureRandom();
 
         // Initialize embeddings
         InitializeEmbeddings(rng);
@@ -151,8 +154,9 @@ public abstract class KGEmbeddingBase<T> : IKnowledgeGraphEmbedding<T>
     {
         if (!IsTrained || !_relationIndex.TryGetValue(relationType, out var idx))
             return null;
-        var copy = new T[GetRelationEmbeddingSize()];
-        Array.Copy(_relationEmbeddings[idx], copy, GetRelationEmbeddingSize());
+        int size = GetRelationEmbeddingSize();
+        var copy = new T[size];
+        Array.Copy(_relationEmbeddings[idx], copy, size);
         return copy;
     }
 

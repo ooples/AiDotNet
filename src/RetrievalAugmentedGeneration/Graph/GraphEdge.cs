@@ -98,6 +98,8 @@ public class GraphEdge<T>
 
     /// <summary>
     /// Checks whether this edge is valid at a specific point in time.
+    /// Uses half-open interval [ValidFrom, ValidUntil) so consecutive edges
+    /// (e.g., "president 2009-2017" and "president 2017-2021") don't overlap.
     /// </summary>
     /// <param name="timestamp">The point in time to check.</param>
     /// <returns>True if the edge is valid at the given time; false otherwise.</returns>
@@ -105,7 +107,7 @@ public class GraphEdge<T>
     /// <para>
     /// An edge is considered valid at a timestamp if:
     /// - ValidFrom is null OR timestamp >= ValidFrom, AND
-    /// - ValidUntil is null OR timestamp &lt;= ValidUntil
+    /// - ValidUntil is null OR timestamp &lt; ValidUntil (exclusive upper bound)
     /// Edges with no temporal bounds (both null) are always valid.
     /// </para>
     /// </remarks>
@@ -113,7 +115,7 @@ public class GraphEdge<T>
     {
         if (ValidFrom.HasValue && timestamp < ValidFrom.Value)
             return false;
-        if (ValidUntil.HasValue && timestamp > ValidUntil.Value)
+        if (ValidUntil.HasValue && timestamp >= ValidUntil.Value)
             return false;
         return true;
     }
@@ -143,6 +145,24 @@ public class GraphEdge<T>
         Weight = weight;
         Properties = new Dictionary<string, object>();
         CreatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Sets the temporal validity window for this edge with validation.
+    /// </summary>
+    /// <param name="validFrom">Start of validity (inclusive). Null means always valid from the past.</param>
+    /// <param name="validUntil">End of validity (exclusive). Null means still valid (ongoing).</param>
+    /// <exception cref="ArgumentException">Thrown when validFrom >= validUntil.</exception>
+    public void SetTemporalWindow(DateTime? validFrom, DateTime? validUntil)
+    {
+        if (validFrom.HasValue && validUntil.HasValue && validFrom.Value >= validUntil.Value)
+        {
+            throw new ArgumentException(
+                $"ValidFrom ({validFrom.Value:O}) must be before ValidUntil ({validUntil.Value:O}).");
+        }
+
+        ValidFrom = validFrom;
+        ValidUntil = validUntil;
     }
 
     /// <summary>

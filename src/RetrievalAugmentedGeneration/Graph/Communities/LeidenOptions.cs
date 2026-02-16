@@ -1,3 +1,5 @@
+using System;
+
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
 
 /// <summary>
@@ -12,12 +14,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
 public class LeidenOptions
 {
     /// <summary>
-    /// Maximum number of iterations for the Leiden algorithm. Default: 10.
+    /// Maximum number of iterations for the Leiden algorithm. Default: 10. Must be positive.
     /// </summary>
     public int? MaxIterations { get; set; }
 
     /// <summary>
-    /// Resolution parameter controlling community granularity. Higher = smaller communities. Default: 1.0.
+    /// Resolution parameter controlling community granularity. Higher = smaller communities.
+    /// Default: 1.0. Must be a finite positive number.
     /// </summary>
     public double? Resolution { get; set; }
 
@@ -26,6 +29,31 @@ public class LeidenOptions
     /// </summary>
     public int? Seed { get; set; }
 
-    internal int GetEffectiveMaxIterations() => MaxIterations ?? 10;
-    internal double GetEffectiveResolution() => Resolution ?? 1.0;
+    internal int GetEffectiveMaxIterations()
+    {
+        int value = MaxIterations ?? 10;
+        if (value <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxIterations),
+                value,
+                "MaxIterations must be a positive integer.");
+        }
+
+        return value;
+    }
+
+    internal double GetEffectiveResolution()
+    {
+        double value = Resolution ?? 1.0;
+        if (value <= 0.0 || double.IsNaN(value) || double.IsInfinity(value))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(Resolution),
+                value,
+                "Resolution must be a finite positive number.");
+        }
+
+        return value;
+    }
 }

@@ -1262,8 +1262,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     private void ProcessKnowledgeGraphOptions(AiModelResult<T, TInput, TOutput> result)
     {
-        if (_knowledgeGraphOptions == null || _knowledgeGraph == null)
+        if (_knowledgeGraphOptions == null)
             return;
+
+        if (_knowledgeGraph == null)
+        {
+            throw new InvalidOperationException(
+                "KnowledgeGraph options were configured via ConfigureKnowledgeGraph(), " +
+                "but no KnowledgeGraph instance was provided. " +
+                "Call ConfigureKnowledgeGraph() with a valid KnowledgeGraph<T> instance.");
+        }
 
         var kgResult = new Models.Results.KnowledgeGraphResult<T>();
 
@@ -1285,8 +1293,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         List<GraphEdge<T>>? testEdges = null;
         KnowledgeGraph<T> trainingGraph = _knowledgeGraph;
 
-        // If link prediction evaluation is requested, hold out test edges BEFORE training
-        if (needsLinkPrediction && _knowledgeGraphOptions.GetEffectiveTrainEmbeddings())
+        // If link prediction evaluation is requested, hold out test edges BEFORE training.
+        // We split regardless of TrainEmbeddings — if embeddings aren't trained here,
+        // the user may supply a pre-trained model and still want evaluation.
+        if (needsLinkPrediction)
         {
             var allEdges = _knowledgeGraph.GetAllEdges().ToList();
             int testSize = Math.Min(allEdges.Count / 5, 100); // Up to 20% or 100 triples
@@ -1295,8 +1305,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             {
                 // Shuffle edges for a random split using seed from embedding options if available
                 var splitRng = _knowledgeGraphOptions.EmbeddingOptions?.Seed is int seed
-                    ? new Random(seed)
-                    : new Random();
+                    ? RandomHelper.CreateSeededRandom(seed)
+                    : RandomHelper.CreateSecureRandom();
                 for (int i = allEdges.Count - 1; i > 0; i--)
                 {
                     int j = splitRng.Next(i + 1);
@@ -1373,7 +1383,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             KGEmbeddingType.ComplEx => new ComplExEmbedding<T>(),
             KGEmbeddingType.DistMult => new DistMultEmbedding<T>(),
             KGEmbeddingType.TemporalTransE => new TemporalTransEEmbedding<T>(),
-            _ => new TransEEmbedding<T>()
+            _ => throw new NotSupportedException(
+                $"Unknown KGEmbeddingType '{embeddingType}'. " +
+                $"Supported types: {string.Join(", ", Enum.GetNames(typeof(KGEmbeddingType)))}")
         };
     }
 

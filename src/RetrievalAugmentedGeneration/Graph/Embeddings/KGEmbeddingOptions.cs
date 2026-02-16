@@ -72,5 +72,6 @@ public class KGEmbeddingOptions
     internal double GetEffectiveMargin() => Margin ?? 1.0;
     internal int GetEffectiveNegativeSamples() => NegativeSamples ?? 1;
     internal double GetEffectiveL2Regularization() => L2Regularization ?? 0.0;
+    internal int? GetEffectiveSeed() => Seed;
     internal int GetEffectiveNumTimeBins() => NumTimeBins ?? 100;
 }

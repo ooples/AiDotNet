@@ -43,34 +43,36 @@ public class KGConstructor<T>
     // - Possessives are excluded via post-processing
     private static readonly Regex CapitalizedPhraseRegex = new(
         @"\b(?:(?:Dr|Mr|Mrs|Ms|Prof|Rev|Gen|Sgt|Cpt|Sir|Dame)\.?\s+)?([A-Z][a-z]+(?:-[A-Z][a-z]+)*(?:\s+(?:of|the|and|for|in|at|de|von|van|del|la|le|el)\s+)?(?:[A-Z][a-z]+(?:-[A-Z][a-z]+)*)*)(?:'s)?\b",
-        RegexOptions.Compiled);
+        RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     // Matches abbreviations: U.S.A., U.N., NATO, IBM, etc.
     private static readonly Regex AbbreviationRegex = new(
         @"\b((?:[A-Z]\.){2,}[A-Z]?\.?|[A-Z]{2,})\b",
-        RegexOptions.Compiled);
+        RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
-    private static readonly (string pattern, string relationType)[] RelationPatterns =
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
+    private static readonly (Regex regex, string relationType)[] RelationPatterns =
     [
-        (@"born\s+in", "BORN_IN"),
-        (@"lives?\s+in", "LIVES_IN"),
-        (@"located\s+in", "LOCATED_IN"),
-        (@"work(?:s|ed)?\s+(?:at|for)", "WORKS_AT"),
-        (@"founded?\s+(?:by)?", "FOUNDED"),
-        (@"created?\s+(?:by)?", "CREATED"),
-        (@"part\s+of", "PART_OF"),
-        (@"member\s+of", "MEMBER_OF"),
-        (@"CEO\s+of", "CEO_OF"),
-        (@"president\s+of", "PRESIDENT_OF"),
-        (@"capital\s+of", "CAPITAL_OF"),
-        (@"married?\s+to", "MARRIED_TO"),
-        (@"studied\s+at", "STUDIED_AT"),
-        (@"graduated\s+from", "GRADUATED_FROM"),
-        (@"acquired\s+(?:by)?", "ACQUIRED"),
-        (@"developed\s+(?:by)?", "DEVELOPED"),
-        (@"owned\s+by", "OWNED_BY"),
-        (@"is\s+a", "IS_A"),
-        (@"known\s+(?:as|for)", "KNOWN_FOR")
+        (new Regex(@"born\s+in", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "BORN_IN"),
+        (new Regex(@"lives?\s+in", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "LIVES_IN"),
+        (new Regex(@"located\s+in", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "LOCATED_IN"),
+        (new Regex(@"work(?:s|ed)?\s+(?:at|for)", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "WORKS_AT"),
+        (new Regex(@"founded?\s+(?:by)?", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "FOUNDED"),
+        (new Regex(@"created?\s+(?:by)?", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "CREATED"),
+        (new Regex(@"part\s+of", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "PART_OF"),
+        (new Regex(@"member\s+of", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "MEMBER_OF"),
+        (new Regex(@"CEO\s+of", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "CEO_OF"),
+        (new Regex(@"president\s+of", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "PRESIDENT_OF"),
+        (new Regex(@"capital\s+of", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "CAPITAL_OF"),
+        (new Regex(@"married?\s+to", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "MARRIED_TO"),
+        (new Regex(@"studied\s+at", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "STUDIED_AT"),
+        (new Regex(@"graduated\s+from", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "GRADUATED_FROM"),
+        (new Regex(@"acquired\s+(?:by)?", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "ACQUIRED"),
+        (new Regex(@"developed\s+(?:by)?", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "DEVELOPED"),
+        (new Regex(@"owned\s+by", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "OWNED_BY"),
+        (new Regex(@"is\s+a", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "IS_A"),
+        (new Regex(@"known\s+(?:as|for)", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "KNOWN_FOR")
     ];
 
     private static readonly HashSet<string> OrganizationIndicators = new(StringComparer.OrdinalIgnoreCase)
@@ -215,10 +217,9 @@ public class KGConstructor<T>
 
         var textLower = text.ToLowerInvariant();
 
-        // Pattern-based relation extraction
-        foreach (var (pattern, relationType) in RelationPatterns)
+        // Pattern-based relation extraction (pre-compiled static regexes)
+        foreach (var (regex, relationType) in RelationPatterns)
         {
-            var regex = new Regex(pattern, RegexOptions.IgnoreCase);
             foreach (Match match in regex.Matches(text))
             {
                 // Find closest entity before and after the pattern
@@ -411,9 +412,10 @@ public class KGConstructor<T>
                     Math.Max(0.0, Math.Min(1.0, relation.Confidence)));
                 graph.AddEdge(edge);
             }
-            catch (InvalidOperationException)
+            catch (InvalidOperationException ex)
             {
-                // Skip edges where source or target doesn't exist (defensive)
+                System.Diagnostics.Debug.WriteLine(
+                    $"KGConstructor: Failed to add edge {sourceId} -[{relation.RelationType}]-> {targetId}: {ex.Message}");
             }
         }
     }

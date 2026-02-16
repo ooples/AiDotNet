@@ -33,6 +33,9 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
     private TimeSpan _binWidth;
     private int _numTimeBins;
 
+    // Maps (headIdx, relIdx, tailIdx) -> time bin for training
+    private Dictionary<(int, int, int), int> _tripleTimeBins = [];
+
     /// <summary>
     /// Gets or sets the number of time bins for discretization. Default: 100.
     /// </summary>
@@ -47,8 +50,8 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
 
         if (temporalEdges.Count > 0)
         {
-            var minTimes = temporalEdges.Where(e => e.ValidFrom.HasValue).Select(e => e.ValidFrom!.Value);
-            var maxTimes = temporalEdges.Where(e => e.ValidUntil.HasValue).Select(e => e.ValidUntil!.Value);
+            var minTimes = temporalEdges.Where(e => e.ValidFrom.HasValue).Select(e => e.ValidFrom.GetValueOrDefault());
+            var maxTimes = temporalEdges.Where(e => e.ValidUntil.HasValue).Select(e => e.ValidUntil.GetValueOrDefault());
 
             _minTime = minTimes.Any() ? minTimes.Min() : DateTime.MinValue;
             var maxTime = maxTimes.Any() ? maxTimes.Max() : DateTime.UtcNow;
@@ -78,12 +81,45 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
                 _timeBinEmbeddings[i][d] = NumOps.FromDouble((rng.NextDouble() * 2.0 - 1.0) * scale);
             }
         }
+
+        // Build triple -> time bin mapping from edge temporal data
+        _tripleTimeBins = [];
+        foreach (var edge in graph.GetAllEdges())
+        {
+            if (!_entityIndex.TryGetValue(edge.SourceId, out var hIdx) ||
+                !_relationIndex.TryGetValue(edge.RelationType, out var rIdx) ||
+                !_entityIndex.TryGetValue(edge.TargetId, out var tIdx))
+                continue;
+
+            // Use midpoint of validity window, or ValidFrom, or ValidUntil
+            DateTime? timestamp = null;
+            if (edge.ValidFrom.HasValue && edge.ValidUntil.HasValue)
+            {
+                var midTicks = edge.ValidFrom.Value.Ticks +
+                    (edge.ValidUntil.Value.Ticks - edge.ValidFrom.Value.Ticks) / 2;
+                timestamp = new DateTime(midTicks, DateTimeKind.Utc);
+            }
+            else if (edge.ValidFrom.HasValue)
+            {
+                timestamp = edge.ValidFrom.Value;
+            }
+            else if (edge.ValidUntil.HasValue)
+            {
+                timestamp = edge.ValidUntil.Value;
+            }
+
+            if (timestamp.HasValue)
+            {
+                _tripleTimeBins[(hIdx, rIdx, tIdx)] = GetTimeBin(timestamp.Value);
+            }
+        }
     }
 
     private protected override T ScoreTripleInternal(int headIdx, int relationIdx, int tailIdx)
     {
-        // Without temporal context, use bin 0 as default
-        return ScoreTripleWithTime(headIdx, relationIdx, tailIdx, 0);
+        // Use the stored time bin if available, otherwise bin 0
+        int timeBin = _tripleTimeBins.TryGetValue((headIdx, relationIdx, tailIdx), out var bin) ? bin : 0;
+        return ScoreTripleWithTime(headIdx, relationIdx, tailIdx, timeBin);
     }
 
     /// <summary>
@@ -137,8 +173,8 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
         double margin = options.GetEffectiveMargin();
         int dim = EmbeddingDimension;
 
-        // Use default time bin 0 for non-temporal triples in base training loop
-        int timeBin = 0;
+        // Look up the time bin for this positive triple from edge temporal data
+        int timeBin = _tripleTimeBins.TryGetValue((posHead, relation, posTail), out var bin) ? bin : 0;
 
         double posDist = ComputeDistanceSqWithTime(posHead, relation, posTail, timeBin, dim);
         double negDist = ComputeDistanceSqWithTime(negHead, relation, negTail, timeBin, dim);
@@ -147,6 +183,7 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
         if (loss <= 0.0) return 0.0;
 
         T lr = NumOps.FromDouble(learningRate);
+        T two = NumOps.FromDouble(2.0);
         var timeEmb = _timeBinEmbeddings[timeBin];
 
         var ph = _entityEmbeddings[posHead];
@@ -158,18 +195,23 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
         for (int d = 0; d < dim; d++)
         {
             // Positive gradient: 2(h + r + time - t)
-            T posGrad = NumOps.Multiply(NumOps.FromDouble(2.0),
+            T posGrad = NumOps.Multiply(two,
                 NumOps.Subtract(NumOps.Add(NumOps.Add(ph[d], r_[d]), timeEmb[d]), pt[d]));
 
             // Negative gradient: 2(nh + r + time - nt)
-            T negGrad = NumOps.Multiply(NumOps.FromDouble(2.0),
+            T negGrad = NumOps.Multiply(two,
                 NumOps.Subtract(NumOps.Add(NumOps.Add(nh_[d], r_[d]), timeEmb[d]), nt_[d]));
 
             // Update positive triple (decrease distance)
             ph[d] = NumOps.Subtract(ph[d], NumOps.Multiply(lr, posGrad));
-            r_[d] = NumOps.Subtract(r_[d], NumOps.Multiply(lr, posGrad));
-            timeEmb[d] = NumOps.Subtract(timeEmb[d], NumOps.Multiply(lr, posGrad));
             pt[d] = NumOps.Add(pt[d], NumOps.Multiply(lr, posGrad));
+
+            // Relation gradient accounts for both positive and negative triples
+            T rGrad = NumOps.Subtract(posGrad, negGrad);
+            r_[d] = NumOps.Subtract(r_[d], NumOps.Multiply(lr, rGrad));
+
+            // Time embedding gradient also accounts for both
+            timeEmb[d] = NumOps.Subtract(timeEmb[d], NumOps.Multiply(lr, rGrad));
 
             // Update negative triple (increase distance)
             nh_[d] = NumOps.Add(nh_[d], NumOps.Multiply(lr, negGrad));

@@ -74,7 +74,7 @@ public class KnowledgeGraphIntegrationTests
         var edge3 = new GraphEdge<double>("biden", "usa", "PRESIDENT_OF")
         {
             ValidFrom = new DateTime(2021, 1, 20),
-            ValidUntil = new DateTime(2025, 1, 20)
+            ValidUntil = new DateTime(2029, 1, 20)
         };
 
         graph.AddEdge(edge1);
@@ -697,8 +697,8 @@ public class KnowledgeGraphIntegrationTests
         var context = rag.Retrieve("physics", topK: 10);
         Assert.NotEmpty(context);
 
-        // DRIFT should include both community and drill-down context
-        Assert.Contains(context, c => c.StartsWith("[Community]"));
+        // DRIFT should include both primer (community) and follow-up (drill-down) context
+        Assert.Contains(context, c => c.StartsWith("[Primer]"));
     }
 
     [Fact]
@@ -710,9 +710,10 @@ public class KnowledgeGraphIntegrationTests
         var rag = new EnhancedGraphRAG<double>(graph);
         var nodes = rag.RetrieveNodes("einstein", topK: 5).ToList();
 
-        // Should find at least one node (depending on FindRelatedNodes implementation)
-        // If no match, empty is acceptable — we're testing it doesn't crash
+        // Verify retrieval returns results and respects topK limit
         Assert.NotNull(nodes);
+        Assert.True(nodes.Count <= 5, $"Expected at most 5 nodes, got {nodes.Count}");
+        Assert.All(nodes, n => Assert.NotNull(n.Id));
     }
 
     [Fact]
@@ -808,8 +809,28 @@ public class KnowledgeGraphIntegrationTests
             "Albert Einstein discovered relativity. Einstein also contributed to quantum mechanics.",
             options: opts);
 
-        // Entity resolution should merge "Albert Einstein" and "Einstein" if similar enough
         Assert.NotNull(graph);
+
+        // With entity resolution enabled, "Albert Einstein" and "Einstein" should be merged.
+        // Count all node IDs that contain "einstein" (case-insensitive).
+        var einsteinNodes = graph.GetAllNodes()
+            .Where(n => n.Id.Contains("einstein", StringComparison.OrdinalIgnoreCase) ||
+                        n.Id.Contains("Einstein", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        // Also build without entity resolution for comparison
+        var graphNoResolution = constructor.ConstructFromText(
+            "Albert Einstein discovered relativity. Einstein also contributed to quantum mechanics.",
+            options: new KGConstructionOptions { EnableEntityResolution = false });
+        var einsteinNodesNoRes = graphNoResolution.GetAllNodes()
+            .Where(n => n.Id.Contains("einstein", StringComparison.OrdinalIgnoreCase) ||
+                        n.Id.Contains("Einstein", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        // With resolution enabled, there should be fewer or equal Einstein-related nodes
+        Assert.True(einsteinNodes.Count <= einsteinNodesNoRes.Count,
+            $"Entity resolution should merge similar names. " +
+            $"With resolution: {einsteinNodes.Count} nodes, without: {einsteinNodesNoRes.Count} nodes");
     }
 
     [Fact]

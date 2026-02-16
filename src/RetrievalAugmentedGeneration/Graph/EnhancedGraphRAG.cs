@@ -39,6 +39,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// </remarks>
 public class EnhancedGraphRAG<T>
 {
+    // Context items per topK result: each entity generates ~3 lines (entity + outgoing + incoming edges)
+    private const int ContextExpansionFactor = 3;
+
     private readonly KnowledgeGraph<T> _graph;
     private readonly GraphRAGOptions _options;
     private CommunityIndex<T>? _communityIndex;
@@ -128,7 +131,8 @@ public class EnhancedGraphRAG<T>
             if (results.Count >= topK) break;
         }
 
-        return results.Take(topK);
+        // The loop breaks at topK, but Take ensures exact limit after >= checks
+        return results.GetRange(0, Math.Min(results.Count, topK));
     }
 
     private List<string> LocalSearch(string query, int topK)
@@ -176,10 +180,10 @@ public class EnhancedGraphRAG<T>
                 }
             }
 
-            if (context.Count >= topK * 3) break;
+            if (context.Count >= topK * ContextExpansionFactor) break;
         }
 
-        return context.Take(topK * 3).ToList();
+        return context.Take(topK * ContextExpansionFactor).ToList();
     }
 
     private List<string> GlobalSearch(string query, int topK)
@@ -194,6 +198,11 @@ public class EnhancedGraphRAG<T>
         return relevantCommunities.Select(c => c.Description).ToList();
     }
 
+    /// <summary>
+    /// DRIFT-inspired search: Dynamic Reasoning and Inference with Flexible Traversal.
+    /// Combines global community search (primer) with iterative local exploration (follow-up),
+    /// where each iteration discovers new entities that expand the search frontier.
+    /// </summary>
     private List<string> DriftSearch(string query, int topK)
     {
         if (_communityIndex == null)
@@ -203,48 +212,98 @@ public class EnhancedGraphRAG<T>
         }
 
         var context = new List<string>();
+        int maxContextItems = topK * ContextExpansionFactor;
         int driftIterations = _options.GetEffectiveDriftMaxIterations();
 
-        // Phase 1: Global search for relevant communities
+        // === Phase 1: Primer — Global search for relevant community reports ===
         var communities = _communityIndex.SearchCommunities(query, level: 0, topK: 3).ToList();
         foreach (var community in communities)
         {
-            context.Add($"[Community] {community.Description}");
+            context.Add($"[Primer] Community: {community.Description}");
         }
 
-        // Phase 2: Iterative local refinement from community key entities
+        // Seed the exploration frontier from community key entities
         var exploredEntities = new HashSet<string>();
-        for (int iter = 0; iter < driftIterations; iter++)
+        var frontier = new Queue<string>();
+        foreach (var entityId in communities.SelectMany(c => c.KeyEntities).Distinct())
         {
-            var entitiesToExplore = communities
-                .SelectMany(c => c.KeyEntities)
-                .Where(e => !exploredEntities.Contains(e))
-                .Take(3)
-                .ToList();
+            frontier.Enqueue(entityId);
+        }
 
-            if (entitiesToExplore.Count == 0) break;
+        // === Phase 2: Follow-up — Iterative local traversal expanding the frontier ===
+        // Each iteration explores frontier entities, discovers new neighbors,
+        // and adds the most connected neighbors to the next iteration's frontier.
+        for (int iter = 0; iter < driftIterations && frontier.Count > 0; iter++)
+        {
+            // Take up to 3 entities from the frontier for this iteration
+            var iterationEntities = new List<string>();
+            while (frontier.Count > 0 && iterationEntities.Count < 3)
+            {
+                var entityId = frontier.Dequeue();
+                if (exploredEntities.Contains(entityId)) continue;
+                iterationEntities.Add(entityId);
+            }
 
-            foreach (var entityId in entitiesToExplore)
+            if (iterationEntities.Count == 0) break;
+
+            var discoveredNeighbors = new Dictionary<string, int>(); // neighbor -> connection count
+
+            foreach (var entityId in iterationEntities)
             {
                 exploredEntities.Add(entityId);
                 var node = _graph.GetNode(entityId);
                 if (node == null) continue;
 
                 var nodeName = node.GetProperty<string>("name") ?? node.Id;
-                context.Add($"[Drill-down iter {iter + 1}] Entity: {nodeName} ({node.Label})");
+                context.Add($"[Follow-up iter {iter + 1}] Entity: {nodeName} ({node.Label})");
 
+                // Explore outgoing edges — gather context and discover new entities
                 foreach (var edge in _graph.GetOutgoingEdges(entityId))
                 {
                     var target = _graph.GetNode(edge.TargetId);
                     if (target == null) continue;
                     var targetName = target.GetProperty<string>("name") ?? target.Id;
                     context.Add($"  {nodeName} --[{edge.RelationType}]--> {targetName}");
+
+                    // Track discovered neighbors for frontier expansion
+                    if (!exploredEntities.Contains(edge.TargetId))
+                    {
+                        discoveredNeighbors.TryGetValue(edge.TargetId, out int count);
+                        discoveredNeighbors[edge.TargetId] = count + 1;
+                    }
+                }
+
+                // Explore incoming edges for richer context
+                foreach (var edge in _graph.GetIncomingEdges(entityId))
+                {
+                    var source = _graph.GetNode(edge.SourceId);
+                    if (source == null) continue;
+                    var sourceName = source.GetProperty<string>("name") ?? source.Id;
+                    context.Add($"  {sourceName} --[{edge.RelationType}]--> {nodeName}");
+
+                    if (!exploredEntities.Contains(edge.SourceId))
+                    {
+                        discoveredNeighbors.TryGetValue(edge.SourceId, out int count);
+                        discoveredNeighbors[edge.SourceId] = count + 1;
+                    }
                 }
             }
 
-            if (context.Count >= topK * 3) break;
+            // Expand frontier: add most-connected discovered neighbors for next iteration
+            foreach (var neighbor in discoveredNeighbors
+                .OrderByDescending(kv => kv.Value)
+                .Take(5)
+                .Select(kv => kv.Key))
+            {
+                if (!exploredEntities.Contains(neighbor))
+                {
+                    frontier.Enqueue(neighbor);
+                }
+            }
+
+            if (context.Count >= maxContextItems) break;
         }
 
-        return context.Take(topK * 3).ToList();
+        return context.Take(maxContextItems).ToList();
     }
 }
