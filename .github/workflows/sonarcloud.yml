@@ -124,6 +124,12 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      - name: Build source generator first
+        run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
+
+      - name: Shutdown build servers to release file handles
+        run: dotnet build-server shutdown
+
       - name: Build (Release)
         run: dotnet build -c Release --no-restore -p:UseSharedCompilation=false -nodeReuse:false
 
@@ -462,6 +468,12 @@ jobs:
           }
 
           & "${{ runner.temp }}\scanner\dotnet-sonarscanner" begin @params
+
+      - name: Build source generator first
+        run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
+
+      - name: Shutdown build servers to release file handles
+        run: dotnet build-server shutdown
 
       - name: Build (Release)
         run: dotnet build -c Release --no-restore -p:UseSharedCompilation=false -nodeReuse:false
