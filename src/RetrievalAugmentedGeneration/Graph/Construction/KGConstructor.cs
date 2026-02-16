@@ -248,6 +248,9 @@ public class KGConstructor<T>
         }
 
         // Co-occurrence based relations (entities in same sentence, no explicit pattern)
+        var existingPairs = new HashSet<(string, string)>(
+            relations.Select(r => (r.SourceEntity, r.TargetEntity)));
+
         var sentences = text.Split(new[] { '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
         int offset = 0;
         foreach (var sentence in sentences)
@@ -262,14 +265,14 @@ public class KGConstructor<T>
             {
                 for (int j = i + 1; j < sentenceEntities.Count; j++)
                 {
-                    // Only add if no explicit relation was already found
-                    if (!relations.Any(r =>
-                        r.SourceEntity == sentenceEntities[i].Name && r.TargetEntity == sentenceEntities[j].Name))
+                    var pair = (sentenceEntities[i].Name, sentenceEntities[j].Name);
+                    if (!existingPairs.Contains(pair))
                     {
+                        existingPairs.Add(pair);
                         relations.Add(new ExtractedRelation
                         {
-                            SourceEntity = sentenceEntities[i].Name,
-                            TargetEntity = sentenceEntities[j].Name,
+                            SourceEntity = pair.Item1,
+                            TargetEntity = pair.Item2,
                             RelationType = "RELATED_TO",
                             Confidence = 0.3 // Low confidence for co-occurrence
                         });

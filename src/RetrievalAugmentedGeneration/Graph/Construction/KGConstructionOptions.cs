@@ -45,10 +45,42 @@ public class KGConstructionOptions
     /// </summary>
     public int? MaxEntitiesPerSentence { get; set; }
 
-    internal int GetEffectiveMaxChunkSize() => MaxChunkSize ?? 500;
-    internal int GetEffectiveChunkOverlap() => ChunkOverlap ?? 50;
-    internal double GetEffectiveEntityConfidenceThreshold() => EntityConfidenceThreshold ?? 0.5;
+    internal int GetEffectiveMaxChunkSize()
+    {
+        var value = MaxChunkSize ?? 500;
+        if (value <= 0) throw new ArgumentOutOfRangeException(nameof(MaxChunkSize), "MaxChunkSize must be > 0.");
+        return value;
+    }
+
+    internal int GetEffectiveChunkOverlap()
+    {
+        var value = ChunkOverlap ?? 50;
+        if (value < 0) throw new ArgumentOutOfRangeException(nameof(ChunkOverlap), "ChunkOverlap must be >= 0.");
+        return value;
+    }
+
+    internal double GetEffectiveEntityConfidenceThreshold()
+    {
+        var value = EntityConfidenceThreshold ?? 0.5;
+        if (value < 0.0 || value > 1.0 || double.IsNaN(value))
+            throw new ArgumentOutOfRangeException(nameof(EntityConfidenceThreshold), "EntityConfidenceThreshold must be in [0, 1].");
+        return value;
+    }
+
     internal bool GetEffectiveEnableEntityResolution() => EnableEntityResolution ?? true;
-    internal double GetEffectiveEntitySimilarityThreshold() => EntitySimilarityThreshold ?? 0.85;
-    internal int GetEffectiveMaxEntitiesPerSentence() => MaxEntitiesPerSentence ?? 20;
+
+    internal double GetEffectiveEntitySimilarityThreshold()
+    {
+        var value = EntitySimilarityThreshold ?? 0.85;
+        if (value < 0.0 || value > 1.0 || double.IsNaN(value))
+            throw new ArgumentOutOfRangeException(nameof(EntitySimilarityThreshold), "EntitySimilarityThreshold must be in [0, 1].");
+        return value;
+    }
+
+    internal int GetEffectiveMaxEntitiesPerSentence()
+    {
+        var value = MaxEntitiesPerSentence ?? 20;
+        if (value <= 0) throw new ArgumentOutOfRangeException(nameof(MaxEntitiesPerSentence), "MaxEntitiesPerSentence must be > 0.");
+        return value;
+    }
 }

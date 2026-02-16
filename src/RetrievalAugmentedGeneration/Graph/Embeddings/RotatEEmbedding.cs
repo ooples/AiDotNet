@@ -172,8 +172,11 @@ public class RotatEEmbedding<T> : KGEmbeddingBase<T>
             t[d] = NumOps.FromDouble(tReal + step * diffReal);
             t[d + dim] = NumOps.FromDouble(tImag + step * diffImag);
 
-            // Gradient w.r.t. phase θ: dL/dθ = 2·(diffReal·d(hrRe)/dθ + diffImag·d(hrIm)/dθ)
-            // where d(hrRe)/dθ = -(hRe·sinθ + hIm·cosθ) and d(hrIm)/dθ = hRe·cosθ - hIm·sinθ
+            // Gradient w.r.t. phase θ: d(||h∘r-t||²)/dθ = 2·(diffReal·d(hrRe)/dθ + diffImag·d(hrIm)/dθ)
+            // where d(hrRe)/dθ = -(hRe·sinθ + hIm·cosθ) and d(hrIm)/dθ = hRe·cosθ - hIm·sinθ.
+            // Note: this is the gradient for squared L2 distance. The RotatE paper (Sun et al., 2019)
+            // uses L1 distance with normalized gradient (÷|z_k|). We use unnormalized squared-L2
+            // for computational efficiency and stable SGD convergence — the step size absorbs scaling.
             double gradPhase = step * (diffReal * (-hReal * rImag - hImag * rReal) +
                                         diffImag * (hReal * rReal - hImag * rImag));
             rPhase[d] = NumOps.FromDouble(phase - gradPhase);

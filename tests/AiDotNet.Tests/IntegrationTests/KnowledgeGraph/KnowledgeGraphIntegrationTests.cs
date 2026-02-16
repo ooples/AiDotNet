@@ -21,27 +21,47 @@ public class KnowledgeGraphIntegrationTests
     #region Facade Integration Tests
 
     [Fact]
-    public void ConfigureKnowledgeGraph_ViaAiModelBuilder_WiresOptions()
+    public void ConfigureKnowledgeGraph_ViaAiModelBuilder_FluentChainingWorks()
     {
         var graph = BuildSmallGraph();
         var builder = new AiModelBuilder<double, double[], double[]>();
 
-        // ConfigureKnowledgeGraph should accept options without throwing
-        builder.ConfigureRetrievalAugmentedGeneration(knowledgeGraph: graph);
-        builder.ConfigureKnowledgeGraph(options =>
-        {
-            options.TrainEmbeddings = true;
-            options.EmbeddingType = KGEmbeddingType.TransE;
-            options.EmbeddingOptions = SmallTrainingOptions();
-            options.EnableLinkPrediction = true;
-            options.LinkPredictionTopK = 5;
-        });
+        // Verify fluent chaining: each Configure method returns the same builder
+        var result = builder
+            .ConfigureRetrievalAugmentedGeneration(knowledgeGraph: graph)
+            .ConfigureKnowledgeGraph(options =>
+            {
+                options.TrainEmbeddings = true;
+                options.EmbeddingType = KGEmbeddingType.TransE;
+                options.EmbeddingOptions = SmallTrainingOptions();
+                options.EnableLinkPrediction = true;
+                options.LinkPredictionTopK = 5;
+            });
 
-        // Verify the builder accepted the configuration without error.
-        // Full Build() requires training data which is outside the scope of this
-        // unit-level facade wiring test — the important thing is that the public
-        // API compiles and accepts the configuration.
-        Assert.NotNull(builder);
+        Assert.Same(builder, result);
+    }
+
+    [Fact]
+    public void KnowledgeGraph_EndToEndPipeline_MatchesFacadeWiring()
+    {
+        // Exercises the same component pipeline that AiModelBuilder.ProcessKnowledgeGraph
+        // wires internally: train embeddings → link prediction → evaluation.
+        var graph = BuildSmallGraph();
+
+        // Step 1: Train embeddings (as facade would)
+        var embedding = new TransEEmbedding<double>();
+        var trainingResult = embedding.Train(graph, SmallTrainingOptions());
+        Assert.True(embedding.IsTrained);
+        Assert.Equal(8, trainingResult.TripleCount);
+
+        // Step 2: Link prediction evaluation (as facade would)
+        var predictor = new LinkPredictor<double>(embedding);
+        var testTriples = new[] { ("einstein", "BORN_IN", "germany") };
+        var eval = predictor.EvaluateModel(graph, testTriples);
+
+        Assert.Equal(1, eval.TestTripleCount);
+        Assert.True(eval.MeanReciprocalRank > 0.0);
+        Assert.True(eval.HitsAtK.ContainsKey(10));
     }
 
     #endregion
