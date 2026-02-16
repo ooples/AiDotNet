@@ -19791,4 +19791,92 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Emotion Models (Batch 5)
+
+    /// <summary>
+    /// Creates default emotion2vec layers for speech emotion recognition.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultEmotion2VecLayers(
+        int numMels = 80,
+        int transformerDim = 768,
+        int numTransformerLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int numClasses = 7,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Feature projection
+        yield return new DenseLayer<T>(numMels, transformerDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(transformerDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Transformer encoder
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 500,
+                embeddingDimension: transformerDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new DenseLayer<T>(transformerDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(transformerDim, transformerDim / 2, reluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(transformerDim / 2, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default HuBERT-SER layers for speech emotion recognition.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultHuBERTSERLayers(
+        int numMels = 80,
+        int transformerDim = 768,
+        int numTransformerLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int classifierHiddenDim = 256,
+        int numClasses = 7,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // CNN feature encoder (simplified as dense)
+        yield return new DenseLayer<T>(numMels, 512, geluActivation);
+        yield return new LayerNormalizationLayer<T>(512);
+        yield return new DenseLayer<T>(512, transformerDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(transformerDim);
+
+        // Transformer encoder
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 500,
+                embeddingDimension: transformerDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new DenseLayer<T>(transformerDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Emotion classification head
+        yield return new DenseLayer<T>(transformerDim, classifierHiddenDim, reluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(classifierHiddenDim, numClasses, identityActivation);
+    }
+
+    #endregion
 }
