@@ -1291,11 +1291,18 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var needsLinkPrediction = _knowledgeGraphOptions.GetEffectiveEnableLinkPrediction();
         var needsTraining = _knowledgeGraphOptions.GetEffectiveTrainEmbeddings();
+
+        if (needsLinkPrediction && !needsTraining)
+        {
+            throw new InvalidOperationException(
+                "EnableLinkPrediction requires TrainEmbeddings to be true. " +
+                "Link prediction evaluation needs a trained embedding model.");
+        }
+
         List<GraphEdge<T>>? testEdges = null;
         KnowledgeGraph<T> trainingGraph = _knowledgeGraph;
 
-        // Only split edges for evaluation when we will actually train an embedding.
-        // Without an embedding, evaluation cannot run, so the split would be wasted work.
+        // Split edges for evaluation when both link prediction and training are enabled.
         if (needsLinkPrediction && needsTraining)
         {
             var allEdges = _knowledgeGraph.GetAllEdges().ToList();

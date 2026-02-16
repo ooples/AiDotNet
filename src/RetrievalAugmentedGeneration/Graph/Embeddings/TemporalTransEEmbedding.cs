@@ -104,10 +104,18 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
             DateTime? timestamp = null;
             if (edge.ValidFrom.HasValue && edge.ValidUntil.HasValue)
             {
-                // Overflow-safe midpoint: delta is always non-negative for valid ranges,
+                var start = edge.ValidFrom.Value;
+                var end = edge.ValidUntil.Value;
+
+                // Skip edges with invalid temporal windows (ValidUntil < ValidFrom)
+                // which can arise if callers set the properties directly.
+                if (end < start)
+                    continue;
+
+                // Overflow-safe midpoint: delta is non-negative for valid ranges,
                 // and start + delta/2 stays within DateTime bounds.
-                var startTicks = edge.ValidFrom.Value.Ticks;
-                var deltaTicks = edge.ValidUntil.Value.Ticks - startTicks;
+                var startTicks = start.Ticks;
+                var deltaTicks = end.Ticks - startTicks;
                 var midTicks = startTicks + deltaTicks / 2;
                 timestamp = new DateTime(midTicks, DateTimeKind.Utc);
             }

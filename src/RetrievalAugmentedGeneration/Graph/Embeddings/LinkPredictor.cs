@@ -155,8 +155,8 @@ public class LinkPredictor<T>
         hitsAtKValues ??= [1, 3, 10];
 
         var allNodes = graph.GetAllNodes().ToList();
-        var existingTriples = new HashSet<string>(
-            graph.GetAllEdges().Select(e => $"{e.SourceId}|{e.RelationType}|{e.TargetId}"));
+        var existingTriples = new HashSet<(string headId, string relationType, string tailId)>(
+            graph.GetAllEdges().Select(e => (e.SourceId, e.RelationType, e.TargetId)));
 
         double sumReciprocalRank = 0.0;
         double sumRank = 0.0;
@@ -220,7 +220,7 @@ public class LinkPredictor<T>
     private int ComputeFilteredRank(
         List<GraphNode<T>> allNodes,
         string headId, string relationType, string tailId,
-        HashSet<string> existingTriples,
+        HashSet<(string headId, string relationType, string tailId)> existingTriples,
         bool isTailPrediction)
     {
         string targetId = isTailPrediction ? tailId : headId;
@@ -233,9 +233,9 @@ public class LinkPredictor<T>
             if (candidateId == targetId) continue;
 
             // Filtered setting: skip existing true triples (except the test triple itself)
-            string tripleKey = isTailPrediction
-                ? $"{headId}|{relationType}|{candidateId}"
-                : $"{candidateId}|{relationType}|{tailId}";
+            var tripleKey = isTailPrediction
+                ? (headId, relationType, candidateId)
+                : (candidateId, relationType, tailId);
 
             if (existingTriples.Contains(tripleKey)) continue;
 
