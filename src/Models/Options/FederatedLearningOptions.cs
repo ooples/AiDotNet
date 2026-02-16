@@ -450,6 +450,19 @@ public class FederatedLearningOptions : ModelOptions
     public double CompressionRatio { get; set; } = 0.1;
 
     /// <summary>
+    /// Gets or sets Trusted Execution Environment options for hardware-backed secure aggregation.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When set, the federated learning server performs aggregation inside a
+    /// hardware-protected enclave (Intel SGX/TDX, AMD SEV-SNP, ARM CCA). Clients can verify the
+    /// enclave via remote attestation before sending their updates. This is 10-100x faster than
+    /// homomorphic encryption while providing hardware-level isolation.</para>
+    ///
+    /// <para>Set to null (default) to use standard in-memory aggregation without TEE.</para>
+    /// </remarks>
+    public TeeOptions? TrustedExecutionEnvironment { get; set; } = null;
+
+    /// <summary>
     /// Gets or sets a random seed for reproducibility.
     /// </summary>
     /// <remarks>
