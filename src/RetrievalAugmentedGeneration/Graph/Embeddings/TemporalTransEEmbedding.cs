@@ -41,6 +41,11 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
     /// </summary>
     public int? NumTimeBins { get; set; }
 
+    /// <summary>
+    /// Gets the actual number of time bins after training (resolved from <see cref="NumTimeBins"/> or options default).
+    /// </summary>
+    public int ResolvedNumTimeBins => _numTimeBins;
+
     private protected override void OnInitialize(KGEmbeddingOptions options, Random rng, KnowledgeGraph<T> graph)
     {
         // Determine time range from edges
@@ -57,6 +62,8 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
             var maxTime = maxTimes.Any() ? maxTimes.Max() : DateTime.UtcNow;
 
             _numTimeBins = NumTimeBins ?? options.GetEffectiveNumTimeBins();
+            if (_numTimeBins <= 0)
+                throw new ArgumentOutOfRangeException(nameof(NumTimeBins), "NumTimeBins must be > 0.");
             var totalSpan = maxTime - _minTime;
             _binWidth = totalSpan.TotalSeconds > 0
                 ? TimeSpan.FromSeconds(totalSpan.TotalSeconds / _numTimeBins)
@@ -66,6 +73,8 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
         {
             _minTime = DateTime.MinValue;
             _numTimeBins = NumTimeBins ?? options.GetEffectiveNumTimeBins();
+            if (_numTimeBins <= 0)
+                throw new ArgumentOutOfRangeException(nameof(NumTimeBins), "NumTimeBins must be > 0.");
             _binWidth = TimeSpan.FromDays(365);
         }
 
@@ -95,8 +104,11 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
             DateTime? timestamp = null;
             if (edge.ValidFrom.HasValue && edge.ValidUntil.HasValue)
             {
-                var midTicks = edge.ValidFrom.Value.Ticks +
-                    (edge.ValidUntil.Value.Ticks - edge.ValidFrom.Value.Ticks) / 2;
+                // Overflow-safe midpoint: delta is always non-negative for valid ranges,
+                // and start + delta/2 stays within DateTime bounds.
+                var startTicks = edge.ValidFrom.Value.Ticks;
+                var deltaTicks = edge.ValidUntil.Value.Ticks - startTicks;
+                var midTicks = startTicks + deltaTicks / 2;
                 timestamp = new DateTime(midTicks, DateTimeKind.Utc);
             }
             else if (edge.ValidFrom.HasValue)

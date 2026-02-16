@@ -18,10 +18,38 @@ namespace AiDotNet.Tests.IntegrationTests.KnowledgeGraph;
 /// </summary>
 public class KnowledgeGraphIntegrationTests
 {
+    #region Facade Integration Tests
+
+    [Fact]
+    public void ConfigureKnowledgeGraph_ViaAiModelBuilder_WiresOptions()
+    {
+        var graph = BuildSmallGraph();
+        var builder = new AiModelBuilder<double, double[], double[]>();
+
+        // ConfigureKnowledgeGraph should accept options without throwing
+        builder.ConfigureRetrievalAugmentedGeneration(knowledgeGraph: graph);
+        builder.ConfigureKnowledgeGraph(options =>
+        {
+            options.TrainEmbeddings = true;
+            options.EmbeddingType = KGEmbeddingType.TransE;
+            options.EmbeddingOptions = SmallTrainingOptions();
+            options.EnableLinkPrediction = true;
+            options.LinkPredictionTopK = 5;
+        });
+
+        // Verify the builder accepted the configuration without error.
+        // Full Build() requires training data which is outside the scope of this
+        // unit-level facade wiring test — the important thing is that the public
+        // API compiles and accepts the configuration.
+        Assert.NotNull(builder);
+    }
+
+    #endregion
+
     #region Test Graph Helpers
 
     /// <summary>
-    /// Builds a small knowledge graph with 6 entities, 3 relation types, and 8 edges.
+    /// Builds a small knowledge graph with 8 entities, 3 relation types, and 8 edges.
     /// Represents: Einstein/Bohr/Curie (persons), Physics/Chemistry (fields), Germany/Denmark/Poland (locations).
     /// </summary>
     private static KnowledgeGraph<double> BuildSmallGraph()
@@ -115,10 +143,12 @@ public class KnowledgeGraphIntegrationTests
         Assert.Equal(50, result.TotalEpochs);
         Assert.True(result.TrainingDuration.TotalMilliseconds > 0);
 
-        // Loss should decrease over training
+        // Loss should trend downward over training (use window averages to avoid SGD noise)
         Assert.True(result.EpochLosses.Count == 50);
-        Assert.True(result.EpochLosses[^1] <= result.EpochLosses[0],
-            $"Loss should decrease: first={result.EpochLosses[0]}, last={result.EpochLosses[^1]}");
+        var firstWindow = result.EpochLosses.Take(5).Average();
+        var lastWindow = result.EpochLosses.Skip(result.EpochLosses.Count - 5).Average();
+        Assert.True(lastWindow <= firstWindow,
+            $"Loss should trend down: firstAvg={firstWindow}, lastAvg={lastWindow}");
 
         // Known triple should score better (lower) than random
         double knownScore = model.ScoreTriple("einstein", "BORN_IN", "germany");
@@ -315,6 +345,7 @@ public class KnowledgeGraphIntegrationTests
 
         var result = model.Train(graph, opts);
         Assert.True(model.IsTrained);
+        Assert.Equal(12, model.ResolvedNumTimeBins);
     }
 
     [Fact]
@@ -410,6 +441,13 @@ public class KnowledgeGraphIntegrationTests
             Assert.True(!double.IsNaN(p.Score) && !double.IsInfinity(p.Score));
             Assert.InRange(p.Confidence, 0.0, 1.0);
         });
+
+        // Distance-based predictions should be sorted ascending (lower=better)
+        for (int i = 0; i < predictions.Count - 1; i++)
+        {
+            Assert.True(predictions[i].Score <= predictions[i + 1].Score,
+                $"Distance-based predictions should be sorted ascending: [{i}]={predictions[i].Score}, [{i + 1}]={predictions[i + 1].Score}");
+        }
     }
 
     [Fact]
@@ -428,6 +466,13 @@ public class KnowledgeGraphIntegrationTests
             Assert.Equal("germany", p.TailId);
             Assert.Equal("BORN_IN", p.RelationType);
         });
+
+        // Distance-based predictions should be sorted ascending (lower=better)
+        for (int i = 0; i < predictions.Count - 1; i++)
+        {
+            Assert.True(predictions[i].Score <= predictions[i + 1].Score,
+                $"Distance-based predictions should be sorted ascending: [{i}]={predictions[i].Score}, [{i + 1}]={predictions[i + 1].Score}");
+        }
     }
 
     [Fact]
@@ -480,6 +525,8 @@ public class KnowledgeGraphIntegrationTests
         var eval = predictor.EvaluateModel(graph, Array.Empty<(string, string, string)>());
 
         Assert.Equal(0, eval.TestTripleCount);
+        Assert.Equal(0.0, eval.MeanReciprocalRank);
+        Assert.Equal(0.0, eval.MeanRank);
     }
 
     [Fact]

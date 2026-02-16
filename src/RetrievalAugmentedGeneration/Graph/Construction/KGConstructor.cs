@@ -41,8 +41,9 @@ public class KGConstructor<T>
     // - Hyphenated names: "Jean-Pierre", "Rolls-Royce"
     // - Titles followed by names: "Dr. Smith", "Prof. Einstein"
     // - Possessives are excluded via post-processing
+    // Atomic groups (?>...) prevent catastrophic backtracking on nested quantifiers
     private static readonly Regex CapitalizedPhraseRegex = new(
-        @"\b(?:(?:Dr|Mr|Mrs|Ms|Prof|Rev|Gen|Sgt|Cpt|Sir|Dame)\.?\s+)?([A-Z][a-z]+(?:-[A-Z][a-z]+)*(?:\s+(?:of|the|and|for|in|at|de|von|van|del|la|le|el)\s+)?(?:[A-Z][a-z]+(?:-[A-Z][a-z]+)*)*)(?:'s)?\b",
+        @"\b(?:(?:Dr|Mr|Mrs|Ms|Prof|Rev|Gen|Sgt|Cpt|Sir|Dame)\.?\s+)?((?>[A-Z][a-z]+(?:-[A-Z][a-z]+)*)(?:\s+(?:(?:of|the|and|for|in|at|de|von|van|del|la|le|el)\s+)?(?>[A-Z][a-z]+(?:-[A-Z][a-z]+)*))*)(?:'s)?\b",
         RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     // Matches abbreviations: U.S.A., U.N., NATO, IBM, etc.
@@ -118,7 +119,7 @@ public class KGConstructor<T>
             var entities = ExtractEntities(chunk, opts.GetEffectiveEntityConfidenceThreshold());
             allEntities.AddRange(entities);
 
-            var relations = ExtractRelations(chunk, entities);
+            var relations = ExtractRelations(chunk, entities, opts.GetEffectiveMaxEntitiesPerSentence());
             allRelations.AddRange(relations);
         }
 
@@ -210,7 +211,7 @@ public class KGConstructor<T>
     /// <param name="text">The text to analyze.</param>
     /// <param name="entities">Entities already extracted from this text.</param>
     /// <returns>List of extracted relations.</returns>
-    public List<ExtractedRelation> ExtractRelations(string text, List<ExtractedEntity> entities)
+    public List<ExtractedRelation> ExtractRelations(string text, List<ExtractedEntity> entities, int maxEntitiesPerSentence = 20)
     {
         var relations = new List<ExtractedRelation>();
         if (entities.Count < 2) return relations;
@@ -253,6 +254,7 @@ public class KGConstructor<T>
         {
             var sentenceEntities = entities
                 .Where(e => e.StartOffset >= offset && e.EndOffset <= offset + sentence.Length)
+                .Take(maxEntitiesPerSentence)
                 .ToList();
 
             // Generate co-occurrence relations between entities in the same sentence
@@ -283,6 +285,11 @@ public class KGConstructor<T>
 
     private static List<string> ChunkText(string text, int maxChunkSize, int overlap)
     {
+        if (maxChunkSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxChunkSize), "MaxChunkSize must be > 0.");
+        if (overlap < 0 || overlap >= maxChunkSize)
+            throw new ArgumentOutOfRangeException(nameof(overlap), "Overlap must be >= 0 and < MaxChunkSize.");
+
         var chunks = new List<string>();
         if (text.Length <= maxChunkSize)
         {

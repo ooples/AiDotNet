@@ -387,7 +387,8 @@ public class LeidenCommunityDetector<T>
         {
             communityInternalWeight.TryGetValue(comm, out double lc);
             double sc = communityStrength[comm];
-            // lc is double-counted (both edge directions), divide by 2
+            // Standard modularity: Q = (1/2m) Σ[Aij - ki*kj/2m] δ(ci,cj)
+            // lc sums both directions of each internal edge, so lc/2 = actual internal weight.
             modularity += lc / 2.0 - resolution * sc * sc / (2.0 * totalWeight);
         }
 

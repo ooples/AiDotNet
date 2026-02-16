@@ -186,6 +186,8 @@ public class LinkPredictor<T>
             sumRank += avgRank;
             sumReciprocalRank += avgRR;
 
+            // Hits@K counts each prediction (head and tail) independently,
+            // then divides by totalPredictions (= 2 * tripleCount). Standard protocol per PyKEEN.
             foreach (var k in hitsAtKValues)
             {
                 if (tailRank <= k) hitsCount[k]++;

@@ -65,13 +65,64 @@ public class KGEmbeddingOptions
     /// </summary>
     public int? NumTimeBins { get; set; }
 
-    internal int GetEffectiveEmbeddingDimension() => EmbeddingDimension ?? 100;
-    internal int GetEffectiveEpochs() => Epochs ?? 100;
-    internal int GetEffectiveBatchSize() => BatchSize ?? 128;
-    internal double GetEffectiveLearningRate() => LearningRate ?? 0.01;
-    internal double GetEffectiveMargin() => Margin ?? 1.0;
-    internal int GetEffectiveNegativeSamples() => NegativeSamples ?? 1;
-    internal double GetEffectiveL2Regularization() => L2Regularization ?? 0.0;
+    internal int GetEffectiveEmbeddingDimension()
+    {
+        var value = EmbeddingDimension ?? 100;
+        if (value <= 0) throw new ArgumentOutOfRangeException(nameof(EmbeddingDimension), "EmbeddingDimension must be > 0.");
+        return value;
+    }
+
+    internal int GetEffectiveEpochs()
+    {
+        var value = Epochs ?? 100;
+        if (value <= 0) throw new ArgumentOutOfRangeException(nameof(Epochs), "Epochs must be > 0.");
+        return value;
+    }
+
+    internal int GetEffectiveBatchSize()
+    {
+        var value = BatchSize ?? 128;
+        if (value <= 0) throw new ArgumentOutOfRangeException(nameof(BatchSize), "BatchSize must be > 0.");
+        return value;
+    }
+
+    internal double GetEffectiveLearningRate()
+    {
+        var value = LearningRate ?? 0.01;
+        if (value <= 0 || double.IsNaN(value) || double.IsInfinity(value))
+            throw new ArgumentOutOfRangeException(nameof(LearningRate), "LearningRate must be a finite positive number.");
+        return value;
+    }
+
+    internal double GetEffectiveMargin()
+    {
+        var value = Margin ?? 1.0;
+        if (value <= 0 || double.IsNaN(value) || double.IsInfinity(value))
+            throw new ArgumentOutOfRangeException(nameof(Margin), "Margin must be a finite positive number.");
+        return value;
+    }
+
+    internal int GetEffectiveNegativeSamples()
+    {
+        var value = NegativeSamples ?? 1;
+        if (value <= 0) throw new ArgumentOutOfRangeException(nameof(NegativeSamples), "NegativeSamples must be > 0.");
+        return value;
+    }
+
+    internal double GetEffectiveL2Regularization()
+    {
+        var value = L2Regularization ?? 0.0;
+        if (value < 0 || double.IsNaN(value) || double.IsInfinity(value))
+            throw new ArgumentOutOfRangeException(nameof(L2Regularization), "L2Regularization must be a finite non-negative number.");
+        return value;
+    }
+
     internal int? GetEffectiveSeed() => Seed;
-    internal int GetEffectiveNumTimeBins() => NumTimeBins ?? 100;
+
+    internal int GetEffectiveNumTimeBins()
+    {
+        var value = NumTimeBins ?? 100;
+        if (value <= 0) throw new ArgumentOutOfRangeException(nameof(NumTimeBins), "NumTimeBins must be > 0.");
+        return value;
+    }
 }

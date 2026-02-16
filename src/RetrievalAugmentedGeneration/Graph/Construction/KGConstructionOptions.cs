@@ -39,9 +39,16 @@ public class KGConstructionOptions
     /// </summary>
     public double? EntitySimilarityThreshold { get; set; }
 
+    /// <summary>
+    /// Maximum number of entities per sentence for co-occurrence relation generation.
+    /// Limits the O(n²) pairing cost when a sentence contains many entities. Default: 20.
+    /// </summary>
+    public int? MaxEntitiesPerSentence { get; set; }
+
     internal int GetEffectiveMaxChunkSize() => MaxChunkSize ?? 500;
     internal int GetEffectiveChunkOverlap() => ChunkOverlap ?? 50;
     internal double GetEffectiveEntityConfidenceThreshold() => EntityConfidenceThreshold ?? 0.5;
     internal bool GetEffectiveEnableEntityResolution() => EnableEntityResolution ?? true;
     internal double GetEffectiveEntitySimilarityThreshold() => EntitySimilarityThreshold ?? 0.85;
+    internal int GetEffectiveMaxEntitiesPerSentence() => MaxEntitiesPerSentence ?? 20;
 }

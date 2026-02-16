@@ -42,7 +42,8 @@ public class ComplExEmbedding<T> : KGEmbeddingBase<T>
         var t = _entityEmbeddings[tailIdx];
         int dim = EmbeddingDimension;
 
-        // Re(⟨h, r, conj(t)⟩) = Σ(hRe*rRe*tRe + hRe*rIm*tIm + hIm*rRe*tIm - hIm*rIm*tRe)
+        // Re(⟨h, r, conj(t)⟩) per Trouillon et al. (2016)
+        // = Σ(hRe*rRe*tRe + hRe*rIm*tIm + hIm*rRe*tIm - hIm*rIm*tRe)
         double score = 0.0;
         for (int d = 0; d < dim; d++)
         {

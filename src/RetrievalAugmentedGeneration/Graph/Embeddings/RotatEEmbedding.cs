@@ -172,8 +172,8 @@ public class RotatEEmbedding<T> : KGEmbeddingBase<T>
             t[d] = NumOps.FromDouble(tReal + step * diffReal);
             t[d + dim] = NumOps.FromDouble(tImag + step * diffImag);
 
-            // Gradient w.r.t. phase: d/dphase of (h∘r - t)² via chain rule
-            // gradPhase already includes step (= 2*lr*sign), so apply directly
+            // Gradient w.r.t. phase θ: dL/dθ = 2·(diffReal·d(hrRe)/dθ + diffImag·d(hrIm)/dθ)
+            // where d(hrRe)/dθ = -(hRe·sinθ + hIm·cosθ) and d(hrIm)/dθ = hRe·cosθ - hIm·sinθ
             double gradPhase = step * (diffReal * (-hReal * rImag - hImag * rReal) +
                                         diffImag * (hReal * rReal - hImag * rImag));
             rPhase[d] = NumOps.FromDouble(phase - gradPhase);

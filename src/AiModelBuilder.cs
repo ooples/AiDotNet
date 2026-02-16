@@ -1270,7 +1270,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             throw new InvalidOperationException(
                 "KnowledgeGraph options were configured via ConfigureKnowledgeGraph(), " +
                 "but no KnowledgeGraph instance was provided. " +
-                "Call ConfigureKnowledgeGraph() with a valid KnowledgeGraph<T> instance.");
+                "Call ConfigureRetrievalAugmentedGeneration() to set up the KnowledgeGraph, then ConfigureKnowledgeGraph() to enable advanced features.");
         }
 
         var kgResult = new Models.Results.KnowledgeGraphResult<T>();
@@ -1299,9 +1299,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         if (needsLinkPrediction)
         {
             var allEdges = _knowledgeGraph.GetAllEdges().ToList();
-            int testSize = Math.Min(allEdges.Count / 5, 100); // Up to 20% or 100 triples
+            var testFraction = _knowledgeGraphOptions.GetEffectiveLinkPredictionTestFraction();
+            var maxTestEdges = _knowledgeGraphOptions.GetEffectiveLinkPredictionMaxTestEdges();
+            int testSize = Math.Min((int)Math.Round(allEdges.Count * testFraction), maxTestEdges);
 
-            if (testSize > 0 && allEdges.Count > testSize)
+            // Ensure at least 5 edges remain for training after the split
+            const int minTrainingEdges = 5;
+            if (testSize > 0 && allEdges.Count - testSize >= minTrainingEdges)
             {
                 // Shuffle edges for a random split using seed from embedding options if available
                 var splitRng = _knowledgeGraphOptions.EmbeddingOptions?.Seed is int seed

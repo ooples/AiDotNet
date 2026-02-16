@@ -62,6 +62,18 @@ public class KnowledgeGraphOptions
     public int? LinkPredictionTopK { get; set; }
 
     /// <summary>
+    /// Fraction of edges to hold out for link prediction evaluation. Default: 0.2 (20%).
+    /// Must be in (0, 1).
+    /// </summary>
+    public double? LinkPredictionTestFraction { get; set; }
+
+    /// <summary>
+    /// Maximum number of test edges for link prediction evaluation. Default: 100.
+    /// Must be > 0.
+    /// </summary>
+    public int? LinkPredictionMaxTestEdges { get; set; }
+
+    /// <summary>
     /// Whether to enable temporal query support. Default: false.
     /// </summary>
     public bool? EnableTemporalQueries { get; set; }
@@ -82,5 +94,22 @@ public class KnowledgeGraphOptions
     internal KGEmbeddingType GetEffectiveEmbeddingType() => EmbeddingType ?? Enums.KGEmbeddingType.TransE;
     internal bool GetEffectiveEnableLinkPrediction() => EnableLinkPrediction ?? false;
     internal int GetEffectiveLinkPredictionTopK() => LinkPredictionTopK ?? 10;
+
+    internal double GetEffectiveLinkPredictionTestFraction()
+    {
+        var value = LinkPredictionTestFraction ?? 0.2;
+        if (value <= 0 || value >= 1 || double.IsNaN(value) || double.IsInfinity(value))
+            throw new ArgumentOutOfRangeException(nameof(LinkPredictionTestFraction), "LinkPredictionTestFraction must be in (0, 1).");
+        return value;
+    }
+
+    internal int GetEffectiveLinkPredictionMaxTestEdges()
+    {
+        var value = LinkPredictionMaxTestEdges ?? 100;
+        if (value <= 0)
+            throw new ArgumentOutOfRangeException(nameof(LinkPredictionMaxTestEdges), "LinkPredictionMaxTestEdges must be > 0.");
+        return value;
+    }
+
     internal bool GetEffectiveEnableTemporalQueries() => EnableTemporalQueries ?? false;
 }

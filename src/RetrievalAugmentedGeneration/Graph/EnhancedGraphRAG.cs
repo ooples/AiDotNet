@@ -131,8 +131,8 @@ public class EnhancedGraphRAG<T>
             if (results.Count >= topK) break;
         }
 
-        // The loop breaks at topK, but Take ensures exact limit after >= checks
-        return results.GetRange(0, Math.Min(results.Count, topK));
+        // The loop breaks at topK, so results is already limited to topK entries
+        return results;
     }
 
     private List<string> LocalSearch(string query, int topK)
