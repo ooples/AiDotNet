@@ -62,11 +62,12 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
             throw new ArgumentException("Layer boundaries must be provided and non-empty.", nameof(layerBoundaries));
         }
 
-        // Validate all boundaries are non-negative and strictly increasing
-        if (layerBoundaries[0] < 0)
+        // Validate first boundary is zero (no orphaned parameters before the first layer)
+        if (layerBoundaries[0] != 0)
         {
             throw new ArgumentException(
-                $"Layer boundary at index 0 is negative ({layerBoundaries[0]}). All boundaries must be non-negative.",
+                $"First layer boundary must be 0, but was {layerBoundaries[0]}. " +
+                "Parameters before the first boundary would be unassigned to any layer.",
                 nameof(layerBoundaries));
         }
 
@@ -135,9 +136,7 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
 
         // Use dynamic programming to find the optimal partition that minimizes
         // the maximum cost across all stages (minimize pipeline bubble)
-        var assignment = OptimalPartition(layerSizes, layerCosts, numStages);
-
-        return assignment;
+        return OptimalPartition(layerSizes, layerCosts, numStages);
     }
 
     private int[] BuildLayerSizes(int totalParameters)
@@ -280,8 +279,19 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
         for (int s = 0; s < numStages; s++)
         {
             int layerEnd = stageEndLayers[s];
-            int paramStart = (int)paramPrefix[layerStart];
-            int paramSize = (int)(paramPrefix[layerEnd] - paramPrefix[layerStart]);
+            long paramStartLong = paramPrefix[layerStart];
+            long paramSizeLong = paramPrefix[layerEnd] - paramPrefix[layerStart];
+
+            if (paramStartLong > int.MaxValue || paramSizeLong > int.MaxValue)
+            {
+                throw new InvalidOperationException(
+                    $"Stage {s} parameter range exceeds int.MaxValue " +
+                    $"(start={paramStartLong}, size={paramSizeLong}). " +
+                    "Models with more than int.MaxValue parameters are not supported.");
+            }
+
+            int paramStart = (int)paramStartLong;
+            int paramSize = (int)paramSizeLong;
             partitions[s] = (paramStart, paramSize);
             layerStart = layerEnd;
         }

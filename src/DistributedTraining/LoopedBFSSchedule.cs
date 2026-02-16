@@ -178,9 +178,9 @@ public class LoopedBFSSchedule : IPipelineSchedule
         // but the communication pattern differs. The bubble is roughly:
         // (P-1) / (2*M*V + P - 1)
         // Same asymptotic behavior as Interleaved 1F1B.
-        long p = numStages;
-        long m = numMicroBatches;
-        long v = _virtualStagesPerRank;
-        return (double)(p - 1) / (2 * m * v + p - 1);
+        double p = numStages;
+        double m = numMicroBatches;
+        double v = _virtualStagesPerRank;
+        return (p - 1) / (2.0 * m * v + p - 1.0);
     }
 }

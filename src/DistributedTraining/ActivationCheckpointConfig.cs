@@ -78,7 +78,7 @@ public class ActivationCheckpointConfig
     /// - None: Don't recompute, equivalent to no checkpointing (for testing/debugging)
     /// </para>
     /// </remarks>
-    public RecomputeStrategy RecomputeStrategy { get; set; } = RecomputeStrategy.Selective;
+    public RecomputeStrategy RecomputeStrategy { get; set; } = RecomputeStrategy.None;
 
     /// <summary>
     /// Gets or sets the maximum number of activations to keep in memory simultaneously.

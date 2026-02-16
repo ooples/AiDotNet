@@ -162,8 +162,8 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
         // ZB-H1 bubble is approximately 1/3 of 1F1B's bubble
         // 1F1B bubble: (P-1) / (2*M + P - 1)
         // ZB-H1 bubble: ~(P-1) / (3*M + P - 1)
-        long p = numStages;
-        long m = numMicroBatches;
-        return (double)(p - 1) / (3 * m + p - 1);
+        double p = numStages;
+        double m = numMicroBatches;
+        return (p - 1) / (3.0 * m + p - 1.0);
     }
 }

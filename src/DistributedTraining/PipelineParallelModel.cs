@@ -767,11 +767,12 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         {
             fullVector = ConversionsHelper.ConvertToVector<T, TInput>(fullData);
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
             throw new InvalidOperationException(
                 $"Cannot slice input of type {typeof(TInput).Name} into micro-batches. " +
-                "The input must be convertible to a vector for pipeline parallel training with micro-batches > 1.");
+                "The input must be convertible to a vector for pipeline parallel training with micro-batches > 1.",
+                ex);
         }
 
         int totalElements = fullVector.Length;
@@ -821,11 +822,12 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         {
             fullVector = ConversionsHelper.ConvertToVector<T, TOutput>(fullTarget);
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
             throw new InvalidOperationException(
                 $"Cannot slice target of type {typeof(TOutput).Name} into micro-batches. " +
-                "The target must be convertible to a vector for pipeline parallel training with micro-batches > 1.");
+                "The target must be convertible to a vector for pipeline parallel training with micro-batches > 1.",
+                ex);
         }
 
         int totalElements = fullVector.Length;
@@ -899,15 +901,12 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         // For non-first virtual stages on this rank: use the forward output from the
         // previous virtual stage on the same micro-batch.
-        if (!isFirstVirtualStageOnRank && forwardOutputs is not null)
+        if (!isFirstVirtualStageOnRank && forwardOutputs is not null
+            && forwardOutputs.TryGetValue(GetOperationKey(microBatchIndex, virtualStageIndex - 1), out var prevOutput))
         {
-            int prevVStageKey = GetOperationKey(microBatchIndex, virtualStageIndex - 1);
-            if (forwardOutputs.TryGetValue(prevVStageKey, out var prevOutput))
-            {
-                // Convert the previous virtual stage's output to an input for the next stage
-                var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(prevOutput);
-                return ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(outputVector);
-            }
+            // Convert the previous virtual stage's output to an input for the next stage
+            var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(prevOutput);
+            return ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(outputVector);
         }
 
         // Should not reach here in normal operation
