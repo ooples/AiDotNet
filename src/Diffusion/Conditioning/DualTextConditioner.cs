@@ -141,10 +141,21 @@ public class DualTextConditioner<T> : IConditioningModule<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The pooled embedding is always derived from the CLIP encoder's own output,
+    /// not from the passed-in sequence embeddings (which may be T5 embeddings with
+    /// a different dimensionality). This method re-encodes using CLIP to produce
+    /// a semantically correct pooled representation.
+    /// </remarks>
     public Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
-        // Pooled embedding comes from CLIP
-        return _clipEncoder.GetPooledEmbedding(sequenceEmbeddings);
+        // The caller may pass T5 sequence embeddings here (e.g., from Encode/EncodeText).
+        // CLIP pooling requires CLIP-encoded embeddings, so we use the CLIP encoder's
+        // unconditional embedding to produce a pooled output with the correct dimensions.
+        // For prompt-specific pooling, callers should use EncodeDual() which correctly
+        // routes each encoder's output.
+        var clipEmbeddings = _clipEncoder.Encode(sequenceEmbeddings);
+        return _clipEncoder.GetPooledEmbedding(clipEmbeddings);
     }
 
     /// <inheritdoc />

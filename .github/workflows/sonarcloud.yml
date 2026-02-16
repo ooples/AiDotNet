@@ -131,7 +131,7 @@ jobs:
         run: dotnet build-server shutdown
 
       - name: Build (Release)
-        run: dotnet build -c Release --no-restore -p:UseSharedCompilation=false -nodeReuse:false
+        run: dotnet build -c Release --no-restore -p:UseSharedCompilation=false -p:nodeReuse=false
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v4
@@ -476,7 +476,7 @@ jobs:
         run: dotnet build-server shutdown
 
       - name: Build (Release)
-        run: dotnet build -c Release --no-restore -p:UseSharedCompilation=false -nodeReuse:false
+        run: dotnet build -c Release --no-restore -p:UseSharedCompilation=false -p:nodeReuse=false
 
       - name: End SonarCloud analysis
         if: github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250

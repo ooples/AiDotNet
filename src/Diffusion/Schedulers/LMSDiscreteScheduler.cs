@@ -92,8 +92,13 @@ public sealed class LMSDiscreteScheduler<T> : NoiseSchedulerBase<T>
         var derivative = Engine.Subtract(sample, predOriginal);
         derivative = Engine.Divide(derivative, sigma);
 
-        // Store derivative in history
+        // Store derivative in history, trimming to keep only the last _order entries
+        // to prevent unbounded memory growth over many steps
         _derivativeHistory.Add(derivative);
+        if (_derivativeHistory.Count > _order)
+        {
+            _derivativeHistory.RemoveAt(0);
+        }
 
         // Determine the effective order (limited by available history)
         int effectiveOrder = Math.Min(_order, _derivativeHistory.Count);
