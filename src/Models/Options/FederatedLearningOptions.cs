@@ -512,6 +512,18 @@ public class FederatedLearningOptions : ModelOptions
     public ContributionEvaluationOptions? ContributionEvaluation { get; set; } = null;
 
     /// <summary>
+    /// Gets or sets federated concept drift detection and adaptation options.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> In production FL, client data distributions change over time
+    /// (seasonal patterns, evolving fraud, shifting user behavior). Drift detection monitors
+    /// each client's training behavior and adapts aggregation when changes are detected.</para>
+    ///
+    /// <para>Set to null (default) to disable drift detection.</para>
+    /// </remarks>
+    public FederatedDriftOptions? DriftDetection { get; set; } = null;
+
+    /// <summary>
     /// Gets or sets a random seed for reproducibility.
     /// </summary>
     /// <remarks>
