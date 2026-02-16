@@ -167,7 +167,7 @@
 	  <!-- GPU acceleration via CLBlast (OpenCL-based) -->
 	  <PackageReference Include="AiDotNet.Native.CLBlast" Version="0.7.0" />
 	  <!-- CPU acceleration via Intel OneDNN -->
-	  <PackageReference Include="AiDotNet.Native.OneDNN" Version="0.5.0" />
+	  <PackageReference Include="AiDotNet.Native.OneDNN" Version="0.7.0" />
 	</ItemGroup>
 
 	<!-- Global usings for AiDotNet.Tensors namespaces -->
