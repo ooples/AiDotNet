@@ -488,6 +488,30 @@ public class FederatedLearningOptions : ModelOptions
     public FederatedUnlearningOptions? Unlearning { get; set; } = null;
 
     /// <summary>
+    /// Gets or sets fairness constraint options for equitable model performance across client groups.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When set, the FL system enforces fairness constraints to prevent
+    /// the global model from favoring majority client groups at the expense of underrepresented ones.
+    /// Supports demographic parity, equalized odds, equal opportunity, and minimax fairness.</para>
+    ///
+    /// <para>Set to null (default) for standard aggregation without fairness constraints.</para>
+    /// </remarks>
+    public FederatedFairnessOptions? Fairness { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets client contribution evaluation options for measuring each client's value.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When set, the system evaluates how much each client contributed
+    /// to the global model using Shapley values, Data Shapley, or prototypical representations.
+    /// This enables free-rider detection, fair compensation, and quality monitoring.</para>
+    ///
+    /// <para>Set to null (default) to skip contribution evaluation.</para>
+    /// </remarks>
+    public ContributionEvaluationOptions? ContributionEvaluation { get; set; } = null;
+
+    /// <summary>
     /// Gets or sets a random seed for reproducibility.
     /// </summary>
     /// <remarks>
