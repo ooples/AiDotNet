@@ -430,7 +430,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// The downloaded model is cached locally, so subsequent calls will be fast.
     /// </para>
     /// </remarks>
-    public static async Task<BEATs<T>> CreateAsync(
+    internal static async Task<BEATs<T>> CreateAsync(
         BEATsOptions? options = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)

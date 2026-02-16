@@ -164,7 +164,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
     /// <summary>
     /// Creates a MusicSourceSeparator asynchronously, downloading models if needed.
     /// </summary>
-    public static async Task<MusicSourceSeparator<T>> CreateAsync(
+    internal static async Task<MusicSourceSeparator<T>> CreateAsync(
         SourceSeparationOptions? options = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)

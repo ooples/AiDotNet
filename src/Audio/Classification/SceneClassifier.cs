@@ -225,7 +225,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     /// <summary>
     /// Creates a SceneClassifier asynchronously with model download.
     /// </summary>
-    public static async Task<SceneClassifier<T>> CreateAsync(
+    internal static async Task<SceneClassifier<T>> CreateAsync(
         SceneClassifierOptions? options = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)

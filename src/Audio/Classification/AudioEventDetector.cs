@@ -221,7 +221,7 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     /// <summary>
     /// Creates an AudioEventDetector asynchronously with model download.
     /// </summary>
-    public static async Task<AudioEventDetector<T>> CreateAsync(
+    internal static async Task<AudioEventDetector<T>> CreateAsync(
         AudioEventDetectorOptions? options = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)

@@ -192,7 +192,7 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
     /// <summary>
     /// Creates a GenreClassifier asynchronously with model download.
     /// </summary>
-    public static async Task<GenreClassifier<T>> CreateAsync(
+    internal static async Task<GenreClassifier<T>> CreateAsync(
         GenreClassifierOptions? options = null,
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)

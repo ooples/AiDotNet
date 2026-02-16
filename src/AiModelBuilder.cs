@@ -142,6 +142,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IFitnessCalculator<T, TInput, TOutput>? _fitnessCalculator;
     private IFitDetector<T, TInput, TOutput>? _fitDetector;
     private IFullModel<T, TInput, TOutput>? _model;
+
+    /// <summary>
+    /// Gets the configured model instance for use by domain-specific partial class methods.
+    /// </summary>
+    internal IFullModel<T, TInput, TOutput>? ConfiguredModel => _model;
+
     private IOptimizer<T, TInput, TOutput>? _optimizer;
     private IDataLoader<T>? _dataLoader;
     private DataPreparationPipeline<T>? _dataPreparationPipeline;
