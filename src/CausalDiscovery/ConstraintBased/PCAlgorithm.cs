@@ -47,12 +47,7 @@ internal class PCAlgorithm<T> : ConstraintBasedBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
-        int n = data.Rows;
         int d = data.Columns;
-        var X = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
 
         // Step 1: Initialize complete undirected graph
         var adj = new bool[d, d];
@@ -77,7 +72,7 @@ internal class PCAlgorithm<T> : ConstraintBasedBase<T>
 
                     foreach (var condSet in GetCombinations(neighbors, condSize))
                     {
-                        if (TestCI(X, n, i, j, condSet, Alpha))
+                        if (TestCI(data, i, j, condSet, Alpha))
                         {
                             adj[i, j] = false;
                             adj[j, i] = false;
@@ -113,9 +108,8 @@ internal class PCAlgorithm<T> : ConstraintBasedBase<T>
             }
         }
 
-        // Step 4: Build weighted adjacency matrix
-        // Use partial correlation magnitudes as edge weights
-        var W = new double[d, d];
+        // Step 4: Build weighted adjacency matrix using Matrix<T>
+        var W = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
         {
             for (int j = 0; j < d; j++)
@@ -124,7 +118,7 @@ internal class PCAlgorithm<T> : ConstraintBasedBase<T>
 
                 if (oriented[i, j])
                 {
-                    W[i, j] = Math.Abs(ComputePartialCorr(X, n, i, j, []));
+                    W[i, j] = NumOps.FromDouble(Math.Abs(ComputePartialCorr(data, i, j, [])));
                 }
                 else if (oriented[j, i])
                 {
@@ -134,13 +128,13 @@ internal class PCAlgorithm<T> : ConstraintBasedBase<T>
                 else
                 {
                     // Unoriented: assign weight to both directions
-                    double weight = Math.Abs(ComputePartialCorr(X, n, i, j, []));
-                    W[i, j] = weight;
+                    double weight = Math.Abs(ComputePartialCorr(data, i, j, []));
+                    W[i, j] = NumOps.FromDouble(weight);
                 }
             }
         }
 
-        return DoubleArrayToMatrix(W);
+        return W;
     }
 
     private static List<int> GetNeighbors(bool[,] adj, int i, int j, int d)

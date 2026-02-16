@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.CausalDiscovery.Hybrid;
 
@@ -46,16 +47,22 @@ public abstract class HybridBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Computes Pearson correlation between two columns of data.
     /// </summary>
-    protected static double ComputeCorrelation(double[,] X, int n, int col1, int col2)
+    protected double ComputeCorrelation(Matrix<T> data, int col1, int col2)
     {
+        int n = data.Rows;
         double mean1 = 0, mean2 = 0;
-        for (int i = 0; i < n; i++) { mean1 += X[i, col1]; mean2 += X[i, col2]; }
+        for (int i = 0; i < n; i++)
+        {
+            mean1 += NumOps.ToDouble(data[i, col1]);
+            mean2 += NumOps.ToDouble(data[i, col2]);
+        }
         mean1 /= n; mean2 /= n;
 
         double sxy = 0, sxx = 0, syy = 0;
         for (int i = 0; i < n; i++)
         {
-            double d1 = X[i, col1] - mean1, d2 = X[i, col2] - mean2;
+            double d1 = NumOps.ToDouble(data[i, col1]) - mean1;
+            double d2 = NumOps.ToDouble(data[i, col2]) - mean2;
             sxy += d1 * d2; sxx += d1 * d1; syy += d2 * d2;
         }
 
@@ -65,84 +72,70 @@ public abstract class HybridBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Computes BIC score for a variable given its parents.
     /// </summary>
-    protected static double ComputeBIC(double[,] X, int n, int d, int variable, List<int> parents)
+    protected double ComputeBIC(Matrix<T> data, int variable, List<int> parents)
     {
+        int n = data.Rows;
         if (parents.Count == 0)
         {
             double mean = 0;
-            for (int i = 0; i < n; i++) mean += X[i, variable];
+            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, variable]);
             mean /= n;
             double rss = 0;
-            for (int i = 0; i < n; i++) { double e = X[i, variable] - mean; rss += e * e; }
+            for (int i = 0; i < n; i++)
+            {
+                double e = NumOps.ToDouble(data[i, variable]) - mean;
+                rss += e * e;
+            }
             return n * Math.Log(rss / n + 1e-15) + Math.Log(n);
         }
 
         int p = parents.Count;
-        var Z = new double[n, p + 1];
-        for (int i = 0; i < n; i++)
+        int dim = p + 1; // +1 for intercept
+
+        // Build normal equations using generic operations
+        var ZtZ = new Matrix<T>(dim, dim);
+        var Zty = new Vector<T>(dim);
+        for (int a = 0; a < dim; a++)
         {
-            Z[i, 0] = 1.0;
-            for (int j = 0; j < p; j++) Z[i, j + 1] = X[i, parents[j]];
+            for (int b = 0; b < dim; b++)
+            {
+                T sum = NumOps.Zero;
+                for (int k = 0; k < n; k++)
+                {
+                    T va = a == 0 ? NumOps.One : data[k, parents[a - 1]];
+                    T vb = b == 0 ? NumOps.One : data[k, parents[b - 1]];
+                    sum = NumOps.Add(sum, NumOps.Multiply(va, vb));
+                }
+                ZtZ[a, b] = sum;
+            }
+            T sumY = NumOps.Zero;
+            for (int k = 0; k < n; k++)
+            {
+                T va = a == 0 ? NumOps.One : data[k, parents[a - 1]];
+                sumY = NumOps.Add(sumY, NumOps.Multiply(va, data[k, variable]));
+            }
+            Zty[a] = sumY;
         }
 
-        var ZtZ = new double[p + 1, p + 1];
-        var Zty = new double[p + 1];
-        for (int i = 0; i <= p; i++)
-        {
-            for (int j = 0; j <= p; j++)
-                for (int k = 0; k < n; k++) ZtZ[i, j] += Z[k, i] * Z[k, j];
-            for (int k = 0; k < n; k++) Zty[i] += Z[k, i] * X[k, variable];
-        }
+        T ridge = NumOps.FromDouble(1e-6);
+        for (int a = 0; a < dim; a++)
+            ZtZ[a, a] = NumOps.Add(ZtZ[a, a], ridge);
 
-        for (int i = 0; i <= p; i++) ZtZ[i, i] += 1e-6;
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(ZtZ, Zty, MatrixDecompositionType.Lu);
 
-        var beta = SolveSystem(ZtZ, Zty, p + 1);
         double rss2 = 0;
         for (int i = 0; i < n; i++)
         {
-            double pred = 0;
-            for (int j = 0; j <= p; j++) pred += beta[j] * Z[i, j];
-            double err = X[i, variable] - pred;
+            T pred = NumOps.Zero;
+            for (int j = 0; j < dim; j++)
+            {
+                T vj = j == 0 ? NumOps.One : data[i, parents[j - 1]];
+                pred = NumOps.Add(pred, NumOps.Multiply(beta[j], vj));
+            }
+            double err = NumOps.ToDouble(data[i, variable]) - NumOps.ToDouble(pred);
             rss2 += err * err;
         }
 
         return n * Math.Log(rss2 / n + 1e-15) + (p + 1) * Math.Log(n);
     }
-
-    private static double[] SolveSystem(double[,] A, double[] b, int size)
-    {
-        var aug = new double[size, size + 1];
-        for (int i = 0; i < size; i++)
-        {
-            for (int j = 0; j < size; j++) aug[i, j] = A[i, j];
-            aug[i, size] = b[i];
-        }
-
-        for (int col = 0; col < size; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < size; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
-                    maxRow = row;
-            for (int j = 0; j <= size; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-            if (Math.Abs(aug[col, col]) < 1e-10) continue;
-            for (int row = col + 1; row < size; row++)
-            {
-                double factor = aug[row, col] / aug[col, col];
-                for (int j = col; j <= size; j++) aug[row, j] -= factor * aug[col, j];
-            }
-        }
-
-        var x = new double[size];
-        for (int i = size - 1; i >= 0; i--)
-        {
-            x[i] = aug[i, size];
-            for (int j = i + 1; j < size; j++) x[i] -= aug[i, j] * x[j];
-            x[i] /= (Math.Abs(aug[i, i]) > 1e-10 ? aug[i, i] : 1);
-        }
-
-        return x;
-    }
-
 }

@@ -62,31 +62,27 @@ internal class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        var X = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
 
         int effectiveN = n - MaxLag;
         if (effectiveN <= 2 * MaxLag + 1)
         {
             // Not enough data for Granger test — return empty graph
-            return DoubleArrayToMatrix(new double[d, d]);
+            return new Matrix<T>(d, d);
         }
 
-        var W = new double[d, d];
+        var W = new Matrix<T>(d, d);
 
         for (int target = 0; target < d; target++)
         {
             // Restricted model: AR on target only (p parameters = MaxLag)
-            double rssRestricted = ComputeARModelRSS(X, n, target, MaxLag, effectiveN);
+            double rssRestricted = ComputeARModelRSS(data, target, MaxLag, effectiveN);
 
             for (int cause = 0; cause < d; cause++)
             {
                 if (cause == target) continue;
 
                 // Unrestricted model: AR on target + lags of cause (p parameters = 2 * MaxLag)
-                double rssUnrestricted = ComputeGrangerRSS(X, n, target, cause, MaxLag, effectiveN);
+                double rssUnrestricted = ComputeGrangerRSS(data, target, cause, MaxLag, effectiveN);
 
                 // F-test: F = ((RSS_r - RSS_u) / q) / (RSS_u / (n - k))
                 // where q = number of added regressors (MaxLag)
@@ -108,50 +104,49 @@ internal class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
                         if (pValue <= _significanceLevel)
                         {
                             // Use R² improvement as edge weight (interpretable, bounded [0,1])
-                            // R²_improvement = (RSS_r - RSS_u) / RSS_r
                             double rSquaredImprovement = (rssRestricted - rssUnrestricted) / rssRestricted;
-                            W[cause, target] = rSquaredImprovement;
+                            W[cause, target] = NumOps.FromDouble(rSquaredImprovement);
                         }
                     }
                 }
             }
         }
 
-        return DoubleArrayToMatrix(W);
+        return W;
     }
 
-    private double ComputeARModelRSS(double[,] X, int n, int target, int lag, int effectiveN)
+    private double ComputeARModelRSS(Matrix<T> data, int target, int lag, int effectiveN)
     {
         // Design: [effectiveN x (lag + 1)] — lag columns + intercept
-        var design = new double[effectiveN, lag + 1];
-        var y = new double[effectiveN];
+        var design = new Matrix<T>(effectiveN, lag + 1);
+        var y = new Vector<T>(effectiveN);
 
         for (int t = 0; t < effectiveN; t++)
         {
-            y[t] = X[t + lag, target];
+            y[t] = data[t + lag, target];
             for (int l = 0; l < lag; l++)
-                design[t, l] = X[t + lag - l - 1, target];
-            design[t, lag] = 1.0; // intercept
+                design[t, l] = data[t + lag - l - 1, target];
+            design[t, lag] = NumOps.One; // intercept
         }
 
         return ComputeRSS(design, y, effectiveN, lag + 1);
     }
 
-    private double ComputeGrangerRSS(double[,] X, int n, int target, int cause, int lag, int effectiveN)
+    private double ComputeGrangerRSS(Matrix<T> data, int target, int cause, int lag, int effectiveN)
     {
         // Design: [effectiveN x (2*lag + 1)] — target lags + cause lags + intercept
-        var design = new double[effectiveN, 2 * lag + 1];
-        var y = new double[effectiveN];
+        var design = new Matrix<T>(effectiveN, 2 * lag + 1);
+        var y = new Vector<T>(effectiveN);
 
         for (int t = 0; t < effectiveN; t++)
         {
-            y[t] = X[t + lag, target];
+            y[t] = data[t + lag, target];
             for (int l = 0; l < lag; l++)
             {
-                design[t, l] = X[t + lag - l - 1, target];
-                design[t, lag + l] = X[t + lag - l - 1, cause];
+                design[t, l] = data[t + lag - l - 1, target];
+                design[t, lag + l] = data[t + lag - l - 1, cause];
             }
-            design[t, 2 * lag] = 1.0; // intercept
+            design[t, 2 * lag] = NumOps.One; // intercept
         }
 
         return ComputeRSS(design, y, effectiveN, 2 * lag + 1);

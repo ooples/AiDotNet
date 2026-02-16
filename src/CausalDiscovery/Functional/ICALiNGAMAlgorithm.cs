@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.Functional;
@@ -60,104 +61,107 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        var X = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        // Standardize
-        X = StandardizeData(X, n, d);
+        var standardized = StandardizeData(data);
 
         // Approximate ICA via FastICA-like deflation
-        var W = FastICA(X, n, d);
+        // FastICA requires transcendental functions (tanh) in tight inner loops,
+        // so it operates on Matrix<T> but converts elements via NumOps as needed
+        var W = FastICA(standardized, n, d);
 
-        // Recover B = I - inv(W) (simplified: W ≈ inv(A), B = I - A)
+        // Recover B = I - inv(W)
         var invW = InvertMatrix(W, d);
-        if (invW == null) return DoubleArrayToMatrix(new double[d, d]);
+        if (invW == null) return new Matrix<T>(d, d);
 
-        var B = new double[d, d];
+        var B = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
-                B[i, j] = (i == j ? 1.0 : 0.0) - invW[i, j];
+                B[i, j] = NumOps.Subtract(
+                    i == j ? NumOps.One : NumOps.Zero,
+                    invW[i, j]);
 
         // Find permutation to make B approximately lower triangular
         var order = FindCausalOrder(B, d);
 
         // Permute and threshold
-        var result = new double[d, d];
+        var result = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
         {
             for (int j = 0; j < d; j++)
             {
-                double val = B[order[i], order[j]];
-                if (i != j && Math.Abs(val) >= _threshold)
+                T val = B[order[i], order[j]];
+                double valD = NumOps.ToDouble(val);
+                if (i != j && Math.Abs(valD) >= _threshold)
                     result[order[i], order[j]] = val;
             }
         }
 
-        // Zero diagonal
-        for (int i = 0; i < d; i++) result[i, i] = 0;
-
-        return DoubleArrayToMatrix(result);
+        return result;
     }
 
-    private static double[,] FastICA(double[,] X, int n, int d)
+    private Matrix<T> FastICA(Matrix<T> data, int n, int d)
     {
         var rng = new Random(42);
-        var W = new double[d, d];
+        var W = new Matrix<T>(d, d);
 
         // Initialize W as identity + small random perturbation
         for (int i = 0; i < d; i++)
         {
-            W[i, i] = 1.0;
+            W[i, i] = NumOps.One;
             for (int j = 0; j < d; j++)
-                W[i, j] += 0.01 * (rng.NextDouble() - 0.5);
+                W[i, j] = NumOps.Add(W[i, j], NumOps.FromDouble(0.01 * (rng.NextDouble() - 0.5)));
         }
 
         // Deflation-based FastICA
         for (int p = 0; p < d; p++)
         {
-            var w = new double[d];
-            for (int j = 0; j < d; j++) w[j] = rng.NextDouble() - 0.5;
-            Normalize(w, d);
+            var w = new Vector<T>(d);
+            for (int j = 0; j < d; j++) w[j] = NumOps.FromDouble(rng.NextDouble() - 0.5);
+            NormalizeVector(w);
 
             for (int iter = 0; iter < 200; iter++)
             {
-                var wNew = new double[d];
+                var wNew = new Vector<T>(d);
 
-                // E{X * g(w^T X)} - E{g'(w^T X)} * w
-                // Using g(u) = tanh(u)
-                double meanGPrime = 0;
+                // E{X * g(w^T X)} - E{g'(w^T X)} * w, using g(u) = tanh(u)
+                T meanGPrime = NumOps.Zero;
+                T nT = NumOps.FromDouble(n);
                 for (int i = 0; i < n; i++)
                 {
-                    double u = 0;
-                    for (int j = 0; j < d; j++) u += w[j] * X[i, j];
+                    T u = NumOps.Zero;
+                    for (int j = 0; j < d; j++)
+                        u = NumOps.Add(u, NumOps.Multiply(w[j], data[i, j]));
 
-                    double g = Math.Tanh(u);
-                    double gPrime = 1.0 - g * g;
-                    meanGPrime += gPrime;
+                    double uD = NumOps.ToDouble(u);
+                    T g = NumOps.FromDouble(Math.Tanh(uD));
+                    T gPrime = NumOps.Subtract(NumOps.One, NumOps.Multiply(g, g));
+                    meanGPrime = NumOps.Add(meanGPrime, gPrime);
 
                     for (int j = 0; j < d; j++)
-                        wNew[j] += X[i, j] * g;
+                        wNew[j] = NumOps.Add(wNew[j], NumOps.Multiply(data[i, j], g));
                 }
 
-                meanGPrime /= n;
+                meanGPrime = NumOps.Divide(meanGPrime, nT);
                 for (int j = 0; j < d; j++)
-                    wNew[j] = wNew[j] / n - meanGPrime * w[j];
+                    wNew[j] = NumOps.Subtract(
+                        NumOps.Divide(wNew[j], nT),
+                        NumOps.Multiply(meanGPrime, w[j]));
 
                 // Orthogonalize against previous components
                 for (int k = 0; k < p; k++)
                 {
-                    double dot = 0;
-                    for (int j = 0; j < d; j++) dot += wNew[j] * W[k, j];
-                    for (int j = 0; j < d; j++) wNew[j] -= dot * W[k, j];
+                    T dot = NumOps.Zero;
+                    for (int j = 0; j < d; j++)
+                        dot = NumOps.Add(dot, NumOps.Multiply(wNew[j], W[k, j]));
+                    for (int j = 0; j < d; j++)
+                        wNew[j] = NumOps.Subtract(wNew[j], NumOps.Multiply(dot, W[k, j]));
                 }
 
-                Normalize(wNew, d);
+                NormalizeVector(wNew);
 
                 // Check convergence
                 double diff = 0;
-                for (int j = 0; j < d; j++) diff += Math.Abs(Math.Abs(wNew[j]) - Math.Abs(w[j]));
+                for (int j = 0; j < d; j++)
+                    diff += Math.Abs(Math.Abs(NumOps.ToDouble(wNew[j])) - Math.Abs(NumOps.ToDouble(w[j])));
                 w = wNew;
                 if (diff < 1e-6) break;
             }
@@ -168,56 +172,60 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
         return W;
     }
 
-    private static void Normalize(double[] v, int d)
+    private void NormalizeVector(Vector<T> v)
     {
-        double norm = 0;
-        for (int j = 0; j < d; j++) norm += v[j] * v[j];
-        norm = Math.Sqrt(norm);
-        if (norm > 1e-15)
-            for (int j = 0; j < d; j++) v[j] /= norm;
+        T norm = NumOps.Zero;
+        for (int j = 0; j < v.Length; j++)
+            norm = NumOps.Add(norm, NumOps.Multiply(v[j], v[j]));
+        norm = NumOps.Sqrt(norm);
+
+        if (NumOps.ToDouble(norm) > 1e-15)
+            for (int j = 0; j < v.Length; j++)
+                v[j] = NumOps.Divide(v[j], norm);
     }
 
-    private static int[] FindCausalOrder(double[,] B, int d)
+    private int[] FindCausalOrder(Matrix<T> B, int d)
     {
-        // Find ordering that makes B most lower-triangular
-        // Heuristic: order by sum of absolute values in upper triangle
         var rowSums = new double[d];
         for (int i = 0; i < d; i++)
             for (int j = i + 1; j < d; j++)
-                rowSums[i] += Math.Abs(B[i, j]);
+                rowSums[i] += Math.Abs(NumOps.ToDouble(B[i, j]));
 
         return Enumerable.Range(0, d).OrderBy(i => rowSums[i]).ToArray();
     }
 
-    private static double[,]? InvertMatrix(double[,] matrix, int d)
+    private Matrix<T>? InvertMatrix(Matrix<T> matrix, int d)
     {
-        var aug = new double[d, 2 * d];
+        // Build augmented matrix [M | I] using generic T
+        var aug = new Matrix<T>(d, 2 * d);
         for (int i = 0; i < d; i++)
         {
             for (int j = 0; j < d; j++) aug[i, j] = matrix[i, j];
-            aug[i, i + d] = 1.0;
+            aug[i, i + d] = NumOps.One;
         }
 
         for (int col = 0; col < d; col++)
         {
             int maxRow = col;
             for (int row = col + 1; row < d; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col])) maxRow = row;
-            if (Math.Abs(aug[maxRow, col]) < 1e-12) return null;
+                if (Math.Abs(NumOps.ToDouble(aug[row, col])) > Math.Abs(NumOps.ToDouble(aug[maxRow, col])))
+                    maxRow = row;
+            if (Math.Abs(NumOps.ToDouble(aug[maxRow, col])) < 1e-12) return null;
             if (maxRow != col)
                 for (int j = 0; j < 2 * d; j++)
                     (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-            double pivot = aug[col, col];
-            for (int j = 0; j < 2 * d; j++) aug[col, j] /= pivot;
+            T pivot = aug[col, col];
+            for (int j = 0; j < 2 * d; j++) aug[col, j] = NumOps.Divide(aug[col, j], pivot);
             for (int row = 0; row < d; row++)
                 if (row != col)
                 {
-                    double factor = aug[row, col];
-                    for (int j = 0; j < 2 * d; j++) aug[row, j] -= factor * aug[col, j];
+                    T factor = aug[row, col];
+                    for (int j = 0; j < 2 * d; j++)
+                        aug[row, j] = NumOps.Subtract(aug[row, j], NumOps.Multiply(factor, aug[col, j]));
                 }
         }
 
-        var result = new double[d, d];
+        var result = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++) result[i, j] = aug[i, j + d];
         return result;

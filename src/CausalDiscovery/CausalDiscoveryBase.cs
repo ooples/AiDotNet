@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -176,13 +177,13 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
         // Build the submatrix for [i, j, condSet] and compute via matrix inversion
         int[] indices = [i, j, .. conditioningSet];
         int size = indices.Length;
-        var subMatrix = new double[size, size];
+        var subMatrix = new Matrix<T>(size, size);
 
         for (int r = 0; r < size; r++)
         {
             for (int c = 0; c < size; c++)
             {
-                subMatrix[r, c] = NumOps.ToDouble(correlationMatrix[indices[r], indices[c]]);
+                subMatrix[r, c] = correlationMatrix[indices[r], indices[c]];
             }
         }
 
@@ -194,13 +195,15 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
         }
 
         // Partial correlation = -precision[0,1] / sqrt(precision[0,0] * precision[1,1])
-        double denom = Math.Sqrt(Math.Abs(precision[0, 0] * precision[1, 1]));
+        double p00 = NumOps.ToDouble(precision[0, 0]);
+        double p11 = NumOps.ToDouble(precision[1, 1]);
+        double denom = Math.Sqrt(Math.Abs(p00 * p11));
         if (denom < 1e-15)
         {
             return 0.0;
         }
 
-        return -precision[0, 1] / denom;
+        return -NumOps.ToDouble(precision[0, 1]) / denom;
     }
 
     /// <summary>
@@ -272,73 +275,58 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     {
         int n = data.Rows;
         int p = predictors.Length;
+        int dim = p + 1; // +1 for intercept
 
-        // Build X and y in double for numerical stability
-        double[] y = new double[n];
-        double[,] X = new double[n, p + 1]; // +1 for intercept
+        // Build design matrix and target vector using Matrix<T>/Vector<T>
+        var X = new Matrix<T>(n, dim);
+        var y = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
-            y[i] = NumOps.ToDouble(data[i, target]);
-            X[i, 0] = 1.0; // intercept
+            y[i] = data[i, target];
+            X[i, 0] = NumOps.One; // intercept
             for (int j = 0; j < p; j++)
             {
-                X[i, j + 1] = NumOps.ToDouble(data[i, predictors[j]]);
+                X[i, j + 1] = data[i, predictors[j]];
             }
         }
 
-        // Solve via normal equations: beta = (X^T X)^{-1} X^T y
-        int dim = p + 1;
-        double[,] XtX = new double[dim, dim];
-        double[] Xty = new double[dim];
+        // Normal equations: XtX * beta = Xty
+        var XtX = new Matrix<T>(dim, dim);
+        var Xty = new Vector<T>(dim);
 
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < dim; i++)
         {
-            for (int j1 = 0; j1 < dim; j1++)
+            for (int j = i; j < dim; j++)
             {
-                Xty[j1] += X[i, j1] * y[i];
-                for (int j2 = j1; j2 < dim; j2++)
-                {
-                    XtX[j1, j2] += X[i, j1] * X[i, j2];
-                }
+                T sum = NumOps.Zero;
+                for (int k = 0; k < n; k++)
+                    sum = NumOps.Add(sum, NumOps.Multiply(X[k, i], X[k, j]));
+                XtX[i, j] = sum;
+                XtX[j, i] = sum; // Symmetric
             }
+
+            T sumY = NumOps.Zero;
+            for (int k = 0; k < n; k++)
+                sumY = NumOps.Add(sumY, NumOps.Multiply(X[k, i], y[k]));
+            Xty[i] = sumY;
         }
 
-        // Symmetric
-        for (int j1 = 0; j1 < dim; j1++)
-        {
-            for (int j2 = 0; j2 < j1; j2++)
-            {
-                XtX[j1, j2] = XtX[j2, j1];
-            }
-        }
+        // Ridge regularization
+        T ridge = NumOps.FromDouble(1e-4);
+        for (int i = 0; i < dim; i++)
+            XtX[i, i] = NumOps.Add(XtX[i, i], ridge);
 
-        var inv = InvertSmallMatrix(XtX);
-        if (inv == null)
-        {
-            return ComputeVariance(data, target); // Singular — fall back to variance
-        }
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX, Xty, MatrixDecompositionType.Lu);
 
-        double[] beta = new double[dim];
-        for (int j1 = 0; j1 < dim; j1++)
-        {
-            for (int j2 = 0; j2 < dim; j2++)
-            {
-                beta[j1] += inv[j1, j2] * Xty[j2];
-            }
-        }
-
-        // Residual variance
+        // Compute residual variance
         double rss = 0;
         for (int i = 0; i < n; i++)
         {
-            double predicted = 0;
+            T pred = NumOps.Zero;
             for (int j = 0; j < dim; j++)
-            {
-                predicted += X[i, j] * beta[j];
-            }
-
-            double residual = y[i] - predicted;
+                pred = NumOps.Add(pred, NumOps.Multiply(beta[j], X[i, j]));
+            double residual = NumOps.ToDouble(NumOps.Subtract(y[i], pred));
             rss += residual * residual;
         }
 
@@ -464,10 +452,10 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// <summary>
     /// Inverts a small matrix using Gauss-Jordan elimination. Returns null if singular.
     /// </summary>
-    private static double[,]? InvertSmallMatrix(double[,] matrix)
+    private Matrix<T>? InvertSmallMatrix(Matrix<T> matrix)
     {
-        int n = matrix.GetLength(0);
-        double[,] augmented = new double[n, 2 * n];
+        int n = matrix.Rows;
+        var augmented = new Matrix<T>(n, 2 * n);
 
         for (int i = 0; i < n; i++)
         {
@@ -476,7 +464,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
                 augmented[i, j] = matrix[i, j];
             }
 
-            augmented[i, i + n] = 1.0;
+            augmented[i, i + n] = NumOps.One;
         }
 
         for (int col = 0; col < n; col++)
@@ -485,13 +473,14 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
             int maxRow = col;
             for (int row = col + 1; row < n; row++)
             {
-                if (Math.Abs(augmented[row, col]) > Math.Abs(augmented[maxRow, col]))
+                if (Math.Abs(NumOps.ToDouble(augmented[row, col])) >
+                    Math.Abs(NumOps.ToDouble(augmented[maxRow, col])))
                 {
                     maxRow = row;
                 }
             }
 
-            if (Math.Abs(augmented[maxRow, col]) < 1e-12)
+            if (Math.Abs(NumOps.ToDouble(augmented[maxRow, col])) < 1e-12)
             {
                 return null; // Singular
             }
@@ -506,10 +495,10 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
             }
 
             // Scale pivot row
-            double pivot = augmented[col, col];
+            T pivot = augmented[col, col];
             for (int j = 0; j < 2 * n; j++)
             {
-                augmented[col, j] /= pivot;
+                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
             }
 
             // Eliminate other rows
@@ -517,16 +506,17 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
             {
                 if (row != col)
                 {
-                    double factor = augmented[row, col];
+                    T factor = augmented[row, col];
                     for (int j = 0; j < 2 * n; j++)
                     {
-                        augmented[row, j] -= factor * augmented[col, j];
+                        augmented[row, j] = NumOps.Subtract(augmented[row, j],
+                            NumOps.Multiply(factor, augmented[col, j]));
                     }
                 }
             }
         }
 
-        double[,] result = new double[n, n];
+        var result = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
@@ -540,6 +530,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
 
     /// <summary>
     /// Converts a double[,] array to a Matrix&lt;T&gt; using NumOps.FromDouble.
+    /// Used by continuous optimization algorithms that require double[,] for internal gradient computation.
     /// </summary>
     protected Matrix<T> DoubleArrayToMatrix(double[,] data)
     {

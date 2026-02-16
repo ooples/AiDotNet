@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.CausalDiscovery.TimeSeries;
 
@@ -49,25 +50,29 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
     /// Creates lagged data matrix from time series: for each time step t,
     /// includes values at lags t-1, t-2, ..., t-maxLag.
     /// </summary>
-    protected (double[,] LaggedX, double[] Target) CreateLaggedData(
-        double[,] X, int n, int d, int targetCol, int maxLag)
+    protected (Matrix<T> LaggedX, Vector<T> Target) CreateLaggedData(
+        Matrix<T> data, int targetCol, int maxLag)
     {
+        int n = data.Rows;
+        int d = data.Columns;
+
         if (targetCol < 0 || targetCol >= d)
             throw new ArgumentOutOfRangeException(nameof(targetCol), $"targetCol must be in [0, {d - 1}].");
         if (maxLag <= 0 || maxLag >= n)
             throw new ArgumentOutOfRangeException(nameof(maxLag), $"maxLag must be in [1, {n - 1}].");
+
         int effectiveN = n - maxLag;
-        var laggedX = new double[effectiveN, d * maxLag];
-        var target = new double[effectiveN];
+        var laggedX = new Matrix<T>(effectiveN, d * maxLag);
+        var target = new Vector<T>(effectiveN);
 
         for (int t = 0; t < effectiveN; t++)
         {
-            target[t] = X[t + maxLag, targetCol];
+            target[t] = data[t + maxLag, targetCol];
             for (int lag = 0; lag < maxLag; lag++)
             {
                 for (int col = 0; col < d; col++)
                 {
-                    laggedX[t, lag * d + col] = X[t + maxLag - lag - 1, col];
+                    laggedX[t, lag * d + col] = data[t + maxLag - lag - 1, col];
                 }
             }
         }
@@ -76,78 +81,45 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
     }
 
     /// <summary>
-    /// Computes RSS (Residual Sum of Squares) for OLS regression.
+    /// Computes RSS (Residual Sum of Squares) for OLS regression using generic operations.
     /// </summary>
-    protected static double ComputeRSS(double[,] X, double[] y, int n, int p)
+    protected double ComputeRSS(Matrix<T> X, Vector<T> y, int n, int p)
     {
-        var XtX = new double[p, p];
-        var Xty = new double[p];
+        // Build normal equations: XtX * beta = Xty
+        var XtX = new Matrix<T>(p, p);
+        var Xty = new Vector<T>(p);
         for (int i = 0; i < p; i++)
         {
             for (int j = 0; j < p; j++)
-                for (int k = 0; k < n; k++) XtX[i, j] += X[k, i] * X[k, j];
-            for (int k = 0; k < n; k++) Xty[i] += X[k, i] * y[k];
+            {
+                T sum = NumOps.Zero;
+                for (int k = 0; k < n; k++)
+                    sum = NumOps.Add(sum, NumOps.Multiply(X[k, i], X[k, j]));
+                XtX[i, j] = sum;
+            }
+            T sumY = NumOps.Zero;
+            for (int k = 0; k < n; k++)
+                sumY = NumOps.Add(sumY, NumOps.Multiply(X[k, i], y[k]));
+            Xty[i] = sumY;
         }
 
-        for (int i = 0; i < p; i++) XtX[i, i] += 1e-6;
+        // Ridge regularization
+        T ridge = NumOps.FromDouble(1e-6);
+        for (int i = 0; i < p; i++)
+            XtX[i, i] = NumOps.Add(XtX[i, i], ridge);
 
-        var beta = SolveSystem(XtX, Xty, p);
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX, Xty, MatrixDecompositionType.Lu);
 
         double rss = 0;
         for (int i = 0; i < n; i++)
         {
-            double pred = 0;
-            for (int j = 0; j < p; j++) pred += beta[j] * X[i, j];
-            double err = y[i] - pred;
+            T pred = NumOps.Zero;
+            for (int j = 0; j < p; j++)
+                pred = NumOps.Add(pred, NumOps.Multiply(beta[j], X[i, j]));
+            double err = NumOps.ToDouble(NumOps.Subtract(y[i], pred));
             rss += err * err;
         }
 
         return rss;
     }
-
-    private static double[] SolveSystem(double[,] A, double[] b, int size)
-    {
-        var aug = new double[size, size + 1];
-        for (int i = 0; i < size; i++)
-        {
-            for (int j = 0; j < size; j++) aug[i, j] = A[i, j];
-            aug[i, size] = b[i];
-        }
-
-        for (int col = 0; col < size; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < size; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
-                    maxRow = row;
-            for (int j = 0; j <= size; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-            if (Math.Abs(aug[col, col]) < 1e-10) continue;
-            for (int row = col + 1; row < size; row++)
-            {
-                double factor = aug[row, col] / aug[col, col];
-                for (int j = col; j <= size; j++) aug[row, j] -= factor * aug[col, j];
-            }
-        }
-
-        var x = new double[size];
-        for (int i = size - 1; i >= 0; i--)
-        {
-            x[i] = aug[i, size];
-            for (int j = i + 1; j < size; j++) x[i] -= aug[i, j] * x[j];
-            if (Math.Abs(aug[i, i]) > 1e-10)
-            {
-                x[i] /= aug[i, i];
-            }
-            else
-            {
-                System.Diagnostics.Trace.TraceWarning(
-                    $"TimeSeriesCausal: near-singular pivot at index {i} (value={aug[i, i]:E2}); coefficient set to zero (possible collinearity).");
-                x[i] = 0;
-            }
-        }
-
-        return x;
-    }
-
 }

@@ -1,4 +1,6 @@
+using AiDotNet.Extensions;
 using AiDotNet.Models.Options;
+
 namespace AiDotNet.CausalDiscovery.Functional;
 
 /// <summary>
@@ -32,7 +34,6 @@ namespace AiDotNet.CausalDiscovery.Functional;
 internal class CAMAlgorithm<T> : FunctionalBase<T>
 {
     private double _threshold = 0.1;
-    private double _bandwidth = 0.5;
 
     /// <inheritdoc/>
     public override string Name => "CAM";
@@ -50,46 +51,31 @@ internal class CAMAlgorithm<T> : FunctionalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        var X = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        X = StandardizeData(X, n, d);
-
-        // Estimate bandwidth from data (Scott's rule)
-        _bandwidth = Math.Pow(n, -1.0 / 5.0);
+        var standardized = StandardizeData(data);
 
         // Stage 1: Greedy ordering via residual variance minimization
-        var causalOrder = EstimateCausalOrder(X, n, d);
+        var causalOrder = EstimateCausalOrder(standardized, n, d);
 
         // Stage 2: Fit additive model in causal order and prune weak edges
-        var W = FitAndPrune(X, n, d, causalOrder);
-
-        return DoubleArrayToMatrix(W);
+        return FitAndPrune(standardized, n, d, causalOrder);
     }
 
-    /// <summary>
-    /// Greedily selects variables in causal order by choosing the next variable
-    /// that is best explained by the already-ordered set via additive kernel regression.
-    /// </summary>
-    private List<int> EstimateCausalOrder(double[,] X, int n, int d)
+    private List<int> EstimateCausalOrder(Matrix<T> data, int n, int d)
     {
         var remaining = new HashSet<int>(Enumerable.Range(0, d));
         var ordered = new List<int>();
 
-        // First variable: the one with highest marginal variance (least explained by others)
-        // CAM picks the "root" as the variable with the smallest score when regressed on nothing
-        // All have the same marginal variance after standardization, so pick the least predictable
+        // First variable: least predictable by others
         int firstVar = 0;
         double minPredictability = double.MaxValue;
         foreach (int j in remaining)
         {
             double predictability = 0;
+            var colJ = data.GetColumn(j);
             for (int k = 0; k < d; k++)
             {
                 if (k == j) continue;
-                predictability += Math.Abs(ComputeCorrelation(X, n, j, k));
+                predictability += Math.Abs(ComputeCorrelation(colJ, data.GetColumn(k)));
             }
             if (predictability < minPredictability)
             {
@@ -100,7 +86,6 @@ internal class CAMAlgorithm<T> : FunctionalBase<T>
         ordered.Add(firstVar);
         remaining.Remove(firstVar);
 
-        // Iteratively add the variable best explained by the current ordered set
         while (remaining.Count > 0)
         {
             int bestVar = -1;
@@ -108,7 +93,7 @@ internal class CAMAlgorithm<T> : FunctionalBase<T>
 
             foreach (int candidate in remaining)
             {
-                double residVar = ComputeAdditiveResidualVariance(X, n, candidate, ordered);
+                double residVar = ComputeAdditiveResidualVariance(data, n, candidate, ordered);
                 if (residVar < bestResidVar)
                 {
                     bestResidVar = residVar;
@@ -124,44 +109,34 @@ internal class CAMAlgorithm<T> : FunctionalBase<T>
         return ordered;
     }
 
-    /// <summary>
-    /// Fits additive model for each variable on its predecessors in the causal order,
-    /// then prunes edges whose contribution is below threshold.
-    /// </summary>
-    private double[,] FitAndPrune(double[,] X, int n, int d, List<int> causalOrder)
+    private Matrix<T> FitAndPrune(Matrix<T> data, int n, int d, List<int> causalOrder)
     {
-        var W = new double[d, d];
+        var W = new Matrix<T>(d, d);
 
         for (int idx = 1; idx < d; idx++)
         {
             int target = causalOrder[idx];
             var predecessors = causalOrder.GetRange(0, idx);
 
-            // Test each predecessor's significance via variance reduction
-            double fullResidVar = ComputeAdditiveResidualVariance(X, n, target, predecessors);
+            double fullResidVar = ComputeAdditiveResidualVariance(data, n, target, predecessors);
 
             foreach (int parent in predecessors)
             {
-                // Compute residual variance without this parent
                 var reducedPredecessors = predecessors.Where(p => p != parent).ToList();
                 double reducedResidVar = reducedPredecessors.Count > 0
-                    ? ComputeAdditiveResidualVariance(X, n, target, reducedPredecessors)
-                    : ComputeVariance(X, n, target);
+                    ? ComputeAdditiveResidualVariance(data, n, target, reducedPredecessors)
+                    : NumOps.ToDouble(ComputeColumnVariance(data, target));
 
-                // Variance reduction ratio as edge weight
                 double varianceReduction = reducedResidVar - fullResidVar;
-
-                // Log-likelihood ratio test (approximate): n * log(RSS_reduced / RSS_full)
                 double llRatio = (fullResidVar > 1e-15 && reducedResidVar > 1e-15)
                     ? n * Math.Log(reducedResidVar / fullResidVar)
                     : 0;
 
-                // BIC penalty for one additional nonparametric component
                 double bicPenalty = Math.Log(n);
 
                 if (llRatio > bicPenalty && varianceReduction > _threshold * _threshold)
                 {
-                    W[parent, target] = Math.Sqrt(Math.Max(0, varianceReduction));
+                    W[parent, target] = NumOps.FromDouble(Math.Sqrt(Math.Max(0, varianceReduction)));
                 }
             }
         }
@@ -169,125 +144,59 @@ internal class CAMAlgorithm<T> : FunctionalBase<T>
         return W;
     }
 
-    /// <summary>
-    /// Computes residual variance of target after additive kernel regression on parents:
-    /// target = Σ_k f_k(parent_k) + ε, estimated via Nadaraya–Watson kernel smoothing.
-    /// </summary>
-    private double ComputeAdditiveResidualVariance(double[,] X, int n, int target, List<int> parents)
+    private double ComputeAdditiveResidualVariance(Matrix<T> data, int n, int target, List<int> parents)
     {
         if (parents.Count == 0)
-            return ComputeVariance(X, n, target);
+            return NumOps.ToDouble(ComputeColumnVariance(data, target));
 
         // Backfitting algorithm for additive model
-        var fitted = new double[n];
-        var components = new double[parents.Count][];
+        var components = new Vector<T>[parents.Count];
         for (int k = 0; k < parents.Count; k++)
-            components[k] = new double[n];
+            components[k] = new Vector<T>(n);
 
-        // Initialize: partial residuals = target values
-        var targetVals = new double[n];
-        double targetMean = 0;
+        T nT = NumOps.FromDouble(n);
+        T targetMean = NumOps.Zero;
         for (int i = 0; i < n; i++)
-        {
-            targetVals[i] = X[i, target];
-            targetMean += X[i, target];
-        }
-        targetMean /= n;
+            targetMean = NumOps.Add(targetMean, data[i, target]);
+        targetMean = NumOps.Divide(targetMean, nT);
 
         // Backfitting iterations
         for (int iter = 0; iter < 5; iter++)
         {
             for (int k = 0; k < parents.Count; k++)
             {
-                // Compute partial residuals: target - sum of other components
-                var partialResid = new double[n];
+                var partialResid = new Vector<T>(n);
                 for (int i = 0; i < n; i++)
                 {
-                    partialResid[i] = targetVals[i] - targetMean;
+                    T val = NumOps.Subtract(data[i, target], targetMean);
                     for (int j = 0; j < parents.Count; j++)
                     {
-                        if (j != k) partialResid[i] -= components[j][i];
+                        if (j != k) val = NumOps.Subtract(val, components[j][i]);
                     }
+                    partialResid[i] = val;
                 }
 
-                // Smooth partial residuals against parent[k] using NW kernel
-                components[k] = NadarayaWatsonSmooth(X, n, parents[k], partialResid);
+                components[k] = KernelSmooth(data, parents[k], partialResid);
 
                 // Center the component
-                double compMean = 0;
-                for (int i = 0; i < n; i++) compMean += components[k][i];
-                compMean /= n;
-                for (int i = 0; i < n; i++) components[k][i] -= compMean;
+                T compMean = NumOps.Zero;
+                for (int i = 0; i < n; i++) compMean = NumOps.Add(compMean, components[k][i]);
+                compMean = NumOps.Divide(compMean, nT);
+                for (int i = 0; i < n; i++)
+                    components[k][i] = NumOps.Subtract(components[k][i], compMean);
             }
         }
 
         // Compute residual variance
-        double residVar = 0;
+        T residVar = NumOps.Zero;
         for (int i = 0; i < n; i++)
         {
-            double fit = targetMean;
-            for (int k = 0; k < parents.Count; k++) fit += components[k][i];
-            double resid = targetVals[i] - fit;
-            residVar += resid * resid;
+            T fit = targetMean;
+            for (int k = 0; k < parents.Count; k++) fit = NumOps.Add(fit, components[k][i]);
+            T resid = NumOps.Subtract(data[i, target], fit);
+            residVar = NumOps.Add(residVar, NumOps.Multiply(resid, resid));
         }
 
-        return residVar / n;
-    }
-
-    /// <summary>
-    /// Nadaraya–Watson kernel smoother: E[Y | X=x] = Σ K(x-xi) yi / Σ K(x-xi)
-    /// using Gaussian kernel.
-    /// </summary>
-    private double[] NadarayaWatsonSmooth(double[,] X, int n, int predictor, double[] response)
-    {
-        var smoothed = new double[n];
-        double h = _bandwidth;
-
-        for (int i = 0; i < n; i++)
-        {
-            double xi = X[i, predictor];
-            double numerator = 0;
-            double denominator = 0;
-
-            for (int j = 0; j < n; j++)
-            {
-                double diff = (xi - X[j, predictor]) / h;
-                double kernel = Math.Exp(-0.5 * diff * diff);
-                numerator += kernel * response[j];
-                denominator += kernel;
-            }
-
-            smoothed[i] = denominator > 1e-15 ? numerator / denominator : 0;
-        }
-
-        return smoothed;
-    }
-
-    private static double ComputeVariance(double[,] X, int n, int col)
-    {
-        double mean = 0;
-        for (int i = 0; i < n; i++) mean += X[i, col];
-        mean /= n;
-        double variance = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double d = X[i, col] - mean;
-            variance += d * d;
-        }
-        return variance / n;
-    }
-
-    private static double ComputeCorrelation(double[,] X, int n, int i, int j)
-    {
-        double mi = 0, mj = 0;
-        for (int k = 0; k < n; k++) { mi += X[k, i]; mj += X[k, j]; }
-        mi /= n; mj /= n;
-        double sij = 0, sii = 0, sjj = 0;
-        for (int k = 0; k < n; k++)
-        {
-            double di = X[k, i] - mi, dj = X[k, j] - mj;
-            sij += di * dj; sii += di * di; sjj += dj * dj;
-        }
-        return (sii > 1e-10 && sjj > 1e-10) ? sij / Math.Sqrt(sii * sjj) : 0;
+        return NumOps.ToDouble(NumOps.Divide(residVar, nT));
     }
 }

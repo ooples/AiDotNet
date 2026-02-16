@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.Functional;
@@ -42,72 +43,43 @@ public class ANMAlgorithm<T> : FunctionalBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
-        int n = data.Rows;
         int d = data.Columns;
-        var X = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var standardized = StandardizeData(data);
 
-        X = StandardizeData(X, n, d);
-
-        var W = new double[d, d];
+        var W = new Matrix<T>(d, d);
 
         // Pairwise ANM test for all variable pairs
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
             {
-                var xi = GetColumn(X, i, n);
-                var xj = GetColumn(X, j, n);
+                var xi = standardized.GetColumn(i);
+                var xj = standardized.GetColumn(j);
 
                 // Test i → j: fit xj = f(xi) + noise, check independence of noise and xi
-                var residIJ = RegressOut(xj, xi, n);
-                double depIJ = Math.Abs(GaussianMI(residIJ, xi, n));
+                var residIJ = RegressOut(xj, xi);
+                double depIJ = Math.Abs(GaussianMI(residIJ, xi));
 
                 // Test j → i: fit xi = f(xj) + noise, check independence of noise and xj
-                var residJI = RegressOut(xi, xj, n);
-                double depJI = Math.Abs(GaussianMI(residJI, xj, n));
+                var residJI = RegressOut(xi, xj);
+                double depJI = Math.Abs(GaussianMI(residJI, xj));
 
                 // The direction with lower residual dependence is preferred
                 double asymmetry = depJI - depIJ; // positive means i → j
 
                 if (Math.Abs(asymmetry) > _threshold * 0.1) // weak threshold for direction
                 {
-                    double weight = Math.Abs(ComputeCorrelation(xi, xj, n));
+                    double weight = Math.Abs(ComputeCorrelation(xi, xj));
                     if (weight < _threshold) continue;
 
                     if (asymmetry > 0)
-                        W[i, j] = weight;
+                        W[i, j] = NumOps.FromDouble(weight);
                     else
-                        W[j, i] = weight;
+                        W[j, i] = NumOps.FromDouble(weight);
                 }
             }
         }
 
-        return DoubleArrayToMatrix(W);
-    }
-
-    private static double[] GetColumn(double[,] X, int col, int n)
-    {
-        var result = new double[n];
-        for (int i = 0; i < n; i++) result[i] = X[i, col];
-        return result;
-    }
-
-    private static double ComputeCorrelation(double[] x, double[] y, int n)
-    {
-        double mx = 0, my = 0;
-        for (int i = 0; i < n; i++) { mx += x[i]; my += y[i]; }
-        mx /= n; my /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dx = x[i] - mx, dy = y[i] - my;
-            sxy += dx * dy; sxx += dx * dx; syy += dy * dy;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        return W;
     }
 }

@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.TimeSeries;
@@ -51,13 +53,9 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        var X = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
 
         int effectiveN = n - MaxLag;
-        if (effectiveN < 2 * d) return DoubleArrayToMatrix(new double[d, d]);
+        if (effectiveN < 2 * d) return new Matrix<T>(d, d);
 
         // Step 1: PC condition selection — find candidate parents for each variable
         var candidateParents = new HashSet<(int var, int lag)>[d];
@@ -83,7 +81,7 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     condSet.Remove((pVar, pLag));
 
                     double partCorr = ComputeLaggedPartialCorrelation(
-                        X, n, d, j, pVar, pLag, condSet, effectiveN);
+                        data, j, pVar, pLag, condSet, effectiveN);
 
                     // Fisher z-transform to get p-value
                     double pValue = FisherZTestPValue(partCorr, effectiveN, condSet.Count);
@@ -101,7 +99,7 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         }
 
         // Step 2: MCI tests — test with conditioning on parents of BOTH source and target
-        var W = new double[d, d];
+        var W = new Matrix<T>(d, d);
         for (int j = 0; j < d; j++)
         {
             foreach (var (pVar, pLag) in candidateParents[j])
@@ -115,38 +113,42 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     mciCondSet.Add(parent);
 
                 double partCorr = ComputeLaggedPartialCorrelation(
-                    X, n, d, j, pVar, pLag, mciCondSet, effectiveN);
+                    data, j, pVar, pLag, mciCondSet, effectiveN);
 
                 double pValue = FisherZTestPValue(partCorr, effectiveN, mciCondSet.Count);
 
                 if (pValue <= _alpha) // significant causal link
                 {
                     // Aggregate across lags: take maximum absolute partial correlation
-                    W[pVar, j] = Math.Max(W[pVar, j], Math.Abs(partCorr));
+                    double absPartCorr = Math.Abs(partCorr);
+                    double current = NumOps.ToDouble(W[pVar, j]);
+                    if (absPartCorr > current)
+                        W[pVar, j] = NumOps.FromDouble(absPartCorr);
                 }
             }
         }
 
-        return DoubleArrayToMatrix(W);
+        return W;
     }
 
     /// <summary>
     /// Computes partial correlation between target(t) and source(t-lag) conditioned on a set of
     /// lagged parent variables, using OLS residualization.
     /// </summary>
-    private static double ComputeLaggedPartialCorrelation(double[,] X, int n, int d,
+    private double ComputeLaggedPartialCorrelation(Matrix<T> data,
         int target, int source, int lag, HashSet<(int var, int lag)> condSet, int effectiveN)
     {
+        int n = data.Rows;
         int offset = n - effectiveN;
 
         // Build target and source vectors
-        var targetVals = new double[effectiveN];
-        var sourceVals = new double[effectiveN];
+        var targetVals = new Vector<T>(effectiveN);
+        var sourceVals = new Vector<T>(effectiveN);
 
         for (int t = 0; t < effectiveN; t++)
         {
-            targetVals[t] = X[offset + t, target];
-            sourceVals[t] = X[offset + t - lag, source];
+            targetVals[t] = data[offset + t, target];
+            sourceVals[t] = data[offset + t - lag, source];
         }
 
         if (condSet.Count == 0)
@@ -157,14 +159,14 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
 
         // Build conditioning matrix (each column is a lagged conditioning variable)
         int numCond = condSet.Count;
-        var condMatrix = new double[effectiveN, numCond];
+        var condMatrix = new Matrix<T>(effectiveN, numCond);
         int col = 0;
         foreach (var (cVar, cLag) in condSet)
         {
             for (int t = 0; t < effectiveN; t++)
             {
                 int tIdx = offset + t - cLag;
-                condMatrix[t, col] = (tIdx >= 0 && tIdx < n) ? X[tIdx, cVar] : 0.0;
+                condMatrix[t, col] = (tIdx >= 0 && tIdx < n) ? data[tIdx, cVar] : NumOps.Zero;
             }
             col++;
         }
@@ -178,139 +180,63 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
 
     /// <summary>
     /// Computes OLS residuals: y - Z * (Z'Z)^{-1} Z'y using the normal equations.
-    /// Falls back to simple mean-centering if the system is singular.
     /// </summary>
-    private static double[] OLSResiduals(double[,] Z, double[] y, int n, int p)
+    private Vector<T> OLSResiduals(Matrix<T> Z, Vector<T> y, int n, int p)
     {
-        // Compute Z'Z (p x p)
-        var ZtZ = new double[p, p];
-        var Zty = new double[p];
+        // Build normal equations: ZtZ * beta = Zty
+        var ZtZ = new Matrix<T>(p, p);
+        var Zty = new Vector<T>(p);
 
         for (int i = 0; i < p; i++)
         {
             for (int j = i; j < p; j++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int t = 0; t < n; t++)
-                    sum += Z[t, i] * Z[t, j];
+                    sum = NumOps.Add(sum, NumOps.Multiply(Z[t, i], Z[t, j]));
                 ZtZ[i, j] = sum;
                 ZtZ[j, i] = sum;
             }
 
-            double sumZy = 0;
+            T sumZy = NumOps.Zero;
             for (int t = 0; t < n; t++)
-                sumZy += Z[t, i] * y[t];
+                sumZy = NumOps.Add(sumZy, NumOps.Multiply(Z[t, i], y[t]));
             Zty[i] = sumZy;
         }
 
-        // Solve ZtZ * beta = Zty via Cholesky-like approach (add ridge for stability)
-        double ridge = 1e-10;
+        // Ridge for stability
+        T ridge = NumOps.FromDouble(1e-10);
         for (int i = 0; i < p; i++)
-            ZtZ[i, i] += ridge;
+            ZtZ[i, i] = NumOps.Add(ZtZ[i, i], ridge);
 
-        var beta = SolveSymmetricPositiveDefinite(ZtZ, Zty, p);
-        if (beta == null)
-        {
-            // Fallback: mean-center
-            double mean = 0;
-            for (int t = 0; t < n; t++) mean += y[t];
-            mean /= n;
-            var resid = new double[n];
-            for (int t = 0; t < n; t++) resid[t] = y[t] - mean;
-            return resid;
-        }
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(ZtZ, Zty, MatrixDecompositionType.Lu);
 
         // Compute residuals: y - Z * beta
-        var residuals = new double[n];
+        var residuals = new Vector<T>(n);
         for (int t = 0; t < n; t++)
         {
-            double pred = 0;
+            T pred = NumOps.Zero;
             for (int j = 0; j < p; j++)
-                pred += Z[t, j] * beta[j];
-            residuals[t] = y[t] - pred;
+                pred = NumOps.Add(pred, NumOps.Multiply(Z[t, j], beta[j]));
+            residuals[t] = NumOps.Subtract(y[t], pred);
         }
 
         return residuals;
     }
 
     /// <summary>
-    /// Solves A * x = b for symmetric positive definite A using Gaussian elimination with pivoting.
-    /// Returns null if the system is singular.
+    /// Computes Pearson correlation between two vectors.
     /// </summary>
-    private static double[]? SolveSymmetricPositiveDefinite(double[,] A, double[] b, int p)
-    {
-        // Work on copies
-        var M = new double[p, p];
-        var rhs = new double[p];
-        for (int i = 0; i < p; i++)
-        {
-            rhs[i] = b[i];
-            for (int j = 0; j < p; j++)
-                M[i, j] = A[i, j];
-        }
-
-        // Forward elimination with partial pivoting
-        for (int k = 0; k < p; k++)
-        {
-            // Find pivot
-            int maxRow = k;
-            double maxVal = Math.Abs(M[k, k]);
-            for (int i = k + 1; i < p; i++)
-            {
-                if (Math.Abs(M[i, k]) > maxVal)
-                {
-                    maxVal = Math.Abs(M[i, k]);
-                    maxRow = i;
-                }
-            }
-
-            if (maxVal < 1e-12) return null; // singular
-
-            // Swap rows
-            if (maxRow != k)
-            {
-                for (int j = 0; j < p; j++)
-                    (M[k, j], M[maxRow, j]) = (M[maxRow, j], M[k, j]);
-                (rhs[k], rhs[maxRow]) = (rhs[maxRow], rhs[k]);
-            }
-
-            // Eliminate below
-            for (int i = k + 1; i < p; i++)
-            {
-                double factor = M[i, k] / M[k, k];
-                for (int j = k + 1; j < p; j++)
-                    M[i, j] -= factor * M[k, j];
-                rhs[i] -= factor * rhs[k];
-                M[i, k] = 0;
-            }
-        }
-
-        // Back substitution
-        var x = new double[p];
-        for (int i = p - 1; i >= 0; i--)
-        {
-            double sum = rhs[i];
-            for (int j = i + 1; j < p; j++)
-                sum -= M[i, j] * x[j];
-            x[i] = sum / M[i, i];
-        }
-
-        return x;
-    }
-
-    /// <summary>
-    /// Computes Pearson correlation between two arrays.
-    /// </summary>
-    private static double PearsonCorrelation(double[] x, double[] y, int n)
+    private double PearsonCorrelation(Vector<T> x, Vector<T> y, int n)
     {
         double mx = 0, my = 0;
-        for (int i = 0; i < n; i++) { mx += x[i]; my += y[i]; }
+        for (int i = 0; i < n; i++) { mx += NumOps.ToDouble(x[i]); my += NumOps.ToDouble(y[i]); }
         mx /= n; my /= n;
 
         double sxy = 0, sxx = 0, syy = 0;
         for (int i = 0; i < n; i++)
         {
-            double dx = x[i] - mx, dy = y[i] - my;
+            double dx = NumOps.ToDouble(x[i]) - mx, dy = NumOps.ToDouble(y[i]) - my;
             sxy += dx * dy; sxx += dx * dx; syy += dy * dy;
         }
 

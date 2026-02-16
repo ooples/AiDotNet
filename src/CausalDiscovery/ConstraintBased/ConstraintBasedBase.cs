@@ -1,4 +1,6 @@
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.CausalDiscovery.ConstraintBased;
 
@@ -46,17 +48,22 @@ public abstract class ConstraintBasedBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Computes Pearson correlation between two columns of data.
     /// </summary>
-    protected static double ComputeCorrelation(double[,] X, int n, int col1, int col2)
+    protected double ComputeCorrelation(Matrix<T> data, int col1, int col2)
     {
+        int n = data.Rows;
         double mean1 = 0, mean2 = 0;
-        for (int i = 0; i < n; i++) { mean1 += X[i, col1]; mean2 += X[i, col2]; }
+        for (int i = 0; i < n; i++)
+        {
+            mean1 += NumOps.ToDouble(data[i, col1]);
+            mean2 += NumOps.ToDouble(data[i, col2]);
+        }
         mean1 /= n; mean2 /= n;
 
         double sxy = 0, sxx = 0, syy = 0;
         for (int i = 0; i < n; i++)
         {
-            double d1 = X[i, col1] - mean1;
-            double d2 = X[i, col2] - mean2;
+            double d1 = NumOps.ToDouble(data[i, col1]) - mean1;
+            double d2 = NumOps.ToDouble(data[i, col2]) - mean2;
             sxy += d1 * d2;
             sxx += d1 * d1;
             syy += d2 * d2;
@@ -69,9 +76,10 @@ public abstract class ConstraintBasedBase<T> : CausalDiscoveryBase<T>
     /// Tests conditional independence between variables i and j given conditioning set,
     /// using Fisher's z-transform of partial correlation.
     /// </summary>
-    protected bool TestCI(double[,] X, int n, int i, int j, List<int> condSet, double alpha)
+    protected bool TestCI(Matrix<T> data, int i, int j, List<int> condSet, double alpha)
     {
-        double partialCorr = ComputePartialCorr(X, n, i, j, condSet);
+        double partialCorr = ComputePartialCorr(data, i, j, condSet);
+        int n = data.Rows;
         int dof = n - condSet.Count - 3;
         if (dof <= 0) return false;
 
@@ -84,23 +92,28 @@ public abstract class ConstraintBasedBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Computes partial correlation between variables i and j given conditioning set.
     /// </summary>
-    protected static double ComputePartialCorr(double[,] X, int n, int i, int j, List<int> condSet)
+    protected double ComputePartialCorr(Matrix<T> data, int i, int j, List<int> condSet)
     {
         if (condSet.Count == 0)
-            return ComputeCorrelation(X, n, i, j);
+            return ComputeCorrelation(data, i, j);
 
-        var residI = ComputeResiduals(X, n, i, condSet);
-        var residJ = ComputeResiduals(X, n, j, condSet);
+        var residI = ComputeResiduals(data, i, condSet);
+        var residJ = ComputeResiduals(data, j, condSet);
 
+        int n = data.Rows;
         double meanI = 0, meanJ = 0;
-        for (int k = 0; k < n; k++) { meanI += residI[k]; meanJ += residJ[k]; }
+        for (int k = 0; k < n; k++)
+        {
+            meanI += NumOps.ToDouble(residI[k]);
+            meanJ += NumOps.ToDouble(residJ[k]);
+        }
         meanI /= n; meanJ /= n;
 
         double sxy = 0, sxx = 0, syy = 0;
         for (int k = 0; k < n; k++)
         {
-            double di = residI[k] - meanI;
-            double dj = residJ[k] - meanJ;
+            double di = NumOps.ToDouble(residI[k]) - meanI;
+            double dj = NumOps.ToDouble(residJ[k]) - meanJ;
             sxy += di * dj;
             sxx += di * di;
             syy += dj * dj;
@@ -112,85 +125,57 @@ public abstract class ConstraintBasedBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Computes residuals of column target after regressing on predictor columns.
     /// </summary>
-    private static double[] ComputeResiduals(double[,] X, int n, int target, List<int> predictors)
+    private Vector<T> ComputeResiduals(Matrix<T> data, int target, List<int> predictors)
     {
-        var residuals = new double[n];
-        for (int i = 0; i < n; i++) residuals[i] = X[i, target];
+        int n = data.Rows;
+        var y = data.GetColumn(target);
 
-        if (predictors.Count == 0) return residuals;
+        if (predictors.Count == 0) return y;
 
         int p = predictors.Count;
-        var Z = new double[n, p + 1];
+        int dim = p + 1;
+        var Z = new Matrix<T>(n, dim);
         for (int i = 0; i < n; i++)
         {
-            Z[i, 0] = 1.0;
+            Z[i, 0] = NumOps.One;
             for (int j = 0; j < p; j++)
-                Z[i, j + 1] = X[i, predictors[j]];
+                Z[i, j + 1] = data[i, predictors[j]];
         }
 
-        var beta = SolveOLS(Z, residuals, n, p + 1);
+        // Build normal equations: ZtZ * beta = Zty
+        var ZtZ = new Matrix<T>(dim, dim);
+        var Zty = new Vector<T>(dim);
+        for (int a = 0; a < dim; a++)
+        {
+            for (int b = 0; b < dim; b++)
+            {
+                T sum = NumOps.Zero;
+                for (int k = 0; k < n; k++)
+                    sum = NumOps.Add(sum, NumOps.Multiply(Z[k, a], Z[k, b]));
+                ZtZ[a, b] = sum;
+            }
+            T sumY = NumOps.Zero;
+            for (int k = 0; k < n; k++)
+                sumY = NumOps.Add(sumY, NumOps.Multiply(Z[k, a], y[k]));
+            Zty[a] = sumY;
+        }
+
+        T ridge = NumOps.FromDouble(1e-6);
+        for (int a = 0; a < dim; a++)
+            ZtZ[a, a] = NumOps.Add(ZtZ[a, a], ridge);
+
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(ZtZ, Zty, MatrixDecompositionType.Lu);
+
+        var residuals = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            double predicted = beta[0];
-            for (int j = 0; j < p; j++)
-                predicted += beta[j + 1] * X[i, predictors[j]];
-            residuals[i] -= predicted;
+            T pred = NumOps.Zero;
+            for (int j = 0; j < dim; j++)
+                pred = NumOps.Add(pred, NumOps.Multiply(beta[j], Z[i, j]));
+            residuals[i] = NumOps.Subtract(y[i], pred);
         }
 
         return residuals;
-    }
-
-    private static double[] SolveOLS(double[,] Z, double[] y, int n, int p)
-    {
-        var ZtZ = new double[p, p];
-        var Zty = new double[p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k < n; k++) sum += Z[k, i] * Z[k, j];
-                ZtZ[i, j] = sum;
-            }
-            double sumY = 0;
-            for (int k = 0; k < n; k++) sumY += Z[k, i] * y[k];
-            Zty[i] = sumY;
-        }
-
-        for (int i = 0; i < p; i++) ZtZ[i, i] += 1e-6;
-
-        var aug = new double[p, p + 1];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++) aug[i, j] = ZtZ[i, j];
-            aug[i, p] = Zty[i];
-        }
-
-        for (int col = 0; col < p; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < p; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
-                    maxRow = row;
-            for (int j = 0; j <= p; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-            if (Math.Abs(aug[col, col]) < 1e-10) continue;
-            for (int row = col + 1; row < p; row++)
-            {
-                double factor = aug[row, col] / aug[col, col];
-                for (int j = col; j <= p; j++) aug[row, j] -= factor * aug[col, j];
-            }
-        }
-
-        var beta = new double[p];
-        for (int i = p - 1; i >= 0; i--)
-        {
-            beta[i] = aug[i, p];
-            for (int j = i + 1; j < p; j++) beta[i] -= aug[i, j] * beta[j];
-            beta[i] /= (Math.Abs(aug[i, i]) > 1e-10 ? aug[i, i] : 1);
-        }
-
-        return beta;
     }
 
     /// <summary>

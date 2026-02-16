@@ -1,4 +1,6 @@
+using AiDotNet.Extensions;
 using AiDotNet.Models.Options;
+
 namespace AiDotNet.CausalDiscovery.Functional;
 
 /// <summary>
@@ -48,151 +50,98 @@ internal class PNLAlgorithm<T> : FunctionalBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
-        int n = data.Rows;
         int d = data.Columns;
-        var X = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var standardized = StandardizeData(data);
 
-        X = StandardizeData(X, n, d);
-
-        var W = new double[d, d];
+        var W = new Matrix<T>(d, d);
 
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
             {
-                var xi = GetColumn(X, i, n);
-                var xj = GetColumn(X, j, n);
+                var xi = standardized.GetColumn(i);
+                var xj = standardized.GetColumn(j);
 
-                double weight = Math.Abs(ComputeCorrelation(xi, xj, n));
+                double weight = Math.Abs(ComputeCorrelation(xi, xj));
                 if (weight < _threshold) continue;
 
-                // Test direction i → j: Y=xj, X=xi => Y = g(f(X) + N)
-                double depIJ = PNLResidualDependence(xi, xj, n);
-
-                // Test direction j → i: Y=xi, X=xj => Y = g(f(X) + N)
-                double depJI = PNLResidualDependence(xj, xi, n);
+                double depIJ = PNLResidualDependence(xi, xj);
+                double depJI = PNLResidualDependence(xj, xi);
 
                 double asymmetry = depJI - depIJ;
                 if (Math.Abs(asymmetry) > _threshold * 0.1)
                 {
                     if (asymmetry > 0)
-                        W[i, j] = weight;
+                        W[i, j] = NumOps.FromDouble(weight);
                     else
-                        W[j, i] = weight;
+                        W[j, i] = NumOps.FromDouble(weight);
                 }
             }
         }
 
-        return DoubleArrayToMatrix(W);
+        return W;
     }
 
     /// <summary>
     /// Computes residual dependence for the PNL model Y = g(f(X) + N).
-    /// <list type="number">
-    /// <item>Fits inner function f via kernel regression: f_hat(X)</item>
-    /// <item>Inverts outer function g using rank-based CDF transform on Y</item>
-    /// <item>Computes residuals: N_hat = g^(-1)(Y) - f_hat(X)</item>
-    /// <item>Returns dependence between residuals and cause X</item>
-    /// </list>
     /// </summary>
-    private double PNLResidualDependence(double[] cause, double[] effect, int n)
+    private double PNLResidualDependence(Vector<T> cause, Vector<T> effect)
     {
-        // Step 1: Estimate inner function f via Nadaraya-Watson kernel regression
-        double h = Math.Pow(n, -1.0 / 5.0);
-        var fHat = new double[n];
+        int n = cause.Length;
+
+        // Step 1: Estimate inner function f via kernel regression
+        var fHat = KernelRegressOut(cause, effect);
+        // fHat is the residual; we need the prediction: predicted = effect - residual
+        var fPredicted = new Vector<T>(n);
         for (int i = 0; i < n; i++)
-        {
-            double num = 0, den = 0;
-            for (int j = 0; j < n; j++)
-            {
-                double diff = (cause[i] - cause[j]) / h;
-                double kernel = Math.Exp(-0.5 * diff * diff);
-                num += kernel * effect[j];
-                den += kernel;
-            }
-            fHat[i] = den > 1e-15 ? num / den : 0;
-        }
+            fPredicted[i] = NumOps.Subtract(effect[i], fHat[i]);
 
         // Step 2: Invert g using rank-based probability integral transform
-        // g^(-1)(Y) is approximated by Φ^(-1)(F_Y(Y)) where F_Y is empirical CDF
-        var gInvY = RankTransform(effect, n);
+        var gInvY = RankTransform(effect);
+        var gInvFHat = RankTransform(fPredicted);
 
-        // Step 3: Also transform f_hat to the same scale
-        var gInvFHat = RankTransform(fHat, n);
-
-        // Step 4: Compute residuals in the linearized space
-        var residuals = new double[n];
+        // Step 3: Compute residuals in the linearized space
+        var residuals = new Vector<T>(n);
         for (int i = 0; i < n; i++)
-            residuals[i] = gInvY[i] - gInvFHat[i];
+            residuals[i] = NumOps.Subtract(gInvY[i], gInvFHat[i]);
 
-        // Step 5: Measure independence of residuals from cause
-        return Math.Abs(GaussianMI(residuals, cause, n));
+        // Step 4: Measure independence of residuals from cause
+        return Math.Abs(GaussianMI(residuals, cause));
     }
 
     /// <summary>
     /// Rank-based transform: maps values to approximate standard normal via empirical CDF.
-    /// This serves as the inverse of the unknown post-nonlinear function g.
     /// </summary>
-    private static double[] RankTransform(double[] values, int n)
+    private Vector<T> RankTransform(Vector<T> values)
     {
+        int n = values.Length;
         var indexed = new (double Value, int Index)[n];
         for (int i = 0; i < n; i++)
-            indexed[i] = (values[i], i);
+            indexed[i] = (NumOps.ToDouble(values[i]), i);
         Array.Sort(indexed, (a, b) => a.Value.CompareTo(b.Value));
 
-        var transformed = new double[n];
+        var transformed = new Vector<T>(n);
         for (int rank = 0; rank < n; rank++)
         {
-            // Map rank to (0,1) then to standard normal via probit approximation
             double u = (rank + 0.5) / n;
-            transformed[indexed[rank].Index] = ProbitApproximation(u);
+            transformed[indexed[rank].Index] = NumOps.FromDouble(ProbitApproximation(u));
         }
         return transformed;
     }
 
     /// <summary>
-    /// Approximation of the probit function (inverse normal CDF) using rational approximation.
+    /// Abramowitz and Stegun 26.2.23 rational approximation of the probit function.
     /// </summary>
     private static double ProbitApproximation(double p)
     {
-        // Abramowitz and Stegun 26.2.23 rational approximation
         p = Math.Max(1e-6, Math.Min(1 - 1e-6, p));
         double sign = p < 0.5 ? -1.0 : 1.0;
         double q = p < 0.5 ? p : 1 - p;
         double t = Math.Sqrt(-2.0 * Math.Log(q));
 
-        const double c0 = 2.515517;
-        const double c1 = 0.802853;
-        const double c2 = 0.010328;
-        const double d1 = 1.432788;
-        const double d2 = 0.189269;
-        const double d3 = 0.001308;
+        const double c0 = 2.515517, c1 = 0.802853, c2 = 0.010328;
+        const double d1 = 1.432788, d2 = 0.189269, d3 = 0.001308;
 
-        double result = t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
-        return sign * result;
-    }
-
-    private static double[] GetColumn(double[,] X, int col, int n)
-    {
-        var result = new double[n];
-        for (int i = 0; i < n; i++) result[i] = X[i, col];
-        return result;
-    }
-
-    private static double ComputeCorrelation(double[] x, double[] y, int n)
-    {
-        double mx = 0, my = 0;
-        for (int i = 0; i < n; i++) { mx += x[i]; my += y[i]; }
-        mx /= n; my /= n;
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dx = x[i] - mx, dy = y[i] - my;
-            sxy += dx * dy; sxx += dx * dx; syy += dy * dy;
-        }
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        return sign * (t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t));
     }
 }

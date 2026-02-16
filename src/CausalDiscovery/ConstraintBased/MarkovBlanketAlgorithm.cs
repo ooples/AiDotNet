@@ -14,11 +14,6 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 /// </list>
 /// </para>
 /// <para>
-/// The Markov blanket of a variable consists of its parents, children, and co-parents (other parents
-/// of its children). This is the minimal set of variables that makes the target conditionally
-/// independent of all other variables.
-/// </para>
-/// <para>
 /// <b>For Beginners:</b> Think of a variable's Markov blanket as a "shield" — if you know
 /// all variables in the blanket, no other variable can provide additional information about
 /// the target. This algorithm finds that shield by adding helpful variables (growing) and
@@ -31,13 +26,9 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 internal class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
 {
-    /// <summary>Number of bins for discretization. Higher values capture finer-grained distributions but need more data.</summary>
     private const int DefaultDiscretizationBins = 10;
-    /// <summary>Minimum conditional MI to consider a variable relevant in the Markov blanket.</summary>
     private const double DefaultMIThreshold = 0.01;
-    /// <summary>Minimum range to distinguish from constant columns during discretization.</summary>
     private const double MinDiscretizationRange = 1e-10;
-    /// <summary>Minimum group size in conditional MI computation to avoid noisy estimates.</summary>
     private const int MinGroupSizeForMI = 5;
 
     private readonly int _nBins = DefaultDiscretizationBins;
@@ -52,9 +43,6 @@ internal class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => false;
 
-    /// <summary>
-    /// Initializes Markov Blanket algorithm with optional configuration.
-    /// </summary>
     public MarkovBlanketAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyConstraintOptions(options);
@@ -69,7 +57,7 @@ internal class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
         if (n == 0)
             return new Matrix<T>(d, d);
 
-        // Discretize data for MI computation
+        // Discretize data for MI computation (uses int[,] which is legitimate for binned indices)
         var X = DiscretizeData(data, n, d);
 
         // Find Markov blanket for each variable
@@ -79,9 +67,8 @@ internal class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
             blankets[target] = FindMarkovBlanket(X, n, d, target);
         }
 
-        // Build adjacency: edge i→j if j in blanket(i) or i in blanket(j)
-        // Use MI as edge weight
-        var W = new double[d, d];
+        // Build adjacency using Matrix<T>
+        var W = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
@@ -89,18 +76,18 @@ internal class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
                 if (blankets[i].Contains(j) || blankets[j].Contains(i))
                 {
                     double mi = ComputeMI(X, i, j, n);
-                    W[i, j] = mi;
-                    W[j, i] = mi;
+                    T miT = NumOps.FromDouble(mi);
+                    W[i, j] = miT;
+                    W[j, i] = miT;
                 }
             }
         }
 
-        return DoubleArrayToMatrix(W);
+        return W;
     }
 
     private HashSet<int> FindMarkovBlanket(int[,] X, int n, int d, int target)
     {
-        // Compute MI for all features with target
         var scores = new double[d];
         for (int j = 0; j < d; j++)
         {
@@ -197,7 +184,6 @@ internal class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
         if (condSet.Count == 0)
             return ComputeMI(X, feature, target, n);
 
-        // Group by the JOINT configuration of all conditioning variables
         var condVars = condSet.ToArray();
         var groups = new Dictionary<string, List<int>>();
         for (int i = 0; i < n; i++)

@@ -9,18 +9,6 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 /// <para>
 /// MMPC identifies the parents and children (direct causes and effects) of each variable
 /// using a forward-backward selection procedure based on conditional independence tests.
-/// Unlike the PC algorithm which learns the full graph, MMPC focuses on finding the
-/// local neighborhood of each variable, then assembles a global graph.
-/// </para>
-/// <para>
-/// <b>Algorithm:</b>
-/// <list type="number">
-/// <item>Forward phase: Greedily add the feature most associated with the target,
-/// conditioned on the current set (max-min criterion).</item>
-/// <item>Backward phase: Remove features that become conditionally independent
-/// given the others.</item>
-/// <item>Repeat for all variables to build the full graph.</item>
-/// </list>
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> MMPC finds the "direct neighbors" of each variable in the
@@ -45,9 +33,6 @@ public class MMPCAlgorithm<T> : ConstraintBasedBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => false;
 
-    /// <summary>
-    /// Initializes MMPC with optional configuration.
-    /// </summary>
     public MMPCAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyConstraintOptions(options);
@@ -58,40 +43,37 @@ public class MMPCAlgorithm<T> : ConstraintBasedBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
-        int n = data.Rows;
         int d = data.Columns;
-        var X = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
 
         // Find parents/children of each variable
         var pcSets = new HashSet<int>[d];
         for (int target = 0; target < d; target++)
         {
-            pcSets[target] = FindParentsChildren(X, n, d, target);
+            pcSets[target] = FindParentsChildren(data, target);
         }
 
         // Build symmetric adjacency and orient using constraint tests
-        var W = new double[d, d];
+        var W = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
             {
                 if (pcSets[i].Contains(j) || pcSets[j].Contains(i))
                 {
-                    double weight = Math.Abs(ComputeCorrelation(X, n, i, j));
-                    W[i, j] = weight;
-                    W[j, i] = weight;
+                    double weight = Math.Abs(ComputeCorrelation(data, i, j));
+                    T weightT = NumOps.FromDouble(weight);
+                    W[i, j] = weightT;
+                    W[j, i] = weightT;
                 }
             }
         }
 
-        return DoubleArrayToMatrix(W);
+        return W;
     }
 
-    private HashSet<int> FindParentsChildren(double[,] X, int n, int d, int target)
+    private HashSet<int> FindParentsChildren(Matrix<T> data, int target)
     {
+        int d = data.Columns;
         var candidates = new HashSet<int>();
 
         // Forward phase: max-min criterion
@@ -104,11 +86,11 @@ public class MMPCAlgorithm<T> : ConstraintBasedBase<T>
             {
                 if (j == target || candidates.Contains(j)) continue;
 
-                double minAssoc = Math.Abs(ComputeCorrelation(X, n, j, target));
+                double minAssoc = Math.Abs(ComputeCorrelation(data, j, target));
 
                 foreach (int s in candidates)
                 {
-                    double condAssoc = Math.Abs(ComputePartialCorr(X, n, j, target, [s]));
+                    double condAssoc = Math.Abs(ComputePartialCorr(data, j, target, [s]));
                     minAssoc = Math.Min(minAssoc, condAssoc);
                 }
 
@@ -135,7 +117,7 @@ public class MMPCAlgorithm<T> : ConstraintBasedBase<T>
             bool isIndependent = true;
             foreach (int s in others)
             {
-                double condAssoc = Math.Abs(ComputePartialCorr(X, n, j, target, [s]));
+                double condAssoc = Math.Abs(ComputePartialCorr(data, j, target, [s]));
                 if (condAssoc >= _minAssocThreshold)
                 {
                     isIndependent = false;

@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.CausalDiscovery.Functional;
@@ -55,16 +56,14 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        var X = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        X = StandardizeData(X, n, d);
+        var standardized = StandardizeData(data);
 
         var remaining = Enumerable.Range(0, d).ToList();
         var causalOrder = new List<int>();
-        var currentData = (double[,])X.Clone();
+        var currentData = new Matrix<T>(n, d);
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < d; j++)
+                currentData[i, j] = standardized[i, j];
 
         // Iteratively find root and regress out
         while (remaining.Count > 0)
@@ -76,17 +75,16 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
             foreach (int j in remaining)
             {
                 double totalDep = 0;
-                var col = new double[n];
-                for (int i = 0; i < n; i++) col[i] = currentData[i, j];
+                var col = currentData.GetColumn(j);
 
                 foreach (int k in remaining)
                 {
                     if (k == j) continue;
-                    var resid = RegressOut(col, GetColumn(currentData, k, n), n);
+                    var resid = RegressOut(col, currentData.GetColumn(k));
 
                     // Measure non-Gaussianity of residuals (kurtosis-based independence)
-                    double kurtRes = Math.Abs(ComputeKurtosis(resid, n) - 3.0);
-                    double kurtOrig = Math.Abs(ComputeKurtosis(col, n) - 3.0);
+                    double kurtRes = Math.Abs(ComputeKurtosis(resid) - 3.0);
+                    double kurtOrig = Math.Abs(ComputeKurtosis(col) - 3.0);
                     totalDep += Math.Abs(kurtOrig - kurtRes);
                 }
 
@@ -105,12 +103,16 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
             // Regress out root from remaining variables
             if (remaining.Count > 0)
             {
-                var rootCol = GetColumn(currentData, root, n);
-                var newData = (double[,])currentData.Clone();
+                var rootCol = currentData.GetColumn(root);
+                var newData = new Matrix<T>(n, d);
+                for (int i = 0; i < n; i++)
+                    for (int j = 0; j < d; j++)
+                        newData[i, j] = currentData[i, j];
+
                 foreach (int j in remaining)
                 {
-                    var col = GetColumn(currentData, j, n);
-                    var resid = RegressOut(col, rootCol, n);
+                    var col = currentData.GetColumn(j);
+                    var resid = RegressOut(col, rootCol);
                     for (int i = 0; i < n; i++) newData[i, j] = resid[i];
                 }
 
@@ -119,43 +121,44 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
         }
 
         // Estimate B matrix using OLS in causal order
-        var B = new double[d, d];
+        var B = new Matrix<T>(d, d);
         for (int idx = 1; idx < d; idx++)
         {
             int j = causalOrder[idx];
-            var yCol = GetColumn(X, j, n);
+            var yCol = standardized.GetColumn(j);
 
             for (int pidx = 0; pidx < idx; pidx++)
             {
                 int parent = causalOrder[pidx];
-                var xCol = GetColumn(X, parent, n);
+                var xCol = standardized.GetColumn(parent);
 
                 // Simple regression coefficient
-                double mx = 0, my = 0;
-                for (int i = 0; i < n; i++) { mx += xCol[i]; my += yCol[i]; }
-                mx /= n; my /= n;
-
-                double sxy = 0, sxx = 0;
+                T nT = NumOps.FromDouble(n);
+                T mx = NumOps.Zero, my = NumOps.Zero;
                 for (int i = 0; i < n; i++)
                 {
-                    double dx = xCol[i] - mx;
-                    sxy += dx * (yCol[i] - my);
-                    sxx += dx * dx;
+                    mx = NumOps.Add(mx, xCol[i]);
+                    my = NumOps.Add(my, yCol[i]);
+                }
+                mx = NumOps.Divide(mx, nT);
+                my = NumOps.Divide(my, nT);
+
+                T sxy = NumOps.Zero, sxx = NumOps.Zero;
+                for (int i = 0; i < n; i++)
+                {
+                    T dx = NumOps.Subtract(xCol[i], mx);
+                    sxy = NumOps.Add(sxy, NumOps.Multiply(dx, NumOps.Subtract(yCol[i], my)));
+                    sxx = NumOps.Add(sxx, NumOps.Multiply(dx, dx));
                 }
 
-                double beta = sxx > 1e-10 ? sxy / sxx : 0;
-                if (Math.Abs(beta) >= _threshold)
+                double sxx_d = NumOps.ToDouble(sxx);
+                T beta = sxx_d > 1e-10 ? NumOps.Divide(sxy, sxx) : NumOps.Zero;
+                double beta_d = NumOps.ToDouble(beta);
+                if (Math.Abs(beta_d) >= _threshold)
                     B[parent, j] = beta;
             }
         }
 
-        return DoubleArrayToMatrix(B);
-    }
-
-    private static double[] GetColumn(double[,] X, int col, int n)
-    {
-        var result = new double[n];
-        for (int i = 0; i < n; i++) result[i] = X[i, col];
-        return result;
+        return B;
     }
 }

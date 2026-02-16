@@ -42,27 +42,19 @@ public class MMHCAlgorithm<T> : HybridBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
-        int n = data.Rows;
-        int d = data.Columns;
-        var X = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
         // Phase 1: MMPC — find candidate parents/children for each variable
-        var skeleton = MMPCPhase(X, n, d);
+        var skeleton = MMPCPhase(data);
 
         // Phase 2: Hill Climbing within restricted space
-        var W = HillClimbPhase(X, n, d, skeleton);
-
-        return DoubleArrayToMatrix(W);
+        return HillClimbPhase(data, skeleton);
     }
 
     /// <summary>
     /// MMPC phase: for each variable, identify candidate neighbors using Max-Min heuristic.
     /// </summary>
-    private bool[,] MMPCPhase(double[,] X, int n, int d)
+    private bool[,] MMPCPhase(Matrix<T> data)
     {
+        int d = data.Columns;
         var candidates = new bool[d, d];
 
         for (int target = 0; target < d; target++)
@@ -82,7 +74,7 @@ public class MMHCAlgorithm<T> : HybridBase<T>
                     if (candidate == target || cpc.Contains(candidate)) continue;
 
                     // Min association over conditioning sets
-                    double minAssoc = ComputeMinAssociation(X, n, target, candidate, cpc);
+                    double minAssoc = ComputeMinAssociation(data, target, candidate, cpc);
                     if (minAssoc > bestMinAssoc)
                     {
                         bestMinAssoc = minAssoc;
@@ -99,12 +91,12 @@ public class MMHCAlgorithm<T> : HybridBase<T>
 
             // Backward phase: remove false positives
             var toRemove = new List<int>();
-            foreach (int var in cpc)
+            foreach (int v in cpc)
             {
-                var subset = cpc.Where(v => v != var).ToList();
-                double minAssoc = ComputeMinAssociation(X, n, target, var, subset);
+                var subset = cpc.Where(x => x != v).ToList();
+                double minAssoc = ComputeMinAssociation(data, target, v, subset);
                 if (minAssoc <= Alpha)
-                    toRemove.Add(var);
+                    toRemove.Add(v);
             }
 
             foreach (int v in toRemove) cpc.Remove(v);
@@ -123,21 +115,21 @@ public class MMHCAlgorithm<T> : HybridBase<T>
     /// <summary>
     /// Computes minimum association (absolute correlation) over conditioning subsets.
     /// </summary>
-    private double ComputeMinAssociation(double[,] X, int n, int target, int candidate, List<int> condSet)
+    private double ComputeMinAssociation(Matrix<T> data, int target, int candidate, List<int> condSet)
     {
         if (condSet.Count == 0)
-            return Math.Abs(ComputeCorrelation(X, n, target, candidate));
+            return Math.Abs(ComputeCorrelation(data, target, candidate));
 
         double minAssoc = double.MaxValue;
 
         // Test with empty conditioning
-        double baseCorr = Math.Abs(ComputeCorrelation(X, n, target, candidate));
+        double baseCorr = Math.Abs(ComputeCorrelation(data, target, candidate));
         minAssoc = Math.Min(minAssoc, baseCorr);
 
         // Test conditioning on each individual variable
         foreach (int cond in condSet)
         {
-            double partialCorr = ComputePartialCorrelation(X, n, target, candidate, cond);
+            double partialCorr = ComputePartialCorrelationSingle(data, target, candidate, cond);
             minAssoc = Math.Min(minAssoc, Math.Abs(partialCorr));
         }
 
@@ -147,11 +139,11 @@ public class MMHCAlgorithm<T> : HybridBase<T>
     /// <summary>
     /// Computes partial correlation conditioned on a single variable.
     /// </summary>
-    private static double ComputePartialCorrelation(double[,] X, int n, int i, int j, int cond)
+    private double ComputePartialCorrelationSingle(Matrix<T> data, int i, int j, int cond)
     {
-        double rij = ComputeCorrelation(X, n, i, j);
-        double ric = ComputeCorrelation(X, n, i, cond);
-        double rjc = ComputeCorrelation(X, n, j, cond);
+        double rij = ComputeCorrelation(data, i, j);
+        double ric = ComputeCorrelation(data, i, cond);
+        double rjc = ComputeCorrelation(data, j, cond);
 
         double denom = Math.Sqrt((1 - ric * ric) * (1 - rjc * rjc));
         return denom > 1e-10 ? (rij - ric * rjc) / denom : 0;
@@ -160,14 +152,11 @@ public class MMHCAlgorithm<T> : HybridBase<T>
     /// <summary>
     /// Hill Climbing phase within the skeleton-restricted space.
     /// </summary>
-    private double[,] HillClimbPhase(double[,] X, int n, int d, bool[,] skeleton)
+    private Matrix<T> HillClimbPhase(Matrix<T> data, bool[,] skeleton)
     {
+        int d = data.Columns;
         var parents = new List<int>[d];
         for (int i = 0; i < d; i++) parents[i] = [];
-
-        double totalBIC = 0;
-        for (int i = 0; i < d; i++)
-            totalBIC += ComputeBIC(X, n, d, i, parents[i]);
 
         // Greedy hill climbing with add/remove operations
         bool improved = true;
@@ -192,8 +181,8 @@ public class MMHCAlgorithm<T> : HybridBase<T>
                         var newParents = new List<int>(parents[j]) { i };
                         if (WouldCreateCycle(parents, d, i, j)) continue;
 
-                        double oldBIC = ComputeBIC(X, n, d, j, parents[j]);
-                        double newBIC = ComputeBIC(X, n, d, j, newParents);
+                        double oldBIC = ComputeBIC(data, j, parents[j]);
+                        double newBIC = ComputeBIC(data, j, newParents);
                         double delta = oldBIC - newBIC; // positive = improvement
 
                         if (delta > bestDelta)
@@ -208,8 +197,8 @@ public class MMHCAlgorithm<T> : HybridBase<T>
                     {
                         // Try removing edge i→j
                         var newParents = parents[j].Where(p => p != i).ToList();
-                        double oldBIC = ComputeBIC(X, n, d, j, parents[j]);
-                        double newBIC = ComputeBIC(X, n, d, j, newParents);
+                        double oldBIC = ComputeBIC(data, j, parents[j]);
+                        double newBIC = ComputeBIC(data, j, newParents);
                         double delta = oldBIC - newBIC;
 
                         if (delta > bestDelta)
@@ -231,14 +220,14 @@ public class MMHCAlgorithm<T> : HybridBase<T>
             }
         }
 
-        // Convert parent sets to adjacency matrix with BIC-improvement weights
-        var W = new double[d, d];
+        // Build adjacency using Matrix<T>
+        var W = new Matrix<T>(d, d);
         for (int j = 0; j < d; j++)
         {
             foreach (int i in parents[j])
             {
-                double corr = Math.Abs(ComputeCorrelation(X, n, i, j));
-                W[i, j] = Math.Max(corr, 0.1);
+                double corr = Math.Abs(ComputeCorrelation(data, i, j));
+                W[i, j] = NumOps.FromDouble(Math.Max(corr, 0.1));
             }
         }
 

@@ -41,16 +41,17 @@ public abstract class InfoTheoreticBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Computes Gaussian mutual information between two columns.
     /// </summary>
-    protected static double ComputeGaussianMI(double[,] X, int n, int col1, int col2)
+    protected double ComputeGaussianMI(Matrix<T> data, int col1, int col2)
     {
+        int n = data.Rows;
         double m1 = 0, m2 = 0;
-        for (int i = 0; i < n; i++) { m1 += X[i, col1]; m2 += X[i, col2]; }
+        for (int i = 0; i < n; i++) { m1 += NumOps.ToDouble(data[i, col1]); m2 += NumOps.ToDouble(data[i, col2]); }
         m1 /= n; m2 /= n;
 
         double s11 = 0, s22 = 0, s12 = 0;
         for (int i = 0; i < n; i++)
         {
-            double d1 = X[i, col1] - m1, d2 = X[i, col2] - m2;
+            double d1 = NumOps.ToDouble(data[i, col1]) - m1, d2 = NumOps.ToDouble(data[i, col2]) - m2;
             s11 += d1 * d1; s22 += d2 * d2; s12 += d1 * d2;
         }
 
@@ -63,14 +64,15 @@ public abstract class InfoTheoreticBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Computes Shannon entropy (Gaussian approximation) of a column.
     /// </summary>
-    protected static double ComputeEntropy(double[,] X, int n, int col)
+    protected double ComputeEntropy(Matrix<T> data, int col)
     {
+        int n = data.Rows;
         double mean = 0;
-        for (int i = 0; i < n; i++) mean += X[i, col];
+        for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, col]);
         mean /= n;
 
         double variance = 0;
-        for (int i = 0; i < n; i++) { double d = X[i, col] - mean; variance += d * d; }
+        for (int i = 0; i < n; i++) { double d = NumOps.ToDouble(data[i, col]) - mean; variance += d * d; }
         variance /= n;
 
         return 0.5 * Math.Log(2 * Math.PI * Math.E * (variance + 1e-15));

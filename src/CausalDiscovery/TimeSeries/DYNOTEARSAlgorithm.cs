@@ -56,7 +56,7 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         int n = data.Rows;
         int d = data.Columns;
 
-        if (n <= MaxLag + 1) return DoubleArrayToMatrix(new double[d, d]);
+        if (n <= MaxLag + 1) return new Matrix<T>(d, d);
 
         int effectiveN = n - MaxLag;
 

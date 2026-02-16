@@ -12,19 +12,8 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 /// whether edges are definitely directed, bidirected (due to a latent common cause), or uncertain.
 /// </para>
 /// <para>
-/// <b>Key Differences from PC:</b>
-/// <list type="bullet">
-/// <item>Handles latent confounders (hidden common causes)</item>
-/// <item>Outputs a PAG, not a CPDAG</item>
-/// <item>Uses discriminating path orientation rules</item>
-/// <item>Circle marks (o) indicate uncertainty about edge orientation</item>
-/// </list>
-/// </para>
-/// <para>
 /// <b>For Beginners:</b> Sometimes two variables appear related not because one causes the other,
-/// but because a hidden third variable causes both. FCI can detect this pattern. For example,
-/// if both ice cream sales and crime rates go up in summer, FCI can infer that the relationship
-/// might be due to a hidden variable (temperature) rather than a direct causal link.
+/// but because a hidden third variable causes both. FCI can detect this pattern.
 /// </para>
 /// <para>
 /// Reference: Spirtes, Glymour, and Scheines (2000), "Causation, Prediction, and Search".
@@ -42,9 +31,6 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => false;
 
-    /// <summary>
-    /// Initializes FCI with optional configuration.
-    /// </summary>
     public FCIAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyConstraintOptions(options);
@@ -53,12 +39,7 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
-        int n = data.Rows;
         int d = data.Columns;
-        var X = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
 
         // Phase 1: Skeleton discovery (same as PC)
         var adj = new bool[d, d];
@@ -81,7 +62,7 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
 
                     foreach (var condSet in GetCombinations(neighbors, condSize))
                     {
-                        if (TestCI(X, n, i, j, condSet, Alpha))
+                        if (TestCI(data, i, j, condSet, Alpha))
                         {
                             adj[i, j] = false;
                             adj[j, i] = false;
@@ -113,10 +94,10 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
                     if (sepSets.TryGetValue((i, j), out var sepSet) && sepSet.Contains(k))
                         continue;
 
-                    edgeMark[i, k] = 2; // arrowhead at k on i-k edge
-                    edgeMark[k, i] = 1; // tail at i on i-k edge
-                    edgeMark[j, k] = 2; // arrowhead at k on j-k edge
-                    edgeMark[k, j] = 1; // tail at j on j-k edge
+                    edgeMark[i, k] = 2;
+                    edgeMark[k, i] = 1;
+                    edgeMark[j, k] = 2;
+                    edgeMark[k, j] = 1;
                 }
             }
         }
@@ -137,7 +118,7 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
                     {
                         if (k == i || k == j || !adj[j, k]) continue;
                         if (adj[i, k]) continue;
-                        if (edgeMark[j, k] == 3) // circle mark
+                        if (edgeMark[j, k] == 3)
                         {
                             edgeMark[j, k] = 2;
                             changed = true;
@@ -159,8 +140,8 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
                         bool case2 = edgeMark[i, j] == 2 && edgeMark[j, k] == 2 && edgeMark[k, j] == 1;
                         if (case1 || case2)
                         {
-                            edgeMark[i, k] = 2; // arrowhead at k
-                            edgeMark[k, i] = 1; // tail at i
+                            edgeMark[i, k] = 2;
+                            edgeMark[k, i] = 1;
                             changed = true;
                         }
                     }
@@ -181,20 +162,15 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
                             if (l == i || l == j || l == k) continue;
                             if (!adj[i, l] || !adj[k, l] || !adj[l, j]) continue;
                             if (edgeMark[l, j] != 3) continue;
-                            // l is adjacent to both i and k (with circle marks) and l o—o j
-                            edgeMark[l, j] = 2; // arrowhead at j
-                            edgeMark[j, l] = 1; // tail at l
+                            edgeMark[l, j] = 2;
+                            edgeMark[j, l] = 1;
                             changed = true;
                         }
                     }
                 }
             }
 
-            // R4 (simplified discriminating path approximation):
-            // The full R4 rule requires finding discriminating paths of arbitrary length,
-            // which is O(d!) in the worst case. This simplified version checks the immediate
-            // i → j *→ k pattern with i *→ k, covering common short discriminating paths.
-            // Full R4 with arbitrary-length path traversal is not yet implemented.
+            // R4 (simplified discriminating path approximation)
             for (int j = 0; j < d; j++)
             {
                 for (int k = 0; k < d; k++)
@@ -207,8 +183,8 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
                         if (!adj[i, k]) continue;
                         if (edgeMark[j, k] == 3)
                         {
-                            edgeMark[j, k] = 2; // arrowhead at k
-                            edgeMark[k, j] = 1; // tail at j
+                            edgeMark[j, k] = 2;
+                            edgeMark[k, j] = 1;
                             changed = true;
                         }
                     }
@@ -216,8 +192,8 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
             }
         }
 
-        // Build weighted adjacency from PAG
-        var W = new double[d, d];
+        // Build weighted adjacency from PAG using Matrix<T>
+        var W = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
         {
             for (int j = 0; j < d; j++)
@@ -225,18 +201,18 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
                 if (!adj[i, j]) continue;
                 if (edgeMark[i, j] == 2) // i → j (arrowhead at j)
                 {
-                    double weight = Math.Abs(ComputePartialCorr(X, n, i, j, []));
-                    W[i, j] = weight;
+                    double weight = Math.Abs(ComputePartialCorr(data, i, j, []));
+                    W[i, j] = NumOps.FromDouble(weight);
                 }
                 else if (edgeMark[i, j] == 3) // uncertain
                 {
-                    double weight = 0.5 * Math.Abs(ComputePartialCorr(X, n, i, j, []));
-                    W[i, j] = weight;
+                    double weight = 0.5 * Math.Abs(ComputePartialCorr(data, i, j, []));
+                    W[i, j] = NumOps.FromDouble(weight);
                 }
             }
         }
 
-        return DoubleArrayToMatrix(W);
+        return W;
     }
 
     private static List<int> GetAllNeighbors(bool[,] adj, int node, int d)

@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.CausalDiscovery.ScoreBased;
 
@@ -54,43 +55,60 @@ public abstract class ScoreBasedBase<T> : CausalDiscoveryBase<T>
     /// Computes the BIC score for a variable given its parents.
     /// BIC = -n * log(RSS/n) - penalty * (k+1) * log(n)
     /// </summary>
-    protected double ComputeBIC(double[,] X, int n, int target, HashSet<int> parents)
+    protected double ComputeBIC(Matrix<T> data, int target, HashSet<int> parents)
     {
-        int d = X.GetLength(1);
+        int n = data.Rows;
         if (parents.Count == 0)
         {
             double mean = 0;
-            for (int i = 0; i < n; i++) mean += X[i, target];
+            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, target]);
             mean /= n;
             double rss = 0;
-            for (int i = 0; i < n; i++) rss += (X[i, target] - mean) * (X[i, target] - mean);
+            for (int i = 0; i < n; i++)
+            {
+                double v = NumOps.ToDouble(data[i, target]) - mean;
+                rss += v * v;
+            }
             return -n * Math.Log(rss / n + 1e-10) - PenaltyDiscount * Math.Log(n);
         }
 
         var parentList = parents.ToList();
         int k = parentList.Count;
 
-        var XtX = new double[k, k];
-        var Xty = new double[k];
+        // Build XtX and Xty using generic operations
+        var XtX = new Matrix<T>(k, k);
+        var Xty = new Vector<T>(k);
         for (int i = 0; i < k; i++)
         {
             int fi = parentList[i];
             for (int j = 0; j < k; j++)
             {
                 int fj = parentList[j];
-                for (int r = 0; r < n; r++) XtX[i, j] += X[r, fi] * X[r, fj];
+                T sum = NumOps.Zero;
+                for (int r = 0; r < n; r++)
+                    sum = NumOps.Add(sum, NumOps.Multiply(data[r, fi], data[r, fj]));
+                XtX[i, j] = sum;
             }
-            for (int r = 0; r < n; r++) Xty[i] += X[r, fi] * X[r, target];
+            T sumY = NumOps.Zero;
+            for (int r = 0; r < n; r++)
+                sumY = NumOps.Add(sumY, NumOps.Multiply(data[r, fi], data[r, target]));
+            Xty[i] = sumY;
         }
 
-        var beta = SolveSystem(XtX, Xty, k);
+        // Ridge regularization
+        T ridge = NumOps.FromDouble(1e-6);
+        for (int i = 0; i < k; i++)
+            XtX[i, i] = NumOps.Add(XtX[i, i], ridge);
+
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX, Xty, MatrixDecompositionType.Lu);
 
         double totalRss = 0;
         for (int r = 0; r < n; r++)
         {
-            double pred = 0;
-            for (int i = 0; i < k; i++) pred += beta[i] * X[r, parentList[i]];
-            double err = X[r, target] - pred;
+            T pred = NumOps.Zero;
+            for (int i = 0; i < k; i++)
+                pred = NumOps.Add(pred, NumOps.Multiply(beta[i], data[r, parentList[i]]));
+            double err = NumOps.ToDouble(data[r, target]) - NumOps.ToDouble(pred);
             totalRss += err * err;
         }
 
@@ -98,44 +116,28 @@ public abstract class ScoreBasedBase<T> : CausalDiscoveryBase<T>
     }
 
     /// <summary>
-    /// Solves a linear system Ax = b using Gaussian elimination.
+    /// Computes the absolute Pearson correlation between two columns of data.
     /// </summary>
-    protected static double[] SolveSystem(double[,] A, double[] b, int size)
+    protected double ComputeAbsCorrelation(Matrix<T> data, int col1, int col2)
     {
-        for (int i = 0; i < size; i++) A[i, i] += 1e-6;
-
-        var aug = new double[size, size + 1];
-        for (int i = 0; i < size; i++)
+        int n = data.Rows;
+        double m1 = 0, m2 = 0;
+        for (int k = 0; k < n; k++)
         {
-            for (int j = 0; j < size; j++) aug[i, j] = A[i, j];
-            aug[i, size] = b[i];
+            m1 += NumOps.ToDouble(data[k, col1]);
+            m2 += NumOps.ToDouble(data[k, col2]);
+        }
+        m1 /= n; m2 /= n;
+
+        double sij = 0, sii = 0, sjj = 0;
+        for (int k = 0; k < n; k++)
+        {
+            double d1 = NumOps.ToDouble(data[k, col1]) - m1;
+            double d2 = NumOps.ToDouble(data[k, col2]) - m2;
+            sij += d1 * d2; sii += d1 * d1; sjj += d2 * d2;
         }
 
-        for (int col = 0; col < size; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < size; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
-                    maxRow = row;
-            for (int j = 0; j <= size; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-            if (Math.Abs(aug[col, col]) < 1e-10) continue;
-            for (int row = col + 1; row < size; row++)
-            {
-                double factor = aug[row, col] / aug[col, col];
-                for (int j = col; j <= size; j++) aug[row, j] -= factor * aug[col, j];
-            }
-        }
-
-        var x = new double[size];
-        for (int i = size - 1; i >= 0; i--)
-        {
-            x[i] = aug[i, size];
-            for (int j = i + 1; j < size; j++) x[i] -= aug[i, j] * x[j];
-            x[i] /= (Math.Abs(aug[i, i]) > 1e-10 ? aug[i, i] : 1);
-        }
-
-        return x;
+        return (sii > 1e-10 && sjj > 1e-10) ? Math.Abs(sij / Math.Sqrt(sii * sjj)) : 0;
     }
 
     /// <summary>
