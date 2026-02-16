@@ -2,8 +2,8 @@ using AiDotNet.Diffusion.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
-using AiDotNet.NeuralNetworks.Diffusion;
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion;
 
@@ -118,8 +118,9 @@ public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         INoiseScheduler<T>? scheduler = null,
         int sampleRate = 16000,
         double defaultDurationSeconds = 10.0,
-        int melChannels = 64)
-        : base(options, scheduler)
+        int melChannels = 64,
+        NeuralNetworkArchitecture<T>? architecture = null)
+        : base(options, scheduler, architecture)
     {
         _sampleRate = sampleRate;
         _defaultDurationSeconds = defaultDurationSeconds;

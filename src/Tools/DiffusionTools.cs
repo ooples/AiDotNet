@@ -1,5 +1,6 @@
 using AiDotNet.Diffusion;
-using AiDotNet.Diffusion.Models;
+using AiDotNet.Diffusion.Audio;
+using AiDotNet.Diffusion.TextToImage;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using Newtonsoft.Json.Linq;

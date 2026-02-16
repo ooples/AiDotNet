@@ -1,8 +1,8 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
-using AiDotNet.NeuralNetworks.Diffusion;
-using AiDotNet.NeuralNetworks.Diffusion.Schedulers;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion;
 
@@ -98,8 +98,9 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
         int defaultNumFrames = 25,
-        int defaultFPS = 7)
-        : base(options, scheduler)
+        int defaultFPS = 7,
+        NeuralNetworkArchitecture<T>? architecture = null)
+        : base(options, scheduler, architecture)
     {
         _defaultNumFrames = defaultNumFrames;
         _defaultFPS = defaultFPS;
