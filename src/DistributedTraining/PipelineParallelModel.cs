@@ -2,7 +2,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 
-
 namespace AiDotNet.DistributedTraining;
 
 /// <summary>
