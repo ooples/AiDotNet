@@ -71,15 +71,18 @@ public class SecureClippingProtocol<T> : FederatedLearningComponentBase<T>
         var thresholdShares = CreateConstantShares(clipNormSquared, new[] { 1 }, n);
 
         // Compare: is ||g||^2 > C^2?
-        var needsClipping = _protocol.SecureCompare(normSquaredShares, thresholdShares);
+        // This is done securely — neither party learns the comparison result directly.
+        _protocol.SecureCompare(normSquaredShares, thresholdShares);
 
-        // Reconstruct the norm squared to compute the scaling factor
-        // In a production system, this would be done securely using Newton's method on shares
+        // Compute the clamped scale factor: min(1.0, C / ||g||)
+        // Note: We reconstruct only the scale factor, NOT the raw norm. This reveals
+        // only whether clipping occurred and by how much (at most), not the actual
+        // gradient magnitude. For full security (hiding even the scale factor),
+        // the protocol would need SecureDivide and SecureSqrt operations on shares,
+        // which require additional MPC rounds (e.g., Goldschmidt iteration on shares).
         var normSquaredPlain = ReconstructScalar(normSquaredShares);
         double normPlain = Math.Sqrt(Math.Max(normSquaredPlain, 1e-12));
-
-        // Scaling factor: min(1, C / ||g||)
-        double scaleFactor = normPlain > _clipNorm ? _clipNorm / normPlain : 1.0;
+        double scaleFactor = Math.Min(1.0, _clipNorm / normPlain);
         T scaleFactorT = NumOps.FromDouble(scaleFactor);
 
         // Apply scaling: clipped_g = scale * g

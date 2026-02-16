@@ -142,20 +142,22 @@ public class DualTextConditioner<T> : IConditioningModule<T>
 
     /// <inheritdoc />
     /// <remarks>
-    /// The pooled embedding is always derived from the CLIP encoder's own output,
-    /// not from the passed-in sequence embeddings (which may be T5 embeddings with
-    /// a different dimensionality). This method re-encodes using CLIP to produce
-    /// a semantically correct pooled representation.
+    /// <para>In a dual-encoder architecture, pooled embeddings always come from CLIP.
+    /// The <paramref name="sequenceEmbeddings"/> parameter is ignored because this method
+    /// cannot determine whether the input originated from CLIP or T5, and passing T5
+    /// embeddings (4096-dim) to CLIP pooling (768-dim) would produce incorrect results.</para>
+    ///
+    /// <para>For prompt-specific pooled embeddings, use <see cref="EncodeDual"/> which
+    /// correctly routes each encoder's output to the appropriate pooling.</para>
     /// </remarks>
     public Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
-        // The caller may pass T5 sequence embeddings here (e.g., from Encode/EncodeText).
-        // CLIP pooling requires CLIP-encoded embeddings, so we use the CLIP encoder's
-        // unconditional embedding to produce a pooled output with the correct dimensions.
-        // For prompt-specific pooling, callers should use EncodeDual() which correctly
-        // routes each encoder's output.
-        var clipEmbeddings = _clipEncoder.Encode(sequenceEmbeddings);
-        return _clipEncoder.GetPooledEmbedding(clipEmbeddings);
+        // Pooled embeddings must come from CLIP. Since this method receives generic
+        // sequence embeddings (which may be T5-encoded), we generate a CLIP unconditional
+        // pooled embedding as a safe fallback. Callers that need prompt-specific pooling
+        // should use EncodeDual() instead.
+        var clipUncond = _clipEncoder.GetUnconditionalEmbedding(1);
+        return _clipEncoder.GetPooledEmbedding(clipUncond);
     }
 
     /// <inheritdoc />

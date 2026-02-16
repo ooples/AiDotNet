@@ -49,12 +49,14 @@ public interface ILabelProtector<T>
     /// </summary>
     /// <returns>
     /// A tuple of (epsilon, delta) representing the total privacy cost.
-    /// Smaller values mean more privacy has been spent.
+    /// Larger epsilon means more privacy has been spent (less private).
+    /// Larger delta means a higher probability of the privacy guarantee failing.
     /// </returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Each time gradients are protected with noise, some "privacy budget"
     /// is consumed. Once the budget runs out, the model must stop training to maintain
-    /// the privacy guarantee. Epsilon measures privacy loss (lower = more private).</para>
+    /// the privacy guarantee. Epsilon measures privacy loss (lower = more private,
+    /// higher = more privacy spent).</para>
     /// </remarks>
     (double Epsilon, double Delta) GetPrivacyBudgetSpent();
 }

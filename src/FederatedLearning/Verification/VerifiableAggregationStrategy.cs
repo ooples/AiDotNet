@@ -131,11 +131,15 @@ public class VerifiableAggregationStrategy<TModel> : IAggregationStrategy<TModel
                 }
             }
 
-            verifiedModels[clientId] = kvp.Value;
-            if (clientWeights.ContainsKey(clientId))
+            // Only include clients that appear in both models and weights
+            // to prevent mismatched dictionaries passed to the inner aggregator
+            if (!clientWeights.ContainsKey(clientId))
             {
-                verifiedWeights[clientId] = clientWeights[clientId];
+                continue;
             }
+
+            verifiedModels[clientId] = kvp.Value;
+            verifiedWeights[clientId] = clientWeights[clientId];
         }
 
         if (verifiedModels.Count == 0)

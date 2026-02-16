@@ -138,7 +138,8 @@ public class CircuitBasedPsi : PsiBase
         byte[] input = Encoding.UTF8.GetBytes(element);
         byte[] hash = hmac.ComputeHash(input);
 
-        int outputBytes = securityParameter / 8;
+        // Ensure at least 1 byte to prevent empty PRF outputs when securityParameter < 8
+        int outputBytes = Math.Max(1, securityParameter / 8);
         if (hash.Length > outputBytes)
         {
             byte[] truncated = new byte[outputBytes];

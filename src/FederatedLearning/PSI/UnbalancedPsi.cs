@@ -135,7 +135,8 @@ public class UnbalancedPsi : PsiBase
         byte[] input = Encoding.UTF8.GetBytes(element);
         byte[] hash = hmac.ComputeHash(input);
 
-        int tagBytes = securityParameter / 8;
+        // Ensure at least 1 byte to prevent empty tags when securityParameter < 8
+        int tagBytes = Math.Max(1, securityParameter / 8);
         if (hash.Length > tagBytes)
         {
             byte[] truncated = new byte[tagBytes];

@@ -121,6 +121,13 @@ public sealed class HeunDiscreteScheduler<T> : NoiseSchedulerBase<T>
 
         if (_isSecondPass && _prevDerivative is not null && _prevSample is not null)
         {
+            if (timestep != _prevTimestep)
+            {
+                throw new InvalidOperationException(
+                    $"Heun corrector step expected timestep {_prevTimestep} (matching the predictor), " +
+                    $"but received {timestep}. Ensure the second Step() call uses the same timestep.");
+            }
+
             return HeunCorrectorStep(modelOutput, sample);
         }
 

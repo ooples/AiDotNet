@@ -105,19 +105,24 @@ public class ExtendedObliviousTransfer : IObliviousTransfer
 
         _transferCount++;
 
-        // Derive pad for this transfer index using base keys
+        // Derive pad for this transfer index using DIFFERENT base keys for each message.
+        // pad0 uses _baseKeys0 (sender's key 0) and pad1 uses _baseKeys1 (sender's key 1).
+        // This ensures the receiver can only decrypt the chosen message, not both.
         int msgLen = message0.Length;
         var salt = BitConverter.GetBytes(_transferCount);
         var info0 = new byte[] { 0x45, 0x58, 0x54, 0x30 }; // "EXT0"
         var info1 = new byte[] { 0x45, 0x58, 0x54, 0x31 }; // "EXT1"
 
-        // Use the first base key pair to derive pads
-        byte[] seedKey = _baseKeys0 is not null && _baseKeys0.Length > 0
-            ? _baseKeys0[_transferCount % _baseKeys0.Length]
+        int keyIdx = _transferCount % _securityParameter;
+        byte[] seedKey0 = _baseKeys0 is not null && _baseKeys0.Length > keyIdx
+            ? _baseKeys0[keyIdx]
+            : new byte[16];
+        byte[] seedKey1 = _baseKeys1 is not null && _baseKeys1.Length > keyIdx
+            ? _baseKeys1[keyIdx]
             : new byte[16];
 
-        var pad0 = HkdfSha256.DeriveKey(seedKey, salt, info0, msgLen);
-        var pad1 = HkdfSha256.DeriveKey(seedKey, salt, info1, msgLen);
+        var pad0 = HkdfSha256.DeriveKey(seedKey0, salt, info0, msgLen);
+        var pad1 = HkdfSha256.DeriveKey(seedKey1, salt, info1, msgLen);
 
         // Encrypt both messages
         var encrypted0 = new byte[msgLen];
@@ -128,7 +133,8 @@ public class ExtendedObliviousTransfer : IObliviousTransfer
             encrypted1[i] = (byte)(message1[i] ^ pad1[i]);
         }
 
-        // Receiver decrypts chosen message
+        // Receiver decrypts chosen message using the corresponding pad
+        // choiceBit=0 uses pad0 (from _baseKeys0), choiceBit=1 uses pad1 (from _baseKeys1)
         byte[] chosenPad = choiceBit == 0 ? pad0 : pad1;
         byte[] chosenCiphertext = choiceBit == 0 ? encrypted0 : encrypted1;
 

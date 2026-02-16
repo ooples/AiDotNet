@@ -95,7 +95,6 @@ public class LossThresholdProof<T> : FederatedLearningComponentBase<T>, IVerifia
             throw new ArgumentNullException(nameof(constraint));
         }
 
-        double loss = BitConverter.ToDouble(value, 0);
         byte[] thresholdBytes = BitConverter.GetBytes(constraint.Bound);
 
         var (commitment, randomness) = _proofSystem.Commit(value);
