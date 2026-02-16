@@ -125,8 +125,10 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         if (TryInitializeNativeGloo())
         {
             _useNativeGloo = true;
-            _useNativeTCP = false;
-            Console.WriteLine($"GlooCommunicationBackend: Using native Gloo via GlooSharp for {_worldSize} processes.");
+            // Also initialize TCP for point-to-point Send/Receive (Gloo only handles collectives)
+            _useNativeTCP = true;
+            InitializeTCPConnections();
+            Console.WriteLine($"GlooCommunicationBackend: Using native Gloo via GlooSharp for collectives, TCP for point-to-point ({_worldSize} processes).");
             return;
         }
 
@@ -170,12 +172,15 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
             // Set up transport based on environment variable
             string transportEnv = Environment.GetEnvironmentVariable("AIDOTNET_GLOO_TRANSPORT") ?? "tcp";
+            string? storePath = Environment.GetEnvironmentVariable("AIDOTNET_GLOO_STORE_PATH");
+
             if (string.Equals(transportEnv, "ib", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(transportEnv, "infiniband", StringComparison.OrdinalIgnoreCase))
             {
                 string ibDevice = Environment.GetEnvironmentVariable("AIDOTNET_GLOO_IB_DEVICE") ?? "";
-                var createIB = _glooTransportType.GetMethod("CreateInfiniBand", new[] { glooContextType, typeof(string) });
-                createIB?.Invoke(null, new object[] { _nativeGlooContext, ibDevice });
+                var createIB = _glooTransportType.GetMethod("CreateInfiniBand",
+                    new[] { glooContextType, typeof(string), typeof(string) });
+                createIB?.Invoke(null, new object?[] { _nativeGlooContext, ibDevice, storePath });
                 Console.WriteLine($"GlooCommunicationBackend: InfiniBand transport initialized (device={ibDevice}).");
             }
             else
@@ -184,8 +189,9 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 string portStr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT") ?? "29500";
                 int port = int.TryParse(portStr, out int p) ? p : 29500;
 
-                var createTCP = _glooTransportType.GetMethod("CreateTCP", new[] { glooContextType, typeof(string), typeof(int) });
-                createTCP?.Invoke(null, new object[] { _nativeGlooContext, hostname, port });
+                var createTCP = _glooTransportType.GetMethod("CreateTCP",
+                    new[] { glooContextType, typeof(string), typeof(int), typeof(string) });
+                createTCP?.Invoke(null, new object?[] { _nativeGlooContext, hostname, port, storePath });
             }
 
             // Cache reflection MethodInfo for collective operations (double[] overloads)
@@ -588,6 +594,28 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 return sendData.Clone();
             }
             return new Vector<T>(Array.Empty<T>());
+        }
+
+        if (_useNativeGloo)
+        {
+            // Gloo has no native Scatter — implement via Broadcast + local extraction
+            // (same pattern as NCCLCommunicationBackend.Scatter)
+            if (Rank == root)
+            {
+                ValidateData(sendData, nameof(sendData));
+                if (sendData.Length % _worldSize != 0)
+                {
+                    throw new ArgumentException(
+                        $"Data length {sendData.Length} must be divisible by world size {_worldSize}.");
+                }
+            }
+
+            var broadcasted = PerformNativeGlooBroadcast(sendData, root);
+            int chunkSize = broadcasted.Length / _worldSize;
+            var chunk = new T[chunkSize];
+            var broadcastedArray = broadcasted.ToArray();
+            Array.Copy(broadcastedArray, _rank * chunkSize, chunk, 0, chunkSize);
+            return new Vector<T>(chunk);
         }
 
         if (!_useNativeTCP)
