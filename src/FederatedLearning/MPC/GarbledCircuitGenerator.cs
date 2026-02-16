@@ -142,13 +142,9 @@ public class GarbledCircuitGenerator : IGarbledCircuit
                 wireLabels[gate.OutputWire][1] = wireLabels[gate.InputWire0][0];
                 table = Array.Empty<byte[]>();
             }
-            else if (gate.Type == GateType.And && _enableHalfGates)
-            {
-                table = GarbleHalfGateAnd(wireLabels, gate);
-            }
             else
             {
-                table = GarbleStandardGate(wireLabels, gate);
+                table = GarbleStandardGate(wireLabels, gate, g);
             }
 
             garbledTables.Add(table);
@@ -267,29 +263,34 @@ public class GarbledCircuitGenerator : IGarbledCircuit
         return outputs;
     }
 
-    private byte[][] GarbleStandardGate(byte[][][] wireLabels, CircuitGate gate)
+    private byte[][] GarbleStandardGate(byte[][][] wireLabels, CircuitGate gate, int gateIndex)
     {
         // Standard garbled gate: 4 entries (for 2-input gate), 2 entries (for 1-input)
         bool isBinary = gate.InputWire1 >= 0;
         int entries = isBinary ? 4 : 2;
         var table = new byte[entries][];
 
-        for (int entry = 0; entry < entries; entry++)
+        for (int a = 0; a < 2; a++)
         {
-            int a = isBinary ? (entry >> 1) & 1 : entry & 1;
-            int b = isBinary ? entry & 1 : 0;
+            for (int b = 0; b < (isBinary ? 2 : 1); b++)
+            {
+                int outputBit = EvaluateGatePlaintext(gate.Type, a, b);
 
-            int outputBit = EvaluateGatePlaintext(gate.Type, a, b);
+                // Encrypt: H(label_a || label_b || gate_index) XOR output_label
+                byte[] inputLabel0 = wireLabels[gate.InputWire0][a];
+                byte[] inputLabel1 = isBinary ? wireLabels[gate.InputWire1][b] : Array.Empty<byte>();
 
-            // Encrypt: H(label_a || label_b || gate_index) XOR output_label
-            byte[] inputLabel0 = wireLabels[gate.InputWire0][a];
-            byte[] inputLabel1 = isBinary ? wireLabels[gate.InputWire1][b] : Array.Empty<byte>();
+                // Point-and-permute: place entry at the position determined by color bits
+                // so the evaluator can select the correct row using the last bit of each label
+                int color0 = inputLabel0[_labelLength - 1] & 0x01;
+                int color1 = isBinary ? (inputLabel1[_labelLength - 1] & 0x01) : 0;
+                int permutedIndex = isBinary ? (color0 << 1) | color1 : color0;
 
-            var key = DeriveEncryptionKey(inputLabel0, inputLabel1, gate.OutputWire);
-            table[entry] = XorBytes(key, wireLabels[gate.OutputWire][outputBit]);
+                var key = DeriveEncryptionKey(inputLabel0, inputLabel1, gateIndex);
+                table[permutedIndex] = XorBytes(key, wireLabels[gate.OutputWire][outputBit]);
+            }
         }
 
-        // Permute table using point-and-permute bits
         return table;
     }
 

@@ -270,7 +270,10 @@ public class SplitNeuralNetwork<T> : FederatedLearningComponentBase<T>, ISplitMo
 
     private static Tensor<T> ConcatenateEmbeddings(IReadOnlyList<Tensor<T>> embeddings)
     {
-        int batchSize = embeddings[0].Shape[0];
+        // For 1D embeddings (shape [N]), treat as single-sample batch (batchSize=1, dim=N)
+        // For 2D embeddings (shape [B, N]), batchSize=B, dim=N
+        bool is1D = embeddings[0].Rank == 1;
+        int batchSize = is1D ? 1 : embeddings[0].Shape[0];
         int totalDim = 0;
         for (int p = 0; p < embeddings.Count; p++)
         {

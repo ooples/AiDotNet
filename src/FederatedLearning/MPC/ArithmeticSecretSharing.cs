@@ -285,6 +285,33 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
     /// <param name="count">Number of triples to generate.</param>
     public void PreGenerateBeaverTriples(int[] shape, int count)
     {
+        GenerateBeaverTriples(shape, count, _numberOfParties);
+    }
+
+    private (Tensor<T>[] SharesA, Tensor<T>[] SharesB, Tensor<T>[] SharesC) GetNextBeaverTriple(
+        int[] shape, int numberOfParties)
+    {
+        if (_tripleIndex >= _beaverTriples.Count)
+        {
+            // Auto-generate more triples on demand, matching the actual party count
+            GenerateBeaverTriples(shape, 10, numberOfParties);
+        }
+
+        var triple = _beaverTriples[_tripleIndex];
+
+        // If the pre-generated triple has a different party count, regenerate
+        if (triple.SharesA.Length != numberOfParties)
+        {
+            GenerateBeaverTriples(shape, 10, numberOfParties);
+            triple = _beaverTriples[_tripleIndex];
+        }
+
+        _tripleIndex++;
+        return triple;
+    }
+
+    private void GenerateBeaverTriples(int[] shape, int count, int numberOfParties)
+    {
         for (int t = 0; t < count; t++)
         {
             int totalElements = 1;
@@ -293,7 +320,6 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
                 totalElements *= shape[d];
             }
 
-            // Generate random a, b, and compute c = a * b
             var a = new Tensor<T>(shape);
             var b = new Tensor<T>(shape);
             var c = new Tensor<T>(shape);
@@ -307,26 +333,12 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
                 c[i] = NumOps.FromDouble(aVal * bVal);
             }
 
-            var sharesA = Share(a, _numberOfParties);
-            var sharesB = Share(b, _numberOfParties);
-            var sharesC = Share(c, _numberOfParties);
+            var sharesA = Share(a, numberOfParties);
+            var sharesB = Share(b, numberOfParties);
+            var sharesC = Share(c, numberOfParties);
 
             _beaverTriples.Add((sharesA, sharesB, sharesC));
         }
-    }
-
-    private (Tensor<T>[] SharesA, Tensor<T>[] SharesB, Tensor<T>[] SharesC) GetNextBeaverTriple(
-        int[] shape, int numberOfParties)
-    {
-        if (_tripleIndex >= _beaverTriples.Count)
-        {
-            // Auto-generate more triples on demand
-            PreGenerateBeaverTriples(shape, 10);
-        }
-
-        var triple = _beaverTriples[_tripleIndex];
-        _tripleIndex++;
-        return triple;
     }
 
     private Tensor<T>[] Negate(Tensor<T>[] shares)

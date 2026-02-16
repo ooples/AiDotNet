@@ -194,6 +194,7 @@ public class TeeSecureAggregation<T> : FederatedLearningComponentBase<T>, ITeeSe
     public byte[] GenerateSessionKey()
     {
         EnsureInitialized();
+        EnsureSessionKey();
 
         // Return the public portion of the session key
         // In a real implementation, this would use ECDH or similar key exchange
@@ -214,6 +215,8 @@ public class TeeSecureAggregation<T> : FederatedLearningComponentBase<T>, ITeeSe
         {
             throw new ArgumentNullException(nameof(parameters));
         }
+
+        EnsureSessionKey();
 
         byte[] serialized = SerializeTensor(parameters);
         return EncryptWithSessionKey(serialized);
@@ -271,6 +274,18 @@ public class TeeSecureAggregation<T> : FederatedLearningComponentBase<T>, ITeeSe
         }
 
         return total;
+    }
+
+    private void EnsureSessionKey()
+    {
+        if (_sessionKey is null || _sessionKey.Length == 0)
+        {
+            _sessionKey = new byte[32]; // AES-256
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(_sessionKey);
+            }
+        }
     }
 
     private void EnsureInitialized()
