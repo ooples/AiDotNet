@@ -195,6 +195,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IFederatedServerOptimizer<T>? _federatedServerOptimizer;
     private IFederatedHeterogeneityCorrection<T>? _federatedHeterogeneityCorrection;
     private IHomomorphicEncryptionProvider<T>? _federatedHomomorphicEncryptionProvider;
+    private FederatedLearning.PSI.IPrivateSetIntersection? _federatedPrivateSetIntersection;
+    private FederatedLearning.MPC.ISecureComputationProtocol<T>? _federatedSecureComputationProtocol;
+    private FederatedLearning.TEE.ITeeProvider<T>? _federatedTeeProvider;
+    private FederatedLearning.Verification.IZkProofSystem? _federatedZkProofSystem;
+    private FederatedLearning.Unlearning.IFederatedUnlearner<T>? _federatedUnlearner;
+    private FederatedLearning.DriftDetection.IFederatedDriftDetector<T>? _federatedDriftDetector;
+    private FederatedLearning.Fairness.IClientContributionEvaluator<T>? _federatedContributionEvaluator;
+    private FederatedLearning.Fairness.IFairnessConstraint<T>? _federatedFairnessConstraint;
 
     // Deployment configuration fields
     private QuantizationConfig? _quantizationConfig;
@@ -656,10 +664,29 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <summary>
     /// Enables federated learning training using the provided options.
     /// </summary>
-    /// <param name="options">Federated learning configuration options.</param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the single entry point for all federated learning configurations.
+    /// Set <see cref="FederatedLearningOptions.Mode"/> to choose horizontal (default) or vertical FL.
+    /// All v2 subsystems (PSI, MPC, TEE, ZK verification, graph FL, unlearning, fairness, advanced
+    /// compression, drift detection) are configured via properties on the options object.</para>
+    ///
+    /// <para>Optional injectable interface parameters allow advanced users to provide custom
+    /// implementations that override the defaults derived from options.</para>
+    /// </remarks>
+    /// <param name="options">Federated learning configuration options (horizontal or vertical mode, privacy, compression, etc.).</param>
     /// <param name="aggregationStrategy">Optional aggregation strategy override (null uses defaults based on options).</param>
     /// <param name="clientSelectionStrategy">Optional client selection strategy override (null uses defaults based on options).</param>
     /// <param name="serverOptimizer">Optional server-side optimizer override (null uses defaults based on options).</param>
+    /// <param name="heterogeneityCorrection">Optional heterogeneity correction strategy override.</param>
+    /// <param name="homomorphicEncryptionProvider">Optional homomorphic encryption provider for encrypted aggregation.</param>
+    /// <param name="privateSetIntersection">Optional custom PSI protocol for entity alignment in vertical FL or graph FL.</param>
+    /// <param name="secureComputationProtocol">Optional custom MPC protocol for secure gradient operations.</param>
+    /// <param name="teeProvider">Optional custom TEE provider for hardware-backed secure aggregation.</param>
+    /// <param name="zkProofSystem">Optional custom zero-knowledge proof system for verifiable FL.</param>
+    /// <param name="federatedUnlearner">Optional custom unlearning implementation for GDPR compliance.</param>
+    /// <param name="driftDetector">Optional custom drift detector for concept drift adaptation.</param>
+    /// <param name="contributionEvaluator">Optional custom contribution evaluator for client value assessment.</param>
+    /// <param name="fairnessConstraint">Optional custom fairness constraint for equitable model performance.</param>
     /// <returns>This builder instance for method chaining.</returns>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
         FederatedLearningOptions options,
@@ -667,7 +694,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         IClientSelectionStrategy? clientSelectionStrategy = null,
         IFederatedServerOptimizer<T>? serverOptimizer = null,
         IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
-        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null)
+        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null,
+        FederatedLearning.PSI.IPrivateSetIntersection? privateSetIntersection = null,
+        FederatedLearning.MPC.ISecureComputationProtocol<T>? secureComputationProtocol = null,
+        FederatedLearning.TEE.ITeeProvider<T>? teeProvider = null,
+        FederatedLearning.Verification.IZkProofSystem? zkProofSystem = null,
+        FederatedLearning.Unlearning.IFederatedUnlearner<T>? federatedUnlearner = null,
+        FederatedLearning.DriftDetection.IFederatedDriftDetector<T>? driftDetector = null,
+        FederatedLearning.Fairness.IClientContributionEvaluator<T>? contributionEvaluator = null,
+        FederatedLearning.Fairness.IFairnessConstraint<T>? fairnessConstraint = null)
     {
         Guard.NotNull(options);
         _federatedLearningOptions = options;
@@ -676,6 +711,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         _federatedServerOptimizer = serverOptimizer;
         _federatedHeterogeneityCorrection = heterogeneityCorrection;
         _federatedHomomorphicEncryptionProvider = homomorphicEncryptionProvider;
+        _federatedPrivateSetIntersection = privateSetIntersection;
+        _federatedSecureComputationProtocol = secureComputationProtocol;
+        _federatedTeeProvider = teeProvider;
+        _federatedZkProofSystem = zkProofSystem;
+        _federatedUnlearner = federatedUnlearner;
+        _federatedDriftDetector = driftDetector;
+        _federatedContributionEvaluator = contributionEvaluator;
+        _federatedFairnessConstraint = fairnessConstraint;
         return this;
     }
 

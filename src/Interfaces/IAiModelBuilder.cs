@@ -280,15 +280,32 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// Enables federated learning training using the provided options.
     /// </summary>
     /// <remarks>
-    /// Federated learning is orchestrated internally by the builder to preserve the public facade API.
-    /// Users typically only provide an options object; optional strategy injection is available for advanced scenarios.
+    /// <para>Federated learning is orchestrated internally by the builder to preserve the public facade API.
+    /// Users typically only provide an options object; optional strategy injection is available for advanced scenarios.</para>
+    ///
+    /// <para>Supports both horizontal FL (clients share feature space, different samples) and vertical FL
+    /// (clients share entity space, different features). Set <see cref="FederatedLearningOptions.Mode"/> to
+    /// <see cref="FederatedLearningMode.Vertical"/> and configure
+    /// <see cref="FederatedLearningOptions.VerticalLearning"/> for VFL.</para>
+    ///
+    /// <para>v2 subsystems (PSI, MPC, TEE, ZK verification, graph FL, unlearning, fairness, compression,
+    /// drift detection) are configured via properties on <see cref="FederatedLearningOptions"/>.
+    /// Injectable interfaces below allow custom implementations to override defaults.</para>
     /// </remarks>
-    /// <param name="options">Federated learning configuration options.</param>
+    /// <param name="options">Federated learning configuration options (horizontal or vertical mode, privacy, compression, etc.).</param>
     /// <param name="aggregationStrategy">Optional aggregation strategy override (null uses defaults based on options).</param>
     /// <param name="clientSelectionStrategy">Optional client selection strategy override (null uses defaults based on options).</param>
     /// <param name="serverOptimizer">Optional server-side optimizer override (null uses defaults based on options).</param>
     /// <param name="heterogeneityCorrection">Optional heterogeneity correction strategy override (null uses defaults based on options).</param>
     /// <param name="homomorphicEncryptionProvider">Optional homomorphic encryption provider for encrypted aggregation (null uses plaintext aggregation).</param>
+    /// <param name="privateSetIntersection">Optional custom PSI protocol for entity alignment in vertical FL or graph FL (null uses default based on options).</param>
+    /// <param name="secureComputationProtocol">Optional custom MPC protocol for secure gradient operations (null uses default based on options).</param>
+    /// <param name="teeProvider">Optional custom TEE provider for hardware-backed secure aggregation (null uses default based on options).</param>
+    /// <param name="zkProofSystem">Optional custom zero-knowledge proof system for verifiable FL (null uses default based on options).</param>
+    /// <param name="federatedUnlearner">Optional custom unlearning implementation for GDPR compliance (null uses default based on options).</param>
+    /// <param name="driftDetector">Optional custom drift detector for concept drift adaptation (null uses default based on options).</param>
+    /// <param name="contributionEvaluator">Optional custom contribution evaluator for client value assessment (null uses default based on options).</param>
+    /// <param name="fairnessConstraint">Optional custom fairness constraint for equitable model performance (null uses default based on options).</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureFederatedLearning(
         FederatedLearningOptions options,
@@ -296,7 +313,15 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         IClientSelectionStrategy? clientSelectionStrategy = null,
         IFederatedServerOptimizer<T>? serverOptimizer = null,
         IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
-        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null);
+        IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null,
+        FederatedLearning.PSI.IPrivateSetIntersection? privateSetIntersection = null,
+        FederatedLearning.MPC.ISecureComputationProtocol<T>? secureComputationProtocol = null,
+        FederatedLearning.TEE.ITeeProvider<T>? teeProvider = null,
+        FederatedLearning.Verification.IZkProofSystem? zkProofSystem = null,
+        FederatedLearning.Unlearning.IFederatedUnlearner<T>? federatedUnlearner = null,
+        FederatedLearning.DriftDetection.IFederatedDriftDetector<T>? driftDetector = null,
+        FederatedLearning.Fairness.IClientContributionEvaluator<T>? contributionEvaluator = null,
+        FederatedLearning.Fairness.IFairnessConstraint<T>? fairnessConstraint = null);
 
     /// <summary>
     /// Configures the data preparation pipeline for row-changing operations.
