@@ -31,6 +31,11 @@ public class RotatEEmbedding<T> : KGEmbeddingBase<T>
     // Entity embeddings use paired [real, imag] layout: entityEmbeddings[i] has length 2*dim
     // Relation embeddings store phase angles: relationEmbeddings[i] has length dim
     // where r_real[d] = cos(phase[d]), r_imag[d] = sin(phase[d])
+    //
+    // Distance metric: The paper uses L1 (Σ|z_d|) but this implementation uses squared L2 (Σ|z_d|²)
+    // in the margin loss for computational efficiency and smoother gradients. The theoretical properties
+    // (symmetry, antisymmetry, composition modeling) hold for any Lp norm. Rankings are equivalent
+    // since sqrt is monotonic. The gradient formulas follow from differentiating squared L2, not L1.
 
     private protected override int GetEntityEmbeddingSize() => EmbeddingDimension * 2;
 
