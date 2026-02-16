@@ -6885,6 +6885,163 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates default FullSubNet+ layers for speech enhancement.
+    /// </summary>
+    /// <param name="numFreqBins">Number of frequency bins (default: 257).</param>
+    /// <param name="fullBandHiddenSize">Full-band LSTM hidden size (default: 512).</param>
+    /// <param name="subBandHiddenSize">Sub-band LSTM hidden size (default: 384).</param>
+    /// <param name="fullBandLayers">Number of full-band layers (default: 2).</param>
+    /// <param name="subBandLayers">Number of sub-band layers (default: 2).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.0).</param>
+    /// <returns>A collection of layers for FullSubNet+ speech enhancement.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultFullSubNetPlusLayers(
+        int numFreqBins = 257,
+        int fullBandHiddenSize = 512,
+        int subBandHiddenSize = 384,
+        int fullBandLayers = 2,
+        int subBandLayers = 2,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Full-band path: processes all frequency bins together
+        yield return new DenseLayer<T>(numFreqBins, fullBandHiddenSize, reluActivation);
+        yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+        for (int i = 0; i < fullBandLayers; i++)
+        {
+            yield return new DenseLayer<T>(fullBandHiddenSize, fullBandHiddenSize, reluActivation);
+            yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Sub-band path: processes sub-band features
+        yield return new DenseLayer<T>(fullBandHiddenSize, subBandHiddenSize, reluActivation);
+        yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+        for (int i = 0; i < subBandLayers; i++)
+        {
+            yield return new DenseLayer<T>(subBandHiddenSize, subBandHiddenSize, reluActivation);
+            yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Fusion and mask estimation
+        yield return new DenseLayer<T>(subBandHiddenSize, numFreqBins * 2, identityActivation);
+        yield return new LayerNormalizationLayer<T>(numFreqBins * 2);
+
+        // Output: complex mask (real + imaginary for each frequency bin)
+        yield return new DenseLayer<T>(numFreqBins * 2, numFreqBins * 2, sigmoidActivation);
+    }
+
+    /// <summary>
+    /// Creates default CMGAN layers for conformer-based speech enhancement.
+    /// </summary>
+    /// <param name="numFreqBins">Number of frequency bins (default: 201).</param>
+    /// <param name="conformerDim">Conformer hidden dimension (default: 256).</param>
+    /// <param name="numConformerLayers">Number of Conformer layers (default: 2).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default: 4).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.05).</param>
+    /// <returns>A collection of layers for CMGAN speech enhancement.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCMGANLayers(
+        int numFreqBins = 201,
+        int conformerDim = 256,
+        int numConformerLayers = 2,
+        int numAttentionHeads = 4,
+        double dropoutRate = 0.05)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int feedForwardDim = conformerDim * 4;
+
+        // U-Net encoder
+        yield return new DenseLayer<T>(numFreqBins, conformerDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(conformerDim);
+
+        // Conformer blocks in bottleneck
+        for (int i = 0; i < numConformerLayers; i++)
+        {
+            // Feed-forward module
+            yield return new DenseLayer<T>(conformerDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, conformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(conformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            // Self-attention module
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numFreqBins,
+                embeddingDimension: conformerDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(conformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            // Second feed-forward module
+            yield return new DenseLayer<T>(conformerDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, conformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(conformerDim);
+        }
+
+        // U-Net decoder with mask estimation
+        yield return new DenseLayer<T>(conformerDim, numFreqBins * 2, identityActivation);
+        yield return new LayerNormalizationLayer<T>(numFreqBins * 2);
+
+        // Output: magnitude mask + phase correction
+        yield return new DenseLayer<T>(numFreqBins * 2, numFreqBins * 2, sigmoidActivation);
+    }
+
+    /// <summary>
+    /// Creates default TF-GridNet layers for time-frequency grid speech enhancement.
+    /// </summary>
+    /// <param name="numFreqBins">Number of frequency bins (default: 257).</param>
+    /// <param name="hiddenDim">Hidden dimension (default: 192).</param>
+    /// <param name="embeddingDim">Embedding dimension per T-F bin (default: 48).</param>
+    /// <param name="numBlocks">Number of grid blocks (default: 6).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default: 4).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.0).</param>
+    /// <returns>A collection of layers for TF-GridNet speech enhancement.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTFGridNetLayers(
+        int numFreqBins = 257,
+        int hiddenDim = 192,
+        int embeddingDim = 48,
+        int numBlocks = 6,
+        int numAttentionHeads = 4,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Input embedding: map complex STFT to embedding space
+        yield return new DenseLayer<T>(numFreqBins * 2, embeddingDim * numFreqBins > 4096 ? 4096 : embeddingDim * 4, reluActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim * numFreqBins > 4096 ? 4096 : embeddingDim * 4);
+
+        // Grid blocks: alternating intra-frame (frequency) and inter-frame (time) processing
+        for (int b = 0; b < numBlocks; b++)
+        {
+            int dim = embeddingDim * numFreqBins > 4096 ? 4096 : embeddingDim * 4;
+
+            // Intra-frame (frequency-axis) processing
+            yield return new DenseLayer<T>(dim, hiddenDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, dim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(dim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            // Inter-frame (time-axis) processing
+            yield return new DenseLayer<T>(dim, hiddenDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, dim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(dim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Output: reconstruct complex STFT (real + imaginary)
+        int outDim = embeddingDim * numFreqBins > 4096 ? 4096 : embeddingDim * 4;
+        yield return new DenseLayer<T>(outDim, numFreqBins * 2, identityActivation);
+    }
+
+    /// <summary>
     /// Creates default music source separation layers (U-Net style).
     /// </summary>
     /// <param name="numMels">Number of spectrogram frequency bins (default: 513 for STFT with 1024 window).</param>
