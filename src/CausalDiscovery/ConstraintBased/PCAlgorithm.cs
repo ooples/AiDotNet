@@ -25,7 +25,7 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class PCAlgorithm<T> : ConstraintBasedBase<T>
+internal class PCAlgorithm<T> : ConstraintBasedBase<T>
 {
     /// <inheritdoc/>
     public override string Name => "PC Algorithm";
@@ -152,13 +152,4 @@ public class PCAlgorithm<T> : ConstraintBasedBase<T>
         return neighbors;
     }
 
-    private Matrix<T> DoubleArrayToMatrix(double[,] data)
-    {
-        int rows = data.GetLength(0), cols = data.GetLength(1);
-        var result = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                result[i, j] = NumOps.FromDouble(data[i, j]);
-        return result;
-    }
 }

@@ -159,7 +159,8 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
                         bool case2 = edgeMark[i, j] == 2 && edgeMark[j, k] == 2 && edgeMark[k, j] == 1;
                         if (case1 || case2)
                         {
-                            edgeMark[i, k] = 2;
+                            edgeMark[i, k] = 2; // arrowhead at k
+                            edgeMark[k, i] = 1; // tail at i
                             changed = true;
                         }
                     }
@@ -181,21 +182,24 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
                             if (!adj[i, l] || !adj[k, l] || !adj[l, j]) continue;
                             if (edgeMark[l, j] != 3) continue;
                             // l is adjacent to both i and k (with circle marks) and l o—o j
-                            edgeMark[l, j] = 2;
+                            edgeMark[l, j] = 2; // arrowhead at j
+                            edgeMark[j, l] = 1; // tail at l
                             changed = true;
                         }
                     }
                 }
             }
 
-            // R4 (simplified discriminating path): If i → j → k, i o→ k, and i-j-k is a discriminating path,
-            // then orient j → k. We approximate: if j is a definite non-ancestor of k, orient j → k.
+            // R4 (simplified discriminating path approximation):
+            // The full R4 rule requires finding discriminating paths of arbitrary length,
+            // which is O(d!) in the worst case. This simplified version checks the immediate
+            // i → j *→ k pattern with i *→ k, covering common short discriminating paths.
+            // Full R4 with arbitrary-length path traversal is not yet implemented.
             for (int j = 0; j < d; j++)
             {
                 for (int k = 0; k < d; k++)
                 {
                     if (!adj[j, k] || edgeMark[j, k] != 3) continue;
-                    // Check if there exists an i such that i → j → ... forms a discriminating path
                     for (int i = 0; i < d; i++)
                     {
                         if (i == j || i == k) continue;
@@ -203,7 +207,8 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
                         if (!adj[i, k]) continue;
                         if (edgeMark[j, k] == 3)
                         {
-                            edgeMark[j, k] = 2;
+                            edgeMark[j, k] = 2; // arrowhead at k
+                            edgeMark[k, j] = 1; // tail at j
                             changed = true;
                         }
                     }
@@ -243,13 +248,4 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
         return neighbors;
     }
 
-    private Matrix<T> DoubleArrayToMatrix(double[,] data)
-    {
-        int rows = data.GetLength(0), cols = data.GetLength(1);
-        var result = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                result[i, j] = NumOps.FromDouble(data[i, j]);
-        return result;
-    }
 }

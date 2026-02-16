@@ -28,7 +28,7 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
     public override string Name => "CCM";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => false;
+    public override bool SupportsNonlinear => true;
 
     public CCMAlgorithm(CausalDiscoveryOptions? options = null)
     {

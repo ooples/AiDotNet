@@ -25,7 +25,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
+internal class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
 {
     private int _maxLag = 3;
     private double _threshold = 0.1;
@@ -173,9 +173,15 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
             x[i] = aug[i, size];
             for (int j = i + 1; j < size; j++) x[i] -= aug[i, j] * x[j];
             if (Math.Abs(aug[i, i]) > 1e-10)
+            {
                 x[i] /= aug[i, i];
+            }
             else
-                x[i] = 0; // Near-singular pivot — set coefficient to zero
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"VAR-LiNGAM: near-singular pivot at index {i} (value={aug[i, i]:E2}); coefficient set to zero (possible collinearity).");
+                x[i] = 0;
+            }
         }
 
         return x;

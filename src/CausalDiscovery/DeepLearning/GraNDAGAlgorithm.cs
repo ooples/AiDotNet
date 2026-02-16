@@ -27,7 +27,7 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
     public override string Name => "GraN-DAG";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => false;
+    public override bool SupportsNonlinear => true;
 
     public GraNDAGAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
 

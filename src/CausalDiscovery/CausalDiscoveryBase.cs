@@ -225,7 +225,13 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
 
         // Fisher's z-transform
         double z = 0.5 * Math.Log((1 + partialCorr) / (1 - partialCorr));
-        double testStat = Math.Abs(z) * Math.Sqrt(nSamples - conditioningSet.Length - 3);
+
+        // Guard: degrees of freedom must be positive for the test to be valid
+        int dof = nSamples - conditioningSet.Length - 3;
+        if (dof <= 0)
+            return true; // insufficient data — cannot reject independence
+
+        double testStat = Math.Abs(z) * Math.Sqrt(dof);
 
         // Compare with standard normal critical value
         double criticalValue = NormalQuantile(1 - alpha / 2);
@@ -529,6 +535,19 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
             }
         }
 
+        return result;
+    }
+
+    /// <summary>
+    /// Converts a double[,] array to a Matrix&lt;T&gt; using NumOps.FromDouble.
+    /// </summary>
+    protected Matrix<T> DoubleArrayToMatrix(double[,] data)
+    {
+        int rows = data.GetLength(0), cols = data.GetLength(1);
+        var result = new Matrix<T>(rows, cols);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < cols; j++)
+                result[i, j] = NumOps.FromDouble(data[i, j]);
         return result;
     }
 }

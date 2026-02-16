@@ -68,8 +68,6 @@ public class GESAlgorithm<T> : ScoreBasedBase<T>
         for (int i = 0; i < d; i++)
             scores[i] = ComputeBIC(X, n, i, parentSets[i]);
 
-        double totalScore = scores.Sum();
-
         // Forward phase: add edges
         bool improved = true;
         int forwardIter = 0;

@@ -29,10 +29,19 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
+internal class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
 {
-    private readonly int _nBins = 10;
-    private readonly double _miThreshold = 0.01;
+    /// <summary>Number of bins for discretization. Higher values capture finer-grained distributions but need more data.</summary>
+    private const int DefaultDiscretizationBins = 10;
+    /// <summary>Minimum conditional MI to consider a variable relevant in the Markov blanket.</summary>
+    private const double DefaultMIThreshold = 0.01;
+    /// <summary>Minimum range to distinguish from constant columns during discretization.</summary>
+    private const double MinDiscretizationRange = 1e-10;
+    /// <summary>Minimum group size in conditional MI computation to avoid noisy estimates.</summary>
+    private const int MinGroupSizeForMI = 5;
+
+    private readonly int _nBins = DefaultDiscretizationBins;
+    private readonly double _miThreshold = DefaultMIThreshold;
 
     /// <inheritdoc/>
     public override string Name => "Markov Blanket (Grow-Shrink)";
@@ -56,6 +65,9 @@ public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
+
+        if (n == 0)
+            return new Matrix<T>(d, d);
 
         // Discretize data for MI computation
         var X = DiscretizeData(data, n, d);
@@ -143,7 +155,7 @@ public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
             for (int i = 0; i < n; i++)
             {
                 double val = NumOps.ToDouble(data[i, j]);
-                result[i, j] = range > 1e-10
+                result[i, j] = range > MinDiscretizationRange
                     ? Math.Min((int)((val - min) / range * (_nBins - 1)), _nBins - 1)
                     : 0;
             }
@@ -202,7 +214,7 @@ public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
         double condMI = 0;
         foreach (var group in groups.Values)
         {
-            if (group.Count <= 5) continue;
+            if (group.Count <= MinGroupSizeForMI) continue;
             int groupN = group.Count;
 
             var jointCounts = new Dictionary<(int, int), int>();
@@ -234,13 +246,4 @@ public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
         return condMI;
     }
 
-    private Matrix<T> DoubleArrayToMatrix(double[,] data)
-    {
-        int rows = data.GetLength(0), cols = data.GetLength(1);
-        var result = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                result[i, j] = NumOps.FromDouble(data[i, j]);
-        return result;
-    }
 }

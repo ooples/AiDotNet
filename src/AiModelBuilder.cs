@@ -1896,6 +1896,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
                 // Use feature names from options, or generate defaults
                 var featureNames = _causalDiscoveryOptions.FeatureNames;
+                if ((featureNames == null || featureNames.Length != convertedX.Columns) && convertedX.Columns > 0)
+                {
+                    featureNames = new string[convertedX.Columns];
+                    for (int fi = 0; fi < convertedX.Columns; fi++)
+                        featureNames[fi] = $"X{fi}";
+                }
 
                 // Run causal discovery with target variable for supervised context
                 var causalGraph = algorithm.DiscoverStructure(convertedX, convertedY, featureNames);
@@ -1910,9 +1916,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     category: category,
                     elapsedTime: cdStopwatch.Elapsed);
             }
-            catch
+            catch (Exception ex)
             {
-                // Causal discovery is optional — silently continue with model building
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Causal discovery failed: {ex.Message}");
             }
         }
 

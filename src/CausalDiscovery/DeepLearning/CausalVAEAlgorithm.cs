@@ -22,13 +22,13 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
+internal class CausalVAEAlgorithm<T> : DeepCausalBase<T>
 {
     /// <inheritdoc/>
     public override string Name => "CausalVAE";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => false;
+    public override bool SupportsNonlinear => true;
 
     public CausalVAEAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
 

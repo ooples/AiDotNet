@@ -122,16 +122,4 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
         return -0.5 * Math.Log(1 - corr * corr);
     }
 
-    /// <summary>
-    /// Converts double array to Matrix&lt;T&gt;.
-    /// </summary>
-    protected Matrix<T> DoubleArrayToMatrix(double[,] data)
-    {
-        int rows = data.GetLength(0), cols = data.GetLength(1);
-        var result = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                result[i, j] = NumOps.FromDouble(data[i, j]);
-        return result;
-    }
 }

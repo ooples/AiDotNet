@@ -28,7 +28,7 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
     public override string Name => "CGNN";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => false;
+    public override bool SupportsNonlinear => true;
 
     public CGNNAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
 

@@ -282,6 +282,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
 
         if (invM != null)
         {
+            // Normal case: inversion succeeded
             for (int i = 0; i < d; i++)
             {
                 for (int j = 0; j < d; j++)
@@ -290,6 +291,14 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
                     gradient[i, j] = 2.0 * W[i, j] * invM[j, i];
                 }
             }
+        }
+        else
+        {
+            // Singular matrix: use identity-scaled fallback gradient to avoid stalling
+            System.Diagnostics.Trace.TraceWarning("DAGMA: M matrix is singular; using fallback gradient.");
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    gradient[i, j] = 2.0 * W[i, j];
         }
 
         return (h, gradient);

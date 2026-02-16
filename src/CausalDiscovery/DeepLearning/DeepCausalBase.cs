@@ -46,20 +46,8 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     {
         if (options == null) return;
         if (options.MaxIterations.HasValue) MaxEpochs = options.MaxIterations.Value;
-        if (options.SparsityPenalty.HasValue) LearningRate = options.SparsityPenalty.Value;
-        if (options.MaxParents.HasValue) HiddenUnits = options.MaxParents.Value;
+        if (options.LearningRate.HasValue) LearningRate = options.LearningRate.Value;
+        if (options.HiddenUnits.HasValue) HiddenUnits = options.HiddenUnits.Value;
     }
 
-    /// <summary>
-    /// Converts double array to Matrix&lt;T&gt;.
-    /// </summary>
-    protected Matrix<T> DoubleArrayToMatrix(double[,] data)
-    {
-        int rows = data.GetLength(0), cols = data.GetLength(1);
-        var result = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                result[i, j] = NumOps.FromDouble(data[i, j]);
-        return result;
-    }
 }

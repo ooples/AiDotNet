@@ -288,10 +288,17 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
                 stepSize *= 0.5;
                 if (ls == 19)
                 {
-                    // Line search failed — take small step anyway
+                    // Line search failed — take a conservative step in the descent direction.
+                    // The step size 1e-4 is small enough to avoid divergence while still
+                    // making progress when the Armijo condition cannot be satisfied.
+                    double dirNorm = 0;
+                    for (int i = 0; i < vecLen; i++)
+                        dirNorm += direction[i] * direction[i];
+                    dirNorm = Math.Sqrt(dirNorm);
+                    double fallbackStep = dirNorm > 0 ? 1e-4 / dirNorm : 0;
                     for (int i = 0; i < vecLen; i++)
                     {
-                        w[i] = w[i] + 1e-4 * direction[i];
+                        w[i] = w[i] + fallbackStep * direction[i];
                     }
 
                     // Zero diagonal

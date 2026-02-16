@@ -253,26 +253,6 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     }
 
     /// <summary>
-    /// Converts a double[,] array to a Matrix&lt;T&gt;.
-    /// </summary>
-    protected Matrix<T> DoubleArrayToMatrix(double[,] data)
-    {
-        int rows = data.GetLength(0);
-        int cols = data.GetLength(1);
-        var result = new Matrix<T>(rows, cols);
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                result[i, j] = NumOps.FromDouble(data[i, j]);
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
     /// Applies threshold to W: sets entries with |W[i,j]| &lt; threshold to 0.
     /// Also zeros out the diagonal.
     /// </summary>

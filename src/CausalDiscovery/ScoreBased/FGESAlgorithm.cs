@@ -68,11 +68,11 @@ public class FGESAlgorithm<T> : ScoreBasedBase<T>
 
         // Forward phase with caching
         bool improved = true;
-        int iteration = 0;
-        while (improved && iteration < MaxIterations)
+        int forwardIter = 0;
+        while (improved && forwardIter < MaxIterations)
         {
             improved = false;
-            iteration++;
+            forwardIter++;
 
             // Evaluate all possible edge additions
             var candidates = new List<(int from, int to, double improvement)>();
@@ -104,10 +104,11 @@ public class FGESAlgorithm<T> : ScoreBasedBase<T>
 
         // Backward phase with caching
         improved = true;
-        while (improved && iteration < MaxIterations)
+        int backwardIter = 0;
+        while (improved && backwardIter < MaxIterations)
         {
             improved = false;
-            iteration++;
+            backwardIter++;
 
             var candidates = new List<(int from, int to, double improvement)>();
             for (int to = 0; to < d; to++)

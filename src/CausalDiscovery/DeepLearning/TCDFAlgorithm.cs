@@ -28,7 +28,7 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
     public override string Name => "TCDF";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => false;
+    public override bool SupportsNonlinear => true;
 
     /// <inheritdoc/>
     public override bool SupportsTimeSeries => true;

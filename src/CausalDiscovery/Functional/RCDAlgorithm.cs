@@ -16,7 +16,7 @@ internal class RCDAlgorithm<T> : FunctionalBase<T>
 {
     private readonly CausalDiscoveryOptions? _options;
     public override string Name => "RCD";
-    public override bool SupportsLatentConfounders => false;
+    public override bool SupportsLatentConfounders => true;
     public override bool SupportsNonlinear => false;
     public RCDAlgorithm(CausalDiscoveryOptions? options = null)
     {

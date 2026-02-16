@@ -136,24 +136,18 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
             x[i] = aug[i, size];
             for (int j = i + 1; j < size; j++) x[i] -= aug[i, j] * x[j];
             if (Math.Abs(aug[i, i]) > 1e-10)
+            {
                 x[i] /= aug[i, i];
+            }
             else
-                x[i] = 0; // Near-singular pivot — set coefficient to zero
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"TimeSeriesCausal: near-singular pivot at index {i} (value={aug[i, i]:E2}); coefficient set to zero (possible collinearity).");
+                x[i] = 0;
+            }
         }
 
         return x;
     }
 
-    /// <summary>
-    /// Converts double array to Matrix&lt;T&gt;.
-    /// </summary>
-    protected Matrix<T> DoubleArrayToMatrix(double[,] data)
-    {
-        int rows = data.GetLength(0), cols = data.GetLength(1);
-        var result = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                result[i, j] = NumOps.FromDouble(data[i, j]);
-        return result;
-    }
 }

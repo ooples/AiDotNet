@@ -27,7 +27,7 @@ public class NeuralGrangerAlgorithm<T> : TimeSeriesCausalBase<T>
     public override string Name => "NeuralGranger";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => false;
+    public override bool SupportsNonlinear => true;
 
     public NeuralGrangerAlgorithm(CausalDiscoveryOptions? options = null)
     {

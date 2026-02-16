@@ -22,13 +22,13 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
+internal class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
 {
     /// <inheritdoc/>
     public override string Name => "AmortizedCD";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => false;
+    public override bool SupportsNonlinear => true;
 
     public AmortizedCDAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
 

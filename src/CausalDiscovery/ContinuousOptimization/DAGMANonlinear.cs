@@ -26,7 +26,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
+internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
 {
     #region Constants
 

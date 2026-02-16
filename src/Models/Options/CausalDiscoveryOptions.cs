@@ -129,4 +129,22 @@ public class CausalDiscoveryOptions
     /// Matches the NOTEARS reference implementation.</para>
     /// </remarks>
     public string? LossType { get; set; }
+
+    /// <summary>
+    /// Learning rate for deep learning-based causal discovery methods. Default: null (1e-3).
+    /// </summary>
+    /// <remarks>
+    /// <para>Controls the step size in gradient-based optimization for neural network methods
+    /// (DAG-GNN, GraN-DAG, DECI, CGNN, CausalVAE, etc.).</para>
+    /// </remarks>
+    public double? LearningRate { get; set; }
+
+    /// <summary>
+    /// Number of hidden units in neural network layers for deep learning methods. Default: null (64).
+    /// </summary>
+    /// <remarks>
+    /// <para>Controls the capacity of neural networks used in deep learning-based causal discovery.
+    /// Larger values can model more complex relationships but require more data.</para>
+    /// </remarks>
+    public int? HiddenUnits { get; set; }
 }

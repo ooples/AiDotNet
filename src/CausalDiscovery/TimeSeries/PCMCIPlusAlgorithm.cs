@@ -89,8 +89,8 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
                 double partCorr;
                 if (condVarIndices.Count == 0)
                 {
-                    // No lagged parents: use simple correlation
-                    partCorr = ComputeCorrelation(X, n, i, j);
+                    // No lagged parents: use simple correlation over effective sample window
+                    partCorr = ComputeCorrelation(X, effectiveN, offset, i, j);
                 }
                 else
                 {
@@ -258,15 +258,20 @@ public class PCMCIPlusAlgorithm<T> : TimeSeriesCausalBase<T>
         return x;
     }
 
-    private static double ComputeCorrelation(double[,] X, int n, int i, int j)
+    private static double ComputeCorrelation(double[,] X, int count, int offset, int i, int j)
     {
         double mi = 0, mj = 0;
-        for (int k = 0; k < n; k++) { mi += X[k, i]; mj += X[k, j]; }
-        mi /= n; mj /= n;
-        double sij = 0, sii = 0, sjj = 0;
-        for (int k = 0; k < n; k++)
+        for (int k = 0; k < count; k++)
         {
-            double di = X[k, i] - mi, dj = X[k, j] - mj;
+            int t = offset + k;
+            mi += X[t, i]; mj += X[t, j];
+        }
+        mi /= count; mj /= count;
+        double sij = 0, sii = 0, sjj = 0;
+        for (int k = 0; k < count; k++)
+        {
+            int t = offset + k;
+            double di = X[t, i] - mi, dj = X[t, j] - mj;
             sij += di * dj; sii += di * di; sjj += dj * dj;
         }
         return (sii > 1e-10 && sjj > 1e-10) ? sij / Math.Sqrt(sii * sjj) : 0;

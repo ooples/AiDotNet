@@ -44,16 +44,4 @@ public abstract class BayesianCausalBase<T> : CausalDiscoveryBase<T>
         if (options.Seed.HasValue) Seed = options.Seed.Value;
     }
 
-    /// <summary>
-    /// Converts double array to Matrix&lt;T&gt;.
-    /// </summary>
-    protected Matrix<T> DoubleArrayToMatrix(double[,] data)
-    {
-        int rows = data.GetLength(0), cols = data.GetLength(1);
-        var result = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                result[i, j] = NumOps.FromDouble(data[i, j]);
-        return result;
-    }
 }
