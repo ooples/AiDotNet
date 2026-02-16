@@ -62,7 +62,7 @@ public class ActivationCheckpointConfig
             {
                 throw new ArgumentOutOfRangeException(nameof(CheckpointEveryNLayers),
                     $"CheckpointEveryNLayers must be at least 1, but was {value}. " +
-                    "A value of 0 would cause division-by-zero in interval-based checkpointing.");
+                    "A value of 0 would mean no layers are checkpointed, defeating the purpose of interval-based checkpointing.");
             }
             _checkpointEveryNLayers = value;
         }

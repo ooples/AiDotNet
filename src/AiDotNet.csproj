@@ -130,8 +130,7 @@
 	<ItemGroup>
 	  <ProjectReference Include="AiDotNet.Generators\AiDotNet.Generators.csproj"
 	                     OutputItemType="Analyzer"
-	                     ReferenceOutputAssembly="false"
-	                     SetTargetFramework="TargetFramework=netstandard2.0" />
+	                     ReferenceOutputAssembly="false" />
 	</ItemGroup>
 
 	<!-- Exclude the source generator project files from this project's compilation -->

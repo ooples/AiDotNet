@@ -127,14 +127,13 @@ public sealed class LMSDiscreteScheduler<T> : NoiseSchedulerBase<T>
     /// </remarks>
     private T[] ComputeLMSCoefficients(int stepIndex, int order)
     {
+        if (_sigmas is null)
+            throw new InvalidOperationException("Sigmas not initialized. Call SetTimesteps() before Step().");
+
         var coefficients = new T[order];
 
-        T sigmaNext = _sigmas![stepIndex + 1];
+        T sigmaNext = _sigmas[stepIndex + 1];
         T sigmaCurrent = _sigmas[stepIndex];
-
-        // Integration range in log-sigma space
-        T logSigmaCurrent = NumOps.FromDouble(Math.Log(Math.Max(1e-10, NumOps.ToDouble(sigmaCurrent))));
-        T logSigmaNext = NumOps.FromDouble(Math.Log(Math.Max(1e-10, NumOps.ToDouble(sigmaNext))));
 
         if (order == 1)
         {
@@ -146,7 +145,6 @@ public sealed class LMSDiscreteScheduler<T> : NoiseSchedulerBase<T>
             // Higher-order: compute integrated Lagrange basis polynomials
             // We use a simplified approximation based on equally-weighted derivatives
             // scaled by the step size
-            T dt = NumOps.Subtract(logSigmaNext, logSigmaCurrent);
             T stepSize = NumOps.Subtract(sigmaNext, sigmaCurrent);
 
             for (int i = 0; i < order; i++)

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
 
@@ -327,7 +328,7 @@ public class QuantizationConfiguration
     /// <item><description>Layer-Sensitive Quantization (2025): Layer sensitivity metrics for mixed-precision</description></item>
     /// </list>
     /// </remarks>
-    public Dictionary<AiDotNet.Interfaces.LayerCategory, int>? CategoryBitWidths { get; set; }
+    public Dictionary<LayerCategory, int>? CategoryBitWidths { get; set; }
 
     /// <summary>
     /// Creates a configuration for INT8 quantization.

@@ -41,12 +41,22 @@ public sealed class HeunDiscreteScheduler<T> : NoiseSchedulerBase<T>
     /// </summary>
     private Vector<T>? _sigmas;
 
+    // Two-pass Heun state: stored between predictor (first call) and corrector (second call)
+    private Vector<T>? _prevDerivative;
+    private Vector<T>? _prevSample;
+    private T _prevDt;
+    private T _prevSigmaNext;
+    private int _prevTimestep;
+    private bool _isSecondPass;
+
     /// <summary>
     /// Initializes a new instance of the Heun discrete scheduler.
     /// </summary>
     /// <param name="config">Configuration for the scheduler including beta schedule parameters.</param>
     public HeunDiscreteScheduler(SchedulerConfig<T> config) : base(config)
     {
+        _prevDt = NumOps.Zero;
+        _prevSigmaNext = NumOps.Zero;
     }
 
     /// <summary>
@@ -89,16 +99,17 @@ public sealed class HeunDiscreteScheduler<T> : NoiseSchedulerBase<T>
     /// <returns>The denoised sample for the previous timestep.</returns>
     /// <remarks>
     /// <para>
-    /// Heun's method (second-order):
-    /// 1. Compute derivative d1 at current sigma using model output
-    /// 2. Take Euler step to get intermediate sample at sigma_{t-1}
-    /// 3. The caller would normally evaluate the model again at the intermediate point;
-    ///    since we only have one model output, we approximate by averaging the derivative
-    ///    at the current point with a corrected estimate
-    /// 4. Take the corrected step
+    /// Heun's method requires two model evaluations per denoising step:
     ///
-    /// This implementation uses the single-evaluation approximation where the second
-    /// derivative is estimated from the predicted clean sample.
+    /// Pass 1 (Predictor): Computes derivative d1 at current sigma, takes Euler step
+    /// to intermediate point, returns intermediate sample for a second model evaluation.
+    ///
+    /// Pass 2 (Corrector): Uses the second model output at the intermediate point to
+    /// compute d2, averages d1 and d2, and takes the corrected step.
+    ///
+    /// The caller must call Step() twice per denoising step:
+    /// 1. intermediate = scheduler.Step(model(x_t), t, x_t, eta)
+    /// 2. result = scheduler.Step(model(intermediate), t, intermediate, eta)
     /// </para>
     /// </remarks>
     public override Vector<T> Step(Vector<T> modelOutput, int timestep, Vector<T> sample, T eta, Vector<T>? noise = null)
@@ -108,8 +119,21 @@ public sealed class HeunDiscreteScheduler<T> : NoiseSchedulerBase<T>
         if (_sigmas == null)
             throw new InvalidOperationException("Sigmas not initialized. Call SetTimesteps() before Step().");
 
+        if (_isSecondPass && _prevDerivative is not null && _prevSample is not null)
+        {
+            return HeunCorrectorStep(modelOutput, sample);
+        }
+
+        return HeunPredictorStep(modelOutput, timestep, sample);
+    }
+
+    /// <summary>
+    /// First pass: compute derivative d1, take Euler step, store state for corrector.
+    /// </summary>
+    private Vector<T> HeunPredictorStep(Vector<T> modelOutput, int timestep, Vector<T> sample)
+    {
         int stepIndex = FindTimestepIndex(timestep);
-        T sigma = _sigmas[stepIndex];
+        T sigma = _sigmas![stepIndex];
         T sigmaNext = _sigmas[stepIndex + 1];
 
         // Convert model output to predicted original sample
@@ -120,33 +144,62 @@ public sealed class HeunDiscreteScheduler<T> : NoiseSchedulerBase<T>
         var d1 = Engine.Subtract(sample, predOriginal);
         d1 = Engine.Divide(d1, sigma);
 
-        // If sigmaNext is zero, just use Euler step
+        T dt = NumOps.Subtract(sigmaNext, sigma);
+
+        // If sigmaNext is zero, just use Euler step (no corrector needed)
         if (NumOps.Equals(sigmaNext, NumOps.Zero))
         {
-            T dt = NumOps.Subtract(sigmaNext, sigma);
+            _isSecondPass = false;
             var step = Engine.Multiply(d1, dt);
             return Engine.Add(sample, step);
         }
 
         // Euler step to get intermediate sample
-        T dt1 = NumOps.Subtract(sigmaNext, sigma);
-        var sampleIntermediate = Engine.Add(sample, Engine.Multiply(d1, dt1));
+        var sampleIntermediate = Engine.Add(sample, Engine.Multiply(d1, dt));
 
-        // Compute derivative d2 at intermediate point
-        // Using the predicted original sample at the intermediate noise level
-        var predOriginal2 = ConvertToPredOriginal(modelOutput, sampleIntermediate, sigmaNext, timestep);
+        // Store state for corrector pass
+        _prevDerivative = d1;
+        _prevSample = sample;
+        _prevDt = dt;
+        _prevSigmaNext = sigmaNext;
+        _prevTimestep = timestep;
+        _isSecondPass = true;
+
+        return sampleIntermediate;
+    }
+
+    /// <summary>
+    /// Second pass: use the second model evaluation at the intermediate point
+    /// to compute the Heun corrector step.
+    /// </summary>
+    private Vector<T> HeunCorrectorStep(Vector<T> modelOutput, Vector<T> sampleIntermediate)
+    {
+        var d1 = _prevDerivative!;
+        var originalSample = _prevSample!;
+        T dt = _prevDt;
+        T sigmaNext = _prevSigmaNext;
+        int timestep = _prevTimestep;
+
+        // Convert the second model output to predicted original sample at sigmaNext
+        Vector<T> predOriginal2 = ConvertToPredOriginal(modelOutput, sampleIntermediate, sigmaNext, timestep);
         predOriginal2 = ClipSampleIfNeeded(predOriginal2);
 
+        // Compute derivative d2 = (x_intermediate - pred_x0_2) / sigma_next
         var d2 = Engine.Subtract(sampleIntermediate, predOriginal2);
         d2 = Engine.Divide(d2, sigmaNext);
+
+        // Clear state
+        _isSecondPass = false;
+        _prevDerivative = null;
+        _prevSample = null;
 
         // Average the two derivatives (Heun's corrector)
         var half = NumOps.FromDouble(0.5);
         var dAvg = Engine.Add(Engine.Multiply(d1, half), Engine.Multiply(d2, half));
 
-        // Take corrected step
-        var correctedStep = Engine.Multiply(dAvg, dt1);
-        return Engine.Add(sample, correctedStep);
+        // Take corrected step from the ORIGINAL sample
+        var correctedStep = Engine.Multiply(dAvg, dt);
+        return Engine.Add(originalSample, correctedStep);
     }
 
     /// <summary>

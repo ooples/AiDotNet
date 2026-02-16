@@ -214,7 +214,7 @@ public sealed class SchedulerConfig<T>
         return new SchedulerConfig<T>(
             trainTimesteps: 1000,
             betaStart: ops.FromDouble(0.0001),
-            betaEnd: ops.FromDouble(1.0),
+            betaEnd: ops.FromDouble(0.02),
             betaSchedule: BetaSchedule.Linear,
             clipSample: false,
             predictionType: DiffusionPredictionType.VPrediction);

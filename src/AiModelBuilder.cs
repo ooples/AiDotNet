@@ -167,7 +167,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private IPipelinePartitionStrategy<T>? _pipelinePartitionStrategy;
     private IPipelineSchedule? _pipelineSchedule;
     private ActivationCheckpointConfig? _pipelineCheckpointConfig;
-    private int _pipelineMicroBatchSize = 1;
+    private int _pipelineMicroBatchCount = 1;
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
     private AgentConfiguration<T>? _agentConfig;
     private AgentAssistanceOptions _agentOptions = AgentAssistanceOptions.Default;
@@ -1768,7 +1768,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     DistributedStrategy.PipelineParallel => CreateDistributedPair(
                         new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(
                             _model, shardingConfig,
-                            microBatchSize: _pipelineMicroBatchSize,
+                            microBatchSize: _pipelineMicroBatchCount,
                             partitionStrategy: _pipelinePartitionStrategy,
                             schedule: _pipelineSchedule,
                             checkpointConfig: _pipelineCheckpointConfig),
@@ -3877,7 +3877,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         _pipelineSchedule = schedule;
         _pipelinePartitionStrategy = partitionStrategy;
         _pipelineCheckpointConfig = checkpointConfig;
-        _pipelineMicroBatchSize = microBatchCount;
+        _pipelineMicroBatchCount = microBatchCount;
         return this;
     }
 

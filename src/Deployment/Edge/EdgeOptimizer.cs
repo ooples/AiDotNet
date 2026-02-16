@@ -268,6 +268,16 @@ public class EdgeOptimizer<T, TInput, TOutput>
             totalFlops += allLayerInfo[i].EstimatedFlops;
         }
 
+        // Pre-compute structurally valid partition points to avoid repeated validation calls
+        var validPartitionPoints = new HashSet<int>();
+        for (int i = 0; i < allLayerInfo.Count - 1; i++)
+        {
+            if (layeredModel.ValidatePartitionPoint(i))
+            {
+                validPartitionPoints.Add(i);
+            }
+        }
+
         // Find the layer boundary where cumulative FLOPs are closest to half
         long halfFlops = totalFlops / 2;
         long cumulative = 0;
@@ -278,8 +288,7 @@ public class EdgeOptimizer<T, TInput, TOutput>
         {
             cumulative += allLayerInfo[i].EstimatedFlops;
 
-            // Validate the partition point is structurally valid
-            if (!layeredModel.ValidatePartitionPoint(i))
+            if (!validPartitionPoints.Contains(i))
             {
                 continue;
             }

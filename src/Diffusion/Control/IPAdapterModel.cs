@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -109,12 +108,12 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// The base noise predictor (U-Net).
     /// </summary>
-    private UNetNoisePredictor<T> _baseUNet;
+    private readonly UNetNoisePredictor<T> _baseUNet;
 
     /// <summary>
     /// The VAE for encoding/decoding.
     /// </summary>
-    private StandardVAE<T> _vae;
+    private readonly StandardVAE<T> _vae;
 
     /// <summary>
     /// The text conditioning module.
@@ -124,12 +123,12 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// The image encoder for extracting image features.
     /// </summary>
-    private ImageEncoder<T> _imageEncoder;
+    private readonly ImageEncoder<T> _imageEncoder;
 
     /// <summary>
     /// The image projection layer.
     /// </summary>
-    private ImageProjector<T> _imageProjector;
+    private readonly ImageProjector<T> _imageProjector;
 
     /// <summary>
     /// Default image prompt weight.
@@ -201,19 +200,6 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     {
         _conditioner = conditioner;
 
-        InitializeLayers(baseUNet, vae, embedDim, seed);
-    }
-
-    #endregion
-
-    #region Layer Initialization
-
-    /// <summary>
-    /// Initializes the U-Net, VAE, image encoder, and projector layers.
-    /// </summary>
-    [MemberNotNull(nameof(_baseUNet), nameof(_vae), nameof(_imageEncoder), nameof(_imageProjector))]
-    private void InitializeLayers(UNetNoisePredictor<T>? baseUNet, StandardVAE<T>? vae, int embedDim, int? seed)
-    {
         _baseUNet = baseUNet ?? new UNetNoisePredictor<T>(
             architecture: Architecture,
             inputChannels: IPA_LATENT_CHANNELS,
