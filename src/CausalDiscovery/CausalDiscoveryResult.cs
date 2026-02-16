@@ -125,7 +125,10 @@ public class CausalDiscoveryResult<T>
         Graph = graph;
         AlgorithmUsed = algorithmUsed;
         Category = category;
-        Converged = graph.IsDAG();
+        // Default to true (algorithm completed successfully).
+        // Not all algorithms produce DAGs (e.g., FCI returns PAGs), so IsDAG() is not
+        // a reliable proxy for convergence.
+        Converged = true;
         ElapsedTime = elapsedTime;
     }
 }

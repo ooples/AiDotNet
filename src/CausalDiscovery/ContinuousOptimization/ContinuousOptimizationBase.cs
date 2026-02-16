@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Extensions;
 
 namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 
@@ -135,48 +136,11 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
             for (int j = 0; j < d; j++)
                 wSquared[i, j] = NumOps.Multiply(W[i, j], W[i, j]);
 
-        // e^(W∘W) via truncated Taylor series
-        var expMatrix = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            expMatrix[i, i] = NumOps.One; // Identity
-
-        // power starts as copy of wSquared
-        var power = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                power[i, j] = wSquared[i, j];
-
-        double factorial = 1.0;
-
-        for (int k = 1; k <= taylorOrder; k++)
-        {
-            factorial *= k;
-            T invFactorial = NumOps.FromDouble(1.0 / factorial);
-
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    expMatrix[i, j] = NumOps.Add(expMatrix[i, j], NumOps.Multiply(power[i, j], invFactorial));
-
-            if (k < taylorOrder)
-            {
-                var nextPower = new Matrix<T>(d, d);
-                for (int i = 0; i < d; i++)
-                    for (int j = 0; j < d; j++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int m = 0; m < d; m++)
-                            sum = NumOps.Add(sum, NumOps.Multiply(power[i, m], wSquared[m, j]));
-                        nextPower[i, j] = sum;
-                    }
-                power = nextPower;
-            }
-        }
+        // e^(W∘W) via shared MatrixExponential extension
+        var expMatrix = wSquared.MatrixExponential(taylorOrder);
 
         // h = tr(expMatrix) - d
-        double trace = 0;
-        for (int i = 0; i < d; i++)
-            trace += NumOps.ToDouble(expMatrix[i, i]);
-        double h = trace - d;
+        double h = NumOps.ToDouble(expMatrix.Trace()) - d;
 
         // Gradient: dh/dW = 2 * e^(W∘W) ∘ W
         T two = NumOps.FromDouble(2.0);
