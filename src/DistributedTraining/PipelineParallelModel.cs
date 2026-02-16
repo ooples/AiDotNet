@@ -190,7 +190,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         _stageId = Config.CommunicationBackend.Rank;
         _numStages = Config.CommunicationBackend.WorldSize;
         _virtualStagesPerRank = _schedule.VirtualStagesPerRank;
-        _totalVirtualStages = _numStages * _virtualStagesPerRank;
+        _totalVirtualStages = checked(_numStages * _virtualStagesPerRank);
         _supportsDecomposedBackward = WrappedModel is IPipelineDecomposableModel<T, TInput, TOutput>;
     }
 
@@ -769,13 +769,11 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         // After consuming the previous virtual stage's output, free it to reclaim memory.
         // This handles the case where FreeNonCheckpointedActivations retained the output
         // for cross-virtual-stage dependencies (e.g., Looped BFS).
-        if (op.VirtualStageIndex > 0)
+        if (op.VirtualStageIndex > 0
+            && !_checkpointedActivations.ContainsKey(
+                GetOperationKey(op.MicroBatchIndex, op.VirtualStageIndex - 1)))
         {
-            int prevVStageKey = GetOperationKey(op.MicroBatchIndex, op.VirtualStageIndex - 1);
-            if (!_checkpointedActivations.ContainsKey(prevVStageKey))
-            {
-                forwardOutputs.Remove(prevVStageKey);
-            }
+            forwardOutputs.Remove(GetOperationKey(op.MicroBatchIndex, op.VirtualStageIndex - 1));
         }
 
         // Checkpoint activation if configured
@@ -912,7 +910,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// </summary>
     private int GetOperationKey(int microBatchIndex, int virtualStageIndex)
     {
-        return microBatchIndex * _virtualStagesPerRank + virtualStageIndex;
+        return checked(microBatchIndex * _virtualStagesPerRank + virtualStageIndex);
     }
 
     /// <summary>
@@ -1026,7 +1024,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <param name="senderGlobalVStage">The sender's global virtual stage index.</param>
     private int ComputeForwardTag(int microBatchIndex, int senderGlobalVStage)
     {
-        return ActivationTagBase + microBatchIndex * _totalVirtualStages + senderGlobalVStage;
+        return checked(ActivationTagBase + microBatchIndex * _totalVirtualStages + senderGlobalVStage);
     }
 
     /// <summary>
@@ -1037,7 +1035,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <param name="receiverGlobalVStage">The receiver's (upstream) global virtual stage index.</param>
     private int ComputeBackwardTag(int microBatchIndex, int receiverGlobalVStage)
     {
-        return GradientTagBase + microBatchIndex * _totalVirtualStages + receiverGlobalVStage;
+        return checked(GradientTagBase + microBatchIndex * _totalVirtualStages + receiverGlobalVStage);
     }
 
     /// <summary>

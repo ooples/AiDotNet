@@ -57,8 +57,18 @@ public class GraphNeighborhoodPrivacy<T> : FederatedLearningComponentBase<T>
     public Tensor<T> PrivatizeEmbeddings(Tensor<T> embeddings, int embeddingDim)
     {
         if (embeddings is null) throw new ArgumentNullException(nameof(embeddings));
+        if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim), "Embedding dimension must be positive.");
 
         int totalElements = embeddings.Shape[0];
+
+        if (totalElements % embeddingDim != 0)
+        {
+            throw new ArgumentException(
+                $"Embedding tensor length ({totalElements}) is not divisible by embeddingDim ({embeddingDim}). " +
+                "Expected a flattened [numNodes * embDim] tensor.",
+                nameof(embeddings));
+        }
+
         var privatized = new Tensor<T>(new[] { totalElements });
 
         // Gaussian mechanism: sigma = sensitivity * sqrt(2 * ln(1.25/delta)) / epsilon

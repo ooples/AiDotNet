@@ -54,6 +54,17 @@ public class SecureClippingProtocol<T> : FederatedLearningComponentBase<T>
     /// </summary>
     /// <param name="gradientShares">Secret shares of the gradient vector.</param>
     /// <returns>Secret shares of the clipped gradient.</returns>
+    /// <remarks>
+    /// <para><b>Security note:</b> This implementation reconstructs the squared norm into
+    /// plaintext (via <c>ReconstructScalar</c>) to compute the scale factor, which reveals
+    /// the gradient's L2 norm to the computing party. This is a <b>known limitation</b>:
+    /// fully secure norm-based clipping requires MPC-native square root and division
+    /// (e.g., Goldschmidt iteration on shares), which adds significant MPC rounds.</para>
+    /// <para>For applications where norm leakage is acceptable (e.g., the server already
+    /// knows approximate gradient magnitudes), this implementation is correct and efficient.
+    /// For strict norm-hiding, use <see cref="ClipByValue"/> (per-element clipping) instead,
+    /// which operates entirely on shares via secure comparison.</para>
+    /// </remarks>
     public Tensor<T>[] ClipByNorm(Tensor<T>[] gradientShares)
     {
         if (gradientShares is null)

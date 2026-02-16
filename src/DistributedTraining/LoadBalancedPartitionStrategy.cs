@@ -205,21 +205,39 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
 
         if (numStages >= numLayers)
         {
-            // More stages than layers: assign one layer per stage, remaining stages get empty shards
             return AssignOneLayerPerStage(layerSizes, numStages);
         }
 
-        // Prefix sums for parameter sizes and costs
-        var paramPrefix = new long[numLayers + 1];
-        var costPrefix = new double[numLayers + 1];
+        var (paramPrefix, costPrefix) = ComputePrefixSums(layerSizes, layerCosts);
+        var (dp, splitPoint) = SolveMinMaxDP(costPrefix, numLayers, numStages);
+        var stageEndLayers = BacktrackSplitPoints(splitPoint, numLayers, numStages);
 
-        for (int i = 0; i < numLayers; i++)
+        return ConvertToPartitions(paramPrefix, stageEndLayers, numStages);
+    }
+
+    /// <summary>
+    /// Computes prefix sums for parameter sizes and layer costs.
+    /// </summary>
+    private static (long[] ParamPrefix, double[] CostPrefix) ComputePrefixSums(int[] layerSizes, double[] layerCosts)
+    {
+        int n = layerSizes.Length;
+        var paramPrefix = new long[n + 1];
+        var costPrefix = new double[n + 1];
+
+        for (int i = 0; i < n; i++)
         {
             paramPrefix[i + 1] = paramPrefix[i] + layerSizes[i];
             costPrefix[i + 1] = costPrefix[i] + layerCosts[i];
         }
 
-        // dp[s][l] = minimum of maximum stage cost when assigning layers 0..l-1 to stages 0..s-1
+        return (paramPrefix, costPrefix);
+    }
+
+    /// <summary>
+    /// Fills the DP table: dp[s][l] = min of max stage cost assigning layers 0..l-1 to stages 0..s-1.
+    /// </summary>
+    private static (double[][] Dp, int[][] SplitPoint) SolveMinMaxDP(double[] costPrefix, int numLayers, int numStages)
+    {
         var dp = new double[numStages + 1][];
         var splitPoint = new int[numStages + 1][];
 
@@ -227,27 +245,21 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
         {
             dp[s] = new double[numLayers + 1];
             splitPoint[s] = new int[numLayers + 1];
-            for (int i = 0; i < dp[s].Length; i++)
-            {
-                dp[s][i] = double.MaxValue;
-            }
+            ArrayPolyfill.Fill(dp[s], double.MaxValue);
         }
 
         dp[0][0] = 0.0;
 
-        // Base case: one stage gets all layers up to l
         for (int l = 1; l <= numLayers; l++)
         {
             dp[1][l] = costPrefix[l];
             splitPoint[1][l] = 0;
         }
 
-        // Fill DP table
         for (int s = 2; s <= numStages; s++)
         {
             for (int l = s; l <= numLayers; l++)
             {
-                // Try all possible split points for the last stage
                 for (int k = s - 1; k < l; k++)
                 {
                     double lastStageCost = costPrefix[l] - costPrefix[k];
@@ -262,7 +274,14 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
             }
         }
 
-        // Backtrack to find optimal partition
+        return (dp, splitPoint);
+    }
+
+    /// <summary>
+    /// Backtracks from the DP split points to find the optimal layer-to-stage assignment.
+    /// </summary>
+    private static int[] BacktrackSplitPoints(int[][] splitPoint, int numLayers, int numStages)
+    {
         var stageEndLayers = new int[numStages];
         int currentLayer = numLayers;
 
@@ -272,7 +291,15 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
             currentLayer = splitPoint[s][currentLayer];
         }
 
-        // Convert layer assignments to parameter partitions
+        return stageEndLayers;
+    }
+
+    /// <summary>
+    /// Converts layer assignments to parameter partitions (StartIndex, Size).
+    /// </summary>
+    private static (int StartIndex, int Size)[] ConvertToPartitions(
+        long[] paramPrefix, int[] stageEndLayers, int numStages)
+    {
         var partitions = new (int StartIndex, int Size)[numStages];
         int layerStart = 0;
 
@@ -290,9 +317,7 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
                     "Models with more than int.MaxValue parameters are not supported.");
             }
 
-            int paramStart = (int)paramStartLong;
-            int paramSize = (int)paramSizeLong;
-            partitions[s] = (paramStart, paramSize);
+            partitions[s] = ((int)paramStartLong, (int)paramSizeLong);
             layerStart = layerEnd;
         }
 
@@ -306,16 +331,9 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
 
         for (int i = 0; i < numStages; i++)
         {
-            if (i < layerSizes.Length)
-            {
-                partitions[i] = (currentStart, layerSizes[i]);
-                currentStart += layerSizes[i];
-            }
-            else
-            {
-                // Empty stage (more stages than layers)
-                partitions[i] = (currentStart, 0);
-            }
+            int size = i < layerSizes.Length ? layerSizes[i] : 0;
+            partitions[i] = (currentStart, size);
+            currentStart += size;
         }
 
         return partitions;

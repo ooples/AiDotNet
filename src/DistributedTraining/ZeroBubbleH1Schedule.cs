@@ -54,36 +54,48 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
 
         var ops = new List<PipelineOperation>();
 
-        // ZB-H1 follows 1F1B structure but splits backward into B + W
-        // Key constraint: maintain same number of in-flight micro-batches as 1F1B
-        // (i.e., at most numStages micro-batches stored at once)
-
         int numWarmupForwards = Math.Min(numStages - 1 - stageId, numMicroBatches);
         int numSteadyState = Math.Max(0, numMicroBatches - numWarmupForwards);
 
-        // Phase 1: Warmup - forward passes only (same as 1F1B)
-        int forwardIdx = 0;
+        int forwardIdx = EmitWarmupForwards(ops, numWarmupForwards);
+        var (backwardInputIdx, backwardWeightIdx) = EmitSteadyState(
+            ops, numSteadyState, numMicroBatches, forwardIdx);
+        EmitCooldown(ops, numMicroBatches, backwardInputIdx, backwardWeightIdx);
+
+        return ops;
+    }
+
+    /// <summary>
+    /// Phase 1: Warmup — forward passes only (same as 1F1B).
+    /// </summary>
+    private static int EmitWarmupForwards(List<PipelineOperation> ops, int numWarmupForwards)
+    {
         for (int i = 0; i < numWarmupForwards; i++)
         {
             ops.Add(new PipelineOperation
             {
                 Type = PipelineOperationType.Forward,
-                MicroBatchIndex = forwardIdx,
+                MicroBatchIndex = i,
                 IsWarmup = true,
                 IsCooldown = false
             });
-            forwardIdx++;
         }
 
-        // Phase 2: Steady state - 1F-1B-1W pattern
-        // For each steady-state step: one Forward, one BackwardInput, and
-        // schedule BackwardWeight for the micro-batch that completed B earliest.
+        return numWarmupForwards;
+    }
+
+    /// <summary>
+    /// Phase 2: Steady state — 1F-1B-1W pattern.
+    /// For each step: one Forward, one BackwardInput, and one BackwardWeight (bubble fill).
+    /// </summary>
+    private static (int BackwardInputIdx, int BackwardWeightIdx) EmitSteadyState(
+        List<PipelineOperation> ops, int numSteadyState, int numMicroBatches, int forwardIdx)
+    {
         int backwardInputIdx = 0;
         int backwardWeightIdx = 0;
 
         for (int i = 0; i < numSteadyState; i++)
         {
-            // Forward
             if (forwardIdx < numMicroBatches)
             {
                 ops.Add(new PipelineOperation
@@ -96,7 +108,6 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
                 forwardIdx++;
             }
 
-            // BackwardInput (B) - on the critical path
             ops.Add(new PipelineOperation
             {
                 Type = PipelineOperationType.BackwardInput,
@@ -106,9 +117,6 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
             });
             backwardInputIdx++;
 
-            // BackwardWeight (W) - fills bubbles, scheduled for earlier micro-batch
-            // ZB-H1 constraint: W starts only after enough B steps to maintain
-            // the same in-flight count as 1F1B
             if (backwardWeightIdx < backwardInputIdx && backwardWeightIdx < numMicroBatches)
             {
                 ops.Add(new PipelineOperation
@@ -122,7 +130,15 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
             }
         }
 
-        // Phase 3: Cooldown - remaining B and W passes
+        return (backwardInputIdx, backwardWeightIdx);
+    }
+
+    /// <summary>
+    /// Phase 3: Cooldown — drain remaining BackwardInput and BackwardWeight passes.
+    /// </summary>
+    private static void EmitCooldown(
+        List<PipelineOperation> ops, int numMicroBatches, int backwardInputIdx, int backwardWeightIdx)
+    {
         while (backwardInputIdx < numMicroBatches)
         {
             ops.Add(new PipelineOperation
@@ -135,7 +151,6 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
             backwardInputIdx++;
         }
 
-        // Drain remaining W passes
         while (backwardWeightIdx < numMicroBatches)
         {
             ops.Add(new PipelineOperation
@@ -147,8 +162,6 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
             });
             backwardWeightIdx++;
         }
-
-        return ops;
     }
 
     /// <inheritdoc/>
@@ -164,6 +177,6 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
         // ZB-H1 bubble: ~(P-1) / (3*M + P - 1)
         double p = numStages;
         double m = numMicroBatches;
-        return (p - 1) / (3.0 * m + p - 1.0);
+        return (p - 1.0) / (3.0 * m + p - 1.0);
     }
 }

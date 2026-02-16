@@ -84,7 +84,17 @@ public class Interleaved1F1BSchedule : IPipelineSchedule
         }
 
         var ops = new List<PipelineOperation>();
-        int totalVirtualStages = numStages * _virtualStagesPerRank;
+
+        // Use long arithmetic to prevent overflow when numStages * _virtualStagesPerRank
+        // exceeds int.MaxValue, then validate the result fits in int.
+        long totalVirtualStagesLong = (long)numStages * _virtualStagesPerRank;
+        if (totalVirtualStagesLong > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"Total virtual stages ({totalVirtualStagesLong}) exceeds int.MaxValue. " +
+                "Reduce numStages or virtualStagesPerRank.");
+        }
+        int totalVirtualStages = (int)totalVirtualStagesLong;
 
         // Each rank handles V virtual stages. Virtual stage IDs for rank stageId:
         // stageId, stageId + numStages, stageId + 2*numStages, ...
@@ -92,11 +102,14 @@ public class Interleaved1F1BSchedule : IPipelineSchedule
 
         // Warmup: number of forward passes before steady state begins
         // For interleaved, warmup is proportional to (totalVirtualStages - rank's first virtual stage - 1)
+        long numWarmupForwardsLong = (long)numMicroBatches * _virtualStagesPerRank;
         int numWarmupForwards = Math.Min(
             totalVirtualStages - 1 - stageId,
-            numMicroBatches * _virtualStagesPerRank);
+            numWarmupForwardsLong > int.MaxValue ? int.MaxValue : (int)numWarmupForwardsLong);
 
-        int totalForwards = numMicroBatches * _virtualStagesPerRank;
+        int totalForwards = numWarmupForwardsLong > int.MaxValue
+            ? int.MaxValue
+            : (int)numWarmupForwardsLong;
         int totalBackwards = totalForwards;
         int forwardsDone = 0;
         int backwardsDone = 0;

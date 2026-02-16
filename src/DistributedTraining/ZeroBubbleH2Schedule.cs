@@ -52,30 +52,41 @@ public class ZeroBubbleH2Schedule : IPipelineSchedule
 
         var ops = new List<PipelineOperation>();
 
-        // ZB-H2 allows more warmup forwards than 1F1B to fill the pipeline more aggressively.
-        // The key difference from ZB-H1: we allow up to (numStages - 1) additional in-flight
-        // micro-batches, which uses more memory but fills all bubbles.
-
-        // Extended warmup: later stages (higher stageId) get fewer warmup forwards
-        // because their inputs arrive later in the pipeline.
-        // Stage 0 gets up to numStages warmup forwards, stage (numStages-1) gets 1.
         int numWarmupForwards = Math.Min(numStages - stageId, numMicroBatches);
 
-        // Phase 1: Extended warmup - more forward passes to fill pipeline completely
-        int forwardIdx = 0;
+        int forwardIdx = EmitExtendedWarmup(ops, numWarmupForwards);
+        var (backwardInputIdx, backwardWeightIdx) = EmitSteadyState(
+            ops, numMicroBatches, numWarmupForwards, forwardIdx);
+        EmitCooldown(ops, numMicroBatches, backwardInputIdx, backwardWeightIdx);
+
+        return ops;
+    }
+
+    /// <summary>
+    /// Phase 1: Extended warmup — more forward passes to fill pipeline completely.
+    /// </summary>
+    private static int EmitExtendedWarmup(List<PipelineOperation> ops, int numWarmupForwards)
+    {
         for (int i = 0; i < numWarmupForwards; i++)
         {
             ops.Add(new PipelineOperation
             {
                 Type = PipelineOperationType.Forward,
-                MicroBatchIndex = forwardIdx,
+                MicroBatchIndex = i,
                 IsWarmup = true,
                 IsCooldown = false
             });
-            forwardIdx++;
         }
 
-        // Phase 2: Steady state - interleave F, B, W to maintain zero bubble
+        return numWarmupForwards;
+    }
+
+    /// <summary>
+    /// Phase 2: Steady state — interleave B, F, W to maintain zero bubble.
+    /// </summary>
+    private static (int BackwardInputIdx, int BackwardWeightIdx) EmitSteadyState(
+        List<PipelineOperation> ops, int numMicroBatches, int numWarmupForwards, int forwardIdx)
+    {
         int backwardInputIdx = 0;
         int backwardWeightIdx = 0;
         int steadyStateCount = Math.Max(0, numMicroBatches - numWarmupForwards);
@@ -119,7 +130,15 @@ public class ZeroBubbleH2Schedule : IPipelineSchedule
             }
         }
 
-        // Phase 3: Cooldown - drain remaining B and W
+        return (backwardInputIdx, backwardWeightIdx);
+    }
+
+    /// <summary>
+    /// Phase 3: Cooldown — drain remaining B and W passes.
+    /// </summary>
+    private static void EmitCooldown(
+        List<PipelineOperation> ops, int numMicroBatches, int backwardInputIdx, int backwardWeightIdx)
+    {
         while (backwardInputIdx < numMicroBatches)
         {
             ops.Add(new PipelineOperation
@@ -157,8 +176,6 @@ public class ZeroBubbleH2Schedule : IPipelineSchedule
             });
             backwardWeightIdx++;
         }
-
-        return ops;
     }
 
     /// <inheritdoc/>

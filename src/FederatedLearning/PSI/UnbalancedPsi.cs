@@ -129,14 +129,24 @@ public class UnbalancedPsi : PsiBase
     /// Computes a PRF tag for an element. In a real OPRF protocol, the server would
     /// evaluate this obliviously on the client's blinded input.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="securityParameter"/> is less than 8, which would produce
+    /// tags too short to prevent collisions.
+    /// </exception>
     private static string ComputeTag(string element, byte[] key, int securityParameter)
     {
+        if (securityParameter < 8)
+        {
+            throw new ArgumentOutOfRangeException(nameof(securityParameter),
+                $"Security parameter must be at least 8 (got {securityParameter}). " +
+                "Values below 8 produce tags shorter than 1 byte, causing catastrophic collisions.");
+        }
+
         using var hmac = new HMACSHA256(key);
         byte[] input = Encoding.UTF8.GetBytes(element);
         byte[] hash = hmac.ComputeHash(input);
 
-        // Ensure at least 1 byte to prevent empty tags when securityParameter < 8
-        int tagBytes = Math.Max(1, securityParameter / 8);
+        int tagBytes = securityParameter / 8;
         if (hash.Length > tagBytes)
         {
             byte[] truncated = new byte[tagBytes];
