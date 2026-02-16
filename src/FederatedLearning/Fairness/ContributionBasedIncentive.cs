@@ -145,7 +145,7 @@ public class ContributionBasedIncentive<T> : FederatedLearningComponentBase<T>, 
             double consistency = 1.0 / (1.0 + Math.Sqrt(variance));
 
             // Participation bonus: more rounds = more trusted (logarithmic growth)
-            double participationBonus = Math.Log(1.0 +history.Count) / Math.Log(1.0 +100);
+            double participationBonus = Math.Log(1.0 + history.Count) / Math.Log(1.0 + 100);
             participationBonus = Math.Min(1.0, participationBonus);
 
             // Combine: EMA (quality) * consistency * participation

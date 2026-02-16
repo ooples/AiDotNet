@@ -368,6 +368,44 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     }
 
     /// <summary>
+    /// Updates the local parameter shard from a full parameter vector, correctly handling
+    /// non-contiguous virtual stage partitions for V&gt;1 schedules.
+    /// </summary>
+    /// <remarks>
+    /// For single-stage schedules (V=1), parameters are contiguous and the base class
+    /// <see cref="ShardedModelBase{T, TInput, TOutput}.UpdateLocalShardFromFull"/> works fine.
+    /// For multi-stage schedules (V&gt;1), the local shard is a concatenation of non-contiguous
+    /// chunks from different parts of the full parameter vector. This method mirrors the
+    /// extraction logic in <see cref="InitializeSharding"/> to rebuild the shard correctly.
+    /// </remarks>
+    private void UpdateLocalShardFromFullParameters(Vector<T> fullParameters)
+    {
+        if (_virtualStagesPerRank <= 1)
+        {
+            // Single virtual stage: shard is contiguous, use base class
+            UpdateLocalShardFromFull(fullParameters);
+            return;
+        }
+
+        // Multi-stage: gather non-contiguous chunks in virtual-stage order
+        var shardData = new T[ShardSize];
+        int destOffset = 0;
+        var paramArray = fullParameters.ToArray();
+
+        for (int v = 0; v < _virtualStagesPerRank; v++)
+        {
+            if (_virtualStagePartitions.TryGetValue(v, out var partition))
+            {
+                Array.Copy(paramArray, partition.StartIndex, shardData, destOffset, partition.Size);
+                destOffset += partition.Size;
+            }
+        }
+
+        LocalShard = new Vector<T>(shardData);
+        InvalidateCache();
+    }
+
+    /// <summary>
     /// Performs layer-aware partitioning that respects layer boundaries and balances
     /// computational cost across pipeline stages.
     /// </summary>
@@ -612,7 +650,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                 SendGradientsUpstream(gradientVector, op.MicroBatchIndex, op.VirtualStageIndex);
                 accumulatedGradients = AccumulateGradients(accumulatedGradients, gradientVector);
 
-                FreeNonCheckpointedActivations(opKey, forwardInputs, forwardOutputs);
+                FreeConsumedActivations(opKey, forwardInputs, forwardOutputs);
             }
             else if (op.Type == PipelineOperationType.BackwardInput)
             {
@@ -683,7 +721,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                 }
 
                 accumulatedGradients = AccumulateGradients(accumulatedGradients, weightGradients);
-                FreeNonCheckpointedActivations(opKey, forwardInputs, forwardOutputs);
+                FreeConsumedActivations(opKey, forwardInputs, forwardOutputs);
             }
         }
 
@@ -702,7 +740,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         // Extract this stage's parameter shard
         var updatedParams = WrappedModel.GetParameters();
-        UpdateLocalShardFromFull(updatedParams);
+        UpdateLocalShardFromFullParameters(updatedParams);
         InvalidateCache();
 
         // Clean up all activation/gradient storage
@@ -879,54 +917,61 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     }
 
     /// <summary>
-    /// Gets the input for this stage, receiving from previous stage if needed.
-    /// For multi-stage schedules, routes based on virtual stage index.
+    /// Gets the input for this stage, receiving from the previous global virtual stage.
     /// </summary>
+    /// <remarks>
+    /// <para>For V&gt;1 schedules (Interleaved 1F1B, Looped BFS, ZB-V), each rank holds non-contiguous
+    /// model chunks. The global pipeline is: chunk 0 -> 1 -> 2 -> ... -> (V*P-1). Rank i holds chunks
+    /// {i, i+P, i+2P, ...}. Each virtual stage on this rank receives input from the previous physical
+    /// rank (which processed the previous global virtual stage), not from a local virtual stage.</para>
+    /// <para>Special cases: global stage 0 uses original micro-batch input; single-rank with V&gt;1
+    /// uses local forwarding (no inter-rank communication).</para>
+    /// </remarks>
     private TInput GetStageInput(
         Dictionary<int, TInput> microBatches, int microBatchIndex, int virtualStageIndex,
         Dictionary<int, TOutput>? forwardOutputs = null)
     {
-        // For virtual stage 0 of this rank, receive from the previous rank's last virtual stage
-        // For subsequent virtual stages, use the forward output from this rank's previous virtual stage
-        bool isFirstVirtualStageOnRank = virtualStageIndex == 0;
+        int globalVStage = _stageId + virtualStageIndex * _numStages;
 
-        if (isFirstVirtualStageOnRank && _stageId > 0)
+        if (globalVStage == 0)
         {
-            // Receive from previous rank (its last virtual stage's output)
-            int tag = ComputeForwardTag(microBatchIndex, virtualStageIndex);
-            Vector<T> sizeHeader = Config.CommunicationBackend.Receive(
-                _stageId - 1, count: 1, tag: tag);
-            int activationSize = NumOps.ToInt32(sizeHeader[0]);
+            // First global stage: use the micro-batch input directly
+            if (microBatches.TryGetValue(microBatchIndex, out var microBatch))
+            {
+                return microBatch;
+            }
 
-            Vector<T> receivedActivations = Config.CommunicationBackend.Receive(
-                _stageId - 1, activationSize, tag: tag);
-
-            return ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(receivedActivations);
+            throw new InvalidOperationException(
+                $"No micro-batch input found for micro-batch {microBatchIndex} at global virtual stage 0.");
         }
 
-        if (isFirstVirtualStageOnRank && microBatches.TryGetValue(microBatchIndex, out var microBatch))
+        if (_numStages == 1)
         {
-            // First stage, first virtual stage: use the micro-batch input directly
-            return microBatch;
+            // Single rank with V>1: use the forward output from the previous local virtual stage
+            if (forwardOutputs is not null
+                && forwardOutputs.TryGetValue(GetOperationKey(microBatchIndex, virtualStageIndex - 1), out var prevOutput))
+            {
+                var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(prevOutput);
+                return ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(outputVector);
+            }
+
+            throw new InvalidOperationException(
+                $"No input available for micro-batch {microBatchIndex}, virtual stage {virtualStageIndex}. " +
+                $"Forward output from virtual stage {virtualStageIndex - 1} was not found.");
         }
 
-        // For non-first virtual stages on this rank: use the forward output from the
-        // previous virtual stage on the same micro-batch.
-        if (!isFirstVirtualStageOnRank && forwardOutputs is not null
-            && forwardOutputs.TryGetValue(GetOperationKey(microBatchIndex, virtualStageIndex - 1), out var prevOutput))
-        {
-            // Convert the previous virtual stage's output to an input for the next stage
-            var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(prevOutput);
-            return ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(outputVector);
-        }
+        // Multi-rank: receive from the rank that processed the previous global virtual stage
+        int prevGlobalVStage = globalVStage - 1;
+        int sourceRank = prevGlobalVStage % _numStages;
+        int tag = ComputeForwardTag(microBatchIndex, prevGlobalVStage);
 
-        // Should not reach here in normal operation
-        throw new InvalidOperationException(
-            $"No input available for micro-batch {microBatchIndex}, virtual stage {virtualStageIndex}. " +
-            (isFirstVirtualStageOnRank
-                ? "Expected micro-batch input was not found."
-                : $"Forward output from virtual stage {virtualStageIndex - 1} was not found. " +
-                  "Ensure the schedule processes virtual stages in order."));
+        Vector<T> sizeHeader = Config.CommunicationBackend.Receive(sourceRank, count: 1, tag: tag);
+        int activationSize = NumOps.ToInt32(sizeHeader[0]);
+
+        Vector<T> receivedActivations = Config.CommunicationBackend.Receive(
+            sourceRank, activationSize, tag: tag);
+
+        return ConversionsHelper.ConvertVectorToInputWithoutReference<T, TInput>(receivedActivations);
     }
 
     /// <summary>
@@ -942,41 +987,58 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     }
 
     /// <summary>
-    /// Sends activations to the next stage in the pipeline.
-    /// For multi-stage schedules, only sends when transitioning between ranks.
+    /// Sends activations to the next stage in the global virtual pipeline.
     /// </summary>
+    /// <remarks>
+    /// For V&gt;1, every virtual stage (not just the last on this rank) sends to the next
+    /// physical rank, because the next global virtual stage is always on rank (_stageId+1)%P.
+    /// </remarks>
     private void SendActivationsForward(TOutput stageOutput, int microBatchIndex, int virtualStageIndex)
     {
-        // Only send to next rank when this is the last virtual stage on this rank
-        bool isLastVirtualStageOnRank = virtualStageIndex == _virtualStagesPerRank - 1;
+        int globalVStage = _stageId + virtualStageIndex * _numStages;
 
-        if (isLastVirtualStageOnRank && _stageId < _numStages - 1)
+        // Last global stage: nothing to send
+        if (globalVStage >= _totalVirtualStages - 1)
         {
-            Vector<T> activationsToSend = ConversionsHelper.ConvertToVector<T, TOutput>(stageOutput);
-            int tag = ComputeForwardTag(microBatchIndex, 0); // Next rank receives at vStage 0
-
-            var sizeHeader = new Vector<T>(new[] { NumOps.FromDouble(activationsToSend.Length) });
-            Config.CommunicationBackend.Send(sizeHeader, _stageId + 1, tag: tag);
-            Config.CommunicationBackend.Send(activationsToSend, _stageId + 1, tag: tag);
+            return;
         }
+
+        // Single rank with V>1: outputs stored locally in forwardOutputs, no communication
+        if (_numStages == 1)
+        {
+            return;
+        }
+
+        // Send to rank responsible for next global virtual stage
+        int destRank = (_stageId + 1) % _numStages;
+        Vector<T> activationsToSend = ConversionsHelper.ConvertToVector<T, TOutput>(stageOutput);
+        int tag = ComputeForwardTag(microBatchIndex, globalVStage);
+
+        var sizeHeader = new Vector<T>(new[] { NumOps.FromDouble(activationsToSend.Length) });
+        Config.CommunicationBackend.Send(sizeHeader, destRank, tag: tag);
+        Config.CommunicationBackend.Send(activationsToSend, destRank, tag: tag);
     }
 
     /// <summary>
     /// Computes a unique communication tag for forward pass activations.
     /// Tags are in the range [ActivationTagBase, GradientTagBase).
     /// </summary>
-    private int ComputeForwardTag(int microBatchIndex, int virtualStageIndex)
+    /// <param name="microBatchIndex">The micro-batch index.</param>
+    /// <param name="senderGlobalVStage">The sender's global virtual stage index.</param>
+    private int ComputeForwardTag(int microBatchIndex, int senderGlobalVStage)
     {
-        return ActivationTagBase + microBatchIndex * (_virtualStagesPerRank + 1) + virtualStageIndex;
+        return ActivationTagBase + microBatchIndex * _totalVirtualStages + senderGlobalVStage;
     }
 
     /// <summary>
     /// Computes a unique communication tag for backward pass gradients.
     /// Tags are in the range [GradientTagBase, PredictTagBase).
     /// </summary>
-    private int ComputeBackwardTag(int microBatchIndex, int virtualStageIndex)
+    /// <param name="microBatchIndex">The micro-batch index.</param>
+    /// <param name="receiverGlobalVStage">The receiver's (upstream) global virtual stage index.</param>
+    private int ComputeBackwardTag(int microBatchIndex, int receiverGlobalVStage)
     {
-        return GradientTagBase + microBatchIndex * (_virtualStagesPerRank + 1) + virtualStageIndex;
+        return GradientTagBase + microBatchIndex * _totalVirtualStages + receiverGlobalVStage;
     }
 
     /// <summary>
@@ -1081,36 +1143,56 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     private void ReceiveAndAccumulateDownstreamGradients(
         Vector<T> gradientVector, int microBatchIndex, int virtualStageIndex)
     {
-        // Only receive from next rank when this is the last virtual stage on this rank
-        bool isLastVirtualStageOnRank = virtualStageIndex == _virtualStagesPerRank - 1;
+        int globalVStage = _stageId + virtualStageIndex * _numStages;
 
-        if (isLastVirtualStageOnRank && _stageId < _numStages - 1)
+        // Last global stage has no downstream
+        if (globalVStage >= _totalVirtualStages - 1)
         {
-            int tag = ComputeBackwardTag(microBatchIndex, virtualStageIndex);
-            Vector<T> nextStageGradients = Config.CommunicationBackend.Receive(
-                _stageId + 1, gradientVector.Length, tag: tag);
+            return;
+        }
 
-            for (int i = 0; i < gradientVector.Length; i++)
-            {
-                gradientVector[i] = NumOps.Add(gradientVector[i], nextStageGradients[i]);
-            }
+        // Single rank: no communication
+        if (_numStages == 1)
+        {
+            return;
+        }
+
+        // Receive from the rank that processed the next global virtual stage
+        int sourceRank = (_stageId + 1) % _numStages;
+        int tag = ComputeBackwardTag(microBatchIndex, globalVStage);
+        Vector<T> nextStageGradients = Config.CommunicationBackend.Receive(
+            sourceRank, gradientVector.Length, tag: tag);
+
+        for (int i = 0; i < gradientVector.Length; i++)
+        {
+            gradientVector[i] = NumOps.Add(gradientVector[i], nextStageGradients[i]);
         }
     }
 
     /// <summary>
-    /// Sends gradients to the upstream (previous) stage.
-    /// For multi-stage schedules, handles virtual stage routing.
+    /// Sends gradients to the upstream (previous) stage in the global virtual pipeline.
     /// </summary>
     private void SendGradientsUpstream(Vector<T> gradientVector, int microBatchIndex, int virtualStageIndex)
     {
-        // Only send to previous rank when this is the first virtual stage on this rank
-        bool isFirstVirtualStageOnRank = virtualStageIndex == 0;
+        int globalVStage = _stageId + virtualStageIndex * _numStages;
 
-        if (isFirstVirtualStageOnRank && _stageId > 0)
+        // First global stage has no upstream
+        if (globalVStage == 0)
         {
-            int tag = ComputeBackwardTag(microBatchIndex, _virtualStagesPerRank - 1);
-            Config.CommunicationBackend.Send(gradientVector, _stageId - 1, tag: tag);
+            return;
         }
+
+        // Single rank: no communication
+        if (_numStages == 1)
+        {
+            return;
+        }
+
+        // Send to the rank that processed the previous global virtual stage
+        int prevGlobalVStage = globalVStage - 1;
+        int destRank = prevGlobalVStage % _numStages;
+        int tag = ComputeBackwardTag(microBatchIndex, prevGlobalVStage);
+        Config.CommunicationBackend.Send(gradientVector, destRank, tag: tag);
     }
 
     /// <summary>
@@ -1145,30 +1227,39 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     }
 
     /// <summary>
-    /// Frees non-checkpointed activations to save memory.
+    /// Frees activations after backward has consumed them to reduce memory usage.
     /// </summary>
     /// <remarks>
-    /// For multi-stage schedules (V &gt; 1), forward outputs from non-last virtual stages are
+    /// <para>After backward completes for an operation, both the forward input and any checkpoint
+    /// copy are no longer needed (with <see cref="RecomputeStrategy.None"/>). This method eagerly
+    /// evicts both to minimize peak memory.</para>
+    /// <para>For multi-stage schedules (V &gt; 1), forward outputs from non-last virtual stages are
     /// retained because the next virtual stage's forward pass needs them as input.
     /// These outputs are freed later when the next virtual stage's forward pass consumes them
-    /// (via <see cref="ExecuteForward"/>).
+    /// (via <see cref="ExecuteForward"/>).</para>
     /// </remarks>
-    private void FreeNonCheckpointedActivations(
+    private void FreeConsumedActivations(
         int opKey, Dictionary<int, TInput> forwardInputs, Dictionary<int, TOutput> forwardOutputs)
     {
-        if (!_checkpointedActivations.ContainsKey(opKey))
-        {
-            forwardInputs.Remove(opKey);
+        // Backward has already consumed the input - free it unconditionally
+        forwardInputs.Remove(opKey);
 
-            // Only free forward outputs if this is the last virtual stage on this rank.
-            // Non-last virtual stages' outputs are needed by the next virtual stage's
-            // forward pass (e.g., Looped BFS completes vStage 0's 1F1B before starting
-            // vStage 1, which needs vStage 0's forward outputs as input).
-            int virtualStageIndex = opKey % _virtualStagesPerRank;
-            if (virtualStageIndex >= _virtualStagesPerRank - 1)
-            {
-                forwardOutputs.Remove(opKey);
-            }
+        // Only free forward outputs if this is the last virtual stage on this rank.
+        // Non-last virtual stages' outputs are needed by the next virtual stage's
+        // forward pass (e.g., Looped BFS completes vStage 0's 1F1B before starting
+        // vStage 1, which needs vStage 0's forward outputs as input).
+        int virtualStageIndex = opKey % _virtualStagesPerRank;
+        if (virtualStageIndex >= _virtualStagesPerRank - 1)
+        {
+            forwardOutputs.Remove(opKey);
+        }
+
+        // With RecomputeStrategy.None, checkpointed activations are not needed after
+        // backward since we cannot recompute from them. Evict to save memory.
+        // Future recompute strategies (Selective/Full) would keep these as recovery points.
+        if (_checkpointConfig.RecomputeStrategy == RecomputeStrategy.None)
+        {
+            _checkpointedActivations.Remove(opKey);
         }
     }
 
