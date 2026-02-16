@@ -69,6 +69,11 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
         // Default: append target as last column and run standard discovery
         int n = data.Rows;
         int d = data.Columns;
+
+        if (target.Length != n)
+            throw new ArgumentException($"Target length ({target.Length}) must match data row count ({n}).", nameof(target));
+        if (featureNames != null && featureNames.Length != d)
+            throw new ArgumentException($"Feature names length ({featureNames.Length}) must match data column count ({d}).", nameof(featureNames));
         var combined = new Matrix<T>(n, d + 1);
 
         for (int i = 0; i < n; i++)
@@ -191,7 +196,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
         var precision = InvertSmallMatrix(subMatrix);
         if (precision == null)
         {
-            return 0.0; // Singular matrix — assume independence
+            return double.NaN; // Singular matrix — caller should handle
         }
 
         // Partial correlation = -precision[0,1] / sqrt(precision[0,0] * precision[1,1])
@@ -222,6 +227,10 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
         int nSamples, double alpha = 0.05)
     {
         double partialCorr = ComputePartialCorrelation(correlationMatrix, i, j, conditioningSet);
+
+        // NaN means singular correlation sub-matrix — conservatively assume independence
+        if (double.IsNaN(partialCorr))
+            return true;
 
         // Clamp to avoid log(0) or log(negative) in Fisher's z-transform
         partialCorr = Math.Max(-1 + 1e-15, Math.Min(1 - 1e-15, partialCorr));

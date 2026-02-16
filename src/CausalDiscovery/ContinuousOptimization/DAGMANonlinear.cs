@@ -26,7 +26,7 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
+public class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
 {
     #region Constants
 
@@ -137,9 +137,9 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
             }
 
             mu *= DEFAULT_MU_FACTOR;
-            _lastIterations += maxInner;
         }
 
+        _lastIterations = adamStep;
         var A = ExtractAdjacencyMatrix(d);
         var (finalLoss, _, _, _, _) = ComputeObjectiveAndGradients(data, n, d, h, 0, _sValues[^1]);
         _lastLoss = finalLoss;
@@ -243,7 +243,11 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
 
         var invM = InvertMatrix(M, d);
         var gradient = new Matrix<T>(d, d);
-        if (invM != null)
+        if (invM == null)
+        {
+            System.Diagnostics.Trace.TraceWarning("DAGMA-NL: M matrix is singular; returning zero gradient for h(W).");
+        }
+        else
         {
             T two = NumOps.FromDouble(2.0);
             for (int i = 0; i < d; i++)

@@ -3,15 +3,19 @@ using AiDotNet.Models.Options;
 namespace AiDotNet.CausalDiscovery.ScoreBased;
 
 /// <summary>
-/// FGES (Fast Greedy Equivalence Search) — optimized version of GES with score caching.
+/// FGES (Fast Greedy Equivalence Search) — greedy DAG search with BIC score caching.
 /// </summary>
 /// <remarks>
 /// <para>
-/// FGES improves on GES by using score caching to avoid redundant BIC calculations.
+/// This implementation performs greedy forward (edge addition) and backward (edge removal)
+/// search over DAG structures with BIC score caching for efficiency. It uses the same
+/// forward-backward structure as GES but with cached score evaluations to avoid redundant
+/// BIC computations.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> FGES does the same thing as GES but faster. It remembers
-/// previous calculations (caching) so it doesn't redo work unnecessarily.
+/// <b>For Beginners:</b> FGES searches for the best graph by first greedily adding edges
+/// that improve the score, then removing edges that improve the score. Caching remembered
+/// scores avoids recalculating the same parent-set configurations.
 /// </para>
 /// <para>
 /// Reference: Ramsey et al. (2017), "A Million Variables and More", JMLR.
@@ -60,7 +64,7 @@ public class FGESAlgorithm<T> : ScoreBasedBase<T>
                 for (int from = 0; from < d; from++)
                 {
                     if (from == to || parentSets[to].Contains(from)) continue;
-                    if (WouldCreateCycle(parentSets, from, to, d)) continue;
+                    if (WouldCreateCycle(parentSets, from, to)) continue;
 
                     var testParents = new HashSet<int>(parentSets[to]) { from };
                     double newScore = GetCachedBIC(data, to, testParents, scoreCache);
@@ -113,7 +117,7 @@ public class FGESAlgorithm<T> : ScoreBasedBase<T>
         var W = new Matrix<T>(d, d);
         for (int to = 0; to < d; to++)
             foreach (int from in parentSets[to])
-                W[from, to] = NumOps.FromDouble(Math.Max(0.01, ComputeAbsCorrelation(data, from, to)));
+                W[from, to] = NumOps.FromDouble(Math.Max(1e-10, ComputeAbsCorrelation(data, from, to)));
 
         return W;
     }

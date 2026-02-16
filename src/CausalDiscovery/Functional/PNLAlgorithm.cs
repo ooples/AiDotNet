@@ -32,9 +32,9 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// Post-Nonlinear Causal Model", UAI.
 /// </para>
 /// </remarks>
-internal class PNLAlgorithm<T> : FunctionalBase<T>
+public class PNLAlgorithm<T> : FunctionalBase<T>
 {
-    private double _threshold = 0.1;
+    private readonly double _threshold = 0.1;
 
     /// <inheritdoc/>
     public override string Name => "PNL";
@@ -44,13 +44,17 @@ internal class PNLAlgorithm<T> : FunctionalBase<T>
 
     public PNLAlgorithm(CausalDiscoveryOptions? options = null)
     {
-        if (options?.EdgeThreshold.HasValue == true) _threshold = options.EdgeThreshold.Value;
+        if (options?.EdgeThreshold.HasValue == true)
+            _threshold = Math.Max(0, Math.Min(1, options.EdgeThreshold.Value));
     }
 
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
+        int n = data.Rows;
         int d = data.Columns;
+        if (n == 0 || d < 2) return new Matrix<T>(d, d);
+
         var standardized = StandardizeData(data);
 
         var W = new Matrix<T>(d, d);

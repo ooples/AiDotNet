@@ -58,7 +58,7 @@ public class HillClimbingAlgorithm<T> : ScoreBasedBase<T>
                 for (int from = 0; from < d; from++)
                 {
                     if (from == to || parentSets[to].Contains(from)) continue;
-                    if (WouldCreateCycle(parentSets, from, to, d)) continue;
+                    if (WouldCreateCycle(parentSets, from, to)) continue;
 
                     var testParents = new HashSet<int>(parentSets[to]) { from };
                     double imp = ComputeBIC(data, to, testParents) - scores[to];
@@ -105,7 +105,7 @@ public class HillClimbingAlgorithm<T> : ScoreBasedBase<T>
                     var tempParents = (HashSet<int>[])parentSets.Clone();
                     tempParents[to] = testParentsTo;
                     tempParents[from] = testParentsFrom;
-                    if (WouldCreateCycle(tempParents, to, from, d)) continue;
+                    if (WouldCreateCycle(tempParents, to, from)) continue;
 
                     double impTo = ComputeBIC(data, to, testParentsTo) - scores[to];
                     double impFrom = ComputeBIC(data, from, testParentsFrom) - scores[from];
@@ -146,7 +146,7 @@ public class HillClimbingAlgorithm<T> : ScoreBasedBase<T>
         var W = new Matrix<T>(d, d);
         for (int to = 0; to < d; to++)
             foreach (int from in parentSets[to])
-                W[from, to] = NumOps.FromDouble(Math.Max(0.01, ComputeAbsCorrelation(data, from, to)));
+                W[from, to] = NumOps.FromDouble(Math.Max(1e-10, ComputeAbsCorrelation(data, from, to)));
 
         return W;
     }

@@ -22,7 +22,7 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
+public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
 {
     /// <inheritdoc/>
     public override string Name => "AmortizedCD";

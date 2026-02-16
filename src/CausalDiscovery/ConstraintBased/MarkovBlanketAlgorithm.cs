@@ -24,7 +24,7 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
+public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
 {
     private const int DefaultDiscretizationBins = 10;
     private const double DefaultMIThreshold = 0.01;
@@ -134,14 +134,29 @@ internal class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
             for (int i = 0; i < n; i++)
             {
                 double val = NumOps.ToDouble(data[i, j]);
+                if (double.IsNaN(val) || double.IsInfinity(val))
+                    continue;
                 min = Math.Min(min, val);
                 max = Math.Max(max, val);
+            }
+
+            // If all values were NaN/Infinity, assign bin 0
+            if (min > max)
+            {
+                for (int i = 0; i < n; i++)
+                    result[i, j] = 0;
+                continue;
             }
 
             double range = max - min;
             for (int i = 0; i < n; i++)
             {
                 double val = NumOps.ToDouble(data[i, j]);
+                if (double.IsNaN(val) || double.IsInfinity(val))
+                {
+                    result[i, j] = 0;
+                    continue;
+                }
                 result[i, j] = range > MinDiscretizationRange
                     ? Math.Min((int)((val - min) / range * (_nBins - 1)), _nBins - 1)
                     : 0;
@@ -153,27 +168,31 @@ internal class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
 
     private double ComputeMI(int[,] X, int col1, int col2, int n)
     {
-        var jointCounts = new Dictionary<(int, int), int>();
         var counts1 = new int[_nBins];
         var counts2 = new int[_nBins];
+        var jointCounts = new int[_nBins, _nBins];
 
         for (int i = 0; i < n; i++)
         {
             int v1 = X[i, col1], v2 = X[i, col2];
             counts1[v1]++;
             counts2[v2]++;
-            var key = (v1, v2);
-            jointCounts[key] = jointCounts.GetValueOrDefault(key) + 1;
+            jointCounts[v1, v2]++;
         }
 
         double mi = 0;
-        foreach (var kvp in jointCounts)
+        for (int v1 = 0; v1 < _nBins; v1++)
         {
-            double pxy = (double)kvp.Value / n;
-            double px = (double)counts1[kvp.Key.Item1] / n;
-            double py = (double)counts2[kvp.Key.Item2] / n;
-            if (pxy > 0 && px > 0 && py > 0)
+            if (counts1[v1] == 0) continue;
+            double px = (double)counts1[v1] / n;
+            for (int v2 = 0; v2 < _nBins; v2++)
+            {
+                int joint = jointCounts[v1, v2];
+                if (joint == 0 || counts2[v2] == 0) continue;
+                double pxy = (double)joint / n;
+                double py = (double)counts2[v2] / n;
                 mi += pxy * Math.Log(pxy / (px * py));
+            }
         }
 
         return mi;

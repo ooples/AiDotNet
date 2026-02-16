@@ -26,10 +26,10 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// </para>
 /// <para>Reference: Maeda and Shimizu (2021), "Causal Additive Models with Unobserved Variables".</para>
 /// </remarks>
-internal class CAMUVAlgorithm<T> : FunctionalBase<T>
+public class CAMUVAlgorithm<T> : FunctionalBase<T>
 {
-    private double _threshold = 0.1;
-    private double _confoundingThreshold = 0.3;
+    private readonly double _threshold = 0.1;
+    private readonly double _confoundingThreshold = 0.3;
 
     /// <inheritdoc/>
     public override string Name => "CAM-UV";
@@ -42,7 +42,10 @@ internal class CAMUVAlgorithm<T> : FunctionalBase<T>
 
     public CAMUVAlgorithm(CausalDiscoveryOptions? options = null)
     {
-        if (options?.EdgeThreshold.HasValue == true) _threshold = options.EdgeThreshold.Value;
+        if (options?.EdgeThreshold.HasValue == true)
+            _threshold = Math.Max(0, options.EdgeThreshold.Value);
+        if (options?.SparsityPenalty.HasValue == true)
+            _confoundingThreshold = Math.Max(0, options.SparsityPenalty.Value);
     }
 
     /// <inheritdoc/>

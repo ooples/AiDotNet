@@ -27,10 +27,10 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
+public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
 {
-    private int _maxLag = 3;
-    private double _threshold = 0.1;
+    private readonly int _maxLag = 3;
+    private readonly double _threshold = 0.1;
 
     /// <inheritdoc/>
     public override string Name => "VAR-LiNGAM";
@@ -44,7 +44,7 @@ internal class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
     public VARLiNGAMAlgorithm(CausalDiscoveryOptions? options = null)
     {
         if (options?.EdgeThreshold.HasValue == true) _threshold = options.EdgeThreshold.Value;
-        if (options?.MaxIterations.HasValue == true) _maxLag = options.MaxIterations.Value;
+        if (options?.MaxLag.HasValue == true) _maxLag = Math.Max(1, options.MaxLag.Value);
     }
 
     /// <inheritdoc/>

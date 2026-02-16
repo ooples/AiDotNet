@@ -34,9 +34,13 @@ public class MMHCAlgorithm<T> : HybridBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => false;
 
+    private readonly int _maxIterations = 100;
+
     public MMHCAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyHybridOptions(options);
+        if (options?.MaxIterations.HasValue == true)
+            _maxIterations = Math.Max(1, options.MaxIterations.Value);
     }
 
     /// <inheritdoc/>
@@ -160,7 +164,7 @@ public class MMHCAlgorithm<T> : HybridBase<T>
 
         // Greedy hill climbing with add/remove operations
         bool improved = true;
-        int maxIter = 100;
+        int maxIter = _maxIterations;
         while (improved && maxIter-- > 0)
         {
             improved = false;
@@ -227,7 +231,7 @@ public class MMHCAlgorithm<T> : HybridBase<T>
             foreach (int i in parents[j])
             {
                 double corr = Math.Abs(ComputeCorrelation(data, i, j));
-                W[i, j] = NumOps.FromDouble(Math.Max(corr, 0.1));
+                W[i, j] = NumOps.FromDouble(Math.Max(corr, 1e-10));
             }
         }
 

@@ -12,7 +12,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// <para>Reference: Janzing et al. (2012), "Information-Geometric Approach to Inferring
 /// Causal Directions", Artificial Intelligence.</para>
 /// </remarks>
-internal class IGCIAlgorithm<T> : FunctionalBase<T>
+public class IGCIAlgorithm<T> : FunctionalBase<T>
 {
     private readonly CausalDiscoveryOptions? _options;
     public override string Name => "IGCI";

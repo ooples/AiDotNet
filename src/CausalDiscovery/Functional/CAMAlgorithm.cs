@@ -31,9 +31,10 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// Order Search and Penalized Regression", Annals of Statistics.
 /// </para>
 /// </remarks>
-internal class CAMAlgorithm<T> : FunctionalBase<T>
+public class CAMAlgorithm<T> : FunctionalBase<T>
 {
-    private double _threshold = 0.1;
+    private readonly double _threshold = 0.1;
+    private readonly int _backfittingIterations = 5;
 
     /// <inheritdoc/>
     public override string Name => "CAM";
@@ -43,7 +44,10 @@ internal class CAMAlgorithm<T> : FunctionalBase<T>
 
     public CAMAlgorithm(CausalDiscoveryOptions? options = null)
     {
-        if (options?.EdgeThreshold.HasValue == true) _threshold = options.EdgeThreshold.Value;
+        if (options?.EdgeThreshold.HasValue == true)
+            _threshold = Math.Max(0, options.EdgeThreshold.Value);
+        if (options?.MaxIterations.HasValue == true)
+            _backfittingIterations = Math.Max(1, options.MaxIterations.Value);
     }
 
     /// <inheritdoc/>
@@ -65,17 +69,21 @@ internal class CAMAlgorithm<T> : FunctionalBase<T>
         var remaining = new HashSet<int>(Enumerable.Range(0, d));
         var ordered = new List<int>();
 
+        // Cache columns to avoid repeated allocations
+        var columns = new Vector<T>[d];
+        for (int i = 0; i < d; i++)
+            columns[i] = data.GetColumn(i);
+
         // First variable: least predictable by others
         int firstVar = 0;
         double minPredictability = double.MaxValue;
         foreach (int j in remaining)
         {
             double predictability = 0;
-            var colJ = data.GetColumn(j);
             for (int k = 0; k < d; k++)
             {
                 if (k == j) continue;
-                predictability += Math.Abs(ComputeCorrelation(colJ, data.GetColumn(k)));
+                predictability += Math.Abs(ComputeCorrelation(columns[j], columns[k]));
             }
             if (predictability < minPredictability)
             {
@@ -161,7 +169,7 @@ internal class CAMAlgorithm<T> : FunctionalBase<T>
         targetMean = NumOps.Divide(targetMean, nT);
 
         // Backfitting iterations
-        for (int iter = 0; iter < 5; iter++)
+        for (int iter = 0; iter < _backfittingIterations; iter++)
         {
             for (int k = 0; k < parents.Count; k++)
             {

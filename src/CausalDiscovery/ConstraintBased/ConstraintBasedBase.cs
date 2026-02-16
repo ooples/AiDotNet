@@ -41,8 +41,8 @@ public abstract class ConstraintBasedBase<T> : CausalDiscoveryBase<T>
     protected void ApplyConstraintOptions(Models.Options.CausalDiscoveryOptions? options)
     {
         if (options == null) return;
-        if (options.SignificanceLevel.HasValue) Alpha = options.SignificanceLevel.Value;
-        if (options.MaxConditioningSetSize.HasValue) MaxConditioningSetSize = options.MaxConditioningSetSize.Value;
+        if (options.SignificanceLevel.HasValue) Alpha = Math.Max(0.001, Math.Min(0.5, options.SignificanceLevel.Value));
+        if (options.MaxConditioningSetSize.HasValue) MaxConditioningSetSize = Math.Max(0, options.MaxConditioningSetSize.Value);
     }
 
     /// <summary>
@@ -81,7 +81,7 @@ public abstract class ConstraintBasedBase<T> : CausalDiscoveryBase<T>
         double partialCorr = ComputePartialCorr(data, i, j, condSet);
         int n = data.Rows;
         int dof = n - condSet.Count - 3;
-        if (dof <= 0) return false;
+        if (dof <= 0) return true; // insufficient data — cannot reject independence
 
         double clampedCorr = Math.Max(-0.999999, Math.Min(partialCorr, 0.999999));
         double z = Math.Sqrt(dof) * 0.5 * Math.Log((1 + clampedCorr) / (1 - clampedCorr));

@@ -148,7 +148,9 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         for (int t = 0; t < effectiveN; t++)
         {
             targetVals[t] = data[offset + t, target];
-            sourceVals[t] = data[offset + t - lag, source];
+            int sourceIdx = offset + t - lag;
+            // offset = MaxLag, lag <= MaxLag, so sourceIdx >= 0 always holds
+            sourceVals[t] = data[sourceIdx, source];
         }
 
         if (condSet.Count == 0)

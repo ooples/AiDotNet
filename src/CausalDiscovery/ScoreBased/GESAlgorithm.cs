@@ -66,7 +66,7 @@ public class GESAlgorithm<T> : ScoreBasedBase<T>
                 for (int from = 0; from < d; from++)
                 {
                     if (from == to || parentSets[to].Contains(from)) continue;
-                    if (WouldCreateCycle(parentSets, from, to, d)) continue;
+                    if (WouldCreateCycle(parentSets, from, to)) continue;
 
                     var testParents = new HashSet<int>(parentSets[to]) { from };
                     double newScore = ComputeBIC(data, to, testParents);

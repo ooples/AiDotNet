@@ -49,7 +49,8 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
         double bestTotalScore = scores.Sum();
         var bestParentSets = CloneParentSets(parentSets, d);
 
-        var tabuList = new Queue<(int type, int from, int to)>();
+        var tabuQueue = new Queue<(int type, int from, int to)>();
+        var tabuSet = new HashSet<(int type, int from, int to)>();
         double currentTotal = scores.Sum();
 
         for (int iteration = 0; iteration < MaxIterations; iteration++)
@@ -65,9 +66,9 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
                     for (int from = 0; from < d; from++)
                     {
                         if (from == to || parentSets[to].Contains(from)) continue;
-                        if (WouldCreateCycle(parentSets, from, to, d)) continue;
+                        if (WouldCreateCycle(parentSets, from, to)) continue;
 
-                        bool isTabu = tabuList.Any(t => t.type == 1 && t.from == from && t.to == to);
+                        bool isTabu = tabuSet.Contains((1, from, to));
 
                         var testParents = new HashSet<int>(parentSets[to]) { from };
                         double imp = ComputeBIC(data, to, testParents) - scores[to];
@@ -88,7 +89,7 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
                 // Remove operations
                 foreach (int from in parentSets[to])
                 {
-                    bool isTabu = tabuList.Any(t => t.type == 0 && t.from == from && t.to == to);
+                    bool isTabu = tabuSet.Contains((0, from, to));
 
                     var testParents = new HashSet<int>(parentSets[to]);
                     testParents.Remove(from);
@@ -114,17 +115,21 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
                 case 0:
                     parentSets[bestTo].Add(bestFrom);
                     scores[bestTo] = ComputeBIC(data, bestTo, parentSets[bestTo]);
-                    tabuList.Enqueue((1, bestFrom, bestTo));
+                    var entry1 = (1, bestFrom, bestTo);
+                    tabuQueue.Enqueue(entry1);
+                    tabuSet.Add(entry1);
                     break;
                 case 1:
                     parentSets[bestTo].Remove(bestFrom);
                     scores[bestTo] = ComputeBIC(data, bestTo, parentSets[bestTo]);
-                    tabuList.Enqueue((0, bestFrom, bestTo));
+                    var entry2 = (0, bestFrom, bestTo);
+                    tabuQueue.Enqueue(entry2);
+                    tabuSet.Add(entry2);
                     break;
             }
 
-            while (tabuList.Count > DEFAULT_TABU_SIZE)
-                tabuList.Dequeue();
+            while (tabuQueue.Count > DEFAULT_TABU_SIZE)
+                tabuSet.Remove(tabuQueue.Dequeue());
 
             currentTotal = scores.Sum();
             if (currentTotal > bestTotalScore)
@@ -138,7 +143,7 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
         var W = new Matrix<T>(d, d);
         for (int to = 0; to < d; to++)
             foreach (int from in bestParentSets[to])
-                W[from, to] = NumOps.FromDouble(Math.Max(0.01, ComputeAbsCorrelation(data, from, to)));
+                W[from, to] = NumOps.FromDouble(Math.Max(1e-10, ComputeAbsCorrelation(data, from, to)));
 
         return W;
     }

@@ -12,7 +12,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// <para>Reference: Aragam and Zhou (2015), "Concave Penalized Estimation of Sparse
 /// Gaussian Bayesian Networks", JMLR.</para>
 /// </remarks>
-internal class CCDrAlgorithm<T> : FunctionalBase<T>
+public class CCDrAlgorithm<T> : FunctionalBase<T>
 {
     private readonly CausalDiscoveryOptions? _options;
     public override string Name => "CCDr";

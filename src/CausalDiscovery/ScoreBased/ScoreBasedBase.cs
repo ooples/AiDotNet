@@ -41,9 +41,9 @@ public abstract class ScoreBasedBase<T> : CausalDiscoveryBase<T>
     protected void ApplyScoreOptions(Models.Options.CausalDiscoveryOptions? options)
     {
         if (options == null) return;
-        if (options.SparsityPenalty.HasValue) PenaltyDiscount = options.SparsityPenalty.Value;
-        if (options.MaxParents.HasValue) MaxParents = options.MaxParents.Value;
-        if (options.MaxIterations.HasValue) MaxIterations = options.MaxIterations.Value;
+        if (options.SparsityPenalty.HasValue) PenaltyDiscount = Math.Max(0, options.SparsityPenalty.Value);
+        if (options.MaxParents.HasValue) MaxParents = Math.Max(1, options.MaxParents.Value);
+        if (options.MaxIterations.HasValue) MaxIterations = Math.Max(1, options.MaxIterations.Value);
     }
 
     /// <summary>
@@ -75,7 +75,19 @@ public abstract class ScoreBasedBase<T> : CausalDiscoveryBase<T>
         var parentList = parents.ToList();
         int k = parentList.Count;
 
-        // Build XtX and Xty using generic operations
+        // Compute means for centering (implicit intercept)
+        double targetMean = 0;
+        var parentMeans = new double[k];
+        for (int r = 0; r < n; r++)
+        {
+            targetMean += NumOps.ToDouble(data[r, target]);
+            for (int i = 0; i < k; i++)
+                parentMeans[i] += NumOps.ToDouble(data[r, parentList[i]]);
+        }
+        targetMean /= n;
+        for (int i = 0; i < k; i++) parentMeans[i] /= n;
+
+        // Build XtX and Xty on centered data
         var XtX = new Matrix<T>(k, k);
         var Xty = new Vector<T>(k);
         for (int i = 0; i < k; i++)
@@ -84,15 +96,17 @@ public abstract class ScoreBasedBase<T> : CausalDiscoveryBase<T>
             for (int j = 0; j < k; j++)
             {
                 int fj = parentList[j];
-                T sum = NumOps.Zero;
+                double sum = 0;
                 for (int r = 0; r < n; r++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(data[r, fi], data[r, fj]));
-                XtX[i, j] = sum;
+                    sum += (NumOps.ToDouble(data[r, fi]) - parentMeans[i]) *
+                           (NumOps.ToDouble(data[r, fj]) - parentMeans[j]);
+                XtX[i, j] = NumOps.FromDouble(sum);
             }
-            T sumY = NumOps.Zero;
+            double sumY = 0;
             for (int r = 0; r < n; r++)
-                sumY = NumOps.Add(sumY, NumOps.Multiply(data[r, fi], data[r, target]));
-            Xty[i] = sumY;
+                sumY += (NumOps.ToDouble(data[r, fi]) - parentMeans[i]) *
+                        (NumOps.ToDouble(data[r, target]) - targetMean);
+            Xty[i] = NumOps.FromDouble(sumY);
         }
 
         // Ridge regularization
@@ -102,16 +116,18 @@ public abstract class ScoreBasedBase<T> : CausalDiscoveryBase<T>
 
         var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX, Xty, MatrixDecompositionType.Lu);
 
+        // Compute RSS with intercept: pred = mean(y) + sum(beta_i * (x_i - mean(x_i)))
         double totalRss = 0;
         for (int r = 0; r < n; r++)
         {
-            T pred = NumOps.Zero;
+            double pred = targetMean;
             for (int i = 0; i < k; i++)
-                pred = NumOps.Add(pred, NumOps.Multiply(beta[i], data[r, parentList[i]]));
-            double err = NumOps.ToDouble(data[r, target]) - NumOps.ToDouble(pred);
+                pred += NumOps.ToDouble(beta[i]) * (NumOps.ToDouble(data[r, parentList[i]]) - parentMeans[i]);
+            double err = NumOps.ToDouble(data[r, target]) - pred;
             totalRss += err * err;
         }
 
+        // k+1 parameters: k slopes + 1 intercept
         return -n * Math.Log(totalRss / n + 1e-10) - PenaltyDiscount * (k + 1) * Math.Log(n);
     }
 
@@ -143,7 +159,7 @@ public abstract class ScoreBasedBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Checks if adding an edge from parent to child would create a cycle.
     /// </summary>
-    protected static bool WouldCreateCycle(HashSet<int>[] parents, int from, int to, int d)
+    protected static bool WouldCreateCycle(HashSet<int>[] parents, int from, int to)
     {
         var visited = new HashSet<int>();
         var queue = new Queue<int>();

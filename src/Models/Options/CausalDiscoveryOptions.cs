@@ -140,6 +140,15 @@ public class CausalDiscoveryOptions
     public double? LearningRate { get; set; }
 
     /// <summary>
+    /// Maximum lag order for time-series causal discovery methods. Default: null (3).
+    /// </summary>
+    /// <remarks>
+    /// <para>Controls how many past time steps are considered for lagged effects in methods
+    /// like VAR-LiNGAM, DYNOTEARS, PCMCI, and Granger causality.</para>
+    /// </remarks>
+    public int? MaxLag { get; set; }
+
+    /// <summary>
     /// Number of hidden units in neural network layers for deep learning methods. Default: null (64).
     /// </summary>
     /// <remarks>

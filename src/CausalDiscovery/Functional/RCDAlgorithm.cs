@@ -12,7 +12,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 /// <para>Reference: Maeda and Shimizu (2020), "RCD: Repetitive Causal Discovery of
 /// Linear Non-Gaussian Acyclic Models with Latent Confounders", AISTATS.</para>
 /// </remarks>
-internal class RCDAlgorithm<T> : FunctionalBase<T>
+public class RCDAlgorithm<T> : FunctionalBase<T>
 {
     private readonly CausalDiscoveryOptions? _options;
     public override string Name => "RCD";

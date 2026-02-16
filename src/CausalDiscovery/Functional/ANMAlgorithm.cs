@@ -67,7 +67,9 @@ public class ANMAlgorithm<T> : FunctionalBase<T>
                 // The direction with lower residual dependence is preferred
                 double asymmetry = depJI - depIJ; // positive means i → j
 
-                if (Math.Abs(asymmetry) > _threshold * 0.1) // weak threshold for direction
+                // Asymmetry threshold: a fraction of _threshold to detect directional preference
+                double asymmetryThreshold = _threshold * 0.1;
+                if (Math.Abs(asymmetry) > asymmetryThreshold)
                 {
                     double weight = Math.Abs(ComputeCorrelation(xi, xj));
                     if (weight < _threshold) continue;

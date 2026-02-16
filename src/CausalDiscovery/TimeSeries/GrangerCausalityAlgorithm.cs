@@ -31,7 +31,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
+public class GrangerCausalityAlgorithm<T> : TimeSeriesCausalBase<T>
 {
     private readonly double _significanceLevel = 0.05;
 

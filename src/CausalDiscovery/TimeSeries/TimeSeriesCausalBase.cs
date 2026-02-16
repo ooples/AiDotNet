@@ -38,11 +38,11 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
     protected void ApplyTimeSeriesOptions(Models.Options.CausalDiscoveryOptions? options)
     {
         if (options == null) return;
-        if (options.MaxIterations.HasValue)
+        if (options.MaxLag.HasValue)
         {
-            if (options.MaxIterations.Value <= 0)
-                throw new ArgumentOutOfRangeException(nameof(options), "MaxLag (MaxIterations) must be > 0.");
-            MaxLag = options.MaxIterations.Value;
+            if (options.MaxLag.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), "MaxLag must be > 0.");
+            MaxLag = options.MaxLag.Value;
         }
     }
 

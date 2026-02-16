@@ -228,7 +228,19 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
     protected Vector<T> KernelSmooth(Matrix<T> data, int predictorCol, Vector<T> response)
     {
         int n = data.Rows;
-        T h = NumOps.FromDouble(Math.Pow(n, -1.0 / 5.0));
+
+        // Scott's rule: h = sigma * n^(-1/5)
+        double mean = 0;
+        for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, predictorCol]);
+        mean /= n;
+        double variance = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double diff = NumOps.ToDouble(data[i, predictorCol]) - mean;
+            variance += diff * diff;
+        }
+        double sigma = Math.Max(Math.Sqrt(variance / n), 1e-10);
+        T h = NumOps.FromDouble(sigma * Math.Pow(n, -1.0 / 5.0));
         var smoothed = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
@@ -261,7 +273,19 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
     protected Vector<T> KernelRegressOut(Vector<T> predictor, Vector<T> response)
     {
         int n = predictor.Length;
-        double h = Math.Pow(n, -1.0 / 5.0);
+
+        // Scott's rule: h = sigma * n^(-1/5)
+        double mean = 0;
+        for (int i = 0; i < n; i++) mean += NumOps.ToDouble(predictor[i]);
+        mean /= n;
+        double variance = 0;
+        for (int i = 0; i < n; i++)
+        {
+            double diff = NumOps.ToDouble(predictor[i]) - mean;
+            variance += diff * diff;
+        }
+        double sigma = Math.Max(Math.Sqrt(variance / n), 1e-10);
+        double h = sigma * Math.Pow(n, -1.0 / 5.0);
         var residuals = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)

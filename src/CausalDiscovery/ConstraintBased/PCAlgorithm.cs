@@ -25,7 +25,7 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class PCAlgorithm<T> : ConstraintBasedBase<T>
+public class PCAlgorithm<T> : ConstraintBasedBase<T>
 {
     /// <inheritdoc/>
     public override string Name => "PC Algorithm";
@@ -108,6 +108,9 @@ internal class PCAlgorithm<T> : ConstraintBasedBase<T>
             }
         }
 
+        // Step 3b: Apply Meek orientation rules iteratively
+        ApplyMeekRules(adj, oriented, d);
+
         // Step 4: Build weighted adjacency matrix using Matrix<T>
         var W = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
@@ -127,7 +130,7 @@ internal class PCAlgorithm<T> : ConstraintBasedBase<T>
                 }
                 else
                 {
-                    // Unoriented: assign weight to both directions
+                    // Unoriented: assign weight (both i→j and j→i are set in symmetric loop iterations)
                     double weight = Math.Abs(ComputePartialCorr(data, i, j, []));
                     W[i, j] = NumOps.FromDouble(weight);
                 }
@@ -135,6 +138,69 @@ internal class PCAlgorithm<T> : ConstraintBasedBase<T>
         }
 
         return W;
+    }
+
+    /// <summary>
+    /// Applies Meek orientation rules R1–R3 iteratively until no more edges can be oriented.
+    /// </summary>
+    private static void ApplyMeekRules(bool[,] adj, bool[,] oriented, int d)
+    {
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+
+            for (int i = 0; i < d; i++)
+            {
+                for (int j = 0; j < d; j++)
+                {
+                    if (!adj[i, j] || oriented[i, j] || oriented[j, i]) continue;
+
+                    // R1: If k→i — j (k→i is oriented, i—j is undirected, k and j are non-adjacent), orient i→j
+                    for (int k = 0; k < d; k++)
+                    {
+                        if (k == i || k == j) continue;
+                        if (oriented[k, i] && !adj[k, j])
+                        {
+                            oriented[i, j] = true;
+                            changed = true;
+                            break;
+                        }
+                    }
+                    if (oriented[i, j]) continue;
+
+                    // R2: If i→k→j (both oriented) and i—j is undirected, orient i→j
+                    for (int k = 0; k < d; k++)
+                    {
+                        if (k == i || k == j) continue;
+                        if (oriented[i, k] && oriented[k, j])
+                        {
+                            oriented[i, j] = true;
+                            changed = true;
+                            break;
+                        }
+                    }
+                    if (oriented[i, j]) continue;
+
+                    // R3: If i—k→j and i—l→j (k,l non-adjacent, both k→j and l→j oriented), orient i→j
+                    for (int k = 0; k < d; k++)
+                    {
+                        if (k == i || k == j || !adj[i, k] || !oriented[k, j]) continue;
+                        for (int l = k + 1; l < d; l++)
+                        {
+                            if (l == i || l == j || !adj[i, l] || !oriented[l, j]) continue;
+                            if (!adj[k, l])
+                            {
+                                oriented[i, j] = true;
+                                changed = true;
+                                break;
+                            }
+                        }
+                        if (oriented[i, j]) break;
+                    }
+                }
+            }
+        }
     }
 
     private static List<int> GetNeighbors(bool[,] adj, int i, int j, int d)
