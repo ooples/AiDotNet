@@ -463,6 +463,18 @@ public class FederatedLearningOptions : ModelOptions
     public TeeOptions? TrustedExecutionEnvironment { get; set; } = null;
 
     /// <summary>
+    /// Gets or sets federated graph learning options.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When set, the FL system handles graph-structured data where each client
+    /// holds a subgraph of a larger graph. Includes cross-client edge discovery (PSI), pseudo-node
+    /// strategies for missing neighbors, and graph-aware aggregation weighting.</para>
+    ///
+    /// <para>Set to null (default) for standard non-graph federated learning.</para>
+    /// </remarks>
+    public FederatedGraphOptions? GraphLearning { get; set; } = null;
+
+    /// <summary>
     /// Gets or sets a random seed for reproducibility.
     /// </summary>
     /// <remarks>
