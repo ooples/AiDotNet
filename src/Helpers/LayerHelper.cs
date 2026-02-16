@@ -19590,4 +19590,205 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Speaker Models (Batch 4)
+
+    /// <summary>
+    /// Creates default ECAPA-TDNN speaker embedding layers.
+    /// </summary>
+    /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
+    /// <param name="channels">Base channel dimension for TDNN blocks (default: 512).</param>
+    /// <param name="embeddingDim">Output embedding dimension (default: 192).</param>
+    /// <param name="numBlocks">Number of SE-Res2Net blocks (default: 3).</param>
+    /// <param name="poolingDim">Attentive statistics pooling dimension (default: 1536).</param>
+    /// <param name="seBottleneckDim">Squeeze-Excitation bottleneck dimension (default: 128).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.0).</param>
+    /// <returns>A collection of layers for ECAPA-TDNN speaker embedding.</returns>
+    /// <remarks>
+    /// <para>
+    /// ECAPA-TDNN (Desplanques et al., Interspeech 2020) architecture:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Initial TDNN frame-level feature extraction</description></item>
+    /// <item><description>SE-Res2Net blocks with multi-scale aggregation</description></item>
+    /// <item><description>Multi-layer feature aggregation (MFA)</description></item>
+    /// <item><description>Attentive statistics pooling</description></item>
+    /// <item><description>Final embedding projection</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultECAPATDNNSpeakerLayers(
+        int numMels = 80,
+        int channels = 512,
+        int embeddingDim = 192,
+        int numBlocks = 3,
+        int poolingDim = 1536,
+        int seBottleneckDim = 128,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Initial TDNN layer: mel features -> channels
+        yield return new DenseLayer<T>(numMels, channels, reluActivation);
+        yield return new BatchNormalizationLayer<T>(channels);
+
+        // SE-Res2Net TDNN blocks with increasing dilation
+        for (int i = 0; i < numBlocks; i++)
+        {
+            // Bottleneck down
+            yield return new DenseLayer<T>(channels, channels, reluActivation);
+            yield return new BatchNormalizationLayer<T>(channels);
+
+            // Res2Net-style multi-scale processing (simplified as dense layers)
+            yield return new DenseLayer<T>(channels, channels, reluActivation);
+            yield return new BatchNormalizationLayer<T>(channels);
+
+            // SE block: squeeze -> excite
+            yield return new DenseLayer<T>(channels, seBottleneckDim, reluActivation);
+            yield return new DenseLayer<T>(seBottleneckDim, channels, (IActivationFunction<T>)new SigmoidActivation<T>());
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Multi-layer feature aggregation (MFA): concat all block outputs
+        yield return new DenseLayer<T>(channels, poolingDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(poolingDim);
+
+        // Attentive statistics pooling (simplified)
+        yield return new DenseLayer<T>(poolingDim, poolingDim, (IActivationFunction<T>)new TanhActivation<T>());
+        yield return new DenseLayer<T>(poolingDim, poolingDim, identityActivation);
+
+        // Final embedding projection
+        yield return new DenseLayer<T>(poolingDim, embeddingDim, identityActivation);
+        yield return new BatchNormalizationLayer<T>(embeddingDim);
+    }
+
+    /// <summary>
+    /// Creates default TitaNet speaker embedding layers.
+    /// </summary>
+    /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
+    /// <param name="encoderDim">Encoder hidden dimension (default: 1024).</param>
+    /// <param name="embeddingDim">Output embedding dimension (default: 192).</param>
+    /// <param name="numBlocks">Number of encoder blocks (default: 22).</param>
+    /// <param name="attentivePoolingDim">Attentive pooling hidden dimension (default: 128).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.0).</param>
+    /// <returns>A collection of layers for TitaNet speaker embedding.</returns>
+    /// <remarks>
+    /// <para>
+    /// TitaNet (Koluguri et al., ICASSP 2022) architecture:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Prolog: initial projection and normalization</description></item>
+    /// <item><description>Body: depth-wise separable conv blocks with SE and global context</description></item>
+    /// <item><description>Epilog: final projection</description></item>
+    /// <item><description>Attentive statistics pooling</description></item>
+    /// <item><description>Embedding projection with batch normalization</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTitaNetLayers(
+        int numMels = 80,
+        int encoderDim = 1024,
+        int embeddingDim = 192,
+        int numBlocks = 22,
+        int attentivePoolingDim = 128,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int midDim = encoderDim / 2;
+
+        // Prolog: mel features -> encoder dimension
+        yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+
+        // Body: depth-wise separable conv blocks with SE (simplified as dense + SE)
+        for (int i = 0; i < numBlocks; i++)
+        {
+            // Depth-wise separable convolution (simplified as dense)
+            yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+            yield return new BatchNormalizationLayer<T>(encoderDim);
+
+            // SE block
+            int seDim = encoderDim / 8;
+            yield return new DenseLayer<T>(encoderDim, seDim, reluActivation);
+            yield return new DenseLayer<T>(seDim, encoderDim, (IActivationFunction<T>)new SigmoidActivation<T>());
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Epilog: final projection
+        yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+
+        // Attentive statistics pooling
+        yield return new DenseLayer<T>(encoderDim, attentivePoolingDim, (IActivationFunction<T>)new TanhActivation<T>());
+        yield return new DenseLayer<T>(attentivePoolingDim, encoderDim, identityActivation);
+
+        // Embedding projection
+        yield return new DenseLayer<T>(encoderDim, embeddingDim, identityActivation);
+        yield return new BatchNormalizationLayer<T>(embeddingDim);
+    }
+
+    /// <summary>
+    /// Creates default pyannote 3.x segmentation layers.
+    /// </summary>
+    /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
+    /// <param name="lstmHiddenSize">LSTM hidden dimension (default: 128).</param>
+    /// <param name="numLSTMLayers">Number of LSTM layers (default: 4).</param>
+    /// <param name="linearDim">Linear layer dimension after LSTM (default: 128).</param>
+    /// <param name="maxSpeakersPerChunk">Maximum speakers per chunk (default: 3).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers for pyannote speaker diarization.</returns>
+    /// <remarks>
+    /// <para>
+    /// pyannote.audio 3.x PyanNet architecture:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>SincNet feature extraction from raw audio</description></item>
+    /// <item><description>Multi-layer bidirectional LSTM</description></item>
+    /// <item><description>Linear classifier for per-frame speaker activity</description></item>
+    /// <item><description>Powerset multi-label output for overlap detection</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultPyAnnoteLayers(
+        int numMels = 80,
+        int lstmHiddenSize = 128,
+        int numLSTMLayers = 4,
+        int linearDim = 128,
+        int maxSpeakersPerChunk = 3,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // SincNet-style front-end (simplified as dense layers)
+        yield return new DenseLayer<T>(numMels, 60, reluActivation);
+        yield return new BatchNormalizationLayer<T>(60);
+        yield return new DenseLayer<T>(60, 60, reluActivation);
+        yield return new BatchNormalizationLayer<T>(60);
+
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Multi-layer LSTM (simplified as dense + attention layers)
+        int prevDim = 60;
+        for (int i = 0; i < numLSTMLayers; i++)
+        {
+            // Bidirectional LSTM (simplified as dense with double hidden for bidirectional)
+            int biDirDim = lstmHiddenSize * 2;
+            yield return new DenseLayer<T>(prevDim, biDirDim, (IActivationFunction<T>)new TanhActivation<T>());
+            yield return new LayerNormalizationLayer<T>(biDirDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = biDirDim;
+        }
+
+        // Linear classification head
+        yield return new DenseLayer<T>(prevDim, linearDim, reluActivation);
+
+        // Powerset output: C(maxSpeakers+1, 2) classes for overlap-aware segmentation
+        // For maxSpeakersPerChunk=3: 1 (silence) + 3 (single) + 3 (pairs) = 7 classes
+        int numPowersetClasses = 1 + maxSpeakersPerChunk + (maxSpeakersPerChunk * (maxSpeakersPerChunk - 1)) / 2;
+        yield return new DenseLayer<T>(linearDim, numPowersetClasses, identityActivation);
+    }
+
+    #endregion
 }
