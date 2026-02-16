@@ -6543,6 +6543,348 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates default AST (Audio Spectrogram Transformer) layers following the paper architecture.
+    /// </summary>
+    /// <param name="patchFeatureSize">Flattened patch dimension (patchSize^2, default 256).</param>
+    /// <param name="embeddingDim">Transformer embedding dimension (default 768 for AST-Base).</param>
+    /// <param name="numEncoderLayers">Number of Transformer encoder layers (default 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads per layer (default 12).</param>
+    /// <param name="feedForwardDim">Feed-forward network dimension (default 3072).</param>
+    /// <param name="numClasses">Number of classification labels (default 527 for AudioSet).</param>
+    /// <param name="maxSequenceLength">Maximum patch sequence length including [CLS] token (default 1214).</param>
+    /// <param name="dropoutRate">Dropout rate for regularization (default 0.1).</param>
+    /// <returns>A collection of layers implementing the AST architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// AST (Gong et al., Interspeech 2021) directly applies ViT to audio spectrograms.
+    /// Architecture: patch projection -> [CLS] token -> positional encoding -> Transformer encoder -> classification head.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultASTLayers(
+        int patchFeatureSize = 256,
+        int embeddingDim = 768,
+        int numEncoderLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int numClasses = 527,
+        int maxSequenceLength = 1214,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // 1. Patch Projection: project flattened spectrogram patches to embedding space
+        yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
+
+        // 2. Pre-Layer Normalization
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // 3. Positional Encoding (includes [CLS] token position)
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
+
+        // 4. Transformer Encoder Stack
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: embeddingDim,
+                headCount: numAttentionHeads);
+
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+            yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // 5. Post-Layer Normalization
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        // 6. Classification Head: [CLS] token output -> class logits
+        yield return new DenseLayer<T>(embeddingDim, embeddingDim, reluActivation);
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+        yield return new DenseLayer<T>(embeddingDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default HTS-AT (Hierarchical Token-Semantic Audio Transformer) layers.
+    /// </summary>
+    /// <param name="patchFeatureSize">Flattened patch dimension (default 16 for 4x4 patches).</param>
+    /// <param name="embeddingDim">Base embedding dimension (default 96, doubles per stage).</param>
+    /// <param name="numStages">Number of hierarchical stages (default 4).</param>
+    /// <param name="numLayersPerStage">Layers per stage (default [2,2,6,2]).</param>
+    /// <param name="numClasses">Number of classification labels (default 527).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default 1024).</param>
+    /// <param name="dropoutRate">Dropout rate (default 0.0).</param>
+    /// <returns>A collection of layers implementing the HTS-AT architecture.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultHTSATLayers(
+        int patchFeatureSize = 16,
+        int embeddingDim = 96,
+        int numStages = 4,
+        int[]? numLayersPerStage = null,
+        int numClasses = 527,
+        int maxSequenceLength = 1024,
+        double dropoutRate = 0.0)
+    {
+        numLayersPerStage ??= [2, 2, 6, 2];
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // 1. Initial Patch Embedding
+        yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        // 2. Hierarchical Swin Transformer Stages
+        int currentDim = embeddingDim;
+        int seqLen = maxSequenceLength;
+        for (int stage = 0; stage < numStages && stage < numLayersPerStage.Length; stage++)
+        {
+            int numHeads = Math.Max(1, currentDim / 32);
+            int ffDim = currentDim * 4;
+
+            for (int layer = 0; layer < numLayersPerStage[stage]; layer++)
+            {
+                yield return new MultiHeadAttentionLayer<T>(
+                    sequenceLength: seqLen,
+                    embeddingDimension: currentDim,
+                    headCount: numHeads);
+                yield return new LayerNormalizationLayer<T>(currentDim);
+                yield return new DenseLayer<T>(currentDim, ffDim, reluActivation);
+                yield return new DenseLayer<T>(ffDim, currentDim, identityActivation);
+                yield return new LayerNormalizationLayer<T>(currentDim);
+            }
+
+            // Patch merging: double channels, halve sequence at stage boundary (except last stage)
+            if (stage < numStages - 1)
+            {
+                int nextDim = currentDim * 2;
+                yield return new DenseLayer<T>(currentDim, nextDim, identityActivation);
+                yield return new LayerNormalizationLayer<T>(nextDim);
+                currentDim = nextDim;
+                seqLen = Math.Max(1, seqLen / 2);
+            }
+        }
+
+        // 3. Final normalization and classification head
+        yield return new LayerNormalizationLayer<T>(currentDim);
+        yield return new DenseLayer<T>(currentDim, currentDim, reluActivation);
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+        yield return new DenseLayer<T>(currentDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default EAT (Efficient Audio Transformer) layers following the paper architecture.
+    /// </summary>
+    /// <param name="patchFeatureSize">Flattened patch dimension (default 256).</param>
+    /// <param name="embeddingDim">Transformer embedding dimension (default 768).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default 12).</param>
+    /// <param name="feedForwardDim">Feed-forward dimension (default 3072).</param>
+    /// <param name="numClasses">Number of labels (default 527).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default 600).</param>
+    /// <param name="dropoutRate">Dropout rate (default 0.1).</param>
+    /// <returns>A collection of layers implementing the EAT architecture.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultEATLayers(
+        int patchFeatureSize = 256,
+        int embeddingDim = 768,
+        int numEncoderLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int numClasses = 527,
+        int maxSequenceLength = 600,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: embeddingDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new DenseLayer<T>(embeddingDim, embeddingDim, reluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(embeddingDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default Audio-MAE (Masked Autoencoders for Audio) layers for classification.
+    /// </summary>
+    /// <param name="patchFeatureSize">Flattened patch dimension (default 256).</param>
+    /// <param name="embeddingDim">Encoder embedding dimension (default 768).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default 12).</param>
+    /// <param name="feedForwardDim">Feed-forward dimension (default 3072).</param>
+    /// <param name="numClasses">Number of labels (default 527).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default 600).</param>
+    /// <param name="dropoutRate">Dropout rate (default 0.0).</param>
+    /// <returns>A collection of layers implementing the Audio-MAE encoder for classification.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioMAELayers(
+        int patchFeatureSize = 256,
+        int embeddingDim = 768,
+        int numEncoderLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int numClasses = 527,
+        int maxSequenceLength = 600,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: embeddingDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+        }
+
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new DenseLayer<T>(embeddingDim, embeddingDim, reluActivation);
+        yield return new DenseLayer<T>(embeddingDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default PANNs CNN14 layers for audio classification.
+    /// </summary>
+    /// <param name="numMels">Number of mel bands (default 64).</param>
+    /// <param name="baseChannels">Base channel count (default 64, doubles per block).</param>
+    /// <param name="numBlocks">Number of CNN blocks (default 6).</param>
+    /// <param name="embeddingDim">Embedding dimension before classification (default 2048).</param>
+    /// <param name="numClasses">Number of labels (default 527).</param>
+    /// <param name="maxFrames">Maximum time frames (default 1001).</param>
+    /// <param name="dropoutRate">Dropout rate (default 0.2).</param>
+    /// <returns>A collection of layers implementing the PANNs CNN14 architecture.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultPANNsLayers(
+        int numMels = 64,
+        int baseChannels = 64,
+        int numBlocks = 6,
+        int embeddingDim = 2048,
+        int numClasses = 527,
+        int maxFrames = 1001,
+        double dropoutRate = 0.2)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // CNN14: 6 blocks of (Conv -> BN -> ReLU -> Conv -> BN -> ReLU -> AvgPool)
+        int inputDim = numMels;
+        int channels = baseChannels;
+
+        for (int block = 0; block < numBlocks; block++)
+        {
+            yield return new DenseLayer<T>(inputDim, channels, reluActivation);
+            yield return new LayerNormalizationLayer<T>(channels);
+            yield return new DenseLayer<T>(channels, channels, reluActivation);
+            yield return new LayerNormalizationLayer<T>(channels);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            inputDim = channels;
+            channels = Math.Min(channels * 2, embeddingDim);
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(inputDim, embeddingDim, reluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(embeddingDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default CLAP (Contrastive Language-Audio Pre-training) audio encoder layers.
+    /// </summary>
+    /// <param name="patchFeatureSize">Flattened patch dimension (default 256).</param>
+    /// <param name="embeddingDim">Audio encoder embedding dimension (default 768).</param>
+    /// <param name="projectionDim">Joint audio-text projection dimension (default 512).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default 12).</param>
+    /// <param name="feedForwardDim">Feed-forward dimension (default 3072).</param>
+    /// <param name="numClasses">Number of labels (default 527).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default 1024).</param>
+    /// <param name="dropoutRate">Dropout rate (default 0.1).</param>
+    /// <returns>A collection of layers implementing the CLAP audio encoder.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCLAPLayers(
+        int patchFeatureSize = 256,
+        int embeddingDim = 768,
+        int projectionDim = 512,
+        int numEncoderLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int numClasses = 527,
+        int maxSequenceLength = 1024,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Audio encoder (HTS-AT style)
+        yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: embeddingDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Projection to joint space
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new DenseLayer<T>(embeddingDim, projectionDim, reluActivation);
+
+        // Classification head (for fine-tuned mode)
+        yield return new DenseLayer<T>(projectionDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
     /// Creates default music source separation layers (U-Net style).
     /// </summary>
     /// <param name="numMels">Number of spectrogram frequency bins (default: 513 for STFT with 1024 window).</param>
