@@ -624,4 +624,65 @@ public class FederatedLearningOptions : ModelOptions
     /// Set to null (default) to use basic compression via <see cref="Compression"/>.</para>
     /// </remarks>
     public AdvancedCompressionOptions? AdvancedCompression { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets federated knowledge distillation options (FedMD, FedDF, FedGEN).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Knowledge distillation enables model-heterogeneous FL where different
+    /// clients can use different model architectures. Instead of sharing model parameters directly,
+    /// clients share soft predictions (logits) and learn from each other's knowledge.</para>
+    ///
+    /// <para>Set to null (default) for standard parameter aggregation.</para>
+    /// </remarks>
+    public FederatedDistillationOptions? Distillation { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets federated adapter options for parameter-efficient fine-tuning (LoRA, prompt tuning).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When fine-tuning large foundation models in FL, sending full model
+    /// parameters is prohibitively expensive. Adapters only train and communicate a tiny fraction
+    /// (&lt;1%) of parameters, making federated LLM fine-tuning practical.</para>
+    ///
+    /// <para>Set to null (default) for standard full-model aggregation.</para>
+    /// </remarks>
+    public FederatedAdapterOptions? Adapters { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets decentralized (serverless) federated learning options.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Standard FL uses a central server. Decentralized FL removes
+    /// the server — nodes communicate directly using gossip or ring topologies. This eliminates
+    /// single points of failure and can be more robust for edge/IoT deployments.</para>
+    ///
+    /// <para>Set to null (default) for standard server-based FL.</para>
+    /// </remarks>
+    public DecentralizedFederatedOptions? Decentralized { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets federated continual learning options for preventing catastrophic forgetting.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When the FL system learns new tasks over time, it can forget
+    /// previously learned knowledge. Federated continual learning strategies (EWC, orthogonal
+    /// projection) identify and protect important model parameters across training rounds.</para>
+    ///
+    /// <para>Set to null (default) to disable continual learning protection.</para>
+    /// </remarks>
+    public FederatedContinualLearningOptions? ContinualLearning { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets backdoor attack detection and defense options.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Backdoor attacks are stealthy — the model works correctly on clean
+    /// data but misbehaves when a trigger pattern is present. These detectors (Neural Cleanse,
+    /// Direction Alignment Inspector) analyze client updates for signs of backdoor injection
+    /// and filter suspicious updates before aggregation.</para>
+    ///
+    /// <para>Set to null (default) to skip backdoor detection.</para>
+    /// </remarks>
+    public BackdoorDefenseOptions? BackdoorDefense { get; set; } = new();
 }
