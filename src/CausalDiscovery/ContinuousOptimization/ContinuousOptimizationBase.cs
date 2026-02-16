@@ -1,5 +1,4 @@
 using AiDotNet.Enums;
-using AiDotNet.Extensions;
 
 namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 
@@ -74,53 +73,45 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// <param name="X">Data matrix [n x d].</param>
     /// <param name="W">Weighted adjacency matrix [d x d].</param>
     /// <returns>Tuple of (loss value, gradient matrix [d x d]).</returns>
-    protected (double Loss, double[,] Gradient) ComputeL2Loss(double[,] X, double[,] W)
+    protected (double Loss, Matrix<T> Gradient) ComputeL2Loss(Matrix<T> X, Matrix<T> W)
     {
-        int n = X.GetLength(0);
-        int d = X.GetLength(1);
-        double nInv = 1.0 / n;
+        int n = X.Rows;
+        int d = X.Columns;
 
         // Residual R = X - X @ W
-        var R = new double[n, d];
+        var R = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < d; j++)
             {
-                double xw = 0;
+                T xw = NumOps.Zero;
                 for (int k = 0; k < d; k++)
-                {
-                    xw += X[i, k] * W[k, j];
-                }
-
-                R[i, j] = X[i, j] - xw;
+                    xw = NumOps.Add(xw, NumOps.Multiply(X[i, k], W[k, j]));
+                R[i, j] = NumOps.Subtract(X[i, j], xw);
             }
         }
 
         // Loss = (1/2n) * ||R||²_F
         double loss = 0;
         for (int i = 0; i < n; i++)
-        {
             for (int j = 0; j < d; j++)
             {
-                loss += R[i, j] * R[i, j];
+                double r = NumOps.ToDouble(R[i, j]);
+                loss += r * r;
             }
-        }
-
-        loss *= 0.5 * nInv;
+        loss *= 0.5 / n;
 
         // Gradient = -(1/n) * X^T @ R = (1/n) * X^T @ (XW - X)
-        var grad = new double[d, d];
+        T nT = NumOps.FromDouble(n);
+        var grad = new Matrix<T>(d, d);
         for (int k = 0; k < d; k++)
         {
             for (int j = 0; j < d; j++)
             {
-                double sum = 0;
+                T sum = NumOps.Zero;
                 for (int i = 0; i < n; i++)
-                {
-                    sum += X[i, k] * (-R[i, j]);
-                }
-
-                grad[k, j] = sum * nInv;
+                    sum = NumOps.Add(sum, NumOps.Multiply(X[i, k], R[i, j]));
+                grad[k, j] = NumOps.Negate(NumOps.Divide(sum, nT));
             }
         }
 
@@ -134,60 +125,49 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// <param name="W">Weighted adjacency matrix [d x d].</param>
     /// <param name="taylorOrder">Number of Taylor series terms for matrix exponential.</param>
     /// <returns>Tuple of (h value, gradient matrix [d x d]).</returns>
-    protected (double H, double[,] Gradient) ComputeNOTEARSConstraint(double[,] W, int taylorOrder = 8)
+    protected (double H, Matrix<T> Gradient) ComputeNOTEARSConstraint(Matrix<T> W, int taylorOrder = 8)
     {
-        int d = W.GetLength(0);
+        int d = W.Rows;
 
         // W ∘ W (element-wise square)
-        var wSquared = new double[d, d];
+        var wSquared = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                wSquared[i, j] = W[i, j] * W[i, j];
-            }
-        }
+                wSquared[i, j] = NumOps.Multiply(W[i, j], W[i, j]);
 
         // e^(W∘W) via truncated Taylor series
-        var expMatrix = new double[d, d];
+        var expMatrix = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
-        {
-            expMatrix[i, i] = 1.0; // Identity
-        }
+            expMatrix[i, i] = NumOps.One; // Identity
 
-        var power = (double[,])wSquared.Clone();
+        // power starts as copy of wSquared
+        var power = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                power[i, j] = wSquared[i, j];
+
         double factorial = 1.0;
 
         for (int k = 1; k <= taylorOrder; k++)
         {
             factorial *= k;
-            double invFactorial = 1.0 / factorial;
+            T invFactorial = NumOps.FromDouble(1.0 / factorial);
 
             for (int i = 0; i < d; i++)
-            {
                 for (int j = 0; j < d; j++)
-                {
-                    expMatrix[i, j] += power[i, j] * invFactorial;
-                }
-            }
+                    expMatrix[i, j] = NumOps.Add(expMatrix[i, j], NumOps.Multiply(power[i, j], invFactorial));
 
             if (k < taylorOrder)
             {
-                var nextPower = new double[d, d];
+                var nextPower = new Matrix<T>(d, d);
                 for (int i = 0; i < d; i++)
-                {
                     for (int j = 0; j < d; j++)
                     {
-                        double sum = 0;
+                        T sum = NumOps.Zero;
                         for (int m = 0; m < d; m++)
-                        {
-                            sum += power[i, m] * wSquared[m, j];
-                        }
-
+                            sum = NumOps.Add(sum, NumOps.Multiply(power[i, m], wSquared[m, j]));
                         nextPower[i, j] = sum;
                     }
-                }
-
                 power = nextPower;
             }
         }
@@ -195,21 +175,15 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         // h = tr(expMatrix) - d
         double trace = 0;
         for (int i = 0; i < d; i++)
-        {
-            trace += expMatrix[i, i];
-        }
-
+            trace += NumOps.ToDouble(expMatrix[i, i]);
         double h = trace - d;
 
         // Gradient: dh/dW = 2 * e^(W∘W) ∘ W
-        var gradient = new double[d, d];
+        T two = NumOps.FromDouble(2.0);
+        var gradient = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                gradient[i, j] = 2.0 * expMatrix[i, j] * W[i, j];
-            }
-        }
+                gradient[i, j] = NumOps.Multiply(two, NumOps.Multiply(expMatrix[i, j], W[i, j]));
 
         return (h, gradient);
     }
@@ -217,60 +191,29 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Computes the L1 norm of a matrix: sum of absolute values.
     /// </summary>
-    protected double ComputeL1Norm(double[,] W)
+    protected double ComputeL1Norm(Matrix<T> W)
     {
-        int d = W.GetLength(0);
+        int d = W.Rows;
         double sum = 0;
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                sum += Math.Abs(W[i, j]);
-            }
-        }
-
+                sum += Math.Abs(NumOps.ToDouble(W[i, j]));
         return sum;
-    }
-
-    /// <summary>
-    /// Converts a Matrix&lt;T&gt; to a double[,] array for optimization.
-    /// </summary>
-    protected double[,] MatrixToDoubleArray(Matrix<T> data)
-    {
-        int n = data.Rows;
-        int d = data.Columns;
-        var result = new double[n, d];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                result[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
     /// Applies threshold to W: sets entries with |W[i,j]| &lt; threshold to 0.
     /// Also zeros out the diagonal.
     /// </summary>
-    protected double[,] ThresholdAndClean(double[,] W, double threshold)
+    protected Matrix<T> ThresholdAndClean(Matrix<T> W, double threshold)
     {
-        int d = W.GetLength(0);
-        var result = new double[d, d];
+        int d = W.Rows;
+        var result = new Matrix<T>(d, d);
 
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                if (i != j && Math.Abs(W[i, j]) >= threshold)
-                {
+                if (i != j && Math.Abs(NumOps.ToDouble(W[i, j])) >= threshold)
                     result[i, j] = W[i, j];
-                }
-            }
-        }
 
         return result;
     }

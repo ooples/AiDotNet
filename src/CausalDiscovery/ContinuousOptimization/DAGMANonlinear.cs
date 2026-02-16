@@ -54,13 +54,13 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
     private double _lastLoss;
 
     // MLP parameters per variable
-    private double[][,] _W1 = [];
+    private Matrix<T>[] _W1 = [];
     private double[][] _b1 = [];
     private double[][] _W2 = [];
     private double[] _b2 = [];
 
     // Adam state
-    private double[][,] _mW1 = [], _vW1 = [];
+    private Matrix<T>[] _mW1 = [], _vW1 = [];
     private double[][] _mb1 = [], _vb1 = [];
     private double[][] _mW2 = [], _vW2 = [];
     private double[] _mb2 = [], _vb2 = [];
@@ -99,7 +99,6 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
-        double[,] X = MatrixToDoubleArray(data);
         int n = data.Rows;
         int d = data.Columns;
         int h = _hiddenSize;
@@ -120,14 +119,14 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
             for (int inner = 1; inner <= maxInner; inner++)
             {
                 adamStep++;
-                var (obj, gW1, gB1, gW2, gB2) = ComputeObjectiveAndGradients(X, n, d, h, mu, s);
+                var (obj, gW1, gB1, gW2, gB2) = ComputeObjectiveAndGradients(data, n, d, h, mu, s);
 
                 AdamUpdate(gW1, gB1, gW2, gB2, d, h, adamStep);
 
                 // Zero diagonal in W1
                 for (int j = 0; j < d; j++)
                     for (int k = 0; k < h; k++)
-                        _W1[j][j, k] = 0;
+                        _W1[j][j, k] = NumOps.Zero;
 
                 if (inner % CHECKPOINT_INTERVAL == 0)
                 {
@@ -142,12 +141,11 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         }
 
         var A = ExtractAdjacencyMatrix(d);
-        var (finalLoss, _, _, _, _) = ComputeObjectiveAndGradients(X, n, d, h, 0, _sValues[^1]);
+        var (finalLoss, _, _, _, _) = ComputeObjectiveAndGradients(data, n, d, h, 0, _sValues[^1]);
         _lastLoss = finalLoss;
         _lastH = ComputeLogDetConstraintFromA(A, _sValues[^1], d).H;
 
-        var WThresholded = ThresholdAndClean(A, WThreshold);
-        return DoubleArrayToMatrix(WThresholded);
+        return ThresholdAndClean(A, WThreshold);
     }
 
     #endregion
@@ -159,18 +157,18 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         var rng = new Random(_seed);
         double scale = Math.Sqrt(2.0 / d);
 
-        _W1 = new double[d][,]; _b1 = new double[d][];
+        _W1 = new Matrix<T>[d]; _b1 = new double[d][];
         _W2 = new double[d][]; _b2 = new double[d];
-        _mW1 = new double[d][,]; _vW1 = new double[d][,];
+        _mW1 = new Matrix<T>[d]; _vW1 = new Matrix<T>[d];
         _mb1 = new double[d][]; _vb1 = new double[d][];
         _mW2 = new double[d][]; _vW2 = new double[d][];
         _mb2 = new double[d]; _vb2 = new double[d];
 
         for (int j = 0; j < d; j++)
         {
-            _W1[j] = new double[d, h]; _b1[j] = new double[h];
+            _W1[j] = new Matrix<T>(d, h); _b1[j] = new double[h];
             _W2[j] = new double[h]; _b2[j] = 0;
-            _mW1[j] = new double[d, h]; _vW1[j] = new double[d, h];
+            _mW1[j] = new Matrix<T>(d, h); _vW1[j] = new Matrix<T>(d, h);
             _mb1[j] = new double[h]; _vb1[j] = new double[h];
             _mW2[j] = new double[h]; _vW2[j] = new double[h];
 
@@ -178,7 +176,7 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
             {
                 if (i == j) continue;
                 for (int k = 0; k < h; k++)
-                    _W1[j][i, k] = rng.NextDouble() * scale - scale / 2.0;
+                    _W1[j][i, k] = NumOps.FromDouble(rng.NextDouble() * scale - scale / 2.0);
             }
 
             for (int k = 0; k < h; k++)
@@ -186,9 +184,8 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         }
     }
 
-    private (double output, double[] hidden) ForwardMLP(double[] x, int j)
+    private (double output, double[] hidden) ForwardMLP(Matrix<T> data, int sample, int j, int d)
     {
-        int d = x.Length;
         int h = _b1[j].Length;
         var hidden = new double[h];
 
@@ -196,7 +193,7 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         {
             double sum = _b1[j][k];
             for (int i = 0; i < d; i++)
-                sum += x[i] * _W1[j][i, k];
+                sum += NumOps.ToDouble(data[sample, i]) * NumOps.ToDouble(_W1[j][i, k]);
             hidden[k] = 1.0 / (1.0 + Math.Exp(-sum));
         }
 
@@ -207,10 +204,10 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         return (output, hidden);
     }
 
-    private double[,] ExtractAdjacencyMatrix(int d)
+    private Matrix<T> ExtractAdjacencyMatrix(int d)
     {
         int h = _b1[0].Length;
-        var A = new double[d, d];
+        var A = new Matrix<T>(d, d);
         for (int j = 0; j < d; j++)
         {
             for (int i = 0; i < d; i++)
@@ -218,34 +215,40 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
                 if (i == j) continue;
                 double norm = 0;
                 for (int k = 0; k < h; k++)
-                    norm += _W1[j][i, k] * _W1[j][i, k];
-                A[i, j] = Math.Sqrt(norm);
+                {
+                    double w = NumOps.ToDouble(_W1[j][i, k]);
+                    norm += w * w;
+                }
+                A[i, j] = NumOps.FromDouble(Math.Sqrt(norm));
             }
         }
 
         return A;
     }
 
-    private (double H, double[,] Gradient) ComputeLogDetConstraintFromA(double[,] A, double s, int d)
+    private (double H, Matrix<T> Gradient) ComputeLogDetConstraintFromA(Matrix<T> A, double s, int d)
     {
-        var M = new double[d, d];
+        // M = sI - A∘A
+        var M = new Matrix<T>(d, d);
+        T sT = NumOps.FromDouble(s);
         for (int i = 0; i < d; i++)
         {
-            M[i, i] = s;
+            M[i, i] = sT;
             for (int j = 0; j < d; j++)
-                M[i, j] -= A[i, j] * A[i, j];
+                M[i, j] = NumOps.Subtract(M[i, j], NumOps.Multiply(A[i, j], A[i, j]));
         }
 
         double logDet = ComputeLogDeterminant(M, d);
         double hVal = -logDet + d * Math.Log(s);
 
         var invM = InvertMatrix(M, d);
-        var gradient = new double[d, d];
+        var gradient = new Matrix<T>(d, d);
         if (invM != null)
         {
+            T two = NumOps.FromDouble(2.0);
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
-                    gradient[i, j] = 2.0 * A[i, j] * invM[j, i];
+                    gradient[i, j] = NumOps.Multiply(two, NumOps.Multiply(A[i, j], invM[j, i]));
         }
 
         return (hVal, gradient);
@@ -255,29 +258,26 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
 
     #region Gradient Computation
 
-    private (double obj, double[][,] gW1, double[][] gB1, double[][] gW2, double[] gB2)
-        ComputeObjectiveAndGradients(double[,] X, int n, int d, int h, double mu, double s)
+    private (double obj, Matrix<T>[] gW1, double[][] gB1, double[][] gW2, double[] gB2)
+        ComputeObjectiveAndGradients(Matrix<T> data, int n, int d, int h, double mu, double s)
     {
-        var gW1 = new double[d][,];
+        var gW1 = new Matrix<T>[d];
         var gB1 = new double[d][];
         var gW2 = new double[d][];
         var gB2 = new double[d];
         for (int j = 0; j < d; j++)
         {
-            gW1[j] = new double[d, h]; gB1[j] = new double[h]; gW2[j] = new double[h];
+            gW1[j] = new Matrix<T>(d, h); gB1[j] = new double[h]; gW2[j] = new double[h];
         }
 
         double totalLoss = 0;
 
         for (int sample = 0; sample < n; sample++)
         {
-            var x = new double[d];
-            for (int j = 0; j < d; j++) x[j] = X[sample, j];
-
             for (int j = 0; j < d; j++)
             {
-                var (pred, hidden) = ForwardMLP(x, j);
-                double residual = pred - x[j];
+                var (pred, hidden) = ForwardMLP(data, sample, j, d);
+                double residual = pred - NumOps.ToDouble(data[sample, j]);
                 totalLoss += residual * residual;
 
                 double dOutput = residual / n;
@@ -290,7 +290,8 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
                     double dHidden = dOutput * _W2[j][k] * hidden[k] * (1 - hidden[k]);
                     gB1[j][k] += dHidden;
                     for (int i = 0; i < d; i++)
-                        gW1[j][i, k] += dHidden * x[i];
+                        gW1[j][i, k] = NumOps.Add(gW1[j][i, k],
+                            NumOps.FromDouble(dHidden * NumOps.ToDouble(data[sample, i])));
                 }
             }
         }
@@ -307,14 +308,15 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
             for (int i = 0; i < d; i++)
             {
                 if (i == j) continue;
-                double aij = A[i, j];
+                double aij = NumOps.ToDouble(A[i, j]);
                 if (aij < 1e-12) continue;
 
-                double dhda = mu * hGrad[i, j];
+                double dhda = mu * NumOps.ToDouble(hGrad[i, j]);
                 for (int k = 0; k < h; k++)
                 {
-                    gW1[j][i, k] += dhda * _W1[j][i, k] / aij;
-                    gW1[j][i, k] += Lambda1 * Math.Sign(_W1[j][i, k]);
+                    double w1val = NumOps.ToDouble(_W1[j][i, k]);
+                    double grad = dhda * w1val / aij + Lambda1 * Math.Sign(w1val);
+                    gW1[j][i, k] = NumOps.Add(gW1[j][i, k], NumOps.FromDouble(grad));
                 }
             }
         }
@@ -322,7 +324,7 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         return (obj, gW1, gB1, gW2, gB2);
     }
 
-    private void AdamUpdate(double[][,] gW1, double[][] gB1, double[][] gW2, double[] gB2,
+    private void AdamUpdate(Matrix<T>[] gW1, double[][] gB1, double[][] gW2, double[] gB2,
         int d, int h, int step)
     {
         double bc1 = 1 - Math.Pow(ADAM_BETA1, step);
@@ -333,9 +335,14 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < h; k++)
                 {
-                    _mW1[j][i, k] = ADAM_BETA1 * _mW1[j][i, k] + (1 - ADAM_BETA1) * gW1[j][i, k];
-                    _vW1[j][i, k] = ADAM_BETA2 * _vW1[j][i, k] + (1 - ADAM_BETA2) * gW1[j][i, k] * gW1[j][i, k];
-                    _W1[j][i, k] -= DEFAULT_LEARNING_RATE * (_mW1[j][i, k] / bc1) / (Math.Sqrt(_vW1[j][i, k] / bc2) + 1e-8);
+                    double gVal = NumOps.ToDouble(gW1[j][i, k]);
+                    double mVal = ADAM_BETA1 * NumOps.ToDouble(_mW1[j][i, k]) + (1 - ADAM_BETA1) * gVal;
+                    double vVal = ADAM_BETA2 * NumOps.ToDouble(_vW1[j][i, k]) + (1 - ADAM_BETA2) * gVal * gVal;
+                    _mW1[j][i, k] = NumOps.FromDouble(mVal);
+                    _vW1[j][i, k] = NumOps.FromDouble(vVal);
+                    double wVal = NumOps.ToDouble(_W1[j][i, k]);
+                    wVal -= DEFAULT_LEARNING_RATE * (mVal / bc1) / (Math.Sqrt(vVal / bc2) + 1e-8);
+                    _W1[j][i, k] = NumOps.FromDouble(wVal);
                 }
 
             for (int k = 0; k < h; k++)
@@ -358,12 +365,13 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
         }
     }
 
-    private static double ComputeL1NormFromA(double[,] A, int d)
+    private static double ComputeL1NormFromA(Matrix<T> A, int d)
     {
         double sum = 0;
+        var numOps = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
-                if (i != j) sum += Math.Abs(A[i, j]);
+                if (i != j) sum += Math.Abs(numOps.ToDouble(A[i, j]));
         return sum;
     }
 
@@ -371,74 +379,78 @@ internal class DAGMANonlinear<T> : ContinuousOptimizationBase<T>
 
     #region Matrix Utilities
 
-    private static double ComputeLogDeterminant(double[,] matrix, int d)
+    private double ComputeLogDeterminant(Matrix<T> matrix, int d)
     {
-        var LU = (double[,])matrix.Clone();
+        var LU = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                LU[i, j] = matrix[i, j];
+
         for (int k = 0; k < d; k++)
         {
             int maxRow = k;
             for (int i = k + 1; i < d; i++)
-                if (Math.Abs(LU[i, k]) > Math.Abs(LU[maxRow, k]))
+                if (Math.Abs(NumOps.ToDouble(LU[i, k])) > Math.Abs(NumOps.ToDouble(LU[maxRow, k])))
                     maxRow = i;
 
             if (maxRow != k)
                 for (int j = 0; j < d; j++)
                     (LU[k, j], LU[maxRow, j]) = (LU[maxRow, j], LU[k, j]);
 
-            if (Math.Abs(LU[k, k]) < 1e-15)
+            if (Math.Abs(NumOps.ToDouble(LU[k, k])) < 1e-15)
                 return double.NegativeInfinity;
 
             for (int i = k + 1; i < d; i++)
             {
-                LU[i, k] /= LU[k, k];
+                LU[i, k] = NumOps.Divide(LU[i, k], LU[k, k]);
                 for (int j = k + 1; j < d; j++)
-                    LU[i, j] -= LU[i, k] * LU[k, j];
+                    LU[i, j] = NumOps.Subtract(LU[i, j], NumOps.Multiply(LU[i, k], LU[k, j]));
             }
         }
 
         double logDet = 0;
         for (int i = 0; i < d; i++)
-            logDet += Math.Log(Math.Abs(LU[i, i]));
+            logDet += Math.Log(Math.Abs(NumOps.ToDouble(LU[i, i])));
         return logDet;
     }
 
-    private static double[,]? InvertMatrix(double[,] matrix, int d)
+    private Matrix<T>? InvertMatrix(Matrix<T> matrix, int d)
     {
-        var aug = new double[d, 2 * d];
+        var aug = new Matrix<T>(d, 2 * d);
         for (int i = 0; i < d; i++)
         {
             for (int j = 0; j < d; j++) aug[i, j] = matrix[i, j];
-            aug[i, i + d] = 1.0;
+            aug[i, i + d] = NumOps.One;
         }
 
         for (int col = 0; col < d; col++)
         {
             int maxRow = col;
             for (int row = col + 1; row < d; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
+                if (Math.Abs(NumOps.ToDouble(aug[row, col])) > Math.Abs(NumOps.ToDouble(aug[maxRow, col])))
                     maxRow = row;
 
-            if (Math.Abs(aug[maxRow, col]) < 1e-12) return null;
+            if (Math.Abs(NumOps.ToDouble(aug[maxRow, col])) < 1e-12) return null;
 
             if (maxRow != col)
                 for (int j = 0; j < 2 * d; j++)
                     (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
 
-            double pivot = aug[col, col];
-            for (int j = 0; j < 2 * d; j++) aug[col, j] /= pivot;
+            T pivot = aug[col, col];
+            for (int j = 0; j < 2 * d; j++) aug[col, j] = NumOps.Divide(aug[col, j], pivot);
 
             for (int row = 0; row < d; row++)
             {
                 if (row != col)
                 {
-                    double factor = aug[row, col];
+                    T factor = aug[row, col];
                     for (int j = 0; j < 2 * d; j++)
-                        aug[row, j] -= factor * aug[col, j];
+                        aug[row, j] = NumOps.Subtract(aug[row, j], NumOps.Multiply(factor, aug[col, j]));
                 }
             }
         }
 
-        var result = new double[d, d];
+        var result = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
                 result[i, j] = aug[i, j + d];

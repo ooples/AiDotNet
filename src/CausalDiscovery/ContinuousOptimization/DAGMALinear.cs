@@ -137,11 +137,10 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
-        double[,] X = MatrixToDoubleArray(data);
         int d = data.Columns;
 
         // Initialize W = 0
-        var W = new double[d, d];
+        var W = new Matrix<T>(d, d);
         double mu = DEFAULT_MU_INIT;
         _lastIterations = 0;
 
@@ -153,30 +152,30 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             int maxInner = (t < T - 1) ? DEFAULT_WARM_ITER : DEFAULT_MAX_ITER;
 
             int actualIter;
-            (W, actualIter) = SolveInnerProblem(X, W, mu, s, d, maxInner);
+            (W, actualIter) = SolveInnerProblem(data, W, mu, s, d, maxInner);
 
             mu *= DEFAULT_MU_FACTOR;
             _lastIterations += actualIter;
         }
 
         // Compute final metrics
-        var (finalLoss, _) = ComputeL2Loss(X, W);
+        var (finalLoss, _) = ComputeL2Loss(data, W);
         _lastLoss = finalLoss + Lambda1 * ComputeL1Norm(W);
 
         var (h, _) = ComputeLogDetConstraint(W, _sValues[^1], d);
         _lastH = h;
 
         // Threshold and clean
-        var WThresholded = ThresholdAndClean(W, WThreshold);
-        return DoubleArrayToMatrix(WThresholded);
+        return ThresholdAndClean(W, WThreshold);
     }
 
     /// <summary>
     /// Solves the inner optimization problem using Adam optimizer.
     /// Minimizes: score(W) + mu * h(W, s)
     /// </summary>
-    private (double[,] W, int ActualIterations) SolveInnerProblem(double[,] X, double[,] W, double mu, double s, int d, int maxIter)
+    private (Matrix<T> W, int ActualIterations) SolveInnerProblem(Matrix<T> X, Matrix<T> W, double mu, double s, int d, int maxIter)
     {
+        // Flatten W to double[] for Adam state management
         int vecLen = d * d;
         double[] w = FlattenMatrix(W, d);
 
@@ -204,7 +203,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
                 for (int j = 0; j < d; j++)
                 {
                     int idx = i * d + j;
-                    grad[idx] = lossGrad[i, j] + mu * hGrad[i, j];
+                    grad[idx] = NumOps.ToDouble(lossGrad[i, j]) + mu * NumOps.ToDouble(hGrad[i, j]);
 
                     if (i != j)
                     {
@@ -257,17 +256,16 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
     /// h(W, s) = -log det(sI - W∘W) + d*log(s)
     /// Gradient: dh/dW = 2 * W ∘ (sI - W∘W)^{-T}
     /// </summary>
-    private (double H, double[,] Gradient) ComputeLogDetConstraint(double[,] W, double s, int d)
+    private (double H, Matrix<T> Gradient) ComputeLogDetConstraint(Matrix<T> W, double s, int d)
     {
         // M = sI - W∘W
-        var M = new double[d, d];
+        var M = new Matrix<T>(d, d);
+        T sT = NumOps.FromDouble(s);
         for (int i = 0; i < d; i++)
         {
-            M[i, i] = s;
+            M[i, i] = sT;
             for (int j = 0; j < d; j++)
-            {
-                M[i, j] -= W[i, j] * W[i, j];
-            }
+                M[i, j] = NumOps.Subtract(M[i, j], NumOps.Multiply(W[i, j], W[i, j]));
         }
 
         // Log-determinant via LU decomposition
@@ -278,27 +276,25 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
 
         // Gradient: 2 * W ∘ inv(M)^T
         var invM = InvertMatrix(M, d);
-        var gradient = new double[d, d];
+        var gradient = new Matrix<T>(d, d);
 
         if (invM != null)
         {
             // Normal case: inversion succeeded
+            T two = NumOps.FromDouble(2.0);
             for (int i = 0; i < d; i++)
-            {
                 for (int j = 0; j < d; j++)
-                {
                     // Note: for symmetric M, inv(M)^T = inv(M)
-                    gradient[i, j] = 2.0 * W[i, j] * invM[j, i];
-                }
-            }
+                    gradient[i, j] = NumOps.Multiply(two, NumOps.Multiply(W[i, j], invM[j, i]));
         }
         else
         {
             // Singular matrix: use identity-scaled fallback gradient to avoid stalling
             System.Diagnostics.Trace.TraceWarning("DAGMA: M matrix is singular; using fallback gradient.");
+            T two = NumOps.FromDouble(2.0);
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
-                    gradient[i, j] = 2.0 * W[i, j];
+                    gradient[i, j] = NumOps.Multiply(two, W[i, j]);
         }
 
         return (h, gradient);
@@ -307,126 +303,89 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
     /// <summary>
     /// Computes log-determinant using LU decomposition.
     /// </summary>
-    private static double ComputeLogDeterminant(double[,] matrix, int d)
+    private double ComputeLogDeterminant(Matrix<T> matrix, int d)
     {
-        // LU decomposition (partial pivoting)
-        var LU = (double[,])matrix.Clone();
-        int swaps = 0;
+        // LU decomposition (partial pivoting) on a copy
+        var LU = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                LU[i, j] = matrix[i, j];
 
         for (int k = 0; k < d; k++)
         {
             // Find pivot
             int maxRow = k;
             for (int i = k + 1; i < d; i++)
-            {
-                if (Math.Abs(LU[i, k]) > Math.Abs(LU[maxRow, k]))
-                {
+                if (Math.Abs(NumOps.ToDouble(LU[i, k])) > Math.Abs(NumOps.ToDouble(LU[maxRow, k])))
                     maxRow = i;
-                }
-            }
 
             if (maxRow != k)
-            {
                 for (int j = 0; j < d; j++)
-                {
                     (LU[k, j], LU[maxRow, j]) = (LU[maxRow, j], LU[k, j]);
-                }
 
-                swaps++;
-            }
-
-            if (Math.Abs(LU[k, k]) < 1e-15)
-            {
+            if (Math.Abs(NumOps.ToDouble(LU[k, k])) < 1e-15)
                 return double.NegativeInfinity; // Singular
-            }
 
             for (int i = k + 1; i < d; i++)
             {
-                LU[i, k] /= LU[k, k];
+                LU[i, k] = NumOps.Divide(LU[i, k], LU[k, k]);
                 for (int j = k + 1; j < d; j++)
-                {
-                    LU[i, j] -= LU[i, k] * LU[k, j];
-                }
+                    LU[i, j] = NumOps.Subtract(LU[i, j], NumOps.Multiply(LU[i, k], LU[k, j]));
             }
         }
 
         double logDet = 0;
         for (int i = 0; i < d; i++)
-        {
-            logDet += Math.Log(Math.Abs(LU[i, i]));
-        }
-
+            logDet += Math.Log(Math.Abs(NumOps.ToDouble(LU[i, i])));
         return logDet;
     }
 
     /// <summary>
     /// Inverts a matrix using Gauss-Jordan elimination. Returns null if singular.
     /// </summary>
-    private static double[,]? InvertMatrix(double[,] matrix, int d)
+    private Matrix<T>? InvertMatrix(Matrix<T> matrix, int d)
     {
-        var aug = new double[d, 2 * d];
+        var aug = new Matrix<T>(d, 2 * d);
         for (int i = 0; i < d; i++)
         {
             for (int j = 0; j < d; j++)
-            {
                 aug[i, j] = matrix[i, j];
-            }
-
-            aug[i, i + d] = 1.0;
+            aug[i, i + d] = NumOps.One;
         }
 
         for (int col = 0; col < d; col++)
         {
             int maxRow = col;
             for (int row = col + 1; row < d; row++)
-            {
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
-                {
+                if (Math.Abs(NumOps.ToDouble(aug[row, col])) > Math.Abs(NumOps.ToDouble(aug[maxRow, col])))
                     maxRow = row;
-                }
-            }
 
-            if (Math.Abs(aug[maxRow, col]) < 1e-12)
-            {
+            if (Math.Abs(NumOps.ToDouble(aug[maxRow, col])) < 1e-12)
                 return null;
-            }
 
             if (maxRow != col)
-            {
                 for (int j = 0; j < 2 * d; j++)
-                {
                     (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-                }
-            }
 
-            double pivot = aug[col, col];
+            T pivot = aug[col, col];
             for (int j = 0; j < 2 * d; j++)
-            {
-                aug[col, j] /= pivot;
-            }
+                aug[col, j] = NumOps.Divide(aug[col, j], pivot);
 
             for (int row = 0; row < d; row++)
             {
                 if (row != col)
                 {
-                    double factor = aug[row, col];
+                    T factor = aug[row, col];
                     for (int j = 0; j < 2 * d; j++)
-                    {
-                        aug[row, j] -= factor * aug[col, j];
-                    }
+                        aug[row, j] = NumOps.Subtract(aug[row, j], NumOps.Multiply(factor, aug[col, j]));
                 }
             }
         }
 
-        var result = new double[d, d];
+        var result = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
                 result[i, j] = aug[i, j + d];
-            }
-        }
-
         return result;
     }
 
@@ -442,31 +401,21 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
         return (_lastIterations, _lastH, _lastLoss);
     }
 
-    private static double[] FlattenMatrix(double[,] matrix, int d)
+    private double[] FlattenMatrix(Matrix<T> matrix, int d)
     {
         var result = new double[d * d];
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                result[i * d + j] = matrix[i, j];
-            }
-        }
-
+                result[i * d + j] = NumOps.ToDouble(matrix[i, j]);
         return result;
     }
 
-    private static double[,] UnflattenMatrix(double[] vector, int d)
+    private Matrix<T> UnflattenMatrix(double[] vector, int d)
     {
-        var result = new double[d, d];
+        var result = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                result[i, j] = vector[i * d + j];
-            }
-        }
-
+                result[i, j] = NumOps.FromDouble(vector[i * d + j]);
         return result;
     }
 

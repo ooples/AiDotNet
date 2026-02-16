@@ -139,11 +139,10 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
-        double[,] X = MatrixToDoubleArray(data);
         int d = data.Columns;
 
         // Initialize: W = 0, alpha = 0, rho = rho_init
-        var W = new double[d, d];
+        var W = new Matrix<T>(d, d);
         double alpha = 0.0;
         double rho = DEFAULT_RHO_INIT;
 
@@ -158,7 +157,7 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
             _lastIterations = outerIter + 1;
 
             // Inner loop: minimize augmented Lagrangian via L-BFGS
-            W = SolveLBFGSSubproblem(X, W, alpha, rho, d);
+            W = SolveLBFGSSubproblem(data, W, alpha, rho, d);
 
             // Evaluate constraint at new W
             var (hNew, _) = ComputeNOTEARSConstraint(W);
@@ -190,13 +189,11 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
         }
 
         // Compute final loss for reporting
-        var (finalLoss, _) = ComputeL2Loss(X, W);
+        var (finalLoss, _) = ComputeL2Loss(data, W);
         _lastLoss = finalLoss + Lambda1 * ComputeL1Norm(W);
 
         // Threshold and clean
-        var WThresholded = ThresholdAndClean(W, WThreshold);
-
-        return DoubleArrayToMatrix(WThresholded);
+        return ThresholdAndClean(W, WThreshold);
     }
 
     /// <summary>
@@ -208,9 +205,9 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
     /// using a limited-memory BFGS algorithm with projected gradient for the L1 term.
     /// </para>
     /// </remarks>
-    private double[,] SolveLBFGSSubproblem(double[,] X, double[,] W, double alpha, double rho, int d)
+    private Matrix<T> SolveLBFGSSubproblem(Matrix<T> X, Matrix<T> W, double alpha, double rho, int d)
     {
-        // Flatten W to vector for L-BFGS (excluding diagonal)
+        // Flatten W to vector for L-BFGS
         int vecLen = d * d;
         double[] w = FlattenMatrix(W, d);
         double[] prevW = (double[])w.Clone();
@@ -289,8 +286,6 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
                 if (ls == 19)
                 {
                     // Line search failed — take a conservative step in the descent direction.
-                    // The step size 1e-4 is small enough to avoid divergence while still
-                    // making progress when the Armijo condition cannot be satisfied.
                     double dirNorm = 0;
                     for (int i = 0; i < vecLen; i++)
                         dirNorm += direction[i] * direction[i];
@@ -352,24 +347,19 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
     /// Computes the gradient of the augmented Lagrangian (without L1 term, which is handled separately).
     /// L(W) = loss(W) + alpha*h(W) + (rho/2)*h(W)^2
     /// </summary>
-    private (double[,] Gradient, double Objective) ComputeAugmentedLagrangianGradient(
-        double[,] X, double[,] W, double alpha, double rho, int d)
+    private (Matrix<T> Gradient, double Objective) ComputeAugmentedLagrangianGradient(
+        Matrix<T> X, Matrix<T> W, double alpha, double rho, int d)
     {
         var (loss, lossGrad) = ComputeL2Loss(X, W);
         var (h, hGrad) = ComputeNOTEARSConstraint(W);
 
         double objective = loss + alpha * h + 0.5 * rho * h * h;
+        T augFactor = NumOps.FromDouble(alpha + rho * h);
 
-        var grad = new double[d, d];
-        double augFactor = alpha + rho * h;
-
+        var grad = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                grad[i, j] = lossGrad[i, j] + augFactor * hGrad[i, j];
-            }
-        }
+                grad[i, j] = NumOps.Add(lossGrad[i, j], NumOps.Multiply(augFactor, hGrad[i, j]));
 
         return (grad, objective);
     }
@@ -377,7 +367,7 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
     /// <summary>
     /// Computes the augmented Lagrangian objective value (without L1).
     /// </summary>
-    private double ComputeAugmentedLagrangianObjective(double[,] X, double[,] W, double alpha, double rho)
+    private double ComputeAugmentedLagrangianObjective(Matrix<T> X, Matrix<T> W, double alpha, double rho)
     {
         var (loss, _) = ComputeL2Loss(X, W);
         var (h, _) = ComputeNOTEARSConstraint(W);
@@ -482,31 +472,21 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
         return sum;
     }
 
-    private static double[] FlattenMatrix(double[,] matrix, int d)
+    private double[] FlattenMatrix(Matrix<T> matrix, int d)
     {
         var result = new double[d * d];
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                result[i * d + j] = matrix[i, j];
-            }
-        }
-
+                result[i * d + j] = NumOps.ToDouble(matrix[i, j]);
         return result;
     }
 
-    private static double[,] UnflattenMatrix(double[] vector, int d)
+    private Matrix<T> UnflattenMatrix(double[] vector, int d)
     {
-        var result = new double[d, d];
+        var result = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                result[i, j] = vector[i * d + j];
-            }
-        }
-
+                result[i, j] = NumOps.FromDouble(vector[i * d + j]);
         return result;
     }
 

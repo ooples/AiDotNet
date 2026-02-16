@@ -63,14 +63,14 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
     private double _lastLoss;
 
     // MLP parameters per variable:
-    // W1[j] is [d x h], b1[j] is [h], W2[j] is [h x 1], b2[j] is scalar
-    private double[][,] _W1 = [];
+    // W1[j] is [d x h], b1[j] is [h], W2[j] is [h], b2[j] is scalar
+    private Matrix<T>[] _W1 = [];
     private double[][] _b1 = [];
     private double[][] _W2 = [];
     private double[] _b2 = [];
 
     // Adam state
-    private double[][,] _mW1 = [], _vW1 = [];
+    private Matrix<T>[] _mW1 = [], _vW1 = [];
     private double[][] _mb1 = [], _vb1 = [];
     private double[][] _mW2 = [], _vW2 = [];
     private double[] _mb2 = [], _vb2 = [];
@@ -106,7 +106,6 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
-        double[,] X = MatrixToDoubleArray(data);
         int n = data.Rows;
         int d = data.Columns;
         int h = _hiddenSize;
@@ -128,18 +127,14 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
             {
                 adamStep++;
                 var (_, totalGradW1, totalGradB1, totalGradW2, totalGradB2) =
-                    ComputeAugLagGradient(X, n, d, h, alpha, rho);
+                    ComputeAugLagGradient(data, n, d, h, alpha, rho);
 
                 AdamUpdate(totalGradW1, totalGradB1, totalGradW2, totalGradB2, d, h, adamStep);
 
                 // Zero out diagonal entries in W1 (no self-loops)
                 for (int j = 0; j < d; j++)
-                {
                     for (int k = 0; k < h; k++)
-                    {
-                        _W1[j][j, k] = 0;
-                    }
-                }
+                        _W1[j][j, k] = NumOps.Zero;
 
                 // Convergence check
                 if (inner % 100 == 0 && inner > 0)
@@ -170,11 +165,10 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
 
         // Extract adjacency from MLP weights
         var W = ExtractAdjacencyMatrix(d);
-        var (loss, _1, _2, _3, _4) = ComputeAugLagGradient(X, n, d, h, 0, 0);
+        var (loss, _1, _2, _3, _4) = ComputeAugLagGradient(data, n, d, h, 0, 0);
         _lastLoss = loss;
 
-        var WThresholded = ThresholdAndClean(W, WThreshold);
-        return DoubleArrayToMatrix(WThresholded);
+        return ThresholdAndClean(W, WThreshold);
     }
 
     #endregion
@@ -186,24 +180,24 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
         var rng = new Random(42);
         double scale = Math.Sqrt(2.0 / d); // He initialization
 
-        _W1 = new double[d][,];
+        _W1 = new Matrix<T>[d];
         _b1 = new double[d][];
         _W2 = new double[d][];
         _b2 = new double[d];
 
-        _mW1 = new double[d][,]; _vW1 = new double[d][,];
+        _mW1 = new Matrix<T>[d]; _vW1 = new Matrix<T>[d];
         _mb1 = new double[d][]; _vb1 = new double[d][];
         _mW2 = new double[d][]; _vW2 = new double[d][];
         _mb2 = new double[d]; _vb2 = new double[d];
 
         for (int j = 0; j < d; j++)
         {
-            _W1[j] = new double[d, h];
+            _W1[j] = new Matrix<T>(d, h);
             _b1[j] = new double[h];
             _W2[j] = new double[h];
             _b2[j] = 0;
 
-            _mW1[j] = new double[d, h]; _vW1[j] = new double[d, h];
+            _mW1[j] = new Matrix<T>(d, h); _vW1[j] = new Matrix<T>(d, h);
             _mb1[j] = new double[h]; _vb1[j] = new double[h];
             _mW2[j] = new double[h]; _vW2[j] = new double[h];
 
@@ -212,7 +206,7 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
                 if (i == j) continue; // No self-loops
                 for (int k = 0; k < h; k++)
                 {
-                    _W1[j][i, k] = rng.NextDouble() * scale - scale / 2.0;
+                    _W1[j][i, k] = NumOps.FromDouble(rng.NextDouble() * scale - scale / 2.0);
                 }
             }
 
@@ -226,9 +220,8 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
     /// <summary>
     /// Forward pass for variable j: output = W2[j]^T * sigmoid(W1[j]^T * x + b1[j]) + b2[j]
     /// </summary>
-    private (double output, double[] hidden) ForwardMLP(double[] x, int j)
+    private (double output, double[] hidden) ForwardMLP(Matrix<T> data, int sample, int j, int d)
     {
-        int d = x.Length;
         int h = _b1[j].Length;
         var hidden = new double[h];
 
@@ -236,18 +229,13 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
         {
             double sum = _b1[j][k];
             for (int i = 0; i < d; i++)
-            {
-                sum += x[i] * _W1[j][i, k];
-            }
-
+                sum += NumOps.ToDouble(data[sample, i]) * NumOps.ToDouble(_W1[j][i, k]);
             hidden[k] = 1.0 / (1.0 + Math.Exp(-sum)); // sigmoid
         }
 
         double output = _b2[j];
         for (int k = 0; k < h; k++)
-        {
             output += hidden[k] * _W2[j][k];
-        }
 
         return (output, hidden);
     }
@@ -255,10 +243,10 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
     /// <summary>
     /// Extract adjacency matrix from MLP weights: A[i,j] = ||W1[j][:,i]||_2
     /// </summary>
-    private double[,] ExtractAdjacencyMatrix(int d)
+    private Matrix<T> ExtractAdjacencyMatrix(int d)
     {
         int h = _b1[0].Length;
-        var A = new double[d, d];
+        var A = new Matrix<T>(d, d);
         for (int j = 0; j < d; j++)
         {
             for (int i = 0; i < d; i++)
@@ -267,10 +255,10 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
                 double norm = 0;
                 for (int k = 0; k < h; k++)
                 {
-                    norm += _W1[j][i, k] * _W1[j][i, k];
+                    double w = NumOps.ToDouble(_W1[j][i, k]);
+                    norm += w * w;
                 }
-
-                A[i, j] = Math.Sqrt(norm);
+                A[i, j] = NumOps.FromDouble(Math.Sqrt(norm));
             }
         }
 
@@ -288,16 +276,16 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
 
     #region Gradient Computation
 
-    private (double loss, double[][,] gW1, double[][] gB1, double[][] gW2, double[] gB2)
-        ComputeAugLagGradient(double[,] X, int n, int d, int h, double alpha, double rho)
+    private (double loss, Matrix<T>[] gW1, double[][] gB1, double[][] gW2, double[] gB2)
+        ComputeAugLagGradient(Matrix<T> data, int n, int d, int h, double alpha, double rho)
     {
-        var gW1 = new double[d][,];
+        var gW1 = new Matrix<T>[d];
         var gB1 = new double[d][];
         var gW2 = new double[d][];
         var gB2 = new double[d];
         for (int j = 0; j < d; j++)
         {
-            gW1[j] = new double[d, h];
+            gW1[j] = new Matrix<T>(d, h);
             gB1[j] = new double[h];
             gW2[j] = new double[h];
         }
@@ -307,13 +295,10 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
         // Compute loss and data gradients for each sample
         for (int sample = 0; sample < n; sample++)
         {
-            var x = new double[d];
-            for (int j = 0; j < d; j++) x[j] = X[sample, j];
-
             for (int j = 0; j < d; j++)
             {
-                var (pred, hidden) = ForwardMLP(x, j);
-                double residual = pred - x[j];
+                var (pred, hidden) = ForwardMLP(data, sample, j, d);
+                double residual = pred - NumOps.ToDouble(data[sample, j]);
                 totalLoss += residual * residual;
 
                 // Backprop through MLP
@@ -322,9 +307,7 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
                 // Gradient for W2, b2
                 gB2[j] += dOutput;
                 for (int k = 0; k < h; k++)
-                {
                     gW2[j][k] += dOutput * hidden[k];
-                }
 
                 // Gradient for W1, b1 (through sigmoid)
                 for (int k = 0; k < h; k++)
@@ -332,9 +315,8 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
                     double dHidden = dOutput * _W2[j][k] * hidden[k] * (1 - hidden[k]);
                     gB1[j][k] += dHidden;
                     for (int i = 0; i < d; i++)
-                    {
-                        gW1[j][i, k] += dHidden * x[i];
-                    }
+                        gW1[j][i, k] = NumOps.Add(gW1[j][i, k],
+                            NumOps.FromDouble(dHidden * NumOps.ToDouble(data[sample, i])));
                 }
             }
         }
@@ -352,17 +334,18 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
             for (int i = 0; i < d; i++)
             {
                 if (i == j) continue;
-                double aij = A[i, j];
+                double aij = NumOps.ToDouble(A[i, j]);
                 if (aij < 1e-12) continue;
 
-                double dhda = augFactor * hGrad[i, j];
+                double dhda = augFactor * NumOps.ToDouble(hGrad[i, j]);
                 for (int k = 0; k < h; k++)
                 {
+                    double w1val = NumOps.ToDouble(_W1[j][i, k]);
                     // dA[i,j]/dW1[j][i,k] = W1[j][i,k] / A[i,j]
-                    gW1[j][i, k] += dhda * _W1[j][i, k] / aij;
-
+                    double grad = dhda * w1val / aij;
                     // L1 penalty on W1
-                    gW1[j][i, k] += Lambda1 * Math.Sign(_W1[j][i, k]);
+                    grad += Lambda1 * Math.Sign(w1val);
+                    gW1[j][i, k] = NumOps.Add(gW1[j][i, k], NumOps.FromDouble(grad));
                 }
             }
         }
@@ -370,7 +353,7 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
         return (totalLoss, gW1, gB1, gW2, gB2);
     }
 
-    private void AdamUpdate(double[][,] gW1, double[][] gB1, double[][] gW2, double[] gB2,
+    private void AdamUpdate(Matrix<T>[] gW1, double[][] gB1, double[][] gW2, double[] gB2,
         int d, int h, int step)
     {
         double bc1 = 1 - Math.Pow(ADAM_BETA1, step);
@@ -383,11 +366,16 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
             {
                 for (int k = 0; k < h; k++)
                 {
-                    _mW1[j][i, k] = ADAM_BETA1 * _mW1[j][i, k] + (1 - ADAM_BETA1) * gW1[j][i, k];
-                    _vW1[j][i, k] = ADAM_BETA2 * _vW1[j][i, k] + (1 - ADAM_BETA2) * gW1[j][i, k] * gW1[j][i, k];
-                    double mHat = _mW1[j][i, k] / bc1;
-                    double vHat = _vW1[j][i, k] / bc2;
-                    _W1[j][i, k] -= LEARNING_RATE * mHat / (Math.Sqrt(vHat) + 1e-8);
+                    double gVal = NumOps.ToDouble(gW1[j][i, k]);
+                    double mVal = ADAM_BETA1 * NumOps.ToDouble(_mW1[j][i, k]) + (1 - ADAM_BETA1) * gVal;
+                    double vVal = ADAM_BETA2 * NumOps.ToDouble(_vW1[j][i, k]) + (1 - ADAM_BETA2) * gVal * gVal;
+                    _mW1[j][i, k] = NumOps.FromDouble(mVal);
+                    _vW1[j][i, k] = NumOps.FromDouble(vVal);
+                    double mHat = mVal / bc1;
+                    double vHat = vVal / bc2;
+                    double wVal = NumOps.ToDouble(_W1[j][i, k]);
+                    wVal -= LEARNING_RATE * mHat / (Math.Sqrt(vHat) + 1e-8);
+                    _W1[j][i, k] = NumOps.FromDouble(wVal);
                 }
             }
 
@@ -422,7 +410,7 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
         }
     }
 
-    private static double ComputeGradientNorm(double[][,] gW1, double[][] gB1, double[][] gW2, double[] gB2,
+    private double ComputeGradientNorm(Matrix<T>[] gW1, double[][] gB1, double[][] gW2, double[] gB2,
         int d, int h)
     {
         double norm = 0;
@@ -430,7 +418,10 @@ public class NOTEARSNonlinear<T> : ContinuousOptimizationBase<T>
         {
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < h; k++)
-                    norm += gW1[j][i, k] * gW1[j][i, k];
+                {
+                    double g = NumOps.ToDouble(gW1[j][i, k]);
+                    norm += g * g;
+                }
             for (int k = 0; k < h; k++)
                 norm += gB1[j][k] * gB1[j][k];
             for (int k = 0; k < h; k++)
