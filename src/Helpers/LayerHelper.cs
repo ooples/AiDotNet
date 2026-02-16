@@ -7042,6 +7042,126 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates default BS-RoFormer layers for band-split music source separation.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBSRoFormerLayers(
+        int numBands = 24,
+        int bandEmbeddingDim = 128,
+        int transformerDim = 384,
+        int numTransformerLayers = 12,
+        int numAttentionHeads = 8,
+        int feedForwardDim = 1536,
+        int numStems = 4,
+        int numFreqBins = 1025,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Band-split embedding: map each band to embedding space
+        yield return new DenseLayer<T>(numFreqBins, numBands * bandEmbeddingDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(numBands * bandEmbeddingDim);
+
+        // Project to transformer dim
+        yield return new DenseLayer<T>(numBands * bandEmbeddingDim, transformerDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(transformerDim);
+
+        // Transformer blocks with rotary embeddings
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numBands,
+                embeddingDimension: transformerDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new DenseLayer<T>(transformerDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Mask estimation for each stem
+        yield return new DenseLayer<T>(transformerDim, numFreqBins * numStems * 2, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default MelBand-RoFormer layers for mel-band music source separation.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMelBandRoFormerLayers(
+        int numMelBands = 60,
+        int bandEmbeddingDim = 128,
+        int transformerDim = 384,
+        int numTransformerLayers = 12,
+        int numAttentionHeads = 8,
+        int feedForwardDim = 1536,
+        int numStems = 4,
+        int numFreqBins = 1025,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Mel-band embedding
+        yield return new DenseLayer<T>(numFreqBins, numMelBands * bandEmbeddingDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(numMelBands * bandEmbeddingDim);
+
+        yield return new DenseLayer<T>(numMelBands * bandEmbeddingDim, transformerDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(transformerDim);
+
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numMelBands,
+                embeddingDimension: transformerDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new DenseLayer<T>(transformerDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        yield return new DenseLayer<T>(transformerDim, numFreqBins * numStems * 2, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default HTDemucs layers for hybrid transformer music source separation.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultHTDemucsLayers(
+        int numFreqBins = 2049,
+        int transformerDim = 384,
+        int numTransformerLayers = 5,
+        int numAttentionHeads = 8,
+        int numStems = 4,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int feedForwardDim = transformerDim * 4;
+
+        // Spectral encoder
+        yield return new DenseLayer<T>(numFreqBins, transformerDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(transformerDim);
+
+        // Cross-domain Transformer
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numFreqBins / 4,
+                embeddingDimension: transformerDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new DenseLayer<T>(transformerDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder: multi-stem mask prediction
+        yield return new DenseLayer<T>(transformerDim, numFreqBins * numStems, identityActivation);
+    }
+
+    /// <summary>
     /// Creates default music source separation layers (U-Net style).
     /// </summary>
     /// <param name="numMels">Number of spectrogram frequency bins (default: 513 for STFT with 1024 window).</param>
