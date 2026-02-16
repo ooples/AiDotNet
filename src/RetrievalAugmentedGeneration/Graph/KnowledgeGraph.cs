@@ -256,6 +256,57 @@ public class KnowledgeGraph<T>
     }
 
     /// <summary>
+    /// Gets all edges valid at a specific point in time.
+    /// </summary>
+    /// <param name="timestamp">The point in time to filter by.</param>
+    /// <returns>Edges whose temporal validity window includes the given timestamp.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This lets you "time travel" in the graph.
+    /// Query edges as they existed on a specific date.
+    /// Edges without temporal bounds (ValidFrom/ValidUntil both null) are always included.
+    /// </para>
+    /// </remarks>
+    public IEnumerable<GraphEdge<T>> GetEdgesAt(DateTime timestamp)
+    {
+        return _store.GetAllEdges().Where(e => e.IsValidAt(timestamp));
+    }
+
+    /// <summary>
+    /// Gets outgoing edges from a node that are valid at a specific point in time.
+    /// </summary>
+    /// <param name="nodeId">The source node ID.</param>
+    /// <param name="timestamp">The point in time to filter by.</param>
+    /// <returns>Temporally valid outgoing edges.</returns>
+    public IEnumerable<GraphEdge<T>> GetOutgoingEdgesAt(string nodeId, DateTime timestamp)
+    {
+        return _store.GetOutgoingEdges(nodeId).Where(e => e.IsValidAt(timestamp));
+    }
+
+    /// <summary>
+    /// Gets incoming edges to a node that are valid at a specific point in time.
+    /// </summary>
+    /// <param name="nodeId">The target node ID.</param>
+    /// <param name="timestamp">The point in time to filter by.</param>
+    /// <returns>Temporally valid incoming edges.</returns>
+    public IEnumerable<GraphEdge<T>> GetIncomingEdgesAt(string nodeId, DateTime timestamp)
+    {
+        return _store.GetIncomingEdges(nodeId).Where(e => e.IsValidAt(timestamp));
+    }
+
+    /// <summary>
+    /// Gets neighbors of a node considering only edges valid at a specific point in time.
+    /// </summary>
+    /// <param name="nodeId">The node ID.</param>
+    /// <param name="timestamp">The point in time to filter by.</param>
+    /// <returns>Neighbor nodes connected by temporally valid edges.</returns>
+    public IEnumerable<GraphNode<T>> GetNeighborsAt(string nodeId, DateTime timestamp)
+    {
+        return GetOutgoingEdgesAt(nodeId, timestamp)
+            .Select(e => _store.GetNode(e.TargetId))
+            .OfType<GraphNode<T>>();
+    }
+
+    /// <summary>
     /// Clears all nodes and edges from the graph.
     /// </summary>
     public void Clear()

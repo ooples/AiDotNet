@@ -38,6 +38,8 @@ global using AiDotNet.Tools;
 global using AiDotNet.UncertaintyQuantification.Layers;
 using AiDotNet.Augmentation;
 using AiDotNet.AutoML.NAS;
+using AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
+using AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
 using AiDotNet.AutoML.Policies;
 using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Postprocessing;
@@ -160,6 +162,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private KnowledgeGraph<T>? _knowledgeGraph;
     private IGraphStore<T>? _graphStore;
     private HybridGraphRetriever<T>? _hybridGraphRetriever;
+    private KnowledgeGraphOptions? _knowledgeGraphOptions;
     private IMetaLearner<T, TInput, TOutput>? _metaLearner;
     private ICommunicationBackend<T>? _distributedBackend;
     private DistributedStrategy _distributedStrategy = DistributedStrategy.DDP;
@@ -1252,7 +1255,126 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             MemoryConfig = _memoryConfig
         };
 
-        return new AiModelResult<T, TInput, TOutput>(options);
+        var programSynthesisResult = new AiModelResult<T, TInput, TOutput>(options);
+        ProcessKnowledgeGraphOptions(programSynthesisResult);
+        return programSynthesisResult;
+    }
+
+    private void ProcessKnowledgeGraphOptions(AiModelResult<T, TInput, TOutput> result)
+    {
+        if (_knowledgeGraphOptions == null || _knowledgeGraph == null)
+            return;
+
+        var kgResult = new Models.Results.KnowledgeGraphResult<T>();
+
+        // Run KG construction from text if configured
+        if (_knowledgeGraphOptions.ConstructionTexts != null &&
+            _knowledgeGraphOptions.ConstructionTexts.Count > 0)
+        {
+            var constructor = new AiDotNet.RetrievalAugmentedGeneration.Graph.Construction.KGConstructor<T>();
+            foreach (var text in _knowledgeGraphOptions.ConstructionTexts)
+            {
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    constructor.ConstructFromText(text, _knowledgeGraph, _knowledgeGraphOptions.ConstructionOptions);
+                }
+            }
+        }
+
+        var needsLinkPrediction = _knowledgeGraphOptions.GetEffectiveEnableLinkPrediction();
+        List<GraphEdge<T>>? testEdges = null;
+        KnowledgeGraph<T> trainingGraph = _knowledgeGraph;
+
+        // If link prediction evaluation is requested, hold out test edges BEFORE training
+        if (needsLinkPrediction && _knowledgeGraphOptions.GetEffectiveTrainEmbeddings())
+        {
+            var allEdges = _knowledgeGraph.GetAllEdges().ToList();
+            int testSize = Math.Min(allEdges.Count / 5, 100); // Up to 20% or 100 triples
+
+            if (testSize > 0 && allEdges.Count > testSize)
+            {
+                // Shuffle edges for a random split using seed from embedding options if available
+                var splitRng = _knowledgeGraphOptions.EmbeddingOptions?.Seed is int seed
+                    ? new Random(seed)
+                    : new Random();
+                for (int i = allEdges.Count - 1; i > 0; i--)
+                {
+                    int j = splitRng.Next(i + 1);
+                    (allEdges[i], allEdges[j]) = (allEdges[j], allEdges[i]);
+                }
+
+                testEdges = allEdges.GetRange(allEdges.Count - testSize, testSize);
+                var trainEdges = allEdges.GetRange(0, allEdges.Count - testSize);
+
+                // Build a training-only graph (same nodes, fewer edges)
+                trainingGraph = new KnowledgeGraph<T>();
+                foreach (var node in _knowledgeGraph.GetAllNodes())
+                    trainingGraph.AddNode(node);
+                foreach (var edge in trainEdges)
+                    trainingGraph.AddEdge(edge);
+            }
+        }
+
+        // Train embeddings if requested
+        if (_knowledgeGraphOptions.GetEffectiveTrainEmbeddings())
+        {
+            var embedding = CreateEmbeddingModel(_knowledgeGraphOptions.GetEffectiveEmbeddingType());
+            var trainingResult = embedding.Train(trainingGraph, _knowledgeGraphOptions.EmbeddingOptions);
+            kgResult.EmbeddingTrainingResult = trainingResult;
+            kgResult.TrainedEmbedding = embedding;
+        }
+
+        // Set up GraphRAG options with mode from KG options
+        var ragOptions = _knowledgeGraphOptions.GraphRAGOptions ?? new GraphRAGOptions();
+        if (_knowledgeGraphOptions.GraphRAGMode.HasValue)
+        {
+            ragOptions.Mode = _knowledgeGraphOptions.GraphRAGMode.Value;
+        }
+
+        // Create EnhancedGraphRAG (uses full graph for retrieval)
+        var enhancedRAG = new EnhancedGraphRAG<T>(_knowledgeGraph, ragOptions);
+
+        // Build community index for Global/Drift modes
+        var effectiveMode = ragOptions.Mode ?? Enums.GraphRAGMode.Local;
+        if (effectiveMode == Enums.GraphRAGMode.Global || effectiveMode == Enums.GraphRAGMode.Drift)
+        {
+            enhancedRAG.BuildCommunityIndex();
+            kgResult.CommunityStructure = enhancedRAG.CommunityStructure;
+
+            // Generate community summaries
+            if (kgResult.CommunityStructure != null)
+            {
+                var summarizer = new CommunitySummarizer<T>();
+                kgResult.CommunitySummaries = summarizer.Summarize(_knowledgeGraph, kgResult.CommunityStructure);
+            }
+        }
+
+        kgResult.EnhancedGraphRAG = enhancedRAG;
+
+        // Run link prediction evaluation on held-out test edges
+        if (needsLinkPrediction && kgResult.TrainedEmbedding != null && testEdges != null && testEdges.Count > 0)
+        {
+            var predictor = new LinkPredictor<T>(kgResult.TrainedEmbedding);
+            var testTriples = testEdges.Select(e => (e.SourceId, e.RelationType, e.TargetId));
+
+            // Evaluate against the full graph (standard filtered setting)
+            kgResult.LinkPredictionEvaluation = predictor.EvaluateModel(_knowledgeGraph, testTriples);
+        }
+
+        result.KnowledgeGraphResult = kgResult;
+    }
+
+    private static IKnowledgeGraphEmbedding<T> CreateEmbeddingModel(KGEmbeddingType embeddingType)
+    {
+        return embeddingType switch
+        {
+            KGEmbeddingType.TransE => new TransEEmbedding<T>(),
+            KGEmbeddingType.RotatE => new RotatEEmbedding<T>(),
+            KGEmbeddingType.ComplEx => new ComplExEmbedding<T>(),
+            KGEmbeddingType.DistMult => new DistMultEmbedding<T>(),
+            KGEmbeddingType.TemporalTransE => new TemporalTransEEmbedding<T>(),
+            _ => new TransEEmbedding<T>()
+        };
     }
 
     private Task RunBenchmarksIfConfiguredAsync(AiModelResult<T, TInput, TOutput> result)
@@ -1448,7 +1570,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             MemoryConfig = _memoryConfig
         };
 
-        return new AiModelResult<T, TInput, TOutput>(options);
+        var nnResult = new AiModelResult<T, TInput, TOutput>(options);
+        ProcessKnowledgeGraphOptions(nnResult);
+        return nnResult;
     }
 
     /// <summary>
@@ -2496,6 +2620,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             finalResult.GetModelMetadata().SetProperty(FederatedLearningMetadata.MetadataKey, federatedLearningMetadata);
         }
 
+        ProcessKnowledgeGraphOptions(finalResult);
+
         return finalResult;
     }
 
@@ -2626,6 +2752,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         };
 
         var result = new AiModelResult<T, TInput, TOutput>(metaOptions);
+        ProcessKnowledgeGraphOptions(result);
 
         return result;
     }
@@ -2946,6 +3073,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         };
 
         var result = new AiModelResult<T, TInput, TOutput>(rlOptions);
+        ProcessKnowledgeGraphOptions(result);
 
         return result;
     }
@@ -3448,6 +3576,41 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _hybridGraphRetriever = null;
         }
 
+        return this;
+    }
+
+    /// <summary>
+    /// Configures advanced knowledge graph capabilities including embeddings, community detection,
+    /// link prediction, temporal queries, and KG construction.
+    /// </summary>
+    /// <param name="configure">An action that configures the knowledge graph options.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is separate from <see cref="ConfigureRetrievalAugmentedGeneration"/>, which handles
+    /// low-level plumbing (IGraphStore, KnowledgeGraph, HybridGraphRetriever). This method
+    /// configures higher-level features built on top of the existing infrastructure.
+    /// </para>
+    /// <para><b>For Beginners:</b> After setting up your knowledge graph via <c>ConfigureRetrievalAugmentedGeneration()</c>,
+    /// use this method to enable advanced features:
+    ///
+    /// <code>
+    /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureRetrievalAugmentedGeneration(graphStore: new MemoryGraphStore&lt;double&gt;())
+    ///     .ConfigureKnowledgeGraph(options =&gt; {
+    ///         options.TrainEmbeddings = true;
+    ///         options.EmbeddingType = KGEmbeddingType.TransE;
+    ///         options.GraphRAGMode = GraphRAGMode.Global;
+    ///     })
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureKnowledgeGraph(
+        Action<KnowledgeGraphOptions>? configure = null)
+    {
+        _knowledgeGraphOptions = new KnowledgeGraphOptions();
+        configure?.Invoke(_knowledgeGraphOptions);
         return this;
     }
 

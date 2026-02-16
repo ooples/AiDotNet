@@ -72,6 +72,53 @@ public class GraphEdge<T>
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
+    /// Start of the temporal validity window for this relationship.
+    /// Null means the relationship has no defined start time (always valid from the past).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Some facts are only true during a specific time period.
+    /// For example, "Einstein WORKED_AT Princeton" was valid from 1933 to 1955.
+    /// ValidFrom = 1933-01-01 means this relationship started in 1933.
+    /// If null, the relationship is considered to have always been valid.
+    /// </para>
+    /// </remarks>
+    public DateTime? ValidFrom { get; set; }
+
+    /// <summary>
+    /// End of the temporal validity window for this relationship.
+    /// Null means the relationship has no defined end time (still valid).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ValidUntil defines when a fact stopped being true.
+    /// For example, "Einstein WORKED_AT Princeton" had ValidUntil = 1955-04-18.
+    /// If null, the relationship is considered to still be valid (ongoing).
+    /// </para>
+    /// </remarks>
+    public DateTime? ValidUntil { get; set; }
+
+    /// <summary>
+    /// Checks whether this edge is valid at a specific point in time.
+    /// </summary>
+    /// <param name="timestamp">The point in time to check.</param>
+    /// <returns>True if the edge is valid at the given time; false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// An edge is considered valid at a timestamp if:
+    /// - ValidFrom is null OR timestamp >= ValidFrom, AND
+    /// - ValidUntil is null OR timestamp &lt;= ValidUntil
+    /// Edges with no temporal bounds (both null) are always valid.
+    /// </para>
+    /// </remarks>
+    public bool IsValidAt(DateTime timestamp)
+    {
+        if (ValidFrom.HasValue && timestamp < ValidFrom.Value)
+            return false;
+        if (ValidUntil.HasValue && timestamp > ValidUntil.Value)
+            return false;
+        return true;
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GraphEdge{T}"/> class.
     /// </summary>
     /// <param name="sourceId">The source node ID.</param>
