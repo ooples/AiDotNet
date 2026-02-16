@@ -125,14 +125,17 @@ public class CausalDiscoverySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         _nInputFeatures = data.Columns;
         int n = data.Rows;
-        int p = data.Columns;
 
-        // Create augmented matrix with target as last column
+        // Honor ColumnIndices: only analyze the specified columns
+        var activeIndices = GetColumnsToProcess(data.Columns);
+        int p = activeIndices.Length;
+
+        // Create augmented matrix with selected columns + target as last column
         var augmented = new Matrix<T>(n, p + 1);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < p; j++)
-                augmented[i, j] = data[i, j];
+                augmented[i, j] = data[i, activeIndices[j]];
             augmented[i, p] = target[i];
         }
 
@@ -158,7 +161,7 @@ public class CausalDiscoverySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         // Select top features above threshold
         int numToSelect = Math.Min(_maxFeatures, p);
-        _selectedIndices = Enumerable.Range(0, p)
+        var localSelected = Enumerable.Range(0, p)
             .Where(j => _connectionStrengths[j] >= _edgeThreshold)
             .OrderByDescending(j => _connectionStrengths[j])
             .Take(numToSelect)
@@ -166,14 +169,17 @@ public class CausalDiscoverySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             .ToArray();
 
         // If no features pass the threshold, take the top N by strength
-        if (_selectedIndices.Length == 0)
+        if (localSelected.Length == 0)
         {
-            _selectedIndices = Enumerable.Range(0, p)
+            localSelected = Enumerable.Range(0, p)
                 .OrderByDescending(j => _connectionStrengths[j])
                 .Take(numToSelect)
                 .OrderBy(x => x)
                 .ToArray();
         }
+
+        // Map local indices back to original column indices
+        _selectedIndices = localSelected.Select(j => activeIndices[j]).ToArray();
 
         IsFitted = true;
     }

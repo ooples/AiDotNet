@@ -33,8 +33,9 @@ public class CausalDiscoveryOptions
     /// </summary>
     /// <remarks>
     /// <para>When null, the system selects an appropriate algorithm based on data size and type.
-    /// For small-medium datasets (&lt;1000 variables), NOTEARS Linear is used.
-    /// For larger datasets, DAGMA Linear is preferred for speed.</para>
+    /// For small datasets (≤50 variables), NOTEARS Linear is used.
+    /// For medium datasets (≤200 variables), DAGMA Linear is preferred for speed.
+    /// For large datasets (&gt;200 variables), FGES is used for scalability.</para>
     /// </remarks>
     public CausalDiscoveryAlgorithmType? Algorithm { get; set; }
 

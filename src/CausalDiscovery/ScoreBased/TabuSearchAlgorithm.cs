@@ -68,7 +68,8 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
                         if (from == to || parentSets[to].Contains(from)) continue;
                         if (WouldCreateCycle(parentSets, from, to)) continue;
 
-                        bool isTabu = tabuSet.Contains((1, from, to));
+                        // Check if the reverse operation (remove) was recently done — adding back is tabu
+                        bool isTabu = tabuSet.Contains((0, from, to));
 
                         var testParents = new HashSet<int>(parentSets[to]) { from };
                         double imp = ComputeBIC(data, to, testParents) - scores[to];
@@ -89,7 +90,8 @@ public class TabuSearchAlgorithm<T> : ScoreBasedBase<T>
                 // Remove operations
                 foreach (int from in parentSets[to])
                 {
-                    bool isTabu = tabuSet.Contains((0, from, to));
+                    // Check if the reverse operation (add) was recently done — removing is tabu
+                    bool isTabu = tabuSet.Contains((1, from, to));
 
                     var testParents = new HashSet<int>(parentSets[to]);
                     testParents.Remove(from);

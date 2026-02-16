@@ -28,7 +28,7 @@ public class KraskovMIAlgorithm<T> : InfoTheoreticBase<T>
     public override string Name => "KraskovMI";
 
     /// <inheritdoc/>
-    public override bool SupportsNonlinear => false;
+    public override bool SupportsNonlinear => true;
 
     public KraskovMIAlgorithm(CausalDiscoveryOptions? options = null) { ApplyInfoOptions(options); }
 

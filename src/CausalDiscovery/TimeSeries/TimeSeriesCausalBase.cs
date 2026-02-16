@@ -30,7 +30,7 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Maximum lag order for temporal relationships.
     /// </summary>
-    protected int MaxLag { get; set; } = 5;
+    protected int MaxLag { get; set; } = 3;
 
     /// <summary>
     /// Applies time-series-specific options.
