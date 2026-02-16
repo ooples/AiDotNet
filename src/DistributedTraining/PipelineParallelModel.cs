@@ -129,11 +129,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     {
         get
         {
-            if (_numStages <= 0)
-            {
-                throw new InvalidOperationException(
-                    "EstimatedBubbleFraction cannot be computed before sharding is initialized.");
-            }
+            EnsureShardingInitialized();
 
             return _schedule.EstimateBubbleFraction(_numStages, _microBatchSize);
         }
@@ -548,6 +544,9 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <inheritdoc/>
     public override void Train(TInput input, TOutput expectedOutput)
     {
+        // Ensure sharding (and _numStages / _stageId) is initialized before using them
+        EnsureShardingInitialized();
+
         // Pipeline parallel training using the configured schedule
         var scheduleOps = _schedule.GetSchedule(_stageId, _numStages, _microBatchSize);
 
@@ -729,6 +728,18 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         int opKey)
     {
         var stageInput = GetStageInput(microBatches, op.MicroBatchIndex, op.VirtualStageIndex, forwardOutputs);
+
+        // After consuming the previous virtual stage's output, free it to reclaim memory.
+        // This handles the case where FreeNonCheckpointedActivations retained the output
+        // for cross-virtual-stage dependencies (e.g., Looped BFS).
+        if (op.VirtualStageIndex > 0)
+        {
+            int prevVStageKey = GetOperationKey(op.MicroBatchIndex, op.VirtualStageIndex - 1);
+            if (!_checkpointedActivations.ContainsKey(prevVStageKey))
+            {
+                forwardOutputs.Remove(prevVStageKey);
+            }
+        }
 
         // Checkpoint activation if configured
         if (ShouldCheckpointActivation(opKey))
@@ -1136,13 +1147,28 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <summary>
     /// Frees non-checkpointed activations to save memory.
     /// </summary>
+    /// <remarks>
+    /// For multi-stage schedules (V &gt; 1), forward outputs from non-last virtual stages are
+    /// retained because the next virtual stage's forward pass needs them as input.
+    /// These outputs are freed later when the next virtual stage's forward pass consumes them
+    /// (via <see cref="ExecuteForward"/>).
+    /// </remarks>
     private void FreeNonCheckpointedActivations(
         int opKey, Dictionary<int, TInput> forwardInputs, Dictionary<int, TOutput> forwardOutputs)
     {
         if (!_checkpointedActivations.ContainsKey(opKey))
         {
             forwardInputs.Remove(opKey);
-            forwardOutputs.Remove(opKey);
+
+            // Only free forward outputs if this is the last virtual stage on this rank.
+            // Non-last virtual stages' outputs are needed by the next virtual stage's
+            // forward pass (e.g., Looped BFS completes vStage 0's 1F1B before starting
+            // vStage 1, which needs vStage 0's forward outputs as input).
+            int virtualStageIndex = opKey % _virtualStagesPerRank;
+            if (virtualStageIndex >= _virtualStagesPerRank - 1)
+            {
+                forwardOutputs.Remove(opKey);
+            }
         }
     }
 
@@ -1182,6 +1208,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
+        EnsureShardingInitialized();
         var metadata = WrappedModel.GetModelMetadata();
         metadata.SetProperty("IsDistributed", true);
         metadata.SetProperty("Strategy", "PipelineParallel");
@@ -1210,6 +1237,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <inheritdoc/>
     public override byte[] Serialize()
     {
+        EnsureShardingInitialized();
         using var ms = new MemoryStream();
         using var writer = new BinaryWriter(ms);
         writer.Write(WorldSize);
@@ -1254,7 +1282,11 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         int modelDataLength = reader.ReadInt32();
         byte[] modelData = reader.ReadBytes(modelDataLength);
         WrappedModel.Deserialize(modelData);
-        InitializeSharding();
+
+        // EnsureShardingInitialized calls OnBeforeInitializeSharding (which sets _numStages
+        // and other derived state) before InitializeSharding. Calling InitializeSharding
+        // directly would skip that setup and cause divide-by-zero.
+        EnsureShardingInitialized();
     }
 
     /// <inheritdoc/>
