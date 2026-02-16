@@ -150,6 +150,7 @@ public class LinkPredictor<T>
         int[]? hitsAtKValues = null)
     {
         if (graph == null) throw new ArgumentNullException(nameof(graph));
+        if (testTriples == null) throw new ArgumentNullException(nameof(testTriples));
 
         hitsAtKValues ??= [1, 3, 10];
 

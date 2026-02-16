@@ -10,7 +10,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Graph;
 /// <para><b>For Beginners:</b> These settings control how GraphRAG queries the knowledge graph:
 /// - Mode: Local (entity-focused), Global (community summaries), or Drift (global→local refinement)
 /// - MaxHops: How far to traverse from matched entities in local mode
-/// - GraphBoostFactor: How much to boost scores for graph-connected results
 /// - CommunityDetection: Settings for the Leiden algorithm used in Global/Drift modes
 /// </para>
 /// </remarks>
@@ -27,11 +26,6 @@ public class GraphRAGOptions
     public int? MaxHops { get; set; }
 
     /// <summary>
-    /// Boost factor for graph-connected results. Default: 1.5.
-    /// </summary>
-    public double? GraphBoostFactor { get; set; }
-
-    /// <summary>
     /// Options for Leiden community detection (used in Global and Drift modes).
     /// </summary>
     public LeidenOptions? CommunityDetection { get; set; }
@@ -43,6 +37,5 @@ public class GraphRAGOptions
 
     internal GraphRAGMode GetEffectiveMode() => Mode ?? GraphRAGMode.Local;
     internal int GetEffectiveMaxHops() => MaxHops ?? 2;
-    internal double GetEffectiveGraphBoostFactor() => GraphBoostFactor ?? 1.5;
     internal int GetEffectiveDriftMaxIterations() => DriftMaxIterations ?? 3;
 }

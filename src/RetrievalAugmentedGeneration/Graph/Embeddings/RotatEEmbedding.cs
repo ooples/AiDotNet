@@ -184,7 +184,9 @@ public class RotatEEmbedding<T> : KGEmbeddingBase<T>
             // for computational efficiency and stable SGD convergence — the step size absorbs scaling.
             double gradPhase = step * (diffReal * (-hReal * rImag - hImag * rReal) +
                                         diffImag * (hReal * rReal - hImag * rImag));
-            rPhase[d] = NumOps.FromDouble(phase - gradPhase);
+            double updatedPhase = phase - gradPhase;
+            updatedPhase = Math.IEEERemainder(updatedPhase, 2.0 * Math.PI); // wrap to [-π, π]
+            rPhase[d] = NumOps.FromDouble(updatedPhase);
         }
     }
 }

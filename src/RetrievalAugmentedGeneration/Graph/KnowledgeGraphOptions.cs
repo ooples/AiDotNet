@@ -57,11 +57,6 @@ public class KnowledgeGraphOptions
     public bool? EnableLinkPrediction { get; set; }
 
     /// <summary>
-    /// Number of top predictions to return in link prediction. Default: 10.
-    /// </summary>
-    public int? LinkPredictionTopK { get; set; }
-
-    /// <summary>
     /// Fraction of edges to hold out for link prediction evaluation. Default: 0.2 (20%).
     /// Must be in (0, 1).
     /// </summary>
@@ -72,11 +67,6 @@ public class KnowledgeGraphOptions
     /// Must be > 0.
     /// </summary>
     public int? LinkPredictionMaxTestEdges { get; set; }
-
-    /// <summary>
-    /// Whether to enable temporal query support. Default: false.
-    /// </summary>
-    public bool? EnableTemporalQueries { get; set; }
 
     /// <summary>
     /// Options for KG construction from text. If null, KG construction is not performed.
@@ -93,7 +83,6 @@ public class KnowledgeGraphOptions
     internal bool GetEffectiveTrainEmbeddings() => TrainEmbeddings ?? false;
     internal KGEmbeddingType GetEffectiveEmbeddingType() => EmbeddingType ?? Enums.KGEmbeddingType.TransE;
     internal bool GetEffectiveEnableLinkPrediction() => EnableLinkPrediction ?? false;
-    internal int GetEffectiveLinkPredictionTopK() => LinkPredictionTopK ?? 10;
 
     internal double GetEffectiveLinkPredictionTestFraction()
     {
@@ -111,5 +100,4 @@ public class KnowledgeGraphOptions
         return value;
     }
 
-    internal bool GetEffectiveEnableTemporalQueries() => EnableTemporalQueries ?? false;
 }

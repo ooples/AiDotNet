@@ -56,13 +56,14 @@ public class DistMultEmbedding<T> : KGEmbeddingBase<T>
         double negScore = NumOps.ToDouble(ScoreTripleInternal(negHead, relation, negTail));
 
         // Logistic loss: -log(σ(posScore)) - log(σ(-negScore))
-        double posLoss = Math.Log(1.0 + Math.Exp(-posScore));
-        double negLoss = Math.Log(1.0 + Math.Exp(negScore));
+        // Using numerically stable softplus: log(1 + exp(x)) = x + log(1 + exp(-x)) when x > 0
+        double posLoss = StableSoftplus(-posScore);
+        double negLoss = StableSoftplus(negScore);
         double loss = posLoss + negLoss;
 
-        // Gradient scales
-        double posGradScale = -1.0 / (1.0 + Math.Exp(posScore));
-        double negGradScale = 1.0 / (1.0 + Math.Exp(-negScore));
+        // Gradient scales using stable sigmoid
+        double posGradScale = -StableSigmoid(-posScore);
+        double negGradScale = StableSigmoid(negScore);
 
         // Update positive triple
         UpdateTripleGradients(posHead, relation, posTail, dim, learningRate * posGradScale);
@@ -88,6 +89,35 @@ public class DistMultEmbedding<T> : KGEmbeddingBase<T>
             h[d] = NumOps.FromDouble(hd - step * rd * td);
             r[d] = NumOps.FromDouble(rd - step * hd * td);
             t[d] = NumOps.FromDouble(td - step * hd * rd);
+        }
+    }
+
+    /// <summary>
+    /// Numerically stable softplus: log(1 + exp(x)).
+    /// For large positive x, returns x directly to avoid overflow.
+    /// For large negative x, returns exp(x) to avoid log(1+0) precision loss.
+    /// </summary>
+    private static double StableSoftplus(double x)
+    {
+        if (x > 20.0) return x;
+        if (x < -20.0) return Math.Exp(x);
+        return Math.Log(1.0 + Math.Exp(x));
+    }
+
+    /// <summary>
+    /// Numerically stable sigmoid: 1 / (1 + exp(-x)).
+    /// </summary>
+    private static double StableSigmoid(double x)
+    {
+        if (x >= 0.0)
+        {
+            double ez = Math.Exp(-x);
+            return 1.0 / (1.0 + ez);
+        }
+        else
+        {
+            double ez = Math.Exp(x);
+            return ez / (1.0 + ez);
         }
     }
 }

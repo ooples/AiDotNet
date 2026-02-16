@@ -83,4 +83,16 @@ public class KGConstructionOptions
         if (value <= 0) throw new ArgumentOutOfRangeException(nameof(MaxEntitiesPerSentence), "MaxEntitiesPerSentence must be > 0.");
         return value;
     }
+
+    /// <summary>
+    /// Validates cross-field constraints. Call after individual fields are set.
+    /// </summary>
+    internal void ValidateCrossFieldConstraints()
+    {
+        var maxChunk = GetEffectiveMaxChunkSize();
+        var overlap = GetEffectiveChunkOverlap();
+        if (overlap >= maxChunk)
+            throw new ArgumentException(
+                $"ChunkOverlap ({overlap}) must be less than MaxChunkSize ({maxChunk}).");
+    }
 }

@@ -59,7 +59,7 @@ public class KGConstructor<T>
         (new Regex(@"lives?\s+in", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "LIVES_IN"),
         (new Regex(@"located\s+in", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "LOCATED_IN"),
         (new Regex(@"work(?:s|ed)?\s+(?:at|for)", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "WORKS_AT"),
-        (new Regex(@"founded?\s+(?:by)?", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "FOUNDED"),
+        (new Regex(@"found(?:ed)?\s+(?:by)?", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "FOUNDED"),
         (new Regex(@"created?\s+(?:by)?", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "CREATED"),
         (new Regex(@"part\s+of", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "PART_OF"),
         (new Regex(@"member\s+of", RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout), "MEMBER_OF"),
@@ -105,6 +105,7 @@ public class KGConstructor<T>
             throw new ArgumentException("Text cannot be null or empty.", nameof(text));
 
         var opts = options ?? new KGConstructionOptions();
+        opts.ValidateCrossFieldConstraints();
         graph ??= new KnowledgeGraph<T>();
 
         // Step 1: Chunk text
@@ -216,8 +217,6 @@ public class KGConstructor<T>
         var relations = new List<ExtractedRelation>();
         if (entities.Count < 2) return relations;
 
-        var textLower = text.ToLowerInvariant();
-
         // Pattern-based relation extraction (pre-compiled static regexes)
         foreach (var (regex, relationType) in RelationPatterns)
         {
@@ -305,11 +304,12 @@ public class KGConstructor<T>
         {
             int length = Math.Min(maxChunkSize, text.Length - start);
 
-            // Try to break at sentence boundary
+            // Try to break at sentence boundary, but only if it gives at least half a chunk of progress
             if (start + length < text.Length)
             {
-                int lastPeriod = text.LastIndexOf('.', start + length, Math.Min(length, text.Length - start));
-                if (lastPeriod > start)
+                int searchStart = start + length - 1;
+                int lastPeriod = text.LastIndexOf('.', searchStart, Math.Min(length, text.Length - start));
+                if (lastPeriod > start + length / 2)
                     length = lastPeriod - start + 1;
             }
 
@@ -512,22 +512,30 @@ public class KGConstructor<T>
     {
         int n = s.Length;
         int m = t.Length;
-        var d = new int[n + 1, m + 1];
 
-        for (int i = 0; i <= n; i++) d[i, 0] = i;
-        for (int j = 0; j <= m; j++) d[0, j] = j;
+        // Guard against pathologically long strings (e.g., regex bugs producing sentence-length "entities")
+        if (n > 1000 || m > 1000)
+            return Math.Max(n, m);
+
+        // Two-row optimization: O(min(n,m)) memory instead of O(n*m)
+        var prev = new int[m + 1];
+        var curr = new int[m + 1];
+
+        for (int j = 0; j <= m; j++) prev[j] = j;
 
         for (int i = 1; i <= n; i++)
         {
+            curr[0] = i;
             for (int j = 1; j <= m; j++)
             {
                 int cost = s[i - 1] == t[j - 1] ? 0 : 1;
-                d[i, j] = Math.Min(
-                    Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1),
-                    d[i - 1, j - 1] + cost);
+                curr[j] = Math.Min(
+                    Math.Min(prev[j] + 1, curr[j - 1] + 1),
+                    prev[j - 1] + cost);
             }
+            (prev, curr) = (curr, prev);
         }
 
-        return d[n, m];
+        return prev[m];
     }
 }
