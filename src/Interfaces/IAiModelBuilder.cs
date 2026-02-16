@@ -1527,6 +1527,26 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureReasoning(ReasoningConfig? config = null);
 
     /// <summary>
+    /// Configures causal structure discovery to learn a DAG from the training data.
+    /// </summary>
+    /// <param name="configure">Action to configure causal discovery options. If null, defaults are used.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// When configured, the builder will run a causal discovery algorithm (e.g., NOTEARS, DAGMA, PC)
+    /// to learn the causal structure between variables. The result is available on
+    /// <c>AiModelResult.CausalDiscoveryResult</c>.
+    /// </para>
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCausalDiscovery(
+        Action<CausalDiscoveryOptions>? configure = null);
+
+    /// <summary>
+    /// Configures causal structure discovery with a pre-built options object.
+    /// </summary>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCausalDiscovery(CausalDiscoveryOptions? options);
+
+    /// <summary>
     /// Configures the data loader for providing training data.
     /// </summary>
     /// <remarks>
