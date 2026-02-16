@@ -6330,6 +6330,219 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates the default layer configuration for a BEATs (Audio Pre-Training with Acoustic Tokenizers)
+    /// audio event detection and classification model.
+    /// </summary>
+    /// <param name="patchFeatureSize">
+    /// The flattened size of each spectrogram patch. For BEATs with 16x16 patches, this is 256.
+    /// The patch is a small tile of the mel spectrogram that the model processes as a single unit,
+    /// similar to how Vision Transformers (ViT) process image patches.
+    /// </param>
+    /// <param name="embeddingDim">
+    /// The dimensionality of the Transformer embedding space. BEATs_iter3 (the best variant from the paper)
+    /// uses 768 dimensions, matching BERT-base. Each spectrogram patch is linearly projected into this
+    /// space before being processed by the Transformer encoder. Larger values increase model capacity
+    /// but require more memory and compute.
+    /// </param>
+    /// <param name="numEncoderLayers">
+    /// The number of stacked Transformer encoder layers. BEATs_iter3 uses 12 layers (matching BERT-base).
+    /// Each layer consists of multi-head self-attention followed by a position-wise feed-forward network,
+    /// with layer normalization and residual connections. More layers allow the model to learn increasingly
+    /// abstract audio representations.
+    /// </param>
+    /// <param name="numAttentionHeads">
+    /// The number of parallel attention heads per Transformer layer. BEATs_iter3 uses 12 heads.
+    /// Each head independently attends to different positions in the patch sequence, allowing the model
+    /// to simultaneously capture different types of audio relationships (e.g., harmonic structure,
+    /// temporal patterns, onset alignment).
+    /// </param>
+    /// <param name="feedForwardDim">
+    /// The inner dimensionality of the position-wise feed-forward network in each Transformer layer.
+    /// BEATs_iter3 uses 3072 (4x the embedding dimension), following the standard Transformer convention.
+    /// This expansion-then-compression pattern allows the FFN to learn complex nonlinear transformations.
+    /// </param>
+    /// <param name="numClasses">
+    /// The number of output classes for the classification head. For AudioSet-527, this is 527.
+    /// The classification head maps the aggregated Transformer output to per-class logits.
+    /// Sigmoid activation is applied externally for multi-label classification.
+    /// </param>
+    /// <param name="maxSequenceLength">
+    /// Maximum number of patches in the input sequence (for positional encoding dimensioning).
+    /// For BEATs processing 10-second clips at 16kHz with 128 mel bins and 16x16 patches,
+    /// this is approximately 500-600 patches. Set generously to accommodate variable-length inputs.
+    /// </param>
+    /// <param name="dropoutRate">
+    /// Dropout probability for regularization during training. BEATs_iter3 uses 0.1 (10%).
+    /// Applied after attention, feed-forward networks, and before the classification head.
+    /// Helps prevent overfitting during fine-tuning on smaller datasets.
+    /// </param>
+    /// <returns>
+    /// An ordered collection of layers forming the complete BEATs architecture:
+    /// patch projection, pre-norm, Transformer encoder stack, post-norm, and classification head.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates the complete BEATs neural network architecture as described in:
+    /// "BEATs: Audio Pre-Training with Acoustic Tokenizers" (Chen et al., ICML 2023).
+    /// </para>
+    /// <para>
+    /// <b>Architecture Overview:</b>
+    /// The BEATs architecture is a Vision Transformer (ViT) adapted for audio spectrograms:
+    /// <list type="number">
+    /// <item><b>Patch Projection:</b> A linear layer projects each flattened spectrogram patch
+    /// (patchSize x patchSize = 256 values) into the embedding space (768 dimensions).
+    /// This is equivalent to the "patch embedding" in ViT.</item>
+    /// <item><b>Pre-Normalization:</b> Layer normalization applied before the Transformer stack
+    /// to stabilize training (Pre-LN Transformer variant, which converges faster than Post-LN).</item>
+    /// <item><b>Transformer Encoder Stack:</b> 12 identical encoder layers, each containing:
+    ///   - Multi-head self-attention (12 heads, each with 64-dim key/query/value)
+    ///   - Layer normalization + residual connection
+    ///   - Position-wise feed-forward network (768 -> 3072 -> 768 with GELU activation)
+    ///   - Layer normalization + residual connection
+    ///   - Dropout for regularization</item>
+    /// <item><b>Post-Normalization:</b> Final layer normalization to stabilize the output
+    /// distribution before classification.</item>
+    /// <item><b>Classification Head:</b> A two-layer MLP that maps from the embedding space
+    /// to the number of output classes. Uses ReLU activation in the hidden layer.
+    /// Sigmoid activation is applied externally for multi-label classification (since
+    /// multiple audio events can occur simultaneously).</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> BEATs is one of the best models for identifying sounds in audio.
+    /// Think of how it works step by step:
+    ///
+    /// 1. <b>Audio to spectrogram:</b> Sound waves are converted to a visual representation
+    ///    called a mel spectrogram, like a "fingerprint" of the sound showing which frequencies
+    ///    are present at each moment in time.
+    ///
+    /// 2. <b>Cut into patches:</b> The spectrogram is divided into small tiles (16x16 pixels each),
+    ///    like cutting a photo into small puzzle pieces. Each piece captures a brief moment of sound
+    ///    across a range of frequencies.
+    ///
+    /// 3. <b>Project patches:</b> Each small tile is converted into a 768-number vector that
+    ///    represents its content. Think of this as describing each puzzle piece using 768 adjectives.
+    ///
+    /// 4. <b>Transformer magic:</b> The Transformer encoder (the same architecture behind ChatGPT)
+    ///    looks at ALL the patches simultaneously, figuring out how they relate to each other.
+    ///    For example, it learns that a particular pattern of frequencies followed by silence
+    ///    sounds like a dog bark, while sustained tones with harmonics sound like singing.
+    ///
+    /// 5. <b>Classification:</b> Finally, the model outputs a probability for each possible sound
+    ///    (e.g., 95% chance of "speech", 40% chance of "music", 2% chance of "dog bark").
+    ///    Multiple sounds can be detected simultaneously since they often overlap in real audio.
+    ///
+    /// BEATs achieves remarkable accuracy:
+    /// - 98.1% on ESC-50 (environmental sounds like rain, dog bark, clock tick)
+    /// - 50.6% mAP on AudioSet-2M (527 sound classes in YouTube videos)
+    ///
+    /// The key innovation is how BEATs is pre-trained: it uses an "acoustic tokenizer" to create
+    /// labels for audio patches, then trains the model to predict masked (hidden) patches.
+    /// This process repeats for 3 iterations, with each iteration producing better labels
+    /// and a better model.
+    /// </para>
+    /// <para>
+    /// <b>Default values match BEATs_iter3</b> (the best-performing variant from the paper):
+    /// <list type="bullet">
+    /// <item>Embedding dimension: 768 (same as BERT-base, ViT-Base)</item>
+    /// <item>Encoder layers: 12 (deep enough for complex audio patterns)</item>
+    /// <item>Attention heads: 12 (one per layer, 64-dim per head)</item>
+    /// <item>FFN dimension: 3072 (4x embedding, standard Transformer ratio)</item>
+    /// <item>Dropout: 0.1 (10%, standard for fine-tuning)</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>References:</b>
+    /// <list type="bullet">
+    /// <item>Paper: "BEATs: Audio Pre-Training with Acoustic Tokenizers" (Chen et al., ICML 2023)</item>
+    /// <item>Repository: https://github.com/microsoft/unilm/tree/master/beats</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBEATsLayers(
+        int patchFeatureSize = 256,
+        int embeddingDim = 768,
+        int numEncoderLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int numClasses = 527,
+        int maxSequenceLength = 600,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // 1. Patch Projection Layer
+        // Projects each flattened spectrogram patch (patchSize^2 values) into the Transformer
+        // embedding space. This is the audio equivalent of ViT's patch embedding.
+        // BEATs paper: "We use a linear projection to embed each patch into a d-dimensional space."
+        yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
+
+        // 2. Pre-Layer Normalization
+        // BEATs uses Pre-LN Transformer (normalize before attention, not after), which provides
+        // more stable gradients during training and faster convergence than Post-LN.
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // 3. Positional Encoding
+        // Adds learnable position information so the Transformer knows the temporal and frequency
+        // ordering of patches. Without this, the model would treat patches as an unordered set.
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
+
+        // 4. Transformer Encoder Stack
+        // Each layer applies multi-head self-attention (allowing each patch to attend to all
+        // other patches) followed by a feed-forward network. Layer norm and residual connections
+        // are applied within each TransformerEncoderLayer.
+        // BEATs_iter3 uses 12 layers, matching BERT-base and ViT-Base architectures.
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: embeddingDim,
+                headCount: numAttentionHeads);
+
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+            // Position-wise Feed-Forward Network (FFN):
+            // Expand to feedForwardDim (4x), apply GELU, then project back.
+            // GELU is used instead of ReLU following the original Transformer and BERT.
+            yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // 5. Post-Layer Normalization
+        // Final normalization before the classification head to stabilize the distribution
+        // of features across different input lengths and content.
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        // 6. Classification Head
+        // Two-layer MLP: embedding_dim -> embedding_dim -> num_classes
+        // The first layer with ReLU adds nonlinearity for richer feature combination.
+        // The second layer projects to class logits (sigmoid applied externally for multi-label).
+        yield return new DenseLayer<T>(embeddingDim, embeddingDim, reluActivation);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        yield return new DenseLayer<T>(embeddingDim, numClasses, identityActivation);
+        // Sigmoid activation is applied in the model's PostprocessOutput() for multi-label classification.
+        // This is intentional: BEATs detects multiple overlapping events, so each class is independent.
+    }
+
+    /// <summary>
     /// Creates default music source separation layers (U-Net style).
     /// </summary>
     /// <param name="numMels">Number of spectrogram frequency bins (default: 513 for STFT with 1024 window).</param>
