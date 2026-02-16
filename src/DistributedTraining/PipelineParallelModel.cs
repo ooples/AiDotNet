@@ -203,6 +203,15 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// Initializes pipeline parallelism by partitioning parameters into stages,
     /// including virtual stage partitions for multi-stage schedules.
     /// </summary>
+    /// <remarks>
+    /// <para>When the wrapped model implements <see cref="ILayeredModel{T}"/>, this method
+    /// uses layer-aware partitioning that respects layer boundaries and balances computational
+    /// cost across stages using estimated FLOPs. This avoids splitting parameters in the
+    /// middle of a layer, which would corrupt that layer's weights.</para>
+    ///
+    /// <para>When the wrapped model does not implement <see cref="ILayeredModel{T}"/>,
+    /// falls back to simple parameter-count-based partitioning.</para>
+    /// </remarks>
     protected override void InitializeSharding()
     {
         var fullParameters = WrappedModel.GetParameters();
@@ -283,6 +292,14 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
                 ShardSize = 0;
             }
         }
+        else if (WrappedModel is ILayeredModel<T> layeredModel && layeredModel.LayerCount > 0
+                 && _partitionStrategy is null)
+        {
+            // Layer-aware partitioning: respects layer boundaries to avoid splitting
+            // a layer's parameters across stages
+            InitializeLayerAwareSharding(layeredModel, fullParameters);
+            _virtualStagePartitions[0] = (ShardStartIndex, ShardSize);
+        }
         else
         {
             // Single-stage schedule: standard partitioning
@@ -352,6 +369,180 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         }
 
         CachedFullParameters = null;
+    }
+
+    /// <summary>
+    /// Performs layer-aware partitioning that respects layer boundaries and balances
+    /// computational cost across pipeline stages.
+    /// </summary>
+    /// <param name="layeredModel">The model with layer-level access.</param>
+    /// <param name="fullParameters">The full parameter vector.</param>
+    private void InitializeLayerAwareSharding(ILayeredModel<T> layeredModel, Vector<T> fullParameters)
+    {
+        var allLayerInfo = layeredModel.GetAllLayerInfo();
+        int layerCount = allLayerInfo.Count;
+        var paramArray = fullParameters.ToArray();
+
+        if (layerCount == 0 || _numStages <= 1)
+        {
+            // Single stage or no layers: take all parameters
+            ShardStartIndex = 0;
+            ShardSize = fullParameters.Length;
+            LocalShard = new Vector<T>(paramArray);
+            return;
+        }
+
+        // Compute total FLOPs for balanced partitioning
+        long totalFlops = 0;
+        foreach (var info in allLayerInfo)
+        {
+            totalFlops += info.EstimatedFlops;
+        }
+
+        // Target FLOPs per stage for balanced distribution
+        long targetFlopsPerStage = totalFlops / _numStages;
+
+        // Greedily assign layers to stages, trying to balance FLOPs
+        // stageStartLayer[s] = index of first layer in stage s
+        var stageStartLayer = new int[_numStages + 1];
+        stageStartLayer[0] = 0;
+
+        int currentLayer = 0;
+        for (int stage = 0; stage < _numStages - 1; stage++)
+        {
+            long stageFlops = 0;
+            int layersInStage = 0;
+            int candidateBoundary = -1;
+
+            // Add layers until we exceed the target FLOPs or run out of layers
+            // Always assign at least one layer per stage
+            while (currentLayer < layerCount)
+            {
+                long layerFlops = allLayerInfo[currentLayer].EstimatedFlops;
+                stageFlops += layerFlops;
+                currentLayer++;
+                layersInStage++;
+
+                // Check if we've exceeded the target for this stage
+                // But ensure remaining stages each get at least one layer
+                int remainingLayers = layerCount - currentLayer;
+                int remainingStages = _numStages - stage - 1;
+
+                if (stageFlops >= targetFlopsPerStage && remainingLayers >= remainingStages)
+                {
+                    // Validate the partition point before accepting it
+                    int partitionAfter = currentLayer - 1;
+                    if (partitionAfter < layerCount - 1 &&
+                        layeredModel.ValidatePartitionPoint(partitionAfter))
+                    {
+                        candidateBoundary = currentLayer;
+                        break;
+                    }
+
+                    // Partition point not valid here; continue consuming layers
+                    // to find the next valid boundary
+                }
+            }
+
+            // If we found a valid boundary, it already equals currentLayer (set at line 214)
+            if (candidateBoundary < 0)
+            {
+                // No valid forward boundary found; try backward search from currentLayer
+                // to find the nearest valid partition point within this stage's range
+                int searchStart = currentLayer - 1;
+                int searchEnd = stageStartLayer[stage];
+                bool foundBackward = false;
+
+                for (int probe = searchStart; probe > searchEnd; probe--)
+                {
+                    if (layeredModel.ValidatePartitionPoint(probe - 1))
+                    {
+                        currentLayer = probe;
+                        foundBackward = true;
+                        break;
+                    }
+                }
+
+                if (!foundBackward)
+                {
+                    if (layersInStage == 0 && currentLayer < layerCount)
+                    {
+                        // Ensure at least one layer per stage
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[PipelineParallel] Stage {stage}: No valid partition point found, " +
+                            $"forcing boundary at layer {currentLayer}.");
+                        currentLayer++;
+                    }
+                    else if (currentLayer <= stageStartLayer[stage])
+                    {
+                        throw new InvalidOperationException(
+                            $"Cannot find a valid partition point for stage {stage} " +
+                            $"in layer range [{stageStartLayer[stage]}, {currentLayer}). " +
+                            "The model's ValidatePartitionPoint rejected all candidates.");
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[PipelineParallel] Stage {stage}: Backward search exhausted " +
+                            $"at layer {currentLayer} with {layersInStage} layer(s) already assigned.");
+                    }
+                }
+            }
+
+            stageStartLayer[stage + 1] = currentLayer;
+        }
+
+        // Last stage gets all remaining layers
+        stageStartLayer[_numStages] = layerCount;
+
+        // Compute parameter offset and size for this stage
+        int firstLayerInStage = stageStartLayer[_stageId];
+        int lastLayerInStage = stageStartLayer[_stageId + 1] - 1;
+
+        if (firstLayerInStage >= layerCount || lastLayerInStage < firstLayerInStage)
+        {
+            // This stage has no layers (more stages than layers)
+            ShardStartIndex = 0;
+            ShardSize = 0;
+            LocalShard = new Vector<T>(0);
+            return;
+        }
+
+        // Use LayerInfo parameter offsets for precise slicing
+        int stageParamStart = allLayerInfo[firstLayerInStage].ParameterOffset;
+        long stageParamEndLong = (long)allLayerInfo[lastLayerInStage].ParameterOffset +
+                                 allLayerInfo[lastLayerInStage].ParameterCount;
+
+        if (stageParamEndLong > fullParameters.Length)
+        {
+            throw new InvalidOperationException(
+                $"Stage {_stageId} parameter range [{stageParamStart}, {stageParamEndLong}) exceeds " +
+                $"total parameter count ({fullParameters.Length}). " +
+                "LayerInfo metadata may be stale or inconsistent with the model parameters.");
+        }
+
+        if (stageParamEndLong > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"Stage {_stageId} parameter end ({stageParamEndLong}) exceeds int.MaxValue. " +
+                "Models with more than int.MaxValue parameters are not supported.");
+        }
+
+        int stageParamEnd = (int)stageParamEndLong;
+
+        ShardStartIndex = stageParamStart;
+        ShardSize = stageParamEnd - stageParamStart;
+
+        if (ShardSize > 0)
+        {
+            var shardData = new T[ShardSize];
+            Array.Copy(paramArray, ShardStartIndex, shardData, 0, ShardSize);
+            LocalShard = new Vector<T>(shardData);
+        }
+        else
+        {
+            LocalShard = new Vector<T>(0);
+        }
     }
 
     /// <inheritdoc/>

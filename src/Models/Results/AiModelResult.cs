@@ -531,6 +531,64 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     public QuantizationInfo? QuantizationInfo { get; internal set; }
 
     /// <summary>
+    /// Gets the total number of layers in the model, if the model supports layer-level access.
+    /// </summary>
+    /// <value>The layer count, or null if the model does not implement <see cref="ILayeredModel{T}"/>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Neural networks are made up of layers stacked on top of each other.
+    /// This property tells you how many layers the model has. If null, the model doesn't support
+    /// layer-level inspection (for example, it might be a linear regression model).</para>
+    /// </remarks>
+    [JsonProperty]
+    public int? LayerCount { get; internal set; }
+
+    /// <summary>
+    /// Gets a summary of layer categories in this model, showing how many layers belong to each category.
+    /// </summary>
+    /// <value>A dictionary mapping <see cref="LayerCategory"/> to count, or null if the model does not implement <see cref="ILayeredModel{T}"/>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This gives you a quick overview of the model's architecture by
+    /// counting how many layers of each type it has. For example, you might see:
+    /// Dense: 3, Normalization: 2, Activation: 3, Regularization: 1.
+    ///
+    /// This is useful for:
+    /// - Understanding the model structure at a glance
+    /// - Comparing architectures between models
+    /// - Planning per-category operations like mixed-precision quantization
+    /// </para>
+    /// </remarks>
+    [JsonProperty("LayerCategorySummary")]
+    private Dictionary<LayerCategory, int>? _layerCategorySummary;
+
+    /// <inheritdoc cref="_layerCategorySummary"/>
+    [JsonIgnore]
+    public IReadOnlyDictionary<LayerCategory, int>? LayerCategorySummary => _layerCategorySummary;
+
+    /// <summary>
+    /// Gets the total number of trainable parameters across all layers.
+    /// </summary>
+    /// <value>The total trainable parameter count, or null if the model does not implement <see cref="ILayeredModel{T}"/>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Parameters are the numbers that the model learns during training.
+    /// More parameters generally means a more powerful model, but also requires more memory
+    /// and computing power. This property tells you how many trainable parameters the model has.</para>
+    /// </remarks>
+    [JsonProperty]
+    public long? TotalTrainableParameters { get; internal set; }
+
+    /// <summary>
+    /// Gets the total estimated FLOPs (floating-point operations) for a single forward pass.
+    /// </summary>
+    /// <value>The estimated FLOPs, or null if the model does not implement <see cref="ILayeredModel{T}"/>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> FLOPs measure how much computation the model needs to make
+    /// a prediction. Higher FLOPs means the model takes longer to run. This is useful for
+    /// estimating inference time and planning deployment on specific hardware.</para>
+    /// </remarks>
+    [JsonProperty]
+    public long? TotalEstimatedFlops { get; internal set; }
+
+    /// <summary>
     /// Gets the JIT-compiled prediction function for accelerated inference.
     /// </summary>
     /// <value>A compiled function for fast predictions, or null if JIT compilation was not enabled or not supported.</value>
@@ -1165,6 +1223,31 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         JitCompiledFunction = options.JitCompiledFunction;
         InferenceOptimizationConfig = options.InferenceOptimizationConfig;
         QuantizationInfo = options.QuantizationInfo;
+
+        // Layer metadata (populated if the model supports layer-level access)
+        if (Model is ILayeredModel<T> layeredModel)
+        {
+            LayerCount = layeredModel.LayerCount;
+            var allLayerInfo = layeredModel.GetAllLayerInfo();
+            var categorySummary = new Dictionary<LayerCategory, int>();
+            long totalParams = 0;
+            long totalFlops = 0;
+            for (int i = 0; i < allLayerInfo.Count; i++)
+            {
+                var info = allLayerInfo[i];
+                categorySummary[info.Category] = categorySummary.TryGetValue(info.Category, out int count)
+                    ? count + 1
+                    : 1;
+                if (info.IsTrainable)
+                {
+                    totalParams += info.ParameterCount;
+                }
+                totalFlops += info.EstimatedFlops;
+            }
+            _layerCategorySummary = categorySummary;
+            TotalTrainableParameters = totalParams;
+            TotalEstimatedFlops = totalFlops;
+        }
 
         // Safety & Robustness (enabled by default; opt-out via options)
         var safetyConfig = options.SafetyFilterConfiguration;
@@ -4393,6 +4476,40 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 {
                     Model.Deserialize(modelBytes);
                     OptimizationResult.BestSolution = Model;
+                }
+
+                // Recompute layer metadata from the live model (serialized snapshots may be stale)
+                if (Model is ILayeredModel<T> layeredModel)
+                {
+                    LayerCount = layeredModel.LayerCount;
+                    var allLayerInfo = layeredModel.GetAllLayerInfo();
+                    var categorySummary = new Dictionary<LayerCategory, int>();
+                    long totalParams = 0;
+                    long totalFlops = 0;
+                    for (int i = 0; i < allLayerInfo.Count; i++)
+                    {
+                        var info = allLayerInfo[i];
+                        categorySummary[info.Category] = categorySummary.TryGetValue(info.Category, out int cnt)
+                            ? cnt + 1
+                            : 1;
+
+                        if (info.IsTrainable)
+                            totalParams += info.ParameterCount;
+
+                        totalFlops += info.EstimatedFlops;
+                    }
+                    _layerCategorySummary = categorySummary;
+                    TotalTrainableParameters = totalParams;
+                    TotalEstimatedFlops = totalFlops;
+                }
+                else
+                {
+                    // Clear stale layer-metadata fields so callers don't see data
+                    // from a previous ILayeredModel that no longer applies.
+                    LayerCount = null;
+                    _layerCategorySummary = null;
+                    TotalTrainableParameters = null;
+                    TotalEstimatedFlops = null;
                 }
             }
             else

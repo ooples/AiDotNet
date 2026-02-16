@@ -18364,4 +18364,398 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Diffusion Model Layers
+
+    /// <summary>
+    /// Creates default U-Net layers for Stable Diffusion 1.5 architecture.
+    /// </summary>
+    /// <param name="latentChannels">Number of latent space channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count for U-Net (default: 320).</param>
+    /// <param name="channelMultipliers">Channel multipliers per resolution level (default: [1, 2, 4, 4]).</param>
+    /// <param name="numResBlocks">Number of residual blocks per level (default: 2).</param>
+    /// <param name="crossAttentionDim">Cross-attention dimension matching text encoder (default: 768 for CLIP ViT-L/14).</param>
+    /// <returns>Layers forming the SD 1.5 U-Net architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This creates the standard Stable Diffusion 1.5 U-Net architecture
+    /// as described in the original paper. The U-Net has 865M parameters with channel multipliers
+    /// [1, 2, 4, 4] producing channels [320, 640, 1280, 1280] at each resolution level.
+    /// </para>
+    /// <para>
+    /// Reference: Rombach et al., "High-Resolution Image Synthesis with Latent Diffusion Models", CVPR 2022
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSD15UNetLayers(
+        int latentChannels = 4,
+        int baseChannels = 320,
+        int[]? channelMultipliers = null,
+        int numResBlocks = 2,
+        int crossAttentionDim = 768)
+    {
+        channelMultipliers ??= [1, 2, 4, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        // Input projection: latentChannels -> baseChannels
+        yield return new DenseLayer<T>(latentChannels, baseChannels, identity);
+
+        // Encoder path: progressive downsampling
+        int prevChannels = baseChannels;
+        for (int level = 0; level < channelMultipliers.Length; level++)
+        {
+            int channels = baseChannels * channelMultipliers[level];
+            for (int block = 0; block < numResBlocks; block++)
+            {
+                yield return new DenseLayer<T>(prevChannels, channels, identity);
+                prevChannels = channels;
+            }
+            // Cross-attention at each level
+            yield return new DenseLayer<T>(channels, crossAttentionDim, identity);
+            yield return new DenseLayer<T>(crossAttentionDim, channels, identity);
+        }
+
+        // Middle block
+        yield return new DenseLayer<T>(prevChannels, prevChannels, identity);
+
+        // Decoder path: progressive upsampling (reverse multipliers)
+        for (int level = channelMultipliers.Length - 1; level >= 0; level--)
+        {
+            int channels = baseChannels * channelMultipliers[level];
+            for (int block = 0; block < numResBlocks + 1; block++)
+            {
+                yield return new DenseLayer<T>(prevChannels, channels, identity);
+                prevChannels = channels;
+            }
+        }
+
+        // Output projection: baseChannels -> latentChannels
+        yield return new DenseLayer<T>(prevChannels, latentChannels, identity);
+    }
+
+    /// <summary>
+    /// Creates default U-Net layers for SDXL architecture with dual cross-attention.
+    /// </summary>
+    /// <param name="latentChannels">Number of latent space channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count for U-Net (default: 320).</param>
+    /// <param name="crossAttentionDim1">First cross-attention dimension for CLIP-L (default: 768).</param>
+    /// <param name="crossAttentionDim2">Second cross-attention dimension for CLIP-G (default: 1280).</param>
+    /// <returns>Layers forming the SDXL U-Net architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> SDXL uses a larger U-Net with dual text encoders (CLIP-L and CLIP-G).
+    /// The cross-attention concatenates both encoder outputs for richer text understanding.
+    /// </para>
+    /// <para>
+    /// Reference: Podell et al., "SDXL: Improving Latent Diffusion Models for High-Resolution Image Synthesis", ICLR 2024
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSDXLUNetLayers(
+        int latentChannels = 4,
+        int baseChannels = 320,
+        int crossAttentionDim1 = 768,
+        int crossAttentionDim2 = 1280)
+    {
+        int combinedDim = crossAttentionDim1 + crossAttentionDim2;
+        int[] channelMultipliers = [1, 2, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new DenseLayer<T>(latentChannels, baseChannels, identity);
+
+        int prevChannels = baseChannels;
+        for (int level = 0; level < channelMultipliers.Length; level++)
+        {
+            int channels = baseChannels * channelMultipliers[level];
+            for (int block = 0; block < 2; block++)
+            {
+                yield return new DenseLayer<T>(prevChannels, channels, identity);
+                prevChannels = channels;
+            }
+            yield return new DenseLayer<T>(channels, combinedDim, identity);
+            yield return new DenseLayer<T>(combinedDim, channels, identity);
+        }
+
+        yield return new DenseLayer<T>(prevChannels, prevChannels, identity);
+
+        for (int level = channelMultipliers.Length - 1; level >= 0; level--)
+        {
+            int channels = baseChannels * channelMultipliers[level];
+            for (int block = 0; block < 3; block++)
+            {
+                yield return new DenseLayer<T>(prevChannels, channels, identity);
+                prevChannels = channels;
+            }
+        }
+
+        yield return new DenseLayer<T>(prevChannels, latentChannels, identity);
+    }
+
+    /// <summary>
+    /// Creates default DiT (Diffusion Transformer) layers with AdaLN-Zero conditioning.
+    /// </summary>
+    /// <param name="latentChannels">Number of latent channels (default: 4).</param>
+    /// <param name="hiddenSize">Hidden dimension (default: 1152 for DiT-XL).</param>
+    /// <param name="numLayers">Number of transformer layers (default: 28 for DiT-XL).</param>
+    /// <param name="numHeads">Number of attention heads (default: 16).</param>
+    /// <param name="patchSize">Patch embedding size (default: 2).</param>
+    /// <returns>Layers forming the DiT architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> DiT replaces the U-Net with a vision transformer. It uses
+    /// AdaLN-Zero (adaptive layer normalization with zero initialization) for timestep
+    /// and class conditioning instead of cross-attention.
+    /// </para>
+    /// <para>
+    /// Reference: Peebles &amp; Xie, "Scalable Diffusion Models with Transformers", ICCV 2023
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultDiTLayers(
+        int latentChannels = 4,
+        int hiddenSize = 1152,
+        int numLayers = 28,
+        int numHeads = 16,
+        int patchSize = 2)
+    {
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int patchDim = latentChannels * patchSize * patchSize;
+
+        // Patch embedding
+        yield return new DenseLayer<T>(patchDim, hiddenSize, identity);
+
+        // Transformer blocks with AdaLN-Zero
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Self-attention projection
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 3, identity);
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize, identity);
+            // MLP
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 4, identity);
+            yield return new DenseLayer<T>(hiddenSize * 4, hiddenSize, identity);
+        }
+
+        // Final layer norm + linear
+        yield return new DenseLayer<T>(hiddenSize, patchDim, identity);
+    }
+
+    /// <summary>
+    /// Creates default MMDiT (Multi-Modal Diffusion Transformer) layers with joint attention.
+    /// </summary>
+    /// <param name="latentChannels">Number of latent channels (default: 16 for SD3).</param>
+    /// <param name="hiddenSize">Hidden dimension (default: 1536).</param>
+    /// <param name="numLayers">Number of joint attention layers (default: 24).</param>
+    /// <param name="numHeads">Number of attention heads (default: 24).</param>
+    /// <returns>Layers forming the MMDiT architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MMDiT extends DiT with joint text-image attention blocks.
+    /// Both text and image tokens are processed together in each transformer layer,
+    /// allowing deeper interaction between text understanding and image generation.
+    /// </para>
+    /// <para>
+    /// Reference: Esser et al., "Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", ICML 2024
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMMDiTLayers(
+        int latentChannels = 16,
+        int hiddenSize = 1536,
+        int numLayers = 24,
+        int numHeads = 24)
+    {
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+        int patchDim = latentChannels * 4; // 2x2 patches
+
+        // Patch embedding
+        yield return new DenseLayer<T>(patchDim, hiddenSize, identity);
+
+        // Joint text-image transformer blocks
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Joint self-attention (text + image tokens)
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 3, identity);
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize, identity);
+            // MLP
+            yield return new DenseLayer<T>(hiddenSize, hiddenSize * 4, identity);
+            yield return new DenseLayer<T>(hiddenSize * 4, hiddenSize, identity);
+        }
+
+        yield return new DenseLayer<T>(hiddenSize, patchDim, identity);
+    }
+
+    /// <summary>
+    /// Creates default video U-Net layers with temporal attention for video diffusion models.
+    /// </summary>
+    /// <param name="latentChannels">Number of latent channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count (default: 320).</param>
+    /// <param name="crossAttentionDim">Cross-attention dimension (default: 768).</param>
+    /// <param name="numTemporalLayers">Number of temporal attention layers per block (default: 1).</param>
+    /// <returns>Layers forming the video U-Net architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> A video U-Net extends the image U-Net with temporal attention layers
+    /// that attend across frames. This ensures temporal coherence - frames look consistent over time.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVideoUNetLayers(
+        int latentChannels = 4,
+        int baseChannels = 320,
+        int crossAttentionDim = 768,
+        int numTemporalLayers = 1)
+    {
+        int[] channelMultipliers = [1, 2, 4, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new DenseLayer<T>(latentChannels, baseChannels, identity);
+
+        int prevChannels = baseChannels;
+        for (int level = 0; level < channelMultipliers.Length; level++)
+        {
+            int channels = baseChannels * channelMultipliers[level];
+            for (int block = 0; block < 2; block++)
+            {
+                yield return new DenseLayer<T>(prevChannels, channels, identity);
+                prevChannels = channels;
+            }
+            // Spatial cross-attention
+            yield return new DenseLayer<T>(channels, crossAttentionDim, identity);
+            yield return new DenseLayer<T>(crossAttentionDim, channels, identity);
+            // Temporal attention layers
+            for (int t = 0; t < numTemporalLayers; t++)
+            {
+                yield return new DenseLayer<T>(channels, channels, identity);
+            }
+        }
+
+        yield return new DenseLayer<T>(prevChannels, prevChannels, identity);
+
+        for (int level = channelMultipliers.Length - 1; level >= 0; level--)
+        {
+            int channels = baseChannels * channelMultipliers[level];
+            for (int block = 0; block < 3; block++)
+            {
+                yield return new DenseLayer<T>(prevChannels, channels, identity);
+                prevChannels = channels;
+            }
+        }
+
+        yield return new DenseLayer<T>(prevChannels, latentChannels, identity);
+    }
+
+    /// <summary>
+    /// Creates default audio diffusion layers for mel spectrogram-based audio generation.
+    /// </summary>
+    /// <param name="melChannels">Number of mel spectrogram channels (default: 64).</param>
+    /// <param name="latentChannels">Number of latent channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count (default: 256).</param>
+    /// <returns>Layers forming the audio diffusion architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Audio diffusion models operate on mel spectrograms - visual
+    /// representations of audio frequency content over time. This creates a U-Net that
+    /// processes these spectrograms to generate or modify audio.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioDiffusionLayers(
+        int melChannels = 64,
+        int latentChannels = 4,
+        int baseChannels = 256)
+    {
+        int[] channelMultipliers = [1, 2, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new DenseLayer<T>(melChannels, baseChannels, identity);
+
+        int prevChannels = baseChannels;
+        for (int level = 0; level < channelMultipliers.Length; level++)
+        {
+            int channels = baseChannels * channelMultipliers[level];
+            yield return new DenseLayer<T>(prevChannels, channels, identity);
+            yield return new DenseLayer<T>(channels, channels, identity);
+            prevChannels = channels;
+        }
+
+        yield return new DenseLayer<T>(prevChannels, prevChannels, identity);
+
+        for (int level = channelMultipliers.Length - 1; level >= 0; level--)
+        {
+            int channels = baseChannels * channelMultipliers[level];
+            yield return new DenseLayer<T>(prevChannels, channels, identity);
+            yield return new DenseLayer<T>(channels, channels, identity);
+            prevChannels = channels;
+        }
+
+        yield return new DenseLayer<T>(prevChannels, melChannels, identity);
+    }
+
+    /// <summary>
+    /// Creates default VAE encoder layers for latent diffusion models.
+    /// </summary>
+    /// <param name="inputChannels">Number of input image channels (default: 3 for RGB).</param>
+    /// <param name="latentChannels">Number of latent channels (default: 4).</param>
+    /// <param name="baseChannels">Base channel count (default: 128).</param>
+    /// <returns>Layers forming the VAE encoder.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The VAE encoder compresses images from pixel space to a smaller
+    /// latent representation. For example, a 512x512 RGB image (3 channels) becomes a 64x64
+    /// latent with 4 channels - an 8x spatial compression.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVAEEncoderLayers(
+        int inputChannels = 3,
+        int latentChannels = 4,
+        int baseChannels = 128)
+    {
+        int[] channelMultipliers = [1, 2, 4, 4];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new DenseLayer<T>(inputChannels, baseChannels, identity);
+
+        int prevChannels = baseChannels;
+        for (int level = 0; level < channelMultipliers.Length; level++)
+        {
+            int channels = baseChannels * channelMultipliers[level];
+            yield return new DenseLayer<T>(prevChannels, channels, identity);
+            yield return new DenseLayer<T>(channels, channels, identity);
+            prevChannels = channels;
+        }
+
+        // Output: mean and logvar for latent distribution
+        yield return new DenseLayer<T>(prevChannels, latentChannels * 2, identity);
+    }
+
+    /// <summary>
+    /// Creates default VAE decoder layers for latent diffusion models.
+    /// </summary>
+    /// <param name="latentChannels">Number of latent channels (default: 4).</param>
+    /// <param name="outputChannels">Number of output image channels (default: 3 for RGB).</param>
+    /// <param name="baseChannels">Base channel count (default: 128).</param>
+    /// <returns>Layers forming the VAE decoder.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> The VAE decoder reconstructs images from the latent representation.
+    /// It reverses the encoder's compression, expanding the 64x64 latent back to a 512x512 image.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultVAEDecoderLayers(
+        int latentChannels = 4,
+        int outputChannels = 3,
+        int baseChannels = 128)
+    {
+        int[] channelMultipliers = [4, 4, 2, 1];
+        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
+
+        yield return new DenseLayer<T>(latentChannels, baseChannels * channelMultipliers[0], identity);
+
+        int prevChannels = baseChannels * channelMultipliers[0];
+        for (int level = 0; level < channelMultipliers.Length; level++)
+        {
+            int channels = baseChannels * channelMultipliers[level];
+            yield return new DenseLayer<T>(prevChannels, channels, identity);
+            yield return new DenseLayer<T>(channels, channels, identity);
+            prevChannels = channels;
+        }
+
+        yield return new DenseLayer<T>(prevChannels, outputChannels, identity);
+    }
+
+    #endregion
 }
