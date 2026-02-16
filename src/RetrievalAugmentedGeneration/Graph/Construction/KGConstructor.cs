@@ -42,6 +42,9 @@ public class KGConstructor<T>
     // - Titles followed by names: "Dr. Smith", "Prof. Einstein"
     // - Possessives are excluded via post-processing
     // Atomic groups (?>...) prevent catastrophic backtracking on nested quantifiers
+    // Atomic groups (?>...) prevent catastrophic backtracking on nested quantifiers.
+    // The 1-second timeout is a defense-in-depth safeguard for untrusted input that
+    // may contain unexpected Unicode or patterns the atomic groups don't fully cover.
     private static readonly Regex CapitalizedPhraseRegex = new(
         @"\b(?:(?:Dr|Mr|Mrs|Ms|Prof|Rev|Gen|Sgt|Cpt|Sir|Dame)\.?\s+)?((?>[A-Z][a-z]+(?:-[A-Z][a-z]+)*)(?:\s+(?:(?:of|the|and|for|in|at|de|von|van|del|la|le|el)\s+)?(?>[A-Z][a-z]+(?:-[A-Z][a-z]+)*))*)(?:'s)?\b",
         RegexOptions.Compiled, TimeSpan.FromSeconds(1));
@@ -410,6 +413,8 @@ public class KGConstructor<T>
             graph.AddNode(node);
         }
 
+        var failedEdges = new List<string>();
+
         foreach (var relation in relations)
         {
             if (!entityIdMap.TryGetValue(relation.SourceEntity, out var sourceId) ||
@@ -424,9 +429,16 @@ public class KGConstructor<T>
             }
             catch (InvalidOperationException ex)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    $"KGConstructor: Failed to add edge {sourceId} -[{relation.RelationType}]-> {targetId}: {ex.Message}");
+                string failure = $"{sourceId} -[{relation.RelationType}]-> {targetId}: {ex.Message}";
+                failedEdges.Add(failure);
+                System.Diagnostics.Trace.TraceWarning($"KGConstructor: Failed to add edge {failure}");
             }
+        }
+
+        if (failedEdges.Count > 0)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"KGConstructor: {failedEdges.Count} edge(s) failed during graph construction.");
         }
     }
 
@@ -515,7 +527,9 @@ public class KGConstructor<T>
 
         // Guard against pathologically long strings (e.g., regex bugs producing sentence-length "entities")
         if (n > 1000 || m > 1000)
-            return Math.Max(n, m);
+            throw new ArgumentException(
+                $"Input strings exceed the maximum supported length of 1000 characters (got {n} and {m}). " +
+                "This typically indicates malformed entity extraction output.");
 
         // Two-row optimization: O(min(n,m)) memory instead of O(n*m)
         var prev = new int[m + 1];

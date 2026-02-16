@@ -207,20 +207,20 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
         var timeEmb = _timeBinEmbeddings[timeBin];
 
         var ph = _entityEmbeddings[posHead];
-        var r_ = _relationEmbeddings[relation];
+        var relationEmb = _relationEmbeddings[relation];
         var pt = _entityEmbeddings[posTail];
-        var nh_ = _entityEmbeddings[negHead];
-        var nt_ = _entityEmbeddings[negTail];
+        var nh = _entityEmbeddings[negHead];
+        var nt = _entityEmbeddings[negTail];
 
         for (int d = 0; d < dim; d++)
         {
             // Positive gradient: 2(h + r + time - t)
             T posGrad = NumOps.Multiply(two,
-                NumOps.Subtract(NumOps.Add(NumOps.Add(ph[d], r_[d]), timeEmb[d]), pt[d]));
+                NumOps.Subtract(NumOps.Add(NumOps.Add(ph[d], relationEmb[d]), timeEmb[d]), pt[d]));
 
             // Negative gradient: 2(nh + r + time - nt)
             T negGrad = NumOps.Multiply(two,
-                NumOps.Subtract(NumOps.Add(NumOps.Add(nh_[d], r_[d]), timeEmb[d]), nt_[d]));
+                NumOps.Subtract(NumOps.Add(NumOps.Add(nh[d], relationEmb[d]), timeEmb[d]), nt[d]));
 
             // Update positive triple (decrease distance)
             ph[d] = NumOps.Subtract(ph[d], NumOps.Multiply(lr, posGrad));
@@ -228,14 +228,14 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
 
             // Relation gradient accounts for both positive and negative triples
             T rGrad = NumOps.Subtract(posGrad, negGrad);
-            r_[d] = NumOps.Subtract(r_[d], NumOps.Multiply(lr, rGrad));
+            relationEmb[d] = NumOps.Subtract(relationEmb[d], NumOps.Multiply(lr, rGrad));
 
             // Time embedding gradient also accounts for both
             timeEmb[d] = NumOps.Subtract(timeEmb[d], NumOps.Multiply(lr, rGrad));
 
             // Update negative triple (increase distance)
-            nh_[d] = NumOps.Add(nh_[d], NumOps.Multiply(lr, negGrad));
-            nt_[d] = NumOps.Subtract(nt_[d], NumOps.Multiply(lr, negGrad));
+            nh[d] = NumOps.Add(nh[d], NumOps.Multiply(lr, negGrad));
+            nt[d] = NumOps.Subtract(nt[d], NumOps.Multiply(lr, negGrad));
         }
 
         return loss;
