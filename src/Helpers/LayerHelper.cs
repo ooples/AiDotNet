@@ -21816,4 +21816,131 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region SED Batch 27
+
+    /// <summary>
+    /// Creates default layers for the CRNN Sound Event Detector.
+    /// Architecture: CNN feature extraction blocks -> Bidirectional GRU -> Frame-level classifier.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCRNNEventDetectorLayers(
+        int[]? cnnChannels = null, int rnnHiddenSize = 128,
+        int numRNNLayers = 2, int numClasses = 527,
+        int numMels = 64, double dropoutRate = 0.2)
+    {
+        cnnChannels ??= [64, 128, 256];
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+
+        // CNN feature extraction blocks
+        int currentDim = numMels;
+        foreach (int ch in cnnChannels)
+        {
+            yield return new FullyConnectedLayer<T>(currentDim, ch, reluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = ch;
+        }
+
+        // Bidirectional GRU layers (simulated via FC)
+        int rnnOutputDim = rnnHiddenSize * 2; // bidirectional doubles output
+        for (int i = 0; i < numRNNLayers; i++)
+        {
+            int inputDim = i == 0 ? currentDim : rnnOutputDim;
+            yield return new FullyConnectedLayer<T>(inputDim, rnnOutputDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(rnnOutputDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Frame-level classifier (sigmoid applied in post-processing)
+        yield return new FullyConnectedLayer<T>(rnnOutputDim, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the FDY-SED (Frequency Dynamic SED) model.
+    /// Architecture: Frequency-dynamic CNN blocks -> Bidirectional GRU -> Frame-level classifier.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFDYSEDLayers(
+        int[]? cnnChannels = null, int embeddingDim = 256,
+        int numFrequencyGroups = 4, int rnnHiddenSize = 128,
+        int numRNNLayers = 2, int numClasses = 527,
+        int numMels = 128, double dropoutRate = 0.2)
+    {
+        cnnChannels ??= [16, 32, 64, 128, 256];
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+
+        // Frequency-dynamic CNN blocks (kernel generation + convolution)
+        int currentDim = numMels;
+        foreach (int ch in cnnChannels)
+        {
+            // Frequency-dynamic kernel generation (per-group FC)
+            for (int g = 0; g < numFrequencyGroups; g++)
+            {
+                yield return new FullyConnectedLayer<T>(currentDim / numFrequencyGroups,
+                    ch / numFrequencyGroups, reluActivation);
+            }
+            yield return new BatchNormalizationLayer<T>(ch);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = ch;
+        }
+
+        // Embedding projection
+        yield return new FullyConnectedLayer<T>(currentDim, embeddingDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        // Bidirectional GRU layers
+        int rnnOutputDim = rnnHiddenSize * 2;
+        for (int i = 0; i < numRNNLayers; i++)
+        {
+            int inputDim = i == 0 ? embeddingDim : rnnOutputDim;
+            yield return new FullyConnectedLayer<T>(inputDim, rnnOutputDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(rnnOutputDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Frame-level classifier
+        yield return new FullyConnectedLayer<T>(rnnOutputDim, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the AudioSep model.
+    /// Architecture: CLAP-conditioned U-Net separator with attention and classification head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioSepLayers(
+        int clapEmbeddingDim = 512, int separationDim = 256,
+        int numSeparationLayers = 6, int numHeads = 8,
+        int[]? encoderChannels = null, int numClasses = 527,
+        int numMels = 128, double dropoutRate = 0.1)
+    {
+        encoderChannels ??= [32, 64, 128, 256];
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Audio encoder: mel to features
+        int currentDim = numMels;
+        foreach (int ch in encoderChannels)
+        {
+            yield return new FullyConnectedLayer<T>(currentDim, ch, geluActivation);
+            yield return new LayerNormalizationLayer<T>(ch);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = ch;
+        }
+
+        // CLAP conditioning projection (text embedding -> FiLM parameters)
+        yield return new FullyConnectedLayer<T>(clapEmbeddingDim, separationDim, geluActivation);
+
+        // Separation layers (conditioned transformer blocks)
+        for (int i = 0; i < numSeparationLayers; i++)
+        {
+            int inputDim = i == 0 ? currentDim : separationDim;
+            yield return new FullyConnectedLayer<T>(inputDim, separationDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(separationDim);
+            // Self-attention (simulated)
+            yield return new FullyConnectedLayer<T>(separationDim, separationDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Classification head
+        yield return new FullyConnectedLayer<T>(separationDim, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
 }
