@@ -20993,4 +20993,115 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Fingerprinting Batch 19
+
+    /// <summary>
+    /// Creates layers for PeakNetFP spectral peak-based fingerprinting.
+    /// Peak-enhanced CNN encoder + L2-normalized embedding head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultPeakNetFPLayers(
+        int numMels = 256, int baseFilters = 32, int numEncoderBlocks = 5,
+        int embeddingDim = 128, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Initial projection
+        yield return new DenseLayer<T>(numMels, baseFilters * 2, reluActivation);
+        yield return new BatchNormalizationLayer<T>(baseFilters * 2);
+
+        // Peak-enhanced convolutional encoder blocks
+        int filters = baseFilters * 2;
+        for (int i = 0; i < numEncoderBlocks; i++)
+        {
+            int nextFilters = Math.Min(filters * 2, 512);
+            yield return new FullyConnectedLayer<T>(filters, nextFilters, reluActivation);
+            yield return new BatchNormalizationLayer<T>(nextFilters);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            filters = nextFilters;
+        }
+
+        // Embedding projection
+        yield return new FullyConnectedLayer<T>(filters, embeddingDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for GraFPrint graph neural network fingerprinting.
+    /// GNN message passing layers + graph readout + embedding head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraFPrintLayers(
+        int numMels = 256, int gnnHiddenDim = 256, int numGnnLayers = 4,
+        int numAttentionHeads = 4, int embeddingDim = 128, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Node feature projection
+        yield return new DenseLayer<T>(numMels, gnnHiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(gnnHiddenDim);
+
+        // Graph attention layers (simulated as attention + FC)
+        for (int i = 0; i < numGnnLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: gnnHiddenDim, embeddingDimension: gnnHiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(gnnHiddenDim);
+            yield return new DenseLayer<T>(gnnHiddenDim, gnnHiddenDim * 2, geluActivation);
+            yield return new DenseLayer<T>(gnnHiddenDim * 2, gnnHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(gnnHiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Readout + embedding projection
+        yield return new DenseLayer<T>(gnnHiddenDim, embeddingDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for ConformerFP (Conformer-based fingerprinting).
+    /// Conformer blocks (attention + convolution) + embedding head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultConformerFPLayers(
+        int numMels = 256, int hiddenDim = 256, int numLayers = 6,
+        int numAttentionHeads = 4, int feedForwardDim = 1024,
+        int embeddingDim = 128, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Feature projection
+        yield return new DenseLayer<T>(numMels, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Conformer blocks: FFN + MHSA + Conv + FFN + LayerNorm
+        for (int i = 0; i < numLayers; i++)
+        {
+            // First FFN (half-step)
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Convolution module (simulated as FC + activation + FC)
+            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 2, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim * 2, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Second FFN (half-step)
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Embedding projection
+        yield return new DenseLayer<T>(hiddenDim, embeddingDim, identityActivation);
+    }
+
+    #endregion
 }
