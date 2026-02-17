@@ -232,6 +232,14 @@ public class ImageSafetyConfig
     public bool? ViolenceDetection { get; set; }
 
     /// <summary>
+    /// Gets or sets the violence detection threshold (0-1). Content above this is flagged. Default: 0.75.
+    /// </summary>
+    /// <remarks>
+    /// Slightly lower than NSFW threshold to improve recall on graphic violence content.
+    /// </remarks>
+    public double? ViolenceThreshold { get; set; }
+
+    /// <summary>
     /// Gets or sets whether deepfake/AI-generated image detection is enabled. Default: false.
     /// </summary>
     public bool? DeepfakeDetection { get; set; }
@@ -245,6 +253,7 @@ public class ImageSafetyConfig
     internal bool EffectiveNSFWDetection => NSFWDetection ?? true;
     internal double EffectiveNSFWThreshold => NSFWThreshold ?? 0.8;
     internal bool EffectiveViolenceDetection => ViolenceDetection ?? true;
+    internal double EffectiveViolenceThreshold => ViolenceThreshold ?? 0.75;
     internal bool EffectiveDeepfakeDetection => DeepfakeDetection ?? false;
 }
 
