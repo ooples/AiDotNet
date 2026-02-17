@@ -341,6 +341,21 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal HybridGraphRetriever<T>? HybridGraphRetriever { get; private set; }
 
     /// <summary>
+    /// Gets the knowledge graph processing results including trained embeddings,
+    /// community structure, and link prediction evaluation.
+    /// </summary>
+    /// <value>Knowledge graph result, or null if ConfigureKnowledgeGraph was not used.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> If you enabled advanced knowledge graph features via
+    /// <c>ConfigureKnowledgeGraph()</c>, this property contains all the results:
+    /// trained embeddings, detected communities, link prediction metrics, and the
+    /// enhanced GraphRAG instance you can use for querying.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    public KnowledgeGraphResult<T>? KnowledgeGraphResult { get; internal set; }
+
+    /// <summary>
     /// Gets or sets the meta-learner used for few-shot adaptation and fine-tuning.
     /// </summary>
     /// <value>An implementation of IMetaLearner for meta-learning capabilities, or null if this is a standard supervised model.</value>

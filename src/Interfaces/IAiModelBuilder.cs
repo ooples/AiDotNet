@@ -620,6 +620,36 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         IDocumentStore<T>? documentStore = null);
 
     /// <summary>
+    /// Configures advanced knowledge graph capabilities including embeddings, community detection,
+    /// link prediction, temporal queries, and KG construction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is separate from <see cref="ConfigureRetrievalAugmentedGeneration"/>, which handles
+    /// low-level plumbing (IGraphStore, KnowledgeGraph, HybridGraphRetriever). This method
+    /// configures higher-level features built on top of the existing infrastructure.
+    /// </para>
+    /// <para><b>For Beginners:</b> After setting up your knowledge graph via <c>ConfigureRetrievalAugmentedGeneration()</c>,
+    /// use this method to enable advanced features:
+    ///
+    /// <code>
+    /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+    ///     .ConfigureRetrievalAugmentedGeneration(graphStore: new MemoryGraphStore&lt;double&gt;())
+    ///     .ConfigureKnowledgeGraph(options => {
+    ///         options.TrainEmbeddings = true;
+    ///         options.EmbeddingType = KGEmbeddingType.TransE;
+    ///         options.GraphRAGMode = GraphRAGMode.Global;
+    ///     })
+    ///     .Build(X, y);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <param name="configure">An action that configures the knowledge graph options.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureKnowledgeGraph(
+        Action<KnowledgeGraphOptions>? configure = null);
+
+    /// <summary>
     /// Configures AI agent assistance during model building and inference.
     /// </summary>
     /// <remarks>
