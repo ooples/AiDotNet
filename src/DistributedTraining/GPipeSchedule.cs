@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.DistributedTraining;
 
@@ -32,8 +34,10 @@ namespace AiDotNet.DistributedTraining;
 /// <para><b>Reference:</b> Huang et al., "GPipe: Efficient Training of Giant Neural Networks using Pipeline Parallelism", 2019.
 /// https://arxiv.org/abs/1811.06965</para>
 /// </remarks>
-public class GPipeSchedule : IPipelineSchedule
+public class GPipeSchedule<T> : IPipelineSchedule<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <inheritdoc/>
     public string Name => "GPipe";
 
@@ -43,21 +47,7 @@ public class GPipeSchedule : IPipelineSchedule
     /// <inheritdoc/>
     public IReadOnlyList<PipelineOperation> GetSchedule(int stageId, int numStages, int numMicroBatches)
     {
-        if (numStages <= 0)
-        {
-            throw new ArgumentException("Number of stages must be positive.", nameof(numStages));
-        }
-
-        if (numMicroBatches <= 0)
-        {
-            throw new ArgumentException("Number of micro-batches must be positive.", nameof(numMicroBatches));
-        }
-
-        if (stageId < 0 || stageId >= numStages)
-        {
-            throw new ArgumentOutOfRangeException(nameof(stageId),
-                $"Stage ID must be between 0 and {numStages - 1}.");
-        }
+        ValidateScheduleParameters(stageId, numStages, numMicroBatches);
 
         var ops = new List<PipelineOperation>();
 
@@ -89,16 +79,36 @@ public class GPipeSchedule : IPipelineSchedule
     }
 
     /// <inheritdoc/>
-    public double EstimateBubbleFraction(int numStages, int numMicroBatches)
+    public T EstimateBubbleFraction(int numStages, int numMicroBatches)
     {
         if (numStages <= 1 || numMicroBatches <= 0)
         {
-            return 0.0;
+            return NumOps.Zero;
         }
 
         // GPipe bubble fraction: (P-1) / (P-1+M) where P = stages, M = micro-batches
-        double p = numStages;
-        double m = numMicroBatches;
-        return (p - 1.0) / (p - 1.0 + m);
+        T p = NumOps.FromDouble(numStages);
+        T m = NumOps.FromDouble(numMicroBatches);
+        T pMinusOne = NumOps.Subtract(p, NumOps.One);
+        return NumOps.Divide(pMinusOne, NumOps.Add(pMinusOne, m));
+    }
+
+    private static void ValidateScheduleParameters(int stageId, int numStages, int numMicroBatches)
+    {
+        if (numStages <= 0)
+        {
+            throw new ArgumentException("Number of stages must be positive.", nameof(numStages));
+        }
+
+        if (numMicroBatches <= 0)
+        {
+            throw new ArgumentException("Number of micro-batches must be positive.", nameof(numMicroBatches));
+        }
+
+        if (stageId < 0 || stageId >= numStages)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stageId),
+                $"Stage ID must be between 0 and {numStages - 1}.");
+        }
     }
 }

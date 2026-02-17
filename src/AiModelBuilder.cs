@@ -165,7 +165,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private DistributedStrategy _distributedStrategy = DistributedStrategy.DDP;
     private IShardingConfiguration<T>? _distributedConfiguration;
     private IPipelinePartitionStrategy<T>? _pipelinePartitionStrategy;
-    private IPipelineSchedule? _pipelineSchedule;
+    private IPipelineSchedule<T>? _pipelineSchedule;
     private ActivationCheckpointConfig? _pipelineCheckpointConfig;
     private int _pipelineMicroBatchCount = 1;
     private ICrossValidator<T, TInput, TOutput>? _crossValidator;
@@ -3914,7 +3914,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </summary>
     /// <param name="schedule">
     /// Pipeline execution schedule. If null, uses GPipeSchedule.
-    /// Use <see cref="DistributedTraining.OneForwardOneBackwardSchedule"/> for reduced pipeline bubble (~12-15% vs ~50%).
+    /// Use <see cref="DistributedTraining.OneForwardOneBackwardSchedule{T}"/> for reduced pipeline bubble (~12-15% vs ~50%).
     /// </param>
     /// <param name="partitionStrategy">
     /// Strategy for partitioning layers across pipeline stages.
@@ -3957,7 +3957,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </para>
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigurePipelineParallelism(
-        IPipelineSchedule? schedule = null,
+        IPipelineSchedule<T>? schedule = null,
         IPipelinePartitionStrategy<T>? partitionStrategy = null,
         ActivationCheckpointConfig? checkpointConfig = null,
         int microBatchCount = 1)

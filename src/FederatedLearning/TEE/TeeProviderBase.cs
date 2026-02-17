@@ -19,6 +19,11 @@ namespace AiDotNet.FederatedLearning.TEE;
 /// <typeparam name="T">The numeric type used for model parameters.</typeparam>
 public abstract class TeeProviderBase<T> : FederatedLearningComponentBase<T>, ITeeProvider<T>
 {
+    /// <summary>
+    /// Minimum sealed payload size in bytes: AES-GCM nonce (12) + tag (16) + at least 1 byte of ciphertext.
+    /// </summary>
+    private const int MinSealedDataLength = 29;
+
     private byte[] _sealingKey = Array.Empty<byte>();
     private string _measurementHash = string.Empty;
     private bool _initialized;
@@ -82,7 +87,7 @@ public abstract class TeeProviderBase<T> : FederatedLearningComponentBase<T>, IT
     {
         EnsureInitialized();
 
-        if (sealedData is null || sealedData.Length < 17)
+        if (sealedData is null || sealedData.Length < MinSealedDataLength)
         {
             throw new ArgumentException("Sealed data is too short.", nameof(sealedData));
         }

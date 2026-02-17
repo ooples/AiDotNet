@@ -218,7 +218,7 @@ public class EdgeOptimizer<T, TInput, TOutput>
             // Models without layer metadata cannot be meaningfully partitioned.
             // Return 0 so the entire model runs on one side rather than creating
             // an invalid split with unknown layer boundaries.
-            Console.WriteLine(
+            System.Diagnostics.Debug.WriteLine(
                 $"[EdgeOptimizer] Warning: Model type {model.GetType().Name} does not implement ILayeredModel<T>. " +
                 "Cannot determine partition point without layer information. Defaulting to partition point 0 (no split).");
             return 0;

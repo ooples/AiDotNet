@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.DistributedTraining;
 
@@ -25,8 +27,10 @@ namespace AiDotNet.DistributedTraining;
 /// <para><b>Reference:</b> Qi et al., "Zero Bubble Pipeline Parallelism", ICLR 2024 Spotlight.
 /// https://arxiv.org/abs/2401.10241</para>
 /// </remarks>
-public class ZeroBubbleH1Schedule : IPipelineSchedule
+public class ZeroBubbleH1Schedule<T> : IPipelineSchedule<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <inheritdoc/>
     public string Name => "ZB-H1";
 
@@ -35,6 +39,23 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
 
     /// <inheritdoc/>
     public IReadOnlyList<PipelineOperation> GetSchedule(int stageId, int numStages, int numMicroBatches)
+    {
+        ValidateScheduleParameters(stageId, numStages, numMicroBatches);
+
+        var ops = new List<PipelineOperation>();
+
+        int numWarmupForwards = Math.Min(numStages - 1 - stageId, numMicroBatches);
+        int numSteadyState = Math.Max(0, numMicroBatches - numWarmupForwards);
+
+        int forwardIdx = EmitWarmupForwards(ops, numWarmupForwards);
+        var (backwardInputIdx, backwardWeightIdx) = EmitSteadyState(
+            ops, numSteadyState, numMicroBatches, forwardIdx);
+        EmitCooldown(ops, numMicroBatches, backwardInputIdx, backwardWeightIdx);
+
+        return ops;
+    }
+
+    private static void ValidateScheduleParameters(int stageId, int numStages, int numMicroBatches)
     {
         if (numStages <= 0)
         {
@@ -51,18 +72,6 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
             throw new ArgumentOutOfRangeException(nameof(stageId),
                 $"Stage ID must be between 0 and {numStages - 1}.");
         }
-
-        var ops = new List<PipelineOperation>();
-
-        int numWarmupForwards = Math.Min(numStages - 1 - stageId, numMicroBatches);
-        int numSteadyState = Math.Max(0, numMicroBatches - numWarmupForwards);
-
-        int forwardIdx = EmitWarmupForwards(ops, numWarmupForwards);
-        var (backwardInputIdx, backwardWeightIdx) = EmitSteadyState(
-            ops, numSteadyState, numMicroBatches, forwardIdx);
-        EmitCooldown(ops, numMicroBatches, backwardInputIdx, backwardWeightIdx);
-
-        return ops;
     }
 
     /// <summary>
@@ -165,18 +174,20 @@ public class ZeroBubbleH1Schedule : IPipelineSchedule
     }
 
     /// <inheritdoc/>
-    public double EstimateBubbleFraction(int numStages, int numMicroBatches)
+    public T EstimateBubbleFraction(int numStages, int numMicroBatches)
     {
         if (numStages <= 1 || numMicroBatches <= 0)
         {
-            return 0.0;
+            return NumOps.Zero;
         }
 
         // ZB-H1 bubble is approximately 1/3 of 1F1B's bubble
         // 1F1B bubble: (P-1) / (2*M + P - 1)
         // ZB-H1 bubble: ~(P-1) / (3*M + P - 1)
-        double p = numStages;
-        double m = numMicroBatches;
-        return (p - 1.0) / (3.0 * m + p - 1.0);
+        T p = NumOps.FromDouble(numStages);
+        T m = NumOps.FromDouble(numMicroBatches);
+        T pMinusOne = NumOps.Subtract(p, NumOps.One);
+        T three = NumOps.FromDouble(3.0);
+        return NumOps.Divide(pMinusOne, NumOps.Add(NumOps.Multiply(three, m), pMinusOne));
     }
 }

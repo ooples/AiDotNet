@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.DistributedTraining;
 
@@ -38,8 +40,10 @@ namespace AiDotNet.DistributedTraining;
 /// <para><b>Reference:</b> Narayanan et al., "PipeDream: Generalized Pipeline Parallelism for DNN Training", SOSP 2019.
 /// https://arxiv.org/abs/1806.03377</para>
 /// </remarks>
-public class OneForwardOneBackwardSchedule : IPipelineSchedule
+public class OneForwardOneBackwardSchedule<T> : IPipelineSchedule<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <inheritdoc/>
     public string Name => "1F1B";
 
@@ -49,21 +53,7 @@ public class OneForwardOneBackwardSchedule : IPipelineSchedule
     /// <inheritdoc/>
     public IReadOnlyList<PipelineOperation> GetSchedule(int stageId, int numStages, int numMicroBatches)
     {
-        if (numStages <= 0)
-        {
-            throw new ArgumentException("Number of stages must be positive.", nameof(numStages));
-        }
-
-        if (numMicroBatches <= 0)
-        {
-            throw new ArgumentException("Number of micro-batches must be positive.", nameof(numMicroBatches));
-        }
-
-        if (stageId < 0 || stageId >= numStages)
-        {
-            throw new ArgumentOutOfRangeException(nameof(stageId),
-                $"Stage ID must be between 0 and {numStages - 1}.");
-        }
+        ValidateScheduleParameters(stageId, numStages, numMicroBatches);
 
         var ops = new List<PipelineOperation>();
 
@@ -132,18 +122,39 @@ public class OneForwardOneBackwardSchedule : IPipelineSchedule
         return ops;
     }
 
+    private static void ValidateScheduleParameters(int stageId, int numStages, int numMicroBatches)
+    {
+        if (numStages <= 0)
+        {
+            throw new ArgumentException("Number of stages must be positive.", nameof(numStages));
+        }
+
+        if (numMicroBatches <= 0)
+        {
+            throw new ArgumentException("Number of micro-batches must be positive.", nameof(numMicroBatches));
+        }
+
+        if (stageId < 0 || stageId >= numStages)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stageId),
+                $"Stage ID must be between 0 and {numStages - 1}.");
+        }
+    }
+
     /// <inheritdoc/>
-    public double EstimateBubbleFraction(int numStages, int numMicroBatches)
+    public T EstimateBubbleFraction(int numStages, int numMicroBatches)
     {
         if (numStages <= 1 || numMicroBatches <= 0)
         {
-            return 0.0;
+            return NumOps.Zero;
         }
 
         // 1F1B bubble fraction: (P-1) / (2*M + P - 1) where P = stages, M = micro-batches
         // This is approximately half of GPipe's bubble for large M
-        double p = numStages;
-        double m = numMicroBatches;
-        return (p - 1.0) / (2.0 * m + p - 1.0);
+        T p = NumOps.FromDouble(numStages);
+        T m = NumOps.FromDouble(numMicroBatches);
+        T pMinusOne = NumOps.Subtract(p, NumOps.One);
+        T two = NumOps.FromDouble(2.0);
+        return NumOps.Divide(pMinusOne, NumOps.Add(NumOps.Multiply(two, m), pMinusOne));
     }
 }

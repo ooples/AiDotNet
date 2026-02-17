@@ -815,7 +815,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="microBatchCount">Number of micro-batches to split the full batch into. Default: 1.</param>
     /// <returns>This builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigurePipelineParallelism(
-        IPipelineSchedule? schedule = null,
+        IPipelineSchedule<T>? schedule = null,
         IPipelinePartitionStrategy<T>? partitionStrategy = null,
         ActivationCheckpointConfig? checkpointConfig = null,
         int microBatchCount = 1);

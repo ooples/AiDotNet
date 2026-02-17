@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.DistributedTraining;
 
@@ -37,8 +39,10 @@ namespace AiDotNet.DistributedTraining;
 /// <para><b>Reference:</b> Lamy-Poirier, "Breadth-First Pipeline Parallelism", 2022.
 /// https://arxiv.org/abs/2211.05953</para>
 /// </remarks>
-public class LoopedBFSSchedule : IPipelineSchedule
+public class LoopedBFSSchedule<T> : IPipelineSchedule<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly int _virtualStagesPerRank;
 
     /// <summary>
@@ -70,21 +74,7 @@ public class LoopedBFSSchedule : IPipelineSchedule
     /// <inheritdoc/>
     public IReadOnlyList<PipelineOperation> GetSchedule(int stageId, int numStages, int numMicroBatches)
     {
-        if (numStages <= 0)
-        {
-            throw new ArgumentException("Number of stages must be positive.", nameof(numStages));
-        }
-
-        if (numMicroBatches <= 0)
-        {
-            throw new ArgumentException("Number of micro-batches must be positive.", nameof(numMicroBatches));
-        }
-
-        if (stageId < 0 || stageId >= numStages)
-        {
-            throw new ArgumentOutOfRangeException(nameof(stageId),
-                $"Stage ID must be between 0 and {numStages - 1}.");
-        }
+        ValidateScheduleParameters(stageId, numStages, numMicroBatches);
 
         var ops = new List<PipelineOperation>();
 
@@ -166,21 +156,42 @@ public class LoopedBFSSchedule : IPipelineSchedule
         return ops;
     }
 
+    private static void ValidateScheduleParameters(int stageId, int numStages, int numMicroBatches)
+    {
+        if (numStages <= 0)
+        {
+            throw new ArgumentException("Number of stages must be positive.", nameof(numStages));
+        }
+
+        if (numMicroBatches <= 0)
+        {
+            throw new ArgumentException("Number of micro-batches must be positive.", nameof(numMicroBatches));
+        }
+
+        if (stageId < 0 || stageId >= numStages)
+        {
+            throw new ArgumentOutOfRangeException(nameof(stageId),
+                $"Stage ID must be between 0 and {numStages - 1}.");
+        }
+    }
+
     /// <inheritdoc/>
-    public double EstimateBubbleFraction(int numStages, int numMicroBatches)
+    public T EstimateBubbleFraction(int numStages, int numMicroBatches)
     {
         if (numStages <= 1 || numMicroBatches <= 0)
         {
-            return 0.0;
+            return NumOps.Zero;
         }
 
         // Looped BFS has approximately the same bubble as Interleaved 1F1B
         // but the communication pattern differs. The bubble is roughly:
         // (P-1) / (2*M*V + P - 1)
         // Same asymptotic behavior as Interleaved 1F1B.
-        double p = numStages;
-        double m = numMicroBatches;
-        double v = _virtualStagesPerRank;
-        return (p - 1.0) / (2.0 * m * v + p - 1.0);
+        T p = NumOps.FromDouble(numStages);
+        T m = NumOps.FromDouble(numMicroBatches);
+        T v = NumOps.FromDouble(_virtualStagesPerRank);
+        T pMinusOne = NumOps.Subtract(p, NumOps.One);
+        T two = NumOps.FromDouble(2.0);
+        return NumOps.Divide(pMinusOne, NumOps.Add(NumOps.Multiply(NumOps.Multiply(two, m), v), pMinusOne));
     }
 }

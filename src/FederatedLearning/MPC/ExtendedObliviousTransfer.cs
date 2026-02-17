@@ -41,6 +41,12 @@ public class ExtendedObliviousTransfer : IObliviousTransfer
     /// <param name="securityParameter">Security parameter in bits (default 128).</param>
     public ExtendedObliviousTransfer(IObliviousTransfer? baseOt = null, int securityParameter = 128)
     {
+        if (securityParameter <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(securityParameter),
+                "Security parameter must be a positive integer (used as array length and modulo divisor).");
+        }
+
         _baseOt = baseOt ?? new BaseObliviousTransfer();
         _securityParameter = securityParameter;
         _initialized = false;

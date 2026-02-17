@@ -99,9 +99,8 @@ public class SecureCrossClientEdgeDiscovery<T> : FederatedLearningComponentBase<
         // Apply randomized response for differential privacy
         // Use numerically stable sigmoid: p = 1 / (1 + exp(-epsilon))
         // This avoids overflow when epsilon is large (exp(epsilon) -> Infinity)
-        double reportProbability = _privacyEpsilon >= 0
-            ? 1.0 / (1.0 + Math.Exp(-_privacyEpsilon))
-            : Math.Exp(_privacyEpsilon) / (Math.Exp(_privacyEpsilon) + 1.0);
+        // Constructor enforces _privacyEpsilon > 0, so we use the stable branch directly.
+        double reportProbability = 1.0 / (1.0 + Math.Exp(-_privacyEpsilon));
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
 
         for (int i = 0; i < clientABorderNodes.Count && discovered.Count < _maxEdgesPerPair; i++)

@@ -25,7 +25,7 @@ namespace AiDotNet.Interfaces;
 /// - Zero Bubble: Workers split backward into two parts, using the flexible part to fill gaps
 /// </para>
 /// </remarks>
-public interface IPipelineSchedule
+public interface IPipelineSchedule<T>
 {
     /// <summary>
     /// Gets the name of the scheduling strategy for diagnostics.
@@ -66,7 +66,7 @@ public interface IPipelineSchedule
     /// <param name="numStages">Total number of pipeline stages.</param>
     /// <param name="numMicroBatches">Number of micro-batches per mini-batch.</param>
     /// <returns>Estimated fraction of total time spent in pipeline bubbles (0.0 to 1.0).</returns>
-    double EstimateBubbleFraction(int numStages, int numMicroBatches);
+    T EstimateBubbleFraction(int numStages, int numMicroBatches);
 }
 
 /// <summary>

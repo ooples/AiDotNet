@@ -58,7 +58,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 {
     private readonly int _microBatchCount;
     private readonly IPipelinePartitionStrategy<T>? _partitionStrategy;
-    private readonly IPipelineSchedule _schedule;
+    private readonly IPipelineSchedule<T> _schedule;
     private readonly ActivationCheckpointConfig _checkpointConfig;
     private int _stageId;
     private int _numStages;
@@ -101,7 +101,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// This property is internal. Configure the schedule via <c>AiModelBuilder</c> methods
     /// (e.g., <c>ConfigurePipelineParallelism</c>) rather than accessing this directly.
     /// </remarks>
-    internal IPipelineSchedule Schedule => _schedule;
+    internal IPipelineSchedule<T> Schedule => _schedule;
 
     /// <summary>
     /// Gets the activation checkpoint configuration.
@@ -124,7 +124,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// <summary>
     /// Gets the estimated pipeline bubble fraction for the current configuration.
     /// </summary>
-    public double EstimatedBubbleFraction
+    public T EstimatedBubbleFraction
     {
         get
         {
@@ -144,7 +144,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// Strategy for partitioning parameters across stages. If null, uses uniform partitioning.
     /// </param>
     /// <param name="schedule">
-    /// Pipeline execution schedule. If null, uses <see cref="GPipeSchedule"/>.
+    /// Pipeline execution schedule. If null, uses <see cref="GPipeSchedule{T}"/>.
     /// </param>
     /// <param name="checkpointConfig">
     /// Activation checkpointing configuration. If null, checkpointing is disabled.
@@ -154,7 +154,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         IShardingConfiguration<T> config,
         int microBatchCount = 1,
         IPipelinePartitionStrategy<T>? partitionStrategy = null,
-        IPipelineSchedule? schedule = null,
+        IPipelineSchedule<T>? schedule = null,
         ActivationCheckpointConfig? checkpointConfig = null)
         : base(wrappedModel, config)
     {
@@ -166,7 +166,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
         _microBatchCount = microBatchCount;
         _partitionStrategy = partitionStrategy;
-        _schedule = schedule ?? new GPipeSchedule();
+        _schedule = schedule ?? new GPipeSchedule<T>();
         _checkpointConfig = checkpointConfig ?? new ActivationCheckpointConfig();
 
         // Activation checkpointing recomputation strategies (Selective, Full) require
@@ -1307,7 +1307,8 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         metadata.SetProperty("MicroBatchCount", _microBatchCount);
         metadata.SetProperty("Schedule", _schedule.Name);
         metadata.SetProperty("VirtualStagesPerRank", _virtualStagesPerRank);
-        metadata.SetProperty("EstimatedBubbleFraction", EstimatedBubbleFraction);
+        T bubbleFraction = EstimatedBubbleFraction;
+        metadata.SetProperty("EstimatedBubbleFraction", NumOps.ToDouble(bubbleFraction));
         metadata.SetProperty("ActivationCheckpointing", _checkpointConfig.Enabled);
         metadata.SetProperty("PartitionStrategy", _partitionStrategy?.GetType().Name ?? "Uniform");
         metadata.SetProperty("SupportsDecomposedBackward", _supportsDecomposedBackward);

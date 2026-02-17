@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.DistributedTraining;
 
@@ -31,7 +33,9 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type for operations.</typeparam>
 public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
 {
-    private readonly Func<int, double>? _costEstimator;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    private readonly Func<int, T>? _costEstimator;
     private readonly int[] _layerBoundaries;
     private readonly bool _isAutoDetect;
 
@@ -55,7 +59,7 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
     /// </param>
     /// <exception cref="ArgumentException">Thrown when layerBoundaries is null, empty,
     /// contains negative values, or is not strictly increasing.</exception>
-    public LoadBalancedPartitionStrategy(int[] layerBoundaries, Func<int, double>? costEstimator = null)
+    public LoadBalancedPartitionStrategy(int[] layerBoundaries, Func<int, T>? costEstimator = null)
     {
         if (layerBoundaries is null || layerBoundaries.Length == 0)
         {
@@ -105,7 +109,7 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
     /// </param>
     /// <param name="costEstimator">Optional cost estimator function.</param>
     /// <exception cref="ArgumentException">Thrown when estimatedLayerSize is not positive.</exception>
-    public LoadBalancedPartitionStrategy(int estimatedLayerSize, Func<int, double>? costEstimator = null)
+    public LoadBalancedPartitionStrategy(int estimatedLayerSize, Func<int, T>? costEstimator = null)
     {
         if (estimatedLayerSize <= 0)
         {
@@ -178,9 +182,10 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
         return layerSizes;
     }
 
-    private double[] ComputeLayerCosts(int[] layerSizes)
+    private Vector<T> ComputeLayerCosts(int[] layerSizes)
     {
-        var costs = new double[layerSizes.Length];
+        var costs = new Vector<T>(layerSizes.Length);
+        T exponent = NumOps.FromDouble(1.5);
 
         for (int i = 0; i < layerSizes.Length; i++)
         {
@@ -189,7 +194,7 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
             // This is a reasonable approximation for dense/linear layers.
             costs[i] = _costEstimator is not null
                 ? _costEstimator(layerSizes[i])
-                : Math.Pow(layerSizes[i], 1.5);
+                : NumOps.Power(NumOps.FromDouble(layerSizes[i]), exponent);
         }
 
         return costs;
@@ -199,7 +204,7 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
     /// Uses dynamic programming to find the partition of layers into stages
     /// that minimizes the maximum stage cost (min-max partitioning).
     /// </summary>
-    private (int StartIndex, int Size)[] OptimalPartition(int[] layerSizes, double[] layerCosts, int numStages)
+    private (int StartIndex, int Size)[] OptimalPartition(int[] layerSizes, Vector<T> layerCosts, int numStages)
     {
         int numLayers = layerSizes.Length;
 
@@ -218,16 +223,16 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
     /// <summary>
     /// Computes prefix sums for parameter sizes and layer costs.
     /// </summary>
-    private static (long[] ParamPrefix, double[] CostPrefix) ComputePrefixSums(int[] layerSizes, double[] layerCosts)
+    private static (long[] ParamPrefix, Vector<T> CostPrefix) ComputePrefixSums(int[] layerSizes, Vector<T> layerCosts)
     {
         int n = layerSizes.Length;
         var paramPrefix = new long[n + 1];
-        var costPrefix = new double[n + 1];
+        var costPrefix = new Vector<T>(n + 1);
 
         for (int i = 0; i < n; i++)
         {
             paramPrefix[i + 1] = paramPrefix[i] + layerSizes[i];
-            costPrefix[i + 1] = costPrefix[i] + layerCosts[i];
+            costPrefix[i + 1] = NumOps.Add(costPrefix[i], layerCosts[i]);
         }
 
         return (paramPrefix, costPrefix);
@@ -236,25 +241,9 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
     /// <summary>
     /// Fills the DP table: dp[s][l] = min of max stage cost assigning layers 0..l-1 to stages 0..s-1.
     /// </summary>
-    private static (double[][] Dp, int[][] SplitPoint) SolveMinMaxDP(double[] costPrefix, int numLayers, int numStages)
+    private static (Matrix<T> Dp, Matrix<int> SplitPoint) SolveMinMaxDP(Vector<T> costPrefix, int numLayers, int numStages)
     {
-        var dp = new double[numStages + 1][];
-        var splitPoint = new int[numStages + 1][];
-
-        for (int s = 0; s <= numStages; s++)
-        {
-            dp[s] = new double[numLayers + 1];
-            splitPoint[s] = new int[numLayers + 1];
-            ArrayPolyfill.Fill(dp[s], double.MaxValue);
-        }
-
-        dp[0][0] = 0.0;
-
-        for (int l = 1; l <= numLayers; l++)
-        {
-            dp[1][l] = costPrefix[l];
-            splitPoint[1][l] = 0;
-        }
+        var (dp, splitPoint) = InitializeDPTables(costPrefix, numLayers, numStages);
 
         for (int s = 2; s <= numStages; s++)
         {
@@ -262,13 +251,14 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
             {
                 for (int k = s - 1; k < l; k++)
                 {
-                    double lastStageCost = costPrefix[l] - costPrefix[k];
-                    double candidate = Math.Max(dp[s - 1][k], lastStageCost);
+                    T lastStageCost = NumOps.Subtract(costPrefix[l], costPrefix[k]);
+                    T prevBest = dp[s - 1, k];
+                    T candidate = NumOps.GreaterThan(prevBest, lastStageCost) ? prevBest : lastStageCost;
 
-                    if (candidate < dp[s][l])
+                    if (NumOps.LessThan(candidate, dp[s, l]))
                     {
-                        dp[s][l] = candidate;
-                        splitPoint[s][l] = k;
+                        dp[s, l] = candidate;
+                        splitPoint[s, l] = k;
                     }
                 }
             }
@@ -278,9 +268,38 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
     }
 
     /// <summary>
+    /// Creates and initializes DP tables with base cases for single-stage partitioning.
+    /// </summary>
+    private static (Matrix<T> Dp, Matrix<int> SplitPoint) InitializeDPTables(
+        Vector<T> costPrefix, int numLayers, int numStages)
+    {
+        var dp = new Matrix<T>(numStages + 1, numLayers + 1);
+        var splitPoint = new Matrix<int>(numStages + 1, numLayers + 1);
+
+        // Fill DP table with MaxValue
+        for (int s = 0; s <= numStages; s++)
+        {
+            for (int l = 0; l <= numLayers; l++)
+            {
+                dp[s, l] = NumOps.MaxValue;
+            }
+        }
+
+        dp[0, 0] = NumOps.Zero;
+
+        for (int l = 1; l <= numLayers; l++)
+        {
+            dp[1, l] = costPrefix[l];
+            splitPoint[1, l] = 0;
+        }
+
+        return (dp, splitPoint);
+    }
+
+    /// <summary>
     /// Backtracks from the DP split points to find the optimal layer-to-stage assignment.
     /// </summary>
-    private static int[] BacktrackSplitPoints(int[][] splitPoint, int numLayers, int numStages)
+    private static int[] BacktrackSplitPoints(Matrix<int> splitPoint, int numLayers, int numStages)
     {
         var stageEndLayers = new int[numStages];
         int currentLayer = numLayers;
@@ -288,7 +307,7 @@ public class LoadBalancedPartitionStrategy<T> : IPipelinePartitionStrategy<T>
         for (int s = numStages; s >= 1; s--)
         {
             stageEndLayers[s - 1] = currentLayer;
-            currentLayer = splitPoint[s][currentLayer];
+            currentLayer = splitPoint[s, currentLayer];
         }
 
         return stageEndLayers;

@@ -74,14 +74,21 @@ public class ContributionBasedIncentive<T> : FederatedLearningComponentBase<T>, 
             totalScore += clipped;
         }
 
-        // Allocate minimum floor to each client
-        double floorTotal = n * MinRewardFraction * totalBudget;
-        double remainingBudget = Math.Max(0, totalBudget - floorTotal);
+        // Allocate minimum floor to each client, capped so floor never exceeds total budget
+        double perClientFloor = MinRewardFraction * totalBudget;
+        double floorTotal = n * perClientFloor;
+        if (floorTotal > totalBudget)
+        {
+            // Scale down per-client floor so total floors fit within budget
+            perClientFloor = totalBudget / n;
+            floorTotal = totalBudget;
+        }
+        double remainingBudget = totalBudget - floorTotal;
 
         foreach (var kvp in clippedScores)
         {
             // Floor reward
-            double reward = MinRewardFraction * totalBudget;
+            double reward = perClientFloor;
 
             // Proportional reward from remaining budget
             if (totalScore > 1e-12)

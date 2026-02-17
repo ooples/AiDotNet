@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.Interfaces;
 
 namespace AiDotNet.DistributedTraining;
 
@@ -37,8 +39,10 @@ namespace AiDotNet.DistributedTraining;
 /// <para><b>Reference:</b> Qi et al., "Zero Bubble Pipeline Parallelism", ICLR 2024 Spotlight.
 /// https://arxiv.org/abs/2401.10241</para>
 /// </remarks>
-public class ZeroBubbleVSchedule : IPipelineSchedule
+public class ZeroBubbleVSchedule<T> : IPipelineSchedule<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     /// <inheritdoc/>
     public string Name => "ZB-V";
 
@@ -47,6 +51,22 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
 
     /// <inheritdoc/>
     public IReadOnlyList<PipelineOperation> GetSchedule(int stageId, int numStages, int numMicroBatches)
+    {
+        ValidateScheduleParameters(stageId, numStages, numMicroBatches);
+
+        var ops = new List<PipelineOperation>();
+
+        int warmupForwardsPerChunk = Math.Min(numStages - 1 - stageId, numMicroBatches);
+
+        var state = new ScheduleState();
+        EmitWarmup(ops, warmupForwardsPerChunk, numMicroBatches, state);
+        EmitSteadyState(ops, numMicroBatches, state);
+        EmitCooldown(ops, numMicroBatches, state);
+
+        return ops;
+    }
+
+    private static void ValidateScheduleParameters(int stageId, int numStages, int numMicroBatches)
     {
         if (numStages <= 0)
         {
@@ -63,17 +83,6 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
             throw new ArgumentOutOfRangeException(nameof(stageId),
                 $"Stage ID must be between 0 and {numStages - 1}.");
         }
-
-        var ops = new List<PipelineOperation>();
-
-        int warmupForwardsPerChunk = Math.Min(numStages - 1 - stageId, numMicroBatches);
-
-        var state = new ScheduleState();
-        EmitWarmup(ops, warmupForwardsPerChunk, numMicroBatches, state);
-        EmitSteadyState(ops, numMicroBatches, state);
-        EmitCooldown(ops, numMicroBatches, state);
-
-        return ops;
     }
 
     /// <summary>
@@ -262,24 +271,25 @@ public class ZeroBubbleVSchedule : IPipelineSchedule
     }
 
     /// <inheritdoc/>
-    public double EstimateBubbleFraction(int numStages, int numMicroBatches)
+    public T EstimateBubbleFraction(int numStages, int numMicroBatches)
     {
         if (numStages <= 1 || numMicroBatches <= 0)
         {
-            return 0.0;
+            return NumOps.Zero;
         }
 
         // ZB-V achieves zero bubble when numMicroBatches >= numStages
         // Same as ZB-H2 but with 1F1B-equivalent memory
         if (numMicroBatches >= numStages)
         {
-            return 0.0;
+            return NumOps.Zero;
         }
 
         // For insufficient micro-batches, small residual bubble
         // With V=2 virtual stages, the bubble is reduced compared to ZB-H1
-        double p = numStages;
-        double m = numMicroBatches;
-        return (p - m) / (6.0 * m + p);
+        T p = NumOps.FromDouble(numStages);
+        T m = NumOps.FromDouble(numMicroBatches);
+        T six = NumOps.FromDouble(6.0);
+        return NumOps.Divide(NumOps.Subtract(p, m), NumOps.Add(NumOps.Multiply(six, m), p));
     }
 }
