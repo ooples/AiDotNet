@@ -20728,5 +20728,71 @@ public static class LayerHelper<T>
         yield return new BatchNormalizationLayer<T>(embeddingDim);
     }
 
+    /// <summary>
+    /// Creates default layers for the Wav2Small lightweight SER model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultWav2SmallLayers(
+        int numMels = 80, int hiddenDim = 256, int numLayers = 4,
+        int numAttentionHeads = 4, int feedForwardDim = 1024,
+        int featureEncoderDim = 256, int numClasses = 7, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Compact feature encoder
+        yield return new DenseLayer<T>(numMels, featureEncoderDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(featureEncoderDim);
+        yield return new DenseLayer<T>(featureEncoderDim, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Small Transformer encoder
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for the WavLM-SER emotion recognition model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultWavLMSERLayers(
+        int hiddenDim = 768, int numLayers = 12, int numAttentionHeads = 12,
+        int feedForwardDim = 3072, int featureEncoderDim = 512,
+        int numClasses = 7, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Feature encoder
+        yield return new DenseLayer<T>(featureEncoderDim, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // WavLM Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Emotion classification head
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+    }
+
     #endregion
 }
