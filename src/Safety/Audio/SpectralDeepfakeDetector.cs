@@ -37,7 +37,7 @@ namespace AiDotNet.Safety.Audio;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
+internal class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -143,12 +143,7 @@ public class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
                 T val = samples[i];
                 energySum = NumOps.Add(energySum, NumOps.Multiply(val, val));
 
-                bool valNonNeg = NumOps.GreaterThanOrEquals(val, Zero);
-                bool prevNeg = NumOps.LessThan(prevSample, Zero);
-                bool valNeg = NumOps.LessThan(val, Zero);
-                bool prevNonNeg = NumOps.GreaterThanOrEquals(prevSample, Zero);
-
-                if ((valNonNeg && prevNeg) || (valNeg && prevNonNeg))
+                if (IsZeroCrossing(prevSample, val))
                 {
                     zeroCrossings++;
                 }
@@ -429,6 +424,13 @@ public class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         }
 
         return n > 0 ? NumOps.Divide(sumSq, NumOps.FromDouble(n)) : Zero;
+    }
+
+    private static bool IsZeroCrossing(T prev, T current)
+    {
+        bool currentNonNeg = NumOps.GreaterThanOrEquals(current, Zero);
+        bool prevNonNeg = NumOps.GreaterThanOrEquals(prev, Zero);
+        return currentNonNeg != prevNonNeg;
     }
 
     private static T Clamp01(T value)

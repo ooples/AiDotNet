@@ -71,6 +71,11 @@ public class SafetyBenchmarkRunner<T>
 
         foreach (var testCase in testCases)
         {
+            if (string.IsNullOrWhiteSpace(testCase.Text))
+            {
+                continue; // Skip test cases with empty text
+            }
+
             var startTime = DateTime.UtcNow;
 
             var report = _pipeline.EvaluateText(testCase.Text);

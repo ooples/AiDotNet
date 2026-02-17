@@ -1258,7 +1258,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var programSynthesisResult = new AiModelResult<T, TInput, TOutput>(options);
         ProcessKnowledgeGraphOptions(programSynthesisResult);
+        AttachSafetyPipeline(programSynthesisResult);
         return programSynthesisResult;
+    }
+
+    private void AttachSafetyPipeline(AiModelResult<T, TInput, TOutput> result)
+    {
+        if (_safetyPipelineConfig != null)
+        {
+            result.SafetyPipeline = AiDotNet.Safety.SafetyPipelineFactory<T>.Create(_safetyPipelineConfig);
+        }
     }
 
     private void ProcessKnowledgeGraphOptions(AiModelResult<T, TInput, TOutput> result)
@@ -1596,6 +1605,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var nnResult = new AiModelResult<T, TInput, TOutput>(options);
         ProcessKnowledgeGraphOptions(nnResult);
+        AttachSafetyPipeline(nnResult);
         return nnResult;
     }
 
@@ -2698,10 +2708,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         ProcessKnowledgeGraphOptions(finalResult);
 
         // Build and attach the composable safety pipeline if configured
-        if (_safetyPipelineConfig != null)
-        {
-            finalResult.SafetyPipeline = AiDotNet.Safety.SafetyPipelineFactory<T>.Create(_safetyPipelineConfig);
-        }
+        AttachSafetyPipeline(finalResult);
 
         return finalResult;
     }
@@ -2834,6 +2841,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var result = new AiModelResult<T, TInput, TOutput>(metaOptions);
         ProcessKnowledgeGraphOptions(result);
+        AttachSafetyPipeline(result);
 
         return result;
     }
@@ -3155,6 +3163,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var result = new AiModelResult<T, TInput, TOutput>(rlOptions);
         ProcessKnowledgeGraphOptions(result);
+        AttachSafetyPipeline(result);
 
         return result;
     }

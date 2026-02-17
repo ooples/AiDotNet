@@ -49,6 +49,11 @@ public abstract class VideoSafetyModuleBase<T> : IVideoSafetyModule<T>
     /// </remarks>
     public virtual IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
+        if (content is null)
+        {
+            throw new ArgumentNullException(nameof(content));
+        }
+
         var tensor = new Tensor<T>(content.ToArray(), new[] { content.Length });
         var frames = new List<Tensor<T>> { tensor };
         return EvaluateVideo(frames, _defaultFrameRate);

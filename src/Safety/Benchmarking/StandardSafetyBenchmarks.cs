@@ -26,10 +26,7 @@ namespace AiDotNet.Safety.Benchmarking;
 /// </remarks>
 public static class StandardSafetyBenchmarks
 {
-    /// <summary>
-    /// Gets a basic jailbreak detection benchmark with known attack patterns and benign prompts.
-    /// </summary>
-    public static IReadOnlyList<SafetyBenchmarkCase> JailbreakBenchmark => new[]
+    private static readonly SafetyBenchmarkCase[] CachedJailbreakBenchmark =
     {
         // Known attack patterns (expected unsafe)
         new SafetyBenchmarkCase
@@ -79,9 +76,11 @@ public static class StandardSafetyBenchmarks
     };
 
     /// <summary>
-    /// Gets a PII detection benchmark with known PII patterns and clean text.
+    /// Gets a basic jailbreak detection benchmark with known attack patterns and benign prompts.
     /// </summary>
-    public static IReadOnlyList<SafetyBenchmarkCase> PIIBenchmark => new[]
+    public static IReadOnlyList<SafetyBenchmarkCase> JailbreakBenchmark => CachedJailbreakBenchmark;
+
+    private static readonly SafetyBenchmarkCase[] CachedPIIBenchmark =
     {
         // PII present (expected unsafe)
         new SafetyBenchmarkCase
@@ -124,9 +123,11 @@ public static class StandardSafetyBenchmarks
     };
 
     /// <summary>
-    /// Gets a toxicity detection benchmark with toxic and non-toxic content.
+    /// Gets a PII detection benchmark with known PII patterns and clean text.
     /// </summary>
-    public static IReadOnlyList<SafetyBenchmarkCase> ToxicityBenchmark => new[]
+    public static IReadOnlyList<SafetyBenchmarkCase> PIIBenchmark => CachedPIIBenchmark;
+
+    private static readonly SafetyBenchmarkCase[] CachedToxicityBenchmark =
     {
         // Toxic content (expected unsafe)
         new SafetyBenchmarkCase
@@ -162,17 +163,23 @@ public static class StandardSafetyBenchmarks
     };
 
     /// <summary>
+    /// Gets a toxicity detection benchmark with toxic and non-toxic content.
+    /// </summary>
+    public static IReadOnlyList<SafetyBenchmarkCase> ToxicityBenchmark => CachedToxicityBenchmark;
+
+    private static readonly SafetyBenchmarkCase[] CachedFullBenchmark = BuildFullBenchmark();
+
+    /// <summary>
     /// Gets the full standard benchmark combining all categories.
     /// </summary>
-    public static IReadOnlyList<SafetyBenchmarkCase> FullBenchmark
+    public static IReadOnlyList<SafetyBenchmarkCase> FullBenchmark => CachedFullBenchmark;
+
+    private static SafetyBenchmarkCase[] BuildFullBenchmark()
     {
-        get
-        {
-            var all = new List<SafetyBenchmarkCase>();
-            all.AddRange(JailbreakBenchmark);
-            all.AddRange(PIIBenchmark);
-            all.AddRange(ToxicityBenchmark);
-            return all;
-        }
+        var all = new List<SafetyBenchmarkCase>();
+        all.AddRange(CachedJailbreakBenchmark);
+        all.AddRange(CachedPIIBenchmark);
+        all.AddRange(CachedToxicityBenchmark);
+        return all.ToArray();
     }
 }

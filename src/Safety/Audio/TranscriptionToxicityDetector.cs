@@ -122,17 +122,9 @@ public class TranscriptionToxicityDetector<T> : AudioSafetyModuleBase<T>
             if (NumOps.GreaterThan(val, maxVal)) maxVal = val;
             if (NumOps.LessThan(val, minVal)) minVal = val;
 
-            if (i > 0)
+            if (i > 0 && IsZeroCrossing(prevSample, val))
             {
-                bool valNonNeg = NumOps.GreaterThanOrEquals(val, Zero);
-                bool prevNeg = NumOps.LessThan(prevSample, Zero);
-                bool valNeg = NumOps.LessThan(val, Zero);
-                bool prevNonNeg = NumOps.GreaterThanOrEquals(prevSample, Zero);
-
-                if ((valNonNeg && prevNeg) || (valNeg && prevNonNeg))
-                {
-                    zeroCrossings++;
-                }
+                zeroCrossings++;
             }
 
             prevSample = val;
@@ -313,6 +305,13 @@ public class TranscriptionToxicityDetector<T> : AudioSafetyModuleBase<T>
                 NumOps.Multiply(w5, durationConfidence)));
 
         return Clamp01(rawScore);
+    }
+
+    private static bool IsZeroCrossing(T prev, T current)
+    {
+        bool currentNonNeg = NumOps.GreaterThanOrEquals(current, Zero);
+        bool prevNonNeg = NumOps.GreaterThanOrEquals(prev, Zero);
+        return currentNonNeg != prevNonNeg;
     }
 
     private static T Clamp01(T value)

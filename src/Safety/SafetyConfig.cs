@@ -183,6 +183,8 @@ public class TextSafetyConfig
     /// </summary>
     public int? MaxInputLength { get; set; }
 
+    private static readonly string[] DefaultLanguages = new[] { "en" };
+
     // -- Internal defaults --
     internal bool EffectiveToxicityDetection => ToxicityDetection ?? true;
     internal double EffectiveToxicityThreshold => ToxicityThreshold ?? 0.7;
@@ -191,7 +193,7 @@ public class TextSafetyConfig
     internal double EffectiveJailbreakSensitivity => JailbreakSensitivity ?? 0.7;
     internal bool EffectiveHallucinationDetection => HallucinationDetection ?? false;
     internal bool EffectiveCopyrightDetection => CopyrightDetection ?? false;
-    internal string[] EffectiveLanguages => Languages ?? new[] { "en" };
+    internal string[] EffectiveLanguages => Languages ?? DefaultLanguages;
     internal int EffectiveMaxInputLength => MaxInputLength ?? 10000;
 }
 

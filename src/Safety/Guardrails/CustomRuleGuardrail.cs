@@ -96,18 +96,21 @@ public class CustomRuleGuardrail<T> : ITextSafetyModule<T>
                     findings.Add(finding);
                 }
             }
-            catch (Exception ex)
+            catch (InvalidOperationException)
             {
-                // Custom rules should not crash the pipeline
-                findings.Add(new SafetyFinding
-                {
-                    Category = SafetyCategory.PromptInjection,
-                    Severity = SafetySeverity.Low,
-                    Confidence = 0.5,
-                    Description = $"Custom rule '{rule.Name}' threw an exception: {ex.Message}",
-                    RecommendedAction = SafetyAction.Log,
-                    SourceModule = ModuleName
-                });
+                findings.Add(CreateRuleErrorFinding(rule.Name));
+            }
+            catch (ArgumentException)
+            {
+                findings.Add(CreateRuleErrorFinding(rule.Name));
+            }
+            catch (FormatException)
+            {
+                findings.Add(CreateRuleErrorFinding(rule.Name));
+            }
+            catch (TimeoutException)
+            {
+                findings.Add(CreateRuleErrorFinding(rule.Name));
             }
         }
 
@@ -117,7 +120,34 @@ public class CustomRuleGuardrail<T> : ITextSafetyModule<T>
     /// <inheritdoc />
     public IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
-        return Array.Empty<SafetyFinding>();
+        if (content is null)
+        {
+            throw new ArgumentNullException(nameof(content));
+        }
+
+        // Convert vector to string (character codes) and delegate to text evaluation
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var chars = new char[content.Length];
+        for (int i = 0; i < content.Length; i++)
+        {
+            int code = (int)Math.Round(numOps.ToDouble(content[i]));
+            chars[i] = code is >= 0 and <= 65535 ? (char)code : '?';
+        }
+
+        return EvaluateText(new string(chars));
+    }
+
+    private static SafetyFinding CreateRuleErrorFinding(string ruleName)
+    {
+        return new SafetyFinding
+        {
+            Category = SafetyCategory.PromptInjection,
+            Severity = SafetySeverity.Low,
+            Confidence = 0.5,
+            Description = $"Custom rule '{ruleName}' failed during evaluation.",
+            RecommendedAction = SafetyAction.Log,
+            SourceModule = "CustomRuleGuardrail"
+        };
     }
 }
 

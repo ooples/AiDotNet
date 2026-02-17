@@ -24,7 +24,6 @@ namespace AiDotNet.Safety.Video;
 /// <b>Sampling strategy:</b>
 /// - At 1 FPS sampling on a 30 FPS video, only ~3% of frames are analyzed
 /// - Higher sampling rates improve detection but increase processing time
-/// - Key-frame extraction could further optimize (not yet implemented)
 /// </para>
 /// <para>
 /// <b>References:</b>
@@ -79,12 +78,10 @@ public class FrameSamplingVideoModerator<T> : VideoSafetyModuleBase<T>
 
         // Compute sampling interval: how many frames to skip between samples
         int frameInterval = Math.Max(1, (int)(frameRate / _samplingRate));
-        int framesAnalyzed = 0;
 
         for (int i = 0; i < frames.Count; i += frameInterval)
         {
             var frameFindings = _imageClassifier.EvaluateImage(frames[i]);
-            framesAnalyzed++;
 
             foreach (var finding in frameFindings)
             {

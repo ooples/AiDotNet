@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text.RegularExpressions;
 using AiDotNet.Enums;
 using AiDotNet.Safety;
@@ -52,9 +53,11 @@ public class PatternJailbreakDetector<T> : TextSafetyModuleBase<T>
     /// Initializes a new instance of the pattern-based jailbreak detector.
     /// </summary>
     /// <param name="sensitivity">
-    /// Detection sensitivity (0-1). Higher catches more but increases false positives. Default: 0.7.
-    /// At 0.7+, basic patterns are checked. At 0.5+, subtle patterns are also checked.
-    /// At 0.3+, aggressive patterns that may false-positive are included.
+    /// Detection sensitivity (0-1). Higher values include more pattern categories.
+    /// Default: 0.7.
+    /// - All values: high-confidence patterns (direct override, DAN, prompt extraction, etc.)
+    /// - 0.5 and above: medium-confidence patterns (hypothetical framing, multi-turn escalation)
+    /// - 0.3 and above: aggressive patterns (indirect injection) that may false-positive
     /// </param>
     public PatternJailbreakDetector(double sensitivity = 0.7)
     {
@@ -153,7 +156,7 @@ public class PatternJailbreakDetector<T> : TextSafetyModuleBase<T>
             "Fake system message injection"));
 
         // === Medium confidence patterns (sensitivity >= 0.5) ===
-        if (sensitivity <= 0.5)
+        if (sensitivity < 0.5)
         {
             return patterns;
         }
@@ -177,7 +180,7 @@ public class PatternJailbreakDetector<T> : TextSafetyModuleBase<T>
             "Payload splitting attack"));
 
         // === Aggressive patterns (sensitivity >= 0.3) ===
-        if (sensitivity <= 0.3)
+        if (sensitivity < 0.3)
         {
             return patterns;
         }
@@ -242,17 +245,10 @@ public class PatternJailbreakDetector<T> : TextSafetyModuleBase<T>
 
     private static bool ContainsUnicodeTagCharacters(string text)
     {
-        foreach (char c in text)
-        {
-            // Unicode Tags block: U+E0001 to U+E007F (requires surrogate pairs in UTF-16)
-            // Check for characters in the Specials block that are commonly misused
-            if (c >= '\uFFF0' && c <= '\uFFFF')
-            {
-                return true;
-            }
-        }
-
-        // Check for surrogate pairs pointing to tag characters
+        // Only check for Unicode Tags block (U+E0001-U+E007F) used for prompt smuggling.
+        // These are supplementary plane characters requiring surrogate pairs in UTF-16.
+        // Do NOT flag the BMP Specials block (U+FFF0-U+FFFF) which includes legitimate
+        // characters like U+FFFD (replacement character) and U+FEFF (BOM).
         for (int i = 0; i < text.Length - 1; i++)
         {
             if (char.IsHighSurrogate(text[i]) && char.IsLowSurrogate(text[i + 1]))

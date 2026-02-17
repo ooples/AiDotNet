@@ -170,21 +170,27 @@ public class TemporalConsistencyDetector<T> : VideoSafetyModuleBase<T>
     {
         var span1 = frame1.Data.Span;
         var span2 = frame2.Data.Span;
-        int minLength = Math.Min(span1.Length, span2.Length);
 
-        if (minLength == 0)
+        if (span1.Length == 0 || span2.Length == 0)
         {
             return Zero;
         }
 
+        if (span1.Length != span2.Length)
+        {
+            throw new ArgumentException(
+                $"Frame tensors have different sizes ({span1.Length} vs {span2.Length}). " +
+                "All video frames must have the same dimensions.");
+        }
+
         T sumAbsDiff = Zero;
-        for (int i = 0; i < minLength; i++)
+        for (int i = 0; i < span1.Length; i++)
         {
             T diff = NumOps.Subtract(span1[i], span2[i]);
             sumAbsDiff = NumOps.Add(sumAbsDiff, NumOps.Abs(diff));
         }
 
-        return NumOps.Divide(sumAbsDiff, NumOps.FromDouble(minLength));
+        return NumOps.Divide(sumAbsDiff, NumOps.FromDouble(span1.Length));
     }
 
     /// <summary>

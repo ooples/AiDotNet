@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -30,7 +31,7 @@ namespace AiDotNet.Safety.Text;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class ContextAwarePIIDetector<T> : TextSafetyModuleBase<T>
 {
-    private readonly TextSafetyModuleBase<T> _innerDetector;
+    private readonly ITextSafetyModule<T> _innerDetector;
     private readonly int _contextWindow;
 
     // Contexts that suggest a number is NOT a phone number
@@ -56,7 +57,7 @@ public class ContextAwarePIIDetector<T> : TextSafetyModuleBase<T>
     /// </summary>
     /// <param name="innerDetector">The base PII detector to wrap. If null, uses RegexPIIDetector.</param>
     /// <param name="contextWindow">Number of characters to examine around each detection. Default: 50.</param>
-    public ContextAwarePIIDetector(TextSafetyModuleBase<T>? innerDetector = null, int contextWindow = 50)
+    public ContextAwarePIIDetector(ITextSafetyModule<T>? innerDetector = null, int contextWindow = 50)
     {
         _innerDetector = innerDetector ?? new RegexPIIDetector<T>();
         _contextWindow = contextWindow;

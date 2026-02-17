@@ -39,6 +39,11 @@ public abstract class TextSafetyModuleBase<T> : ITextSafetyModule<T>
     /// </remarks>
     public virtual IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
+        if (content is null)
+        {
+            throw new ArgumentNullException(nameof(content));
+        }
+
         // Convert numeric vector to string representation for text analysis.
         // Subclasses that work on embeddings directly should override this.
         var numOps = MathHelper.GetNumericOperations<T>();

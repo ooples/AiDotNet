@@ -35,7 +35,7 @@ public class SafetyViolationException : InvalidOperationException
     /// <param name="report">The safety report with findings.</param>
     /// <param name="isInputViolation">True if the violation was on input, false if on output.</param>
     public SafetyViolationException(SafetyReport report, bool isInputViolation)
-        : base(BuildMessage(report, isInputViolation))
+        : base(BuildMessage(report ?? throw new ArgumentNullException(nameof(report)), isInputViolation))
     {
         Report = report;
         IsInputViolation = isInputViolation;

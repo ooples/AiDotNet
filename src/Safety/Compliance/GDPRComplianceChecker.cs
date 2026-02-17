@@ -78,19 +78,14 @@ public class GDPRComplianceChecker<T> : ITextSafetyModule<T>
             });
         }
 
-        // Check for potential PII in the text itself (basic check)
-        if (!string.IsNullOrEmpty(text) && _config.Text.EffectivePIIDetection)
-        {
-            // The PII detector will handle actual detection.
-            // This module focuses on configuration compliance.
-        }
-
         return findings;
     }
 
     /// <inheritdoc />
     public IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
-        return Array.Empty<SafetyFinding>();
+        // GDPR compliance checks configuration state, not vector content.
+        // Delegate to EvaluateText with empty string to run config checks.
+        return EvaluateText(string.Empty);
     }
 }
