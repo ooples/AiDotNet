@@ -150,7 +150,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     public override ModelOptions GetOptions() => _options;
 
     private MelSpectrogram<T>? _melSpectrogram;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -319,11 +319,10 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         // Load the pre-trained ONNX model containing all BEATs weights
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
 
+        _options.ModelPath = modelPath;
+
         // Set class labels: either user-provided custom labels or the standard AudioSet-527 set
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
-
-        // Optimizer not used in ONNX inference mode but required by base class infrastructure
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
@@ -1086,7 +1085,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
 
         // Update all parameters using AdamW optimizer
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         // Restore inference mode: disables dropout, uses running statistics for batch norm
         SetTrainingMode(false);

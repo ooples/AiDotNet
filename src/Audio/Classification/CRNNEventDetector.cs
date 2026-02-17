@@ -58,7 +58,7 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
     private readonly CRNNEventDetectorOptions _options;
     public override ModelOptions GetOptions() => _options;
     private MelSpectrogram<T>? _melSpectrogram;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -79,9 +79,9 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
         base.NumMels = _options.NumMels;
         _melSpectrogram = new MelSpectrogram<T>(sampleRate: _options.SampleRate, nMels: _options.NumMels,
             nFft: _options.FftSize, hopLength: _options.HopLength, fMin: _options.FMin, fMax: _options.FMax, logMel: true);
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -257,7 +257,7 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
         var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(gradient);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 

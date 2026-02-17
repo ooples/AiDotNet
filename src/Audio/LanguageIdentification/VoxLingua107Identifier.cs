@@ -91,7 +91,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
     private readonly MfccExtractor<T> _mfccExtractor;
     private readonly ILossFunction<T> _lossFunction;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     // ECAPA-TDNN architecture (same as ECAPATDNNLanguageIdentifier)
     private readonly List<ILayer<T>> _tdnnLayers = [];
@@ -178,8 +178,6 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         // Load ONNX model
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
 
-        // Initialize optimizer (not used in ONNX mode but required for readonly field)
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>
@@ -460,7 +458,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape);
 
         BackwardNative(gradientTensor);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }

@@ -63,7 +63,7 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     public override ModelOptions GetOptions() => _options;
 
     private MelSpectrogram<T>? _melSpectrogram;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -99,9 +99,9 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             fMax: _options.FMax,
             logMel: true);
 
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -315,7 +315,7 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gradientTensor = Tensor<T>.FromVector(gradient);
         for (int i = Layers.Count - 1; i >= 0; i--) gradientTensor = Layers[i].Backward(gradientTensor);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 

@@ -57,7 +57,7 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     private readonly PANNsOptions _options;
     public override ModelOptions GetOptions() => _options;
     private MelSpectrogram<T>? _melSpectrogram;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
     public static readonly string[] AudioSetLabels = BEATs<T>.AudioSetLabels;
@@ -72,9 +72,10 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         _options = options ?? new PANNsOptions(); _useNativeMode = false;
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); InitializeLayers();
+        InitializeLayers();
     }
 
     public PANNs(NeuralNetworkArchitecture<T> architecture, PANNsOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
@@ -145,7 +146,7 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true); var output = Predict(input); var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(grad); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer.UpdateParameters(Layers); SetTrainingMode(false);
+        SetTrainingMode(true); var output = Predict(input); var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(grad); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false);
     }
 
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }

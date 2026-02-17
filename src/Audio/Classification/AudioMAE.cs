@@ -46,7 +46,7 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     private readonly AudioMAEOptions _options;
     public override ModelOptions GetOptions() => _options;
     private MelSpectrogram<T>? _melSpectrogram;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
     public static readonly string[] AudioSetLabels = BEATs<T>.AudioSetLabels;
@@ -65,9 +65,9 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -169,7 +169,7 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         SetTrainingMode(true); var output = Predict(input);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers); SetTrainingMode(false);
+        _optimizer?.UpdateParameters(Layers); SetTrainingMode(false);
     }
 
     public override void UpdateParameters(Vector<T> parameters)

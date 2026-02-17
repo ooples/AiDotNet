@@ -64,7 +64,7 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     public override ModelOptions GetOptions() => _options;
 
     private MelSpectrogram<T>? _melSpectrogram;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -136,10 +136,7 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         // Initialize class labels
         ClassLabels = _options.CustomLabels ?? CommonEventLabels;
 
-        // Create feature extractors
-
-        // Optimizer not used in ONNX mode but required by interface
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _options.ModelPath = modelPath;
 
         InitializeLayers();
     }
@@ -571,7 +568,7 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         }
 
         // Update parameters using optimizer
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         // Set inference mode
         SetTrainingMode(false);

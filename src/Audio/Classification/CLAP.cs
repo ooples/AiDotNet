@@ -58,7 +58,7 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     private readonly CLAPOptions _options;
     public override ModelOptions GetOptions() => _options;
     private MelSpectrogram<T>? _melSpectrogram;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
     private string[] _textPrompts;
@@ -89,12 +89,12 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         _melSpectrogram = new MelSpectrogram<T>(
             _options.SampleRate, _options.NumMels, _options.FftSize,
             _options.HopLength, _options.FMin, _options.FMax, logMel: true);
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         if (_options.TextEncoderModelPath is { } tp && !string.IsNullOrEmpty(tp))
             _textEncoder = new OnnxModel<T>(tp, _options.OnnxOptions);
         _textPrompts = _options.TextPrompts ?? Array.Empty<string>();
         ClassLabels = _options.CustomLabels ?? (_textPrompts.Length > 0 ? _textPrompts : AudioSetLabels);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -358,7 +358,7 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--)
             gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
