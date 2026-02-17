@@ -69,6 +69,10 @@ public class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     public PANNs(NeuralNetworkArchitecture<T> architecture, string modelPath, PANNsOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new PANNsOptions(); _useNativeMode = false;
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);

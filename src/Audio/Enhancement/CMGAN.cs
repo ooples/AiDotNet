@@ -142,10 +142,11 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         ThrowIfDisposed();
         var stft = ComputeSTFT(audio);
 
-        // Apply spectral subtraction if noise profile is available
-        if (_noiseProfile is not null && _noiseProfile.Length == stft.Length)
+        // Apply spectral subtraction if noise profile is available (per-bin, handles length differences)
+        if (_noiseProfile is not null)
         {
-            for (int i = 0; i < stft.Length; i++)
+            int len = Math.Min(stft.Length, _noiseProfile.Length);
+            for (int i = 0; i < len; i++)
             {
                 T subtracted = NumOps.Subtract(stft[i], _noiseProfile[i]);
                 stft[i] = NumOps.GreaterThan(subtracted, NumOps.Zero) ? subtracted : NumOps.Zero;
@@ -293,6 +294,8 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int nFft = NextPowerOfTwo(_options.FftSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
             windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
+        _lastPhase = null;
+        _noiseProfile = null;
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

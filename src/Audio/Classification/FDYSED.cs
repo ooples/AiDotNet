@@ -42,9 +42,9 @@ namespace AiDotNet.Audio.Classification;
 ///
 /// <b>Usage:</b>
 /// <code>
-/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 256, outputSize: 527);
-/// var model = new FDYSED&lt;float&gt;(arch, "fdysed.onnx");
-/// var result = model.Detect(audioTensor);
+/// var result = await new AiModelBuilder()
+///     .WithAudioEventDetection(options => options.ModelPath = "fdysed.onnx")
+///     .BuildAsync&lt;float&gt;();
 /// </code>
 /// </para>
 /// </remarks>
@@ -71,6 +71,7 @@ public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         : base(architecture)
     {
         _options = options ?? new FDYSEDOptions();
+        ValidateOptions(_options);
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
@@ -88,6 +89,7 @@ public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         : base(architecture)
     {
         _options = options ?? new FDYSEDOptions();
+        ValidateOptions(_options);
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
@@ -343,6 +345,14 @@ public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     #region Private Helpers
 
+    private static void ValidateOptions(FDYSEDOptions options)
+    {
+        if (options.SampleRate <= 0)
+            throw new ArgumentException("SampleRate must be positive.", nameof(options));
+        if (options.DetectionWindowSize <= 0)
+            throw new ArgumentException("DetectionWindowSize must be positive.", nameof(options));
+    }
+
     private T[] ClassifyWindow(Tensor<T> melSpec)
     {
         Tensor<T> output;
@@ -396,7 +406,8 @@ public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
         int remainingStart = windows.Count > 0 ? lastStart : 0;
         int remainingSamples = audio.Length - remainingStart;
-        if (remainingSamples > windowSamples / 10)
+        const double MinTailWindowFraction = 0.1;
+        if (remainingSamples > windowSamples * MinTailWindowFraction)
         {
             var window = new Tensor<T>([windowSamples]);
             for (int i = 0; i < remainingSamples && i < windowSamples; i++) window[i] = audio[remainingStart + i];
@@ -422,7 +433,8 @@ public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             for (int i = 1; i < sorted.Count; i++)
             {
                 var next = sorted[i];
-                if (next.StartTime <= current.EndTime + 0.1)
+                const double MergeGapSeconds = 0.1;
+                if (next.StartTime <= current.EndTime + MergeGapSeconds)
                 {
                     double cc = NumOps.ToDouble(current.Confidence), nc = NumOps.ToDouble(next.Confidence);
                     current = new AudioEvent<T>

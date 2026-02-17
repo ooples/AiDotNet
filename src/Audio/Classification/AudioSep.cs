@@ -234,7 +234,13 @@ public class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     /// <inheritdoc/>
     public IStreamingEventDetectionSession<T> StartStreamingSession(int sampleRate, T threshold)
-        => new AudioSepStreamingSession(this, sampleRate, threshold);
+    {
+        if (sampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
+        if (sampleRate != _options.SampleRate)
+            throw new ArgumentException($"Sample rate {sampleRate} does not match model's configured sample rate {_options.SampleRate}. Resample audio before streaming.", nameof(sampleRate));
+        return new AudioSepStreamingSession(this, sampleRate, threshold);
+    }
 
     #endregion
 
@@ -320,6 +326,7 @@ public class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         foreach (int ch in _options.EncoderChannels) w.Write(ch);
         w.Write(_options.Threshold); w.Write(_options.DetectionWindowSize);
         w.Write(_options.WindowOverlap); w.Write(_options.DropoutRate);
+        w.Write((int)_options.FMin); w.Write((int)_options.FMax);
         w.Write(ClassLabels.Count);
         foreach (var label in ClassLabels) w.Write(label);
     }
@@ -335,6 +342,7 @@ public class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         for (int i = 0; i < nch; i++) _options.EncoderChannels[i] = r.ReadInt32();
         _options.Threshold = r.ReadDouble(); _options.DetectionWindowSize = r.ReadDouble();
         _options.WindowOverlap = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
+        _options.FMin = r.ReadInt32(); _options.FMax = r.ReadInt32();
         int numLabels = r.ReadInt32(); var labels = new string[numLabels];
         for (int i = 0; i < numLabels; i++) labels[i] = r.ReadString();
         ClassLabels = labels;
@@ -343,7 +351,12 @@ public class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new AudioSep<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new AudioSep<T>(Architecture, mp, _options);
+        return new AudioSep<T>(Architecture, _options);
+    }
 
     #endregion
 

@@ -230,7 +230,13 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
 
     /// <inheritdoc/>
     public IStreamingEventDetectionSession<T> StartStreamingSession(int sampleRate, T threshold)
-        => new CRNNStreamingSession(this, sampleRate, threshold);
+    {
+        if (sampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
+        if (sampleRate != _options.SampleRate)
+            throw new ArgumentException($"Sample rate {sampleRate} does not match model's configured sample rate {_options.SampleRate}. Resample audio before streaming.", nameof(sampleRate));
+        return new CRNNStreamingSession(this, sampleRate, threshold);
+    }
 
     #endregion
 
@@ -314,6 +320,7 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
         w.Write(_options.RNNHiddenSize); w.Write(_options.NumRNNLayers);
         w.Write(_options.Threshold); w.Write(_options.DetectionWindowSize);
         w.Write(_options.WindowOverlap); w.Write(_options.DropoutRate);
+        w.Write((int)_options.FMin); w.Write((int)_options.FMax);
         w.Write(ClassLabels.Count);
         foreach (var label in ClassLabels) w.Write(label);
     }
@@ -328,6 +335,7 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
         _options.RNNHiddenSize = r.ReadInt32(); _options.NumRNNLayers = r.ReadInt32();
         _options.Threshold = r.ReadDouble(); _options.DetectionWindowSize = r.ReadDouble();
         _options.WindowOverlap = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
+        _options.FMin = r.ReadInt32(); _options.FMax = r.ReadInt32();
         int numLabels = r.ReadInt32(); var labels = new string[numLabels];
         for (int i = 0; i < numLabels; i++) labels[i] = r.ReadString();
         ClassLabels = labels;
@@ -336,7 +344,12 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new CRNNEventDetector<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new CRNNEventDetector<T>(Architecture, mp, _options);
+        return new CRNNEventDetector<T>(Architecture, _options);
+    }
 
     #endregion
 

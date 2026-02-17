@@ -147,7 +147,12 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         ASTOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new ASTOptions();
+        _options.ModelPath = modelPath;
         _useNativeMode = false;
 
         base.SampleRate = _options.SampleRate;

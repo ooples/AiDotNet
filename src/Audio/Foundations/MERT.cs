@@ -135,7 +135,12 @@ public class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
     public Tensor<T> ExtractWeightedFeatures(Tensor<T> audio, T[]? layerWeights = null)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode) return ExtractEmbeddings(audio);
+        if (IsOnnxMode)
+        {
+            if (layerWeights is not null)
+                throw new NotSupportedException("Layer weights are not supported in ONNX mode. Use native mode for weighted feature extraction.");
+            return ExtractEmbeddings(audio);
+        }
 
         var layerOutputs = new List<Tensor<T>>();
         var c = audio;
@@ -177,28 +182,41 @@ public class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        var current = input;
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        return current;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+        if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized. Cannot train without an optimizer.");
         SetTrainingMode(true);
         var output = Predict(input);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
+        _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        int idx = 0;
+        foreach (var l in Layers)
+        {
+            int c = l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
     }
 
+    /// <summary>Returns raw audio unchanged; MERT expects raw waveform input and handles internal feature extraction.</summary>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
+
+    /// <summary>Returns output unchanged; no post-processing needed for foundation model embeddings.</summary>
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
     public override ModelMetadata<T> GetModelMetadata()

@@ -70,6 +70,10 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     public EAT(NeuralNetworkArchitecture<T> architecture, string modelPath, EATOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new EATOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;

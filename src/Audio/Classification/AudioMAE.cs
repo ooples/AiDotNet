@@ -61,6 +61,10 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     public AudioMAE(NeuralNetworkArchitecture<T> architecture, string modelPath, AudioMAEOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new AudioMAEOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
@@ -148,7 +152,14 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     }
 
     public IStreamingEventDetectionSession<T> StartStreamingSession() => StartStreamingSession(_options.SampleRate, NumOps.FromDouble(_options.Threshold));
-    public IStreamingEventDetectionSession<T> StartStreamingSession(int sampleRate, T threshold) => new AudioMAEStreamingSession(this, sampleRate, threshold);
+    public IStreamingEventDetectionSession<T> StartStreamingSession(int sampleRate, T threshold)
+    {
+        if (sampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
+        if (sampleRate != _options.SampleRate)
+            throw new ArgumentException($"Sample rate {sampleRate} does not match model's configured sample rate {_options.SampleRate}. Resample audio before streaming.", nameof(sampleRate));
+        return new AudioMAEStreamingSession(this, sampleRate, threshold);
+    }
 
     #endregion
 

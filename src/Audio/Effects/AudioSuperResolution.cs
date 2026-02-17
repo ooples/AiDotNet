@@ -75,6 +75,10 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
     public AudioSuperResolution(NeuralNetworkArchitecture<T> architecture, string modelPath, AudioSuperResolutionOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new AudioSuperResolutionOptions();
         _useNativeMode = false;
         base.SampleRate = _options.OutputSampleRate;

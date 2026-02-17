@@ -273,7 +273,13 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     /// <inheritdoc/>
     public IStreamingEventDetectionSession<T> StartStreamingSession(int sampleRate, T threshold)
-        => new HTSATStreamingSession(this, sampleRate, threshold);
+    {
+        if (sampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
+        if (sampleRate != _options.SampleRate)
+            throw new ArgumentException($"Sample rate {sampleRate} does not match model's configured sample rate {_options.SampleRate}. Resample audio before streaming.", nameof(sampleRate));
+        return new HTSATStreamingSession(this, sampleRate, threshold);
+    }
 
     #endregion
 
@@ -386,6 +392,7 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         writer.Write(_options.PatchSize); writer.Write(_options.Threshold);
         writer.Write(_options.DetectionWindowSize); writer.Write(_options.WindowOverlap);
         writer.Write(_options.DropoutRate);
+        writer.Write((int)_options.FMin); writer.Write((int)_options.FMax);
         writer.Write(ClassLabels.Count);
         foreach (var label in ClassLabels) writer.Write(label);
     }
@@ -402,6 +409,7 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         _options.PatchSize = reader.ReadInt32(); _options.Threshold = reader.ReadDouble();
         _options.DetectionWindowSize = reader.ReadDouble(); _options.WindowOverlap = reader.ReadDouble();
         _options.DropoutRate = reader.ReadDouble();
+        _options.FMin = reader.ReadInt32(); _options.FMax = reader.ReadInt32();
         int numLabels = reader.ReadInt32();
         var labels = new string[numLabels];
         for (int i = 0; i < numLabels; i++) labels[i] = reader.ReadString();
@@ -418,7 +426,11 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new HTSAT<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new HTSAT<T>(Architecture, mp, _options);
+        return new HTSAT<T>(Architecture, _options);
+    }
 
     #endregion
 

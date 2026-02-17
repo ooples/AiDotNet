@@ -279,7 +279,13 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     /// <inheritdoc />
     public IStreamingEventDetectionSession<T> StartStreamingSession(int sr, T thr)
-        => new CLAPStreamingSession(this, sr, thr);
+    {
+        if (sr <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sr), "Sample rate must be positive.");
+        if (sr != _options.SampleRate)
+            throw new ArgumentException($"Sample rate {sr} does not match model's configured sample rate {_options.SampleRate}. Resample audio before streaming.", nameof(sr));
+        return new CLAPStreamingSession(this, sr, thr);
+    }
 
     #endregion
 
@@ -437,6 +443,7 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         w.Write(_options.WindowSize);
         w.Write(_options.WindowOverlap);
         w.Write(_options.DropoutRate);
+        w.Write((int)_options.FMin); w.Write((int)_options.FMax);
         w.Write(ClassLabels.Count);
         foreach (var l in ClassLabels)
             w.Write(l);
@@ -466,6 +473,7 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         _options.WindowSize = r.ReadDouble();
         _options.WindowOverlap = r.ReadDouble();
         _options.DropoutRate = r.ReadDouble();
+        _options.FMin = r.ReadInt32(); _options.FMax = r.ReadInt32();
         int n = r.ReadInt32();
         var labels = new string[n];
         for (int i = 0; i < n; i++) labels[i] = r.ReadString();
@@ -484,7 +492,11 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new CLAP<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new CLAP<T>(Architecture, mp, _options);
+        return new CLAP<T>(Architecture, _options);
+    }
 
     #endregion
 

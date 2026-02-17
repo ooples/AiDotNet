@@ -127,7 +127,11 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     public int NumChannels { get; } = 1;
 
     /// <inheritdoc />
-    public double EnhancementStrength { get; set; } = 1.0;
+    public double EnhancementStrength
+    {
+        get => _options.EnhancementStrength;
+        set => _options.EnhancementStrength = Math.Max(0, Math.Min(1, value));
+    }
 
     /// <inheritdoc />
     public int LatencySamples => _options.FftSize;

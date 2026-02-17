@@ -186,27 +186,38 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         return ComputeValenceFromProbs(GetEmotionProbabilities(audio));
     }
 
+    private static double GetProbValue(IReadOnlyDictionary<string, T> probs, string key, INumericOperations<T> numOps)
+    {
+        // Case-insensitive lookup to handle different label conventions
+        foreach (var kvp in probs)
+        {
+            if (string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase))
+                return numOps.ToDouble(kvp.Value);
+        }
+        return 0.0;
+    }
+
     private T ComputeArousalFromProbs(IReadOnlyDictionary<string, T> probs)
     {
         double arousal = 0;
-        if (probs.TryGetValue("angry", out var angry)) arousal += NumOps.ToDouble(angry) * 0.8;
-        if (probs.TryGetValue("happy", out var happy)) arousal += NumOps.ToDouble(happy) * 0.6;
-        if (probs.TryGetValue("fearful", out var fear)) arousal += NumOps.ToDouble(fear) * 0.5;
-        if (probs.TryGetValue("surprised", out var surprised)) arousal += NumOps.ToDouble(surprised) * 0.7;
-        if (probs.TryGetValue("sad", out var sad)) arousal -= NumOps.ToDouble(sad) * 0.4;
-        if (probs.TryGetValue("neutral", out var neutral)) arousal -= NumOps.ToDouble(neutral) * 0.2;
+        arousal += GetProbValue(probs, "angry", NumOps) * 0.8;
+        arousal += GetProbValue(probs, "happy", NumOps) * 0.6;
+        arousal += GetProbValue(probs, "fearful", NumOps) * 0.5;
+        arousal += GetProbValue(probs, "surprised", NumOps) * 0.7;
+        arousal -= GetProbValue(probs, "sad", NumOps) * 0.4;
+        arousal -= GetProbValue(probs, "neutral", NumOps) * 0.2;
         return NumOps.FromDouble(Math.Max(-1, Math.Min(1, arousal)));
     }
 
     private T ComputeValenceFromProbs(IReadOnlyDictionary<string, T> probs)
     {
         double valence = 0;
-        if (probs.TryGetValue("happy", out var happy)) valence += NumOps.ToDouble(happy) * 0.9;
-        if (probs.TryGetValue("surprised", out var surprised)) valence += NumOps.ToDouble(surprised) * 0.3;
-        if (probs.TryGetValue("angry", out var angry)) valence -= NumOps.ToDouble(angry) * 0.7;
-        if (probs.TryGetValue("sad", out var sad)) valence -= NumOps.ToDouble(sad) * 0.8;
-        if (probs.TryGetValue("fearful", out var fear)) valence -= NumOps.ToDouble(fear) * 0.6;
-        if (probs.TryGetValue("disgusted", out var disgusted)) valence -= NumOps.ToDouble(disgusted) * 0.7;
+        valence += GetProbValue(probs, "happy", NumOps) * 0.9;
+        valence += GetProbValue(probs, "surprised", NumOps) * 0.3;
+        valence -= GetProbValue(probs, "angry", NumOps) * 0.7;
+        valence -= GetProbValue(probs, "sad", NumOps) * 0.8;
+        valence -= GetProbValue(probs, "fearful", NumOps) * 0.6;
+        valence -= GetProbValue(probs, "disgusted", NumOps) * 0.7;
         return NumOps.FromDouble(Math.Max(-1, Math.Min(1, valence)));
     }
 

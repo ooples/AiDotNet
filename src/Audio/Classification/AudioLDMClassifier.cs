@@ -40,7 +40,7 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
 
     private readonly AudioLDMClassifierOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -218,12 +218,13 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+        if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized. Cannot train without an optimizer.");
         SetTrainingMode(true);
         var output = Predict(input);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
+        _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
@@ -252,8 +253,16 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
             result[i] = NumOps.Exp(NumOps.Subtract(o[i], maxVal));
             sum = NumOps.Add(sum, result[i]);
         }
-        for (int i = 0; i < o.Length; i++)
-            result[i] = NumOps.Divide(result[i], sum);
+        if (NumOps.Equals(sum, NumOps.Zero))
+        {
+            T uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(o.Length));
+            for (int i = 0; i < o.Length; i++) result[i] = uniform;
+        }
+        else
+        {
+            for (int i = 0; i < o.Length; i++)
+                result[i] = NumOps.Divide(result[i], sum);
+        }
         return result;
     }
 
@@ -295,6 +304,8 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
         ClassLabels = labels;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
+        else if (_useNativeMode)
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
@@ -402,6 +413,8 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
 
         public AudioLDMClassifierStreamingSession(AudioLDMClassifier<T> model, int sampleRate, T threshold)
         {
+            if (sampleRate <= 0)
+                throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
             _model = model; _sampleRate = sampleRate; _threshold = threshold;
             _windowSamples = (int)(_model._options.DetectionWindowSize * sampleRate);
         }

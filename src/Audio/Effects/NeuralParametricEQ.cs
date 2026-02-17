@@ -238,8 +238,9 @@ public class NeuralParametricEQ<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
                 double freqNorm = NumOps.ToDouble(eqParams[offset]);
                 double gainNorm = NumOps.ToDouble(eqParams[offset + 1]);
                 double qNorm = NumOps.ToDouble(eqParams[offset + 2]);
-                // Map normalized outputs to EQ parameter ranges
-                double freq = 20.0 * Math.Pow(1000.0, Math.Max(0, Math.Min(1, (freqNorm + 1) / 2.0)));
+                // Map normalized outputs to EQ parameter ranges, clamped to Nyquist
+                double nyquist = Math.Max(20.0, _options.SampleRate * 0.5);
+                double freq = Math.Min(20.0 * Math.Pow(1000.0, Math.Max(0, Math.Min(1, (freqNorm + 1) / 2.0))), nyquist * 0.95);
                 double gainDb = gainNorm * 12.0 * strength; // +/- 12 dB range scaled by strength
                 double q = 0.1 + Math.Abs(qNorm) * 10.0; // Q range: 0.1 to ~10
                 bands[b] = (freq, gainDb, q);

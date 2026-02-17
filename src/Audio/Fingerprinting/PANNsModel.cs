@@ -859,6 +859,10 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             _convBlocks = CreateConvBlocks(_architectureType, _numMelBands);
         }
+
+        // Rehydrate optimizer for native training mode
+        if (!IsOnnxMode && _optimizer is null)
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     private void WriteArray(BinaryWriter writer, T[] array)

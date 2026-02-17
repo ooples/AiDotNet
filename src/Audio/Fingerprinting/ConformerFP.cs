@@ -65,6 +65,10 @@ public class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public ConformerFP(NeuralNetworkArchitecture<T> architecture, string modelPath, ConformerFPOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new ConformerFPOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
@@ -157,6 +161,8 @@ public class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public IReadOnlyList<FingerprintMatch> FindMatches(AudioFingerprint<T> query, AudioFingerprint<T> reference, int minMatchLength = 10)
     {
         ThrowIfDisposed();
+        if (minMatchLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(minMatchLength), "Minimum match length must be positive.");
         var matches = new List<FingerprintMatch>();
         int embDim = _options.EmbeddingDim;
         int queryFrames = query.Data.Length / Math.Max(1, embDim);

@@ -114,6 +114,16 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(noisyAudio);
+        // Apply spectral subtraction if noise profile is available
+        if (_noiseProfile is not null)
+        {
+            int len = Math.Min(features.Length, _noiseProfile.Length);
+            for (int i = 0; i < len; i++)
+            {
+                double val = NumOps.ToDouble(features[i]) - NumOps.ToDouble(_noiseProfile[i]) * 0.5;
+                features[i] = NumOps.FromDouble(Math.Max(0, val));
+            }
+        }
         var enhanced = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
         var result = PostprocessOutput(enhanced);
         if (EnhancementStrength < 1.0)
@@ -165,7 +175,10 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        var current = input;
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        return current;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)

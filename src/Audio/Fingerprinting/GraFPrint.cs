@@ -35,7 +35,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// </code>
 /// </para>
 /// </remarks>
-public class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
+internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     #region Fields
 
@@ -66,6 +66,10 @@ public class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public GraFPrint(NeuralNetworkArchitecture<T> architecture, string modelPath, GraFPrintOptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new GraFPrintOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;

@@ -112,6 +112,16 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(noisyAudio);
+        // Apply spectral subtraction if noise profile is available
+        if (_noiseProfile is not null)
+        {
+            int len = Math.Min(features.Length, _noiseProfile.Length);
+            for (int i = 0; i < len; i++)
+            {
+                double val = NumOps.ToDouble(features[i]) - NumOps.ToDouble(_noiseProfile[i]) * 0.5;
+                features[i] = NumOps.FromDouble(Math.Max(0, val));
+            }
+        }
         var enhanced = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
         return PostprocessOutput(enhanced);
     }
