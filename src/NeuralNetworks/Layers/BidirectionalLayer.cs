@@ -420,12 +420,17 @@ public class BidirectionalLayer<T> : LayerBase<T>
             }
             else
             {
-                throw new ArgumentException($"BidirectionalLayer backward expects 2D or 3D gradient, got {shape.Length}D.");
+                // Higher rank: flatten leading dimensions into batch
+                batchSize = 1;
+                for (int d = 0; d < shape.Length - 2; d++)
+                    batchSize *= shape[d];
+                timeSteps = shape[shape.Length - 2];
+                features = shape[shape.Length - 1];
             }
         }
         else
         {
-            // Non-merge mode has an extra dimension [2, batch, timeSteps, features]
+            // Non-merge mode has an extra dimension [2, ...batch, timeSteps, features]
             if (shape.Length == 3)
             {
                 batchSize = 1;
@@ -440,7 +445,12 @@ public class BidirectionalLayer<T> : LayerBase<T>
             }
             else
             {
-                throw new ArgumentException($"BidirectionalLayer non-merge backward expects 3D or 4D gradient, got {shape.Length}D.");
+                // Higher rank: flatten leading dims (after dim[0]=2) into batch
+                batchSize = 1;
+                for (int d = 1; d < shape.Length - 2; d++)
+                    batchSize *= shape[d];
+                timeSteps = shape[shape.Length - 2];
+                features = shape[shape.Length - 1];
             }
         }
 

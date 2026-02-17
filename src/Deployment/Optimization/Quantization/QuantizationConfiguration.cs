@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.Deployment.Optimization.Quantization;
 
@@ -327,7 +328,7 @@ public class QuantizationConfiguration
     /// <item><description>Layer-Sensitive Quantization (2025): Layer sensitivity metrics for mixed-precision</description></item>
     /// </list>
     /// </remarks>
-    public Dictionary<AiDotNet.Interfaces.LayerCategory, int>? CategoryBitWidths { get; set; }
+    public Dictionary<LayerCategory, int>? CategoryBitWidths { get; set; }
 
     /// <summary>
     /// Creates a configuration for INT8 quantization.
@@ -552,14 +553,23 @@ public class QuantizationConfiguration
             return layerParams.BitWidth.Value;
         }
 
-        // Skip layers get full precision
+        // Skip layers get the highest precision available for the current mode.
         if (SkipLayers.Contains(layerInfo.Name))
         {
-            return 32;
+            return GetFullPrecisionBitWidth();
         }
 
         // Category-based override
         return GetBitWidthForCategory(layerInfo.Category);
+    }
+
+    /// <summary>
+    /// Returns the full-precision bit width for the current quantization mode.
+    /// Float16 mode uses 16-bit; all other modes use 32-bit.
+    /// </summary>
+    private int GetFullPrecisionBitWidth()
+    {
+        return Mode == QuantizationMode.Float16 ? 16 : 32;
     }
 
     /// <summary>

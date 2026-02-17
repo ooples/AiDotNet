@@ -66,7 +66,7 @@ public class FederatedLearningOptions : ModelOptions
     /// <b>For Beginners:</b> If this is null, the trainer uses uniform random sampling with
     /// <see cref="ClientSelectionFraction"/>.
     /// </remarks>
-    public ClientSelectionOptions? ClientSelection { get; set; } = null;
+    public ClientSelectionOptions? ClientSelection { get; set; } = new();
 
     /// <summary>
     /// Gets or sets the number of local training epochs each client performs per round.
@@ -249,7 +249,7 @@ public class FederatedLearningOptions : ModelOptions
     /// a dropout-resilient protocol mode and tune its thresholds. If this is null, industry-standard defaults
     /// are used based on your selected mode.
     /// </remarks>
-    public SecureAggregationOptions? SecureAggregation { get; set; } = null;
+    public SecureAggregationOptions? SecureAggregation { get; set; } = new();
 
     /// <summary>
     /// Gets or sets the convergence threshold for early stopping.
@@ -299,7 +299,7 @@ public class FederatedLearningOptions : ModelOptions
     /// <b>For Beginners:</b> Most users can ignore this unless they select a robust aggregation strategy.
     /// If not provided, industry-standard defaults are used.
     /// </remarks>
-    public RobustAggregationOptions? RobustAggregation { get; set; } = null;
+    public RobustAggregationOptions? RobustAggregation { get; set; } = new();
 
     /// <summary>
     /// Gets or sets server-side federated optimization options (FedOpt family).
@@ -308,7 +308,7 @@ public class FederatedLearningOptions : ModelOptions
     /// <b>For Beginners:</b> FedOpt applies an optimizer step on the server after aggregation.
     /// If this is null or set to <see cref="FederatedServerOptimizer.None"/>, the server uses the aggregated parameters directly (FedAvg-style).
     /// </remarks>
-    public FederatedServerOptimizerOptions? ServerOptimizer { get; set; } = null;
+    public FederatedServerOptimizerOptions? ServerOptimizer { get; set; } = new();
 
     /// <summary>
     /// Gets or sets asynchronous federated learning options (FedAsync / FedBuff).
@@ -317,7 +317,7 @@ public class FederatedLearningOptions : ModelOptions
     /// <b>For Beginners:</b> Async FL can reduce waiting on slow clients by applying updates as they arrive
     /// (FedAsync) or in small buffers (FedBuff). If not set or set to <see cref="FederatedAsyncMode.None"/>, training is synchronous.
     /// </remarks>
-    public AsyncFederatedLearningOptions? AsyncFederatedLearning { get; set; } = null;
+    public AsyncFederatedLearningOptions? AsyncFederatedLearning { get; set; } = new();
 
     /// <summary>
     /// Gets or sets federated heterogeneity correction options (SCAFFOLD / FedNova / FedDyn).
@@ -326,7 +326,7 @@ public class FederatedLearningOptions : ModelOptions
     /// <b>For Beginners:</b> These methods help reduce client drift on non-IID data by transforming
     /// client updates before aggregation. If not set or set to <see cref="FederatedHeterogeneityCorrection.None"/>, no correction is applied.
     /// </remarks>
-    public FederatedHeterogeneityCorrectionOptions? HeterogeneityCorrection { get; set; } = null;
+    public FederatedHeterogeneityCorrectionOptions? HeterogeneityCorrection { get; set; } = new();
 
     /// <summary>
     /// Gets or sets homomorphic encryption options for federated aggregation (CKKS/BFV).
@@ -334,7 +334,7 @@ public class FederatedLearningOptions : ModelOptions
     /// <remarks>
     /// <b>For Beginners:</b> If enabled, the server aggregates encrypted updates without seeing individual updates in plaintext.
     /// </remarks>
-    public HomomorphicEncryptionOptions? HomomorphicEncryption { get; set; } = null;
+    public HomomorphicEncryptionOptions? HomomorphicEncryption { get; set; } = new();
 
     /// <summary>
     /// Gets or sets the proximal term coefficient for FedProx algorithm.
@@ -397,7 +397,7 @@ public class FederatedLearningOptions : ModelOptions
     /// <b>For Beginners:</b> If this is set, it overrides the legacy
     /// <see cref="EnablePersonalization"/> / <see cref="PersonalizationLayerFraction"/> settings.
     /// </remarks>
-    public FederatedPersonalizationOptions? Personalization { get; set; } = null;
+    public FederatedPersonalizationOptions? Personalization { get; set; } = new();
 
     /// <summary>
     /// Gets or sets federated meta-learning options (Per-FedAvg / FedMAML / Reptile-style).
@@ -406,7 +406,7 @@ public class FederatedLearningOptions : ModelOptions
     /// <b>For Beginners:</b> Federated meta-learning learns a global initialization that adapts quickly to each client.
     /// If set and enabled, the trainer uses a meta-update rule instead of standard FedAvg-style aggregation.
     /// </remarks>
-    public FederatedMetaLearningOptions? MetaLearning { get; set; } = null;
+    public FederatedMetaLearningOptions? MetaLearning { get; set; } = new();
 
     /// <summary>
     /// Gets or sets whether to use gradient compression to reduce communication costs.
@@ -433,7 +433,7 @@ public class FederatedLearningOptions : ModelOptions
     /// <b>For Beginners:</b> This is the preferred way to configure compression. If null,
     /// the legacy <see cref="UseCompression"/> / <see cref="CompressionRatio"/> properties are used.
     /// </remarks>
-    public FederatedCompressionOptions? Compression { get; set; } = null;
+    public FederatedCompressionOptions? Compression { get; set; } = new();
 
     /// <summary>
     /// Gets or sets the compression ratio (0.0 to 1.0) if compression is enabled.
@@ -450,6 +450,80 @@ public class FederatedLearningOptions : ModelOptions
     public double CompressionRatio { get; set; } = 0.1;
 
     /// <summary>
+    /// Gets or sets Trusted Execution Environment options for hardware-backed secure aggregation.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When set, the federated learning server performs aggregation inside a
+    /// hardware-protected enclave (Intel SGX/TDX, AMD SEV-SNP, ARM CCA). Clients can verify the
+    /// enclave via remote attestation before sending their updates. This is 10-100x faster than
+    /// homomorphic encryption while providing hardware-level isolation.</para>
+    ///
+    /// <para>Set to null (default) to use standard in-memory aggregation without TEE.</para>
+    /// </remarks>
+    public TeeOptions? TrustedExecutionEnvironment { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets federated graph learning options.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When set, the FL system handles graph-structured data where each client
+    /// holds a subgraph of a larger graph. Includes cross-client edge discovery (PSI), pseudo-node
+    /// strategies for missing neighbors, and graph-aware aggregation weighting.</para>
+    ///
+    /// <para>Set to null (default) for standard non-graph federated learning.</para>
+    /// </remarks>
+    public FederatedGraphOptions? GraphLearning { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets federated unlearning options (right to be forgotten).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When a client exercises their GDPR right to be forgotten, the system
+    /// must remove their contribution from the trained model. These options configure how unlearning
+    /// is performed, including method selection (exact retraining, gradient ascent, influence functions,
+    /// or diffusive noise) and verification parameters.</para>
+    ///
+    /// <para>Set to null (default) if unlearning is not needed.</para>
+    /// </remarks>
+    public FederatedUnlearningOptions? Unlearning { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets fairness constraint options for equitable model performance across client groups.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When set, the FL system enforces fairness constraints to prevent
+    /// the global model from favoring majority client groups at the expense of underrepresented ones.
+    /// Supports demographic parity, equalized odds, equal opportunity, and minimax fairness.</para>
+    ///
+    /// <para>Set to null (default) for standard aggregation without fairness constraints.</para>
+    /// </remarks>
+    public FederatedFairnessOptions? Fairness { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets client contribution evaluation options for measuring each client's value.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When set, the system evaluates how much each client contributed
+    /// to the global model using Shapley values, Data Shapley, or prototypical representations.
+    /// This enables free-rider detection, fair compensation, and quality monitoring.</para>
+    ///
+    /// <para>Set to null (default) to skip contribution evaluation.</para>
+    /// </remarks>
+    public ContributionEvaluationOptions? ContributionEvaluation { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets federated concept drift detection and adaptation options.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> In production FL, client data distributions change over time
+    /// (seasonal patterns, evolving fraud, shifting user behavior). Drift detection monitors
+    /// each client's training behavior and adapts aggregation when changes are detected.</para>
+    ///
+    /// <para>Set to null (default) to disable drift detection.</para>
+    /// </remarks>
+    public FederatedDriftOptions? DriftDetection { get; set; } = new();
+
+    /// <summary>
     /// Gets or sets a random seed for reproducibility.
     /// </summary>
     /// <remarks>
@@ -464,4 +538,151 @@ public class FederatedLearningOptions : ModelOptions
     /// Set to null for truly random behavior.
     /// </remarks>
     public int? RandomSeed { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the federated learning mode (horizontal or vertical).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Choose the paradigm that matches how data is distributed:</para>
+    /// <list type="bullet">
+    /// <item><description><b>Horizontal (default):</b> Each client has the same features for different samples
+    /// (e.g., multiple hospitals with patient records sharing the same columns).</description></item>
+    /// <item><description><b>Vertical:</b> Each client has different features for the same entities
+    /// (e.g., a bank has income data, a hospital has medical data for the same people).
+    /// When set to Vertical, you must also configure <see cref="VerticalLearning"/>.</description></item>
+    /// </list>
+    /// </remarks>
+    public FederatedLearningMode Mode { get; set; } = FederatedLearningMode.Horizontal;
+
+    /// <summary>
+    /// Gets or sets vertical federated learning options (split learning, entity alignment, etc.).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Only used when <see cref="Mode"/> is set to
+    /// <see cref="FederatedLearningMode.Vertical"/>. Configures the split neural network,
+    /// entity alignment via PSI, missing feature handling, and label privacy protection.</para>
+    ///
+    /// <para>Set to null (default) when using horizontal federated learning.</para>
+    /// </remarks>
+    public VerticalFederatedLearningOptions? VerticalLearning { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets Private Set Intersection options for entity alignment.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> PSI allows parties to discover which entities they share
+    /// without revealing non-shared data. This is the mandatory first step for vertical FL
+    /// and can also be used in graph FL for cross-client edge discovery.</para>
+    ///
+    /// <para>Supports multiple protocols: Diffie-Hellman, Oblivious Transfer, Bloom Filter,
+    /// Circuit-Based, Fuzzy Matching, and Multi-Party PSI.</para>
+    ///
+    /// <para>Set to null (default) if PSI is not needed (e.g., pure horizontal FL with known clients).</para>
+    /// </remarks>
+    public PsiOptions? PrivateSetIntersection { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets Multi-Party Computation options for secure operations beyond summation.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Standard secure aggregation only computes sums privately. MPC
+    /// enables arbitrary secure computations including comparisons, clipping, top-k selection,
+    /// and gradient transformations using secret sharing and garbled circuits.</para>
+    ///
+    /// <para>Use MPC when you need secure gradient clipping, median aggregation,
+    /// or Krum/Bulyan distance computation on encrypted data.</para>
+    ///
+    /// <para>Set to null (default) for standard plaintext or basic secure aggregation.</para>
+    /// </remarks>
+    public MpcOptions? MultiPartyComputation { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets verification options for zero-knowledge proof-based update validation.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Verification allows the server to cryptographically verify
+    /// that client updates are well-formed (e.g., gradients are within declared bounds, local
+    /// training was performed correctly) without clients revealing their private data.</para>
+    ///
+    /// <para>Complements Byzantine-robust aggregators (Krum, Bulyan) which detect statistical
+    /// anomalies. ZK proofs provide cryptographic guarantees of computational correctness.</para>
+    ///
+    /// <para>Set to null (default) to skip verification.</para>
+    /// </remarks>
+    public VerificationOptions? Verification { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets advanced communication compression options (PowerSGD, sketching, error feedback).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Advanced compression techniques go beyond basic TopK/RandomK
+    /// sparsification. PowerSGD uses low-rank approximation, gradient sketching uses Count Sketch,
+    /// error feedback accumulates compression errors across rounds, and adaptive compression
+    /// adjusts ratios per client based on bandwidth.</para>
+    ///
+    /// <para>These methods can achieve 100-1000x compression while maintaining convergence.
+    /// Set to null (default) to use basic compression via <see cref="Compression"/>.</para>
+    /// </remarks>
+    public AdvancedCompressionOptions? AdvancedCompression { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets federated knowledge distillation options (FedMD, FedDF, FedGEN).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Knowledge distillation enables model-heterogeneous FL where different
+    /// clients can use different model architectures. Instead of sharing model parameters directly,
+    /// clients share soft predictions (logits) and learn from each other's knowledge.</para>
+    ///
+    /// <para>Set to null (default) for standard parameter aggregation.</para>
+    /// </remarks>
+    public FederatedDistillationOptions? Distillation { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets federated adapter options for parameter-efficient fine-tuning (LoRA, prompt tuning).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When fine-tuning large foundation models in FL, sending full model
+    /// parameters is prohibitively expensive. Adapters only train and communicate a tiny fraction
+    /// (&lt;1%) of parameters, making federated LLM fine-tuning practical.</para>
+    ///
+    /// <para>Set to null (default) for standard full-model aggregation.</para>
+    /// </remarks>
+    public FederatedAdapterOptions? Adapters { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets decentralized (serverless) federated learning options.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Standard FL uses a central server. Decentralized FL removes
+    /// the server — nodes communicate directly using gossip or ring topologies. This eliminates
+    /// single points of failure and can be more robust for edge/IoT deployments.</para>
+    ///
+    /// <para>Set to null (default) for standard server-based FL.</para>
+    /// </remarks>
+    public DecentralizedFederatedOptions? Decentralized { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets federated continual learning options for preventing catastrophic forgetting.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When the FL system learns new tasks over time, it can forget
+    /// previously learned knowledge. Federated continual learning strategies (EWC, orthogonal
+    /// projection) identify and protect important model parameters across training rounds.</para>
+    ///
+    /// <para>Set to null (default) to disable continual learning protection.</para>
+    /// </remarks>
+    public FederatedContinualLearningOptions? ContinualLearning { get; set; } = new();
+
+    /// <summary>
+    /// Gets or sets backdoor attack detection and defense options.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Backdoor attacks are stealthy — the model works correctly on clean
+    /// data but misbehaves when a trigger pattern is present. These detectors (Neural Cleanse,
+    /// Direction Alignment Inspector) analyze client updates for signs of backdoor injection
+    /// and filter suspicious updates before aggregation.</para>
+    ///
+    /// <para>Set to null (default) to skip backdoor detection.</para>
+    /// </remarks>
+    public BackdoorDefenseOptions? BackdoorDefense { get; set; } = new();
 }

@@ -597,20 +597,40 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        return _noisePredictor.GetParameters();
+        var noisePredParams = _noisePredictor.GetParameters();
+        var vaeParams = _vae.GetParameters();
+        int totalLength = noisePredParams.Length + vaeParams.Length;
+        var combined = new Vector<T>(totalLength);
+        for (int i = 0; i < noisePredParams.Length; i++)
+            combined[i] = noisePredParams[i];
+        for (int i = 0; i < vaeParams.Length; i++)
+            combined[noisePredParams.Length + i] = vaeParams[i];
+        return combined;
     }
 
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != _noisePredictor.ParameterCount)
+        int expectedCount = _noisePredictor.ParameterCount + _vae.ParameterCount;
+        if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(
-                $"Expected {_noisePredictor.ParameterCount} parameters, got {parameters.Length}.",
+                $"Expected {expectedCount} parameters (noise predictor: {_noisePredictor.ParameterCount}, " +
+                $"VAE: {_vae.ParameterCount}), got {parameters.Length}.",
                 nameof(parameters));
         }
 
-        _noisePredictor.SetParameters(parameters);
+        int npCount = _noisePredictor.ParameterCount;
+        var noisePredParams = new Vector<T>(npCount);
+        for (int i = 0; i < npCount; i++)
+            noisePredParams[i] = parameters[i];
+        _noisePredictor.SetParameters(noisePredParams);
+
+        int vaeCount = _vae.ParameterCount;
+        var vaeParams = new Vector<T>(vaeCount);
+        for (int i = 0; i < vaeCount; i++)
+            vaeParams[i] = parameters[npCount + i];
+        _vae.SetParameters(vaeParams);
     }
 
     #endregion

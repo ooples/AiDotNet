@@ -371,6 +371,64 @@ public class FederatedLearningMetadata
     public int SecureAggregationReconstructionThresholdUsed { get; set; }
 
     /// <summary>
+    /// Gets or sets the cumulative contribution scores across all rounds.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> An aggregate measure of how much each client contributed to the
+    /// global model across all training rounds. Higher scores indicate more valuable contributions.
+    /// Key: client ID, Value: cumulative contribution score.
+    ///
+    /// For example:
+    /// - Client 1: 4.2 (consistently valuable contributor)
+    /// - Client 2: 0.8 (minimal contributions)
+    /// - Client 3: -0.1 (possible free-rider or harmful updates)
+    /// </remarks>
+    public Dictionary<int, double> CumulativeContributionScores { get; set; } = new Dictionary<int, double>();
+
+    /// <summary>
+    /// Gets or sets the IDs of clients identified as free-riders.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Free-riders are clients that benefit from the global model without
+    /// contributing meaningful updates. They may submit random, zero, or stale updates.
+    /// </remarks>
+    public List<int> IdentifiedFreeRiders { get; set; } = new List<int>();
+
+    /// <summary>
+    /// Gets or sets whether fairness constraints were applied during training.
+    /// </summary>
+    public bool FairnessConstraintsEnabled { get; set; }
+
+    /// <summary>
+    /// Gets or sets the fairness constraint type used.
+    /// </summary>
+    public string FairnessConstraintUsed { get; set; } = "None";
+
+    /// <summary>
+    /// Gets or sets the number of rounds in which global drift was detected.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Counts how many rounds experienced significant data distribution changes.
+    /// High numbers suggest the data environment is unstable and adaptive strategies are beneficial.
+    /// </remarks>
+    public int DriftDetectedRounds { get; set; }
+
+    /// <summary>
+    /// Gets or sets the drift detection method used.
+    /// </summary>
+    public string DriftDetectionMethodUsed { get; set; } = "None";
+
+    /// <summary>
+    /// Gets or sets whether federated unlearning was performed.
+    /// </summary>
+    public bool UnlearningPerformed { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of unlearning requests processed.
+    /// </summary>
+    public int UnlearningRequestsProcessed { get; set; }
+
+    /// <summary>
     /// Gets or sets additional notes or observations about the training run.
     /// </summary>
     /// <remarks>

@@ -176,6 +176,7 @@ public class PoolingLayer<T> : LayerBase<T>
     /// Tracks whether a batch dimension was added during forward pass.
     /// </summary>
     private bool _addedBatchDimension;
+    private int[]? _originalInputShape;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PoolingLayer{T}"/> class with the specified dimensions and pooling parameters.
@@ -279,28 +280,32 @@ public class PoolingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        _originalInputShape = input.Shape;
 
-        // === GPU-Accelerated Pooling ===
-        // Phase B: US-GPU-016 - Replace 4 nested loops with IEngine pooling operations
-        // Achieves 20-100x speedup on GPU for large feature maps
+        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
+        if (input.Shape.Length < 3)
+            throw new ArgumentException($"Pooling layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
-        // Handle any-rank input: convert to 4D [batch, channels, height, width]
+        int rank = input.Shape.Length;
         Tensor<T> input4D;
-        if (input.Shape.Length == 3)
+        if (rank == 3)
         {
-            // 3D [C, H, W] -> 4D [1, C, H, W]
             _addedBatchDimension = true;
             input4D = input.Reshape(1, input.Shape[0], input.Shape[1], input.Shape[2]);
         }
-        else if (input.Shape.Length == 4)
+        else if (rank == 4)
         {
-            // Already 4D [B, C, H, W]
             _addedBatchDimension = false;
             input4D = input;
         }
         else
         {
-            throw new ArgumentException($"PoolingLayer requires 3D [C,H,W] or 4D [B,C,H,W] input, got {input.Shape.Length}D");
+            // Higher rank: flatten leading dimensions into batch
+            _addedBatchDimension = false;
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= input.Shape[d];
+            input4D = input.Reshape(flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]);
         }
 
         Tensor<T> output;
@@ -309,14 +314,10 @@ public class PoolingLayer<T> : LayerBase<T>
 
         if (Type == PoolingType.Max)
         {
-            // Use GPU-accelerated MaxPool2DWithIndices
-            // This provides both the pooled output and the indices for backpropagation
-            // in a single optimized kernel call
             output = Engine.MaxPool2DWithIndices(input4D, poolSizeArr, strideArr, out _maxIndices);
         }
         else if (Type == PoolingType.Average)
         {
-            // Use GPU-accelerated AvgPool2D
             output = Engine.AvgPool2D(input4D, poolSizeArr, strideArr);
             _maxIndices = null;
         }
@@ -325,7 +326,17 @@ public class PoolingLayer<T> : LayerBase<T>
             throw new InvalidOperationException($"Unsupported pooling type: {Type}");
         }
 
-        // Return with matching dimensions (3D if batch was added)
+        // Return with matching dimensions to preserve original tensor rank
+        if (_originalInputShape.Length > 4)
+        {
+            var outputShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 3; d++)
+                outputShape[d] = _originalInputShape[d];
+            outputShape[_originalInputShape.Length - 3] = output.Shape[1];
+            outputShape[_originalInputShape.Length - 2] = output.Shape[2];
+            outputShape[_originalInputShape.Length - 1] = output.Shape[3];
+            return output.Reshape(outputShape);
+        }
         if (_addedBatchDimension)
         {
             return output.Reshape(output.Shape[1], output.Shape[2], output.Shape[3]);
@@ -384,15 +395,36 @@ public class PoolingLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        // Handle any-rank gradient: convert to 4D for Engine operations
-        Tensor<T> outGrad4D = (outputGradient.Shape.Length == 3 && _addedBatchDimension)
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2])
-            : outputGradient;
+        // Flatten gradient to 4D the same way forward flattened input
+        int rank = outputGradient.Shape.Length;
+        Tensor<T> outGrad4D;
+        int[] inputShape4D;
 
-        // Determine input shape for backward (needs to be 4D)
-        int[] inputShape4D = _lastInput.Shape.Length == 3
-            ? new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] }
-            : _lastInput.Shape;
+        if (rank == 3)
+        {
+            outGrad4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
+            inputShape4D = new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] };
+        }
+        else if (rank == 4)
+        {
+            outGrad4D = outputGradient;
+            inputShape4D = _lastInput.Shape.Length == 3
+                ? new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2] }
+                : _lastInput.Shape;
+        }
+        else
+        {
+            // Higher rank: flatten leading dimensions into batch
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 3; d++)
+                flatBatch *= outputGradient.Shape[d];
+            outGrad4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1]);
+
+            int inputFlatBatch = 1;
+            for (int d = 0; d < _lastInput.Shape.Length - 3; d++)
+                inputFlatBatch *= _lastInput.Shape[d];
+            inputShape4D = new[] { inputFlatBatch, _lastInput.Shape[_lastInput.Shape.Length - 3], _lastInput.Shape[_lastInput.Shape.Length - 2], _lastInput.Shape[_lastInput.Shape.Length - 1] };
+        }
 
         var poolSizeArr = new[] { PoolSize, PoolSize };
         var strideArr = new[] { Stride, Stride };
@@ -406,8 +438,8 @@ public class PoolingLayer<T> : LayerBase<T>
             _ => throw new InvalidOperationException($"Unsupported pooling type: {Type}")
         };
 
-        // Return with matching dimensions (3D if batch was added)
-        return _addedBatchDimension ? inputGrad.Reshape(_lastInput.Shape) : inputGrad;
+        // Restore to original input shape
+        return inputGrad.Reshape(_lastInput.Shape);
     }
 
     /// <summary>

@@ -213,31 +213,15 @@ public class EdgeOptimizer<T, TInput, TOutput>
 
     private int DeterminePartitionPoint(IFullModel<T, TInput, TOutput> model)
     {
-        // Analyze model and determine optimal partition point
-        // Based on:
-        // - Layer computational cost
-        // - Data transfer cost
-        // - Edge device capabilities
-
-        return _config.PartitionStrategy switch
-        {
-            PartitionStrategy.EarlyLayers => 3, // First 3 layers on edge
-            PartitionStrategy.LateLayers => 10, // Most layers on edge
-            PartitionStrategy.Adaptive => CalculateAdaptivePartitionPoint(model),
-            _ => 5 // Default: middle partition
-        };
-    }
-
-    private int CalculateAdaptivePartitionPoint(IFullModel<T, TInput, TOutput> model)
-    {
         if (model is not ILayeredModel<T> layeredModel)
         {
-            // Graceful fallback: models without layer metadata get a reasonable default
-            // partition (middle) rather than crashing at runtime.
+            // Models without layer metadata cannot be meaningfully partitioned.
+            // Return 0 so the entire model runs on one side rather than creating
+            // an invalid split with unknown layer boundaries.
             System.Diagnostics.Debug.WriteLine(
-                $"[EdgeOptimizer] Model type {model.GetType().Name} does not implement ILayeredModel<T>. " +
-                "Falling back to default mid-point partition for adaptive strategy.");
-            return 5;
+                $"[EdgeOptimizer] Warning: Model type {model.GetType().Name} does not implement ILayeredModel<T>. " +
+                "Cannot determine partition point without layer information. Defaulting to partition point 0 (no split).");
+            return 0;
         }
 
         if (layeredModel.LayerCount <= 1)
@@ -245,7 +229,45 @@ public class EdgeOptimizer<T, TInput, TOutput>
             return 0;
         }
 
-        return CalculateLoadBalancedPartitionPoint(layeredModel);
+        return _config.PartitionStrategy switch
+        {
+            PartitionStrategy.EarlyLayers => CalculateProportionalPartitionPoint(layeredModel, 0.25),
+            PartitionStrategy.LateLayers => CalculateProportionalPartitionPoint(layeredModel, 0.75),
+            PartitionStrategy.Adaptive => CalculateLoadBalancedPartitionPoint(layeredModel),
+            _ => CalculateLoadBalancedPartitionPoint(layeredModel)
+        };
+    }
+
+    /// <summary>
+    /// Calculates a partition point at a fixed proportion of the model's layers.
+    /// </summary>
+    /// <param name="layeredModel">The model with layer information.</param>
+    /// <param name="proportion">Fraction of layers to assign to the edge (0.0 to 1.0).</param>
+    /// <returns>The layer index at which to partition.</returns>
+    private int CalculateProportionalPartitionPoint(ILayeredModel<T> layeredModel, double proportion)
+    {
+        int targetLayer = Math.Max(1, (int)(layeredModel.LayerCount * proportion));
+        targetLayer = Math.Min(targetLayer, layeredModel.LayerCount - 1);
+
+        // Find the closest structurally valid partition point
+        var allLayerInfo = layeredModel.GetAllLayerInfo();
+        int bestPartition = targetLayer;
+        int bestDistance = int.MaxValue;
+
+        for (int i = 0; i < allLayerInfo.Count - 1; i++)
+        {
+            if (layeredModel.ValidatePartitionPoint(i))
+            {
+                int distance = Math.Abs(i + 1 - targetLayer);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestPartition = i + 1;
+                }
+            }
+        }
+
+        return bestPartition;
     }
 
     /// <summary>
@@ -268,6 +290,16 @@ public class EdgeOptimizer<T, TInput, TOutput>
             totalFlops += allLayerInfo[i].EstimatedFlops;
         }
 
+        // Pre-compute structurally valid partition points to avoid repeated validation calls
+        var validPartitionPoints = new HashSet<int>();
+        for (int i = 0; i < allLayerInfo.Count - 1; i++)
+        {
+            if (layeredModel.ValidatePartitionPoint(i))
+            {
+                validPartitionPoints.Add(i);
+            }
+        }
+
         // Find the layer boundary where cumulative FLOPs are closest to half
         long halfFlops = totalFlops / 2;
         long cumulative = 0;
@@ -278,8 +310,7 @@ public class EdgeOptimizer<T, TInput, TOutput>
         {
             cumulative += allLayerInfo[i].EstimatedFlops;
 
-            // Validate the partition point is structurally valid
-            if (!layeredModel.ValidatePartitionPoint(i))
+            if (!validPartitionPoints.Contains(i))
             {
                 continue;
             }

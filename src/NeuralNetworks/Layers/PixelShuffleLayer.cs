@@ -311,9 +311,13 @@ public class PixelShuffleLayer<T> : LayerBase<T>
         int r = _upscaleFactor;
         int r2 = r * r;
 
-        // Handle different input ranks
+        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
+        if (shape.Length < 3)
+            throw new ArgumentException($"PixelShuffle requires at least 3D tensor [C, H, W]. Got rank {shape.Length}.");
+
         int batch, channels, height, width;
         bool added3DBatch = false;
+        var originalShape = shape;
 
         if (shape.Length == 4)
         {
@@ -333,13 +337,20 @@ public class PixelShuffleLayer<T> : LayerBase<T>
         }
         else
         {
-            throw new ArgumentException($"PixelShuffle requires 3D or 4D input, got {shape.Length}D.");
+            // Higher rank: flatten leading dimensions into batch
+            batch = 1;
+            for (int d = 0; d < shape.Length - 3; d++)
+                batch *= shape[d];
+            channels = shape[shape.Length - 3];
+            height = shape[shape.Length - 2];
+            width = shape[shape.Length - 1];
+            input = gpuEngine.ReshapeGpu(input, new[] { batch, channels, height, width });
         }
 
         // Cache for backward pass
         if (IsTrainingMode)
         {
-            _gpuCachedInputShape = (int[])shape.Clone();
+            _gpuCachedInputShape = (int[])originalShape.Clone();
             _gpuAdded3DBatch = added3DBatch;
         }
 
@@ -356,8 +367,18 @@ public class PixelShuffleLayer<T> : LayerBase<T>
         int outWidth = width * r;
         var result = gpuEngine.ReshapeGpu(permuted, new[] { batch, outChannels, outHeight, outWidth });
 
-        // Remove batch dimension if we added it
-        if (added3DBatch)
+        // Restore original tensor rank
+        if (originalShape.Length > 4)
+        {
+            var restoreShape = new int[originalShape.Length];
+            for (int d = 0; d < originalShape.Length - 3; d++)
+                restoreShape[d] = originalShape[d];
+            restoreShape[originalShape.Length - 3] = outChannels;
+            restoreShape[originalShape.Length - 2] = outHeight;
+            restoreShape[originalShape.Length - 1] = outWidth;
+            result = gpuEngine.ReshapeGpu(result, restoreShape);
+        }
+        else if (added3DBatch)
         {
             result = gpuEngine.ReshapeGpu(result, new[] { outChannels, outHeight, outWidth });
         }
