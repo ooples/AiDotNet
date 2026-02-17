@@ -164,3 +164,33 @@ public enum Florence2ModelSize
     /// <summary>Florence-2 Large (0.77B parameters).</summary>
     Large
 }
+
+/// <summary>
+/// Specifies how vision and language features are fused in a VLM.
+/// </summary>
+public enum FusionType
+{
+    /// <summary>Single stream: visual and text tokens concatenated in one transformer.</summary>
+    SingleStream,
+    /// <summary>Dual stream: separate encoders with cross-attention bridges.</summary>
+    DualStream,
+    /// <summary>Co-attention: parallel streams with co-attention layers.</summary>
+    CoAttention,
+    /// <summary>Cross-modal encoder: dedicated cross-modal transformer layers.</summary>
+    CrossModal,
+    /// <summary>Bridge layers: explicit bridge connections between encoders.</summary>
+    BridgeLayers
+}
+
+/// <summary>
+/// Specifies the visual feature extraction method for foundational VLMs.
+/// </summary>
+public enum VisualFeatureType
+{
+    /// <summary>Object-level features from a detection model (e.g., Faster R-CNN).</summary>
+    RegionFeatures,
+    /// <summary>Raw image patches linearly embedded (e.g., ViLT, ViT-based).</summary>
+    PatchEmbeddings,
+    /// <summary>Grid features from a CNN backbone.</summary>
+    GridFeatures
+}

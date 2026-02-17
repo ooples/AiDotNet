@@ -22693,5 +22693,281 @@ public static class LayerHelper<T>
         }
     }
 
+    /// <summary>
+    /// Creates default layers for dual-stream vision-language fusion models (ViLBERT, METER).
+    /// Separate vision and text transformer encoders connected by co-attention fusion layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDualStreamFusionLayers(
+        int visionDim = 1024,
+        int textDim = 768,
+        int fusionDim = 1024,
+        int numVisionLayers = 6,
+        int numTextLayers = 12,
+        int numFusionLayers = 6,
+        int numHeads = 12,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionDim * 4;
+        int textFfnDim = textDim * 4;
+        int fusionFfnDim = fusionDim * 4;
+
+        // === Vision Stream (transformer encoder) ===
+        yield return new LayerNormalizationLayer<T>(visionDim);
+
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Vision projection to fusion dim
+        if (visionDim != fusionDim)
+            yield return new DenseLayer<T>(visionDim, fusionDim, identityActivation);
+
+        // === Text Stream (transformer encoder) ===
+        yield return new LayerNormalizationLayer<T>(textDim);
+
+        for (int i = 0; i < numTextLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(textDim, textDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(textDim);
+            yield return new DenseLayer<T>(textDim, textFfnDim, geluActivation);
+            yield return new DenseLayer<T>(textFfnDim, textDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Text projection to fusion dim
+        if (textDim != fusionDim)
+            yield return new DenseLayer<T>(textDim, fusionDim, identityActivation);
+
+        // === Co-Attention Fusion Layers ===
+        for (int i = 0; i < numFusionLayers; i++)
+        {
+            // Vision-to-text cross-attention
+            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            // Text-to-vision cross-attention
+            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            // Feed-forward
+            yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for single-stream vision-language fusion models (VisualBERT, UNITER, Oscar, VinVL, ViLT).
+    /// Vision features are projected and concatenated with text tokens, then processed by a single transformer.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSingleStreamFusionLayers(
+        int visionDim = 2048,
+        int textDim = 768,
+        int fusionDim = 768,
+        int numFusionLayers = 12,
+        int numHeads = 12,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int fusionFfnDim = fusionDim * 4;
+
+        // === Vision Feature Projection ===
+        // Project vision features (region/patch) to fusion dimension
+        if (visionDim != fusionDim)
+        {
+            yield return new DenseLayer<T>(visionDim, fusionDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+        }
+
+        // === Text Embedding Projection ===
+        if (textDim != fusionDim)
+        {
+            yield return new DenseLayer<T>(textDim, fusionDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+        }
+
+        // === Joint Transformer Encoder (BERT-style) ===
+        yield return new LayerNormalizationLayer<T>(fusionDim);
+
+        for (int i = 0; i < numFusionLayers; i++)
+        {
+            // Multi-head self-attention over concatenated vision+text tokens
+            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            // Feed-forward network
+            yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for cross-modal fusion models (LXMERT).
+    /// Three encoder types: object relationship, language, and cross-modality with bidirectional cross-attention.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCrossModalFusionLayers(
+        int visionDim = 2048,
+        int textDim = 768,
+        int fusionDim = 768,
+        int numRelationshipLayers = 5,
+        int numTextLayers = 9,
+        int numCrossModalLayers = 5,
+        int numHeads = 12,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int fusionFfnDim = fusionDim * 4;
+
+        // === Vision Feature Projection ===
+        if (visionDim != fusionDim)
+        {
+            yield return new DenseLayer<T>(visionDim, fusionDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+        }
+
+        // === Object Relationship Encoder (vision self-attention) ===
+        yield return new LayerNormalizationLayer<T>(fusionDim);
+
+        for (int i = 0; i < numRelationshipLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Language Encoder (text self-attention) ===
+        // Text projection
+        if (textDim != fusionDim)
+        {
+            yield return new DenseLayer<T>(textDim, fusionDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+        }
+
+        for (int i = 0; i < numTextLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // === Cross-Modality Encoder (bidirectional cross-attention) ===
+        for (int i = 0; i < numCrossModalLayers; i++)
+        {
+            // Language-to-vision cross-attention
+            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            // Vision-to-language cross-attention
+            yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            // Feed-forward for fused representation
+            yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(fusionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for BridgeTower with bridge connections between vision and text encoder layers.
+    /// Vision and text are encoded in parallel with cross-attention bridge layers at multiple levels.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBridgeFusionLayers(
+        int visionDim = 768,
+        int textDim = 768,
+        int fusionDim = 768,
+        int numVisionLayers = 12,
+        int numTextLayers = 12,
+        int numBridgeLayers = 6,
+        int numHeads = 12,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionDim * 4;
+        int textFfnDim = textDim * 4;
+        int fusionFfnDim = fusionDim * 4;
+
+        // === Vision Encoder with Bridge Points ===
+        yield return new LayerNormalizationLayer<T>(visionDim);
+
+        // Determine at which vision layers bridges connect (evenly spaced)
+        int bridgeInterval = numVisionLayers > numBridgeLayers ? numVisionLayers / numBridgeLayers : 1;
+
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            // Vision self-attention block
+            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new DenseLayer<T>(visionDim, visionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(visionFfnDim, visionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            // Bridge cross-attention at designated layers
+            if (bridgeInterval > 0 && (i + 1) % bridgeInterval == 0 && i < numVisionLayers - 1)
+            {
+                // Cross-attention bridge: vision attends to text
+                yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+                yield return new LayerNormalizationLayer<T>(visionDim);
+            }
+        }
+
+        // Vision projection to fusion dim
+        if (visionDim != fusionDim)
+            yield return new DenseLayer<T>(visionDim, fusionDim, identityActivation);
+
+        // === Text Encoder with Bridge Points ===
+        yield return new LayerNormalizationLayer<T>(textDim);
+
+        int textBridgeInterval = numTextLayers > numBridgeLayers ? numTextLayers / numBridgeLayers : 1;
+
+        for (int i = 0; i < numTextLayers; i++)
+        {
+            // Text self-attention block
+            yield return new MultiHeadAttentionLayer<T>(textDim, textDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(textDim);
+            yield return new DenseLayer<T>(textDim, textFfnDim, geluActivation);
+            yield return new DenseLayer<T>(textFfnDim, textDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            // Bridge cross-attention at designated layers
+            if (textBridgeInterval > 0 && (i + 1) % textBridgeInterval == 0 && i < numTextLayers - 1)
+            {
+                // Cross-attention bridge: text attends to vision
+                yield return new MultiHeadAttentionLayer<T>(textDim, textDim, numHeads);
+                yield return new LayerNormalizationLayer<T>(textDim);
+            }
+        }
+
+        // Text projection to fusion dim
+        if (textDim != fusionDim)
+            yield return new DenseLayer<T>(textDim, fusionDim, identityActivation);
+
+        // === Final Cross-Modal Fusion ===
+        yield return new MultiHeadAttentionLayer<T>(fusionDim, fusionDim, numHeads);
+        yield return new LayerNormalizationLayer<T>(fusionDim);
+        yield return new DenseLayer<T>(fusionDim, fusionFfnDim, geluActivation);
+        yield return new DenseLayer<T>(fusionFfnDim, fusionDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(fusionDim);
+    }
+
     #endregion
 }
