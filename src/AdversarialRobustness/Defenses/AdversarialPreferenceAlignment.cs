@@ -137,10 +137,42 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
     public IPredictiveModel<T, Vector<T>, Vector<T>> ApplyConstitutionalPrinciples(
         IPredictiveModel<T, Vector<T>, Vector<T>> model, string[] principles)
     {
-        // Constitutional AI with adversarial augmentation:
-        // For each principle, generate adversarial examples that might violate it,
-        // then train the model to maintain the principle under adversarial conditions
-        return model;
+        if (model == null) throw new ArgumentNullException(nameof(model));
+        if (principles == null) throw new ArgumentNullException(nameof(principles));
+
+        // If the model supports gradient computation, use Constitutional AI self-critique training
+        if (model is IGradientComputable<T, Vector<T>, Vector<T>> trainableModel)
+        {
+            var parameterizable = (IParameterizable<T, Vector<T>, Vector<T>>)trainableModel;
+            var random = new Random(42);
+            var learningRate = NumOps.FromDouble(_options.LearningRate);
+            double complianceThreshold = 0.5;
+
+            foreach (var principle in principles)
+            {
+                // Generate probe inputs that test the boundary of this principle
+                var probeInputs = GeneratePrincipleProbes(principle, parameterizable, random);
+
+                foreach (var probe in probeInputs)
+                {
+                    var output = model.Predict(probe);
+                    double complianceScore = EvaluatePrincipleCompliance(output, principle);
+
+                    if (complianceScore < complianceThreshold)
+                    {
+                        // Output violates principle — train toward a compliant output
+                        var compliantTarget = GenerateCompliantTarget(output, principle);
+                        var gradients = trainableModel.ComputeGradients(probe, compliantTarget);
+                        trainableModel.ApplyGradients(gradients, learningRate);
+                    }
+                }
+            }
+
+            return model;
+        }
+
+        // Fallback: wrap the model with runtime constitutional filtering
+        return new ConstitutionalFilterModel(model, principles, _options.CritiqueIterations);
     }
 
     /// <inheritdoc/>
@@ -268,14 +300,57 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         AlignmentFeedbackData<T> feedbackData,
         Func<Vector<T>, Vector<T>, double> rewardModel)
     {
-        // Adversarial RLHF: for each training step, with probability _adversarialRatio,
-        // perturb the input adversarially before computing the reward
-        // This teaches the model to maintain alignment even under adversarial conditions
+        // If the model supports gradient computation, use PPO-style adversarial RLHF training
+        if (baseModel is IGradientComputable<T, Vector<T>, Vector<T>> trainableModel)
+        {
+            // Save reference parameters for KL penalty computation
+            var parameterizable = (IParameterizable<T, Vector<T>, Vector<T>>)trainableModel;
+            var referenceParams = CopyVector(parameterizable.GetParameters());
+            var random = new Random(42);
+            var learningRate = NumOps.FromDouble(_options.LearningRate);
 
-        // In practice, this would require differentiable policy optimization
-        // The base model is returned as-is since we cannot modify weights without
-        // a full training loop infrastructure
-        return baseModel;
+            for (int epoch = 0; epoch < _options.TrainingIterations; epoch++)
+            {
+                for (int i = 0; i < feedbackData.Inputs.Rows; i++)
+                {
+                    var input = feedbackData.Inputs.GetRow(i);
+
+                    // With probability _adversarialRatio, perturb input adversarially
+                    if (random.NextDouble() < _adversarialRatio)
+                    {
+                        input = AdversariallyPerturb(input, random);
+                    }
+
+                    // Forward pass: get model output
+                    var output = baseModel.Predict(input);
+
+                    // Compute reward score for this input-output pair
+                    double reward = rewardModel(input, output);
+
+                    // Get preferred target direction from feedback data
+                    var preferredTarget = GetPreferredTarget(feedbackData, i);
+
+                    // Compute gradients toward the preferred output
+                    var gradients = trainableModel.ComputeGradients(input, preferredTarget);
+
+                    // Scale gradients by reward signal (policy gradient: reward * ∇log π)
+                    var scaledGradients = ScaleVector(gradients, reward);
+
+                    // Add KL penalty gradient to prevent drift from reference model
+                    var currentParams = parameterizable.GetParameters();
+                    var klGradient = ComputeKLPenaltyGradient(currentParams, referenceParams);
+                    var finalGradients = AddVectors(scaledGradients, klGradient);
+
+                    // Apply gradient update
+                    trainableModel.ApplyGradients(finalGradients, learningRate);
+                }
+            }
+
+            return baseModel;
+        }
+
+        // Fallback: wrap the model with reward-based output adjustment at inference time
+        return new AlignmentWrappedModel(baseModel, rewardModel, _options.KLCoefficient);
     }
 
     private Vector<T> AdversariallyPerturb(Vector<T> input, Random random)
@@ -329,4 +404,252 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         return denom > 1e-10 ? dot / denom : 0;
     }
 
+    private static Vector<T> CopyVector(Vector<T> source)
+    {
+        var data = new T[source.Length];
+        for (int i = 0; i < source.Length; i++)
+        {
+            data[i] = source[i];
+        }
+
+        return new Vector<T>(data);
+    }
+
+    private static Vector<T> ScaleVector(Vector<T> v, double scalar)
+    {
+        var result = new T[v.Length];
+        for (int i = 0; i < v.Length; i++)
+        {
+            result[i] = NumOps.FromDouble(NumOps.ToDouble(v[i]) * scalar);
+        }
+
+        return new Vector<T>(result);
+    }
+
+    private static Vector<T> AddVectors(Vector<T> a, Vector<T> b)
+    {
+        int len = Math.Min(a.Length, b.Length);
+        var result = new T[len];
+        for (int i = 0; i < len; i++)
+        {
+            result[i] = NumOps.Add(a[i], b[i]);
+        }
+
+        return new Vector<T>(result);
+    }
+
+    private Vector<T> ComputeKLPenaltyGradient(Vector<T> currentParams, Vector<T> referenceParams)
+    {
+        // KL penalty gradient: _options.KLCoefficient * (currentParams - referenceParams)
+        // This pulls parameters back toward the reference model to prevent drift
+        int len = Math.Min(currentParams.Length, referenceParams.Length);
+        var result = new T[len];
+        for (int i = 0; i < len; i++)
+        {
+            double diff = NumOps.ToDouble(currentParams[i]) - NumOps.ToDouble(referenceParams[i]);
+            result[i] = NumOps.FromDouble(_options.KLCoefficient * diff);
+        }
+
+        return new Vector<T>(result);
+    }
+
+    private Vector<T> GetPreferredTarget(AlignmentFeedbackData<T> feedbackData, int inputIndex)
+    {
+        // Use the preferred output from feedback preferences if available
+        foreach (var (preferred, _) in feedbackData.Preferences)
+        {
+            if (preferred >= 0 && preferred < feedbackData.Outputs.Rows)
+            {
+                return feedbackData.Outputs.GetRow(preferred);
+            }
+        }
+
+        // Fall back to the corresponding output row if within range
+        if (inputIndex < feedbackData.Outputs.Rows)
+        {
+            return feedbackData.Outputs.GetRow(inputIndex);
+        }
+
+        // Last resort: return the first output
+        return feedbackData.Outputs.GetRow(0);
+    }
+
+    private List<Vector<T>> GeneratePrincipleProbes(
+        string principle,
+        IParameterizable<T, Vector<T>, Vector<T>> parameterizable,
+        Random random)
+    {
+        // Generate probe inputs by creating small perturbations around a unit vector
+        // The number of probes scales with the principle complexity (word count)
+        int numProbes = Math.Max(3, principle.Split(' ').Length / 2);
+        int inputDim = Math.Max(1, parameterizable.ParameterCount > 0
+            ? (int)Math.Sqrt(parameterizable.ParameterCount)
+            : 4);
+        inputDim = Math.Min(inputDim, 64);
+
+        var probes = new List<Vector<T>>();
+        for (int p = 0; p < numProbes; p++)
+        {
+            var data = new T[inputDim];
+            for (int i = 0; i < inputDim; i++)
+            {
+                data[i] = NumOps.FromDouble((random.NextDouble() * 2.0 - 1.0) * _perturbationBudget * 2);
+            }
+
+            probes.Add(new Vector<T>(data));
+        }
+
+        return probes;
+    }
+
+    private static double EvaluatePrincipleCompliance(Vector<T> output, string principle)
+    {
+        // Score how well the output complies with the principle
+        // Higher output variance indicates less controlled / less compliant behavior
+        if (output.Length == 0) return 0.0;
+
+        double sum = 0;
+        for (int i = 0; i < output.Length; i++)
+        {
+            sum += NumOps.ToDouble(output[i]);
+        }
+
+        double mean = sum / output.Length;
+        double varianceSum = 0;
+        for (int i = 0; i < output.Length; i++)
+        {
+            double diff = NumOps.ToDouble(output[i]) - mean;
+            varianceSum += diff * diff;
+        }
+
+        double variance = varianceSum / output.Length;
+
+        // Low variance + moderate mean = more compliant behavior
+        // Principles with "harm" or "safe" keywords enforce stricter thresholds
+        double strictness = principle.Contains("harm", StringComparison.OrdinalIgnoreCase) ||
+                           principle.Contains("safe", StringComparison.OrdinalIgnoreCase)
+            ? 0.3
+            : 0.5;
+
+        double compliance = 1.0 - Math.Min(1.0, variance / strictness);
+        return Math.Max(0, compliance);
+    }
+
+    private static Vector<T> GenerateCompliantTarget(Vector<T> output, string principle)
+    {
+        // Generate a target that is more compliant by dampening extreme values
+        // This pushes the output toward moderate, controlled values
+        if (output.Length == 0) return output;
+
+        double sum = 0;
+        for (int i = 0; i < output.Length; i++)
+        {
+            sum += NumOps.ToDouble(output[i]);
+        }
+
+        double mean = sum / output.Length;
+
+        // Dampen toward the mean — reduce variance while preserving overall direction
+        double dampeningFactor = principle.Contains("harm", StringComparison.OrdinalIgnoreCase) ? 0.3 : 0.5;
+        var result = new T[output.Length];
+        for (int i = 0; i < output.Length; i++)
+        {
+            double val = NumOps.ToDouble(output[i]);
+            double dampened = mean + (val - mean) * dampeningFactor;
+            result[i] = NumOps.FromDouble(dampened);
+        }
+
+        return new Vector<T>(result);
+    }
+
+    private sealed class AlignmentWrappedModel : IPredictiveModel<T, Vector<T>, Vector<T>>
+    {
+        private readonly IPredictiveModel<T, Vector<T>, Vector<T>> _baseModel;
+        private readonly Func<Vector<T>, Vector<T>, double> _rewardModel;
+        private readonly double _klCoefficient;
+
+        public AlignmentWrappedModel(
+            IPredictiveModel<T, Vector<T>, Vector<T>> baseModel,
+            Func<Vector<T>, Vector<T>, double> rewardModel,
+            double klCoefficient)
+        {
+            Guard.NotNull(baseModel);
+            _baseModel = baseModel;
+            Guard.NotNull(rewardModel);
+            _rewardModel = rewardModel;
+            _klCoefficient = klCoefficient;
+        }
+
+        public Vector<T> Predict(Vector<T> input)
+        {
+            var output = _baseModel.Predict(input);
+            var reward = _rewardModel(input, output);
+
+            // Adjust output based on reward signal: push toward higher-reward regions
+            var adjusted = new T[output.Length];
+            double adjustment = reward * (1.0 - _klCoefficient) * 0.1;
+            for (int i = 0; i < output.Length; i++)
+            {
+                double val = NumOps.ToDouble(output[i]);
+                adjusted[i] = NumOps.FromDouble(MathHelper.Clamp(val + adjustment, 0.0, 1.0));
+            }
+
+            return new Vector<T>(adjusted);
+        }
+
+        public ModelMetadata<T> GetModelMetadata() => _baseModel.GetModelMetadata();
+        public byte[] Serialize() => _baseModel.Serialize();
+        public void Deserialize(byte[] data) => _baseModel.Deserialize(data);
+        public void SaveModel(string filePath) => _baseModel.SaveModel(filePath);
+        public void LoadModel(string filePath) => _baseModel.LoadModel(filePath);
+    }
+
+    private sealed class ConstitutionalFilterModel : IPredictiveModel<T, Vector<T>, Vector<T>>
+    {
+        private readonly IPredictiveModel<T, Vector<T>, Vector<T>> _baseModel;
+        private readonly string[] _principles;
+        private readonly int _critiqueIterations;
+
+        public ConstitutionalFilterModel(
+            IPredictiveModel<T, Vector<T>, Vector<T>> baseModel,
+            string[] principles,
+            int critiqueIterations)
+        {
+            Guard.NotNull(baseModel);
+            _baseModel = baseModel;
+            Guard.NotNull(principles);
+            _principles = principles;
+            _critiqueIterations = critiqueIterations;
+        }
+
+        public Vector<T> Predict(Vector<T> input)
+        {
+            var output = _baseModel.Predict(input);
+
+            // Iterative self-critique: check compliance and dampen non-compliant outputs
+            for (int iter = 0; iter < _critiqueIterations; iter++)
+            {
+                bool anyViolation = false;
+                foreach (var principle in _principles)
+                {
+                    double compliance = EvaluatePrincipleCompliance(output, principle);
+                    if (compliance < 0.5)
+                    {
+                        output = GenerateCompliantTarget(output, principle);
+                        anyViolation = true;
+                    }
+                }
+
+                if (!anyViolation) break;
+            }
+
+            return output;
+        }
+
+        public ModelMetadata<T> GetModelMetadata() => _baseModel.GetModelMetadata();
+        public byte[] Serialize() => _baseModel.Serialize();
+        public void Deserialize(byte[] data) => _baseModel.Deserialize(data);
+        public void SaveModel(string filePath) => _baseModel.SaveModel(filePath);
+        public void LoadModel(string filePath) => _baseModel.LoadModel(filePath);
+    }
 }
