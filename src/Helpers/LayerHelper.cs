@@ -20654,5 +20654,79 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, numFreqBins * numStems, identityActivation);
     }
 
+    /// <summary>
+    /// Creates default layers for the WavLM Speaker verification model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultWavLMSpeakerLayers(
+        int hiddenDim = 768, int numLayers = 12, int numAttentionHeads = 12,
+        int feedForwardDim = 3072, int featureEncoderDim = 512,
+        int embeddingDim = 256, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Feature encoder: CNN layers for raw waveform
+        yield return new DenseLayer<T>(featureEncoderDim, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, (IActivationFunction<T>)new IdentityActivation<T>());
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Speaker embedding head: statistics pooling + projection
+        yield return new DenseLayer<T>(hiddenDim * 2, embeddingDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(embeddingDim);
+    }
+
+    /// <summary>
+    /// Creates default layers for the CAM++ speaker verification model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCAMPlusPlusLayers(
+        int numMels = 80, int initialChannels = 512, int growthRate = 64,
+        int numBlocks = 6, int bottleneckDim = 128, int maskingDim = 256,
+        int poolingDim = 1536, int embeddingDim = 192, double dropoutRate = 0.0)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Input projection
+        yield return new DenseLayer<T>(numMels, initialChannels, reluActivation);
+        yield return new BatchNormalizationLayer<T>(initialChannels);
+
+        // D-TDNN blocks with dense connections
+        int currentDim = initialChannels;
+        for (int i = 0; i < numBlocks; i++)
+        {
+            // Bottleneck
+            yield return new DenseLayer<T>(currentDim, bottleneckDim, reluActivation);
+            yield return new BatchNormalizationLayer<T>(bottleneckDim);
+
+            // TDNN layer
+            yield return new DenseLayer<T>(bottleneckDim, growthRate, reluActivation);
+            yield return new BatchNormalizationLayer<T>(growthRate);
+
+            currentDim += growthRate;
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Context-aware masking
+        yield return new DenseLayer<T>(currentDim, maskingDim, reluActivation);
+        yield return new DenseLayer<T>(maskingDim, currentDim, identityActivation);
+
+        // Pooling and embedding projection
+        yield return new DenseLayer<T>(currentDim * 2, poolingDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(poolingDim);
+        yield return new DenseLayer<T>(poolingDim, embeddingDim, identityActivation);
+        yield return new BatchNormalizationLayer<T>(embeddingDim);
+    }
+
     #endregion
 }
