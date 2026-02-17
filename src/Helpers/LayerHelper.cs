@@ -20795,4 +20795,202 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region MIR Batch 18
+
+    /// <summary>
+    /// Creates layers for MT3 multi-track music transcription (Gardner et al., 2022).
+    /// T5-style encoder-decoder: spectrogram encoder + autoregressive MIDI token decoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMT3Layers(
+        int numMels = 512, int encoderDim = 512, int numEncoderLayers = 8,
+        int decoderDim = 512, int numDecoderLayers = 8, int numAttentionHeads = 8,
+        int vocabSize = 6000, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Mel spectrogram projection
+        yield return new DenseLayer<T>(numMels, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        // T5-style encoder layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: encoderDim, embeddingDimension: encoderDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Cross-attention decoder layers
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: decoderDim, embeddingDimension: decoderDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new DenseLayer<T>(decoderDim, decoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(decoderDim * 4, decoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Token prediction head
+        yield return new DenseLayer<T>(decoderDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for Madmom neural beat tracker (Bock et al., 2016).
+    /// Spectrogram features + bidirectional RNN stack + beat activation output.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMadmomBeatTrackerLayers(
+        int numBands = 81, int rnnHiddenSize = 256, int numRnnLayers = 3,
+        double dropoutRate = 0.15)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Spectrogram feature projection
+        yield return new DenseLayer<T>(numBands, rnnHiddenSize, reluActivation);
+        yield return new BatchNormalizationLayer<T>(rnnHiddenSize);
+
+        // Bidirectional RNN stack (simulated as FC + LayerNorm)
+        for (int i = 0; i < numRnnLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(rnnHiddenSize, rnnHiddenSize * 2, reluActivation);
+            yield return new LayerNormalizationLayer<T>(rnnHiddenSize * 2);
+            yield return new FullyConnectedLayer<T>(rnnHiddenSize * 2, rnnHiddenSize, reluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Beat activation output
+        yield return new FullyConnectedLayer<T>(rnnHiddenSize, 1, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for Tempogram neural tempo estimation.
+    /// Onset detector + autocorrelation-inspired tempo bin classifier.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTempogramLayers(
+        int fftSize = 2048, int onsetHiddenDim = 256, int numOnsetLayers = 3,
+        int numTempoBins = 300, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Spectrogram feature extraction
+        yield return new DenseLayer<T>(fftSize, onsetHiddenDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(onsetHiddenDim);
+
+        // Onset detection layers
+        for (int i = 0; i < numOnsetLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(onsetHiddenDim, onsetHiddenDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(onsetHiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Tempo bin classifier
+        yield return new FullyConnectedLayer<T>(onsetHiddenDim, onsetHiddenDim * 2, reluActivation);
+        yield return new FullyConnectedLayer<T>(onsetHiddenDim * 2, numTempoBins, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for Music Structure Analyzer.
+    /// Mel features + Transformer encoder + section segmentation head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMusicStructureAnalyzerLayers(
+        int numMels = 128, int hiddenDim = 256, int numLayers = 4,
+        int numAttentionHeads = 4, int numSections = 8, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Mel projection
+        yield return new DenseLayer<T>(numMels, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Self-similarity Transformer encoder
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Section segmentation head
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
+        yield return new DenseLayer<T>(hiddenDim, numSections, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for neural Melody Extractor.
+    /// Mel features + encoder stack + pitch bin classifier with voicing head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMelodyExtractorLayers(
+        int numMels = 128, int hiddenDim = 256, int numLayers = 4,
+        int numPitchBins = 360, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Mel feature projection
+        yield return new DenseLayer<T>(numMels, hiddenDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(hiddenDim);
+
+        // Encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 2, reluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim * 2);
+            yield return new FullyConnectedLayer<T>(hiddenDim * 2, hiddenDim, reluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Pitch bin classification head
+        yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, reluActivation);
+        yield return new FullyConnectedLayer<T>(hiddenDim, numPitchBins, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for Music Tagging Transformer (Won et al., 2021).
+    /// Mel features + Transformer encoder + multi-label sigmoid classification.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMusicTaggingTransformerLayers(
+        int numMels = 128, int hiddenDim = 256, int numLayers = 4,
+        int numAttentionHeads = 4, int feedForwardDim = 1024,
+        int numTags = 50, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Mel feature projection
+        yield return new DenseLayer<T>(numMels, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Multi-label classification head
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
+        yield return new DenseLayer<T>(hiddenDim, numTags, identityActivation);
+    }
+
+    #endregion
 }
