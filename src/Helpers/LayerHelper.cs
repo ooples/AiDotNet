@@ -20035,4 +20035,51 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Fingerprinting Models (Batch 7)
+
+    /// <summary>
+    /// Creates default NeuralFP audio fingerprinting layers.
+    /// </summary>
+    /// <param name="numMels">Number of mel filterbank channels (default: 256).</param>
+    /// <param name="baseFilters">Base filter count (default: 32).</param>
+    /// <param name="numConvBlocks">Number of convolutional blocks (default: 4).</param>
+    /// <param name="embeddingDim">Output embedding dimension (default: 128).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers for NeuralFP fingerprinting.</returns>
+    /// <remarks>
+    /// <para>
+    /// NeuralFP architecture (Chang et al., 2021):
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>CNN encoder with increasing filter counts</description></item>
+    /// <item><description>Batch normalization and ReLU after each conv</description></item>
+    /// <item><description>Global average pooling + linear projection to embedding</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralFPLayers(
+        int numMels = 256,
+        int baseFilters = 32,
+        int numConvBlocks = 4,
+        int embeddingDim = 128,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        int prevDim = numMels;
+        for (int i = 0; i < numConvBlocks; i++)
+        {
+            int filters = baseFilters * (1 << i); // 32, 64, 128, 256
+            yield return new DenseLayer<T>(prevDim, filters, reluActivation);
+            yield return new BatchNormalizationLayer<T>(filters);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = filters;
+        }
+
+        // Projection to embedding space
+        yield return new DenseLayer<T>(prevDim, embeddingDim, identityActivation);
+    }
+
+    #endregion
 }
