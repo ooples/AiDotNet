@@ -156,14 +156,40 @@ public class Data2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 
         if (layerOutputs.Count == 0) return c;
 
-        var result = new Tensor<T>(layerOutputs[0].Shape);
         int count = layerOutputs.Count;
+        var weights = new double[count];
+
+        if (layerWeights is null)
+        {
+            for (int li = 0; li < count; li++)
+                weights[li] = 1.0 / count;
+        }
+        else
+        {
+            if (layerWeights.Length != count)
+                throw new ArgumentException(
+                    $"layerWeights length ({layerWeights.Length}) must match the number of transformer layers ({count}).",
+                    nameof(layerWeights));
+
+            double sum = 0;
+            for (int li = 0; li < count; li++)
+            {
+                weights[li] = NumOps.ToDouble(layerWeights[li]);
+                sum += weights[li];
+            }
+
+            if (sum > 0)
+            {
+                for (int li = 0; li < count; li++)
+                    weights[li] /= sum;
+            }
+        }
+
+        var result = new Tensor<T>(layerOutputs[0].Shape);
         for (int li = 0; li < count; li++)
         {
-            double w = layerWeights is not null && li < layerWeights.Length
-                ? NumOps.ToDouble(layerWeights[li]) : 1.0 / count;
             for (int i = 0; i < result.Length && i < layerOutputs[li].Length; i++)
-                result[i] = NumOps.Add(result[i], NumOps.FromDouble(NumOps.ToDouble(layerOutputs[li][i]) * w));
+                result[i] = NumOps.Add(result[i], NumOps.FromDouble(NumOps.ToDouble(layerOutputs[li][i]) * weights[li]));
         }
         return result;
     }
