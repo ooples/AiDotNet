@@ -21554,4 +21554,112 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region TTS Batch 25
+
+    /// <summary>Creates default layers for Matcha-TTS (flow-matching TTS).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMatchaTTSLayers(
+        int textEncoderDim = 192, int numTextEncoderLayers = 6,
+        int numTextEncoderHeads = 2, int decoderDim = 256,
+        int numDecoderLayers = 2, int numMels = 80,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Text encoder (transformer-based)
+        yield return new FullyConnectedLayer<T>(numMels, textEncoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(textEncoderDim);
+        for (int i = 0; i < numTextEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(textEncoderDim, textEncoderDim, numTextEncoderHeads);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new FullyConnectedLayer<T>(textEncoderDim, textEncoderDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(textEncoderDim * 4, textEncoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Duration predictor
+        yield return new FullyConnectedLayer<T>(textEncoderDim, textEncoderDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(textEncoderDim, 1, (IActivationFunction<T>?)null);
+
+        // Flow matching decoder (U-Net blocks)
+        yield return new FullyConnectedLayer<T>(textEncoderDim, decoderDim, geluActivation);
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(decoderDim, decoderDim * 2, geluActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim * 2);
+            yield return new FullyConnectedLayer<T>(decoderDim * 2, decoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+        }
+
+        // Output projection to mel-spectrogram
+        yield return new FullyConnectedLayer<T>(decoderDim, numMels, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for BigVGAN universal vocoder.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBigVGANLayers(
+        int numMels = 100, int upsampleInitialChannel = 1536,
+        int[]? upsampleRates = null, int numResBlocks = 3,
+        double dropoutRate = 0.0)
+    {
+        upsampleRates ??= new[] { 4, 4, 2, 2, 2, 2 };
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Input projection (mel-spectrogram to initial channels)
+        yield return new FullyConnectedLayer<T>(numMels, upsampleInitialChannel, geluActivation);
+
+        // Upsampling + MRF blocks with Snake-like activation
+        int ch = upsampleInitialChannel;
+        foreach (int rate in upsampleRates)
+        {
+            int nextCh = ch / 2;
+            if (nextCh < 32) nextCh = 32;
+
+            // Transposed convolution approximated by FC upsample
+            yield return new FullyConnectedLayer<T>(ch, nextCh, geluActivation);
+            yield return new LayerNormalizationLayer<T>(nextCh);
+
+            // Multi-Receptive Field Fusion (MRF) blocks
+            for (int b = 0; b < numResBlocks; b++)
+            {
+                yield return new FullyConnectedLayer<T>(nextCh, nextCh, geluActivation);
+                yield return new LayerNormalizationLayer<T>(nextCh);
+            }
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            ch = nextCh;
+        }
+
+        // Output projection to waveform
+        yield return new FullyConnectedLayer<T>(ch, 1, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Vocos ISTFT vocoder.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVocosLayers(
+        int numMels = 100, int hiddenDim = 512,
+        int numBackboneBlocks = 8, int intermediateDim = 1536,
+        int numFrequencyBins = 513, double dropoutRate = 0.0)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Input projection (mel or codec tokens to hidden)
+        yield return new FullyConnectedLayer<T>(numMels, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // ConvNeXt backbone blocks
+        for (int i = 0; i < numBackboneBlocks; i++)
+        {
+            yield return new FullyConnectedLayer<T>(hiddenDim, intermediateDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(intermediateDim, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // ISTFT head: predict magnitude and phase
+        yield return new FullyConnectedLayer<T>(hiddenDim, numFrequencyBins, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(numFrequencyBins, numFrequencyBins, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
 }
