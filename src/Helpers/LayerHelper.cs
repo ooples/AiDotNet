@@ -22348,4 +22348,350 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Vision-Language Encoders
+
+    /// <summary>
+    /// Creates default layers for an OpenCLIP contrastive vision-language encoder.
+    /// </summary>
+    /// <param name="visionEmbeddingDim">Vision encoder embedding dimension (default: 768 for ViT-B).</param>
+    /// <param name="textEmbeddingDim">Text encoder embedding dimension (default: 512).</param>
+    /// <param name="projectionDim">Shared projection space dimension (default: 512).</param>
+    /// <param name="numVisionLayers">Number of vision transformer layers (default: 12).</param>
+    /// <param name="numTextLayers">Number of text transformer layers (default: 12).</param>
+    /// <param name="numVisionHeads">Number of vision attention heads (default: 12).</param>
+    /// <param name="numTextHeads">Number of text attention heads (default: 8).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.0).</param>
+    /// <returns>A collection of layers forming an OpenCLIP dual-encoder architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Architecture:</b> OpenCLIP uses a dual-encoder design identical to CLIP:
+    /// <list type="number">
+    /// <item><b>Vision encoder</b>: ViT transformer layers processing image patches</item>
+    /// <item><b>Vision projection</b>: Linear projection to shared embedding space</item>
+    /// <item><b>Text encoder</b>: Transformer layers with causal attention for text tokens</item>
+    /// <item><b>Text projection</b>: Linear projection to shared embedding space</item>
+    /// </list>
+    /// The first half of layers are for the vision encoder, the second half for the text encoder.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultOpenCLIPLayers(
+        int visionEmbeddingDim = 768,
+        int textEmbeddingDim = 512,
+        int projectionDim = 512,
+        int numVisionLayers = 12,
+        int numTextLayers = 12,
+        int numVisionHeads = 12,
+        int numTextHeads = 8,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionEmbeddingDim * 4;
+        int textFfnDim = textEmbeddingDim * 4;
+
+        // === Vision Encoder ===
+        // Pre-norm before vision transformer stack
+        yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+
+        // Vision transformer layers
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(visionEmbeddingDim, visionEmbeddingDim, numVisionHeads);
+            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Vision projection head to shared space
+        yield return new DenseLayer<T>(visionEmbeddingDim, projectionDim, identityActivation);
+
+        // === Text Encoder ===
+        // Pre-norm before text transformer stack
+        yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+
+        // Text transformer layers
+        for (int i = 0; i < numTextLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new DenseLayer<T>(textEmbeddingDim, textFfnDim, geluActivation);
+            yield return new DenseLayer<T>(textFfnDim, textEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Text projection head to shared space
+        yield return new DenseLayer<T>(textEmbeddingDim, projectionDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a SigLIP contrastive vision-language encoder.
+    /// </summary>
+    /// <param name="visionEmbeddingDim">Vision encoder embedding dimension (default: 768 for ViT-B/16).</param>
+    /// <param name="textEmbeddingDim">Text encoder embedding dimension (default: 768).</param>
+    /// <param name="projectionDim">Shared projection space dimension (default: 768).</param>
+    /// <param name="numVisionLayers">Number of vision transformer layers (default: 12).</param>
+    /// <param name="numTextLayers">Number of text transformer layers (default: 12).</param>
+    /// <param name="numVisionHeads">Number of vision attention heads (default: 12).</param>
+    /// <param name="numTextHeads">Number of text attention heads (default: 12).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.0).</param>
+    /// <returns>A collection of layers forming a SigLIP dual-encoder architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Architecture:</b> SigLIP mirrors CLIP's dual-encoder design but uses sigmoid loss
+    /// instead of softmax InfoNCE. The layer architecture is identical to OpenCLIP, but default
+    /// dimensions differ (SigLIP typically uses larger projection dimensions and ViT-B/16).
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSigLIPLayers(
+        int visionEmbeddingDim = 768,
+        int textEmbeddingDim = 768,
+        int projectionDim = 768,
+        int numVisionLayers = 12,
+        int numTextLayers = 12,
+        int numVisionHeads = 12,
+        int numTextHeads = 12,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionEmbeddingDim * 4;
+        int textFfnDim = textEmbeddingDim * 4;
+
+        // === Vision Encoder ===
+        yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(visionEmbeddingDim, visionEmbeddingDim, numVisionHeads);
+            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Vision projection to shared space
+        yield return new DenseLayer<T>(visionEmbeddingDim, projectionDim, identityActivation);
+
+        // === Text Encoder ===
+        yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+
+        for (int i = 0; i < numTextLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new DenseLayer<T>(textEmbeddingDim, textFfnDim, geluActivation);
+            yield return new DenseLayer<T>(textFfnDim, textEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Text projection to shared space
+        yield return new DenseLayer<T>(textEmbeddingDim, projectionDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for the ALIGN model (EfficientNet CNN vision encoder + text transformer).
+    /// ALIGN uses a CNN-based vision encoder (EfficientNet-B7) instead of a ViT, so the vision side
+    /// uses stacked dense layers to approximate the CNN feature extraction pipeline.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultALIGNLayers(
+        int visionEmbeddingDim = 640,
+        int textEmbeddingDim = 768,
+        int projectionDim = 640,
+        int numVisionLayers = 7,
+        int numTextLayers = 12,
+        int numTextHeads = 12,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionEmbeddingDim * 4;
+        int textFfnDim = textEmbeddingDim * 4;
+
+        // === Vision Encoder (EfficientNet-style CNN blocks approximated with Dense layers) ===
+        yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            // MBConv-style block: expand -> depthwise -> project
+            yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(visionFfnDim);
+            yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Vision projection to shared space
+        yield return new DenseLayer<T>(visionEmbeddingDim, projectionDim, identityActivation);
+
+        // === Text Encoder (Transformer) ===
+        yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+
+        for (int i = 0; i < numTextLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new DenseLayer<T>(textEmbeddingDim, textFfnDim, geluActivation);
+            yield return new DenseLayer<T>(textFfnDim, textEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Text projection to shared space
+        yield return new DenseLayer<T>(textEmbeddingDim, projectionDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for the BASIC model (CoAtNet hybrid CNN-Transformer vision + text transformer).
+    /// CoAtNet starts with CNN (MBConv) stages then transitions to Transformer stages.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBASICLayers(
+        int visionEmbeddingDim = 1536,
+        int textEmbeddingDim = 768,
+        int projectionDim = 1376,
+        int numVisionLayers = 24,
+        int numTextLayers = 12,
+        int numVisionHeads = 24,
+        int numTextHeads = 12,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int visionFfnDim = visionEmbeddingDim * 4;
+        int textFfnDim = textEmbeddingDim * 4;
+
+        // === Vision Encoder (CoAtNet: CNN stages followed by Transformer stages) ===
+        yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+
+        // First half: MBConv-style CNN stages
+        int cnnStages = numVisionLayers / 2;
+        for (int i = 0; i < cnnStages; i++)
+        {
+            yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(visionFfnDim);
+            yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Second half: Transformer stages with self-attention
+        int transformerStages = numVisionLayers - cnnStages;
+        for (int i = 0; i < transformerStages; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(visionEmbeddingDim, visionEmbeddingDim, numVisionHeads);
+            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            yield return new DenseLayer<T>(visionEmbeddingDim, visionFfnDim, geluActivation);
+            yield return new DenseLayer<T>(visionFfnDim, visionEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Vision projection to shared space
+        yield return new DenseLayer<T>(visionEmbeddingDim, projectionDim, identityActivation);
+
+        // === Text Encoder (Transformer) ===
+        yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+
+        for (int i = 0; i < numTextLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(textEmbeddingDim, textEmbeddingDim, numTextHeads);
+            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            yield return new DenseLayer<T>(textEmbeddingDim, textFfnDim, geluActivation);
+            yield return new DenseLayer<T>(textFfnDim, textEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Text projection to shared space
+        yield return new DenseLayer<T>(textEmbeddingDim, projectionDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a standard Vision Transformer (ViT) encoder.
+    /// Used by ViT, DINOv2, DINOv3, SAM, InternViT, SigLIP-SO, RADIOv2.5, and Perception Encoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultViTLayers(
+        int embeddingDim = 768,
+        int numLayers = 12,
+        int numHeads = 12,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int ffnDim = embeddingDim * 4;
+
+        // Initial layer norm (pre-norm architecture)
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(embeddingDim, embeddingDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            // Feed-forward network
+            yield return new DenseLayer<T>(embeddingDim, ffnDim, geluActivation);
+            yield return new DenseLayer<T>(ffnDim, embeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    /// <summary>
+    /// Creates default layers for Florence-2 (DaViT vision encoder + multi-task decoder).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFlorence2Layers(
+        int encoderEmbeddingDim = 768,
+        int decoderEmbeddingDim = 768,
+        int numEncoderLayers = 12,
+        int numDecoderLayers = 6,
+        int numEncoderHeads = 12,
+        int numDecoderHeads = 12,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int encoderFfnDim = encoderEmbeddingDim * 4;
+        int decoderFfnDim = decoderEmbeddingDim * 4;
+
+        // === DaViT Vision Encoder ===
+        yield return new LayerNormalizationLayer<T>(encoderEmbeddingDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            // Spatial window attention (odd layers) / channel group attention (even layers)
+            yield return new MultiHeadAttentionLayer<T>(encoderEmbeddingDim, encoderEmbeddingDim, numEncoderHeads);
+            yield return new LayerNormalizationLayer<T>(encoderEmbeddingDim);
+            yield return new DenseLayer<T>(encoderEmbeddingDim, encoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(encoderFfnDim, encoderEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Encoder-to-decoder projection
+        if (encoderEmbeddingDim != decoderEmbeddingDim)
+            yield return new DenseLayer<T>(encoderEmbeddingDim, decoderEmbeddingDim, identityActivation);
+
+        // === Multi-task Decoder ===
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(decoderEmbeddingDim, decoderEmbeddingDim, numDecoderHeads);
+            yield return new LayerNormalizationLayer<T>(decoderEmbeddingDim);
+            // Cross-attention to encoder features
+            yield return new MultiHeadAttentionLayer<T>(decoderEmbeddingDim, decoderEmbeddingDim, numDecoderHeads);
+            yield return new LayerNormalizationLayer<T>(decoderEmbeddingDim);
+            // Feed-forward
+            yield return new DenseLayer<T>(decoderEmbeddingDim, decoderFfnDim, geluActivation);
+            yield return new DenseLayer<T>(decoderFfnDim, decoderEmbeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderEmbeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    #endregion
 }
