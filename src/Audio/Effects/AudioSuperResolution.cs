@@ -234,14 +234,19 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         double strength = EnhancementStrength;
         if (Math.Abs(strength - 1.0) < 1e-9) return enhanced;
 
-        // Blend original and enhanced based on strength
+        // Blend original and enhanced based on strength.
+        // For super-resolution, enhanced may be longer than original (upsampled).
+        // Blend only the overlapping region; keep enhanced-only samples intact.
         var result = new Tensor<T>(enhanced.Shape);
-        for (int i = 0; i < enhanced.Length; i++)
+        int blendLen = Math.Min(original.Length, enhanced.Length);
+        for (int i = 0; i < blendLen; i++)
         {
-            double orig = i < original.Length ? NumOps.ToDouble(original[i]) : 0.0;
+            double orig = NumOps.ToDouble(original[i]);
             double enh = NumOps.ToDouble(enhanced[i]);
             result[i] = NumOps.FromDouble(orig + (enh - orig) * strength);
         }
+        for (int i = blendLen; i < enhanced.Length; i++)
+            result[i] = enhanced[i];
         return result;
     }
 

@@ -79,6 +79,10 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
         base.NumMels = _options.NumMels;
         _melSpectrogram = new MelSpectrogram<T>(sampleRate: _options.SampleRate, nMels: _options.NumMels,
             nFft: _options.FftSize, hopLength: _options.HopLength, fMin: _options.FMin, fMax: _options.FMax, logMel: true);
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;

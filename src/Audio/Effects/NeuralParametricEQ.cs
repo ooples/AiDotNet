@@ -112,7 +112,11 @@ public class NeuralParametricEQ<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         return ApplyEQ(audio, eqParams);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Enhances audio by applying parametric EQ. The reference parameter is ignored because
+    /// parametric EQ predicts filter parameters from the input spectrum alone; it does not
+    /// perform reference-based matching or noise profiling.
+    /// </summary>
     public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference) => Enhance(audio);
 
     /// <inheritdoc />

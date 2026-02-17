@@ -115,7 +115,15 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         ThrowIfDisposed();
         var features = PreprocessAudio(noisyAudio);
         var enhanced = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
-        return PostprocessOutput(enhanced);
+        var result = PostprocessOutput(enhanced);
+        if (EnhancementStrength < 1.0)
+        {
+            T s = NumOps.FromDouble(EnhancementStrength);
+            T inv = NumOps.FromDouble(1.0 - EnhancementStrength);
+            for (int i = 0; i < result.Length && i < noisyAudio.Length; i++)
+                result[i] = NumOps.Add(NumOps.Multiply(s, result[i]), NumOps.Multiply(inv, noisyAudio[i]));
+        }
+        return result;
     }
 
     /// <inheritdoc />

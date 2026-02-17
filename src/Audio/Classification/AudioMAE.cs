@@ -166,10 +166,11 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized. Cannot train without an optimizer.");
         SetTrainingMode(true); var output = Predict(input);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers); SetTrainingMode(false);
+        _optimizer.UpdateParameters(Layers); SetTrainingMode(false);
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -196,6 +197,7 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         w.Write(_options.SampleRate); w.Write(_options.NumMels); w.Write(_options.FftSize); w.Write(_options.HopLength);
         w.Write(_options.EncoderEmbeddingDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumEncoderHeads);
         w.Write(_options.PatchSize); w.Write(_options.PatchStride); w.Write(_options.Threshold); w.Write(_options.WindowSize); w.Write(_options.WindowOverlap); w.Write(_options.DropoutRate); w.Write(_options.MaskRatio);
+        w.Write((int)_options.FMin); w.Write((int)_options.FMax);
         w.Write(ClassLabels.Count); foreach (var l in ClassLabels) w.Write(l);
     }
 
@@ -205,12 +207,18 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
         _options.EncoderEmbeddingDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumEncoderHeads = r.ReadInt32();
         _options.PatchSize = r.ReadInt32(); _options.PatchStride = r.ReadInt32(); _options.Threshold = r.ReadDouble(); _options.WindowSize = r.ReadDouble(); _options.WindowOverlap = r.ReadDouble(); _options.DropoutRate = r.ReadDouble(); _options.MaskRatio = r.ReadDouble();
+        _options.FMin = r.ReadInt32(); _options.FMax = r.ReadInt32();
         int n = r.ReadInt32(); var labels = new string[n]; for (int i = 0; i < n; i++) labels[i] = r.ReadString(); ClassLabels = labels;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new AudioMAE<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new AudioMAE<T>(Architecture, mp, _options);
+        return new AudioMAE<T>(Architecture, _options);
+    }
 
     #endregion
 
@@ -237,9 +245,36 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     private List<AudioEvent<T>> MergeEvents(List<AudioEvent<T>> events)
     {
-        if (events.Count == 0) return events; var merged = new List<AudioEvent<T>>();
+        if (events.Count == 0) return events;
+        var merged = new List<AudioEvent<T>>();
         foreach (var g in events.GroupBy(e => e.EventType))
-        { var sorted = g.OrderBy(e => e.StartTime).ToList(); var cur = sorted[0]; for (int i = 1; i < sorted.Count; i++) { var next = sorted[i]; if (next.StartTime <= cur.EndTime + 0.1) { double cc = NumOps.ToDouble(cur.Confidence), nc = NumOps.ToDouble(next.Confidence); cur = new AudioEvent<T> { EventType = cur.EventType, StartTime = cur.StartTime, EndTime = Math.Max(cur.EndTime, next.EndTime), Confidence = cc > nc ? cur.Confidence : next.Confidence, PeakTime = cc > nc ? cur.PeakTime : next.PeakTime }; } else { merged.Add(cur); cur = next; } } merged.Add(cur); }
+        {
+            var sorted = g.OrderBy(e => e.StartTime).ToList();
+            var cur = sorted[0];
+            for (int i = 1; i < sorted.Count; i++)
+            {
+                var next = sorted[i];
+                if (next.StartTime <= cur.EndTime + 0.1)
+                {
+                    double cc = NumOps.ToDouble(cur.Confidence);
+                    double nc = NumOps.ToDouble(next.Confidence);
+                    cur = new AudioEvent<T>
+                    {
+                        EventType = cur.EventType,
+                        StartTime = cur.StartTime,
+                        EndTime = Math.Max(cur.EndTime, next.EndTime),
+                        Confidence = cc > nc ? cur.Confidence : next.Confidence,
+                        PeakTime = cc > nc ? cur.PeakTime : next.PeakTime
+                    };
+                }
+                else
+                {
+                    merged.Add(cur);
+                    cur = next;
+                }
+            }
+            merged.Add(cur);
+        }
         return merged.OrderBy(e => e.StartTime).ToList();
     }
 

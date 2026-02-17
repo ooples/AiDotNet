@@ -129,7 +129,7 @@ public class PeakNetFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             Duration = audio.Length / (double)_options.SampleRate,
             SampleRate = _options.SampleRate,
             Algorithm = "PeakNetFP",
-            FrameCount = 1
+            FrameCount = Math.Max(1, data.Length / Math.Max(1, _options.EmbeddingDim))
         };
     }
 
@@ -156,6 +156,8 @@ public class PeakNetFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public IReadOnlyList<FingerprintMatch> FindMatches(AudioFingerprint<T> query, AudioFingerprint<T> reference, int minMatchLength = 10)
     {
         ThrowIfDisposed();
+        if (minMatchLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(minMatchLength), "Minimum match length must be positive.");
         var matches = new List<FingerprintMatch>();
         int embDim = _options.EmbeddingDim;
         int queryFrames = query.Data.Length / Math.Max(1, embDim);

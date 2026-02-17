@@ -99,6 +99,10 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             fMax: _options.FMax,
             logMel: true);
 
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;

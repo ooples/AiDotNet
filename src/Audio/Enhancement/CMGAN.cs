@@ -54,7 +54,7 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly CMGANOptions _options;
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ShortTimeFourierTransform<T> _stft;
+    private ShortTimeFourierTransform<T> _stft;
     private Tensor<T>? _lastPhase;
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
@@ -290,6 +290,9 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _options.NumAttentionHeads = r.ReadInt32(); _options.EnhancementStrength = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
+        int nFft = NextPowerOfTwo(_options.FftSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
+            windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

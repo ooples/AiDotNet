@@ -151,14 +151,24 @@ public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         int nq = tokens.GetLength(0);
         int numFrames = tokens.GetLength(1);
 
-        // Convert tokens to embeddings via codebook lookup
+        // Convert tokens to embeddings via codebook lookup.
+        // Each quantizer contributes a learned embedding vector per token. Without pretrained
+        // codebook weights, we approximate with evenly-spaced embeddings across [-1, 1] per
+        // quantizer, summing across quantizers as in proper RVQ.
         var embeddings = new Tensor<T>([numFrames * _options.EncoderDim]);
+        int dimPerQuantizer = Math.Max(1, _options.EncoderDim / nq);
         for (int f = 0; f < numFrames; f++)
         {
-            for (int q = 0; q < nq && q < _options.EncoderDim; q++)
+            for (int q = 0; q < nq; q++)
             {
-                double val = (tokens[q, f] / (double)_options.CodebookSize) * 2.0 - 1.0;
-                embeddings[f * _options.EncoderDim + q] = NumOps.FromDouble(val);
+                double normalizedToken = (tokens[q, f] / (double)Math.Max(1, _options.CodebookSize - 1)) * 2.0 - 1.0;
+                int startDim = q * dimPerQuantizer;
+                int endDim = Math.Min(startDim + dimPerQuantizer, _options.EncoderDim);
+                for (int d = startDim; d < endDim; d++)
+                {
+                    double existing = NumOps.ToDouble(embeddings[f * _options.EncoderDim + d]);
+                    embeddings[f * _options.EncoderDim + d] = NumOps.FromDouble(existing + normalizedToken);
+                }
             }
         }
 
@@ -183,6 +193,8 @@ public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxDecoder is not null) return OnnxDecoder.Run(embeddings);
+        if (IsOnnxMode && OnnxDecoder is null)
+            throw new InvalidOperationException("ONNX decoder model is not loaded. Provide a decoder ONNX model path.");
         // In native mode, use the decoder layers (second half of the network)
         var c = embeddings;
         int decoderStart = Layers.Count / 2;

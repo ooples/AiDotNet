@@ -232,6 +232,7 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _options.NumAttentionHeads = r.ReadInt32(); _options.FeedForwardDim = r.ReadInt32();
         _options.NumFreqBins = r.ReadInt32(); _options.FFTSize = r.ReadInt32();
         _options.HopLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
+        base.SampleRate = _options.SampleRate;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
         int nFft = NextPowerOfTwo(_options.FFTSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,

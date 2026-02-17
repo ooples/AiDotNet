@@ -93,8 +93,8 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 #pragma warning restore CS0414
     private int _bufferPosition;
 
-    // Optimizer for training
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    // Optimizer for training (used in native training mode)
+    internal IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; set; }
 
     // IAudioEnhancer properties
     /// <inheritdoc/>
@@ -186,7 +186,6 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _numRepeats = 3;
         _tcnKernelSize = 3;
 
-        // modelPath is used by OnnxModel above
     }
 
     /// <summary>
@@ -271,7 +270,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _decoderWeight = InitializeWeights(_encoderDim * _kernelSize);
 
         // Initialize optimizer (Adam by default)
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        Optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

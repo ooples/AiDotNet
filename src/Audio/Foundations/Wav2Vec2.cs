@@ -114,12 +114,22 @@ public class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode) return ExtractEmbeddings(audio);
+
         int targetLayer = layerIndex < 0 ? _options.NumLayers + layerIndex : layerIndex;
-        var c = audio; int currentLayer = 0;
+        if (targetLayer < 0 || targetLayer >= _options.NumLayers)
+            throw new ArgumentOutOfRangeException(nameof(layerIndex),
+                $"Layer index {layerIndex} is out of range. Valid range: [{-_options.NumLayers}, {_options.NumLayers - 1}].");
+
+        var c = audio;
+        int currentLayer = 0;
         foreach (var l in Layers)
         {
             c = l.Forward(c);
-            if (l is MultiHeadAttentionLayer<T>) { if (currentLayer == targetLayer) return c; currentLayer++; }
+            if (l is MultiHeadAttentionLayer<T>)
+            {
+                if (currentLayer == targetLayer) return c;
+                currentLayer++;
+            }
         }
         return c;
     }
@@ -131,7 +141,12 @@ public class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         if (IsOnnxMode) return ExtractEmbeddings(audio);
         var layerOutputs = new List<Tensor<T>>();
         var c = audio;
-        foreach (var l in Layers) { c = l.Forward(c); if (l is MultiHeadAttentionLayer<T>) layerOutputs.Add(c); }
+        foreach (var l in Layers)
+        {
+            c = l.Forward(c);
+            if (l is MultiHeadAttentionLayer<T>)
+                layerOutputs.Add(c);
+        }
         if (layerOutputs.Count == 0) return c;
         var result = new Tensor<T>(layerOutputs[0].Shape);
         int count = layerOutputs.Count;
@@ -220,7 +235,12 @@ public class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new Wav2Vec2<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new Wav2Vec2<T>(Architecture, mp, _options);
+        return new Wav2Vec2<T>(Architecture, _options);
+    }
 
     #endregion
 

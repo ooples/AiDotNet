@@ -419,6 +419,8 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <inheritdoc/>
     public IStreamingEventDetectionSession<T> StartStreamingSession(int sampleRate, T threshold)
     {
+        if (sampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
         return new ASTStreamingSession(this, sampleRate, threshold);
     }
 
@@ -573,6 +575,8 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         writer.Write(_options.WindowSize);
         writer.Write(_options.WindowOverlap);
         writer.Write(_options.DropoutRate);
+        writer.Write((int)_options.FMin);
+        writer.Write((int)_options.FMax);
 
         writer.Write(ClassLabels.Count);
         foreach (var label in ClassLabels)
@@ -605,6 +609,8 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         _options.WindowSize = reader.ReadDouble();
         _options.WindowOverlap = reader.ReadDouble();
         _options.DropoutRate = reader.ReadDouble();
+        _options.FMin = reader.ReadInt32();
+        _options.FMax = reader.ReadInt32();
 
         int numLabels = reader.ReadInt32();
         var labels = new string[numLabels];

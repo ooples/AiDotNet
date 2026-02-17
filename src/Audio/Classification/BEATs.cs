@@ -896,6 +896,8 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// </remarks>
     public IStreamingEventDetectionSession<T> StartStreamingSession(int sampleRate, T threshold)
     {
+        if (sampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
         return new BEATsStreamingSession(this, sampleRate, threshold);
     }
 

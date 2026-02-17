@@ -130,7 +130,7 @@ public class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             Duration = audio.Length / (double)_options.SampleRate,
             SampleRate = _options.SampleRate,
             Algorithm = "ConformerFP",
-            FrameCount = 1
+            FrameCount = Math.Max(1, data.Length / Math.Max(1, _options.EmbeddingDim))
         };
     }
 

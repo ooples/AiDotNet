@@ -141,16 +141,37 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         ThrowIfDisposed();
         var stft = ComputeSTFT(audio);
+        if (_noiseProfile is not null)
+        {
+            int len = Math.Min(stft.Length, _noiseProfile.Length);
+            for (int i = 0; i < len; i++)
+            {
+                T subtracted = NumOps.Subtract(stft[i], _noiseProfile[i]);
+                stft[i] = NumOps.GreaterThan(subtracted, NumOps.Zero) ? subtracted : NumOps.Zero;
+            }
+        }
         Tensor<T> mask;
         if (IsOnnxMode && OnnxEncoder is not null)
             mask = OnnxEncoder.Run(stft);
         else
             mask = Predict(stft);
         var enhanced = ApplyMask(stft, mask);
-        return ComputeISTFT(enhanced, audio.Length);
+        var result = ComputeISTFT(enhanced, audio.Length);
+        if (EnhancementStrength < 1.0)
+        {
+            T s = NumOps.FromDouble(EnhancementStrength);
+            T inv = NumOps.FromDouble(1.0 - EnhancementStrength);
+            for (int i = 0; i < result.Length && i < audio.Length; i++)
+                result[i] = NumOps.Add(NumOps.Multiply(s, result[i]), NumOps.Multiply(inv, audio[i]));
+        }
+        return result;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Enhances audio using a reference noise sample for spectral subtraction before neural enhancement.
+    /// The reference audio is used to estimate the noise spectrum, which is then subtracted from the
+    /// input STFT before applying the neural mask.
+    /// </summary>
     public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference)
     {
         EstimateNoiseProfile(reference);
@@ -302,8 +323,12 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private Tensor<T> ApplyMask(Tensor<T> stft, Tensor<T> mask)
     {
+        if (stft.Length != mask.Length)
+            throw new ArgumentException(
+                $"STFT and mask length mismatch ({stft.Length} vs {mask.Length}). " +
+                "Network output must match STFT dimensions.");
         var result = new Tensor<T>(stft.Shape);
-        for (int i = 0; i < Math.Min(stft.Length, mask.Length); i++)
+        for (int i = 0; i < stft.Length; i++)
             result[i] = NumOps.Multiply(stft[i], mask[i]);
         return result;
     }

@@ -153,8 +153,6 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _embeddingWeight = Array.Empty<T>();
         _embeddingBias = Array.Empty<T>();
         _classLabels = GetDefaultClassLabels();
-
-        // modelPath is used by OnnxModel above
     }
 
     /// <summary>
@@ -1047,7 +1045,9 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             _fcBias = new T[_numClasses];
         }
 
-        // Note: IsOnnxMode state is handled by base class during full deserialization
+        // Rehydrate optimizer for training mode
+        if (!isOnnxMode && _optimizer is null)
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <inheritdoc/>

@@ -124,8 +124,9 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
         foreach (var (windowData, startSample) in windows)
         {
             var probs = ClassifyWindow(windowData);
+            double totalDur = (double)audio.Length / _options.SampleRate;
             double startTime = (double)startSample / _options.SampleRate;
-            double endTime = startTime + _options.DetectionWindowSize;
+            double endTime = Math.Min(startTime + _options.DetectionWindowSize, totalDur);
             for (int i = 0; i < probs.Length && i < ClassLabels.Count; i++)
             {
                 double p = NumOps.ToDouble(probs[i]);
@@ -297,7 +298,11 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new AudioLDMClassifier<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new AudioLDMClassifier<T>(Architecture, mp, _options);
+        return new AudioLDMClassifier<T>(Architecture, _options);
+    }
 
     #endregion
 

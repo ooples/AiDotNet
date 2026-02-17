@@ -118,6 +118,9 @@ public class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         if (IsOnnxMode) return ExtractEmbeddings(audio);
 
         int targetLayer = layerIndex < 0 ? _options.NumLayers + layerIndex : layerIndex;
+        if (targetLayer < 0 || targetLayer >= _options.NumLayers)
+            throw new ArgumentOutOfRangeException(nameof(layerIndex),
+                $"Layer index {layerIndex} is out of range. Valid range: [{-_options.NumLayers}, {_options.NumLayers - 1}].");
         var c = audio;
         int currentLayer = 0;
         foreach (var l in Layers)
@@ -233,7 +236,12 @@ public class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new HuBERT<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new HuBERT<T>(Architecture, mp, _options);
+        return new HuBERT<T>(Architecture, _options);
+    }
 
     #endregion
 

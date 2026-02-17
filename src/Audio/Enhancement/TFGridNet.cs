@@ -142,10 +142,11 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         ThrowIfDisposed();
         var stft = ComputeSTFT(audio);
 
-        // Apply spectral subtraction if noise profile is available
-        if (_noiseProfile is not null && _noiseProfile.Length == stft.Length)
+        // Apply spectral subtraction if noise profile is available (per-bin comparison)
+        if (_noiseProfile is not null)
         {
-            for (int i = 0; i < stft.Length; i++)
+            int len = Math.Min(stft.Length, _noiseProfile.Length);
+            for (int i = 0; i < len; i++)
             {
                 T subtracted = NumOps.Subtract(stft[i], _noiseProfile[i]);
                 stft[i] = NumOps.GreaterThan(subtracted, NumOps.Zero) ? subtracted : NumOps.Zero;
@@ -160,7 +161,7 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         // Apply enhancement strength blending
         var result = ComputeISTFT(output, audio.Length);
-        double strength = _options.EnhancementStrength;
+        double strength = EnhancementStrength;
         if (strength < 1.0)
         {
             T s = NumOps.FromDouble(strength);

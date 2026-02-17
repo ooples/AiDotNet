@@ -118,13 +118,30 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         ThrowIfDisposed();
         var stft = ComputeSTFT(audio);
+        if (_noiseProfile is not null)
+        {
+            int len = Math.Min(stft.Length, _noiseProfile.Length);
+            for (int i = 0; i < len; i++)
+            {
+                T subtracted = NumOps.Subtract(stft[i], _noiseProfile[i]);
+                stft[i] = NumOps.GreaterThan(subtracted, NumOps.Zero) ? subtracted : NumOps.Zero;
+            }
+        }
         Tensor<T> mask;
         if (IsOnnxMode && OnnxEncoder is not null)
             mask = OnnxEncoder.Run(stft);
         else
             mask = Predict(stft);
         var enhanced = ApplyMask(stft, mask);
-        return ComputeISTFT(enhanced, audio.Length);
+        var result = ComputeISTFT(enhanced, audio.Length);
+        if (EnhancementStrength < 1.0)
+        {
+            T s = NumOps.FromDouble(EnhancementStrength);
+            T inv = NumOps.FromDouble(1.0 - EnhancementStrength);
+            for (int i = 0; i < result.Length && i < audio.Length; i++)
+                result[i] = NumOps.Add(NumOps.Multiply(s, result[i]), NumOps.Multiply(inv, audio[i]));
+        }
+        return result;
     }
 
     /// <inheritdoc />
@@ -252,7 +269,11 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new SpikingFullSubNet<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new SpikingFullSubNet<T>(Architecture, mp, _options);
+        return new SpikingFullSubNet<T>(Architecture, _options);
+    }
 
     #endregion
 

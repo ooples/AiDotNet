@@ -89,10 +89,18 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         _melSpectrogram = new MelSpectrogram<T>(
             _options.SampleRate, _options.NumMels, _options.FftSize,
             _options.HopLength, _options.FMin, _options.FMax, logMel: true);
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         if (_options.TextEncoderModelPath is { } tp && !string.IsNullOrEmpty(tp))
+        {
+            if (!File.Exists(tp))
+                throw new FileNotFoundException($"Text encoder ONNX model not found: {tp}", tp);
             _textEncoder = new OnnxModel<T>(tp, _options.OnnxOptions);
+        }
         _textPrompts = _options.TextPrompts ?? Array.Empty<string>();
         ClassLabels = _options.CustomLabels ?? (_textPrompts.Length > 0 ? _textPrompts : AudioSetLabels);
         InitializeLayers();

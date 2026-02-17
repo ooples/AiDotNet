@@ -237,6 +237,7 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         writer.Write(_options.SampleRate); writer.Write(_options.NumMels); writer.Write(_options.FftSize); writer.Write(_options.HopLength);
         writer.Write(_options.EmbeddingDim); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumAttentionHeads); writer.Write(_options.FeedForwardDim);
         writer.Write(_options.PatchSize); writer.Write(_options.PatchStride); writer.Write(_options.Threshold); writer.Write(_options.WindowSize); writer.Write(_options.WindowOverlap); writer.Write(_options.DropoutRate);
+        writer.Write((int)_options.FMin); writer.Write((int)_options.FMax);
         writer.Write(ClassLabels.Count); foreach (var label in ClassLabels) writer.Write(label);
     }
 
@@ -246,6 +247,7 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         _options.SampleRate = reader.ReadInt32(); _options.NumMels = reader.ReadInt32(); _options.FftSize = reader.ReadInt32(); _options.HopLength = reader.ReadInt32();
         _options.EmbeddingDim = reader.ReadInt32(); _options.NumEncoderLayers = reader.ReadInt32(); _options.NumAttentionHeads = reader.ReadInt32(); _options.FeedForwardDim = reader.ReadInt32();
         _options.PatchSize = reader.ReadInt32(); _options.PatchStride = reader.ReadInt32(); _options.Threshold = reader.ReadDouble(); _options.WindowSize = reader.ReadDouble(); _options.WindowOverlap = reader.ReadDouble(); _options.DropoutRate = reader.ReadDouble();
+        _options.FMin = reader.ReadInt32(); _options.FMax = reader.ReadInt32();
         int n = reader.ReadInt32(); var labels = new string[n]; for (int i = 0; i < n; i++) labels[i] = reader.ReadString(); ClassLabels = labels;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);

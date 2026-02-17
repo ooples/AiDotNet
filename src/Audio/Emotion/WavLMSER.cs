@@ -34,7 +34,7 @@ namespace AiDotNet.Audio.Emotion;
 /// </code>
 /// </para>
 /// </remarks>
-public class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
+internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Fields
 
@@ -117,17 +117,28 @@ public class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         var features = PreprocessAudio(audio);
         Tensor<T> logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
 
+        if (_options.NumClasses <= 0)
+            throw new InvalidOperationException("NumClasses must be positive.");
+        if (_options.EmotionLabels is null || _options.EmotionLabels.Length == 0)
+            throw new InvalidOperationException("EmotionLabels must be non-empty.");
+
         var probs = new Dictionary<string, T>();
-        double sumExp = 0;
-        var expValues = new double[_options.NumClasses];
-        for (int i = 0; i < _options.NumClasses && i < logits.Length; i++)
+        int numClasses = Math.Min(_options.NumClasses, Math.Min(_options.EmotionLabels.Length, logits.Length));
+        double maxLogit = double.NegativeInfinity;
+        for (int i = 0; i < numClasses; i++)
         {
             double val = NumOps.ToDouble(logits[i]);
-            expValues[i] = Math.Exp(val);
+            if (val > maxLogit) maxLogit = val;
+        }
+        double sumExp = 0;
+        var expValues = new double[numClasses];
+        for (int i = 0; i < numClasses; i++)
+        {
+            expValues[i] = Math.Exp(NumOps.ToDouble(logits[i]) - maxLogit);
             sumExp += expValues[i];
         }
-        for (int i = 0; i < _options.NumClasses && i < _options.EmotionLabels.Length; i++)
-            probs[_options.EmotionLabels[i]] = NumOps.FromDouble(sumExp > 0 ? expValues[i] / sumExp : 1.0 / _options.NumClasses);
+        for (int i = 0; i < numClasses; i++)
+            probs[_options.EmotionLabels[i]] = NumOps.FromDouble(sumExp > 0 ? expValues[i] / sumExp : 1.0 / numClasses);
 
         return probs;
     }
@@ -135,9 +146,17 @@ public class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     public IReadOnlyList<TimedEmotionResult<T>> RecognizeEmotionTimeSeries(Tensor<T> audio, int windowSizeMs = 1000, int hopSizeMs = 500)
     {
         ThrowIfDisposed();
+        if (_options.SampleRate <= 0)
+            throw new InvalidOperationException("SampleRate must be positive.");
+        if (windowSizeMs <= 0)
+            throw new ArgumentOutOfRangeException(nameof(windowSizeMs), "Window size must be positive.");
+        if (hopSizeMs <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hopSizeMs), "Hop size must be positive.");
         var results = new List<TimedEmotionResult<T>>();
         int windowSamples = _options.SampleRate * windowSizeMs / 1000;
         int hopSamples = _options.SampleRate * hopSizeMs / 1000;
+        if (windowSamples <= 0 || hopSamples <= 0)
+            throw new InvalidOperationException("Computed window or hop size in samples is non-positive. Check SampleRate and window/hop parameters.");
 
         for (int start = 0; start + windowSamples <= audio.Length; start += hopSamples)
         {
