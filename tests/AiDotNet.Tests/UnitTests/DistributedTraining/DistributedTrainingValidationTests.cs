@@ -88,7 +88,7 @@ public class DistributedTrainingValidationTests
         var config = new ShardingConfiguration<double>(backend);
 
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new PipelineParallelModel<double, Matrix<double>, Vector<double>>(model, config, microBatchSize: 0));
+            new PipelineParallelModel<double, Matrix<double>, Vector<double>>(model, config, microBatchCount: 0));
 
         backend.Shutdown();
     }
@@ -102,7 +102,7 @@ public class DistributedTrainingValidationTests
         var config = new ShardingConfiguration<double>(backend);
 
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new PipelineParallelModel<double, Matrix<double>, Vector<double>>(model, config, microBatchSize: -1));
+            new PipelineParallelModel<double, Matrix<double>, Vector<double>>(model, config, microBatchCount: -1));
 
         backend.Shutdown();
     }
@@ -116,7 +116,7 @@ public class DistributedTrainingValidationTests
         var config = new ShardingConfiguration<double>(backend);
 
         var pipelineModel = new PipelineParallelModel<double, Matrix<double>, Vector<double>>(
-            model, config, microBatchSize: 1);
+            model, config, microBatchCount: 1);
 
         Assert.NotNull(pipelineModel);
 
@@ -132,7 +132,7 @@ public class DistributedTrainingValidationTests
         var config = new ShardingConfiguration<double>(backend);
 
         var pipelineModel = new PipelineParallelModel<double, Matrix<double>, Vector<double>>(
-            model, config, microBatchSize: 64);
+            model, config, microBatchCount: 64);
 
         Assert.NotNull(pipelineModel);
 

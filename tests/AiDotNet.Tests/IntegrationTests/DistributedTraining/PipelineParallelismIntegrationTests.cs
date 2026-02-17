@@ -32,7 +32,7 @@ public class PipelineParallelismIntegrationTests
         var schedule = new GPipeSchedule();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 2, schedule: schedule);
+            model, config, microBatchCount: 2, schedule: schedule);
 
         var input = new Vector<double>(Enumerable.Range(0, 10).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 10).Select(i => (double)(i * 2)).ToArray());
@@ -75,7 +75,7 @@ public class PipelineParallelismIntegrationTests
         var schedule = new OneForwardOneBackwardSchedule();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 4, schedule: schedule);
+            model, config, microBatchCount: 4, schedule: schedule);
 
         var input = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)(i * 2)).ToArray());
@@ -115,7 +115,7 @@ public class PipelineParallelismIntegrationTests
         var schedule = new ZeroBubbleH1Schedule();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 4, schedule: schedule);
+            model, config, microBatchCount: 4, schedule: schedule);
 
         var input = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)(i * 2)).ToArray());
@@ -156,7 +156,7 @@ public class PipelineParallelismIntegrationTests
         var schedule = new ZeroBubbleH1Schedule();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 4, schedule: schedule);
+            model, config, microBatchCount: 4, schedule: schedule);
 
         var input = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)(i * 2)).ToArray());
@@ -196,7 +196,7 @@ public class PipelineParallelismIntegrationTests
         var schedule = new ZeroBubbleH2Schedule();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 4, schedule: schedule);
+            model, config, microBatchCount: 4, schedule: schedule);
 
         var input = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)(i * 2)).ToArray());
@@ -236,7 +236,7 @@ public class PipelineParallelismIntegrationTests
         var schedule = new ZeroBubbleVSchedule();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 4, schedule: schedule);
+            model, config, microBatchCount: 4, schedule: schedule);
 
         var input = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)(i * 2)).ToArray());
@@ -276,7 +276,7 @@ public class PipelineParallelismIntegrationTests
         var schedule = new Interleaved1F1BSchedule(virtualStagesPerRank: 2);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 4, schedule: schedule);
+            model, config, microBatchCount: 4, schedule: schedule);
 
         var input = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)(i * 2)).ToArray());
@@ -319,7 +319,7 @@ public class PipelineParallelismIntegrationTests
         var schedule = new LoopedBFSSchedule(virtualStagesPerRank: 2);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 4, schedule: schedule);
+            model, config, microBatchCount: 4, schedule: schedule);
 
         var input = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)(i * 2)).ToArray());
@@ -450,7 +450,7 @@ public class PipelineParallelismIntegrationTests
 
         // 4 micro-batches over 20 elements = 5 per micro-batch
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 4);
+            model, config, microBatchCount: 4);
 
         var input = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)(i * 3)).ToArray());
@@ -477,7 +477,7 @@ public class PipelineParallelismIntegrationTests
 
         // 3 micro-batches over 20 elements: 6, 6, 8
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 3);
+            model, config, microBatchCount: 3);
 
         var input = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)(i * 3)).ToArray());
@@ -503,7 +503,7 @@ public class PipelineParallelismIntegrationTests
         var model = new PipelineTestModel(parameterCount: 10);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 1);
+            model, config, microBatchCount: 1);
 
         var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
         var target = new Vector<double>(new double[] { 2.0, 4.0, 6.0, 8.0, 10.0 });
@@ -532,7 +532,7 @@ public class PipelineParallelismIntegrationTests
 
         // 100 micro-batches for 5 elements -> 0 per batch -> should throw
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 100);
+            model, config, microBatchCount: 100);
 
         var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
         var target = new Vector<double>(new double[] { 2.0, 4.0, 6.0, 8.0, 10.0 });
@@ -570,7 +570,7 @@ public class PipelineParallelismIntegrationTests
         };
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 2, checkpointConfig: checkpointConfig);
+            model, config, microBatchCount: 2, checkpointConfig: checkpointConfig);
 
         var input = new Vector<double>(Enumerable.Range(0, 10).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 10).Select(i => (double)(i * 2)).ToArray());
@@ -616,7 +616,7 @@ public class PipelineParallelismIntegrationTests
         };
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 4, checkpointConfig: checkpointConfig);
+            model, config, microBatchCount: 4, checkpointConfig: checkpointConfig);
 
         var input = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)(i * 2)).ToArray());
@@ -649,7 +649,7 @@ public class PipelineParallelismIntegrationTests
         };
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 2, checkpointConfig: checkpointConfig);
+            model, config, microBatchCount: 2, checkpointConfig: checkpointConfig);
 
         var input = new Vector<double>(Enumerable.Range(0, 10).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 10).Select(i => (double)(i * 2)).ToArray());
@@ -683,7 +683,7 @@ public class PipelineParallelismIntegrationTests
             new[] { 0, 100, 200 });
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 2, partitionStrategy: partitionStrategy);
+            model, config, microBatchCount: 2, partitionStrategy: partitionStrategy);
 
         var input = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)(i * 2)).ToArray());
@@ -712,7 +712,7 @@ public class PipelineParallelismIntegrationTests
             estimatedLayerSize: 100);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 2, partitionStrategy: partitionStrategy);
+            model, config, microBatchCount: 2, partitionStrategy: partitionStrategy);
 
         var input = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 20).Select(i => (double)(i * 2)).ToArray());
@@ -781,7 +781,7 @@ public class PipelineParallelismIntegrationTests
         var schedule = new LoopedBFSSchedule(virtualStagesPerRank: 2);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 4, schedule: schedule);
+            model, config, microBatchCount: 4, schedule: schedule);
 
         var input = new Vector<double>(Enumerable.Range(0, 40).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 40).Select(i => (double)(i * 2)).ToArray());
@@ -809,7 +809,7 @@ public class PipelineParallelismIntegrationTests
         var schedule = new Interleaved1F1BSchedule(virtualStagesPerRank: 3);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 4, schedule: schedule);
+            model, config, microBatchCount: 4, schedule: schedule);
 
         var input = new Vector<double>(Enumerable.Range(0, 40).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 40).Select(i => (double)(i * 2)).ToArray());
@@ -836,7 +836,7 @@ public class PipelineParallelismIntegrationTests
         var schedule = new LoopedBFSSchedule(virtualStagesPerRank: 3);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 4, schedule: schedule);
+            model, config, microBatchCount: 4, schedule: schedule);
 
         var input = new Vector<double>(Enumerable.Range(0, 60).Select(i => (double)i).ToArray());
         var target = new Vector<double>(Enumerable.Range(0, 60).Select(i => (double)(i * 2)).ToArray());
@@ -865,7 +865,7 @@ public class PipelineParallelismIntegrationTests
         var model = new PipelineTestModel(parameterCount: 10);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 2, schedule: new GPipeSchedule());
+            model, config, microBatchCount: 2, schedule: new GPipeSchedule());
 
         var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
         var target = new Vector<double>(new double[] { 2.0, 4.0, 6.0, 8.0, 10.0, 12.0 });
@@ -911,7 +911,7 @@ public class PipelineParallelismIntegrationTests
         var schedule = new OneForwardOneBackwardSchedule();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 2, schedule: schedule);
+            model, config, microBatchCount: 2, schedule: schedule);
 
         try
         {
@@ -927,7 +927,7 @@ public class PipelineParallelismIntegrationTests
             // Deserialize into new instance
             var model2 = new PipelineTestModel(parameterCount: 20);
             var pipelineModel2 = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-                model2, config, microBatchSize: 2, schedule: new OneForwardOneBackwardSchedule());
+                model2, config, microBatchCount: 2, schedule: new OneForwardOneBackwardSchedule());
 
             pipelineModel2.Deserialize(serialized);
 
@@ -956,12 +956,12 @@ public class PipelineParallelismIntegrationTests
 
         var model1 = new PipelineTestModel(parameterCount: 20);
         var pipelineModel1 = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model1, config, microBatchSize: 4);
+            model1, config, microBatchCount: 4);
         var serialized = pipelineModel1.Serialize();
 
         var model2 = new PipelineTestModel(parameterCount: 20);
         var pipelineModel2 = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model2, config, microBatchSize: 2);
+            model2, config, microBatchCount: 2);
 
         try
         {
@@ -984,7 +984,7 @@ public class PipelineParallelismIntegrationTests
         var model = new PipelineTestModel(parameterCount: 20);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchSize: 2);
+            model, config, microBatchCount: 2);
 
         try
         {
@@ -1089,7 +1089,7 @@ public class PipelineParallelismIntegrationTests
         {
             var model = new PipelineTestModel(parameterCount: 20);
             var pipeline = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-                model, config, microBatchSize: 4, schedule: new ZeroBubbleH2Schedule());
+                model, config, microBatchCount: 4, schedule: new ZeroBubbleH2Schedule());
 
             // Single rank: bubble fraction should be 0
             Assert.Equal(0.0, pipeline.EstimatedBubbleFraction);
