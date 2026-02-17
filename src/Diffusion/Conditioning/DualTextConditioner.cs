@@ -159,11 +159,14 @@ public class DualTextConditioner<T> : IConditioningModule<T>
             return _clipEncoder.GetPooledEmbedding(sequenceEmbeddings);
         }
 
-        // Fallback: input is T5-encoded (4096-dim) or otherwise incompatible with
-        // CLIP pooling (768-dim). Generate a CLIP unconditional pooled embedding.
-        // For prompt-specific pooling, callers should use EncodeDual() instead.
-        var clipUncond = _clipEncoder.GetUnconditionalEmbedding(1);
-        return _clipEncoder.GetPooledEmbedding(clipUncond);
+        // Input is T5-encoded (4096-dim) or otherwise incompatible with CLIP pooling (768-dim).
+        // Rather than silently returning an unconditional embedding (losing all semantic info),
+        // throw to surface the misconfiguration early.
+        throw new ArgumentException(
+            $"Cannot pool embeddings with dimension {sequenceEmbeddings.Shape[sequenceEmbeddings.Rank - 1]} " +
+            $"using CLIP encoder (expected {_clipEncoder.EmbeddingDimension}). " +
+            "Use EncodeDual() to get correctly-routed pooled embeddings from the CLIP encoder.",
+            nameof(sequenceEmbeddings));
     }
 
     /// <inheritdoc />

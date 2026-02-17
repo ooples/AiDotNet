@@ -554,14 +554,22 @@ public class QuantizationConfiguration
         }
 
         // Skip layers get the highest precision available for the current mode.
-        // For Float16 mode, full precision is 16-bit; for Int8/Float32/other, it's 32-bit.
         if (SkipLayers.Contains(layerInfo.Name))
         {
-            return Mode == QuantizationMode.Float16 ? 16 : 32;
+            return GetFullPrecisionBitWidth();
         }
 
         // Category-based override
         return GetBitWidthForCategory(layerInfo.Category);
+    }
+
+    /// <summary>
+    /// Returns the full-precision bit width for the current quantization mode.
+    /// Float16 mode uses 16-bit; all other modes use 32-bit.
+    /// </summary>
+    private int GetFullPrecisionBitWidth()
+    {
+        return Mode == QuantizationMode.Float16 ? 16 : 32;
     }
 
     /// <summary>

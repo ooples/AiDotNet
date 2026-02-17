@@ -144,6 +144,6 @@ public class OneForwardOneBackwardSchedule : IPipelineSchedule
         // This is approximately half of GPipe's bubble for large M
         double p = numStages;
         double m = numMicroBatches;
-        return (p - 1) / (2.0 * m + p - 1.0);
+        return (p - 1.0) / (2.0 * m + p - 1.0);
     }
 }

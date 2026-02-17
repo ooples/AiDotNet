@@ -197,6 +197,6 @@ public class Interleaved1F1BSchedule : IPipelineSchedule
         double p = numStages;
         double m = numMicroBatches;
         double v = _virtualStagesPerRank;
-        return (p - 1) / (2.0 * m * v + p - 1.0);
+        return (p - 1.0) / (2.0 * m * v + p - 1.0);
     }
 }
