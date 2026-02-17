@@ -29,16 +29,99 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
     private readonly BridgeTowerOptions _options; public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private int _visionLayerEnd; private int _textLayerEnd;
 
     public BridgeTower(NeuralNetworkArchitecture<T> architecture, string modelPath, BridgeTowerOptions? options = null) : base(architecture) { _options = options ?? new BridgeTowerOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.FusionDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
     public BridgeTower(NeuralNetworkArchitecture<T> architecture, BridgeTowerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new BridgeTowerOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.FusionDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
 
     public int EmbeddingDimension => _options.FusionDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int FusionEmbeddingDim => _options.FusionDim; public int MaxSequenceLength => _options.MaxSequenceLength;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); int end = Layers.Count / 3; var c = p; for (int i = 0; i < end; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
-    public Tensor<T> FuseImageText(Tensor<T> image, string text) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p); var c = p; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public T ComputeMatchingScore(Tensor<T> image, string text) { var fused = FuseImageText(image, text); double sum = 0; for (int i = 0; i < fused.Length; i++) sum += NumOps.ToDouble(fused[i]); return NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-sum / fused.Length))); }
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultBridgeFusionLayers(_options.VisionDim, _options.TextDim, _options.FusionDim, _options.NumVisionLayers, _options.NumTextLayers, _options.NumBridgeLayers, _options.NumHeads, _options.DropoutRate)); }
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p));
+        // Vision encoder with bridge layers
+        var c = p;
+        for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c);
+        return L2Normalize(c);
+    }
+
+    public Tensor<T> FuseImageText(Tensor<T> image, string text)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
+
+        // Vision encoder with bridge cross-attention layers
+        var visionOut = p;
+        for (int i = 0; i < _visionLayerEnd; i++) visionOut = Layers[i].Forward(visionOut);
+
+        // Text encoder with bridge cross-attention layers
+        var textTokens = TokenizeText(text);
+        var textOut = textTokens;
+        for (int i = _visionLayerEnd; i < _textLayerEnd; i++) textOut = Layers[i].Forward(textOut);
+
+        // Final cross-modal fusion layers
+        var fused = visionOut;
+        for (int i = _textLayerEnd; i < Layers.Count; i++) fused = Layers[i].Forward(fused);
+        return fused;
+    }
+
+    public T ComputeMatchingScore(Tensor<T> image, string text)
+    {
+        var imageEmb = EncodeImage(image);
+        var textTokens = TokenizeText(text);
+        Tensor<T> textEmb;
+        if (IsOnnxMode && OnnxModel is not null) { textEmb = L2Normalize(OnnxModel.Run(textTokens)); }
+        else
+        {
+            var c = textTokens;
+            for (int i = _visionLayerEnd; i < _textLayerEnd; i++) c = Layers[i].Forward(c);
+            textEmb = L2Normalize(c);
+        }
+        return CosineSimilarity(imageEmb, textEmb);
+    }
+
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _visionLayerEnd = Layers.Count / 3;
+            _textLayerEnd = Layers.Count * 2 / 3;
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateDefaultBridgeFusionLayers(_options.VisionDim, _options.TextDim, _options.FusionDim, _options.NumVisionLayers, _options.NumTextLayers, _options.NumBridgeLayers, _options.NumHeads, _options.DropoutRate));
+            ComputeBridgeBoundaries();
+        }
+    }
+
+    private void ComputeBridgeBoundaries()
+    {
+        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        // Vision encoder: LN + N vision blocks, with bridge cross-attention at evenly-spaced intervals
+        int bridgeInterval = _options.NumVisionLayers > 0 ? Math.Max(1, _options.NumVisionLayers / Math.Max(1, _options.NumBridgeLayers)) : 1;
+        int numVisionBridges = _options.NumVisionLayers > 0 ? (_options.NumVisionLayers / bridgeInterval) : 0;
+        int bridgeCrossAttnLayers = _options.DropoutRate > 0 ? 3 : 2; // MHA + LN + optional Dropout
+        _visionLayerEnd = 1 + _options.NumVisionLayers * lpb + numVisionBridges * bridgeCrossAttnLayers + (_options.VisionDim != _options.FusionDim ? 1 : 0);
+        // Text encoder: LN + N text blocks, with bridge cross-attention at evenly-spaced intervals
+        int textBridgeInterval = _options.NumTextLayers > 0 ? Math.Max(1, _options.NumTextLayers / Math.Max(1, _options.NumBridgeLayers)) : 1;
+        int numTextBridges = _options.NumTextLayers > 0 ? (_options.NumTextLayers / textBridgeInterval) : 0;
+        _textLayerEnd = _visionLayerEnd + 1 + _options.NumTextLayers * lpb + numTextBridges * bridgeCrossAttnLayers + (_options.TextDim != _options.FusionDim ? 1 : 0);
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
