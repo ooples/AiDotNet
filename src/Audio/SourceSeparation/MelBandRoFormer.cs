@@ -1,3 +1,4 @@
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -36,6 +37,8 @@ public class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparat
     private readonly MelBandRoFormerOptions _options;
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ShortTimeFourierTransform<T> _stft;
+    private Tensor<T>? _lastPhase;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -49,7 +52,11 @@ public class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparat
         _options = options ?? new MelBandRoFormerOptions(); _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); InitializeLayers();
+        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        int nFft = NextPowerOfTwo(_options.FftSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
+            windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
+        InitializeLayers();
     }
 
     public MelBandRoFormer(NeuralNetworkArchitecture<T> architecture, MelBandRoFormerOptions? options = null,
@@ -58,7 +65,11 @@ public class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparat
     {
         _options = options ?? new MelBandRoFormerOptions(); _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate; InitializeLayers();
+        base.SampleRate = _options.SampleRate;
+        int nFft2 = NextPowerOfTwo(_options.FftSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft2, hopLength: _options.HopLength,
+            windowLength: _options.FftSize <= nFft2 ? _options.FftSize : null);
+        InitializeLayers();
     }
 
     internal static async Task<MelBandRoFormer<T>> CreateAsync(MelBandRoFormerOptions? options = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
@@ -178,23 +189,43 @@ public class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparat
 
     private Tensor<T> ComputeSTFT(Tensor<T> audio)
     {
-        int nf = (audio.Length - _options.FftSize) / _options.HopLength + 1; if (nf <= 0) nf = 1;
-        var stft = new Tensor<T>([nf, _options.NumFreqBins]);
-        for (int f = 0; f < nf; f++) { int s = f * _options.HopLength; for (int b = 0; b < _options.NumFreqBins && s + b < audio.Length; b++) stft[f, b] = audio[s + b]; }
-        return stft;
+        _stft.MagnitudeAndPhase(audio, out var magnitude, out var phase);
+        _lastPhase = phase;
+        return magnitude;
     }
 
-    private SourceSeparationResult<T> BuildResult(Tensor<T> audio, Tensor<T> stft, Tensor<T> masks)
+    private SourceSeparationResult<T> BuildResult(Tensor<T> audio, Tensor<T> magnitude, Tensor<T> masks)
     {
-        int nf = stft.Shape[0]; var sources = new Dictionary<string, Tensor<T>>();
+        int nf = magnitude.Shape[0];
+        int numBins = magnitude.Shape[1];
+        var sources = new Dictionary<string, Tensor<T>>();
         for (int si = 0; si < _options.NumStems && si < _options.Sources.Length; si++)
         {
-            var src = new Tensor<T>([audio.Length]);
-            for (int f = 0; f < nf; f++) { int s = f * _options.HopLength; for (int b = 0; b < _options.NumFreqBins && s + b < audio.Length; b++)
-            { int mi = f * _options.NumFreqBins * _options.NumStems + si * _options.NumFreqBins + b; double mask = mi < masks.Length ? Math.Max(0, Math.Min(1, NumOps.ToDouble(masks[mi]))) : 0; src[s + b] = NumOps.Add(src[s + b], NumOps.FromDouble(NumOps.ToDouble(stft[f, b]) * mask)); } }
-            sources[_options.Sources[si]] = src;
+            var maskedMag = new Tensor<T>(magnitude.Shape);
+            for (int f = 0; f < nf; f++)
+                for (int b = 0; b < numBins; b++)
+                {
+                    int mi = f * numBins * _options.NumStems + si * numBins + b;
+                    double mask = mi < masks.Length ? Math.Max(0, Math.Min(1, NumOps.ToDouble(masks[mi]))) : 0;
+                    maskedMag[f, b] = NumOps.FromDouble(NumOps.ToDouble(magnitude[f, b]) * mask);
+                }
+            if (_lastPhase is not null)
+                sources[_options.Sources[si]] = _stft.InverseFromMagnitudeAndPhase(maskedMag, _lastPhase, audio.Length);
+            else
+                sources[_options.Sources[si]] = new Tensor<T>([audio.Length]);
         }
         return new SourceSeparationResult<T> { Sources = sources, OriginalMix = audio, SampleRate = _options.SampleRate, Duration = audio.Length / (double)_options.SampleRate };
+    }
+
+    private static int NextPowerOfTwo(int v)
+    {
+        v--;
+        v |= v >> 1;
+        v |= v >> 2;
+        v |= v >> 4;
+        v |= v >> 8;
+        v |= v >> 16;
+        return v + 1;
     }
 
     #endregion

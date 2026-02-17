@@ -1,3 +1,4 @@
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -37,6 +38,8 @@ public class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly FRCRNOptions _options;
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ShortTimeFourierTransform<T> _stft;
+    private Tensor<T>? _lastPhase;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -52,6 +55,9 @@ public class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         base.SampleRate = _options.SampleRate;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        int nFft = NextPowerOfTwo(_options.FFTSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
+            windowLength: _options.FFTSize <= nFft ? _options.FFTSize : null);
         InitializeLayers();
     }
 
@@ -63,6 +69,9 @@ public class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
+        int nFft = NextPowerOfTwo(_options.FFTSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
+            windowLength: _options.FFTSize <= nFft ? _options.FFTSize : null);
         InitializeLayers();
     }
 
@@ -158,8 +167,30 @@ public class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
     }
 
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        _stft.MagnitudeAndPhase(rawAudio, out var magnitude, out var phase);
+        _lastPhase = phase;
+        return magnitude;
+    }
+
+    protected override Tensor<T> PostprocessOutput(Tensor<T> enhancedMagnitude)
+    {
+        if (_lastPhase is null)
+            return enhancedMagnitude;
+        return _stft.InverseFromMagnitudeAndPhase(enhancedMagnitude, _lastPhase);
+    }
+
+    private static int NextPowerOfTwo(int v)
+    {
+        v--;
+        v |= v >> 1;
+        v |= v >> 2;
+        v |= v >> 4;
+        v |= v >> 8;
+        v |= v >> 16;
+        return v + 1;
+    }
 
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -1,9 +1,12 @@
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Audio.Generation;
 
@@ -37,6 +40,7 @@ public class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     private readonly VoiceCraftOptions _options;
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ITokenizer _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -77,6 +81,7 @@ public class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         base.SampleRate = _options.SampleRate;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         InitializeLayers();
     }
 
@@ -90,6 +95,7 @@ public class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         _options = options ?? new VoiceCraftOptions();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
@@ -313,13 +319,12 @@ public class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     private Tensor<T> EncodeText(string text)
     {
-        var tokens = new Tensor<T>([_options.HiddenDim]);
-        int hash = text.GetHashCode();
-        for (int i = 0; i < _options.HiddenDim; i++)
-        {
-            double val = Math.Sin((hash + i) * 0.1) * 0.5;
-            tokens[i] = NumOps.FromDouble(val);
-        }
+        var encoding = _tokenizer.Encode(text);
+        int dim = _options.HiddenDim;
+        var tokens = new Tensor<T>([dim]);
+        int copyCount = Math.Min(encoding.TokenIds.Count, dim);
+        for (int i = 0; i < copyCount; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
 

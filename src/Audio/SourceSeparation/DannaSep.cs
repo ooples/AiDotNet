@@ -1,3 +1,4 @@
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -40,6 +41,8 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
     private readonly DannaSepOptions _options;
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ShortTimeFourierTransform<T> _stft;
+    private Tensor<T>? _lastPhase;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -56,6 +59,9 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         base.SampleRate = _options.SampleRate;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        int nFft = NextPowerOfTwo(_options.FftSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
+            windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
         InitializeLayers();
     }
 
@@ -68,6 +74,9 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
+        int nFft = NextPowerOfTwo(_options.FftSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
+            windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
         InitializeLayers();
     }
 
@@ -262,42 +271,31 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 
     private Tensor<T> ComputeSTFT(Tensor<T> audio)
     {
-        int numFrames = (audio.Length - _options.FftSize) / _options.HopLength + 1;
-        if (numFrames <= 0) numFrames = 1;
-        var stft = new Tensor<T>([numFrames, _options.NumFreqBins]);
-        for (int f = 0; f < numFrames; f++)
-        {
-            int start = f * _options.HopLength;
-            for (int b = 0; b < _options.NumFreqBins && start + b < audio.Length; b++)
-                stft[f, b] = audio[start + b];
-        }
-        return stft;
+        _stft.MagnitudeAndPhase(audio, out var magnitude, out var phase);
+        _lastPhase = phase;
+        return magnitude;
     }
 
-    private SourceSeparationResult<T> BuildSeparationResult(Tensor<T> audio, Tensor<T> stft, Tensor<T> masks)
+    private SourceSeparationResult<T> BuildSeparationResult(Tensor<T> audio, Tensor<T> magnitude, Tensor<T> masks)
     {
         var sources = new Dictionary<string, Tensor<T>>();
-        int freqBins = _options.NumFreqBins;
-        int numFrames = stft.Shape[0];
+        int numFrames = magnitude.Shape[0];
+        int numBins = magnitude.Shape[1];
         for (int s = 0; s < _options.NumSources; s++)
         {
-            var stemStft = new Tensor<T>([numFrames, freqBins]);
+            var maskedMag = new Tensor<T>(magnitude.Shape);
             for (int f = 0; f < numFrames; f++)
-                for (int b = 0; b < freqBins; b++)
+                for (int b = 0; b < numBins; b++)
                 {
-                    int maskIdx = f * freqBins * _options.NumSources + s * freqBins + b;
+                    int maskIdx = f * numBins * _options.NumSources + s * numBins + b;
                     T maskVal = maskIdx < masks.Length ? masks[maskIdx] : NumOps.Zero;
-                    stemStft[f, b] = NumOps.Multiply(stft[f, b], maskVal);
+                    maskedMag[f, b] = NumOps.Multiply(magnitude[f, b], maskVal);
                 }
-            var stemAudio = new Tensor<T>([audio.Length]);
-            for (int f = 0; f < numFrames; f++)
-            {
-                int start = f * _options.HopLength;
-                for (int b = 0; b < freqBins && start + b < audio.Length; b++)
-                    stemAudio[start + b] = NumOps.Add(stemAudio[start + b], stemStft[f, b]);
-            }
             string name = s < _options.SourceNames.Length ? _options.SourceNames[s] : $"source_{s}";
-            sources[name] = stemAudio;
+            if (_lastPhase is not null)
+                sources[name] = _stft.InverseFromMagnitudeAndPhase(maskedMag, _lastPhase, audio.Length);
+            else
+                sources[name] = new Tensor<T>([audio.Length]);
         }
         return new SourceSeparationResult<T>
         {
@@ -306,6 +304,17 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
             SampleRate = _options.SampleRate,
             Duration = (double)audio.Length / _options.SampleRate
         };
+    }
+
+    private static int NextPowerOfTwo(int v)
+    {
+        v--;
+        v |= v >> 1;
+        v |= v >> 2;
+        v |= v >> 4;
+        v |= v >> 8;
+        v |= v >> 16;
+        return v + 1;
     }
 
     #endregion

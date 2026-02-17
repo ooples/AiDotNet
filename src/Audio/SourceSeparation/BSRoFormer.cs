@@ -1,3 +1,4 @@
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -37,6 +38,8 @@ public class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
     private readonly BSRoFormerOptions _options;
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ShortTimeFourierTransform<T> _stft;
+    private Tensor<T>? _lastPhase;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -52,6 +55,9 @@ public class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         base.SampleRate = _options.SampleRate;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        int nFft = NextPowerOfTwo(_options.FftSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
+            windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
         InitializeLayers();
     }
 
@@ -63,6 +69,9 @@ public class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
+        int nFft = NextPowerOfTwo(_options.FftSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
+            windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
         InitializeLayers();
     }
 
@@ -223,33 +232,45 @@ public class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 
     private Tensor<T> ComputeSTFT(Tensor<T> audio)
     {
-        int nf = (audio.Length - _options.FftSize) / _options.HopLength + 1;
-        if (nf <= 0) nf = 1;
-        var stft = new Tensor<T>([nf, _options.NumFreqBins]);
-        for (int f = 0; f < nf; f++) { int s = f * _options.HopLength; for (int b = 0; b < _options.NumFreqBins && s + b < audio.Length; b++) stft[f, b] = audio[s + b]; }
-        return stft;
+        _stft.MagnitudeAndPhase(audio, out var magnitude, out var phase);
+        _lastPhase = phase;
+        return magnitude;
     }
 
-    private SourceSeparationResult<T> BuildSeparationResult(Tensor<T> audio, Tensor<T> stft, Tensor<T> masks)
+    private SourceSeparationResult<T> BuildSeparationResult(Tensor<T> audio, Tensor<T> magnitude, Tensor<T> masks)
     {
-        int nf = stft.Shape[0];
+        int nf = magnitude.Shape[0];
+        int numBins = magnitude.Shape[1];
         var sources = new Dictionary<string, Tensor<T>>();
         for (int si = 0; si < _options.NumStems && si < _options.Sources.Length; si++)
         {
-            var src = new Tensor<T>([audio.Length]);
+            var maskedMag = new Tensor<T>(magnitude.Shape);
             for (int f = 0; f < nf; f++)
             {
-                int s = f * _options.HopLength;
-                for (int b = 0; b < _options.NumFreqBins && s + b < audio.Length; b++)
+                for (int b = 0; b < numBins; b++)
                 {
-                    int mi = f * _options.NumFreqBins * _options.NumStems + si * _options.NumFreqBins + b;
+                    int mi = f * numBins * _options.NumStems + si * numBins + b;
                     double mask = mi < masks.Length ? Math.Max(0, Math.Min(1, NumOps.ToDouble(masks[mi]))) : 0;
-                    src[s + b] = NumOps.Add(src[s + b], NumOps.FromDouble(NumOps.ToDouble(stft[f, b]) * mask));
+                    maskedMag[f, b] = NumOps.FromDouble(NumOps.ToDouble(magnitude[f, b]) * mask);
                 }
             }
-            sources[_options.Sources[si]] = src;
+            if (_lastPhase is not null)
+                sources[_options.Sources[si]] = _stft.InverseFromMagnitudeAndPhase(maskedMag, _lastPhase, audio.Length);
+            else
+                sources[_options.Sources[si]] = new Tensor<T>([audio.Length]);
         }
         return new SourceSeparationResult<T> { Sources = sources, OriginalMix = audio, SampleRate = _options.SampleRate, Duration = audio.Length / (double)_options.SampleRate };
+    }
+
+    private static int NextPowerOfTwo(int v)
+    {
+        v--;
+        v |= v >> 1;
+        v |= v >> 2;
+        v |= v >> 4;
+        v |= v >> 8;
+        v |= v >> 16;
+        return v + 1;
     }
 
     #endregion

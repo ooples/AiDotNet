@@ -1,3 +1,4 @@
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -53,6 +54,8 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly FullSubNetPlusOptions _options;
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ShortTimeFourierTransform<T> _stft;
+    private Tensor<T>? _lastPhase;
     private bool _useNativeMode;
     private bool _disposed;
     private List<T>? _streamingBuffer;
@@ -72,6 +75,9 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         base.SampleRate = _options.SampleRate;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        int nFft = NextPowerOfTwo(_options.FftSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
+            windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
         InitializeLayers();
     }
 
@@ -86,6 +92,9 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
+        int nFft = NextPowerOfTwo(_options.FftSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
+            windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
         InitializeLayers();
     }
 
@@ -272,16 +281,9 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private Tensor<T> ComputeSTFT(Tensor<T> audio)
     {
-        int numFrames = (audio.Length - _options.FftSize) / _options.HopLength + 1;
-        if (numFrames <= 0) numFrames = 1;
-        var stft = new Tensor<T>([numFrames, _options.NumFreqBins]);
-        for (int f = 0; f < numFrames; f++)
-        {
-            int start = f * _options.HopLength;
-            for (int b = 0; b < _options.NumFreqBins && start + b < audio.Length; b++)
-                stft[f, b] = audio[start + b];
-        }
-        return stft;
+        _stft.MagnitudeAndPhase(audio, out var magnitude, out var phase);
+        _lastPhase = phase;
+        return magnitude;
     }
 
     private Tensor<T> ApplyMask(Tensor<T> stft, Tensor<T> mask)
@@ -292,17 +294,22 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         return result;
     }
 
-    private Tensor<T> ComputeISTFT(Tensor<T> stft, int originalLength)
+    private Tensor<T> ComputeISTFT(Tensor<T> magnitude, int originalLength)
     {
-        var output = new Tensor<T>([originalLength]);
-        int numFrames = stft.Shape[0];
-        for (int f = 0; f < numFrames; f++)
-        {
-            int start = f * _options.HopLength;
-            for (int b = 0; b < _options.NumFreqBins && start + b < originalLength; b++)
-                output[start + b] = NumOps.Add(output[start + b], stft[f, b]);
-        }
-        return output;
+        if (_lastPhase is null)
+            throw new InvalidOperationException("Phase not available. Call ComputeSTFT first.");
+        return _stft.InverseFromMagnitudeAndPhase(magnitude, _lastPhase, originalLength);
+    }
+
+    private static int NextPowerOfTwo(int v)
+    {
+        v--;
+        v |= v >> 1;
+        v |= v >> 2;
+        v |= v >> 4;
+        v |= v >> 8;
+        v |= v >> 16;
+        return v + 1;
     }
 
     #endregion

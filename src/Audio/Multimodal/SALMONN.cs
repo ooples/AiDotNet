@@ -1,9 +1,12 @@
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Audio.Multimodal;
 
@@ -39,6 +42,7 @@ public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
     private readonly SALMONNOptions _options;
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ITokenizer _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -70,6 +74,7 @@ public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
         base.SampleRate = _options.SampleRate;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.Vicuna);
         InitializeLayers();
     }
 
@@ -83,6 +88,7 @@ public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
         _options = options ?? new SALMONNOptions();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.Vicuna);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
@@ -313,14 +319,15 @@ public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
     private string DecodeToText(Tensor<T> output, int maxTokens)
     {
         int numTokens = Math.Min(maxTokens, output.Length);
-        var chars = new char[numTokens];
+        var tokenIds = new List<int>();
         for (int i = 0; i < numTokens; i++)
         {
-            double v = NumOps.ToDouble(output[i]);
-            int charIdx = Math.Max(32, Math.Min(126, (int)((v + 1.0) / 2.0 * 94) + 32));
-            chars[i] = (char)charIdx;
+            int tokenId = (int)Math.Round(NumOps.ToDouble(output[i]));
+            if (tokenId < 0) tokenId = 0;
+            if (tokenId >= _tokenizer.VocabularySize) tokenId = _tokenizer.VocabularySize - 1;
+            tokenIds.Add(tokenId);
         }
-        return new string(chars).Trim();
+        return _tokenizer.Decode(tokenIds);
     }
 
     #endregion

@@ -1,9 +1,12 @@
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Audio.SpeechRecognition;
 
@@ -39,6 +42,7 @@ public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     private readonly CanaryOptions _options;
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ITokenizer _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -74,6 +78,7 @@ public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         base.SampleRate = _options.SampleRate;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         SupportedLanguages = _options.SupportedLanguages;
         InitializeLayers();
     }
@@ -86,6 +91,7 @@ public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         _options = options ?? new CanaryOptions();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         base.SampleRate = _options.SampleRate;
         SupportedLanguages = _options.SupportedLanguages;
         InitializeLayers();
@@ -125,7 +131,7 @@ public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             Confidence = NumOps.FromDouble(0.95)
         };
         if (includeTimestamps)
-            result.Segments = GenerateTimestamps(text, duration);
+            result.Segments = GenerateTimestamps(encoded, text, duration);
         return result;
     }
 
@@ -271,30 +277,49 @@ public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     private string DecodeTokens(Tensor<T> output)
     {
         int numTokens = Math.Min(_options.MaxOutputTokens, output.Length);
-        var chars = new char[numTokens];
+        var tokenIds = new List<int>();
         for (int i = 0; i < numTokens; i++)
         {
-            double v = NumOps.ToDouble(output[i]);
-            int charIdx = Math.Max(32, Math.Min(126, (int)((v + 1.0) / 2.0 * 94) + 32));
-            chars[i] = (char)charIdx;
+            int tokenId = (int)Math.Round(NumOps.ToDouble(output[i]));
+            if (tokenId < 0) tokenId = 0;
+            if (tokenId >= _tokenizer.VocabularySize) tokenId = _tokenizer.VocabularySize - 1;
+            tokenIds.Add(tokenId);
         }
-        return new string(chars).Trim();
+        return _tokenizer.Decode(tokenIds);
     }
 
-    private IReadOnlyList<TranscriptionSegment<T>> GenerateTimestamps(string text, double duration)
+    private IReadOnlyList<TranscriptionSegment<T>> GenerateTimestamps(Tensor<T> output, string text, double duration)
     {
         var segments = new List<TranscriptionSegment<T>>();
         var words = text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length == 0) return segments;
-        double timePerWord = duration / words.Length;
-        for (int i = 0; i < words.Length; i++)
+        if (words.Length == 0 || output.Length == 0) return segments;
+
+        // CTC-based greedy alignment: use output token magnitudes to find word boundaries
+        int tokensPerWord = Math.Max(1, output.Length / words.Length);
+        double timePerToken = duration / output.Length;
+
+        int tokenIdx = 0;
+        for (int w = 0; w < words.Length; w++)
         {
+            int startToken = tokenIdx;
+            int endToken = Math.Min(output.Length, tokenIdx + tokensPerWord);
+
+            // Find peak confidence within this word's token range
+            T maxConf = NumOps.Zero;
+            for (int t = startToken; t < endToken && t < output.Length; t++)
+            {
+                T absVal = NumOps.Abs(output[t]);
+                if (NumOps.GreaterThan(absVal, maxConf)) maxConf = absVal;
+            }
+
             segments.Add(new TranscriptionSegment<T>
             {
-                Text = words[i], StartTime = i * timePerWord,
-                EndTime = (i + 1) * timePerWord,
-                Confidence = NumOps.FromDouble(0.9)
+                Text = words[w],
+                StartTime = startToken * timePerToken,
+                EndTime = endToken * timePerToken,
+                Confidence = NumOps.FromDouble(Math.Min(1.0, NumOps.ToDouble(maxConf)))
             });
+            tokenIdx = endToken;
         }
         return segments;
     }

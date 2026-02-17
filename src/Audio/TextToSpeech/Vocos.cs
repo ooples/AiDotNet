@@ -1,9 +1,12 @@
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.Audio.TextToSpeech;
 
@@ -48,6 +51,7 @@ public class Vocos<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     private readonly VocosOptions _options;
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly ITokenizer _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -83,6 +87,7 @@ public class Vocos<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         base.SampleRate = _options.SampleRate;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         InitializeLayers();
     }
 
@@ -94,6 +99,7 @@ public class Vocos<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _options = options ?? new VocosOptions();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
@@ -261,14 +267,13 @@ public class Vocos<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
     private Tensor<T> EncodeText(string text)
     {
+        var encoding = _tokenizer.Encode(text);
         int dim = _options.NumMels;
-        var encoded = new Tensor<T>(new[] { text.Length * dim });
-        for (int i = 0; i < text.Length; i++)
-        {
-            int charIdx = text[i] % dim;
-            encoded[i * dim + charIdx] = NumOps.FromDouble(1.0);
-        }
-        return encoded;
+        var tokens = new Tensor<T>([dim]);
+        int copyCount = Math.Min(encoding.TokenIds.Count, dim);
+        for (int i = 0; i < copyCount; i++)
+            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
     }
 
     #endregion

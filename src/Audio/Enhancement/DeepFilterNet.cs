@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -138,13 +139,14 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     #endregion
 
-    #region STFT Cache
+    #region STFT
+
+    private readonly ShortTimeFourierTransform<T> _stft;
 
     /// <summary>
-    /// Cached STFT from preprocessing, used for audio reconstruction.
-    /// Shape: [numFrames, numBins, 2] where last dim is [real, imag].
+    /// Cached complex STFT from preprocessing, used for audio reconstruction.
     /// </summary>
-    private Tensor<T>? _cachedStft;
+    private Tensor<Complex<T>>? _cachedComplexStft;
 
     #endregion
 
@@ -257,6 +259,10 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         // Initialize optimizer (not used in ONNX mode but required for readonly field)
         _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        int nFft = NextPowerOfTwo(_fftSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _hopSize,
+            windowLength: _fftSize <= nFft ? _fftSize : null);
     }
 
     /// <summary>
@@ -326,6 +332,10 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _convKernelSize = 3;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
+        int nFft = NextPowerOfTwo(_fftSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _hopSize,
+            windowLength: _fftSize <= nFft ? _fftSize : null);
 
         InitializeNativeLayers();
     }
@@ -427,14 +437,14 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <inheritdoc/>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        // Compute STFT
-        var stft = ComputeSTFT(rawAudio);
+        // Compute complex STFT
+        var complexStft = ComputeSTFT(rawAudio);
 
-        // Cache STFT for reconstruction
-        _cachedStft = stft;
+        // Cache complex STFT for reconstruction
+        _cachedComplexStft = complexStft;
 
-        // Compute ERB features
-        var erbFeatures = ComputeErbFeatures(stft);
+        // Compute ERB features from magnitude
+        var erbFeatures = ComputeErbFeatures(complexStft);
 
         return erbFeatures;
     }
@@ -605,56 +615,23 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <summary>
-    /// Computes STFT of audio signal.
+    /// Computes STFT of audio signal using ShortTimeFourierTransform.
     /// </summary>
-    private Tensor<T> ComputeSTFT(Tensor<T> audio)
+    private Tensor<Complex<T>> ComputeSTFT(Tensor<T> audio)
     {
-        var samples = audio.ToVector().ToArray();
-        int numFrames = (samples.Length - _fftSize) / _hopSize + 1;
-        int numBins = _fftSize / 2 + 1;
-
-        var stft = new Tensor<T>([numFrames, numBins, 2]); // Real + Imag
-        var window = CreateHannWindow(_fftSize);
-
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            int start = frame * _hopSize;
-            var frameData = new double[_fftSize];
-
-            for (int i = 0; i < _fftSize && start + i < samples.Length; i++)
-            {
-                frameData[i] = NumOps.ToDouble(samples[start + i]) * window[i];
-            }
-
-            // Compute FFT (simplified - real implementation would use proper FFT)
-            for (int k = 0; k < numBins; k++)
-            {
-                double real = 0, imag = 0;
-                for (int n = 0; n < _fftSize; n++)
-                {
-                    double angle = -2 * Math.PI * k * n / _fftSize;
-                    real += frameData[n] * Math.Cos(angle);
-                    imag += frameData[n] * Math.Sin(angle);
-                }
-                stft[[frame, k, 0]] = NumOps.FromDouble(real);
-                stft[[frame, k, 1]] = NumOps.FromDouble(imag);
-            }
-        }
-
-        return stft;
+        return _stft.Forward(audio);
     }
 
     /// <summary>
-    /// Computes ERB (Equivalent Rectangular Bandwidth) features.
+    /// Computes ERB (Equivalent Rectangular Bandwidth) features from complex STFT.
     /// </summary>
-    private Tensor<T> ComputeErbFeatures(Tensor<T> stft)
+    private Tensor<T> ComputeErbFeatures(Tensor<Complex<T>> complexStft)
     {
-        int numFrames = stft.Shape[0];
-        int numBins = stft.Shape[1];
+        int numFrames = complexStft.Shape[0];
+        int numBins = complexStft.Shape[1];
 
         var erbFeatures = new Tensor<T>([numFrames, _numErbBands]);
 
-        // ERB filterbank (simplified)
         for (int frame = 0; frame < numFrames; frame++)
         {
             for (int erb = 0; erb < _numErbBands; erb++)
@@ -665,9 +642,8 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
                 for (int bin = startBin; bin < endBin && bin < numBins; bin++)
                 {
-                    double real = NumOps.ToDouble(stft[[frame, bin, 0]]);
-                    double imag = NumOps.ToDouble(stft[[frame, bin, 1]]);
-                    sum += Math.Sqrt(real * real + imag * imag);
+                    double mag = NumOps.ToDouble(complexStft.Data.Span[frame * numBins + bin].Magnitude);
+                    sum += mag;
                 }
 
                 erbFeatures[[frame, erb]] = NumOps.FromDouble(Math.Log(sum + 1e-8));
@@ -686,46 +662,39 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <returns>Reconstructed audio waveform.</returns>
     private Tensor<T> ReconstructAudio(Tensor<T> enhanced)
     {
-        if (_cachedStft is null)
+        if (_cachedComplexStft is null)
         {
-            // If no cached STFT (shouldn't happen in normal flow), return zeros
             int fallbackSamples = enhanced.Shape[0] * _hopSize + _fftSize;
             return new Tensor<T>([fallbackSamples]);
         }
 
-        int numFrames = _cachedStft.Shape[0];
-        int numBins = _cachedStft.Shape[1];
+        int numFrames = _cachedComplexStft.Shape[0];
+        int numBins = _cachedComplexStft.Shape[1];
         int dfCoeffSize = _dfBins * _dfOrder * 2;
 
-        // Apply ERB gains to STFT
-        var enhancedStft = new Tensor<T>(_cachedStft.Shape);
+        // Apply ERB gains and deep filtering to complex STFT
+        var enhancedStft = new Tensor<Complex<T>>(_cachedComplexStft.Shape);
 
         for (int frame = 0; frame < numFrames; frame++)
         {
             for (int bin = 0; bin < numBins; bin++)
             {
-                // Find which ERB band this bin belongs to
-                int erbBand = bin * _numErbBands / numBins;
-                erbBand = Math.Min(erbBand, _numErbBands - 1);
+                int erbBand = Math.Min(bin * _numErbBands / numBins, _numErbBands - 1);
+                int idx = frame * numBins + bin;
 
-                // Get gain from model output (gains are after DF coefficients)
                 double gain = 1.0;
                 if (frame < enhanced.Shape[0] && dfCoeffSize + erbBand < enhanced.Shape[^1])
                 {
                     double rawGain = NumOps.ToDouble(enhanced[[frame, dfCoeffSize + erbBand]]);
-                    // Apply sigmoid to constrain gain to [0, 1]
                     gain = 1.0 / (1.0 + Math.Exp(-rawGain));
                 }
 
-                // Apply gain to complex STFT value
-                double real = NumOps.ToDouble(_cachedStft[[frame, bin, 0]]) * gain;
-                double imag = NumOps.ToDouble(_cachedStft[[frame, bin, 1]]) * gain;
+                double real = NumOps.ToDouble(_cachedComplexStft.Data.Span[idx].Real) * gain;
+                double imag = NumOps.ToDouble(_cachedComplexStft.Data.Span[idx].Imaginary) * gain;
 
                 // Apply deep filtering for first _dfBins bins
                 if (bin < _dfBins && frame < enhanced.Shape[0])
                 {
-                    // Deep filtering applies learned complex coefficients
-                    // For simplicity, treat DF coefficients as additional gain/phase adjustment
                     for (int order = 0; order < _dfOrder && frame >= order; order++)
                     {
                         int coeffIdx = (bin * _dfOrder + order) * 2;
@@ -734,92 +703,20 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
                             double dfReal = NumOps.ToDouble(enhanced[[frame, coeffIdx]]);
                             double dfImag = NumOps.ToDouble(enhanced[[frame, coeffIdx + 1]]);
 
-                            // Complex multiplication for filtering
                             double newReal = real * dfReal - imag * dfImag;
                             double newImag = real * dfImag + imag * dfReal;
-                            real = newReal * 0.1 + real * 0.9; // Blend with original
+                            real = newReal * 0.1 + real * 0.9;
                             imag = newImag * 0.1 + imag * 0.9;
                         }
                     }
                 }
 
-                enhancedStft[[frame, bin, 0]] = NumOps.FromDouble(real);
-                enhancedStft[[frame, bin, 1]] = NumOps.FromDouble(imag);
+                enhancedStft.Data.Span[idx] = new Complex<T>(NumOps.FromDouble(real), NumOps.FromDouble(imag));
             }
         }
 
-        // Inverse STFT with overlap-add
-        return InverseSTFT(enhancedStft);
-    }
-
-    /// <summary>
-    /// Performs inverse STFT using overlap-add reconstruction.
-    /// </summary>
-    private Tensor<T> InverseSTFT(Tensor<T> stft)
-    {
-        int numFrames = stft.Shape[0];
-        int numBins = stft.Shape[1];
-        int numSamples = (numFrames - 1) * _hopSize + _fftSize;
-
-        var audio = new Tensor<T>([numSamples]);
-        var windowSum = new double[numSamples];
-
-        // Create Hann window
-        var window = CreateHannWindow(_fftSize);
-
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            // Extract complex spectrum for this frame
-            var frameReal = new double[_fftSize];
-            var frameImag = new double[_fftSize];
-
-            // Copy positive frequencies
-            for (int bin = 0; bin < numBins && bin < _fftSize / 2 + 1; bin++)
-            {
-                frameReal[bin] = NumOps.ToDouble(stft[[frame, bin, 0]]);
-                frameImag[bin] = NumOps.ToDouble(stft[[frame, bin, 1]]);
-            }
-
-            // Mirror for conjugate symmetry (negative frequencies)
-            for (int bin = 1; bin < _fftSize / 2; bin++)
-            {
-                frameReal[_fftSize - bin] = frameReal[bin];
-                frameImag[_fftSize - bin] = -frameImag[bin]; // Conjugate
-            }
-
-            // Inverse FFT (simplified real-valued DFT)
-            var timeFrame = new double[_fftSize];
-            for (int n = 0; n < _fftSize; n++)
-            {
-                double sum = 0;
-                for (int k = 0; k < _fftSize; k++)
-                {
-                    double angle = 2.0 * Math.PI * k * n / _fftSize;
-                    sum += frameReal[k] * Math.Cos(angle) - frameImag[k] * Math.Sin(angle);
-                }
-                timeFrame[n] = sum / _fftSize;
-            }
-
-            // Apply window and overlap-add
-            int startSample = frame * _hopSize;
-            for (int n = 0; n < _fftSize && startSample + n < numSamples; n++)
-            {
-                double windowedSample = timeFrame[n] * window[n];
-                audio[startSample + n] = NumOps.Add(audio[startSample + n], NumOps.FromDouble(windowedSample));
-                windowSum[startSample + n] += window[n] * window[n];
-            }
-        }
-
-        // Normalize by window sum to complete overlap-add
-        for (int i = 0; i < numSamples; i++)
-        {
-            if (windowSum[i] > 1e-8)
-            {
-                audio[i] = NumOps.Divide(audio[i], NumOps.FromDouble(windowSum[i]));
-            }
-        }
-
-        return audio;
+        // Use proper ISTFT for reconstruction
+        return _stft.Inverse(enhancedStft);
     }
 
     /// <summary>
@@ -851,17 +748,15 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         return combined;
     }
 
-    /// <summary>
-    /// Creates a Hann window.
-    /// </summary>
-    private double[] CreateHannWindow(int size)
+    private static int NextPowerOfTwo(int v)
     {
-        var window = new double[size];
-        for (int i = 0; i < size; i++)
-        {
-            window[i] = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (size - 1)));
-        }
-        return window;
+        v--;
+        v |= v >> 1;
+        v |= v >> 2;
+        v |= v >> 4;
+        v |= v >> 8;
+        v |= v >> 16;
+        return v + 1;
     }
 
     #endregion
