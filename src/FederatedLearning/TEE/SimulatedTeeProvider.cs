@@ -29,7 +29,9 @@ public class SimulatedTeeProvider<T> : TeeProviderBase<T>
     /// <inheritdoc/>
     public override void Initialize(TeeOptions options)
     {
-        // Generate a stable simulated enclave identity
+        // Generate a fresh simulated enclave identity for this session.
+        // Note: This identity is ephemeral — it changes on each Initialize() call.
+        // Previously sealed blobs will not be unsealable after re-initialization.
         _enclaveIdentity = new byte[32];
         using (var rng = RandomNumberGenerator.Create())
         {

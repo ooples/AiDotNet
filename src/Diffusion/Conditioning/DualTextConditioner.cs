@@ -152,10 +152,16 @@ public class DualTextConditioner<T> : IConditioningModule<T>
     /// </remarks>
     public Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
-        // Pooled embeddings must come from CLIP. Since this method receives generic
-        // sequence embeddings (which may be T5-encoded), we generate a CLIP unconditional
-        // pooled embedding as a safe fallback. Callers that need prompt-specific pooling
-        // should use EncodeDual() instead.
+        // If the input has CLIP-compatible dimensions, use it directly for pooling
+        if (sequenceEmbeddings.Rank >= 2 &&
+            sequenceEmbeddings.Shape[sequenceEmbeddings.Rank - 1] == _clipEncoder.EmbeddingDimension)
+        {
+            return _clipEncoder.GetPooledEmbedding(sequenceEmbeddings);
+        }
+
+        // Fallback: input is T5-encoded (4096-dim) or otherwise incompatible with
+        // CLIP pooling (768-dim). Generate a CLIP unconditional pooled embedding.
+        // For prompt-specific pooling, callers should use EncodeDual() instead.
         var clipUncond = _clipEncoder.GetUnconditionalEmbedding(1);
         return _clipEncoder.GetPooledEmbedding(clipUncond);
     }

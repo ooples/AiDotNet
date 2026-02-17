@@ -81,22 +81,22 @@ public class SecureClippingProtocol<T> : FederatedLearningComponentBase<T>
         double clipNormSquared = _clipNorm * _clipNorm;
         var thresholdShares = CreateConstantShares(clipNormSquared, new[] { 1 }, n);
 
-        // Compare: is ||g||^2 > C^2?
-        // This is done securely — neither party learns the comparison result directly.
-        _protocol.SecureCompare(normSquaredShares, thresholdShares);
-
-        // Compute the clamped scale factor: min(1.0, C / ||g||)
-        // Note: We reconstruct only the scale factor, NOT the raw norm. This reveals
-        // only whether clipping occurred and by how much (at most), not the actual
-        // gradient magnitude. For full security (hiding even the scale factor),
-        // the protocol would need SecureDivide and SecureSqrt operations on shares,
-        // which require additional MPC rounds (e.g., Goldschmidt iteration on shares).
+        // Reconstruct ||g||^2 to compute the scale factor.
+        // Note: This reveals the gradient's L2 norm to the computing party. For full
+        // security (hiding the norm), use SecureDivide and SecureSqrt on shares
+        // (e.g., Goldschmidt iteration), which adds significant MPC rounds.
         var normSquaredPlain = ReconstructScalar(normSquaredShares);
         double normPlain = Math.Sqrt(Math.Max(normSquaredPlain, 1e-12));
-        double scaleFactor = Math.Min(1.0, _clipNorm / normPlain);
-        T scaleFactorT = NumOps.FromDouble(scaleFactor);
 
-        // Apply scaling: clipped_g = scale * g
+        // No clipping needed if norm is within threshold
+        if (normPlain <= _clipNorm)
+        {
+            return gradientShares;
+        }
+
+        // Apply scaling: clipped_g = (C / ||g||) * g
+        double scaleFactor = _clipNorm / normPlain;
+        T scaleFactorT = NumOps.FromDouble(scaleFactor);
         return _protocol.ScalarMultiply(gradientShares, scaleFactorT);
     }
 

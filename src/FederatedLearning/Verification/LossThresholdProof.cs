@@ -49,6 +49,11 @@ public class LossThresholdProof<T> : FederatedLearningComponentBase<T>, IVerifia
     /// <returns>A verification proof, or null if the loss exceeds the threshold.</returns>
     public VerificationProof? GenerateLossProof(double loss, int clientId, int round)
     {
+        if (double.IsNaN(loss) || double.IsInfinity(loss))
+        {
+            throw new ArgumentOutOfRangeException(nameof(loss), "Loss must be a finite number.");
+        }
+
         if (loss < 0.0)
         {
             throw new ArgumentOutOfRangeException(nameof(loss), "Loss must be non-negative.");
@@ -144,6 +149,12 @@ public class LossThresholdProof<T> : FederatedLearningComponentBase<T>, IVerifia
             return false;
         }
 
+        // Reject non-finite bounds
+        if (double.IsNaN(constraint.Bound) || double.IsInfinity(constraint.Bound))
+        {
+            return false;
+        }
+
         // Verify range proof
         byte[] thresholdBytes = BitConverter.GetBytes(constraint.Bound);
         if (!_proofSystem.VerifyRangeProof(rangeProof, thresholdBytes, proof.Commitment))
@@ -155,7 +166,8 @@ public class LossThresholdProof<T> : FederatedLearningComponentBase<T>, IVerifia
         if (lossBytes.Length >= 8)
         {
             double committedLoss = BitConverter.ToDouble(lossBytes, 0);
-            if (committedLoss < 0.0 || committedLoss > constraint.Bound)
+            if (double.IsNaN(committedLoss) || double.IsInfinity(committedLoss) ||
+                committedLoss < 0.0 || committedLoss > constraint.Bound)
             {
                 return false;
             }

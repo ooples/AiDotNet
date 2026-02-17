@@ -100,6 +100,11 @@ public abstract class TeeProviderBase<T> : FederatedLearningComponentBase<T>, IT
             throw new ArgumentNullException(nameof(reportData));
         }
 
+        if (reportData.Length > 64)
+        {
+            throw new ArgumentException("Report data must be at most 64 bytes.", nameof(reportData));
+        }
+
         return BuildQuote(reportData);
     }
 

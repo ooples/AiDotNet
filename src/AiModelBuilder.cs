@@ -1811,7 +1811,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     DistributedStrategy.PipelineParallel => CreateDistributedPair(
                         new DistributedTraining.PipelineParallelModel<T, TInput, TOutput>(
                             _model, shardingConfig,
-                            microBatchSize: _pipelineMicroBatchCount,
+                            microBatchCount: _pipelineMicroBatchCount,
                             partitionStrategy: _pipelinePartitionStrategy,
                             schedule: _pipelineSchedule,
                             checkpointConfig: _pipelineCheckpointConfig),

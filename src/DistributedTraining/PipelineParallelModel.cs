@@ -56,7 +56,7 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="TOutput">The output type for the model</typeparam>
 public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
-    private readonly int _microBatchSize;
+    private readonly int _microBatchCount;
     private readonly IPipelinePartitionStrategy<T>? _partitionStrategy;
     private readonly IPipelineSchedule _schedule;
     private readonly ActivationCheckpointConfig _checkpointConfig;
@@ -130,7 +130,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         {
             EnsureShardingInitialized();
 
-            return _schedule.EstimateBubbleFraction(_numStages, _microBatchSize);
+            return _schedule.EstimateBubbleFraction(_numStages, _microBatchCount);
         }
     }
 
@@ -139,7 +139,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     /// </summary>
     /// <param name="wrappedModel">The model to split into pipeline stages.</param>
     /// <param name="config">Configuration for sharding and communication.</param>
-    /// <param name="microBatchSize">Number of micro-batches to split the input into (default: 1).</param>
+    /// <param name="microBatchCount">Number of micro-batches to split the input into (default: 1).</param>
     /// <param name="partitionStrategy">
     /// Strategy for partitioning parameters across stages. If null, uses uniform partitioning.
     /// </param>
@@ -152,19 +152,19 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     public PipelineParallelModel(
         IFullModel<T, TInput, TOutput> wrappedModel,
         IShardingConfiguration<T> config,
-        int microBatchSize = 1,
+        int microBatchCount = 1,
         IPipelinePartitionStrategy<T>? partitionStrategy = null,
         IPipelineSchedule? schedule = null,
         ActivationCheckpointConfig? checkpointConfig = null)
         : base(wrappedModel, config)
     {
-        if (microBatchSize < 1)
+        if (microBatchCount < 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(microBatchSize),
-                "Micro batch size must be at least 1.");
+            throw new ArgumentOutOfRangeException(nameof(microBatchCount),
+                "Micro-batch count must be at least 1.");
         }
 
-        _microBatchSize = microBatchSize;
+        _microBatchCount = microBatchCount;
         _partitionStrategy = partitionStrategy;
         _schedule = schedule ?? new GPipeSchedule();
         _checkpointConfig = checkpointConfig ?? new ActivationCheckpointConfig();
@@ -585,16 +585,16 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         EnsureShardingInitialized();
 
         // Pipeline parallel training using the configured schedule
-        var scheduleOps = _schedule.GetSchedule(_stageId, _numStages, _microBatchSize);
+        var scheduleOps = _schedule.GetSchedule(_stageId, _numStages, _microBatchCount);
 
         // Validate schedule output: externally injectable schedules may emit invalid indices
         foreach (var op in scheduleOps)
         {
-            if (op.MicroBatchIndex < 0 || op.MicroBatchIndex >= _microBatchSize)
+            if (op.MicroBatchIndex < 0 || op.MicroBatchIndex >= _microBatchCount)
             {
                 throw new InvalidOperationException(
                     $"Schedule '{_schedule.Name}' emitted MicroBatchIndex={op.MicroBatchIndex} " +
-                    $"but valid range is [0, {_microBatchSize - 1}].");
+                    $"but valid range is [0, {_microBatchCount - 1}].");
             }
 
             if (op.VirtualStageIndex < 0 || op.VirtualStageIndex >= _virtualStagesPerRank)
@@ -727,7 +727,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         // Apply accumulated gradients averaged across micro-batches
         if (accumulatedGradients is not null)
         {
-            T microBatchCount = NumOps.FromDouble(_microBatchSize);
+            T microBatchCount = NumOps.FromDouble(_microBatchCount);
             for (int i = 0; i < accumulatedGradients.Length; i++)
             {
                 accumulatedGradients[i] = NumOps.Divide(accumulatedGradients[i], microBatchCount);
@@ -801,7 +801,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     {
         var slices = new Dictionary<int, TInput>();
 
-        if (_microBatchSize <= 1)
+        if (_microBatchCount <= 1)
         {
             slices[0] = fullData;
             return slices;
@@ -822,20 +822,20 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         }
 
         int totalElements = fullVector.Length;
-        int microBatchElements = totalElements / _microBatchSize;
+        int microBatchElements = totalElements / _microBatchCount;
 
         if (microBatchElements <= 0)
         {
             throw new InvalidOperationException(
-                $"Cannot slice {totalElements} elements into {_microBatchSize} micro-batches. " +
-                $"Reduce pipelineMicroBatchSize to at most {totalElements}.");
+                $"Cannot slice {totalElements} elements into {_microBatchCount} micro-batches. " +
+                $"Reduce pipelineMicroBatchCount to at most {totalElements}.");
         }
 
         var fullArray = fullVector.ToArray();
-        for (int i = 0; i < _microBatchSize; i++)
+        for (int i = 0; i < _microBatchCount; i++)
         {
             int startIdx = i * microBatchElements;
-            int size = (i == _microBatchSize - 1)
+            int size = (i == _microBatchCount - 1)
                 ? totalElements - startIdx  // Last slice gets remainder
                 : microBatchElements;
 
@@ -857,7 +857,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     {
         var slices = new Dictionary<int, TOutput>();
 
-        if (_microBatchSize <= 1)
+        if (_microBatchCount <= 1)
         {
             slices[0] = fullTarget;
             return slices;
@@ -877,20 +877,20 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         }
 
         int totalElements = fullVector.Length;
-        int microBatchElements = totalElements / _microBatchSize;
+        int microBatchElements = totalElements / _microBatchCount;
 
         if (microBatchElements <= 0)
         {
             throw new InvalidOperationException(
-                $"Cannot slice {totalElements} target elements into {_microBatchSize} micro-batches. " +
-                $"Reduce pipelineMicroBatchSize to at most {totalElements}.");
+                $"Cannot slice {totalElements} target elements into {_microBatchCount} micro-batches. " +
+                $"Reduce pipelineMicroBatchCount to at most {totalElements}.");
         }
 
         var fullArray = fullVector.ToArray();
-        for (int i = 0; i < _microBatchSize; i++)
+        for (int i = 0; i < _microBatchCount; i++)
         {
             int startIdx = i * microBatchElements;
-            int size = (i == _microBatchSize - 1)
+            int size = (i == _microBatchCount - 1)
                 ? totalElements - startIdx
                 : microBatchElements;
 
@@ -1304,7 +1304,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         metadata.SetProperty("Rank", Rank);
         metadata.SetProperty("StageId", _stageId);
         metadata.SetProperty("NumStages", _numStages);
-        metadata.SetProperty("MicroBatchSize", _microBatchSize);
+        metadata.SetProperty("MicroBatchCount", _microBatchCount);
         metadata.SetProperty("Schedule", _schedule.Name);
         metadata.SetProperty("VirtualStagesPerRank", _virtualStagesPerRank);
         metadata.SetProperty("EstimatedBubbleFraction", EstimatedBubbleFraction);
@@ -1318,7 +1318,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         return new PipelineParallelModel<T, TInput, TOutput>(
-            WrappedModel.WithParameters(parameters), Config, _microBatchSize,
+            WrappedModel.WithParameters(parameters), Config, _microBatchCount,
             _partitionStrategy, _schedule, _checkpointConfig);
     }
 
@@ -1330,7 +1330,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         using var writer = new BinaryWriter(ms);
         writer.Write(WorldSize);
         writer.Write(Rank);
-        writer.Write(_microBatchSize);
+        writer.Write(_microBatchCount);
         writer.Write(Config.AutoSyncGradients);
         writer.Write(Config.MinimumParameterGroupSize);
         writer.Write(Config.EnableGradientCompression);
@@ -1351,7 +1351,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         using var reader = new BinaryReader(ms);
         int savedWorldSize = reader.ReadInt32();
         int savedRank = reader.ReadInt32();
-        int savedMicroBatchSize = reader.ReadInt32();
+        int savedMicroBatchCount = reader.ReadInt32();
         reader.ReadBoolean(); // AutoSyncGradients
         reader.ReadInt32(); // MinimumParameterGroupSize
         reader.ReadBoolean(); // EnableGradientCompression
@@ -1364,8 +1364,8 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
             throw new InvalidOperationException($"World size mismatch: {savedWorldSize} vs {WorldSize}");
         if (savedRank != Rank)
             throw new InvalidOperationException($"Rank mismatch: {savedRank} vs {Rank}");
-        if (savedMicroBatchSize != _microBatchSize)
-            throw new InvalidOperationException($"Micro batch size mismatch: saved model was trained with {savedMicroBatchSize}, but current instance configured with {_microBatchSize}");
+        if (savedMicroBatchCount != _microBatchCount)
+            throw new InvalidOperationException($"Micro-batch count mismatch: saved model was trained with {savedMicroBatchCount}, but current instance configured with {_microBatchCount}");
 
         int modelDataLength = reader.ReadInt32();
         byte[] modelData = reader.ReadBytes(modelDataLength);
@@ -1411,7 +1411,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     public override IFullModel<T, TInput, TOutput> Clone()
     {
         return new PipelineParallelModel<T, TInput, TOutput>(
-            WrappedModel.Clone(), Config, _microBatchSize,
+            WrappedModel.Clone(), Config, _microBatchCount,
             _partitionStrategy, _schedule, _checkpointConfig);
     }
 }

@@ -57,6 +57,12 @@ public class SecureCrossClientEdgeDiscovery<T> : FederatedLearningComponentBase<
         int maxEdgesPerPair = 1000,
         bool cacheEnabled = true)
     {
+        if (privacyEpsilon <= 0.0 || double.IsNaN(privacyEpsilon) || double.IsInfinity(privacyEpsilon))
+        {
+            throw new ArgumentOutOfRangeException(nameof(privacyEpsilon),
+                "Privacy epsilon must be a finite positive value.");
+        }
+
         _privacyEpsilon = privacyEpsilon;
         _maxEdgesPerPair = maxEdgesPerPair;
         _cacheEnabled = cacheEnabled;
