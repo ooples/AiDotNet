@@ -20356,4 +20356,101 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Text-to-Speech Layers
+
+    /// <summary>
+    /// Creates default layers for the StyleTTS 2 TTS model (Li et al., 2023).
+    /// Architecture: Text encoder (Transformer) → Style predictor → Decoder → Waveform output.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultStyleTTS2Layers(
+        int textEncoderDim = 512,
+        int numTextEncoderLayers = 6,
+        int styleDim = 128,
+        int prosodyDim = 512,
+        int numMels = 80,
+        int numAttentionHeads = 8,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 512)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        int ffDim = textEncoderDim * 4;
+
+        // --- Text Encoder (Transformer) ---
+        yield return new DenseLayer<T>(256, textEncoderDim, geluActivation); // char embedding projection
+        yield return new LayerNormalizationLayer<T>(textEncoderDim);
+
+        for (int i = 0; i < numTextEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: textEncoderDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+
+            yield return new DenseLayer<T>(textEncoderDim, ffDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(ffDim, textEncoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+        }
+
+        // --- Style Predictor ---
+        yield return new DenseLayer<T>(textEncoderDim, prosodyDim, geluActivation);
+        yield return new DenseLayer<T>(prosodyDim, styleDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(styleDim);
+
+        // --- Decoder (mel-spectrogram generation) ---
+        yield return new DenseLayer<T>(textEncoderDim + styleDim, prosodyDim, geluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(prosodyDim, prosodyDim, geluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(prosodyDim, numMels, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for the HiFi-GAN vocoder (Kong et al., 2020).
+    /// Architecture: Mel input → Upsampling blocks with MRF → Waveform output.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultHiFiGANLayers(
+        int numMels = 80,
+        int upsampleInitialChannel = 512,
+        int[]? upsampleRates = null,
+        int numResBlocks = 3,
+        double dropoutRate = 0.0)
+    {
+        upsampleRates ??= new[] { 8, 8, 2, 2 };
+        var leakyReluActivation = (IActivationFunction<T>)new LeakyReLUActivation<T>();
+        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // --- Input Projection ---
+        yield return new DenseLayer<T>(numMels, upsampleInitialChannel, leakyReluActivation);
+
+        // --- Upsampling Blocks ---
+        int ch = upsampleInitialChannel;
+        foreach (int rate in upsampleRates)
+        {
+            int nextCh = ch / 2;
+            if (nextCh < 1) nextCh = 1;
+
+            // Transposed conv approximation (upsample)
+            yield return new DenseLayer<T>(ch, nextCh, leakyReluActivation);
+
+            // Multi-Receptive Field Fusion (MRF) - multiple residual blocks
+            for (int r = 0; r < numResBlocks; r++)
+            {
+                yield return new DenseLayer<T>(nextCh, nextCh, leakyReluActivation);
+                yield return new DenseLayer<T>(nextCh, nextCh, identityActivation);
+            }
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            ch = nextCh;
+        }
+
+        // --- Output Projection ---
+        yield return new DenseLayer<T>(ch, 1, tanhActivation);
+    }
+
+    #endregion
 }
