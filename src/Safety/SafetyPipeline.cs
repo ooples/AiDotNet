@@ -122,6 +122,17 @@ public class SafetyPipeline<T>
             return SafetyReport.Safe(Array.Empty<string>());
         }
 
+        // Check text-specific modality flags
+        bool textEnabled = _config.Text.EffectiveToxicityDetection
+                           || _config.Text.EffectivePIIDetection
+                           || _config.Text.EffectiveJailbreakDetection
+                           || _config.Text.EffectiveHallucinationDetection
+                           || _config.Text.EffectiveCopyrightDetection;
+        if (!textEnabled)
+        {
+            return SafetyReport.Safe(Array.Empty<string>());
+        }
+
         var sw = Stopwatch.StartNew();
         var allFindings = new List<SafetyFinding>();
         var modulesRun = new List<string>();
@@ -268,11 +279,21 @@ public class SafetyPipeline<T>
             return;
         }
 
+        // Only enforce for findings at or above the minimum action severity
+        if (report.HighestSeverity < _config.EffectiveMinimumActionSeverity)
+        {
+            return;
+        }
+
         bool shouldThrow = isInput
             ? _config.EffectiveThrowOnUnsafeInput
             : _config.EffectiveThrowOnUnsafeOutput;
 
-        if (shouldThrow && report.OverallAction >= SafetyAction.Block)
+        SafetyAction effectiveAction = report.OverallAction >= _config.EffectiveDefaultAction
+            ? report.OverallAction
+            : _config.EffectiveDefaultAction;
+
+        if (shouldThrow && effectiveAction >= SafetyAction.Block)
         {
             throw new SafetyViolationException(report, isInput);
         }

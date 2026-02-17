@@ -27,7 +27,7 @@ namespace AiDotNet.Safety;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public static class SafetyPipelineFactory<T>
+internal static class SafetyPipelineFactory<T>
 {
     /// <summary>
     /// Creates a safety pipeline from the given configuration.
@@ -97,7 +97,8 @@ public static class SafetyPipelineFactory<T>
         if (config.Text.EffectiveJailbreakDetection)
         {
             // Register ensemble jailbreak detector (combines pattern, semantic, and gradient)
-            pipeline.AddModule(new EnsembleJailbreakDetector<T>(config.Text.EffectiveJailbreakSensitivity));
+            pipeline.AddModule(new EnsembleJailbreakDetector<T>(
+                sensitivity: config.Text.EffectiveJailbreakSensitivity));
         }
 
         if (config.Text.EffectiveHallucinationDetection)
@@ -235,7 +236,9 @@ public static class SafetyPipelineFactory<T>
         bool hasAudio = config.Audio.EffectiveDeepfakeDetection ||
                         config.Audio.EffectiveToxicSpeechDetection;
 
-        if ((hasText && hasImage) || (hasText && hasAudio) || (hasImage && hasAudio))
+        // Cross-modal checking requires at least two active modalities
+        int activeModalities = (hasText ? 1 : 0) + (hasImage ? 1 : 0) + (hasAudio ? 1 : 0);
+        if (activeModalities >= 2)
         {
             pipeline.AddModule(new CrossModalConsistencyChecker<T>());
             pipeline.AddModule(new TextImageAlignmentChecker<T>());

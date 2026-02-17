@@ -75,7 +75,19 @@ public class TextWatermarker<T> : ITextSafetyModule<T>
         double detectionThreshold = 4.0,
         int contextWidth = 1)
     {
-        _secretKey = secretKey ?? new byte[] { 0x42, 0x69, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45 };
+        if (secretKey is null || secretKey.Length == 0)
+        {
+            // Generate a cryptographically random key when none is provided.
+            // Callers should persist and reuse a key for consistent watermark detection.
+            _secretKey = new byte[32];
+            using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+            rng.GetBytes(_secretKey);
+        }
+        else
+        {
+            _secretKey = (byte[])secretKey.Clone();
+        }
+
         _greenListFraction = Math.Max(0.1, Math.Min(0.9, greenListFraction));
         _detectionThreshold = detectionThreshold;
         _contextWidth = Math.Max(1, contextWidth);
@@ -158,8 +170,21 @@ public class TextWatermarker<T> : ITextSafetyModule<T>
     /// <inheritdoc />
     public IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
-        // For vector input, we can't meaningfully detect text watermarks
-        return Array.Empty<SafetyFinding>();
+        if (content is null)
+        {
+            throw new ArgumentNullException(nameof(content));
+        }
+
+        // Convert vector to string (character codes) and delegate to text evaluation.
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var chars = new char[content.Length];
+        for (int i = 0; i < content.Length; i++)
+        {
+            int code = (int)Math.Round(numOps.ToDouble(content[i]));
+            chars[i] = code is >= 0 and <= 65535 ? (char)code : '?';
+        }
+
+        return EvaluateText(new string(chars));
     }
 
     private static string[] TokenizeSimple(string text)
@@ -174,7 +199,7 @@ public class TextWatermarker<T> : ITextSafetyModule<T>
 
         for (int i = start; i < position; i++)
         {
-            hash = hash * 31 + tokens[i].GetHashCode();
+            hash = hash * 31 + DeterministicStringHash(tokens[i]);
         }
 
         // Mix in secret key
@@ -189,11 +214,29 @@ public class TextWatermarker<T> : ITextSafetyModule<T>
     private bool IsGreenToken(string token, int contextHash)
     {
         // Deterministically classify token as green/red based on context hash
-        int tokenHash = token.GetHashCode();
+        int tokenHash = DeterministicStringHash(token);
         int combined = contextHash ^ tokenHash;
 
         // Use modular arithmetic to get a fraction in [0,1)
         double fraction = ((combined & 0x7FFFFFFF) % 10000) / 10000.0;
         return fraction < _greenListFraction;
+    }
+
+    /// <summary>
+    /// Deterministic hash for strings that is consistent across processes and .NET versions.
+    /// string.GetHashCode() is randomized per process in .NET Core, making it unsuitable
+    /// for watermark detection across different processes.
+    /// </summary>
+    private static int DeterministicStringHash(string s)
+    {
+        unchecked
+        {
+            int hash = 5381;
+            for (int i = 0; i < s.Length; i++)
+            {
+                hash = ((hash << 5) + hash) ^ s[i];
+            }
+            return hash;
+        }
     }
 }

@@ -666,6 +666,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </code>
     /// </para>
     /// </remarks>
+    [JsonIgnore]
     public AiDotNet.Safety.SafetyPipeline<T>? SafetyPipeline { get; internal set; }
 
     /// <summary>
@@ -1444,7 +1445,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public AiDotNet.Safety.SafetyReport EvaluateTextSafety(string text)
     {
-        if (SafetyPipeline == null)
+        if (SafetyPipeline == null || string.IsNullOrEmpty(text))
         {
             return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
         }

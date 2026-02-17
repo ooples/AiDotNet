@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Image;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
+internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

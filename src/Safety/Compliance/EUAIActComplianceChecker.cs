@@ -36,7 +36,7 @@ namespace AiDotNet.Safety.Compliance;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class EUAIActComplianceChecker<T> : ITextSafetyModule<T>
+internal class EUAIActComplianceChecker<T> : ITextSafetyModule<T>
 {
     private readonly SafetyConfig _config;
 
@@ -115,6 +115,7 @@ public class EUAIActComplianceChecker<T> : ITextSafetyModule<T>
     /// <inheritdoc />
     public IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
-        return Array.Empty<SafetyFinding>();
+        // EU AI Act compliance checks configuration state, not vector content.
+        return EvaluateText(string.Empty);
     }
 }

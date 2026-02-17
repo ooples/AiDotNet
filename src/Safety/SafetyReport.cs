@@ -76,6 +76,11 @@ public class SafetyReport
     /// <returns>A SafetyReport indicating the content is safe.</returns>
     public static SafetyReport Safe(IReadOnlyList<string> modulesExecuted, double evaluationTimeMs = 0)
     {
+        if (modulesExecuted is null)
+        {
+            throw new ArgumentNullException(nameof(modulesExecuted));
+        }
+
         return new SafetyReport
         {
             IsSafe = true,
@@ -85,7 +90,7 @@ public class SafetyReport
             Findings = Array.Empty<SafetyFinding>(),
             DetectedCategories = Array.Empty<SafetyCategory>(),
             EvaluationTimeMs = evaluationTimeMs,
-            ModulesExecuted = modulesExecuted
+            ModulesExecuted = modulesExecuted.ToArray()
         };
     }
 
@@ -101,6 +106,16 @@ public class SafetyReport
         IReadOnlyList<string> modulesExecuted,
         double evaluationTimeMs = 0)
     {
+        if (findings is null)
+        {
+            throw new ArgumentNullException(nameof(findings));
+        }
+
+        if (modulesExecuted is null)
+        {
+            throw new ArgumentNullException(nameof(modulesExecuted));
+        }
+
         if (findings.Count == 0)
         {
             return Safe(modulesExecuted, evaluationTimeMs);
@@ -141,8 +156,10 @@ public class SafetyReport
             }
         }
 
+        // Content is safe only if severity is below Medium AND no action beyond Allow is needed.
+        // Modify actions indicate the content requires modification before it's safe.
         bool isSafe = highestSeverity < SafetySeverity.Medium
-                       && strictestAction < SafetyAction.Block;
+                       && strictestAction <= SafetyAction.Allow;
 
         return new SafetyReport
         {
@@ -150,10 +167,10 @@ public class SafetyReport
             OverallAction = strictestAction,
             HighestSeverity = highestSeverity,
             OverallScore = minConfidenceWeightedScore,
-            Findings = findings,
+            Findings = findings.ToArray(),
             DetectedCategories = categories.ToArray(),
             EvaluationTimeMs = evaluationTimeMs,
-            ModulesExecuted = modulesExecuted
+            ModulesExecuted = modulesExecuted.ToArray()
         };
     }
 }

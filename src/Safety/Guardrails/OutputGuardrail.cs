@@ -61,8 +61,20 @@ public class OutputGuardrail<T> : ITextSafetyModule<T>
                 "Maximum output length must be positive.");
         }
 
+        if (repetitionThreshold < 0 || repetitionThreshold > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(repetitionThreshold),
+                "Repetition threshold must be between 0 and 1.");
+        }
+
+        if (minOutputLength < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(minOutputLength),
+                "Minimum output length must be non-negative.");
+        }
+
         _maxOutputLength = maxOutputLength;
-        _minOutputLength = Math.Max(0, minOutputLength);
+        _minOutputLength = minOutputLength;
         _repetitionThreshold = repetitionThreshold;
     }
 
@@ -126,7 +138,21 @@ public class OutputGuardrail<T> : ITextSafetyModule<T>
     /// <inheritdoc />
     public IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
-        return Array.Empty<SafetyFinding>();
+        if (content is null)
+        {
+            throw new ArgumentNullException(nameof(content));
+        }
+
+        // Convert vector to string (character codes) and delegate to text evaluation
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var chars = new char[content.Length];
+        for (int i = 0; i < content.Length; i++)
+        {
+            int code = (int)Math.Round(numOps.ToDouble(content[i]));
+            chars[i] = code is >= 0 and <= 65535 ? (char)code : '?';
+        }
+
+        return EvaluateText(new string(chars));
     }
 
     private void CheckRepetition(string text, List<SafetyFinding> findings)

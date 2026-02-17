@@ -36,6 +36,12 @@ public abstract class AudioSafetyModuleBase<T> : IAudioSafetyModule<T>
     /// <param name="defaultSampleRate">The default sample rate in Hz when not explicitly provided.</param>
     protected AudioSafetyModuleBase(int defaultSampleRate = 16000)
     {
+        if (defaultSampleRate <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(defaultSampleRate), defaultSampleRate,
+                "Sample rate must be a positive integer.");
+        }
+
         _defaultSampleRate = defaultSampleRate;
     }
 

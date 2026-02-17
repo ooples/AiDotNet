@@ -83,11 +83,17 @@ public class RuleBasedToxicityDetector<T> : TextSafetyModuleBase<T>
                 var matches = pattern.Matches(lowerText);
                 foreach (Match match in matches)
                 {
+                    double confidence = 1.0;
+                    if (confidence < _confidenceThreshold)
+                    {
+                        continue;
+                    }
+
                     findings.Add(new SafetyFinding
                     {
                         Category = category,
                         Severity = severity,
-                        Confidence = 1.0,
+                        Confidence = confidence,
                         Description = description,
                         RecommendedAction = severity >= SafetySeverity.High ? SafetyAction.Block : SafetyAction.Warn,
                         SourceModule = ModuleName,

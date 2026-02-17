@@ -37,7 +37,7 @@ namespace AiDotNet.Safety.Compliance;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class SOC2ComplianceChecker<T> : ITextSafetyModule<T>
+internal class SOC2ComplianceChecker<T> : ITextSafetyModule<T>
 {
     private readonly SafetyConfig _config;
 
@@ -129,6 +129,7 @@ public class SOC2ComplianceChecker<T> : ITextSafetyModule<T>
     /// <inheritdoc />
     public IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
-        return Array.Empty<SafetyFinding>();
+        // SOC2 compliance checks configuration state, not vector content.
+        return EvaluateText(string.Empty);
     }
 }

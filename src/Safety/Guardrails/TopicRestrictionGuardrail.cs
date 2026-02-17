@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -102,9 +103,9 @@ public class TopicRestrictionGuardrail<T> : ITextSafetyModule<T>
                     });
                 }
             }
-            catch (RegexMatchTimeoutException)
+            catch (RegexMatchTimeoutException ex)
             {
-                // Skip this pattern if it takes too long (ReDoS protection)
+                Debug.WriteLine($"TopicRestrictionGuardrail: regex timeout for topic '{topic}': {ex.Message}");
             }
         }
 
