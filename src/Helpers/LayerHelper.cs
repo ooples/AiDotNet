@@ -19879,4 +19879,160 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region MIR Models (Batch 6)
+
+    /// <summary>
+    /// Creates default CREPE pitch detection layers.
+    /// </summary>
+    /// <param name="frameSize">Input frame size in samples (default: 1024).</param>
+    /// <param name="capacityMultiplier">Filter count multiplier (default: 32 for full model).</param>
+    /// <param name="numBins">Number of pitch bins (default: 360).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.25).</param>
+    /// <returns>A collection of layers for CREPE pitch detection.</returns>
+    /// <remarks>
+    /// <para>
+    /// CREPE architecture (Kim et al., 2018):
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>6 convolutional layers with decreasing kernel sizes</description></item>
+    /// <item><description>Max-pooling and batch normalization after each conv</description></item>
+    /// <item><description>Final dense layer producing 360-bin pitch distribution</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultCREPELayers(
+        int frameSize = 1024,
+        int capacityMultiplier = 32,
+        int numBins = 360,
+        double dropoutRate = 0.25)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // CREPE has 6 conv layers with filters [1C, 2C, 3C, 4C, 5C, 6C] where C=capacity
+        int[] filterMultipliers = [1, 2, 3, 4, 5, 6];
+        int prevDim = frameSize;
+
+        for (int i = 0; i < filterMultipliers.Length; i++)
+        {
+            int filters = filterMultipliers[i] * capacityMultiplier;
+            yield return new DenseLayer<T>(prevDim, filters, reluActivation);
+            yield return new BatchNormalizationLayer<T>(filters);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = filters;
+        }
+
+        // Final dense layer -> 360 pitch bins
+        yield return new DenseLayer<T>(prevDim, numBins, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default Basic Pitch multi-pitch detection layers.
+    /// </summary>
+    /// <param name="numHarmonicBins">Number of harmonic CQT input bins (default: 264).</param>
+    /// <param name="encoderFilters">Number of convolutional filters (default: 32).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default: 6).</param>
+    /// <param name="numMidiNotes">Number of MIDI note outputs (default: 88).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers for Basic Pitch music transcription.</returns>
+    /// <remarks>
+    /// <para>
+    /// Basic Pitch architecture (Bittner et al., 2022):
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Harmonic CQT input representation</description></item>
+    /// <item><description>CNN encoder with skip connections</description></item>
+    /// <item><description>Three output heads: note, onset, contour</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBasicPitchLayers(
+        int numHarmonicBins = 264,
+        int encoderFilters = 32,
+        int numEncoderLayers = 6,
+        int numMidiNotes = 88,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Encoder: CNN feature extraction
+        int prevDim = numHarmonicBins;
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            int filters = encoderFilters * (1 << Math.Min(i, 3)); // 32, 64, 128, 256, 256, 256
+            yield return new DenseLayer<T>(prevDim, filters, reluActivation);
+            yield return new BatchNormalizationLayer<T>(filters);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = filters;
+        }
+
+        // Shared intermediate representation
+        int sharedDim = prevDim;
+        yield return new DenseLayer<T>(sharedDim, 256, reluActivation);
+        yield return new BatchNormalizationLayer<T>(256);
+
+        // Combined output: note + onset + contour heads concatenated
+        // note: 88 + onset: 88 + contour: 88 = 264
+        yield return new DenseLayer<T>(256, numMidiNotes * 3, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default Onsets and Frames piano transcription layers.
+    /// </summary>
+    /// <param name="numMels">Number of mel filterbank channels (default: 229).</param>
+    /// <param name="acousticDim">Acoustic model CNN dimension (default: 512).</param>
+    /// <param name="lstmHiddenSize">Bidirectional LSTM hidden size (default: 256).</param>
+    /// <param name="numLstmLayers">Number of LSTM layers (default: 2).</param>
+    /// <param name="numMidiNotes">Number of MIDI note outputs (default: 88).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.2).</param>
+    /// <returns>A collection of layers for Onsets and Frames transcription.</returns>
+    /// <remarks>
+    /// <para>
+    /// Onsets and Frames architecture (Hawthorne et al., 2018):
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>CNN acoustic model (mel -> features)</description></item>
+    /// <item><description>Bidirectional LSTM for onset detection</description></item>
+    /// <item><description>Bidirectional LSTM for frame detection</description></item>
+    /// <item><description>Combined output: onset + frame logits</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultOnsetsAndFramesLayers(
+        int numMels = 229,
+        int acousticDim = 512,
+        int lstmHiddenSize = 256,
+        int numLstmLayers = 2,
+        int numMidiNotes = 88,
+        double dropoutRate = 0.2)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // CNN acoustic model
+        yield return new DenseLayer<T>(numMels, 256, reluActivation);
+        yield return new BatchNormalizationLayer<T>(256);
+        yield return new DenseLayer<T>(256, acousticDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(acousticDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Onset stack: LSTM layers for onset detection
+        int prevDim = acousticDim;
+        for (int i = 0; i < numLstmLayers; i++)
+        {
+            int biDirDim = lstmHiddenSize * 2;
+            yield return new DenseLayer<T>(prevDim, biDirDim, (IActivationFunction<T>)new TanhActivation<T>());
+            yield return new LayerNormalizationLayer<T>(biDirDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = biDirDim;
+        }
+
+        // Frame stack: uses onset output + acoustic features
+        yield return new DenseLayer<T>(prevDim + numMidiNotes, lstmHiddenSize * 2, (IActivationFunction<T>)new TanhActivation<T>());
+        yield return new LayerNormalizationLayer<T>(lstmHiddenSize * 2);
+
+        // Combined onset + frame output: 88 + 88 = 176
+        yield return new DenseLayer<T>(lstmHiddenSize * 2, numMidiNotes * 2, identityActivation);
+    }
+
+    #endregion
 }
