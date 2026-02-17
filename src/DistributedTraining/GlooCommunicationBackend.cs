@@ -92,6 +92,13 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     private MethodInfo? _glooReduceScatterDouble;
     private IReadOnlyDictionary<ReductionOperation, object>? _glooReduceOpCache;
 
+    // Strongly-typed delegates for hot-path collective operations (avoids MethodInfo.Invoke overhead)
+    private Action<object, double[], object>? _allReduceDelegate;
+    private Action<object, double[], int>? _broadcastDelegate;
+    private Func<object, double[], double[]?>? _allGatherDelegate;
+    private Action<object>? _barrierDelegate;
+    private Func<object, double[], object, double[]?>? _reduceScatterDelegate;
+
     /// <summary>
     /// Creates a new Gloo communication backend using production-ready TCP implementation.
     /// </summary>
@@ -142,18 +149,14 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             }
             catch (SocketException)
             {
-                // Clean up native Gloo context on failure to avoid leaking native resources
-                _useNativeGloo = false;
-                _nativeGlooContext?.Dispose();
-                _nativeGlooContext = null;
+                // Clean up ALL resources on failure: native Gloo context + TCP connections
+                CleanupOnInitFailure();
                 throw;
             }
             catch (InvalidOperationException)
             {
-                // Clean up native Gloo context on failure to avoid leaking native resources
-                _useNativeGloo = false;
-                _nativeGlooContext?.Dispose();
-                _nativeGlooContext = null;
+                // Clean up ALL resources on failure: native Gloo context + TCP connections
+                CleanupOnInitFailure();
                 throw;
             }
         }
@@ -284,6 +287,18 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             // Cache GlooReduceOp enum values to avoid per-call reflection
             _glooReduceOpCache = CreateGlooReduceOpMap(glooReduceOpType);
 
+            // Create strongly-typed delegates from MethodInfo to avoid Invoke overhead on hot path
+            _allReduceDelegate = (ctx, data, op) =>
+                _glooAllReduceDouble.Invoke(null, new[] { ctx, data, op });
+            _broadcastDelegate = (ctx, data, root) =>
+                _glooBroadcastDouble.Invoke(null, new object[] { ctx, data, root });
+            _allGatherDelegate = (ctx, data) =>
+                _glooAllGatherDouble.Invoke(null, new[] { ctx, data }) as double[];
+            _barrierDelegate = (ctx) =>
+                _glooBarrier.Invoke(null, new[] { ctx });
+            _reduceScatterDelegate = (ctx, data, op) =>
+                _glooReduceScatterDouble.Invoke(null, new[] { ctx, data, op }) as double[];
+
             // Success — transfer ownership to the field
             _nativeGlooContext = context;
             context = null; // prevent disposal in finally
@@ -302,6 +317,11 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         catch (InvalidOperationException ex)
         {
             Console.WriteLine($"GlooSharp detection failed: {ex.Message}");
+            return false;
+        }
+        catch (MissingMethodException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (API signature mismatch): {ex.Message}");
             return false;
         }
         catch (MemberAccessException ex)
@@ -326,10 +346,11 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// </summary>
     private static IReadOnlyDictionary<ReductionOperation, object> CreateGlooReduceOpMap(Type glooReduceOpType)
     {
+        // Note: Average is NOT mapped here because the call sites already handle Average
+        // by mapping it to Sum and dividing by worldSize after the collective operation.
         return new Dictionary<ReductionOperation, object>
         {
             { ReductionOperation.Sum, Enum.Parse(glooReduceOpType, "Sum", ignoreCase: true) },
-            { ReductionOperation.Average, Enum.Parse(glooReduceOpType, "Sum", ignoreCase: true) },
             { ReductionOperation.Product, Enum.Parse(glooReduceOpType, "Product", ignoreCase: true) },
             { ReductionOperation.Min, Enum.Parse(glooReduceOpType, "Min", ignoreCase: true) },
             { ReductionOperation.Max, Enum.Parse(glooReduceOpType, "Max", ignoreCase: true) },
@@ -406,6 +427,36 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         }
 
         Console.WriteLine($"Rank {_rank}: All TCP connections established ({_tcpConnections?.Count ?? 0} peers)");
+    }
+
+    /// <summary>
+    /// Cleans up all resources (native Gloo context + TCP connections) on initialization failure.
+    /// Prevents resource leaks when InitializeTCPConnections() throws after partial setup.
+    /// </summary>
+    private void CleanupOnInitFailure()
+    {
+        _useNativeGloo = false;
+        _useNativeTCP = false;
+
+        _nativeGlooContext?.Dispose();
+        _nativeGlooContext = null;
+
+        if (_tcpConnections is not null)
+        {
+            foreach (var connection in _tcpConnections.Values)
+            {
+                try { connection.Close(); }
+                catch (ObjectDisposedException) { }
+            }
+            _tcpConnections.Clear();
+        }
+
+        if (_tcpListener is not null)
+        {
+            try { _tcpListener.Stop(); }
+            catch (ObjectDisposedException) { }
+            _tcpListener = null;
+        }
     }
 
     /// <summary>
@@ -594,11 +645,11 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (_useNativeGloo)
         {
-            if (_glooBarrier == null)
+            if (_barrierDelegate == null || _nativeGlooContext == null)
             {
                 throw new InvalidOperationException("Native Gloo Barrier method is not available.");
             }
-            _glooBarrier.Invoke(null, new object[] { _nativeGlooContext! });
+            _barrierDelegate(_nativeGlooContext);
             return;
         }
 
@@ -834,14 +885,14 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// </summary>
     private void PerformNativeGlooAllReduce(Vector<T> data, ReductionOperation operation)
     {
-        if (_glooAllReduceDouble == null)
+        if (_allReduceDelegate == null || _nativeGlooContext == null)
         {
             throw new InvalidOperationException("Native Gloo AllReduce method is not available.");
         }
 
         var doubleData = VectorToDoubleArray(data);
         var glooOp = MapToGlooReduceOp(operation == ReductionOperation.Average ? ReductionOperation.Sum : operation);
-        _glooAllReduceDouble.Invoke(null, new object[] { _nativeGlooContext!, doubleData, glooOp });
+        _allReduceDelegate(_nativeGlooContext, doubleData, glooOp);
 
         // Apply averaging if needed
         if (operation == ReductionOperation.Average)
@@ -864,13 +915,13 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// </summary>
     private Vector<T> PerformNativeGlooBroadcast(Vector<T> data, int root)
     {
-        if (_glooBroadcastDouble == null)
+        if (_broadcastDelegate == null || _nativeGlooContext == null)
         {
             throw new InvalidOperationException("Native Gloo Broadcast method is not available.");
         }
 
         var doubleData = VectorToDoubleArray(data);
-        _glooBroadcastDouble.Invoke(null, new object[] { _nativeGlooContext!, doubleData, root });
+        _broadcastDelegate(_nativeGlooContext, doubleData, root);
         return DoubleArrayToVector(doubleData);
     }
 
@@ -879,14 +930,14 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// </summary>
     private Vector<T> PerformNativeGlooAllGather(Vector<T> sendData)
     {
-        if (_glooAllGatherDouble == null)
+        if (_allGatherDelegate == null || _nativeGlooContext == null)
         {
             throw new InvalidOperationException("Native Gloo AllGather method is not available.");
         }
 
         var doubleData = VectorToDoubleArray(sendData);
-        var result = _glooAllGatherDouble.Invoke(null, new object[] { _nativeGlooContext!, doubleData });
-        if (result is double[] gathered)
+        var gathered = _allGatherDelegate(_nativeGlooContext, doubleData);
+        if (gathered is not null)
         {
             return DoubleArrayToVector(gathered);
         }
@@ -898,16 +949,16 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// </summary>
     private Vector<T> PerformNativeGlooReduceScatter(Vector<T> data, ReductionOperation operation)
     {
-        if (_glooReduceScatterDouble == null)
+        if (_reduceScatterDelegate == null || _nativeGlooContext == null)
         {
             throw new InvalidOperationException("Native Gloo ReduceScatter method is not available.");
         }
 
         var doubleData = VectorToDoubleArray(data);
         var glooOp = MapToGlooReduceOp(operation == ReductionOperation.Average ? ReductionOperation.Sum : operation);
-        var result = _glooReduceScatterDouble.Invoke(null, new object[] { _nativeGlooContext!, doubleData, glooOp });
+        var scattered = _reduceScatterDelegate(_nativeGlooContext, doubleData, glooOp);
 
-        if (result is not double[] scattered)
+        if (scattered is null)
         {
             throw new InvalidOperationException("Native Gloo ReduceScatter invocation did not return a double[] result.");
         }
