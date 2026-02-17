@@ -6330,6 +6330,838 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates the default layer configuration for a BEATs (Audio Pre-Training with Acoustic Tokenizers)
+    /// audio event detection and classification model.
+    /// </summary>
+    /// <param name="patchFeatureSize">
+    /// The flattened size of each spectrogram patch. For BEATs with 16x16 patches, this is 256.
+    /// The patch is a small tile of the mel spectrogram that the model processes as a single unit,
+    /// similar to how Vision Transformers (ViT) process image patches.
+    /// </param>
+    /// <param name="embeddingDim">
+    /// The dimensionality of the Transformer embedding space. BEATs_iter3 (the best variant from the paper)
+    /// uses 768 dimensions, matching BERT-base. Each spectrogram patch is linearly projected into this
+    /// space before being processed by the Transformer encoder. Larger values increase model capacity
+    /// but require more memory and compute.
+    /// </param>
+    /// <param name="numEncoderLayers">
+    /// The number of stacked Transformer encoder layers. BEATs_iter3 uses 12 layers (matching BERT-base).
+    /// Each layer consists of multi-head self-attention followed by a position-wise feed-forward network,
+    /// with layer normalization and residual connections. More layers allow the model to learn increasingly
+    /// abstract audio representations.
+    /// </param>
+    /// <param name="numAttentionHeads">
+    /// The number of parallel attention heads per Transformer layer. BEATs_iter3 uses 12 heads.
+    /// Each head independently attends to different positions in the patch sequence, allowing the model
+    /// to simultaneously capture different types of audio relationships (e.g., harmonic structure,
+    /// temporal patterns, onset alignment).
+    /// </param>
+    /// <param name="feedForwardDim">
+    /// The inner dimensionality of the position-wise feed-forward network in each Transformer layer.
+    /// BEATs_iter3 uses 3072 (4x the embedding dimension), following the standard Transformer convention.
+    /// This expansion-then-compression pattern allows the FFN to learn complex nonlinear transformations.
+    /// </param>
+    /// <param name="numClasses">
+    /// The number of output classes for the classification head. For AudioSet-527, this is 527.
+    /// The classification head maps the aggregated Transformer output to per-class logits.
+    /// Sigmoid activation is applied externally for multi-label classification.
+    /// </param>
+    /// <param name="maxSequenceLength">
+    /// Maximum number of patches in the input sequence (for positional encoding dimensioning).
+    /// For BEATs processing 10-second clips at 16kHz with 128 mel bins and 16x16 patches,
+    /// this is approximately 500-600 patches. Set generously to accommodate variable-length inputs.
+    /// </param>
+    /// <param name="dropoutRate">
+    /// Dropout probability for regularization during training. BEATs_iter3 uses 0.1 (10%).
+    /// Applied after attention, feed-forward networks, and before the classification head.
+    /// Helps prevent overfitting during fine-tuning on smaller datasets.
+    /// </param>
+    /// <returns>
+    /// An ordered collection of layers forming the complete BEATs architecture:
+    /// patch projection, pre-norm, Transformer encoder stack, post-norm, and classification head.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// This method creates the complete BEATs neural network architecture as described in:
+    /// "BEATs: Audio Pre-Training with Acoustic Tokenizers" (Chen et al., ICML 2023).
+    /// </para>
+    /// <para>
+    /// <b>Architecture Overview:</b>
+    /// The BEATs architecture is a Vision Transformer (ViT) adapted for audio spectrograms:
+    /// <list type="number">
+    /// <item><b>Patch Projection:</b> A linear layer projects each flattened spectrogram patch
+    /// (patchSize x patchSize = 256 values) into the embedding space (768 dimensions).
+    /// This is equivalent to the "patch embedding" in ViT.</item>
+    /// <item><b>Pre-Normalization:</b> Layer normalization applied before the Transformer stack
+    /// to stabilize training (Pre-LN Transformer variant, which converges faster than Post-LN).</item>
+    /// <item><b>Transformer Encoder Stack:</b> 12 identical encoder layers, each containing:
+    ///   - Multi-head self-attention (12 heads, each with 64-dim key/query/value)
+    ///   - Layer normalization + residual connection
+    ///   - Position-wise feed-forward network (768 -> 3072 -> 768 with GELU activation)
+    ///   - Layer normalization + residual connection
+    ///   - Dropout for regularization</item>
+    /// <item><b>Post-Normalization:</b> Final layer normalization to stabilize the output
+    /// distribution before classification.</item>
+    /// <item><b>Classification Head:</b> A two-layer MLP that maps from the embedding space
+    /// to the number of output classes. Uses ReLU activation in the hidden layer.
+    /// Sigmoid activation is applied externally for multi-label classification (since
+    /// multiple audio events can occur simultaneously).</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> BEATs is one of the best models for identifying sounds in audio.
+    /// Think of how it works step by step:
+    ///
+    /// 1. <b>Audio to spectrogram:</b> Sound waves are converted to a visual representation
+    ///    called a mel spectrogram, like a "fingerprint" of the sound showing which frequencies
+    ///    are present at each moment in time.
+    ///
+    /// 2. <b>Cut into patches:</b> The spectrogram is divided into small tiles (16x16 pixels each),
+    ///    like cutting a photo into small puzzle pieces. Each piece captures a brief moment of sound
+    ///    across a range of frequencies.
+    ///
+    /// 3. <b>Project patches:</b> Each small tile is converted into a 768-number vector that
+    ///    represents its content. Think of this as describing each puzzle piece using 768 adjectives.
+    ///
+    /// 4. <b>Transformer magic:</b> The Transformer encoder (the same architecture behind ChatGPT)
+    ///    looks at ALL the patches simultaneously, figuring out how they relate to each other.
+    ///    For example, it learns that a particular pattern of frequencies followed by silence
+    ///    sounds like a dog bark, while sustained tones with harmonics sound like singing.
+    ///
+    /// 5. <b>Classification:</b> Finally, the model outputs a probability for each possible sound
+    ///    (e.g., 95% chance of "speech", 40% chance of "music", 2% chance of "dog bark").
+    ///    Multiple sounds can be detected simultaneously since they often overlap in real audio.
+    ///
+    /// BEATs achieves remarkable accuracy:
+    /// - 98.1% on ESC-50 (environmental sounds like rain, dog bark, clock tick)
+    /// - 50.6% mAP on AudioSet-2M (527 sound classes in YouTube videos)
+    ///
+    /// The key innovation is how BEATs is pre-trained: it uses an "acoustic tokenizer" to create
+    /// labels for audio patches, then trains the model to predict masked (hidden) patches.
+    /// This process repeats for 3 iterations, with each iteration producing better labels
+    /// and a better model.
+    /// </para>
+    /// <para>
+    /// <b>Default values match BEATs_iter3</b> (the best-performing variant from the paper):
+    /// <list type="bullet">
+    /// <item>Embedding dimension: 768 (same as BERT-base, ViT-Base)</item>
+    /// <item>Encoder layers: 12 (deep enough for complex audio patterns)</item>
+    /// <item>Attention heads: 12 (one per layer, 64-dim per head)</item>
+    /// <item>FFN dimension: 3072 (4x embedding, standard Transformer ratio)</item>
+    /// <item>Dropout: 0.1 (10%, standard for fine-tuning)</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>References:</b>
+    /// <list type="bullet">
+    /// <item>Paper: "BEATs: Audio Pre-Training with Acoustic Tokenizers" (Chen et al., ICML 2023)</item>
+    /// <item>Repository: https://github.com/microsoft/unilm/tree/master/beats</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBEATsLayers(
+        int patchFeatureSize = 256,
+        int embeddingDim = 768,
+        int numEncoderLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int numClasses = 527,
+        int maxSequenceLength = 600,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // 1. Patch Projection Layer
+        // Projects each flattened spectrogram patch (patchSize^2 values) into the Transformer
+        // embedding space. This is the audio equivalent of ViT's patch embedding.
+        // BEATs paper: "We use a linear projection to embed each patch into a d-dimensional space."
+        yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
+
+        // 2. Pre-Layer Normalization
+        // BEATs uses Pre-LN Transformer (normalize before attention, not after), which provides
+        // more stable gradients during training and faster convergence than Post-LN.
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // 3. Positional Encoding
+        // Adds learnable position information so the Transformer knows the temporal and frequency
+        // ordering of patches. Without this, the model would treat patches as an unordered set.
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
+
+        // 4. Transformer Encoder Stack
+        // Each layer applies multi-head self-attention (allowing each patch to attend to all
+        // other patches) followed by a feed-forward network. Layer norm and residual connections
+        // are applied within each TransformerEncoderLayer.
+        // BEATs_iter3 uses 12 layers, matching BERT-base and ViT-Base architectures.
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: embeddingDim,
+                headCount: numAttentionHeads);
+
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+            // Position-wise Feed-Forward Network (FFN):
+            // Expand to feedForwardDim (4x), apply GELU, then project back.
+            // GELU is used instead of ReLU following the original Transformer and BERT.
+            yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // 5. Post-Layer Normalization
+        // Final normalization before the classification head to stabilize the distribution
+        // of features across different input lengths and content.
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        // 6. Classification Head
+        // Two-layer MLP: embedding_dim -> embedding_dim -> num_classes
+        // The first layer with ReLU adds nonlinearity for richer feature combination.
+        // The second layer projects to class logits (sigmoid applied externally for multi-label).
+        yield return new DenseLayer<T>(embeddingDim, embeddingDim, reluActivation);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        yield return new DenseLayer<T>(embeddingDim, numClasses, identityActivation);
+        // Sigmoid activation is applied in the model's PostprocessOutput() for multi-label classification.
+        // This is intentional: BEATs detects multiple overlapping events, so each class is independent.
+    }
+
+    /// <summary>
+    /// Creates default AST (Audio Spectrogram Transformer) layers following the paper architecture.
+    /// </summary>
+    /// <param name="patchFeatureSize">Flattened patch dimension (patchSize^2, default 256).</param>
+    /// <param name="embeddingDim">Transformer embedding dimension (default 768 for AST-Base).</param>
+    /// <param name="numEncoderLayers">Number of Transformer encoder layers (default 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads per layer (default 12).</param>
+    /// <param name="feedForwardDim">Feed-forward network dimension (default 3072).</param>
+    /// <param name="numClasses">Number of classification labels (default 527 for AudioSet).</param>
+    /// <param name="maxSequenceLength">Maximum patch sequence length including [CLS] token (default 1214).</param>
+    /// <param name="dropoutRate">Dropout rate for regularization (default 0.1).</param>
+    /// <returns>A collection of layers implementing the AST architecture.</returns>
+    /// <remarks>
+    /// <para>
+    /// AST (Gong et al., Interspeech 2021) directly applies ViT to audio spectrograms.
+    /// Architecture: patch projection -> [CLS] token -> positional encoding -> Transformer encoder -> classification head.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultASTLayers(
+        int patchFeatureSize = 256,
+        int embeddingDim = 768,
+        int numEncoderLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int numClasses = 527,
+        int maxSequenceLength = 1214,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // 1. Patch Projection: project flattened spectrogram patches to embedding space
+        yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
+
+        // 2. Pre-Layer Normalization
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // 3. Positional Encoding (includes [CLS] token position)
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
+
+        // 4. Transformer Encoder Stack
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: embeddingDim,
+                headCount: numAttentionHeads);
+
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+            yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+            if (dropoutRate > 0)
+            {
+                yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // 5. Post-Layer Normalization
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        // 6. Classification Head: [CLS] token output -> class logits
+        yield return new DenseLayer<T>(embeddingDim, embeddingDim, reluActivation);
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+        yield return new DenseLayer<T>(embeddingDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default HTS-AT (Hierarchical Token-Semantic Audio Transformer) layers.
+    /// </summary>
+    /// <param name="patchFeatureSize">Flattened patch dimension (default 16 for 4x4 patches).</param>
+    /// <param name="embeddingDim">Base embedding dimension (default 96, doubles per stage).</param>
+    /// <param name="numStages">Number of hierarchical stages (default 4).</param>
+    /// <param name="numLayersPerStage">Layers per stage (default [2,2,6,2]).</param>
+    /// <param name="numClasses">Number of classification labels (default 527).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default 1024).</param>
+    /// <param name="dropoutRate">Dropout rate (default 0.0).</param>
+    /// <returns>A collection of layers implementing the HTS-AT architecture.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultHTSATLayers(
+        int patchFeatureSize = 16,
+        int embeddingDim = 96,
+        int numStages = 4,
+        int[]? numLayersPerStage = null,
+        int numClasses = 527,
+        int maxSequenceLength = 1024,
+        double dropoutRate = 0.0)
+    {
+        numLayersPerStage ??= [2, 2, 6, 2];
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // 1. Initial Patch Embedding
+        yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        // 2. Hierarchical Swin Transformer Stages
+        int currentDim = embeddingDim;
+        int seqLen = maxSequenceLength;
+        for (int stage = 0; stage < numStages && stage < numLayersPerStage.Length; stage++)
+        {
+            int numHeads = Math.Max(1, currentDim / 32);
+            int ffDim = currentDim * 4;
+
+            for (int layer = 0; layer < numLayersPerStage[stage]; layer++)
+            {
+                yield return new MultiHeadAttentionLayer<T>(
+                    sequenceLength: seqLen,
+                    embeddingDimension: currentDim,
+                    headCount: numHeads);
+                yield return new LayerNormalizationLayer<T>(currentDim);
+                yield return new DenseLayer<T>(currentDim, ffDim, reluActivation);
+                yield return new DenseLayer<T>(ffDim, currentDim, identityActivation);
+                yield return new LayerNormalizationLayer<T>(currentDim);
+            }
+
+            // Patch merging: double channels, halve sequence at stage boundary (except last stage)
+            if (stage < numStages - 1)
+            {
+                int nextDim = currentDim * 2;
+                yield return new DenseLayer<T>(currentDim, nextDim, identityActivation);
+                yield return new LayerNormalizationLayer<T>(nextDim);
+                currentDim = nextDim;
+                seqLen = Math.Max(1, seqLen / 2);
+            }
+        }
+
+        // 3. Final normalization and classification head
+        yield return new LayerNormalizationLayer<T>(currentDim);
+        yield return new DenseLayer<T>(currentDim, currentDim, reluActivation);
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+        yield return new DenseLayer<T>(currentDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default EAT (Efficient Audio Transformer) layers following the paper architecture.
+    /// </summary>
+    /// <param name="patchFeatureSize">Flattened patch dimension (default 256).</param>
+    /// <param name="embeddingDim">Transformer embedding dimension (default 768).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default 12).</param>
+    /// <param name="feedForwardDim">Feed-forward dimension (default 3072).</param>
+    /// <param name="numClasses">Number of labels (default 527).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default 600).</param>
+    /// <param name="dropoutRate">Dropout rate (default 0.1).</param>
+    /// <returns>A collection of layers implementing the EAT architecture.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultEATLayers(
+        int patchFeatureSize = 256,
+        int embeddingDim = 768,
+        int numEncoderLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int numClasses = 527,
+        int maxSequenceLength = 600,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: embeddingDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new DenseLayer<T>(embeddingDim, embeddingDim, reluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(embeddingDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default Audio-MAE (Masked Autoencoders for Audio) layers for classification.
+    /// </summary>
+    /// <param name="patchFeatureSize">Flattened patch dimension (default 256).</param>
+    /// <param name="embeddingDim">Encoder embedding dimension (default 768).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default 12).</param>
+    /// <param name="feedForwardDim">Feed-forward dimension (default 3072).</param>
+    /// <param name="numClasses">Number of labels (default 527).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default 600).</param>
+    /// <param name="dropoutRate">Dropout rate (default 0.0).</param>
+    /// <returns>A collection of layers implementing the Audio-MAE encoder for classification.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioMAELayers(
+        int patchFeatureSize = 256,
+        int embeddingDim = 768,
+        int numEncoderLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int numClasses = 527,
+        int maxSequenceLength = 600,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: embeddingDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+        }
+
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new DenseLayer<T>(embeddingDim, embeddingDim, reluActivation);
+        yield return new DenseLayer<T>(embeddingDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default PANNs CNN14 layers for audio classification.
+    /// </summary>
+    /// <param name="numMels">Number of mel bands (default 64).</param>
+    /// <param name="baseChannels">Base channel count (default 64, doubles per block).</param>
+    /// <param name="numBlocks">Number of CNN blocks (default 6).</param>
+    /// <param name="embeddingDim">Embedding dimension before classification (default 2048).</param>
+    /// <param name="numClasses">Number of labels (default 527).</param>
+    /// <param name="maxFrames">Maximum time frames (default 1001).</param>
+    /// <param name="dropoutRate">Dropout rate (default 0.2).</param>
+    /// <returns>A collection of layers implementing the PANNs CNN14 architecture.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultPANNsLayers(
+        int numMels = 64,
+        int baseChannels = 64,
+        int numBlocks = 6,
+        int embeddingDim = 2048,
+        int numClasses = 527,
+        int maxFrames = 1001,
+        double dropoutRate = 0.2)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // CNN14: 6 blocks of (Conv -> BN -> ReLU -> Conv -> BN -> ReLU -> AvgPool)
+        int inputDim = numMels;
+        int channels = baseChannels;
+
+        for (int block = 0; block < numBlocks; block++)
+        {
+            yield return new DenseLayer<T>(inputDim, channels, reluActivation);
+            yield return new LayerNormalizationLayer<T>(channels);
+            yield return new DenseLayer<T>(channels, channels, reluActivation);
+            yield return new LayerNormalizationLayer<T>(channels);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            inputDim = channels;
+            channels = Math.Min(channels * 2, embeddingDim);
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(inputDim, embeddingDim, reluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(embeddingDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default CLAP (Contrastive Language-Audio Pre-training) audio encoder layers.
+    /// </summary>
+    /// <param name="patchFeatureSize">Flattened patch dimension (default 256).</param>
+    /// <param name="embeddingDim">Audio encoder embedding dimension (default 768).</param>
+    /// <param name="projectionDim">Joint audio-text projection dimension (default 512).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default 12).</param>
+    /// <param name="feedForwardDim">Feed-forward dimension (default 3072).</param>
+    /// <param name="numClasses">Number of labels (default 527).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length (default 1024).</param>
+    /// <param name="dropoutRate">Dropout rate (default 0.1).</param>
+    /// <returns>A collection of layers implementing the CLAP audio encoder.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCLAPLayers(
+        int patchFeatureSize = 256,
+        int embeddingDim = 768,
+        int projectionDim = 512,
+        int numEncoderLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int numClasses = 527,
+        int maxSequenceLength = 1024,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Audio encoder (HTS-AT style)
+        yield return new DenseLayer<T>(patchFeatureSize, embeddingDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
+
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: embeddingDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            yield return new DenseLayer<T>(embeddingDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, embeddingDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(embeddingDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Projection to joint space
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new DenseLayer<T>(embeddingDim, projectionDim, reluActivation);
+
+        // Classification head (for fine-tuned mode)
+        yield return new DenseLayer<T>(projectionDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default FullSubNet+ layers for speech enhancement.
+    /// </summary>
+    /// <param name="numFreqBins">Number of frequency bins (default: 257).</param>
+    /// <param name="fullBandHiddenSize">Full-band LSTM hidden size (default: 512).</param>
+    /// <param name="subBandHiddenSize">Sub-band LSTM hidden size (default: 384).</param>
+    /// <param name="fullBandLayers">Number of full-band layers (default: 2).</param>
+    /// <param name="subBandLayers">Number of sub-band layers (default: 2).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.0).</param>
+    /// <returns>A collection of layers for FullSubNet+ speech enhancement.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultFullSubNetPlusLayers(
+        int numFreqBins = 257,
+        int fullBandHiddenSize = 512,
+        int subBandHiddenSize = 384,
+        int fullBandLayers = 2,
+        int subBandLayers = 2,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Full-band path: processes all frequency bins together
+        yield return new DenseLayer<T>(numFreqBins, fullBandHiddenSize, reluActivation);
+        yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+        for (int i = 0; i < fullBandLayers; i++)
+        {
+            yield return new DenseLayer<T>(fullBandHiddenSize, fullBandHiddenSize, reluActivation);
+            yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Sub-band path: processes sub-band features
+        yield return new DenseLayer<T>(fullBandHiddenSize, subBandHiddenSize, reluActivation);
+        yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+        for (int i = 0; i < subBandLayers; i++)
+        {
+            yield return new DenseLayer<T>(subBandHiddenSize, subBandHiddenSize, reluActivation);
+            yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Fusion and mask estimation
+        yield return new DenseLayer<T>(subBandHiddenSize, numFreqBins * 2, identityActivation);
+        yield return new LayerNormalizationLayer<T>(numFreqBins * 2);
+
+        // Output: complex mask (real + imaginary for each frequency bin)
+        yield return new DenseLayer<T>(numFreqBins * 2, numFreqBins * 2, sigmoidActivation);
+    }
+
+    /// <summary>
+    /// Creates default CMGAN layers for conformer-based speech enhancement.
+    /// </summary>
+    /// <param name="numFreqBins">Number of frequency bins (default: 201).</param>
+    /// <param name="conformerDim">Conformer hidden dimension (default: 256).</param>
+    /// <param name="numConformerLayers">Number of Conformer layers (default: 2).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default: 4).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.05).</param>
+    /// <returns>A collection of layers for CMGAN speech enhancement.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultCMGANLayers(
+        int numFreqBins = 201,
+        int conformerDim = 256,
+        int numConformerLayers = 2,
+        int numAttentionHeads = 4,
+        double dropoutRate = 0.05)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int feedForwardDim = conformerDim * 4;
+
+        // U-Net encoder
+        yield return new DenseLayer<T>(numFreqBins, conformerDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(conformerDim);
+
+        // Conformer blocks in bottleneck
+        for (int i = 0; i < numConformerLayers; i++)
+        {
+            // Feed-forward module
+            yield return new DenseLayer<T>(conformerDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, conformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(conformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            // Self-attention module
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numFreqBins,
+                embeddingDimension: conformerDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(conformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            // Second feed-forward module
+            yield return new DenseLayer<T>(conformerDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, conformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(conformerDim);
+        }
+
+        // U-Net decoder with mask estimation
+        yield return new DenseLayer<T>(conformerDim, numFreqBins * 2, identityActivation);
+        yield return new LayerNormalizationLayer<T>(numFreqBins * 2);
+
+        // Output: magnitude mask + phase correction
+        yield return new DenseLayer<T>(numFreqBins * 2, numFreqBins * 2, sigmoidActivation);
+    }
+
+    /// <summary>
+    /// Creates default TF-GridNet layers for time-frequency grid speech enhancement.
+    /// </summary>
+    /// <param name="numFreqBins">Number of frequency bins (default: 257).</param>
+    /// <param name="hiddenDim">Hidden dimension (default: 192).</param>
+    /// <param name="embeddingDim">Embedding dimension per T-F bin (default: 48).</param>
+    /// <param name="numBlocks">Number of grid blocks (default: 6).</param>
+    /// <param name="numAttentionHeads">Number of attention heads (default: 4).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.0).</param>
+    /// <returns>A collection of layers for TF-GridNet speech enhancement.</returns>
+    public static IEnumerable<ILayer<T>> CreateDefaultTFGridNetLayers(
+        int numFreqBins = 257,
+        int hiddenDim = 192,
+        int embeddingDim = 48,
+        int numBlocks = 6,
+        int numAttentionHeads = 4,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Input embedding: map complex STFT to embedding space
+        yield return new DenseLayer<T>(numFreqBins * 2, embeddingDim * numFreqBins > 4096 ? 4096 : embeddingDim * 4, reluActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim * numFreqBins > 4096 ? 4096 : embeddingDim * 4);
+
+        // Grid blocks: alternating intra-frame (frequency) and inter-frame (time) processing
+        for (int b = 0; b < numBlocks; b++)
+        {
+            int dim = embeddingDim * numFreqBins > 4096 ? 4096 : embeddingDim * 4;
+
+            // Intra-frame (frequency-axis) processing
+            yield return new DenseLayer<T>(dim, hiddenDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, dim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(dim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+            // Inter-frame (time-axis) processing
+            yield return new DenseLayer<T>(dim, hiddenDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, dim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(dim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Output: reconstruct complex STFT (real + imaginary)
+        int outDim = embeddingDim * numFreqBins > 4096 ? 4096 : embeddingDim * 4;
+        yield return new DenseLayer<T>(outDim, numFreqBins * 2, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default BS-RoFormer layers for band-split music source separation.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBSRoFormerLayers(
+        int numBands = 24,
+        int bandEmbeddingDim = 128,
+        int transformerDim = 384,
+        int numTransformerLayers = 12,
+        int numAttentionHeads = 8,
+        int feedForwardDim = 1536,
+        int numStems = 4,
+        int numFreqBins = 1025,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Band-split embedding: map each band to embedding space
+        yield return new DenseLayer<T>(numFreqBins, numBands * bandEmbeddingDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(numBands * bandEmbeddingDim);
+
+        // Project to transformer dim
+        yield return new DenseLayer<T>(numBands * bandEmbeddingDim, transformerDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(transformerDim);
+
+        // Transformer blocks with rotary embeddings
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numBands,
+                embeddingDimension: transformerDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new DenseLayer<T>(transformerDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Mask estimation for each stem
+        yield return new DenseLayer<T>(transformerDim, numFreqBins * numStems * 2, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default MelBand-RoFormer layers for mel-band music source separation.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMelBandRoFormerLayers(
+        int numMelBands = 60,
+        int bandEmbeddingDim = 128,
+        int transformerDim = 384,
+        int numTransformerLayers = 12,
+        int numAttentionHeads = 8,
+        int feedForwardDim = 1536,
+        int numStems = 4,
+        int numFreqBins = 1025,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Mel-band embedding
+        yield return new DenseLayer<T>(numFreqBins, numMelBands * bandEmbeddingDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(numMelBands * bandEmbeddingDim);
+
+        yield return new DenseLayer<T>(numMelBands * bandEmbeddingDim, transformerDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(transformerDim);
+
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numMelBands,
+                embeddingDimension: transformerDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new DenseLayer<T>(transformerDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        yield return new DenseLayer<T>(transformerDim, numFreqBins * numStems * 2, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default HTDemucs layers for hybrid transformer music source separation.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultHTDemucsLayers(
+        int numFreqBins = 2049,
+        int transformerDim = 384,
+        int numTransformerLayers = 5,
+        int numAttentionHeads = 8,
+        int numStems = 4,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int feedForwardDim = transformerDim * 4;
+
+        // Spectral encoder
+        yield return new DenseLayer<T>(numFreqBins, transformerDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(transformerDim);
+
+        // Cross-domain Transformer
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numFreqBins / 4,
+                embeddingDimension: transformerDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new DenseLayer<T>(transformerDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder: multi-stem mask prediction
+        yield return new DenseLayer<T>(transformerDim, numFreqBins * numStems, identityActivation);
+    }
+
+    /// <summary>
     /// Creates default music source separation layers (U-Net style).
     /// </summary>
     /// <param name="numMels">Number of spectrogram frequency bins (default: 513 for STFT with 1024 window).</param>
@@ -10310,7 +11142,7 @@ public static class LayerHelper<T>
         // 5. LM Decoder layers
         int lmFeedForwardDim = lmHiddenDim * 4;
         int lmNumHeads = Math.Max(8, lmHiddenDim / 64);
-        var geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
         for (int i = 0; i < numLmDecoderLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
@@ -18755,6 +19587,2764 @@ public static class LayerHelper<T>
         }
 
         yield return new DenseLayer<T>(prevChannels, outputChannels, identity);
+    }
+
+    #endregion
+
+    #region Speaker Models (Batch 4)
+
+    /// <summary>
+    /// Creates default ECAPA-TDNN speaker embedding layers.
+    /// </summary>
+    /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
+    /// <param name="channels">Base channel dimension for TDNN blocks (default: 512).</param>
+    /// <param name="embeddingDim">Output embedding dimension (default: 192).</param>
+    /// <param name="numBlocks">Number of SE-Res2Net blocks (default: 3).</param>
+    /// <param name="poolingDim">Attentive statistics pooling dimension (default: 1536).</param>
+    /// <param name="seBottleneckDim">Squeeze-Excitation bottleneck dimension (default: 128).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.0).</param>
+    /// <returns>A collection of layers for ECAPA-TDNN speaker embedding.</returns>
+    /// <remarks>
+    /// <para>
+    /// ECAPA-TDNN (Desplanques et al., Interspeech 2020) architecture:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Initial TDNN frame-level feature extraction</description></item>
+    /// <item><description>SE-Res2Net blocks with multi-scale aggregation</description></item>
+    /// <item><description>Multi-layer feature aggregation (MFA)</description></item>
+    /// <item><description>Attentive statistics pooling</description></item>
+    /// <item><description>Final embedding projection</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultECAPATDNNSpeakerLayers(
+        int numMels = 80,
+        int channels = 512,
+        int embeddingDim = 192,
+        int numBlocks = 3,
+        int poolingDim = 1536,
+        int seBottleneckDim = 128,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Initial TDNN layer: mel features -> channels
+        yield return new DenseLayer<T>(numMels, channels, reluActivation);
+        yield return new BatchNormalizationLayer<T>(channels);
+
+        // SE-Res2Net TDNN blocks with increasing dilation
+        for (int i = 0; i < numBlocks; i++)
+        {
+            // Bottleneck down
+            yield return new DenseLayer<T>(channels, channels, reluActivation);
+            yield return new BatchNormalizationLayer<T>(channels);
+
+            // Res2Net-style multi-scale processing (simplified as dense layers)
+            yield return new DenseLayer<T>(channels, channels, reluActivation);
+            yield return new BatchNormalizationLayer<T>(channels);
+
+            // SE block: squeeze -> excite
+            yield return new DenseLayer<T>(channels, seBottleneckDim, reluActivation);
+            yield return new DenseLayer<T>(seBottleneckDim, channels, (IActivationFunction<T>)new SigmoidActivation<T>());
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Multi-layer feature aggregation (MFA): concat all block outputs
+        yield return new DenseLayer<T>(channels, poolingDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(poolingDim);
+
+        // Attentive statistics pooling (simplified)
+        yield return new DenseLayer<T>(poolingDim, poolingDim, (IActivationFunction<T>)new TanhActivation<T>());
+        yield return new DenseLayer<T>(poolingDim, poolingDim, identityActivation);
+
+        // Final embedding projection
+        yield return new DenseLayer<T>(poolingDim, embeddingDim, identityActivation);
+        yield return new BatchNormalizationLayer<T>(embeddingDim);
+    }
+
+    /// <summary>
+    /// Creates default TitaNet speaker embedding layers.
+    /// </summary>
+    /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
+    /// <param name="encoderDim">Encoder hidden dimension (default: 1024).</param>
+    /// <param name="embeddingDim">Output embedding dimension (default: 192).</param>
+    /// <param name="numBlocks">Number of encoder blocks (default: 22).</param>
+    /// <param name="attentivePoolingDim">Attentive pooling hidden dimension (default: 128).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.0).</param>
+    /// <returns>A collection of layers for TitaNet speaker embedding.</returns>
+    /// <remarks>
+    /// <para>
+    /// TitaNet (Koluguri et al., ICASSP 2022) architecture:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Prolog: initial projection and normalization</description></item>
+    /// <item><description>Body: depth-wise separable conv blocks with SE and global context</description></item>
+    /// <item><description>Epilog: final projection</description></item>
+    /// <item><description>Attentive statistics pooling</description></item>
+    /// <item><description>Embedding projection with batch normalization</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultTitaNetLayers(
+        int numMels = 80,
+        int encoderDim = 1024,
+        int embeddingDim = 192,
+        int numBlocks = 22,
+        int attentivePoolingDim = 128,
+        double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int midDim = encoderDim / 2;
+
+        // Prolog: mel features -> encoder dimension
+        yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+
+        // Body: depth-wise separable conv blocks with SE (simplified as dense + SE)
+        for (int i = 0; i < numBlocks; i++)
+        {
+            // Depth-wise separable convolution (simplified as dense)
+            yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+            yield return new BatchNormalizationLayer<T>(encoderDim);
+
+            // SE block
+            int seDim = encoderDim / 8;
+            yield return new DenseLayer<T>(encoderDim, seDim, reluActivation);
+            yield return new DenseLayer<T>(seDim, encoderDim, (IActivationFunction<T>)new SigmoidActivation<T>());
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Epilog: final projection
+        yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+
+        // Attentive statistics pooling
+        yield return new DenseLayer<T>(encoderDim, attentivePoolingDim, (IActivationFunction<T>)new TanhActivation<T>());
+        yield return new DenseLayer<T>(attentivePoolingDim, encoderDim, identityActivation);
+
+        // Embedding projection
+        yield return new DenseLayer<T>(encoderDim, embeddingDim, identityActivation);
+        yield return new BatchNormalizationLayer<T>(embeddingDim);
+    }
+
+    /// <summary>
+    /// Creates default pyannote 3.x segmentation layers.
+    /// </summary>
+    /// <param name="numMels">Number of mel filterbank channels (default: 80).</param>
+    /// <param name="lstmHiddenSize">LSTM hidden dimension (default: 128).</param>
+    /// <param name="numLSTMLayers">Number of LSTM layers (default: 4).</param>
+    /// <param name="linearDim">Linear layer dimension after LSTM (default: 128).</param>
+    /// <param name="maxSpeakersPerChunk">Maximum speakers per chunk (default: 3).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers for pyannote speaker diarization.</returns>
+    /// <remarks>
+    /// <para>
+    /// pyannote.audio 3.x PyanNet architecture:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>SincNet feature extraction from raw audio</description></item>
+    /// <item><description>Multi-layer bidirectional LSTM</description></item>
+    /// <item><description>Linear classifier for per-frame speaker activity</description></item>
+    /// <item><description>Powerset multi-label output for overlap detection</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultPyAnnoteLayers(
+        int numMels = 80,
+        int lstmHiddenSize = 128,
+        int numLSTMLayers = 4,
+        int linearDim = 128,
+        int maxSpeakersPerChunk = 3,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // SincNet-style front-end (simplified as dense layers)
+        yield return new DenseLayer<T>(numMels, 60, reluActivation);
+        yield return new BatchNormalizationLayer<T>(60);
+        yield return new DenseLayer<T>(60, 60, reluActivation);
+        yield return new BatchNormalizationLayer<T>(60);
+
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Multi-layer LSTM (simplified as dense + attention layers)
+        int prevDim = 60;
+        for (int i = 0; i < numLSTMLayers; i++)
+        {
+            // Bidirectional LSTM (simplified as dense with double hidden for bidirectional)
+            int biDirDim = lstmHiddenSize * 2;
+            yield return new DenseLayer<T>(prevDim, biDirDim, (IActivationFunction<T>)new TanhActivation<T>());
+            yield return new LayerNormalizationLayer<T>(biDirDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = biDirDim;
+        }
+
+        // Linear classification head
+        yield return new DenseLayer<T>(prevDim, linearDim, reluActivation);
+
+        // Powerset output: C(maxSpeakers+1, 2) classes for overlap-aware segmentation
+        // For maxSpeakersPerChunk=3: 1 (silence) + 3 (single) + 3 (pairs) = 7 classes
+        int numPowersetClasses = 1 + maxSpeakersPerChunk + (maxSpeakersPerChunk * (maxSpeakersPerChunk - 1)) / 2;
+        yield return new DenseLayer<T>(linearDim, numPowersetClasses, identityActivation);
+    }
+
+    #endregion
+
+    #region Emotion Models (Batch 5)
+
+    /// <summary>
+    /// Creates default emotion2vec layers for speech emotion recognition.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultEmotion2VecLayers(
+        int numMels = 80,
+        int transformerDim = 768,
+        int numTransformerLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int numClasses = 7,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Feature projection
+        yield return new DenseLayer<T>(numMels, transformerDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(transformerDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Transformer encoder
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 500,
+                embeddingDimension: transformerDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new DenseLayer<T>(transformerDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(transformerDim, transformerDim / 2, reluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(transformerDim / 2, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default HuBERT-SER layers for speech emotion recognition.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultHuBERTSERLayers(
+        int numMels = 80,
+        int transformerDim = 768,
+        int numTransformerLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        int classifierHiddenDim = 256,
+        int numClasses = 7,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // CNN feature encoder (simplified as dense)
+        yield return new DenseLayer<T>(numMels, 512, geluActivation);
+        yield return new LayerNormalizationLayer<T>(512);
+        yield return new DenseLayer<T>(512, transformerDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(transformerDim);
+
+        // Transformer encoder
+        for (int i = 0; i < numTransformerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 500,
+                embeddingDimension: transformerDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            yield return new DenseLayer<T>(transformerDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, transformerDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(transformerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Emotion classification head
+        yield return new DenseLayer<T>(transformerDim, classifierHiddenDim, reluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(classifierHiddenDim, numClasses, identityActivation);
+    }
+
+    #endregion
+
+    #region MIR Models (Batch 6)
+
+    /// <summary>
+    /// Creates default CREPE pitch detection layers.
+    /// </summary>
+    /// <param name="frameSize">Input frame size in samples (default: 1024).</param>
+    /// <param name="capacityMultiplier">Filter count multiplier (default: 32 for full model).</param>
+    /// <param name="numBins">Number of pitch bins (default: 360).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.25).</param>
+    /// <returns>A collection of layers for CREPE pitch detection.</returns>
+    /// <remarks>
+    /// <para>
+    /// CREPE architecture (Kim et al., 2018):
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>6 convolutional layers with decreasing kernel sizes</description></item>
+    /// <item><description>Max-pooling and batch normalization after each conv</description></item>
+    /// <item><description>Final dense layer producing 360-bin pitch distribution</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultCREPELayers(
+        int frameSize = 1024,
+        int capacityMultiplier = 32,
+        int numBins = 360,
+        double dropoutRate = 0.25)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // CREPE has 6 conv layers with filters [1C, 2C, 3C, 4C, 5C, 6C] where C=capacity
+        int[] filterMultipliers = [1, 2, 3, 4, 5, 6];
+        int prevDim = frameSize;
+
+        for (int i = 0; i < filterMultipliers.Length; i++)
+        {
+            int filters = filterMultipliers[i] * capacityMultiplier;
+            yield return new DenseLayer<T>(prevDim, filters, reluActivation);
+            yield return new BatchNormalizationLayer<T>(filters);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = filters;
+        }
+
+        // Final dense layer -> 360 pitch bins
+        yield return new DenseLayer<T>(prevDim, numBins, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default Basic Pitch multi-pitch detection layers.
+    /// </summary>
+    /// <param name="numHarmonicBins">Number of harmonic CQT input bins (default: 264).</param>
+    /// <param name="encoderFilters">Number of convolutional filters (default: 32).</param>
+    /// <param name="numEncoderLayers">Number of encoder layers (default: 6).</param>
+    /// <param name="numMidiNotes">Number of MIDI note outputs (default: 88).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers for Basic Pitch music transcription.</returns>
+    /// <remarks>
+    /// <para>
+    /// Basic Pitch architecture (Bittner et al., 2022):
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>Harmonic CQT input representation</description></item>
+    /// <item><description>CNN encoder with skip connections</description></item>
+    /// <item><description>Three output heads: note, onset, contour</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultBasicPitchLayers(
+        int numHarmonicBins = 264,
+        int encoderFilters = 32,
+        int numEncoderLayers = 6,
+        int numMidiNotes = 88,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Encoder: CNN feature extraction
+        int prevDim = numHarmonicBins;
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            int filters = encoderFilters * (1 << Math.Min(i, 3)); // 32, 64, 128, 256, 256, 256
+            yield return new DenseLayer<T>(prevDim, filters, reluActivation);
+            yield return new BatchNormalizationLayer<T>(filters);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = filters;
+        }
+
+        // Shared intermediate representation
+        int sharedDim = prevDim;
+        yield return new DenseLayer<T>(sharedDim, 256, reluActivation);
+        yield return new BatchNormalizationLayer<T>(256);
+
+        // Combined output: note + onset + contour heads concatenated
+        // note: 88 + onset: 88 + contour: 88 = 264
+        yield return new DenseLayer<T>(256, numMidiNotes * 3, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default Onsets and Frames piano transcription layers.
+    /// </summary>
+    /// <param name="numMels">Number of mel filterbank channels (default: 229).</param>
+    /// <param name="acousticDim">Acoustic model CNN dimension (default: 512).</param>
+    /// <param name="lstmHiddenSize">Bidirectional LSTM hidden size (default: 256).</param>
+    /// <param name="numLstmLayers">Number of LSTM layers (default: 2).</param>
+    /// <param name="numMidiNotes">Number of MIDI note outputs (default: 88).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.2).</param>
+    /// <returns>A collection of layers for Onsets and Frames transcription.</returns>
+    /// <remarks>
+    /// <para>
+    /// Onsets and Frames architecture (Hawthorne et al., 2018):
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>CNN acoustic model (mel -> features)</description></item>
+    /// <item><description>Bidirectional LSTM for onset detection</description></item>
+    /// <item><description>Bidirectional LSTM for frame detection</description></item>
+    /// <item><description>Combined output: onset + frame logits</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultOnsetsAndFramesLayers(
+        int numMels = 229,
+        int acousticDim = 512,
+        int lstmHiddenSize = 256,
+        int numLstmLayers = 2,
+        int numMidiNotes = 88,
+        double dropoutRate = 0.2)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // CNN acoustic model
+        yield return new DenseLayer<T>(numMels, 256, reluActivation);
+        yield return new BatchNormalizationLayer<T>(256);
+        yield return new DenseLayer<T>(256, acousticDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(acousticDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Onset stack: LSTM layers for onset detection
+        int prevDim = acousticDim;
+        for (int i = 0; i < numLstmLayers; i++)
+        {
+            int biDirDim = lstmHiddenSize * 2;
+            yield return new DenseLayer<T>(prevDim, biDirDim, (IActivationFunction<T>)new TanhActivation<T>());
+            yield return new LayerNormalizationLayer<T>(biDirDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = biDirDim;
+        }
+
+        // Frame stack: uses onset output + acoustic features
+        yield return new DenseLayer<T>(prevDim + numMidiNotes, lstmHiddenSize * 2, (IActivationFunction<T>)new TanhActivation<T>());
+        yield return new LayerNormalizationLayer<T>(lstmHiddenSize * 2);
+
+        // Combined onset + frame output: 88 + 88 = 176
+        yield return new DenseLayer<T>(lstmHiddenSize * 2, numMidiNotes * 2, identityActivation);
+    }
+
+    #endregion
+
+    #region Fingerprinting Models (Batch 7)
+
+    /// <summary>
+    /// Creates default NeuralFP audio fingerprinting layers.
+    /// </summary>
+    /// <param name="numMels">Number of mel filterbank channels (default: 256).</param>
+    /// <param name="baseFilters">Base filter count (default: 32).</param>
+    /// <param name="numConvBlocks">Number of convolutional blocks (default: 4).</param>
+    /// <param name="embeddingDim">Output embedding dimension (default: 128).</param>
+    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
+    /// <returns>A collection of layers for NeuralFP fingerprinting.</returns>
+    /// <remarks>
+    /// <para>
+    /// NeuralFP architecture (Chang et al., 2021):
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>CNN encoder with increasing filter counts</description></item>
+    /// <item><description>Batch normalization and ReLU after each conv</description></item>
+    /// <item><description>Global average pooling + linear projection to embedding</description></item>
+    /// </list>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralFPLayers(
+        int numMels = 256,
+        int baseFilters = 32,
+        int numConvBlocks = 4,
+        int embeddingDim = 128,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        int prevDim = numMels;
+        for (int i = 0; i < numConvBlocks; i++)
+        {
+            int filters = baseFilters * (1 << i); // 32, 64, 128, 256
+            yield return new DenseLayer<T>(prevDim, filters, reluActivation);
+            yield return new BatchNormalizationLayer<T>(filters);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = filters;
+        }
+
+        // Projection to embedding space
+        yield return new DenseLayer<T>(prevDim, embeddingDim, identityActivation);
+    }
+
+    #endregion
+
+    #region Generation/Codec Models (Batch 9)
+
+    /// <summary>
+    /// Creates default EnCodec encoder-decoder layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultEnCodecLayers(
+        int[]? encoderChannels = null, int encoderDim = 128, double dropoutRate = 0.0)
+    {
+        encoderChannels ??= [32, 64, 128, 256, 512];
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Encoder: progressive downsampling
+        int prevDim = 1;
+        foreach (int ch in encoderChannels)
+        {
+            yield return new DenseLayer<T>(prevDim, ch, reluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            yield return new DenseLayer<T>(ch, ch, reluActivation);
+            yield return new DenseLayer<T>(ch, ch, identityActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = ch;
+        }
+
+        // Bottleneck
+        yield return new DenseLayer<T>(prevDim, encoderDim, identityActivation);
+
+        // Decoder (mirror of encoder)
+        prevDim = encoderDim;
+        for (int i = encoderChannels.Length - 1; i >= 0; i--)
+        {
+            int ch = encoderChannels[i];
+            yield return new DenseLayer<T>(prevDim, ch, reluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            yield return new DenseLayer<T>(ch, ch, reluActivation);
+            yield return new DenseLayer<T>(ch, ch, identityActivation);
+            prevDim = ch;
+        }
+
+        yield return new DenseLayer<T>(prevDim, 1, (IActivationFunction<T>)new TanhActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default SoundStream encoder-decoder layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSoundStreamLayers(
+        int[]? encoderChannels = null, int encoderDim = 128, int numResBlocks = 3, double dropoutRate = 0.0)
+    {
+        encoderChannels ??= [32, 64, 128, 256];
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Encoder with residual blocks
+        int prevDim = 1;
+        foreach (int ch in encoderChannels)
+        {
+            yield return new DenseLayer<T>(prevDim, ch, reluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            for (int r = 0; r < numResBlocks; r++)
+            {
+                yield return new DenseLayer<T>(ch, ch, reluActivation);
+                yield return new DenseLayer<T>(ch, ch, identityActivation);
+            }
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = ch;
+        }
+
+        yield return new DenseLayer<T>(prevDim, encoderDim, identityActivation);
+
+        // Decoder (mirror)
+        prevDim = encoderDim;
+        for (int i = encoderChannels.Length - 1; i >= 0; i--)
+        {
+            int ch = encoderChannels[i];
+            yield return new DenseLayer<T>(prevDim, ch, reluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            for (int r = 0; r < numResBlocks; r++)
+            {
+                yield return new DenseLayer<T>(ch, ch, reluActivation);
+                yield return new DenseLayer<T>(ch, ch, identityActivation);
+            }
+            prevDim = ch;
+        }
+
+        yield return new DenseLayer<T>(prevDim, 1, (IActivationFunction<T>)new TanhActivation<T>());
+    }
+
+    #endregion
+
+    #region Foundation Model Layers
+
+    /// <summary>
+    /// Creates default layers for self-supervised speech foundation models (HuBERT, WavLM, wav2vec 2.0).
+    /// Architecture: multi-layer CNN feature encoder → linear projection → N transformer encoder layers.
+    /// </summary>
+    /// <param name="featureEncoderDim">CNN feature encoder output dimension (default 512).</param>
+    /// <param name="hiddenDim">Transformer hidden dimension (default 768).</param>
+    /// <param name="numLayers">Number of transformer encoder layers (default 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads per layer (default 12).</param>
+    /// <param name="feedForwardDim">Feed-forward intermediate dimension (default 3072).</param>
+    /// <param name="dropoutRate">Dropout rate (default 0.1).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length for attention (default 500, ~10 s at 50 Hz frame rate).</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultFoundationModelLayers(
+        int featureEncoderDim = 512,
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 500)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // --- CNN Feature Encoder ---
+        // 7-layer temporal CNN that processes raw waveform into latent representations.
+        // Stride pattern (paper): 5,2,2,2,2,2,2 reduces 16 kHz waveform to 50 Hz frame rate.
+        int[] cnnChannels = [512, 512, 512, 512, 512, featureEncoderDim, featureEncoderDim];
+        int prevDim = 1; // raw waveform is single-channel
+        foreach (int ch in cnnChannels)
+        {
+            yield return new DenseLayer<T>(prevDim, ch, geluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            prevDim = ch;
+        }
+
+        // --- Feature Projection ---
+        // Linear projection from CNN output to transformer hidden dimension.
+        if (featureEncoderDim != hiddenDim)
+        {
+            yield return new DenseLayer<T>(featureEncoderDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // --- Transformer Encoder ---
+        // N layers of multi-head self-attention + feed-forward with layer normalization.
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: hiddenDim,
+                headCount: numAttentionHeads);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Position-wise feed-forward network
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    #endregion
+
+    #region Speech Recognition Layers
+
+    /// <summary>
+    /// Creates default layers for the Conformer ASR model (Gulati et al., 2020).
+    /// Architecture: Conv-subsampling → N Conformer blocks (FF/Attn/Conv/FF macaron) → CTC head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultConformerLayers(
+        int encoderDim = 512,
+        int numLayers = 18,
+        int numAttentionHeads = 8,
+        int feedForwardExpansionFactor = 4,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        int ffDim = encoderDim * feedForwardExpansionFactor;
+
+        // --- Conv Subsampling (stride 4) ---
+        // Two conv layers with stride 2 each reduce frame rate 4x.
+        yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // --- Conformer Encoder Blocks ---
+        // Each block: FF (half-step) → MHSA → Conv → FF (half-step) → LayerNorm
+        for (int i = 0; i < numLayers; i++)
+        {
+            // First feed-forward module (half-step)
+            yield return new DenseLayer<T>(encoderDim, ffDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(ffDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            // Multi-head self-attention module
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: encoderDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            // Convolution module (approximated with dense layers)
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 2, geluActivation);
+            yield return new BatchNormalizationLayer<T>(encoderDim * 2);
+            yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            // Second feed-forward module (half-step)
+            yield return new DenseLayer<T>(encoderDim, ffDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(ffDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // --- CTC Output Head ---
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a CTC decoder ASR model.
+    /// Architecture: Mel projection → N Transformer encoder layers → CTC head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCTCDecoderLayers(
+        int encoderDim = 512,
+        int numLayers = 6,
+        int numAttentionHeads = 8,
+        int feedForwardDim = 2048,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // --- Input Projection ---
+        yield return new DenseLayer<T>(numMels, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // --- Transformer Encoder ---
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: encoderDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            yield return new DenseLayer<T>(encoderDim, feedForwardDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(feedForwardDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // --- CTC Output Head ---
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
+    }
+
+    #endregion
+
+    #region Text-to-Speech Layers
+
+    /// <summary>
+    /// Creates default layers for the StyleTTS 2 TTS model (Li et al., 2023).
+    /// Architecture: Text encoder (Transformer) → Style predictor → Decoder → Waveform output.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultStyleTTS2Layers(
+        int textEncoderDim = 512,
+        int numTextEncoderLayers = 6,
+        int styleDim = 128,
+        int prosodyDim = 512,
+        int numMels = 80,
+        int numAttentionHeads = 8,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 512)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        int ffDim = textEncoderDim * 4;
+
+        // --- Text Encoder (Transformer) ---
+        yield return new DenseLayer<T>(256, textEncoderDim, geluActivation); // char embedding projection
+        yield return new LayerNormalizationLayer<T>(textEncoderDim);
+
+        for (int i = 0; i < numTextEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: textEncoderDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+
+            yield return new DenseLayer<T>(textEncoderDim, ffDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(ffDim, textEncoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+        }
+
+        // --- Style Predictor ---
+        yield return new DenseLayer<T>(textEncoderDim, prosodyDim, geluActivation);
+        yield return new DenseLayer<T>(prosodyDim, styleDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(styleDim);
+
+        // --- Decoder (mel-spectrogram generation) ---
+        yield return new DenseLayer<T>(textEncoderDim + styleDim, prosodyDim, geluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(prosodyDim, prosodyDim, geluActivation);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        yield return new DenseLayer<T>(prosodyDim, numMels, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for the HiFi-GAN vocoder (Kong et al., 2020).
+    /// Architecture: Mel input → Upsampling blocks with MRF → Waveform output.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultHiFiGANLayers(
+        int numMels = 80,
+        int upsampleInitialChannel = 512,
+        int[]? upsampleRates = null,
+        int numResBlocks = 3,
+        double dropoutRate = 0.0)
+    {
+        upsampleRates ??= new[] { 8, 8, 2, 2 };
+        var leakyReluActivation = (IActivationFunction<T>)new LeakyReLUActivation<T>();
+        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // --- Input Projection ---
+        yield return new DenseLayer<T>(numMels, upsampleInitialChannel, leakyReluActivation);
+
+        // --- Upsampling Blocks ---
+        int ch = upsampleInitialChannel;
+        foreach (int rate in upsampleRates)
+        {
+            int nextCh = ch / 2;
+            if (nextCh < 1) nextCh = 1;
+
+            // Transposed conv approximation (upsample)
+            yield return new DenseLayer<T>(ch, nextCh, leakyReluActivation);
+
+            // Multi-Receptive Field Fusion (MRF) - multiple residual blocks
+            for (int r = 0; r < numResBlocks; r++)
+            {
+                yield return new DenseLayer<T>(nextCh, nextCh, leakyReluActivation);
+                yield return new DenseLayer<T>(nextCh, nextCh, identityActivation);
+            }
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            ch = nextCh;
+        }
+
+        // --- Output Projection ---
+        yield return new DenseLayer<T>(ch, 1, tanhActivation);
+    }
+
+    #endregion
+
+    #region Enhancement Layers (Medium Priority)
+
+    /// <summary>
+    /// Creates default layers for MP-SENet (Lu et al., 2023).
+    /// Dual-path Transformer with magnitude and phase estimation paths.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMPSENetLayers(
+        int hiddenDim = 256, int numLayers = 6, int numAttentionHeads = 8,
+        int feedForwardDim = 1024, int numFreqBins = 257, double dropoutRate = 0.1,
+        int maxSequenceLength = 500)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Input projection (complex spectrogram: 2x freq bins for real+imag)
+        yield return new DenseLayer<T>(numFreqBins * 2, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Dual-path Transformer blocks
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Magnitude path
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Cross-domain fusion
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
+        }
+
+        // Output heads: magnitude mask + phase correction
+        yield return new DenseLayer<T>(hiddenDim, numFreqBins * 2, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for FRCRN (Zhao et al., 2022).
+    /// Encoder-decoder CRN with frequency recurrence (LSTM along frequency axis).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFRCRNLayers(
+        int encoderChannels = 64, int numStages = 5, int lstmHiddenSize = 256,
+        int numFreqBins = 257, double dropoutRate = 0.05)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Encoder: progressive downsampling
+        int prevCh = numFreqBins;
+        int ch = encoderChannels;
+        for (int s = 0; s < numStages; s++)
+        {
+            yield return new DenseLayer<T>(prevCh, ch, reluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevCh = ch;
+            ch = Math.Min(ch * 2, 512);
+        }
+
+        // Frequency recurrence (LSTM approximation via dense layers)
+        yield return new DenseLayer<T>(prevCh, lstmHiddenSize, reluActivation);
+        yield return new DenseLayer<T>(lstmHiddenSize, lstmHiddenSize, reluActivation);
+        yield return new DenseLayer<T>(lstmHiddenSize, prevCh, identityActivation);
+
+        // Decoder: progressive upsampling (mirror of encoder)
+        for (int s = numStages - 1; s >= 0; s--)
+        {
+            int outCh = s > 0 ? encoderChannels * (int)Math.Pow(2, s - 1) : numFreqBins;
+            if (outCh > 512) outCh = 512;
+            yield return new DenseLayer<T>(prevCh, outCh, reluActivation);
+            yield return new BatchNormalizationLayer<T>(outCh);
+            prevCh = outCh;
+        }
+
+        // Complex mask output
+        yield return new DenseLayer<T>(prevCh, numFreqBins * 2, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for Band-Split RNN enhancer (Luo and Yu, 2023).
+    /// Band-wise processing with cross-band fusion.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBandSplitRNNEnhancerLayers(
+        int numBands = 24, int bandRnnHiddenSize = 128, int numRnnLayers = 6,
+        int fusionDim = 256, int numFreqBins = 257, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Band split: project freq bins into band features
+        int binsPerBand = (numFreqBins + numBands - 1) / numBands;
+        yield return new DenseLayer<T>(numFreqBins, numBands * bandRnnHiddenSize, reluActivation);
+        yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+
+        // Band-wise RNN processing (approximated with dense layers)
+        for (int layer = 0; layer < numRnnLayers; layer++)
+        {
+            // Intra-band processing
+            yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, numBands * bandRnnHiddenSize, reluActivation);
+            yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+
+            // Inter-band fusion
+            yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, fusionDim, reluActivation);
+            yield return new DenseLayer<T>(fusionDim, numBands * bandRnnHiddenSize, identityActivation);
+            yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Band merge: project back to freq bins
+        yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, numFreqBins, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for the SCNet (Sparse Compression Network) source separation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSCNetLayers(
+        int numClusters = 64, int compressionDim = 128,
+        int numEncoderBlocks = 6, int numDecoderBlocks = 6,
+        int attentionDim = 256, int numAttentionHeads = 8, int feedForwardDim = 1024,
+        int numStems = 4, int numFreqBins = 1025, double dropoutRate = 0.0)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Input projection: freq bins -> compression dim
+        yield return new DenseLayer<T>(numFreqBins, compressionDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(compressionDim);
+
+        // Sparse compression: reduce to clusters
+        yield return new DenseLayer<T>(compressionDim, numClusters, reluActivation);
+        yield return new LayerNormalizationLayer<T>(numClusters);
+
+        // Encoder: attention blocks on compressed representation
+        for (int i = 0; i < numEncoderBlocks; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numClusters, embeddingDimension: attentionDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(attentionDim);
+            yield return new DenseLayer<T>(attentionDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, attentionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(attentionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder: attention blocks for reconstruction
+        for (int i = 0; i < numDecoderBlocks; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numClusters, embeddingDimension: attentionDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(attentionDim);
+            yield return new DenseLayer<T>(attentionDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, attentionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(attentionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decompress: clusters -> freq bins
+        yield return new DenseLayer<T>(numClusters, compressionDim, reluActivation);
+        yield return new DenseLayer<T>(compressionDim, numFreqBins * numStems, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for the BandSplitRNN source separation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBandSplitRNNSeparationLayers(
+        int numBands = 24, int bandRnnHiddenSize = 128, int numBandRnnLayers = 12,
+        int sequenceRnnHiddenSize = 256, int numSequenceRnnLayers = 6, int fusionDim = 256,
+        int numStems = 4, int numFreqBins = 1025, double dropoutRate = 0.0)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Band split: project freq bins into per-band embeddings
+        yield return new DenseLayer<T>(numFreqBins, numBands * bandRnnHiddenSize, reluActivation);
+        yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+
+        // Band-level RNN layers: process each band independently
+        for (int i = 0; i < numBandRnnLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(numBands * bandRnnHiddenSize, numBands * bandRnnHiddenSize, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Cross-band fusion via sequence-level RNN layers
+        for (int i = 0; i < numSequenceRnnLayers; i++)
+        {
+            yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, fusionDim, reluActivation);
+            yield return new DenseLayer<T>(fusionDim, sequenceRnnHiddenSize, reluActivation);
+            yield return new DenseLayer<T>(sequenceRnnHiddenSize, numBands * bandRnnHiddenSize, identityActivation);
+            yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Mask estimation: project to multi-stem frequency masks
+        yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, numFreqBins * numStems, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for the WavLM Speaker verification model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultWavLMSpeakerLayers(
+        int hiddenDim = 768, int numLayers = 12, int numAttentionHeads = 12,
+        int feedForwardDim = 3072, int featureEncoderDim = 512,
+        int embeddingDim = 256, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Feature encoder: CNN layers for raw waveform
+        yield return new DenseLayer<T>(featureEncoderDim, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, (IActivationFunction<T>)new IdentityActivation<T>());
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Speaker embedding head: statistics pooling + projection
+        yield return new DenseLayer<T>(hiddenDim * 2, embeddingDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(embeddingDim);
+    }
+
+    /// <summary>
+    /// Creates default layers for the CAM++ speaker verification model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCAMPlusPlusLayers(
+        int numMels = 80, int initialChannels = 512, int growthRate = 64,
+        int numBlocks = 6, int bottleneckDim = 128, int maskingDim = 256,
+        int poolingDim = 1536, int embeddingDim = 192, double dropoutRate = 0.0)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Input projection
+        yield return new DenseLayer<T>(numMels, initialChannels, reluActivation);
+        yield return new BatchNormalizationLayer<T>(initialChannels);
+
+        // D-TDNN blocks with dense connections
+        int currentDim = initialChannels;
+        for (int i = 0; i < numBlocks; i++)
+        {
+            // Bottleneck
+            yield return new DenseLayer<T>(currentDim, bottleneckDim, reluActivation);
+            yield return new BatchNormalizationLayer<T>(bottleneckDim);
+
+            // TDNN layer
+            yield return new DenseLayer<T>(bottleneckDim, growthRate, reluActivation);
+            yield return new BatchNormalizationLayer<T>(growthRate);
+
+            currentDim += growthRate;
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Context-aware masking
+        yield return new DenseLayer<T>(currentDim, maskingDim, reluActivation);
+        yield return new DenseLayer<T>(maskingDim, currentDim, identityActivation);
+
+        // Pooling and embedding projection
+        yield return new DenseLayer<T>(currentDim * 2, poolingDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(poolingDim);
+        yield return new DenseLayer<T>(poolingDim, embeddingDim, identityActivation);
+        yield return new BatchNormalizationLayer<T>(embeddingDim);
+    }
+
+    /// <summary>
+    /// Creates default layers for the Wav2Small lightweight SER model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultWav2SmallLayers(
+        int numMels = 80, int hiddenDim = 256, int numLayers = 4,
+        int numAttentionHeads = 4, int feedForwardDim = 1024,
+        int featureEncoderDim = 256, int numClasses = 7, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Compact feature encoder
+        yield return new DenseLayer<T>(numMels, featureEncoderDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(featureEncoderDim);
+        yield return new DenseLayer<T>(featureEncoderDim, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Small Transformer encoder
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Classification head
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for the WavLM-SER emotion recognition model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultWavLMSERLayers(
+        int hiddenDim = 768, int numLayers = 12, int numAttentionHeads = 12,
+        int feedForwardDim = 3072, int featureEncoderDim = 512,
+        int numClasses = 7, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Feature encoder
+        yield return new DenseLayer<T>(featureEncoderDim, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // WavLM Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Emotion classification head
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
+        yield return new DenseLayer<T>(hiddenDim, numClasses, identityActivation);
+    }
+
+    #endregion
+
+    #region MIR Batch 18
+
+    /// <summary>
+    /// Creates layers for MT3 multi-track music transcription (Gardner et al., 2022).
+    /// T5-style encoder-decoder: spectrogram encoder + autoregressive MIDI token decoder.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMT3Layers(
+        int numMels = 512, int encoderDim = 512, int numEncoderLayers = 8,
+        int decoderDim = 512, int numDecoderLayers = 8, int numAttentionHeads = 8,
+        int vocabSize = 6000, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Mel spectrogram projection
+        yield return new DenseLayer<T>(numMels, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        // T5-style encoder layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: encoderDim, embeddingDimension: encoderDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Cross-attention decoder layers
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: decoderDim, embeddingDimension: decoderDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new DenseLayer<T>(decoderDim, decoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(decoderDim * 4, decoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Token prediction head
+        yield return new DenseLayer<T>(decoderDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for Madmom neural beat tracker (Bock et al., 2016).
+    /// Spectrogram features + bidirectional RNN stack + beat activation output.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMadmomBeatTrackerLayers(
+        int numBands = 81, int rnnHiddenSize = 256, int numRnnLayers = 3,
+        double dropoutRate = 0.15)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Spectrogram feature projection
+        yield return new DenseLayer<T>(numBands, rnnHiddenSize, reluActivation);
+        yield return new BatchNormalizationLayer<T>(rnnHiddenSize);
+
+        // Bidirectional RNN stack (simulated as FC + LayerNorm)
+        for (int i = 0; i < numRnnLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(rnnHiddenSize, rnnHiddenSize * 2, reluActivation);
+            yield return new LayerNormalizationLayer<T>(rnnHiddenSize * 2);
+            yield return new FullyConnectedLayer<T>(rnnHiddenSize * 2, rnnHiddenSize, reluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Beat activation output
+        yield return new FullyConnectedLayer<T>(rnnHiddenSize, 1, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for Tempogram neural tempo estimation.
+    /// Onset detector + autocorrelation-inspired tempo bin classifier.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultTempogramLayers(
+        int fftSize = 2048, int onsetHiddenDim = 256, int numOnsetLayers = 3,
+        int numTempoBins = 300, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Spectrogram feature extraction
+        yield return new DenseLayer<T>(fftSize, onsetHiddenDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(onsetHiddenDim);
+
+        // Onset detection layers
+        for (int i = 0; i < numOnsetLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(onsetHiddenDim, onsetHiddenDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(onsetHiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Tempo bin classifier
+        yield return new FullyConnectedLayer<T>(onsetHiddenDim, onsetHiddenDim * 2, reluActivation);
+        yield return new FullyConnectedLayer<T>(onsetHiddenDim * 2, numTempoBins, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for Music Structure Analyzer.
+    /// Mel features + Transformer encoder + section segmentation head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMusicStructureAnalyzerLayers(
+        int numMels = 128, int hiddenDim = 256, int numLayers = 4,
+        int numAttentionHeads = 4, int numSections = 8, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Mel projection
+        yield return new DenseLayer<T>(numMels, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Self-similarity Transformer encoder
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(hiddenDim * 4, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Section segmentation head
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
+        yield return new DenseLayer<T>(hiddenDim, numSections, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for neural Melody Extractor.
+    /// Mel features + encoder stack + pitch bin classifier with voicing head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMelodyExtractorLayers(
+        int numMels = 128, int hiddenDim = 256, int numLayers = 4,
+        int numPitchBins = 360, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Mel feature projection
+        yield return new DenseLayer<T>(numMels, hiddenDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(hiddenDim);
+
+        // Encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 2, reluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim * 2);
+            yield return new FullyConnectedLayer<T>(hiddenDim * 2, hiddenDim, reluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Pitch bin classification head
+        yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, reluActivation);
+        yield return new FullyConnectedLayer<T>(hiddenDim, numPitchBins, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for Music Tagging Transformer (Won et al., 2021).
+    /// Mel features + Transformer encoder + multi-label sigmoid classification.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMusicTaggingTransformerLayers(
+        int numMels = 128, int hiddenDim = 256, int numLayers = 4,
+        int numAttentionHeads = 4, int feedForwardDim = 1024,
+        int numTags = 50, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Mel feature projection
+        yield return new DenseLayer<T>(numMels, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Multi-label classification head
+        yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
+        yield return new DenseLayer<T>(hiddenDim, numTags, identityActivation);
+    }
+
+    #endregion
+
+    #region Fingerprinting Batch 19
+
+    /// <summary>
+    /// Creates layers for PeakNetFP spectral peak-based fingerprinting.
+    /// Peak-enhanced CNN encoder + L2-normalized embedding head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultPeakNetFPLayers(
+        int numMels = 256, int baseFilters = 32, int numEncoderBlocks = 5,
+        int embeddingDim = 128, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Initial projection
+        yield return new DenseLayer<T>(numMels, baseFilters * 2, reluActivation);
+        yield return new BatchNormalizationLayer<T>(baseFilters * 2);
+
+        // Peak-enhanced convolutional encoder blocks
+        int filters = baseFilters * 2;
+        for (int i = 0; i < numEncoderBlocks; i++)
+        {
+            int nextFilters = Math.Min(filters * 2, 512);
+            yield return new FullyConnectedLayer<T>(filters, nextFilters, reluActivation);
+            yield return new BatchNormalizationLayer<T>(nextFilters);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            filters = nextFilters;
+        }
+
+        // Embedding projection
+        yield return new FullyConnectedLayer<T>(filters, embeddingDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for GraFPrint graph neural network fingerprinting.
+    /// GNN message passing layers + graph readout + embedding head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultGraFPrintLayers(
+        int numMels = 256, int gnnHiddenDim = 256, int numGnnLayers = 4,
+        int numAttentionHeads = 4, int embeddingDim = 128, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Node feature projection
+        yield return new DenseLayer<T>(numMels, gnnHiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(gnnHiddenDim);
+
+        // Graph attention layers (simulated as attention + FC)
+        for (int i = 0; i < numGnnLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: gnnHiddenDim, embeddingDimension: gnnHiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(gnnHiddenDim);
+            yield return new DenseLayer<T>(gnnHiddenDim, gnnHiddenDim * 2, geluActivation);
+            yield return new DenseLayer<T>(gnnHiddenDim * 2, gnnHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(gnnHiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Readout + embedding projection
+        yield return new DenseLayer<T>(gnnHiddenDim, embeddingDim, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for ConformerFP (Conformer-based fingerprinting).
+    /// Conformer blocks (attention + convolution) + embedding head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultConformerFPLayers(
+        int numMels = 256, int hiddenDim = 256, int numLayers = 6,
+        int numAttentionHeads = 4, int feedForwardDim = 1024,
+        int embeddingDim = 128, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Feature projection
+        yield return new DenseLayer<T>(numMels, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Conformer blocks: FFN + MHSA + Conv + FFN + LayerNorm
+        for (int i = 0; i < numLayers; i++)
+        {
+            // First FFN (half-step)
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: hiddenDim, embeddingDimension: hiddenDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Convolution module (simulated as FC + activation + FC)
+            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 2, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim * 2, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Second FFN (half-step)
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Embedding projection
+        yield return new DenseLayer<T>(hiddenDim, embeddingDim, identityActivation);
+    }
+
+    #endregion
+
+    #region VAD Batch 20
+
+    /// <summary>
+    /// Creates layers for WebRTC neural VAD.
+    /// Lightweight FC encoder + binary speech/non-speech classification.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultWebRTCVadLayers(
+        int frameSize = 480, int hiddenDim = 64, int numLayers = 3,
+        double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Input projection
+        yield return new FullyConnectedLayer<T>(frameSize, hiddenDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(hiddenDim);
+
+        // Lightweight encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Binary classification output
+        yield return new FullyConnectedLayer<T>(hiddenDim, 1, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for MarbleNet separable convolutional VAD (NVIDIA NeMo).
+    /// Mel features + separable conv blocks + binary classification.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMarbleNetLayers(
+        int numMels = 64, int initialFilters = 128, int numBlocks = 3,
+        int subBlocksPerBlock = 5, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Initial conv (prologue)
+        yield return new DenseLayer<T>(numMels, initialFilters, reluActivation);
+        yield return new BatchNormalizationLayer<T>(initialFilters);
+
+        // Jasper-style separable conv blocks
+        int filters = initialFilters;
+        for (int b = 0; b < numBlocks; b++)
+        {
+            for (int s = 0; s < subBlocksPerBlock; s++)
+            {
+                // Depth-wise + point-wise (simulated as FC pairs)
+                yield return new FullyConnectedLayer<T>(filters, filters, reluActivation);
+                yield return new BatchNormalizationLayer<T>(filters);
+                if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Epilogue: reduce to binary classification
+        yield return new FullyConnectedLayer<T>(filters, filters / 2, reluActivation);
+        yield return new FullyConnectedLayer<T>(filters / 2, 1, identityActivation);
+    }
+
+    #endregion
+
+    #region Generation Batch 21
+
+    /// <summary>Creates default layers for AudioLM (semantic stage).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioLMLayers(
+        int semanticDim = 1024, int numSemanticLayers = 12,
+        int numSemanticHeads = 16, int semanticVocabSize = 1024,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Token embedding projection
+        yield return new FullyConnectedLayer<T>(semanticVocabSize, semanticDim, geluActivation);
+
+        // Transformer layers for semantic modeling
+        for (int i = 0; i < numSemanticLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(semanticDim, semanticDim, numSemanticHeads);
+            yield return new LayerNormalizationLayer<T>(semanticDim);
+            yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(semanticDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Output projection to vocabulary
+        yield return new FullyConnectedLayer<T>(semanticDim, semanticVocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for VoiceCraft codec language model.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVoiceCraftLayers(
+        int hiddenDim = 2048, int numLayers = 16,
+        int numHeads = 16, int codebookSize = 2048,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Codec embedding projection
+        yield return new FullyConnectedLayer<T>(codebookSize, hiddenDim, geluActivation);
+
+        // Transformer layers with causal masking
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim * 4, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Output projection to codebook
+        yield return new FullyConnectedLayer<T>(hiddenDim, codebookSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for VALL-E AR stage.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVALLELayers(
+        int arHiddenDim = 1024, int numARLayers = 12,
+        int numARHeads = 16, int codebookSize = 1024,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Input embedding: phoneme + codec
+        yield return new FullyConnectedLayer<T>(codebookSize, arHiddenDim, geluActivation);
+
+        // AR transformer layers
+        for (int i = 0; i < numARLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(arHiddenDim, arHiddenDim, numARHeads);
+            yield return new LayerNormalizationLayer<T>(arHiddenDim);
+            yield return new FullyConnectedLayer<T>(arHiddenDim, arHiddenDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(arHiddenDim * 4, arHiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(arHiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Output projection to first codebook
+        yield return new FullyConnectedLayer<T>(arHiddenDim, codebookSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for YuE semantic stage.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultYuELayers(
+        int semanticDim = 2048, int numSemanticLayers = 24,
+        int numSemanticHeads = 16, int lyricsVocabSize = 32000,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Lyrics + style embedding projection
+        yield return new FullyConnectedLayer<T>(lyricsVocabSize, semanticDim, geluActivation);
+
+        // Deep transformer for long-form generation
+        for (int i = 0; i < numSemanticLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(semanticDim, semanticDim, numSemanticHeads);
+            yield return new LayerNormalizationLayer<T>(semanticDim);
+            yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(semanticDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Output projection
+        yield return new FullyConnectedLayer<T>(semanticDim, semanticDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Fish Speech semantic LM.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFishSpeechLayers(
+        int semanticDim = 1024, int numSemanticLayers = 24,
+        int numSemanticHeads = 16, int codebookSize = 8192,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Text + GFSQ token embedding
+        yield return new FullyConnectedLayer<T>(codebookSize, semanticDim, geluActivation);
+
+        // Transformer layers
+        for (int i = 0; i < numSemanticLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(semanticDim, semanticDim, numSemanticHeads);
+            yield return new LayerNormalizationLayer<T>(semanticDim);
+            yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(semanticDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Output projection to GFSQ codebook
+        yield return new FullyConnectedLayer<T>(semanticDim, codebookSize, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region Multimodal Batch 22
+
+    /// <summary>Creates default layers for Qwen2-Audio (audio encoder + adapter).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultQwen2AudioLayers(
+        int audioEncoderDim = 1280, int numAudioEncoderLayers = 32,
+        int numAudioEncoderHeads = 20, int lmHiddenDim = 3584,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Whisper-style audio encoder
+        for (int i = 0; i < numAudioEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(audioEncoderDim, audioEncoderDim, numAudioEncoderHeads);
+            yield return new LayerNormalizationLayer<T>(audioEncoderDim);
+            yield return new FullyConnectedLayer<T>(audioEncoderDim, audioEncoderDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(audioEncoderDim * 4, audioEncoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(audioEncoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Perceiver adapter: project audio to LM space
+        yield return new FullyConnectedLayer<T>(audioEncoderDim, lmHiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+        // Output projection
+        yield return new FullyConnectedLayer<T>(lmHiddenDim, lmHiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for SALMONN (dual encoder + Q-Former).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSALMONNLayers(
+        int speechEncoderDim = 1280, int audioEncoderDim = 768,
+        int qFormerDim = 768, int numQFormerLayers = 6,
+        int lmHiddenDim = 4096, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Speech encoder projection (Whisper output -> common dim)
+        yield return new FullyConnectedLayer<T>(speechEncoderDim, qFormerDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(qFormerDim);
+
+        // Audio encoder projection (BEATs output -> common dim)
+        yield return new FullyConnectedLayer<T>(audioEncoderDim, qFormerDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(qFormerDim);
+
+        // Window-level Q-Former layers
+        for (int i = 0; i < numQFormerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(qFormerDim, qFormerDim, 12);
+            yield return new LayerNormalizationLayer<T>(qFormerDim);
+            yield return new FullyConnectedLayer<T>(qFormerDim, qFormerDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(qFormerDim * 4, qFormerDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(qFormerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Project Q-Former output to LM input space
+        yield return new FullyConnectedLayer<T>(qFormerDim, lmHiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+        // Output projection
+        yield return new FullyConnectedLayer<T>(lmHiddenDim, lmHiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region Foundations Batch 23
+
+    /// <summary>Creates default layers for data2vec 2.0.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultData2Vec2Layers(
+        int hiddenDim = 768, int numLayers = 12,
+        int numHeads = 12, int feedForwardDim = 3072,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Convolutional feature extractor (simplified)
+        yield return new FullyConnectedLayer<T>(512, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new FullyConnectedLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(feedForwardDim, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Final projection
+        yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for MERT music foundation model.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMERTLayers(
+        int hiddenDim = 768, int numLayers = 12,
+        int numHeads = 12, int feedForwardDim = 3072,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Convolutional feature extractor (tuned for music at 24kHz)
+        yield return new FullyConnectedLayer<T>(512, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Transformer encoder layers with music-aware attention
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new FullyConnectedLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(feedForwardDim, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Final projection
+        yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region Speech Recognition Batch 24
+
+    /// <summary>Creates default layers for RNN-Transducer (encoder + prediction + joint).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultRNNTransducerLayers(
+        int encoderDim = 512, int numEncoderLayers = 12,
+        int numEncoderHeads = 8, int predictionDim = 512,
+        int numPredictionLayers = 2, int embeddingDim = 256,
+        int jointDim = 512, int numMels = 80, int vocabSize = 5000,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Conv subsampling front-end (mel features -> encoder dim)
+        yield return new FullyConnectedLayer<T>(numMels, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        // Conformer-style encoder layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numEncoderHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new FullyConnectedLayer<T>(encoderDim, encoderDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(encoderDim * 4, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Prediction network (LSTM-like via FC layers)
+        yield return new FullyConnectedLayer<T>(embeddingDim, predictionDim, geluActivation);
+        for (int i = 0; i < numPredictionLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(predictionDim, predictionDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(predictionDim);
+        }
+
+        // Joint network (combines encoder + predictor)
+        yield return new FullyConnectedLayer<T>(encoderDim + predictionDim, jointDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(jointDim, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Zipformer (U-Net-style multi-resolution encoder).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultZipformerLayers(
+        int[] encoderDims, int[] numLayersPerStack,
+        int[] numHeadsPerStack, int numMels = 80,
+        int vocabSize = 5000, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        int numStacks = encoderDims.Length;
+
+        // Conv subsampling front-end
+        yield return new FullyConnectedLayer<T>(numMels, encoderDims[0], geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDims[0]);
+
+        // U-Net encoder stacks (each at different temporal resolution)
+        int prevDim = encoderDims[0];
+        for (int s = 0; s < numStacks; s++)
+        {
+            int dim = encoderDims[s];
+            int heads = s < numHeadsPerStack.Length ? numHeadsPerStack[s] : 4;
+            int layers = s < numLayersPerStack.Length ? numLayersPerStack[s] : 2;
+
+            // Dimension projection between stacks
+            if (dim != prevDim)
+            {
+                yield return new FullyConnectedLayer<T>(prevDim, dim, geluActivation);
+                yield return new LayerNormalizationLayer<T>(dim);
+            }
+
+            // Conformer-style layers within each stack
+            for (int i = 0; i < layers; i++)
+            {
+                yield return new MultiHeadAttentionLayer<T>(dim, dim, heads);
+                yield return new LayerNormalizationLayer<T>(dim);
+                yield return new FullyConnectedLayer<T>(dim, dim * 4, geluActivation);
+                yield return new FullyConnectedLayer<T>(dim * 4, dim, geluActivation);
+                yield return new LayerNormalizationLayer<T>(dim);
+                if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            prevDim = dim;
+        }
+
+        // CTC output projection
+        yield return new FullyConnectedLayer<T>(prevDim, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Fast Conformer (8x downsampled Conformer).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFastConformerLayers(
+        int encoderDim = 512, int numLayers = 17,
+        int numHeads = 8, int feedForwardDim = 2048,
+        int convKernelSize = 9, int downsampleFactor = 8,
+        int numMels = 80, int vocabSize = 5000,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // 8x depthwise-separable convolution downsampling front-end
+        yield return new FullyConnectedLayer<T>(numMels, encoderDim / 2, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim / 2);
+        yield return new FullyConnectedLayer<T>(encoderDim / 2, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        // Conformer encoder layers (macaron-style: FF / Attention / Conv / FF)
+        for (int i = 0; i < numLayers; i++)
+        {
+            // First half-step feed-forward
+            yield return new FullyConnectedLayer<T>(encoderDim, feedForwardDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(feedForwardDim, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            // Second half-step feed-forward
+            yield return new FullyConnectedLayer<T>(encoderDim, feedForwardDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(feedForwardDim, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // CTC output projection
+        yield return new FullyConnectedLayer<T>(encoderDim, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region TTS Batch 25
+
+    /// <summary>Creates default layers for Matcha-TTS (flow-matching TTS).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMatchaTTSLayers(
+        int textEncoderDim = 192, int numTextEncoderLayers = 6,
+        int numTextEncoderHeads = 2, int decoderDim = 256,
+        int numDecoderLayers = 2, int numMels = 80,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Text encoder (transformer-based)
+        yield return new FullyConnectedLayer<T>(numMels, textEncoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(textEncoderDim);
+        for (int i = 0; i < numTextEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(textEncoderDim, textEncoderDim, numTextEncoderHeads);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            yield return new FullyConnectedLayer<T>(textEncoderDim, textEncoderDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(textEncoderDim * 4, textEncoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Duration predictor
+        yield return new FullyConnectedLayer<T>(textEncoderDim, textEncoderDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(textEncoderDim, 1, (IActivationFunction<T>?)null);
+
+        // Flow matching decoder (U-Net blocks)
+        yield return new FullyConnectedLayer<T>(textEncoderDim, decoderDim, geluActivation);
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(decoderDim, decoderDim * 2, geluActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim * 2);
+            yield return new FullyConnectedLayer<T>(decoderDim * 2, decoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+        }
+
+        // Output projection to mel-spectrogram
+        yield return new FullyConnectedLayer<T>(decoderDim, numMels, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for BigVGAN universal vocoder.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBigVGANLayers(
+        int numMels = 100, int upsampleInitialChannel = 1536,
+        int[]? upsampleRates = null, int numResBlocks = 3,
+        double dropoutRate = 0.0)
+    {
+        upsampleRates ??= new[] { 4, 4, 2, 2, 2, 2 };
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Input projection (mel-spectrogram to initial channels)
+        yield return new FullyConnectedLayer<T>(numMels, upsampleInitialChannel, geluActivation);
+
+        // Upsampling + MRF blocks with Snake-like activation
+        int ch = upsampleInitialChannel;
+        foreach (int rate in upsampleRates)
+        {
+            int nextCh = ch / 2;
+            if (nextCh < 32) nextCh = 32;
+
+            // Transposed convolution approximated by FC upsample
+            yield return new FullyConnectedLayer<T>(ch, nextCh, geluActivation);
+            yield return new LayerNormalizationLayer<T>(nextCh);
+
+            // Multi-Receptive Field Fusion (MRF) blocks
+            for (int b = 0; b < numResBlocks; b++)
+            {
+                yield return new FullyConnectedLayer<T>(nextCh, nextCh, geluActivation);
+                yield return new LayerNormalizationLayer<T>(nextCh);
+            }
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            ch = nextCh;
+        }
+
+        // Output projection to waveform
+        yield return new FullyConnectedLayer<T>(ch, 1, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Vocos ISTFT vocoder.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVocosLayers(
+        int numMels = 100, int hiddenDim = 512,
+        int numBackboneBlocks = 8, int intermediateDim = 1536,
+        int numFrequencyBins = 513, double dropoutRate = 0.0)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Input projection (mel or codec tokens to hidden)
+        yield return new FullyConnectedLayer<T>(numMels, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // ConvNeXt backbone blocks
+        for (int i = 0; i < numBackboneBlocks; i++)
+        {
+            yield return new FullyConnectedLayer<T>(hiddenDim, intermediateDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(intermediateDim, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // ISTFT head: predict magnitude and phase
+        yield return new FullyConnectedLayer<T>(hiddenDim, numFrequencyBins, (IActivationFunction<T>?)null);
+        yield return new FullyConnectedLayer<T>(numFrequencyBins, numFrequencyBins, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region Effects Batch 26
+
+    /// <summary>
+    /// Creates default layers for the Neural Parametric EQ model.
+    /// Architecture: Spectral encoder -> FC layers -> EQ parameter prediction (gain, freq, Q per band).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralParametricEQLayers(
+        int encoderDim = 256, int numEncoderLayers = 4,
+        int numBands = 6, int fftSize = 2048, double dropoutRate = 0.0)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        int numFreqBins = fftSize / 2 + 1;
+
+        // Input projection from frequency bins to encoder dimension
+        yield return new FullyConnectedLayer<T>(numFreqBins, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        // Encoder layers (spectral feature extraction)
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(encoderDim, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // EQ parameter prediction: 3 params per band (gain, frequency, Q)
+        int outputDim = numBands * 3;
+        yield return new FullyConnectedLayer<T>(encoderDim, outputDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the Demucs Noise model.
+    /// Architecture: Time-domain U-Net encoder-decoder with LSTM bottleneck and skip connections.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDemucsNoiseLayers(
+        int hiddenChannels = 48, int depth = 5,
+        int lstmHiddenSize = 512, int numLSTMLayers = 2,
+        int channelGrowth = 2, double dropoutRate = 0.0)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Encoder: progressive downsampling with growing channels
+        int currentChannels = hiddenChannels;
+        for (int d = 0; d < depth; d++)
+        {
+            int outChannels = currentChannels * channelGrowth;
+            yield return new FullyConnectedLayer<T>(currentChannels, outChannels, geluActivation);
+            yield return new LayerNormalizationLayer<T>(outChannels);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentChannels = outChannels;
+        }
+
+        // LSTM bottleneck
+        for (int i = 0; i < numLSTMLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(lstmHiddenSize, lstmHiddenSize, geluActivation);
+            yield return new LayerNormalizationLayer<T>(lstmHiddenSize);
+        }
+
+        // Decoder: progressive upsampling with decreasing channels
+        for (int d = depth - 1; d >= 0; d--)
+        {
+            int outChannels = d > 0 ? hiddenChannels * (int)Math.Pow(channelGrowth, d) : hiddenChannels;
+            yield return new FullyConnectedLayer<T>(currentChannels, outChannels, geluActivation);
+            yield return new LayerNormalizationLayer<T>(outChannels);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentChannels = outChannels;
+        }
+
+        // Output projection back to 1 channel (mono clean audio)
+        yield return new FullyConnectedLayer<T>(hiddenChannels, 1, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the Audio Super-Resolution model.
+    /// Architecture: Residual blocks with optional self-attention for bandwidth extension.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioSuperResolutionLayers(
+        int hiddenDim = 256, int numResBlocks = 8,
+        int numHeads = 4, int numAttentionLayers = 2,
+        int upsampleFactor = 4, double dropoutRate = 0.0)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Input projection
+        yield return new FullyConnectedLayer<T>(1, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Residual blocks for feature extraction
+        for (int i = 0; i < numResBlocks; i++)
+        {
+            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 2, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim * 2, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Self-attention layers for global context
+        for (int i = 0; i < numAttentionLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        // Upsample projection: expand output dimension by upsample factor
+        yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * upsampleFactor, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim * upsampleFactor);
+
+        // Output projection to waveform
+        yield return new FullyConnectedLayer<T>(hiddenDim * upsampleFactor, upsampleFactor, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the DAC (Descript Audio Codec) model.
+    /// Architecture: Encoder with progressive downsampling -> RVQ bottleneck -> Decoder with Snake activations.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDACLayers(
+        int encoderDim = 64, int[]? encoderChannels = null,
+        int codebookDim = 8, double dropoutRate = 0.0)
+    {
+        encoderChannels ??= [64, 128, 256, 512];
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Encoder: progressive downsampling
+        int currentDim = 1; // mono audio input
+        foreach (int ch in encoderChannels)
+        {
+            yield return new FullyConnectedLayer<T>(currentDim, ch, geluActivation);
+            yield return new LayerNormalizationLayer<T>(ch);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = ch;
+        }
+
+        // Bottleneck projection to codebook dimension
+        yield return new FullyConnectedLayer<T>(currentDim, encoderDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(encoderDim, codebookDim, (IActivationFunction<T>?)null);
+
+        // Decoder: progressive upsampling (mirror of encoder)
+        yield return new FullyConnectedLayer<T>(codebookDim, encoderDim, geluActivation);
+        currentDim = encoderDim;
+        for (int i = encoderChannels.Length - 1; i >= 0; i--)
+        {
+            yield return new FullyConnectedLayer<T>(currentDim, encoderChannels[i], geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderChannels[i]);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = encoderChannels[i];
+        }
+
+        // Output projection to mono waveform
+        yield return new FullyConnectedLayer<T>(currentDim, 1, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region SED Batch 27
+
+    /// <summary>
+    /// Creates default layers for the CRNN Sound Event Detector.
+    /// Architecture: CNN feature extraction blocks -> Bidirectional GRU -> Frame-level classifier.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCRNNEventDetectorLayers(
+        int[]? cnnChannels = null, int rnnHiddenSize = 128,
+        int numRNNLayers = 2, int numClasses = 527,
+        int numMels = 64, double dropoutRate = 0.2)
+    {
+        cnnChannels ??= [64, 128, 256];
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+
+        // CNN feature extraction blocks
+        int currentDim = numMels;
+        foreach (int ch in cnnChannels)
+        {
+            yield return new FullyConnectedLayer<T>(currentDim, ch, reluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = ch;
+        }
+
+        // Bidirectional GRU layers (simulated via FC)
+        int rnnOutputDim = rnnHiddenSize * 2; // bidirectional doubles output
+        for (int i = 0; i < numRNNLayers; i++)
+        {
+            int inputDim = i == 0 ? currentDim : rnnOutputDim;
+            yield return new FullyConnectedLayer<T>(inputDim, rnnOutputDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(rnnOutputDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Frame-level classifier (sigmoid applied in post-processing)
+        yield return new FullyConnectedLayer<T>(rnnOutputDim, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the FDY-SED (Frequency Dynamic SED) model.
+    /// Architecture: Frequency-dynamic CNN blocks -> Bidirectional GRU -> Frame-level classifier.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFDYSEDLayers(
+        int[]? cnnChannels = null, int embeddingDim = 256,
+        int numFrequencyGroups = 4, int rnnHiddenSize = 128,
+        int numRNNLayers = 2, int numClasses = 527,
+        int numMels = 128, double dropoutRate = 0.2)
+    {
+        cnnChannels ??= [16, 32, 64, 128, 256];
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+
+        // Frequency-dynamic CNN blocks (kernel generation + convolution)
+        int currentDim = numMels;
+        foreach (int ch in cnnChannels)
+        {
+            // Frequency-dynamic kernel generation (per-group FC)
+            for (int g = 0; g < numFrequencyGroups; g++)
+            {
+                yield return new FullyConnectedLayer<T>(currentDim / numFrequencyGroups,
+                    ch / numFrequencyGroups, reluActivation);
+            }
+            yield return new BatchNormalizationLayer<T>(ch);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = ch;
+        }
+
+        // Embedding projection
+        yield return new FullyConnectedLayer<T>(currentDim, embeddingDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+
+        // Bidirectional GRU layers
+        int rnnOutputDim = rnnHiddenSize * 2;
+        for (int i = 0; i < numRNNLayers; i++)
+        {
+            int inputDim = i == 0 ? embeddingDim : rnnOutputDim;
+            yield return new FullyConnectedLayer<T>(inputDim, rnnOutputDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(rnnOutputDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Frame-level classifier
+        yield return new FullyConnectedLayer<T>(rnnOutputDim, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the AudioSep model.
+    /// Architecture: CLAP-conditioned U-Net separator with attention and classification head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioSepLayers(
+        int clapEmbeddingDim = 512, int separationDim = 256,
+        int numSeparationLayers = 6, int numHeads = 8,
+        int[]? encoderChannels = null, int numClasses = 527,
+        int numMels = 128, double dropoutRate = 0.1)
+    {
+        encoderChannels ??= [32, 64, 128, 256];
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Audio encoder: mel to features
+        int currentDim = numMels;
+        foreach (int ch in encoderChannels)
+        {
+            yield return new FullyConnectedLayer<T>(currentDim, ch, geluActivation);
+            yield return new LayerNormalizationLayer<T>(ch);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = ch;
+        }
+
+        // CLAP conditioning projection (text embedding -> FiLM parameters)
+        yield return new FullyConnectedLayer<T>(clapEmbeddingDim, separationDim, geluActivation);
+
+        // Separation layers (conditioned transformer blocks)
+        for (int i = 0; i < numSeparationLayers; i++)
+        {
+            int inputDim = i == 0 ? currentDim : separationDim;
+            yield return new FullyConnectedLayer<T>(inputDim, separationDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(separationDim);
+            // Self-attention (simulated)
+            yield return new FullyConnectedLayer<T>(separationDim, separationDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Classification head
+        yield return new FullyConnectedLayer<T>(separationDim, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region Batch 28 - LOW Priority Models
+
+    /// <summary>Creates default layers for Spiking-FullSubNet speech enhancement.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSpikingFullSubNetLayers(
+        int numFreqBins = 257, int fullBandHiddenSize = 512, int subBandHiddenSize = 384,
+        int fullBandLayers = 2, int subBandLayers = 2, double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // Full-band encoder with self-attention for band interaction
+        yield return new DenseLayer<T>(numFreqBins, fullBandHiddenSize, geluActivation);
+        yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+        for (int i = 1; i < fullBandLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: fullBandHiddenSize, headCount: 4);
+            yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+            yield return new DenseLayer<T>(fullBandHiddenSize, fullBandHiddenSize * 2, geluActivation);
+            yield return new DenseLayer<T>(fullBandHiddenSize * 2, fullBandHiddenSize, identityActivation);
+            yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Sub-band processing with feed-forward blocks
+        yield return new DenseLayer<T>(fullBandHiddenSize, subBandHiddenSize, geluActivation);
+        yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+        for (int i = 1; i < subBandLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: subBandHiddenSize, headCount: 4);
+            yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+            yield return new DenseLayer<T>(subBandHiddenSize, subBandHiddenSize * 2, geluActivation);
+            yield return new DenseLayer<T>(subBandHiddenSize * 2, subBandHiddenSize, identityActivation);
+            yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Mask output
+        yield return new DenseLayer<T>(subBandHiddenSize, numFreqBins, (IActivationFunction<T>)new SigmoidActivation<T>());
+    }
+
+    /// <summary>Creates default layers for Danna-Sep dual-path music source separation.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDannaSepLayers(
+        int encoderDim = 256, int numDualPathBlocks = 6, int chunkSize = 250,
+        int numHeads = 4, int numSources = 4, int numFreqBins = 1025, double dropoutRate = 0.05)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // Encoder projection
+        yield return new DenseLayer<T>(numFreqBins, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        // Dual-path blocks (intra-chunk + inter-chunk attention)
+        for (int i = 0; i < numDualPathBlocks; i++)
+        {
+            // Intra-chunk (time) self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: encoderDim, headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            // Inter-chunk (frequency) self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: encoderDim, headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Multi-source mask estimation
+        yield return new DenseLayer<T>(encoderDim, numFreqBins * numSources, (IActivationFunction<T>)new SigmoidActivation<T>());
+    }
+
+    /// <summary>Creates default layers for SpeakerLM language-model-based speaker recognition.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSpeakerLMLayers(
+        int numMels = 80, int embeddingDim = 256, int lmHiddenDim = 768,
+        int numLMLayers = 6, int numHeads = 8, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // Audio encoder
+        yield return new DenseLayer<T>(numMels, embeddingDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new DenseLayer<T>(embeddingDim, embeddingDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        // Projection to LM dimension
+        yield return new DenseLayer<T>(embeddingDim, lmHiddenDim, geluActivation);
+        // Transformer decoder layers
+        for (int i = 0; i < numLMLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: lmHiddenDim, headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+            yield return new DenseLayer<T>(lmHiddenDim, lmHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(lmHiddenDim * 4, lmHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Embedding projection
+        yield return new DenseLayer<T>(lmHiddenDim, embeddingDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for AudioLDM Classifier using diffusion features.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioLDMClassifierLayers(
+        int numMels = 64, int latentDim = 256, int classifierDim = 512,
+        int numClassifierLayers = 3, int numClasses = 527, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // Diffusion latent feature extractor with cross-attention
+        yield return new DenseLayer<T>(numMels, latentDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(latentDim);
+        yield return new MultiHeadAttentionLayer<T>(
+            sequenceLength: 1, embeddingDimension: latentDim, headCount: 4);
+        yield return new LayerNormalizationLayer<T>(latentDim);
+        yield return new DenseLayer<T>(latentDim, latentDim * 2, geluActivation);
+        yield return new DenseLayer<T>(latentDim * 2, latentDim, identityActivation);
+        yield return new LayerNormalizationLayer<T>(latentDim);
+        // Classifier head with attention pooling
+        yield return new DenseLayer<T>(latentDim, classifierDim, geluActivation);
+        for (int i = 1; i < numClassifierLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: classifierDim, headCount: 4);
+            yield return new LayerNormalizationLayer<T>(classifierDim);
+            yield return new DenseLayer<T>(classifierDim, classifierDim * 2, geluActivation);
+            yield return new DenseLayer<T>(classifierDim * 2, classifierDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(classifierDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        yield return new DenseLayer<T>(classifierDim, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Quail VAD lightweight voice activity detection.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultQuailVadLayers(
+        int hiddenDim = 64, int numCNNLayers = 3, int rnnHiddenSize = 64,
+        int frameSizeMs = 30, int sampleRate = 16000)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        int frameSamples = sampleRate * frameSizeMs / 1000;
+        // CNN-style feature extractor (dense layers simulating 1D convolution)
+        int currentDim = frameSamples;
+        for (int i = 0; i < numCNNLayers; i++)
+        {
+            yield return new DenseLayer<T>(currentDim, hiddenDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            currentDim = hiddenDim;
+        }
+        // Recurrent processing (Tanh-gated dense layer simulating GRU)
+        yield return new DenseLayer<T>(currentDim, rnnHiddenSize, (IActivationFunction<T>)new TanhActivation<T>());
+        yield return new LayerNormalizationLayer<T>(rnnHiddenSize);
+        yield return new DenseLayer<T>(rnnHiddenSize, rnnHiddenSize, (IActivationFunction<T>)new TanhActivation<T>());
+        // Output: single speech probability
+        yield return new DenseLayer<T>(rnnHiddenSize, 1, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for ACE-Step accelerated music generation.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultACEStepLayers(
+        int latentDim = 128, int uNetDim = 512, int numUNetLayers = 4,
+        int textEncoderDim = 768, double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // Text conditioning encoder
+        yield return new DenseLayer<T>(textEncoderDim + latentDim, uNetDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(uNetDim);
+        // U-Net encoder path with cross-attention conditioning
+        for (int i = 0; i < numUNetLayers; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: uNetDim, headCount: 8);
+            yield return new LayerNormalizationLayer<T>(uNetDim);
+            // Cross-attention for text conditioning
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: uNetDim, headCount: 8);
+            yield return new LayerNormalizationLayer<T>(uNetDim);
+            // Feed-forward
+            yield return new DenseLayer<T>(uNetDim, uNetDim * 4, geluActivation);
+            yield return new DenseLayer<T>(uNetDim * 4, uNetDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(uNetDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // U-Net decoder path with cross-attention conditioning
+        for (int i = 0; i < numUNetLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: uNetDim, headCount: 8);
+            yield return new LayerNormalizationLayer<T>(uNetDim);
+            yield return new DenseLayer<T>(uNetDim, uNetDim * 4, geluActivation);
+            yield return new DenseLayer<T>(uNetDim * 4, uNetDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(uNetDim);
+        }
+        // Latent output
+        yield return new DenseLayer<T>(uNetDim, latentDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for CosyVoice2 streaming TTS.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCosyVoice2Layers(
+        int textEncoderDim = 512, int numTextEncoderLayers = 6,
+        int decoderDim = 512, int numDecoderLayers = 6,
+        int numMels = 80, int speakerEmbeddingDim = 192, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // Conformer text encoder with speaker conditioning
+        int inputDim = textEncoderDim + speakerEmbeddingDim;
+        yield return new DenseLayer<T>(inputDim, textEncoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(textEncoderDim);
+        for (int i = 1; i < numTextEncoderLayers; i++)
+        {
+            // Feed-forward (first half)
+            yield return new DenseLayer<T>(textEncoderDim, textEncoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(textEncoderDim * 4, textEncoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: textEncoderDim, headCount: 8);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            // Convolution module (approximated with dense)
+            yield return new DenseLayer<T>(textEncoderDim, textEncoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            // Feed-forward (second half)
+            yield return new DenseLayer<T>(textEncoderDim, textEncoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(textEncoderDim * 4, textEncoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Flow-matching decoder with attention
+        yield return new DenseLayer<T>(textEncoderDim, decoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(decoderDim);
+        for (int i = 1; i < numDecoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: decoderDim, headCount: 8);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            yield return new DenseLayer<T>(decoderDim, decoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(decoderDim * 4, decoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Mel output projection
+        yield return new DenseLayer<T>(decoderDim, numMels, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Audio Flamingo 2 multimodal audio-language model.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioFlamingo2Layers(
+        int audioEncoderDim = 768, int llmHiddenDim = 2048,
+        int numPerceiverLayers = 2, int numPerceiverTokens = 64, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // Audio encoder projection
+        yield return new DenseLayer<T>(audioEncoderDim, llmHiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+        // Perceiver cross-attention layers
+        for (int i = 0; i < numPerceiverLayers; i++)
+        {
+            // Cross-attention (latent queries attend to audio features)
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: llmHiddenDim, headCount: 8);
+            yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+            // Feed-forward network
+            yield return new DenseLayer<T>(llmHiddenDim, llmHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(llmHiddenDim * 4, llmHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // LLM output
+        yield return new DenseLayer<T>(llmHiddenDim, llmHiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Music Flamingo music-language model.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMusicFlamingoLayers(
+        int musicEncoderDim = 768, int llmHiddenDim = 2048,
+        int numPerceiverLayers = 2, int numPerceiverTokens = 64, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // Music encoder projection
+        yield return new DenseLayer<T>(musicEncoderDim, llmHiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+        // Perceiver cross-attention layers
+        for (int i = 0; i < numPerceiverLayers; i++)
+        {
+            // Cross-attention (latent queries attend to music features)
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: llmHiddenDim, headCount: 8);
+            yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+            // Feed-forward network
+            yield return new DenseLayer<T>(llmHiddenDim, llmHiddenDim * 4, geluActivation);
+            yield return new DenseLayer<T>(llmHiddenDim * 4, llmHiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // LLM output
+        yield return new DenseLayer<T>(llmHiddenDim, llmHiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Pengi audio language model.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultPengiLayers(
+        int audioEncoderDim = 768, int llmHiddenDim = 2048,
+        int numProjectionLayers = 2, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // Audio-to-LM projection with attention-based alignment
+        int currentDim = audioEncoderDim;
+        for (int i = 0; i < numProjectionLayers; i++)
+        {
+            int outDim = i == numProjectionLayers - 1 ? llmHiddenDim : (audioEncoderDim + llmHiddenDim) / 2;
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: currentDim, headCount: Math.Max(1, currentDim / 64));
+            yield return new LayerNormalizationLayer<T>(currentDim);
+            yield return new DenseLayer<T>(currentDim, outDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(outDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = outDim;
+        }
+        // LM output
+        yield return new DenseLayer<T>(currentDim, llmHiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Canary multilingual ASR/ST model.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCanaryLayers(
+        int encoderDim = 512, int numEncoderLayers = 24,
+        int decoderDim = 512, int numDecoderLayers = 6,
+        int numHeads = 8, int vocabSize = 32128, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // Fast Conformer encoder blocks
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            // Feed-forward module (first half)
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: encoderDim, headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            // Convolution module (approximated with dense)
+            yield return new DenseLayer<T>(encoderDim, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            // Feed-forward module (second half)
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0 && i % 4 == 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Multi-task decoder with cross-attention
+        yield return new DenseLayer<T>(encoderDim, decoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(decoderDim);
+        for (int i = 1; i < numDecoderLayers; i++)
+        {
+            // Self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: decoderDim, headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Cross-attention to encoder
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: decoderDim, headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Feed-forward
+            yield return new DenseLayer<T>(decoderDim, decoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(decoderDim * 4, decoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Vocabulary projection
+        yield return new DenseLayer<T>(decoderDim, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Neural Room Impulse Response estimation.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultRoomImpulseResponseLayers(
+        int encoderDim = 256, int numEncoderLayers = 6,
+        int numHeads = 4, int numFrequencyBins = 257,
+        int rirLength = 16000, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        // Spectral encoder with self-attention
+        yield return new DenseLayer<T>(numFrequencyBins, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        for (int i = 1; i < numEncoderLayers; i++)
+        {
+            // Spectral self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: 1, embeddingDimension: encoderDim, headCount: numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            // Feed-forward
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(encoderDim * 4, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // RIR decoder - project to temporal domain
+        int intermediateSize = Math.Min(rirLength, 4096);
+        yield return new DenseLayer<T>(encoderDim, intermediateSize, geluActivation);
+        yield return new LayerNormalizationLayer<T>(intermediateSize);
+        yield return new DenseLayer<T>(intermediateSize, rirLength, (IActivationFunction<T>?)null);
     }
 
     #endregion

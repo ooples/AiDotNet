@@ -110,12 +110,12 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Loss function for training.
     /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Whether the model has been disposed.
@@ -354,9 +354,8 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         // Initialize available voices
         AvailableVoices = GetDefaultVoices();
 
-        // Initialize optimizer and loss function (not used in ONNX mode, but required for readonly fields)
+        // Default loss function (MSE is standard for TTS mel-spectrogram prediction)
         _lossFunction = new MeanSquaredErrorLoss<T>();
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Initialize layers (empty for ONNX mode)
         InitializeLayers();
@@ -743,7 +742,7 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         Backpropagate(Tensor<T>.FromVector(lossGradient));
 
         // 6. Update parameters using optimizer
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         // 7. Exit training mode
         SetTrainingMode(false);

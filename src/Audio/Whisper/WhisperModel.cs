@@ -105,12 +105,12 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Optimizer for training (unused in ONNX mode).
     /// </summary>
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Loss function for training.
     /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Model size variant.
@@ -352,8 +352,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // Initialize supported languages
         SupportedLanguages = GetSupportedLanguages();
 
-        // Create placeholder optimizer and loss (unused in ONNX mode)
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default loss function (cross-entropy is standard for sequence-to-sequence ASR)
         _lossFunction = new CrossEntropyLoss<T>();
 
         InitializeLayers();
@@ -814,7 +813,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         Backpropagate(Tensor<T>.FromVector(outputGradients));
 
         // 7. Update parameters using optimizer
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         // Exit training mode
         SetTrainingMode(false);
