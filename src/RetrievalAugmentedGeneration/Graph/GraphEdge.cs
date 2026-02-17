@@ -72,6 +72,55 @@ public class GraphEdge<T>
     public DateTime CreatedAt { get; set; }
 
     /// <summary>
+    /// Start of the temporal validity window for this relationship.
+    /// Null means the relationship has no defined start time (always valid from the past).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Some facts are only true during a specific time period.
+    /// For example, "Einstein WORKED_AT Princeton" was valid from 1933 to 1955.
+    /// ValidFrom = 1933-01-01 means this relationship started in 1933.
+    /// If null, the relationship is considered to have always been valid.
+    /// </para>
+    /// </remarks>
+    public DateTime? ValidFrom { get; set; }
+
+    /// <summary>
+    /// End of the temporal validity window for this relationship.
+    /// Null means the relationship has no defined end time (still valid).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ValidUntil defines when a fact stopped being true.
+    /// For example, "Einstein WORKED_AT Princeton" had ValidUntil = 1955-04-18.
+    /// If null, the relationship is considered to still be valid (ongoing).
+    /// </para>
+    /// </remarks>
+    public DateTime? ValidUntil { get; set; }
+
+    /// <summary>
+    /// Checks whether this edge is valid at a specific point in time.
+    /// Uses half-open interval [ValidFrom, ValidUntil) so consecutive edges
+    /// (e.g., "president 2009-2017" and "president 2017-2021") don't overlap.
+    /// </summary>
+    /// <param name="timestamp">The point in time to check.</param>
+    /// <returns>True if the edge is valid at the given time; false otherwise.</returns>
+    /// <remarks>
+    /// <para>
+    /// An edge is considered valid at a timestamp if:
+    /// - ValidFrom is null OR timestamp >= ValidFrom, AND
+    /// - ValidUntil is null OR timestamp &lt; ValidUntil (exclusive upper bound)
+    /// Edges with no temporal bounds (both null) are always valid.
+    /// </para>
+    /// </remarks>
+    public bool IsValidAt(DateTime timestamp)
+    {
+        if (ValidFrom.HasValue && timestamp < ValidFrom.Value)
+            return false;
+        if (ValidUntil.HasValue && timestamp >= ValidUntil.Value)
+            return false;
+        return true;
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="GraphEdge{T}"/> class.
     /// </summary>
     /// <param name="sourceId">The source node ID.</param>
@@ -96,6 +145,24 @@ public class GraphEdge<T>
         Weight = weight;
         Properties = new Dictionary<string, object>();
         CreatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Sets the temporal validity window for this edge with validation.
+    /// </summary>
+    /// <param name="validFrom">Start of validity (inclusive). Null means always valid from the past.</param>
+    /// <param name="validUntil">End of validity (exclusive). Null means still valid (ongoing).</param>
+    /// <exception cref="ArgumentException">Thrown when validFrom >= validUntil.</exception>
+    public void SetTemporalWindow(DateTime? validFrom, DateTime? validUntil)
+    {
+        if (validFrom.HasValue && validUntil.HasValue && validFrom.Value >= validUntil.Value)
+        {
+            throw new ArgumentException(
+                $"ValidFrom ({validFrom.Value:O}) must be before ValidUntil ({validUntil.Value:O}).");
+        }
+
+        ValidFrom = validFrom;
+        ValidUntil = validUntil;
     }
 
     /// <summary>
