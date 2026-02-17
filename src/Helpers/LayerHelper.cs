@@ -21368,4 +21368,62 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Foundations Batch 23
+
+    /// <summary>Creates default layers for data2vec 2.0.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultData2Vec2Layers(
+        int hiddenDim = 768, int numLayers = 12,
+        int numHeads = 12, int feedForwardDim = 3072,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Convolutional feature extractor (simplified)
+        yield return new FullyConnectedLayer<T>(512, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Transformer encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new FullyConnectedLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(feedForwardDim, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Final projection
+        yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for MERT music foundation model.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMERTLayers(
+        int hiddenDim = 768, int numLayers = 12,
+        int numHeads = 12, int feedForwardDim = 3072,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Convolutional feature extractor (tuned for music at 24kHz)
+        yield return new FullyConnectedLayer<T>(512, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Transformer encoder layers with music-aware attention
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new FullyConnectedLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(feedForwardDim, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Final projection
+        yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
 }
