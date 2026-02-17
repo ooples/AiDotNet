@@ -20243,4 +20243,117 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Speech Recognition Layers
+
+    /// <summary>
+    /// Creates default layers for the Conformer ASR model (Gulati et al., 2020).
+    /// Architecture: Conv-subsampling → N Conformer blocks (FF/Attn/Conv/FF macaron) → CTC head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultConformerLayers(
+        int encoderDim = 512,
+        int numLayers = 18,
+        int numAttentionHeads = 8,
+        int feedForwardExpansionFactor = 4,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        int ffDim = encoderDim * feedForwardExpansionFactor;
+
+        // --- Conv Subsampling (stride 4) ---
+        // Two conv layers with stride 2 each reduce frame rate 4x.
+        yield return new DenseLayer<T>(numMels, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, encoderDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(encoderDim);
+
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // --- Conformer Encoder Blocks ---
+        // Each block: FF (half-step) → MHSA → Conv → FF (half-step) → LayerNorm
+        for (int i = 0; i < numLayers; i++)
+        {
+            // First feed-forward module (half-step)
+            yield return new DenseLayer<T>(encoderDim, ffDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(ffDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            // Multi-head self-attention module
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: encoderDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            // Convolution module (approximated with dense layers)
+            yield return new DenseLayer<T>(encoderDim, encoderDim * 2, geluActivation);
+            yield return new BatchNormalizationLayer<T>(encoderDim * 2);
+            yield return new DenseLayer<T>(encoderDim * 2, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            // Second feed-forward module (half-step)
+            yield return new DenseLayer<T>(encoderDim, ffDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(ffDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // --- CTC Output Head ---
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for a CTC decoder ASR model.
+    /// Architecture: Mel projection → N Transformer encoder layers → CTC head.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCTCDecoderLayers(
+        int encoderDim = 512,
+        int numLayers = 6,
+        int numAttentionHeads = 8,
+        int feedForwardDim = 2048,
+        int numMels = 80,
+        int vocabSize = 5000,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 750)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // --- Input Projection ---
+        yield return new DenseLayer<T>(numMels, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // --- Transformer Encoder ---
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: encoderDim,
+                headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            yield return new DenseLayer<T>(encoderDim, feedForwardDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(feedForwardDim, encoderDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // --- CTC Output Head ---
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        yield return new DenseLayer<T>(encoderDim, vocabSize, identityActivation);
+    }
+
+    #endregion
 }
