@@ -21662,4 +21662,158 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Effects Batch 26
+
+    /// <summary>
+    /// Creates default layers for the Neural Parametric EQ model.
+    /// Architecture: Spectral encoder -> FC layers -> EQ parameter prediction (gain, freq, Q per band).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultNeuralParametricEQLayers(
+        int encoderDim = 256, int numEncoderLayers = 4,
+        int numBands = 6, int fftSize = 2048, double dropoutRate = 0.0)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        int numFreqBins = fftSize / 2 + 1;
+
+        // Input projection from frequency bins to encoder dimension
+        yield return new FullyConnectedLayer<T>(numFreqBins, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        // Encoder layers (spectral feature extraction)
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(encoderDim, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // EQ parameter prediction: 3 params per band (gain, frequency, Q)
+        int outputDim = numBands * 3;
+        yield return new FullyConnectedLayer<T>(encoderDim, outputDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the Demucs Noise model.
+    /// Architecture: Time-domain U-Net encoder-decoder with LSTM bottleneck and skip connections.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDemucsNoiseLayers(
+        int hiddenChannels = 48, int depth = 5,
+        int lstmHiddenSize = 512, int numLSTMLayers = 2,
+        int channelGrowth = 2, double dropoutRate = 0.0)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Encoder: progressive downsampling with growing channels
+        int currentChannels = hiddenChannels;
+        for (int d = 0; d < depth; d++)
+        {
+            int outChannels = currentChannels * channelGrowth;
+            yield return new FullyConnectedLayer<T>(currentChannels, outChannels, geluActivation);
+            yield return new LayerNormalizationLayer<T>(outChannels);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentChannels = outChannels;
+        }
+
+        // LSTM bottleneck
+        for (int i = 0; i < numLSTMLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(lstmHiddenSize, lstmHiddenSize, geluActivation);
+            yield return new LayerNormalizationLayer<T>(lstmHiddenSize);
+        }
+
+        // Decoder: progressive upsampling with decreasing channels
+        for (int d = depth - 1; d >= 0; d--)
+        {
+            int outChannels = d > 0 ? hiddenChannels * (int)Math.Pow(channelGrowth, d) : hiddenChannels;
+            yield return new FullyConnectedLayer<T>(currentChannels, outChannels, geluActivation);
+            yield return new LayerNormalizationLayer<T>(outChannels);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentChannels = outChannels;
+        }
+
+        // Output projection back to 1 channel (mono clean audio)
+        yield return new FullyConnectedLayer<T>(hiddenChannels, 1, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the Audio Super-Resolution model.
+    /// Architecture: Residual blocks with optional self-attention for bandwidth extension.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioSuperResolutionLayers(
+        int hiddenDim = 256, int numResBlocks = 8,
+        int numHeads = 4, int numAttentionLayers = 2,
+        int upsampleFactor = 4, double dropoutRate = 0.0)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Input projection
+        yield return new FullyConnectedLayer<T>(1, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Residual blocks for feature extraction
+        for (int i = 0; i < numResBlocks; i++)
+        {
+            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 2, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim * 2, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Self-attention layers for global context
+        for (int i = 0; i < numAttentionLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        // Upsample projection: expand output dimension by upsample factor
+        yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * upsampleFactor, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim * upsampleFactor);
+
+        // Output projection to waveform
+        yield return new FullyConnectedLayer<T>(hiddenDim * upsampleFactor, upsampleFactor, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Creates default layers for the DAC (Descript Audio Codec) model.
+    /// Architecture: Encoder with progressive downsampling -> RVQ bottleneck -> Decoder with Snake activations.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDACLayers(
+        int encoderDim = 64, int[]? encoderChannels = null,
+        int codebookDim = 8, double dropoutRate = 0.0)
+    {
+        encoderChannels ??= [64, 128, 256, 512];
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Encoder: progressive downsampling
+        int currentDim = 1; // mono audio input
+        foreach (int ch in encoderChannels)
+        {
+            yield return new FullyConnectedLayer<T>(currentDim, ch, geluActivation);
+            yield return new LayerNormalizationLayer<T>(ch);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = ch;
+        }
+
+        // Bottleneck projection to codebook dimension
+        yield return new FullyConnectedLayer<T>(currentDim, encoderDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(encoderDim, codebookDim, (IActivationFunction<T>?)null);
+
+        // Decoder: progressive upsampling (mirror of encoder)
+        yield return new FullyConnectedLayer<T>(codebookDim, encoderDim, geluActivation);
+        currentDim = encoderDim;
+        for (int i = encoderChannels.Length - 1; i >= 0; i--)
+        {
+            yield return new FullyConnectedLayer<T>(currentDim, encoderChannels[i], geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderChannels[i]);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = encoderChannels[i];
+        }
+
+        // Output projection to mono waveform
+        yield return new FullyConnectedLayer<T>(currentDim, 1, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
 }
