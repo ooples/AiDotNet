@@ -20453,4 +20453,120 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Enhancement Layers (Medium Priority)
+
+    /// <summary>
+    /// Creates default layers for MP-SENet (Lu et al., 2023).
+    /// Dual-path Transformer with magnitude and phase estimation paths.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMPSENetLayers(
+        int hiddenDim = 256, int numLayers = 6, int numAttentionHeads = 8,
+        int feedForwardDim = 1024, int numFreqBins = 257, double dropoutRate = 0.1,
+        int maxSequenceLength = 500)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Input projection (complex spectrogram: 2x freq bins for real+imag)
+        yield return new DenseLayer<T>(numFreqBins * 2, hiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+        // Dual-path Transformer blocks
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Magnitude path
+            yield return new MultiHeadAttentionLayer<T>(maxSequenceLength, hiddenDim, numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Cross-domain fusion
+            yield return new DenseLayer<T>(hiddenDim, hiddenDim, geluActivation);
+        }
+
+        // Output heads: magnitude mask + phase correction
+        yield return new DenseLayer<T>(hiddenDim, numFreqBins * 2, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for FRCRN (Zhao et al., 2022).
+    /// Encoder-decoder CRN with frequency recurrence (LSTM along frequency axis).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFRCRNLayers(
+        int encoderChannels = 64, int numStages = 5, int lstmHiddenSize = 256,
+        int numFreqBins = 257, double dropoutRate = 0.05)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Encoder: progressive downsampling
+        int prevCh = numFreqBins;
+        int ch = encoderChannels;
+        for (int s = 0; s < numStages; s++)
+        {
+            yield return new DenseLayer<T>(prevCh, ch, reluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevCh = ch;
+            ch = Math.Min(ch * 2, 512);
+        }
+
+        // Frequency recurrence (LSTM approximation via dense layers)
+        yield return new DenseLayer<T>(prevCh, lstmHiddenSize, reluActivation);
+        yield return new DenseLayer<T>(lstmHiddenSize, lstmHiddenSize, reluActivation);
+        yield return new DenseLayer<T>(lstmHiddenSize, prevCh, identityActivation);
+
+        // Decoder: progressive upsampling (mirror of encoder)
+        for (int s = numStages - 1; s >= 0; s--)
+        {
+            int outCh = s > 0 ? encoderChannels * (int)Math.Pow(2, s - 1) : numFreqBins;
+            if (outCh > 512) outCh = 512;
+            yield return new DenseLayer<T>(prevCh, outCh, reluActivation);
+            yield return new BatchNormalizationLayer<T>(outCh);
+            prevCh = outCh;
+        }
+
+        // Complex mask output
+        yield return new DenseLayer<T>(prevCh, numFreqBins * 2, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for Band-Split RNN enhancer (Luo and Yu, 2023).
+    /// Band-wise processing with cross-band fusion.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBandSplitRNNEnhancerLayers(
+        int numBands = 24, int bandRnnHiddenSize = 128, int numRnnLayers = 6,
+        int fusionDim = 256, int numFreqBins = 257, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Band split: project freq bins into band features
+        int binsPerBand = (numFreqBins + numBands - 1) / numBands;
+        yield return new DenseLayer<T>(numFreqBins, numBands * bandRnnHiddenSize, reluActivation);
+        yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+
+        // Band-wise RNN processing (approximated with dense layers)
+        for (int layer = 0; layer < numRnnLayers; layer++)
+        {
+            // Intra-band processing
+            yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, numBands * bandRnnHiddenSize, reluActivation);
+            yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+
+            // Inter-band fusion
+            yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, fusionDim, reluActivation);
+            yield return new DenseLayer<T>(fusionDim, numBands * bandRnnHiddenSize, identityActivation);
+            yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Band merge: project back to freq bins
+        yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, numFreqBins, identityActivation);
+    }
+
+    #endregion
 }
