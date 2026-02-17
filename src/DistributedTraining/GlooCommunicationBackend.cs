@@ -309,6 +309,11 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             Console.WriteLine($"GlooSharp detection failed (access error): {ex.Message}");
             return false;
         }
+        catch (ArgumentException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (enum mismatch): {ex.Message}");
+            return false;
+        }
         finally
         {
             // Dispose the native context if we didn't successfully transfer ownership
