@@ -346,27 +346,41 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var originalShape = input.Shape;
 
-        // Handle 3D [C,H,W] or 4D [B,C,H,W] input
+        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
+        if (originalShape.Length < 3)
+            throw new ArgumentException($"ResidualDenseBlock requires at least 3D tensor [C, H, W]. Got rank {originalShape.Length}.");
+
         int batch, channels, height, width;
-        if (shape.Length == 3)
+        int[] shape;
+        if (originalShape.Length == 3)
         {
             batch = 1;
-            channels = shape[0];
-            height = shape[1];
-            width = shape[2];
+            channels = originalShape[0];
+            height = originalShape[1];
+            width = originalShape[2];
+            shape = originalShape;
         }
-        else if (shape.Length == 4)
+        else if (originalShape.Length == 4)
         {
-            batch = shape[0];
-            channels = shape[1];
-            height = shape[2];
-            width = shape[3];
+            batch = originalShape[0];
+            channels = originalShape[1];
+            height = originalShape[2];
+            width = originalShape[3];
+            shape = originalShape;
         }
         else
         {
-            throw new ArgumentException($"ResidualDenseBlock requires 3D or 4D input, got {shape.Length}D.");
+            // Higher rank: flatten leading dimensions into batch
+            batch = 1;
+            for (int d = 0; d < originalShape.Length - 3; d++)
+                batch *= originalShape[d];
+            channels = originalShape[originalShape.Length - 3];
+            height = originalShape[originalShape.Length - 2];
+            width = originalShape[originalShape.Length - 1];
+            shape = new[] { batch, channels, height, width };
+            input = gpuEngine.ReshapeGpu(input, shape);
         }
 
         int spatialSize = height * width;
@@ -489,7 +503,15 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             x4ActivatedBuffer.Dispose();
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        var result = new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+
+        // Restore original tensor rank for higher-rank input
+        if (originalShape.Length > 4)
+        {
+            return gpuEngine.ReshapeGpu(result, originalShape);
+        }
+
+        return result;
     }
 
     /// <summary>

@@ -874,7 +874,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
         if (input.Shape.Length < 3)
-            throw new ArgumentException($"Conv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
+            throw new ArgumentException($"Convolutional layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
         Tensor<T> input4D;
         _originalInputShape = input.Shape;
