@@ -53,8 +53,8 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private readonly FullSubNetPlusOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly ShortTimeFourierTransform<T> _stft;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private ShortTimeFourierTransform<T> _stft;
     private Tensor<T>? _lastPhase;
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
@@ -74,8 +74,8 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _options = options ?? new FullSubNetPlusOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         int nFft = NextPowerOfTwo(_options.FftSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
             windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
@@ -140,7 +140,6 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     public Tensor<T> Enhance(Tensor<T> audio)
     {
         ThrowIfDisposed();
-        EnhancementStrength = _options.EnhancementStrength;
         var stft = ComputeSTFT(audio);
         Tensor<T> mask;
         if (IsOnnxMode && OnnxEncoder is not null)
@@ -228,7 +227,7 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
@@ -278,10 +277,17 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _options.EnhancementStrength = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
+        int nFft = NextPowerOfTwo(_options.FftSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
+            windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new FullSubNetPlus<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new FullSubNetPlus<T>(Architecture, mp, _options);
+        return new FullSubNetPlus<T>(Architecture, _options);
+    }
 
     #endregion
 

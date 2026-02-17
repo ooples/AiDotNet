@@ -40,7 +40,7 @@ public class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
     private readonly ConformerFPOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private MelSpectrogram<T>? _melSpectrogram;
     private bool _useNativeMode;
     private bool _disposed;
@@ -68,8 +68,8 @@ public class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _options = options ?? new ConformerFPOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels,
             _options.FftSize, _options.HopLength);
         InitializeLayers();
@@ -158,15 +158,32 @@ public class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         ThrowIfDisposed();
         var matches = new List<FingerprintMatch>();
-        double sim = ComputeSimilarity(query, reference);
-        if (sim > 0.5)
+        int embDim = _options.EmbeddingDim;
+        int queryFrames = query.Data.Length / Math.Max(1, embDim);
+        int refFrames = reference.Data.Length / Math.Max(1, embDim);
+        if (queryFrames <= 0 || refFrames <= 0) return matches;
+
+        double threshold = _options.MatchThreshold;
+        for (int rStart = 0; rStart <= refFrames - Math.Min(queryFrames, minMatchLength); rStart++)
         {
-            matches.Add(new FingerprintMatch
+            int matchLen = Math.Min(queryFrames, refFrames - rStart);
+            double sim = 0, normQ = 0, normR = 0;
+            for (int f = 0; f < matchLen; f++)
+                for (int d = 0; d < embDim && (f * embDim + d) < query.Data.Length && ((rStart + f) * embDim + d) < reference.Data.Length; d++)
+                {
+                    double q = NumOps.ToDouble(query.Data[f * embDim + d]);
+                    double r = NumOps.ToDouble(reference.Data[(rStart + f) * embDim + d]);
+                    sim += q * r; normQ += q * q; normR += r * r;
+                }
+            double denom = Math.Sqrt(normQ) * Math.Sqrt(normR);
+            double cosSim = denom > 1e-8 ? sim / denom : 0;
+            if (cosSim >= threshold && matchLen >= minMatchLength)
             {
-                QueryStartTime = 0, ReferenceStartTime = 0,
-                Duration = Math.Min(query.Duration, reference.Duration),
-                Confidence = sim, MatchCount = 1
-            });
+                double timePerFrame = query.Duration / Math.Max(1, queryFrames);
+                matches.Add(new FingerprintMatch { QueryStartTime = 0, ReferenceStartTime = rStart * timePerFrame,
+                    Duration = matchLen * timePerFrame, Confidence = cosSim, MatchCount = matchLen });
+                rStart += matchLen - 1;
+            }
         }
         return matches;
     }
@@ -201,7 +218,7 @@ public class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
@@ -257,7 +274,12 @@ public class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new ConformerFP<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new ConformerFP<T>(Architecture, mp, _options);
+        return new ConformerFP<T>(Architecture, _options);
+    }
 
     #endregion
 

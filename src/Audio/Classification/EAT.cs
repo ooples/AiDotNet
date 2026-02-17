@@ -55,7 +55,7 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     private readonly EATOptions _options;
     public override ModelOptions GetOptions() => _options;
     private MelSpectrogram<T>? _melSpectrogram;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
     public static readonly string[] AudioSetLabels = BEATs<T>.AudioSetLabels;
@@ -74,9 +74,9 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -203,7 +203,7 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gradTensor = Tensor<T>.FromVector(gradient);
         for (int i = Layers.Count - 1; i >= 0; i--) gradTensor = Layers[i].Backward(gradTensor);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
@@ -251,7 +251,12 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new EAT<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new EAT<T>(Architecture, mp, _options);
+        return new EAT<T>(Architecture, _options);
+    }
 
     #endregion
 
@@ -272,7 +277,7 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             for (int t = 0; t < melSpec.Shape[0]; t++) for (int f = 0; f < melSpec.Shape[1]; f++) input[idx++] = melSpec[t, f];
             output = Predict(input);
         }
-        else { var fb = new T[ClassLabels.Count]; for (int i = 0; i < fb.Length; i++) fb[i] = NumOps.FromDouble(0.01); return fb; }
+        else { throw new InvalidOperationException("No model available for classification. Provide an ONNX model path or use native training mode."); }
         var scores = new T[ClassLabels.Count];
         for (int i = 0; i < Math.Min(output.Length, scores.Length); i++) { double l = NumOps.ToDouble(output[i]); scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-l))); }
         return scores;

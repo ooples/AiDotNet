@@ -38,10 +38,11 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
 
     private readonly RoomImpulseResponseOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
     private List<T>? _streamingBuffer;
+    private double _noiseFloor;
 
     #endregion
 
@@ -54,8 +55,8 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         _options = options ?? new RoomImpulseResponseOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -119,7 +120,10 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
 
     /// <inheritdoc />
     public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference)
-        => Enhance(audio);
+    {
+        EstimateNoiseProfile(reference);
+        return Enhance(audio);
+    }
 
     /// <inheritdoc />
     public Tensor<T> ProcessChunk(Tensor<T> audioChunk)
@@ -146,7 +150,17 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
     }
 
     /// <inheritdoc />
-    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio) { }
+    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio)
+    {
+        // Compute mean energy as a simple noise floor estimate
+        T sum = NumOps.Zero;
+        for (int i = 0; i < noiseOnlyAudio.Length; i++)
+        {
+            T val = noiseOnlyAudio[i];
+            sum = NumOps.Add(sum, NumOps.Multiply(val, val));
+        }
+        _noiseFloor = NumOps.ToDouble(sum) / Math.Max(1, noiseOnlyAudio.Length);
+    }
 
     #endregion
 
@@ -177,7 +191,7 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
@@ -232,7 +246,11 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new RoomImpulseResponse<T>(Architecture, _options);
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new RoomImpulseResponse<T>(Architecture, mp, _options);
+        return new RoomImpulseResponse<T>(Architecture, _options);
+    }
 
     #endregion
 

@@ -1074,8 +1074,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         // Forward pass through the full BEATs layer stack
         var output = Predict(input);
 
-        // Compute loss (binary cross-entropy for multi-label) and its gradient
-        var loss = LossFunction.CalculateLoss(output.ToVector(), expected.ToVector());
+        // Compute gradient for backward pass
         var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
 
         // Backward pass: propagate gradients from classification head back through
@@ -1285,6 +1284,8 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         writer.Write(_options.DropoutRate);
         writer.Write(_options.MaskProbability);
         writer.Write(_options.CodebookSize);
+        writer.Write(_options.FMin);
+        writer.Write(_options.FMax);
 
         // Write class labels
         writer.Write(ClassLabels.Count);
@@ -1340,6 +1341,8 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         _options.DropoutRate = reader.ReadDouble();
         _options.MaskProbability = reader.ReadDouble();
         _options.CodebookSize = reader.ReadInt32();
+        _options.FMin = reader.ReadInt32();
+        _options.FMax = reader.ReadInt32();
 
         // Read class labels
         int numLabels = reader.ReadInt32();
@@ -1380,6 +1383,8 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new BEATs<T>(Architecture, mp, _options);
         return new BEATs<T>(Architecture, _options);
     }
 
@@ -1446,14 +1451,8 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
         else
         {
-            // Fallback: uniform low probabilities when no model is available
-            // This can occur after deserialization if the ONNX model file is missing
-            var fallback = new T[ClassLabels.Count];
-            for (int i = 0; i < fallback.Length; i++)
-            {
-                fallback[i] = NumOps.FromDouble(0.01);
-            }
-            return fallback;
+            throw new InvalidOperationException(
+                "No model available for classification. Provide an ONNX model path or use native training mode.");
         }
 
         // Apply sigmoid activation for multi-label classification.

@@ -63,6 +63,15 @@ public class GraFPrintOptions : ModelOptions
 
     #endregion
 
+    #region Matching
+
+    /// <summary>
+    /// Gets or sets the cosine similarity threshold for considering a fingerprint match.
+    /// </summary>
+    public double MatchThreshold { get; set; } = 0.7;
+
+    #endregion
+
     #region Model Loading
 
     /// <summary>Gets or sets the path to the ONNX model file.</summary>

@@ -40,7 +40,7 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
 
     private readonly AudioLDMClassifierOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -59,8 +59,8 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         ClassLabels = _options.CustomLabels ?? BEATs<T>.AudioSetLabels;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -88,7 +88,7 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
             mp = await dl.DownloadAsync("audioldm_classifier", "audioldm_classifier.onnx", progress: progress, cancellationToken);
             options.ModelPath = mp;
         }
-        int numLabels = options.CustomLabels is not null ? options.CustomLabels.Length : BEATs<T>.AudioSetLabels.Count();
+        int numLabels = options.CustomLabels is not null ? options.CustomLabels.Length : BEATs<T>.AudioSetLabels.Length;
         var arch = new NeuralNetworkArchitecture<T>(inputFeatures: options.NumMels, outputSize: numLabels);
         return new AudioLDMClassifier<T>(arch, mp, options);
     }
@@ -222,7 +222,7 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 

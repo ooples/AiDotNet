@@ -38,7 +38,7 @@ public class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     private readonly AudioLMOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -77,8 +77,8 @@ public class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         _options = options ?? new AudioLMOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -220,7 +220,7 @@ public class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
@@ -276,7 +276,12 @@ public class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new AudioLM<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new AudioLM<T>(Architecture, mp, _options);
+        return new AudioLM<T>(Architecture, _options);
+    }
 
     #endregion
 

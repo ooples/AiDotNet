@@ -140,7 +140,6 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     public Tensor<T> Enhance(Tensor<T> audio)
     {
         ThrowIfDisposed();
-        EnhancementStrength = _options.EnhancementStrength;
         var stft = ComputeSTFT(audio);
 
         // Apply spectral subtraction if noise profile is available

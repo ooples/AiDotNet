@@ -42,7 +42,7 @@ public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private readonly DemucsNoiseOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -70,8 +70,8 @@ public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _options = options ?? new DemucsNoiseOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -113,13 +113,22 @@ public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <inheritdoc />
-    public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference) => Enhance(audio);
+    public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference)
+    {
+        // Demucs learns noise characteristics implicitly during training.
+        // The reference parameter is not used as the model handles noise internally.
+        return Enhance(audio);
+    }
 
     /// <inheritdoc />
     public Tensor<T> ProcessChunk(Tensor<T> audioChunk) => Enhance(audioChunk);
 
     /// <inheritdoc />
-    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio) { /* Demucs learns noise implicitly */ }
+    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio)
+    {
+        // Demucs uses end-to-end learned noise modeling rather than explicit
+        // noise profiles. The model inherently separates noise from signal.
+    }
 
     #endregion
 
@@ -150,7 +159,7 @@ public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
@@ -192,10 +201,19 @@ public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _options.HiddenChannels = r.ReadInt32(); _options.Depth = r.ReadInt32();
         _options.LSTMHiddenSize = r.ReadInt32(); _options.NumLSTMLayers = r.ReadInt32();
         _options.ChannelGrowth = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            OnnxEncoder?.Dispose();
+            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
+        }
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new DemucsNoise<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new DemucsNoise<T>(Architecture, mp, _options);
+        return new DemucsNoise<T>(Architecture, _options);
+    }
 
     #endregion
 

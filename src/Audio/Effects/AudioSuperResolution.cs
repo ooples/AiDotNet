@@ -50,7 +50,7 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
 
     private readonly AudioSuperResolutionOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -78,8 +78,8 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         _options = options ?? new AudioSuperResolutionOptions();
         _useNativeMode = false;
         base.SampleRate = _options.OutputSampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -123,13 +123,22 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
     }
 
     /// <inheritdoc />
-    public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference) => Enhance(audio);
+    public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference)
+    {
+        // For super-resolution, the reference can serve as a quality target but
+        // the core upsampling doesn't change. Apply the same enhancement.
+        return Enhance(audio);
+    }
 
     /// <inheritdoc />
     public Tensor<T> ProcessChunk(Tensor<T> audioChunk) => Enhance(audioChunk);
 
     /// <inheritdoc />
-    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio) { /* Not applicable for super-resolution */ }
+    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio)
+    {
+        // Super-resolution focuses on bandwidth extension, not noise reduction.
+        // This method is intentionally minimal as noise profiling is not applicable.
+    }
 
     #endregion
 
@@ -160,7 +169,7 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
@@ -194,6 +203,7 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         w.Write(_options.HiddenDim); w.Write(_options.NumResBlocks);
         w.Write(_options.NumHeads); w.Write(_options.NumAttentionLayers);
         w.Write(_options.DropoutRate);
+        w.Write(_options.LearningRate);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader r)
@@ -204,10 +214,16 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         _options.HiddenDim = r.ReadInt32(); _options.NumResBlocks = r.ReadInt32();
         _options.NumHeads = r.ReadInt32(); _options.NumAttentionLayers = r.ReadInt32();
         _options.DropoutRate = r.ReadDouble();
+        _options.LearningRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new AudioSuperResolution<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new AudioSuperResolution<T>(Architecture, mp, _options);
+        return new AudioSuperResolution<T>(Architecture, _options);
+    }
 
     #endregion
 
@@ -220,10 +236,9 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
 
         // Blend original and enhanced based on strength
         var result = new Tensor<T>(enhanced.Shape);
-        int len = Math.Min(original.Length, enhanced.Length);
         for (int i = 0; i < enhanced.Length; i++)
         {
-            double orig = i < original.Length ? NumOps.ToDouble(original[i % original.Length]) : 0.0;
+            double orig = i < original.Length ? NumOps.ToDouble(original[i]) : 0.0;
             double enh = NumOps.ToDouble(enhanced[i]);
             result[i] = NumOps.FromDouble(orig + (enh - orig) * strength);
         }

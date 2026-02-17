@@ -360,9 +360,8 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
         }
         else
         {
-            var fallback = new T[ClassLabels.Count];
-            for (int i = 0; i < fallback.Length; i++) fallback[i] = NumOps.FromDouble(0.01);
-            return fallback;
+            throw new InvalidOperationException(
+                "No model available for classification. Provide an ONNX model path or use native training mode.");
         }
 
         var scores = new T[ClassLabels.Count];

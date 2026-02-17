@@ -312,7 +312,6 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
         var output = Predict(input);
-        var loss = LossFunction.CalculateLoss(output.ToVector(), expected.ToVector());
         var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gradientTensor = Tensor<T>.FromVector(gradient);
         for (int i = Layers.Count - 1; i >= 0; i--) gradientTensor = Layers[i].Backward(gradientTensor);
@@ -443,9 +442,8 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
         else
         {
-            var fallback = new T[ClassLabels.Count];
-            for (int i = 0; i < fallback.Length; i++) fallback[i] = NumOps.FromDouble(0.01);
-            return fallback;
+            throw new InvalidOperationException(
+                "No model available for classification. Provide an ONNX model path or use native training mode.");
         }
 
         var scores = new T[ClassLabels.Count];

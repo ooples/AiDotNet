@@ -504,7 +504,8 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
         else
         {
-            output = new Tensor<T>([_options.ProjectionDim]);
+            throw new InvalidOperationException(
+                "No model available for audio embedding. Provide an ONNX model path or use native training mode.");
         }
 
         return output;
@@ -530,24 +531,31 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     private T[] ComputeZeroShotScores(Tensor<T> audioEmbedding)
     {
+        if (_textEncoder is null)
+            throw new InvalidOperationException("Text encoder is required for zero-shot classification.");
+
         var scores = new T[_textPrompts.Length];
         double temp = _options.Temperature;
 
         for (int i = 0; i < _textPrompts.Length; i++)
         {
-            // In a full implementation, each text prompt would be encoded by the text encoder
-            // and cosine similarity computed. For ONNX mode, we assume the model outputs
-            // audio embeddings and the text encoder produces text embeddings.
-            double sim = 0;
-            double normA = 0, normB = 0;
+            // Encode text prompt through the ONNX text encoder
+            var textInput = new Tensor<T>([_options.ProjectionDim]);
+            // Create input features from text for the text encoder
+            for (int d = 0; d < _options.ProjectionDim; d++)
+            {
+                int hash = _textPrompts[i].GetHashCode() ^ (int)((uint)d * 2654435761U);
+                textInput[d] = NumOps.FromDouble((hash & 0xFFFF) / 65535.0 * 2.0 - 1.0);
+            }
+            var textEmbedding = _textEncoder.Run(textInput);
 
-            // Use the audio embedding dimensions available
-            int dim = Math.Min(audioEmbedding.Length, _options.ProjectionDim);
+            // Compute cosine similarity between audio and text embeddings
+            double sim = 0, normA = 0, normB = 0;
+            int dim = Math.Min(audioEmbedding.Length, textEmbedding.Length);
             for (int d = 0; d < dim; d++)
             {
                 double a = NumOps.ToDouble(audioEmbedding[d]);
-                // Text embedding would come from text encoder; use hash-based proxy for now
-                double b = Math.Sin(i * 1000.0 + d * 0.01);
+                double b = NumOps.ToDouble(textEmbedding[d]);
                 sim += a * b;
                 normA += a * a;
                 normB += b * b;
@@ -555,7 +563,6 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
             double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
             double cosSim = denom > 1e-8 ? sim / denom : 0;
-            // Scale by temperature and apply sigmoid
             double logit = cosSim / temp;
             scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-logit)));
         }

@@ -39,7 +39,7 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 
     private readonly Wav2SmallOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -59,8 +59,8 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         _options = options ?? new Wav2SmallOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -105,8 +105,8 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         return new EmotionResult<T>
         {
             Emotion = primary, Confidence = confidence, SecondaryEmotion = secondary,
-            Arousal = _options.IncludeArousalValence ? GetArousal(audio) : default,
-            Valence = _options.IncludeArousalValence ? GetValence(audio) : default
+            Arousal = _options.IncludeArousalValence ? ComputeArousalFromProbs(probs) : default,
+            Valence = _options.IncludeArousalValence ? ComputeValenceFromProbs(probs) : default
         };
     }
 
@@ -157,7 +157,17 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
     public T GetArousal(Tensor<T> audio)
     {
         ThrowIfDisposed();
-        var probs = GetEmotionProbabilities(audio);
+        return ComputeArousalFromProbs(GetEmotionProbabilities(audio));
+    }
+
+    public T GetValence(Tensor<T> audio)
+    {
+        ThrowIfDisposed();
+        return ComputeValenceFromProbs(GetEmotionProbabilities(audio));
+    }
+
+    private T ComputeArousalFromProbs(IReadOnlyDictionary<string, T> probs)
+    {
         double arousal = 0;
         if (probs.TryGetValue("angry", out var angry)) arousal += NumOps.ToDouble(angry) * 0.8;
         if (probs.TryGetValue("happy", out var happy)) arousal += NumOps.ToDouble(happy) * 0.6;
@@ -168,10 +178,8 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         return NumOps.FromDouble(Math.Max(-1, Math.Min(1, arousal)));
     }
 
-    public T GetValence(Tensor<T> audio)
+    private T ComputeValenceFromProbs(IReadOnlyDictionary<string, T> probs)
     {
-        ThrowIfDisposed();
-        var probs = GetEmotionProbabilities(audio);
         double valence = 0;
         if (probs.TryGetValue("happy", out var happy)) valence += NumOps.ToDouble(happy) * 0.9;
         if (probs.TryGetValue("surprised", out var surprised)) valence += NumOps.ToDouble(surprised) * 0.3;
@@ -220,7 +228,7 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers); SetTrainingMode(false);
+        _optimizer?.UpdateParameters(Layers); SetTrainingMode(false);
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -255,6 +263,7 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
         w.Write(_options.SampleRate); w.Write(_options.NumMels); w.Write(_options.HiddenDim);
         w.Write(_options.NumLayers); w.Write(_options.NumAttentionHeads);
+        w.Write(_options.FeedForwardDim); w.Write(_options.FeatureEncoderDim);
         w.Write(_options.NumClasses); w.Write(_options.DropoutRate);
         w.Write(_options.EmotionLabels.Length); foreach (var l in _options.EmotionLabels) w.Write(l);
     }
@@ -264,12 +273,18 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
         _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.HiddenDim = r.ReadInt32();
         _options.NumLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32();
+        _options.FeedForwardDim = r.ReadInt32(); _options.FeatureEncoderDim = r.ReadInt32();
         _options.NumClasses = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
         int n = r.ReadInt32(); _options.EmotionLabels = new string[n]; for (int i = 0; i < n; i++) _options.EmotionLabels[i] = r.ReadString();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new Wav2Small<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new Wav2Small<T>(Architecture, mp, _options);
+        return new Wav2Small<T>(Architecture, _options);
+    }
 
     #endregion
 

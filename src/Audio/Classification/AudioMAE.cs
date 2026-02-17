@@ -221,7 +221,7 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         Tensor<T> output;
         if (IsOnnxMode && OnnxEncoder is not null) { var inp = new Tensor<T>([1, 1, melSpec.Shape[0], melSpec.Shape[1]]); for (int t = 0; t < melSpec.Shape[0]; t++) for (int f = 0; f < melSpec.Shape[1]; f++) inp[0, 0, t, f] = melSpec[t, f]; output = OnnxEncoder.Run(inp); }
         else if (_useNativeMode) { var inp = new Tensor<T>([melSpec.Length]); int idx = 0; for (int t = 0; t < melSpec.Shape[0]; t++) for (int f = 0; f < melSpec.Shape[1]; f++) inp[idx++] = melSpec[t, f]; output = Predict(inp); }
-        else { var fb = new T[ClassLabels.Count]; for (int i = 0; i < fb.Length; i++) fb[i] = NumOps.FromDouble(0.01); return fb; }
+        else { throw new InvalidOperationException("No model available for classification. Provide an ONNX model path or use native training mode."); }
         var scores = new T[ClassLabels.Count]; for (int i = 0; i < Math.Min(output.Length, scores.Length); i++) scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(output[i])))); return scores;
     }
 

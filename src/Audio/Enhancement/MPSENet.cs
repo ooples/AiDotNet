@@ -37,8 +37,8 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private readonly MPSENetOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly ShortTimeFourierTransform<T> _stft;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private ShortTimeFourierTransform<T> _stft;
     private Tensor<T>? _lastPhase;
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
@@ -54,8 +54,8 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _options = options ?? new MPSENetOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         int nFft = NextPowerOfTwo(_options.FFTSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
             windowLength: _options.FFTSize <= nFft ? _options.FFTSize : null);
@@ -166,7 +166,7 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
@@ -233,6 +233,9 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _options.NumFreqBins = r.ReadInt32(); _options.FFTSize = r.ReadInt32();
         _options.HopLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
+        int nFft = NextPowerOfTwo(_options.FFTSize);
+        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
+            windowLength: _options.FFTSize <= nFft ? _options.FFTSize : null);
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

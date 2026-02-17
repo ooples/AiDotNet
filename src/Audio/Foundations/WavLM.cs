@@ -37,7 +37,7 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 
     private readonly WavLMOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -61,8 +61,8 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         _options = options ?? new WavLMOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -99,6 +99,8 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
     public Tensor<T> ExtractEmbeddings(Tensor<T> audio)
     {
         ThrowIfDisposed();
+        if (IsOnnxMode && OnnxEncoder is null)
+            throw new InvalidOperationException("ONNX encoder is not loaded. Provide a valid model path.");
         return IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(audio) : Predict(audio);
     }
 
@@ -112,6 +114,8 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         ThrowIfDisposed();
         if (IsOnnxMode) return ExtractEmbeddings(audio);
         int targetLayer = layerIndex < 0 ? _options.NumLayers + layerIndex : layerIndex;
+        if (targetLayer < 0 || targetLayer >= _options.NumLayers)
+            throw new ArgumentOutOfRangeException(nameof(layerIndex), $"Layer index must be between -{_options.NumLayers} and {_options.NumLayers - 1}.");
         var c = audio; int currentLayer = 0;
         foreach (var l in Layers)
         {
@@ -170,7 +174,7 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
@@ -215,9 +219,15 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         _options.FeatureEncoderDim = r.ReadInt32(); _options.UseGatedRelativePositionBias = r.ReadBoolean();
         _options.DropoutRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
+        base.SampleRate = _options.SampleRate;
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new WavLM<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new WavLM<T>(Architecture, mp, _options);
+        return new WavLM<T>(Architecture, _options);
+    }
 
     #endregion
 

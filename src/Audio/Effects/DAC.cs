@@ -48,7 +48,7 @@ public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 
     private readonly DACOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -76,8 +76,8 @@ public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         _options = options ?? new DACOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -195,7 +195,7 @@ public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
     {
         int nq = numQuantizers ?? _options.NumCodebooks;
         double bitsPerToken = Math.Log(_options.CodebookSize) / Math.Log(2.0);
-        return nq * _options.TokenFrameRate * bitsPerToken;
+        return nq * _options.TokenFrameRate * bitsPerToken / 1000.0;
     }
 
     #endregion
@@ -226,7 +226,7 @@ public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
@@ -282,7 +282,12 @@ public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new DAC<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new DAC<T>(Architecture, mp, _options);
+        return new DAC<T>(Architecture, _options);
+    }
 
     #endregion
 

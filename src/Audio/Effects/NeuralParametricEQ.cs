@@ -119,7 +119,11 @@ public class NeuralParametricEQ<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     public Tensor<T> ProcessChunk(Tensor<T> audioChunk) => Enhance(audioChunk);
 
     /// <inheritdoc />
-    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio) { /* Not applicable for EQ */ }
+    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio)
+    {
+        // Parametric EQ focuses on frequency balance, not noise reduction.
+        // Noise profiling is not applicable to this model.
+    }
 
     #endregion
 
@@ -200,7 +204,12 @@ public class NeuralParametricEQ<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new NeuralParametricEQ<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new NeuralParametricEQ<T>(Architecture, mp, _options);
+        return new NeuralParametricEQ<T>(Architecture, _options);
+    }
 
     #endregion
 
@@ -208,18 +217,71 @@ public class NeuralParametricEQ<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 
     private Tensor<T> ApplyEQ(Tensor<T> audio, Tensor<T> eqParams)
     {
-        // Apply predicted EQ parameters to audio (simplified frequency-domain application)
-        var result = new Tensor<T>(audio.Shape);
+        // Neural parametric EQ: the model predicts per-band gain/frequency/Q parameters.
+        // Each band is a 3-tuple: (centerFreq, gain_dB, Q). We apply these as cascaded
+        // second-order IIR biquad filters (peaking EQ) in the time domain.
+        int numBands = _options.NumBands;
+        int paramsPerBand = 3; // centerFreq, gain_dB, Q
         double strength = EnhancementStrength;
-        for (int i = 0; i < audio.Length; i++)
+
+        // Parse band parameters from network output
+        var bands = new (double freq, double gainDb, double q)[numBands];
+        for (int b = 0; b < numBands; b++)
         {
-            double sample = NumOps.ToDouble(audio[i]);
-            // Apply parametric EQ as gain scaling (simplified)
-            double eqGain = eqParams.Length > 0 ? NumOps.ToDouble(eqParams[i % eqParams.Length]) : 0.0;
-            double gain = 1.0 + eqGain * strength * 0.1;
-            result[i] = NumOps.FromDouble(sample * gain);
+            int offset = b * paramsPerBand;
+            if (offset + 2 < eqParams.Length)
+            {
+                double freqNorm = NumOps.ToDouble(eqParams[offset]);
+                double gainNorm = NumOps.ToDouble(eqParams[offset + 1]);
+                double qNorm = NumOps.ToDouble(eqParams[offset + 2]);
+                // Map normalized outputs to EQ parameter ranges
+                double freq = 20.0 * Math.Pow(1000.0, Math.Max(0, Math.Min(1, (freqNorm + 1) / 2.0)));
+                double gainDb = gainNorm * 12.0 * strength; // +/- 12 dB range scaled by strength
+                double q = 0.1 + Math.Abs(qNorm) * 10.0; // Q range: 0.1 to ~10
+                bands[b] = (freq, gainDb, q);
+            }
         }
-        return result;
+
+        // Apply cascaded biquad peaking EQ filters
+        var result = new double[audio.Length];
+        for (int i = 0; i < audio.Length; i++)
+            result[i] = NumOps.ToDouble(audio[i]);
+
+        double sr = _options.SampleRate;
+        foreach (var (freq, gainDb, q) in bands)
+        {
+            if (Math.Abs(gainDb) < 0.01) continue; // Skip negligible bands
+
+            // Biquad peaking EQ coefficients (Audio EQ Cookbook by Robert Bristow-Johnson)
+            double w0 = 2.0 * Math.PI * freq / sr;
+            double A = Math.Pow(10.0, gainDb / 40.0);
+            double alpha = Math.Sin(w0) / (2.0 * q);
+            double b0 = 1.0 + alpha * A;
+            double b1 = -2.0 * Math.Cos(w0);
+            double b2 = 1.0 - alpha * A;
+            double a0 = 1.0 + alpha / A;
+            double a1 = -2.0 * Math.Cos(w0);
+            double a2 = 1.0 - alpha / A;
+
+            // Normalize coefficients
+            b0 /= a0; b1 /= a0; b2 /= a0; a1 /= a0; a2 /= a0;
+
+            // Apply biquad filter
+            double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+            for (int i = 0; i < result.Length; i++)
+            {
+                double x0 = result[i];
+                double y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+                x2 = x1; x1 = x0;
+                y2 = y1; y1 = y0;
+                result[i] = y0;
+            }
+        }
+
+        var output = new Tensor<T>([audio.Length]);
+        for (int i = 0; i < audio.Length; i++)
+            output[i] = NumOps.FromDouble(Math.Max(-1.0, Math.Min(1.0, result[i])));
+        return output;
     }
 
     #endregion

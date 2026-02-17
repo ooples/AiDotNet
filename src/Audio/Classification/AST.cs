@@ -481,7 +481,6 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         SetTrainingMode(true);
 
         var output = Predict(input);
-        var loss = LossFunction.CalculateLoss(output.ToVector(), expected.ToVector());
         var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
 
         var gradientTensor = Tensor<T>.FromVector(gradient);
@@ -634,6 +633,8 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new AST<T>(Architecture, mp, _options);
         return new AST<T>(Architecture, _options);
     }
 
@@ -672,12 +673,8 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
         else
         {
-            var fallback = new T[ClassLabels.Count];
-            for (int i = 0; i < fallback.Length; i++)
-            {
-                fallback[i] = NumOps.FromDouble(0.01);
-            }
-            return fallback;
+            throw new InvalidOperationException(
+                "No model available for classification. Provide an ONNX model path or use native training mode.");
         }
 
         var scores = new T[ClassLabels.Count];

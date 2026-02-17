@@ -117,7 +117,6 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     public Tensor<T> Enhance(Tensor<T> audio)
     {
         ThrowIfDisposed();
-        EnhancementStrength = _options.EnhancementStrength;
         var stft = ComputeSTFT(audio);
         Tensor<T> mask;
         if (IsOnnxMode && OnnxEncoder is not null)
