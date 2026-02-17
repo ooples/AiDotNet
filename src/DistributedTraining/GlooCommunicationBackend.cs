@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -180,48 +181,55 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// <returns><c>true</c> if GlooSharp was detected and initialized successfully.</returns>
     private bool TryInitializeNativeGloo()
     {
-        IDisposable? context = null;
+        // Pre-validate all required types BEFORE creating any IDisposable objects
+        var glooContextType = Type.GetType("GlooSharp.GlooContext, GlooSharp");
+        if (glooContextType is null)
+        {
+            return false;
+        }
+
+        _glooCollectivesType = Type.GetType("GlooSharp.GlooCollectives, GlooSharp");
+        _glooTransportType = Type.GetType("GlooSharp.GlooTransport, GlooSharp");
+        if (_glooCollectivesType is null || _glooTransportType is null)
+        {
+            return false;
+        }
+
+        var glooReduceOpType = Type.GetType("GlooSharp.GlooReduceOp, GlooSharp");
+        if (glooReduceOpType is null)
+        {
+            Console.WriteLine("GlooSharp detection failed: GlooReduceOp type not found.");
+            return false;
+        }
+
+        // Create GlooContext(rank, worldSize) — this may return an IDisposable
+        var contextInstance = Activator.CreateInstance(glooContextType, _rank, _worldSize);
+        if (contextInstance is null)
+        {
+            Console.WriteLine("GlooSharp detection failed: Activator.CreateInstance returned null for GlooContext.");
+            return false;
+        }
+
+        // Safe cast to IDisposable — if GlooContext doesn't implement IDisposable,
+        // fall back gracefully instead of throwing InvalidCastException.
+        if (contextInstance is not IDisposable context)
+        {
+            Console.WriteLine("GlooSharp detection failed: GlooContext does not implement IDisposable. Incompatible GlooSharp version.");
+            return false;
+        }
+
+        // From here on, 'context' is IDisposable and MUST be disposed on all error paths
+        return TryConfigureNativeGloo(context, glooContextType, glooReduceOpType);
+    }
+
+    /// <summary>
+    /// Configures native Gloo transport, caches method handles, and transfers ownership of context on success.
+    /// Disposes context on any failure path.
+    /// </summary>
+    private bool TryConfigureNativeGloo(IDisposable context, Type glooContextType, Type glooReduceOpType)
+    {
         try
         {
-            // Try to load GlooSharp assembly
-            var glooContextType = Type.GetType("GlooSharp.GlooContext, GlooSharp");
-            if (glooContextType == null)
-            {
-                return false;
-            }
-
-            _glooCollectivesType = Type.GetType("GlooSharp.GlooCollectives, GlooSharp");
-            _glooTransportType = Type.GetType("GlooSharp.GlooTransport, GlooSharp");
-            if (_glooCollectivesType == null || _glooTransportType == null)
-            {
-                return false;
-            }
-
-            // Resolve GlooReduceOp type once (needed for collective method lookup)
-            var glooReduceOpType = Type.GetType("GlooSharp.GlooReduceOp, GlooSharp");
-            if (glooReduceOpType == null)
-            {
-                Console.WriteLine("GlooSharp detection failed: GlooReduceOp type not found.");
-                return false;
-            }
-
-            // Create GlooContext(rank, worldSize)
-            var contextInstance = Activator.CreateInstance(glooContextType, _rank, _worldSize);
-            if (contextInstance == null)
-            {
-                Console.WriteLine("GlooSharp detection failed: Activator.CreateInstance returned null for GlooContext.");
-                return false;
-            }
-
-            // Safe cast to IDisposable — if GlooContext doesn't implement IDisposable,
-            // fall back gracefully instead of throwing InvalidCastException.
-            context = contextInstance as IDisposable;
-            if (context == null)
-            {
-                Console.WriteLine("GlooSharp detection failed: GlooContext does not implement IDisposable. Incompatible GlooSharp version.");
-                return false;
-            }
-
             // Set up transport based on environment variable
             string transportEnv = Environment.GetEnvironmentVariable("AIDOTNET_GLOO_TRANSPORT") ?? "tcp";
             string? storePath = Environment.GetEnvironmentVariable("AIDOTNET_GLOO_STORE_PATH");
@@ -230,9 +238,9 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 string.Equals(transportEnv, "infiniband", StringComparison.OrdinalIgnoreCase))
             {
                 string ibDevice = Environment.GetEnvironmentVariable("AIDOTNET_GLOO_IB_DEVICE") ?? "";
-                var createIB = _glooTransportType.GetMethod("CreateInfiniBand",
+                var createIB = _glooTransportType?.GetMethod("CreateInfiniBand",
                     new[] { glooContextType, typeof(string), typeof(string) });
-                if (createIB == null)
+                if (createIB is null)
                 {
                     Console.WriteLine("GlooSharp detection failed: CreateInfiniBand method not found.");
                     return false;
@@ -246,9 +254,9 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 string portStr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT") ?? "29500";
                 int port = int.TryParse(portStr, out int p) ? p : 29500;
 
-                var createTCP = _glooTransportType.GetMethod("CreateTCP",
+                var createTCP = _glooTransportType?.GetMethod("CreateTCP",
                     new[] { glooContextType, typeof(string), typeof(int), typeof(string) });
-                if (createTCP == null)
+                if (createTCP is null)
                 {
                     Console.WriteLine("GlooSharp detection failed: CreateTCP method not found.");
                     return false;
@@ -257,28 +265,28 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             }
 
             // Cache reflection MethodInfo for collective operations (double[] overloads)
-            _glooAllReduceDouble = _glooCollectivesType.GetMethod("AllReduce", new[]
+            _glooAllReduceDouble = _glooCollectivesType?.GetMethod("AllReduce", new[]
             {
                 glooContextType, typeof(double[]), glooReduceOpType
             });
-            _glooBroadcastDouble = _glooCollectivesType.GetMethod("Broadcast", new[]
+            _glooBroadcastDouble = _glooCollectivesType?.GetMethod("Broadcast", new[]
             {
                 glooContextType, typeof(double[]), typeof(int)
             });
-            _glooAllGatherDouble = _glooCollectivesType.GetMethod("AllGather", new[]
+            _glooAllGatherDouble = _glooCollectivesType?.GetMethod("AllGather", new[]
             {
                 glooContextType, typeof(double[])
             });
-            _glooBarrier = _glooCollectivesType.GetMethod("Barrier", new[] { glooContextType });
-            _glooReduceScatterDouble = _glooCollectivesType.GetMethod("ReduceScatter", new[]
+            _glooBarrier = _glooCollectivesType?.GetMethod("Barrier", new[] { glooContextType });
+            _glooReduceScatterDouble = _glooCollectivesType?.GetMethod("ReduceScatter", new[]
             {
                 glooContextType, typeof(double[]), glooReduceOpType
             });
 
             // Validate all required collective methods were found
-            if (_glooAllReduceDouble == null || _glooBroadcastDouble == null ||
-                _glooAllGatherDouble == null || _glooBarrier == null ||
-                _glooReduceScatterDouble == null)
+            if (_glooAllReduceDouble is null || _glooBroadcastDouble is null ||
+                _glooAllGatherDouble is null || _glooBarrier is null ||
+                _glooReduceScatterDouble is null)
             {
                 Console.WriteLine("GlooSharp detected but required collective methods not found. Falling back to TCP.");
                 return false;
@@ -299,9 +307,8 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             _reduceScatterDelegate = (ctx, data, op) =>
                 _glooReduceScatterDouble.Invoke(null, new[] { ctx, data, op }) as double[];
 
-            // Success — transfer ownership to the field
+            // Success — transfer ownership to the field (do NOT dispose)
             _nativeGlooContext = context;
-            context = null; // prevent disposal in finally
             return true;
         }
         catch (TargetInvocationException ex)
@@ -334,15 +341,33 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             Console.WriteLine($"GlooSharp detection failed (enum mismatch): {ex.Message}");
             return false;
         }
-        catch (Exception ex) when (ex is SocketException or TimeoutException or IOException or NotSupportedException)
+        catch (SocketException ex)
         {
             Console.WriteLine($"GlooSharp detection failed (transport error): {ex.Message}");
             return false;
         }
+        catch (TimeoutException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (transport timeout): {ex.Message}");
+            return false;
+        }
+        catch (IOException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (transport I/O error): {ex.Message}");
+            return false;
+        }
+        catch (NotSupportedException ex)
+        {
+            Console.WriteLine($"GlooSharp detection failed (not supported): {ex.Message}");
+            return false;
+        }
         finally
         {
-            // Dispose the native context if we didn't successfully transfer ownership
-            context?.Dispose();
+            // If we didn't transfer ownership (i.e., _nativeGlooContext was not set), dispose
+            if (_nativeGlooContext != context)
+            {
+                context.Dispose();
+            }
         }
     }
 
@@ -451,7 +476,10 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             foreach (var connection in _tcpConnections.Values)
             {
                 try { connection.Close(); }
-                catch (ObjectDisposedException) { }
+                catch (ObjectDisposedException ex)
+                {
+                    Debug.WriteLine($"TCP connection already disposed during cleanup: {ex.Message}");
+                }
             }
             _tcpConnections.Clear();
         }
@@ -459,7 +487,10 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         if (_tcpListener is not null)
         {
             try { _tcpListener.Stop(); }
-            catch (ObjectDisposedException) { }
+            catch (ObjectDisposedException ex)
+            {
+                Debug.WriteLine($"TCP listener already disposed during cleanup: {ex.Message}");
+            }
             _tcpListener = null;
         }
     }
