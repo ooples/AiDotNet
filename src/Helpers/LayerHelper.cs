@@ -21104,4 +21104,68 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region VAD Batch 20
+
+    /// <summary>
+    /// Creates layers for WebRTC neural VAD.
+    /// Lightweight FC encoder + binary speech/non-speech classification.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultWebRTCVadLayers(
+        int frameSize = 480, int hiddenDim = 64, int numLayers = 3,
+        double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Input projection
+        yield return new FullyConnectedLayer<T>(frameSize, hiddenDim, reluActivation);
+        yield return new BatchNormalizationLayer<T>(hiddenDim);
+
+        // Lightweight encoder layers
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Binary classification output
+        yield return new FullyConnectedLayer<T>(hiddenDim, 1, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates layers for MarbleNet separable convolutional VAD (NVIDIA NeMo).
+    /// Mel features + separable conv blocks + binary classification.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMarbleNetLayers(
+        int numMels = 64, int initialFilters = 128, int numBlocks = 3,
+        int subBlocksPerBlock = 5, double dropoutRate = 0.1)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Initial conv (prologue)
+        yield return new DenseLayer<T>(numMels, initialFilters, reluActivation);
+        yield return new BatchNormalizationLayer<T>(initialFilters);
+
+        // Jasper-style separable conv blocks
+        int filters = initialFilters;
+        for (int b = 0; b < numBlocks; b++)
+        {
+            for (int s = 0; s < subBlocksPerBlock; s++)
+            {
+                // Depth-wise + point-wise (simulated as FC pairs)
+                yield return new FullyConnectedLayer<T>(filters, filters, reluActivation);
+                yield return new BatchNormalizationLayer<T>(filters);
+                if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            }
+        }
+
+        // Epilogue: reduce to binary classification
+        yield return new FullyConnectedLayer<T>(filters, filters / 2, reluActivation);
+        yield return new FullyConnectedLayer<T>(filters / 2, 1, identityActivation);
+    }
+
+    #endregion
 }
