@@ -228,13 +228,9 @@ internal static class SafetyPipelineFactory<T>
     private static void RegisterMultimodalModules(SafetyPipeline<T> pipeline, SafetyConfig config)
     {
         // Register cross-modal consistency checker if multiple modalities are active
-        bool hasText = config.Text.EffectiveToxicityDetection ||
-                       config.Text.EffectivePIIDetection ||
-                       config.Text.EffectiveJailbreakDetection;
-        bool hasImage = config.Image.EffectiveNSFWDetection ||
-                        config.Image.EffectiveViolenceDetection;
-        bool hasAudio = config.Audio.EffectiveDeepfakeDetection ||
-                        config.Audio.EffectiveToxicSpeechDetection;
+        bool hasText = HasTextModality(config);
+        bool hasImage = HasImageModality(config);
+        bool hasAudio = HasAudioModality(config);
 
         // Cross-modal checking requires at least two active modalities
         int activeModalities = (hasText ? 1 : 0) + (hasImage ? 1 : 0) + (hasAudio ? 1 : 0);
@@ -244,6 +240,19 @@ internal static class SafetyPipelineFactory<T>
             pipeline.AddModule(new TextImageAlignmentChecker<T>());
         }
     }
+
+    private static bool HasTextModality(SafetyConfig config) =>
+        config.Text.EffectiveToxicityDetection ||
+        config.Text.EffectivePIIDetection ||
+        config.Text.EffectiveJailbreakDetection;
+
+    private static bool HasImageModality(SafetyConfig config) =>
+        config.Image.EffectiveNSFWDetection ||
+        config.Image.EffectiveViolenceDetection;
+
+    private static bool HasAudioModality(SafetyConfig config) =>
+        config.Audio.EffectiveDeepfakeDetection ||
+        config.Audio.EffectiveToxicSpeechDetection;
 
     private static void RegisterComplianceModules(SafetyPipeline<T> pipeline, SafetyConfig config)
     {

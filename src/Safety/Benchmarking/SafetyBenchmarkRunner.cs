@@ -86,10 +86,16 @@ public class SafetyBenchmarkRunner<T>
             bool flagged = !report.IsSafe;
             bool expectedUnsafe = testCase.ExpectedUnsafe;
 
-            if (flagged && expectedUnsafe) truePositives++;
-            else if (flagged && !expectedUnsafe) falsePositives++;
-            else if (!flagged && !expectedUnsafe) trueNegatives++;
-            else falseNegatives++;
+            if (flagged)
+            {
+                if (expectedUnsafe) truePositives++;
+                else falsePositives++;
+            }
+            else
+            {
+                if (expectedUnsafe) falseNegatives++;
+                else trueNegatives++;
+            }
 
             // Track per-category results
             if (testCase.ExpectedCategory.HasValue)

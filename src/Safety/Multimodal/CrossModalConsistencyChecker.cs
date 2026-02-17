@@ -184,27 +184,15 @@ internal class CrossModalConsistencyChecker<T> : ITextSafetyModule<T>
             return 0.0;
         }
 
-        double maxScore = 0.0;
-        foreach (var finding in findings)
+        return findings.Max(f => f.Severity switch
         {
-            double severityWeight = finding.Severity switch
-            {
-                SafetySeverity.Critical => 1.0,
-                SafetySeverity.High => 0.8,
-                SafetySeverity.Medium => 0.5,
-                SafetySeverity.Low => 0.2,
-                SafetySeverity.Info => 0.1,
-                _ => 0.0
-            };
-
-            double score = severityWeight * finding.Confidence;
-            if (score > maxScore)
-            {
-                maxScore = score;
-            }
-        }
-
-        return maxScore;
+            SafetySeverity.Critical => 1.0,
+            SafetySeverity.High => 0.8,
+            SafetySeverity.Medium => 0.5,
+            SafetySeverity.Low => 0.2,
+            SafetySeverity.Info => 0.1,
+            _ => 0.0
+        } * f.Confidence);
     }
 
     private static readonly string[] OverridePatterns =

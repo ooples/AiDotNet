@@ -294,15 +294,13 @@ public class TranscriptionToxicityDetector<T> : AudioSafetyModuleBase<T>
         T w4 = NumOps.FromDouble(0.20);
         T w5 = NumOps.FromDouble(0.10);
 
-        T rawScore = NumOps.Add(
-            NumOps.Add(
-                NumOps.Multiply(w1, rmsScore),
-                NumOps.Multiply(w2, energyVarScore)),
-            NumOps.Add(
-                NumOps.Add(
-                    NumOps.Multiply(w3, zcrScore),
-                    NumOps.Multiply(w4, dynamicRangeScore)),
-                NumOps.Multiply(w5, durationConfidence)));
+        T term1 = NumOps.Multiply(w1, rmsScore);
+        T term2 = NumOps.Multiply(w2, energyVarScore);
+        T term3 = NumOps.Multiply(w3, zcrScore);
+        T term4 = NumOps.Multiply(w4, dynamicRangeScore);
+        T term5 = NumOps.Multiply(w5, durationConfidence);
+
+        T rawScore = NumOps.Add(NumOps.Add(NumOps.Add(term1, term2), NumOps.Add(term3, term4)), term5);
 
         return Clamp01(rawScore);
     }

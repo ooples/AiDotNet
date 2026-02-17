@@ -275,15 +275,13 @@ internal class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         T w4 = NumOps.FromDouble(0.20);
         T w5 = NumOps.FromDouble(0.10);
 
-        T score = NumOps.Add(
-            NumOps.Add(
-                NumOps.Multiply(w1, flatnessScore),
-                NumOps.Multiply(w2, zcrScore)),
-            NumOps.Add(
-                NumOps.Add(
-                    NumOps.Multiply(w3, fluxRegularityScore),
-                    NumOps.Multiply(w4, hnrScore)),
-                NumOps.Multiply(w5, dynamicsScore)));
+        T term1 = NumOps.Multiply(w1, flatnessScore);
+        T term2 = NumOps.Multiply(w2, zcrScore);
+        T term3 = NumOps.Multiply(w3, fluxRegularityScore);
+        T term4 = NumOps.Multiply(w4, hnrScore);
+        T term5 = NumOps.Multiply(w5, dynamicsScore);
+
+        T score = NumOps.Add(NumOps.Add(NumOps.Add(term1, term2), NumOps.Add(term3, term4)), term5);
 
         return Clamp01(score);
     }

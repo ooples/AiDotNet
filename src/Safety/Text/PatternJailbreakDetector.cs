@@ -86,9 +86,9 @@ public class PatternJailbreakDetector<T> : TextSafetyModuleBase<T>
         {
             try
             {
-                if (pattern.IsMatch(lowerText))
+                var match = pattern.Match(lowerText);
+                if (match.Success)
                 {
-                    var match = pattern.Match(lowerText);
                     findings.Add(new SafetyFinding
                     {
                         Category = SafetyCategory.JailbreakAttempt,
