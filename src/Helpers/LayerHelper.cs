@@ -20082,4 +20082,93 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Generation/Codec Models (Batch 9)
+
+    /// <summary>
+    /// Creates default EnCodec encoder-decoder layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultEnCodecLayers(
+        int[]? encoderChannels = null, int encoderDim = 128, double dropoutRate = 0.0)
+    {
+        encoderChannels ??= [32, 64, 128, 256, 512];
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Encoder: progressive downsampling
+        int prevDim = 1;
+        foreach (int ch in encoderChannels)
+        {
+            yield return new DenseLayer<T>(prevDim, ch, reluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            yield return new DenseLayer<T>(ch, ch, reluActivation);
+            yield return new DenseLayer<T>(ch, ch, identityActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = ch;
+        }
+
+        // Bottleneck
+        yield return new DenseLayer<T>(prevDim, encoderDim, identityActivation);
+
+        // Decoder (mirror of encoder)
+        prevDim = encoderDim;
+        for (int i = encoderChannels.Length - 1; i >= 0; i--)
+        {
+            int ch = encoderChannels[i];
+            yield return new DenseLayer<T>(prevDim, ch, reluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            yield return new DenseLayer<T>(ch, ch, reluActivation);
+            yield return new DenseLayer<T>(ch, ch, identityActivation);
+            prevDim = ch;
+        }
+
+        yield return new DenseLayer<T>(prevDim, 1, (IActivationFunction<T>)new TanhActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates default SoundStream encoder-decoder layers.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSoundStreamLayers(
+        int[]? encoderChannels = null, int encoderDim = 128, int numResBlocks = 3, double dropoutRate = 0.0)
+    {
+        encoderChannels ??= [32, 64, 128, 256];
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Encoder with residual blocks
+        int prevDim = 1;
+        foreach (int ch in encoderChannels)
+        {
+            yield return new DenseLayer<T>(prevDim, ch, reluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            for (int r = 0; r < numResBlocks; r++)
+            {
+                yield return new DenseLayer<T>(ch, ch, reluActivation);
+                yield return new DenseLayer<T>(ch, ch, identityActivation);
+            }
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            prevDim = ch;
+        }
+
+        yield return new DenseLayer<T>(prevDim, encoderDim, identityActivation);
+
+        // Decoder (mirror)
+        prevDim = encoderDim;
+        for (int i = encoderChannels.Length - 1; i >= 0; i--)
+        {
+            int ch = encoderChannels[i];
+            yield return new DenseLayer<T>(prevDim, ch, reluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            for (int r = 0; r < numResBlocks; r++)
+            {
+                yield return new DenseLayer<T>(ch, ch, reluActivation);
+                yield return new DenseLayer<T>(ch, ch, identityActivation);
+            }
+            prevDim = ch;
+        }
+
+        yield return new DenseLayer<T>(prevDim, 1, (IActivationFunction<T>)new TanhActivation<T>());
+    }
+
+    #endregion
 }
