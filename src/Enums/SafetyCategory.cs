@@ -237,5 +237,17 @@ public enum SafetyCategory
     /// <summary>
     /// Content that contains a digital watermark (informational, not harmful).
     /// </summary>
-    Watermarked
+    Watermarked,
+
+    // === Fairness ===
+
+    /// <summary>
+    /// Biased content that treats demographic groups inequitably.
+    /// </summary>
+    Bias,
+
+    /// <summary>
+    /// Content that lacks transparency about AI involvement (regulatory compliance).
+    /// </summary>
+    TransparencyViolation
 }

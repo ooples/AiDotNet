@@ -1462,6 +1462,103 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// Evaluates image content for safety using the configured safety pipeline.
+    /// </summary>
+    /// <param name="image">The image tensor to evaluate (CHW or HWC format).</param>
+    /// <returns>A safety report with findings, or a safe report if no pipeline is configured.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this to check if image content is safe:
+    /// <code>
+    /// var report = result.EvaluateImageSafety(imageTensor);
+    /// if (!report.IsSafe)
+    ///     Console.WriteLine($"Blocked: {report.HighestSeverity}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport EvaluateImageSafety(Tensor<T> image)
+    {
+        if (SafetyPipeline == null)
+        {
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+        }
+
+        return SafetyPipeline.EvaluateImage(image);
+    }
+
+    /// <summary>
+    /// Evaluates audio content for safety using the configured safety pipeline.
+    /// </summary>
+    /// <param name="audioSamples">The audio samples to evaluate.</param>
+    /// <param name="sampleRate">The audio sample rate in Hz (e.g. 16000, 44100).</param>
+    /// <returns>A safety report with findings, or a safe report if no pipeline is configured.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this to check if audio content is safe:
+    /// <code>
+    /// var report = result.EvaluateAudioSafety(audioVector, sampleRate: 16000);
+    /// if (!report.IsSafe)
+    ///     Console.WriteLine($"Blocked: {report.HighestSeverity}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport EvaluateAudioSafety(Vector<T> audioSamples, int sampleRate)
+    {
+        if (SafetyPipeline == null)
+        {
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+        }
+
+        return SafetyPipeline.EvaluateAudio(audioSamples, sampleRate);
+    }
+
+    /// <summary>
+    /// Evaluates video content for safety using the configured safety pipeline.
+    /// </summary>
+    /// <param name="frames">The video frames to evaluate (list of image tensors).</param>
+    /// <param name="frameRate">The video frame rate in frames per second.</param>
+    /// <returns>A safety report with findings, or a safe report if no pipeline is configured.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this to check if video content is safe:
+    /// <code>
+    /// var report = result.EvaluateVideoSafety(frames, frameRate: 30.0);
+    /// if (!report.IsSafe)
+    ///     Console.WriteLine($"Blocked: {report.HighestSeverity}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport EvaluateVideoSafety(IReadOnlyList<Tensor<T>> frames, double frameRate)
+    {
+        if (SafetyPipeline == null)
+        {
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+        }
+
+        return SafetyPipeline.EvaluateVideo(frames, frameRate);
+    }
+
+    /// <summary>
+    /// Enforces the safety policy on a report, throwing if the content is blocked.
+    /// </summary>
+    /// <param name="report">The safety report to enforce.</param>
+    /// <param name="isInput">True if evaluating input content, false for output content.</param>
+    /// <exception cref="InvalidOperationException">Thrown when content is blocked by the safety policy.</exception>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this after evaluating content to automatically block unsafe content:
+    /// <code>
+    /// var report = result.EvaluateTextSafety(userInput);
+    /// result.EnforceSafetyPolicy(report, isInput: true); // throws if blocked
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public void EnforceSafetyPolicy(AiDotNet.Safety.SafetyReport report, bool isInput)
+    {
+        SafetyPipeline?.EnforcePolicy(report, isInput);
+    }
+
+    /// <summary>
     /// Makes predictions using the model on the provided input data.
     /// </summary>
     /// <param name="newData">A matrix of input features, where each row represents an observation and each column represents a feature.</param>
