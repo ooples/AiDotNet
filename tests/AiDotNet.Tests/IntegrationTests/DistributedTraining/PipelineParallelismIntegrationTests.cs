@@ -29,7 +29,7 @@ public class PipelineParallelismIntegrationTests
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var model = new PipelineTestModel(parameterCount: 20);
-        var schedule = new GPipeSchedule();
+        var schedule = new GPipeSchedule<double>();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
             model, config, microBatchCount: 2, schedule: schedule);
@@ -72,7 +72,7 @@ public class PipelineParallelismIntegrationTests
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var model = new PipelineTestModel(parameterCount: 20);
-        var schedule = new OneForwardOneBackwardSchedule();
+        var schedule = new OneForwardOneBackwardSchedule<double>();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
             model, config, microBatchCount: 4, schedule: schedule);
@@ -112,7 +112,7 @@ public class PipelineParallelismIntegrationTests
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var model = new DecomposablePipelineTestModel(parameterCount: 20);
-        var schedule = new ZeroBubbleH1Schedule();
+        var schedule = new ZeroBubbleH1Schedule<double>();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
             model, config, microBatchCount: 4, schedule: schedule);
@@ -153,7 +153,7 @@ public class PipelineParallelismIntegrationTests
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var model = new PipelineTestModel(parameterCount: 20);
-        var schedule = new ZeroBubbleH1Schedule();
+        var schedule = new ZeroBubbleH1Schedule<double>();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
             model, config, microBatchCount: 4, schedule: schedule);
@@ -193,7 +193,7 @@ public class PipelineParallelismIntegrationTests
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var model = new DecomposablePipelineTestModel(parameterCount: 20);
-        var schedule = new ZeroBubbleH2Schedule();
+        var schedule = new ZeroBubbleH2Schedule<double>();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
             model, config, microBatchCount: 4, schedule: schedule);
@@ -233,7 +233,7 @@ public class PipelineParallelismIntegrationTests
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var model = new DecomposablePipelineTestModel(parameterCount: 20);
-        var schedule = new ZeroBubbleVSchedule();
+        var schedule = new ZeroBubbleVSchedule<double>();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
             model, config, microBatchCount: 4, schedule: schedule);
@@ -273,7 +273,7 @@ public class PipelineParallelismIntegrationTests
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var model = new PipelineTestModel(parameterCount: 20);
-        var schedule = new Interleaved1F1BSchedule(virtualStagesPerRank: 2);
+        var schedule = new Interleaved1F1BSchedule<double>(virtualStagesPerRank: 2);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
             model, config, microBatchCount: 4, schedule: schedule);
@@ -316,7 +316,7 @@ public class PipelineParallelismIntegrationTests
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var model = new PipelineTestModel(parameterCount: 20);
-        var schedule = new LoopedBFSSchedule(virtualStagesPerRank: 2);
+        var schedule = new LoopedBFSSchedule<double>(virtualStagesPerRank: 2);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
             model, config, microBatchCount: 4, schedule: schedule);
@@ -778,7 +778,7 @@ public class PipelineParallelismIntegrationTests
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var model = new PipelineTestModel(parameterCount: 40);
-        var schedule = new LoopedBFSSchedule(virtualStagesPerRank: 2);
+        var schedule = new LoopedBFSSchedule<double>(virtualStagesPerRank: 2);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
             model, config, microBatchCount: 4, schedule: schedule);
@@ -806,7 +806,7 @@ public class PipelineParallelismIntegrationTests
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var model = new PipelineTestModel(parameterCount: 40);
-        var schedule = new Interleaved1F1BSchedule(virtualStagesPerRank: 3);
+        var schedule = new Interleaved1F1BSchedule<double>(virtualStagesPerRank: 3);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
             model, config, microBatchCount: 4, schedule: schedule);
@@ -833,7 +833,7 @@ public class PipelineParallelismIntegrationTests
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var model = new PipelineTestModel(parameterCount: 60);
-        var schedule = new LoopedBFSSchedule(virtualStagesPerRank: 3);
+        var schedule = new LoopedBFSSchedule<double>(virtualStagesPerRank: 3);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
             model, config, microBatchCount: 4, schedule: schedule);
@@ -865,7 +865,7 @@ public class PipelineParallelismIntegrationTests
         var model = new PipelineTestModel(parameterCount: 10);
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-            model, config, microBatchCount: 2, schedule: new GPipeSchedule());
+            model, config, microBatchCount: 2, schedule: new GPipeSchedule<double>());
 
         var input = new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 });
         var target = new Vector<double>(new double[] { 2.0, 4.0, 6.0, 8.0, 10.0, 12.0 });
@@ -908,7 +908,7 @@ public class PipelineParallelismIntegrationTests
         backend.Initialize();
         var config = new ShardingConfiguration<double>(backend);
         var model = new PipelineTestModel(parameterCount: 20);
-        var schedule = new OneForwardOneBackwardSchedule();
+        var schedule = new OneForwardOneBackwardSchedule<double>();
 
         var pipelineModel = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
             model, config, microBatchCount: 2, schedule: schedule);
@@ -927,7 +927,7 @@ public class PipelineParallelismIntegrationTests
             // Deserialize into new instance
             var model2 = new PipelineTestModel(parameterCount: 20);
             var pipelineModel2 = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-                model2, config, microBatchCount: 2, schedule: new OneForwardOneBackwardSchedule());
+                model2, config, microBatchCount: 2, schedule: new OneForwardOneBackwardSchedule<double>());
 
             pipelineModel2.Deserialize(serialized);
 
@@ -1025,15 +1025,15 @@ public class PipelineParallelismIntegrationTests
 
         try
         {
-            var schedules = new (IPipelineSchedule schedule, string expectedName)[]
+            var schedules = new (IPipelineSchedule<double> schedule, string expectedName)[]
             {
-                (new GPipeSchedule(), "GPipe"),
-                (new OneForwardOneBackwardSchedule(), "1F1B"),
-                (new ZeroBubbleH1Schedule(), "ZB-H1"),
-                (new ZeroBubbleH2Schedule(), "ZB-H2"),
-                (new ZeroBubbleVSchedule(), "ZB-V"),
-                (new Interleaved1F1BSchedule(), "Interleaved-1F1B"),
-                (new LoopedBFSSchedule(), "Looped-BFS"),
+                (new GPipeSchedule<double>(), "GPipe"),
+                (new OneForwardOneBackwardSchedule<double>(), "1F1B"),
+                (new ZeroBubbleH1Schedule<double>(), "ZB-H1"),
+                (new ZeroBubbleH2Schedule<double>(), "ZB-H2"),
+                (new ZeroBubbleVSchedule<double>(), "ZB-V"),
+                (new Interleaved1F1BSchedule<double>(), "Interleaved-1F1B"),
+                (new LoopedBFSSchedule<double>(), "Looped-BFS"),
             };
 
             foreach (var (schedule, expectedName) in schedules)
@@ -1066,7 +1066,7 @@ public class PipelineParallelismIntegrationTests
         {
             var model = new PipelineTestModel(parameterCount: 20);
             var pipeline = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-                model, config, schedule: new Interleaved1F1BSchedule(virtualStagesPerRank: 3));
+                model, config, schedule: new Interleaved1F1BSchedule<double>(virtualStagesPerRank: 3));
             var metadata = pipeline.GetModelMetadata();
 
             Assert.Equal(3, metadata.Properties["VirtualStagesPerRank"]);
@@ -1089,7 +1089,7 @@ public class PipelineParallelismIntegrationTests
         {
             var model = new PipelineTestModel(parameterCount: 20);
             var pipeline = new PipelineParallelModel<double, Vector<double>, Vector<double>>(
-                model, config, microBatchCount: 4, schedule: new ZeroBubbleH2Schedule());
+                model, config, microBatchCount: 4, schedule: new ZeroBubbleH2Schedule<double>());
 
             // Single rank: bubble fraction should be 0
             Assert.Equal(0.0, pipeline.EstimatedBubbleFraction);
@@ -1110,7 +1110,7 @@ public class PipelineParallelismIntegrationTests
     [InlineData(16)]
     public void GPipe_AllStages_ProduceCorrectOpCounts(int numMicroBatches)
     {
-        var schedule = new GPipeSchedule();
+        var schedule = new GPipeSchedule<double>();
         for (int stageId = 0; stageId < 4; stageId++)
         {
             var ops = schedule.GetSchedule(stageId, numStages: 4, numMicroBatches);
@@ -1127,7 +1127,7 @@ public class PipelineParallelismIntegrationTests
     [InlineData(8)]
     public void OneF1B_AllStages_ProduceCorrectOpCounts(int numMicroBatches)
     {
-        var schedule = new OneForwardOneBackwardSchedule();
+        var schedule = new OneForwardOneBackwardSchedule<double>();
         for (int stageId = 0; stageId < 4; stageId++)
         {
             var ops = schedule.GetSchedule(stageId, numStages: 4, numMicroBatches);
@@ -1144,7 +1144,7 @@ public class PipelineParallelismIntegrationTests
     [InlineData(8)]
     public void ZBH1_AllStages_HaveMatchingBWCounts(int numMicroBatches)
     {
-        var schedule = new ZeroBubbleH1Schedule();
+        var schedule = new ZeroBubbleH1Schedule<double>();
         for (int stageId = 0; stageId < 4; stageId++)
         {
             var ops = schedule.GetSchedule(stageId, numStages: 4, numMicroBatches);
@@ -1161,7 +1161,7 @@ public class PipelineParallelismIntegrationTests
     [Fact]
     public void ZBV_Schedule_ProducesOpsForBothVirtualStages()
     {
-        var schedule = new ZeroBubbleVSchedule();
+        var schedule = new ZeroBubbleVSchedule<double>();
         var ops = schedule.GetSchedule(stageId: 0, numStages: 2, numMicroBatches: 4);
 
         var vStage0Ops = ops.Where(o => o.VirtualStageIndex == 0).ToList();
@@ -1179,7 +1179,7 @@ public class PipelineParallelismIntegrationTests
     [Fact]
     public void LoopedBFS_Schedule_VStage0CompletesBeforeVStage1()
     {
-        var schedule = new LoopedBFSSchedule(virtualStagesPerRank: 2);
+        var schedule = new LoopedBFSSchedule<double>(virtualStagesPerRank: 2);
         var ops = schedule.GetSchedule(stageId: 0, numStages: 2, numMicroBatches: 4);
 
         int lastVStage0Index = -1;
@@ -1207,15 +1207,15 @@ public class PipelineParallelismIntegrationTests
     [InlineData(8, 32)]
     public void AllSchedules_BubbleFraction_InValidRange(int numStages, int numMicroBatches)
     {
-        var schedules = new IPipelineSchedule[]
+        var schedules = new IPipelineSchedule<double>[]
         {
-            new GPipeSchedule(),
-            new OneForwardOneBackwardSchedule(),
-            new ZeroBubbleH1Schedule(),
-            new ZeroBubbleH2Schedule(),
-            new ZeroBubbleVSchedule(),
-            new Interleaved1F1BSchedule(),
-            new LoopedBFSSchedule(),
+            new GPipeSchedule<double>(),
+            new OneForwardOneBackwardSchedule<double>(),
+            new ZeroBubbleH1Schedule<double>(),
+            new ZeroBubbleH2Schedule<double>(),
+            new ZeroBubbleVSchedule<double>(),
+            new Interleaved1F1BSchedule<double>(),
+            new LoopedBFSSchedule<double>(),
         };
 
         foreach (var schedule in schedules)
@@ -1228,8 +1228,8 @@ public class PipelineParallelismIntegrationTests
     [Fact]
     public void ZeroBubbleSchedules_AchieveZeroBubble_WhenEnoughMicroBatches()
     {
-        var zbH2 = new ZeroBubbleH2Schedule();
-        var zbV = new ZeroBubbleVSchedule();
+        var zbH2 = new ZeroBubbleH2Schedule<double>();
+        var zbV = new ZeroBubbleVSchedule<double>();
 
         // With M >= P, zero bubble schedules should report 0
         Assert.Equal(0.0, zbH2.EstimateBubbleFraction(numStages: 4, numMicroBatches: 4));
@@ -1241,8 +1241,8 @@ public class PipelineParallelismIntegrationTests
     [Fact]
     public void GPipe_HasHigherBubble_Than1F1B()
     {
-        var gpipe = new GPipeSchedule();
-        var oneF1B = new OneForwardOneBackwardSchedule();
+        var gpipe = new GPipeSchedule<double>();
+        var oneF1B = new OneForwardOneBackwardSchedule<double>();
 
         double gpipeBubble = gpipe.EstimateBubbleFraction(numStages: 4, numMicroBatches: 8);
         double oneF1BBubble = oneF1B.EstimateBubbleFraction(numStages: 4, numMicroBatches: 8);

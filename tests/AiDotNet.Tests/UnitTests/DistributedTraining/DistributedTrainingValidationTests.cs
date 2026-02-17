@@ -325,7 +325,7 @@ public class DistributedTrainingValidationTests
     [Fact]
     public void GPipeSchedule_GetSchedule_ProducesCorrectPhases()
     {
-        var schedule = new GPipeSchedule();
+        var schedule = new GPipeSchedule<double>();
         var ops = schedule.GetSchedule(stageId: 0, numStages: 2, numMicroBatches: 4);
 
         Assert.NotEmpty(ops);
@@ -353,7 +353,7 @@ public class DistributedTrainingValidationTests
     [Fact]
     public void OneForwardOneBackward_GetSchedule_InterleavesFB()
     {
-        var schedule = new OneForwardOneBackwardSchedule();
+        var schedule = new OneForwardOneBackwardSchedule<double>();
         var ops = schedule.GetSchedule(stageId: 1, numStages: 4, numMicroBatches: 8);
 
         Assert.NotEmpty(ops);
@@ -387,7 +387,7 @@ public class DistributedTrainingValidationTests
     [Fact]
     public void ZeroBubbleH1_GetSchedule_SplitsBackward()
     {
-        var schedule = new ZeroBubbleH1Schedule();
+        var schedule = new ZeroBubbleH1Schedule<double>();
         var ops = schedule.GetSchedule(stageId: 0, numStages: 4, numMicroBatches: 8);
 
         Assert.NotEmpty(ops);
@@ -405,7 +405,7 @@ public class DistributedTrainingValidationTests
     [Fact]
     public void ZeroBubbleH2_GetSchedule_SplitsBackward()
     {
-        var schedule = new ZeroBubbleH2Schedule();
+        var schedule = new ZeroBubbleH2Schedule<double>();
         var ops = schedule.GetSchedule(stageId: 0, numStages: 4, numMicroBatches: 8);
 
         Assert.NotEmpty(ops);
@@ -420,7 +420,7 @@ public class DistributedTrainingValidationTests
     [Fact]
     public void ZeroBubbleV_GetSchedule_UsesTwoVirtualStages()
     {
-        var schedule = new ZeroBubbleVSchedule();
+        var schedule = new ZeroBubbleVSchedule<double>();
 
         Assert.Equal(2, schedule.VirtualStagesPerRank);
 
@@ -439,7 +439,7 @@ public class DistributedTrainingValidationTests
     [Fact]
     public void Interleaved1F1B_GetSchedule_DepthFirstOrder()
     {
-        var schedule = new Interleaved1F1BSchedule(virtualStagesPerRank: 2);
+        var schedule = new Interleaved1F1BSchedule<double>(virtualStagesPerRank: 2);
         var ops = schedule.GetSchedule(stageId: 0, numStages: 2, numMicroBatches: 4);
 
         Assert.NotEmpty(ops);
@@ -457,13 +457,13 @@ public class DistributedTrainingValidationTests
     public void Interleaved1F1B_Constructor_ThrowsOnSingleVirtualStage()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new Interleaved1F1BSchedule(virtualStagesPerRank: 1));
+            new Interleaved1F1BSchedule<double>(virtualStagesPerRank: 1));
     }
 
     [Fact]
     public void LoopedBFS_GetSchedule_BreadthFirstOrder()
     {
-        var schedule = new LoopedBFSSchedule(virtualStagesPerRank: 2);
+        var schedule = new LoopedBFSSchedule<double>(virtualStagesPerRank: 2);
         var ops = schedule.GetSchedule(stageId: 0, numStages: 2, numMicroBatches: 4);
 
         Assert.NotEmpty(ops);
@@ -491,17 +491,17 @@ public class DistributedTrainingValidationTests
     public void LoopedBFS_Constructor_ThrowsOnSingleVirtualStage()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            new LoopedBFSSchedule(virtualStagesPerRank: 1));
+            new LoopedBFSSchedule<double>(virtualStagesPerRank: 1));
     }
 
     [Theory]
-    [InlineData(typeof(GPipeSchedule))]
-    [InlineData(typeof(OneForwardOneBackwardSchedule))]
-    [InlineData(typeof(ZeroBubbleH1Schedule))]
-    [InlineData(typeof(ZeroBubbleH2Schedule))]
+    [InlineData(typeof(GPipeSchedule<double>))]
+    [InlineData(typeof(OneForwardOneBackwardSchedule<double>))]
+    [InlineData(typeof(ZeroBubbleH1Schedule<double>))]
+    [InlineData(typeof(ZeroBubbleH2Schedule<double>))]
     public void Schedule_GetSchedule_ThrowsOnInvalidStageId(Type scheduleType)
     {
-        var schedule = (IPipelineSchedule)Activator.CreateInstance(scheduleType)!;
+        var schedule = (IPipelineSchedule<double>)(Activator.CreateInstance(scheduleType) ?? throw new InvalidOperationException($"Failed to create instance of {scheduleType.Name}"));
 
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             schedule.GetSchedule(stageId: -1, numStages: 4, numMicroBatches: 4));
@@ -511,26 +511,26 @@ public class DistributedTrainingValidationTests
     }
 
     [Theory]
-    [InlineData(typeof(GPipeSchedule))]
-    [InlineData(typeof(OneForwardOneBackwardSchedule))]
-    [InlineData(typeof(ZeroBubbleH1Schedule))]
-    [InlineData(typeof(ZeroBubbleH2Schedule))]
+    [InlineData(typeof(GPipeSchedule<double>))]
+    [InlineData(typeof(OneForwardOneBackwardSchedule<double>))]
+    [InlineData(typeof(ZeroBubbleH1Schedule<double>))]
+    [InlineData(typeof(ZeroBubbleH2Schedule<double>))]
     public void Schedule_GetSchedule_ThrowsOnZeroMicroBatches(Type scheduleType)
     {
-        var schedule = (IPipelineSchedule)Activator.CreateInstance(scheduleType)!;
+        var schedule = (IPipelineSchedule<double>)(Activator.CreateInstance(scheduleType) ?? throw new InvalidOperationException($"Failed to create instance of {scheduleType.Name}"));
 
         Assert.Throws<ArgumentException>(() =>
             schedule.GetSchedule(stageId: 0, numStages: 4, numMicroBatches: 0));
     }
 
     [Theory]
-    [InlineData(typeof(GPipeSchedule))]
-    [InlineData(typeof(OneForwardOneBackwardSchedule))]
-    [InlineData(typeof(ZeroBubbleH1Schedule))]
-    [InlineData(typeof(ZeroBubbleH2Schedule))]
+    [InlineData(typeof(GPipeSchedule<double>))]
+    [InlineData(typeof(OneForwardOneBackwardSchedule<double>))]
+    [InlineData(typeof(ZeroBubbleH1Schedule<double>))]
+    [InlineData(typeof(ZeroBubbleH2Schedule<double>))]
     public void Schedule_EstimateBubbleFraction_ReturnsBetweenZeroAndOne(Type scheduleType)
     {
-        var schedule = (IPipelineSchedule)Activator.CreateInstance(scheduleType)!;
+        var schedule = (IPipelineSchedule<double>)(Activator.CreateInstance(scheduleType) ?? throw new InvalidOperationException($"Failed to create instance of {scheduleType.Name}"));
 
         double fraction = schedule.EstimateBubbleFraction(numStages: 4, numMicroBatches: 8);
 
@@ -538,13 +538,13 @@ public class DistributedTrainingValidationTests
     }
 
     [Theory]
-    [InlineData(typeof(GPipeSchedule))]
-    [InlineData(typeof(OneForwardOneBackwardSchedule))]
-    [InlineData(typeof(ZeroBubbleH1Schedule))]
-    [InlineData(typeof(ZeroBubbleH2Schedule))]
+    [InlineData(typeof(GPipeSchedule<double>))]
+    [InlineData(typeof(OneForwardOneBackwardSchedule<double>))]
+    [InlineData(typeof(ZeroBubbleH1Schedule<double>))]
+    [InlineData(typeof(ZeroBubbleH2Schedule<double>))]
     public void Schedule_EstimateBubbleFraction_ZeroForSingleStage(Type scheduleType)
     {
-        var schedule = (IPipelineSchedule)Activator.CreateInstance(scheduleType)!;
+        var schedule = (IPipelineSchedule<double>)(Activator.CreateInstance(scheduleType) ?? throw new InvalidOperationException($"Failed to create instance of {scheduleType.Name}"));
 
         double fraction = schedule.EstimateBubbleFraction(numStages: 1, numMicroBatches: 8);
 
@@ -554,7 +554,7 @@ public class DistributedTrainingValidationTests
     [Fact]
     public void ZeroBubbleH2_EstimateBubbleFraction_ZeroWhenEnoughMicroBatches()
     {
-        var schedule = new ZeroBubbleH2Schedule();
+        var schedule = new ZeroBubbleH2Schedule<double>();
         double fraction = schedule.EstimateBubbleFraction(numStages: 4, numMicroBatches: 4);
 
         Assert.Equal(0.0, fraction);
@@ -563,7 +563,7 @@ public class DistributedTrainingValidationTests
     [Fact]
     public void ZeroBubbleV_EstimateBubbleFraction_ZeroWhenEnoughMicroBatches()
     {
-        var schedule = new ZeroBubbleVSchedule();
+        var schedule = new ZeroBubbleVSchedule<double>();
         double fraction = schedule.EstimateBubbleFraction(numStages: 4, numMicroBatches: 4);
 
         Assert.Equal(0.0, fraction);
@@ -700,7 +700,7 @@ public class DistributedTrainingValidationTests
         var config = new ShardingConfiguration<double>(backend);
 
         var pipelineModel = new PipelineParallelModel<double, Matrix<double>, Vector<double>>(
-            model, config, schedule: new OneForwardOneBackwardSchedule());
+            model, config, schedule: new OneForwardOneBackwardSchedule<double>());
 
         var metadata = pipelineModel.GetModelMetadata();
 
