@@ -20568,5 +20568,91 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, numFreqBins, identityActivation);
     }
 
+    /// <summary>
+    /// Creates default layers for the SCNet (Sparse Compression Network) source separation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSCNetLayers(
+        int numClusters = 64, int compressionDim = 128,
+        int numEncoderBlocks = 6, int numDecoderBlocks = 6,
+        int attentionDim = 256, int numAttentionHeads = 8, int feedForwardDim = 1024,
+        int numStems = 4, int numFreqBins = 1025, double dropoutRate = 0.0)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Input projection: freq bins -> compression dim
+        yield return new DenseLayer<T>(numFreqBins, compressionDim, reluActivation);
+        yield return new LayerNormalizationLayer<T>(compressionDim);
+
+        // Sparse compression: reduce to clusters
+        yield return new DenseLayer<T>(compressionDim, numClusters, reluActivation);
+        yield return new LayerNormalizationLayer<T>(numClusters);
+
+        // Encoder: attention blocks on compressed representation
+        for (int i = 0; i < numEncoderBlocks; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numClusters, embeddingDimension: attentionDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(attentionDim);
+            yield return new DenseLayer<T>(attentionDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, attentionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(attentionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decoder: attention blocks for reconstruction
+        for (int i = 0; i < numDecoderBlocks; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: numClusters, embeddingDimension: attentionDim, headCount: numAttentionHeads);
+            yield return new LayerNormalizationLayer<T>(attentionDim);
+            yield return new DenseLayer<T>(attentionDim, feedForwardDim, reluActivation);
+            yield return new DenseLayer<T>(feedForwardDim, attentionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(attentionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Decompress: clusters -> freq bins
+        yield return new DenseLayer<T>(numClusters, compressionDim, reluActivation);
+        yield return new DenseLayer<T>(compressionDim, numFreqBins * numStems, identityActivation);
+    }
+
+    /// <summary>
+    /// Creates default layers for the BandSplitRNN source separation model.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultBandSplitRNNSeparationLayers(
+        int numBands = 24, int bandRnnHiddenSize = 128, int numBandRnnLayers = 12,
+        int sequenceRnnHiddenSize = 256, int numSequenceRnnLayers = 6, int fusionDim = 256,
+        int numStems = 4, int numFreqBins = 1025, double dropoutRate = 0.0)
+    {
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // Band split: project freq bins into per-band embeddings
+        yield return new DenseLayer<T>(numFreqBins, numBands * bandRnnHiddenSize, reluActivation);
+        yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+
+        // Band-level RNN layers: process each band independently
+        for (int i = 0; i < numBandRnnLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(numBands * bandRnnHiddenSize, numBands * bandRnnHiddenSize, (IActivationFunction<T>?)null);
+            yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Cross-band fusion via sequence-level RNN layers
+        for (int i = 0; i < numSequenceRnnLayers; i++)
+        {
+            yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, fusionDim, reluActivation);
+            yield return new DenseLayer<T>(fusionDim, sequenceRnnHiddenSize, reluActivation);
+            yield return new DenseLayer<T>(sequenceRnnHiddenSize, numBands * bandRnnHiddenSize, identityActivation);
+            yield return new LayerNormalizationLayer<T>(numBands * bandRnnHiddenSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Mask estimation: project to multi-stem frequency masks
+        yield return new DenseLayer<T>(numBands * bandRnnHiddenSize, numFreqBins * numStems, identityActivation);
+    }
+
     #endregion
 }
