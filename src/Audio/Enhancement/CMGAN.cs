@@ -56,6 +56,7 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
     private Tensor<T>? _lastPhase;
+    private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;
     private List<T>? _streamingBuffer;
@@ -141,17 +142,47 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         ThrowIfDisposed();
         EnhancementStrength = _options.EnhancementStrength;
         var stft = ComputeSTFT(audio);
+
+        // Apply spectral subtraction if noise profile is available
+        if (_noiseProfile is not null && _noiseProfile.Length == stft.Length)
+        {
+            for (int i = 0; i < stft.Length; i++)
+            {
+                T subtracted = NumOps.Subtract(stft[i], _noiseProfile[i]);
+                stft[i] = NumOps.GreaterThan(subtracted, NumOps.Zero) ? subtracted : NumOps.Zero;
+            }
+        }
+
         Tensor<T> mask;
         if (IsOnnxMode && OnnxEncoder is not null)
             mask = OnnxEncoder.Run(stft);
         else
             mask = Predict(stft);
         var enhanced = ApplyMask(stft, mask);
-        return ComputeISTFT(enhanced, audio.Length);
+
+        // Apply enhancement strength blending: output = strength * enhanced + (1 - strength) * original
+        var result = ComputeISTFT(enhanced, audio.Length);
+        double strength = _options.EnhancementStrength;
+        if (strength < 1.0)
+        {
+            T s = NumOps.FromDouble(strength);
+            T inv = NumOps.FromDouble(1.0 - strength);
+            for (int i = 0; i < result.Length && i < audio.Length; i++)
+            {
+                result[i] = NumOps.Add(NumOps.Multiply(s, result[i]), NumOps.Multiply(inv, audio[i]));
+            }
+        }
+
+        return result;
     }
 
     /// <inheritdoc />
-    public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference) => Enhance(audio);
+    public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference)
+    {
+        // Use the reference signal as a noise profile estimate before enhancement
+        EstimateNoiseProfile(reference);
+        return Enhance(audio);
+    }
 
     /// <inheritdoc />
     public Tensor<T> ProcessChunk(Tensor<T> audioChunk)
@@ -171,7 +202,12 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     public override void ResetState() { base.ResetState(); _streamingBuffer = null; }
 
     /// <inheritdoc />
-    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio) { }
+    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio)
+    {
+        // Compute STFT of noise-only audio to get spectral noise floor
+        _stft.MagnitudeAndPhase(noiseOnlyAudio, out var magnitude, out _);
+        _noiseProfile = magnitude;
+    }
 
     #endregion
 
@@ -257,7 +293,12 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new CMGAN<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new CMGAN<T>(Architecture, mp, _options);
+        return new CMGAN<T>(Architecture, _options);
+    }
 
     #endregion
 

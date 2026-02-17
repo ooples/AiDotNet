@@ -42,6 +42,7 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
     private Tensor<T>? _lastPhase;
+    private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;
     private List<T>? _streamingBuffer;
@@ -129,7 +130,10 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     /// <inheritdoc />
     public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference)
-        => Enhance(audio);
+    {
+        EstimateNoiseProfile(reference);
+        return Enhance(audio);
+    }
 
     /// <inheritdoc />
     public Tensor<T> ProcessChunk(Tensor<T> audioChunk)
@@ -158,7 +162,11 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <inheritdoc />
-    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio) { }
+    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio)
+    {
+        _stft.MagnitudeAndPhase(noiseOnlyAudio, out var magnitude, out _);
+        _noiseProfile = magnitude;
+    }
 
     #endregion
 

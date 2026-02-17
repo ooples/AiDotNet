@@ -40,6 +40,7 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
     private Tensor<T>? _lastPhase;
+    private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -120,13 +121,21 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         => Task.Run(() => Enhance(noisyAudio), cancellationToken);
 
     /// <inheritdoc />
-    public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference) => Enhance(audio);
+    public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference)
+    {
+        EstimateNoiseProfile(reference);
+        return Enhance(audio);
+    }
 
     /// <inheritdoc />
     public Tensor<T> ProcessChunk(Tensor<T> audioChunk) => Enhance(audioChunk);
 
     /// <inheritdoc />
-    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio) { }
+    public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio)
+    {
+        _stft.MagnitudeAndPhase(noiseOnlyAudio, out var magnitude, out _);
+        _noiseProfile = magnitude;
+    }
 
     #endregion
 
@@ -226,7 +235,12 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
     }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new MPSENet<T>(Architecture, _options);
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new MPSENet<T>(Architecture, mp, _options);
+        return new MPSENet<T>(Architecture, _options);
+    }
 
     #endregion
 
