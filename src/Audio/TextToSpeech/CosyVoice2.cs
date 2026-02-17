@@ -42,7 +42,7 @@ public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
     private readonly CosyVoice2Options _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -77,8 +77,8 @@ public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _options = options ?? new CosyVoice2Options();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
         InitializeLayers();
     }
@@ -202,7 +202,7 @@ public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 

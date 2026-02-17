@@ -40,7 +40,7 @@ public class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T
 
     private readonly OnsetsAndFramesOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private MelSpectrogram<T>? _melSpectrogram;
     private bool _useNativeMode;
     private bool _disposed;
@@ -68,8 +68,8 @@ public class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T
         _options = options ?? new OnsetsAndFramesOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels,
             _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
         InitializeLayers();
@@ -223,7 +223,7 @@ public class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 

@@ -102,7 +102,7 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     public override ModelOptions GetOptions() => _options;
 
     private MelSpectrogram<T>? _melSpectrogram;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -164,7 +164,6 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -489,7 +488,7 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             gradientTensor = Layers[i].Backward(gradientTensor);
         }
 
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 

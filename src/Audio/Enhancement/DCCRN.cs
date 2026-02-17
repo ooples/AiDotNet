@@ -149,12 +149,12 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// <summary>
     /// Loss function for training.
     /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
+    private ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// Optimizer for training.
     /// </summary>
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <summary>
     /// Cached encoder outputs for skip connections.
@@ -246,12 +246,10 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _useComplexMask = true;
         _kernelSize = 5;
         _stride = 2;
-        _lossFunction = new MeanSquaredErrorLoss<T>();
-
         OnnxModel = new OnnxModel<T>(modelPath, onnxOptions);
 
-        // Initialize optimizer (not used in ONNX mode but required for readonly field)
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default loss function (MSE is standard for speech enhancement)
+        _lossFunction = new MeanSquaredErrorLoss<T>();
     }
 
     /// <summary>
@@ -527,7 +525,7 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         BackwardNative(gradientTensor);
 
         // Update parameters via optimizer
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
     }

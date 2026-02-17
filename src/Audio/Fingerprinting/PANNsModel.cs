@@ -78,7 +78,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     private string[] _classLabels;
 
     // Optimizer for training
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <inheritdoc/>
     public string Name => $"PANNs-{_architectureType}";
@@ -154,8 +154,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _embeddingBias = Array.Empty<T>();
         _classLabels = GetDefaultClassLabels();
 
-        // Initialize optimizer (not used in ONNX mode but required for readonly field)
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // modelPath is used by OnnxModel above
     }
 
     /// <summary>
@@ -790,6 +789,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         var paramVector = new Vector<T>(allParams.ToArray());
 
         // Use optimizer to compute updated parameters
+        if (_optimizer is null) throw new InvalidOperationException("Optimizer not initialized. Use the training constructor.");
         var updatedParams = _optimizer.UpdateParameters(paramVector, gradientVector);
 
         // Distribute updated parameters back to weight arrays

@@ -40,7 +40,7 @@ public class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, IS
 
     private readonly CAMPlusPlusOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ConcurrentDictionary<string, SpeakerProfile<T>> _enrolledSpeakers;
     private bool _useNativeMode;
     private bool _disposed;
@@ -67,8 +67,8 @@ public class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, IS
         base.SampleRate = _options.SampleRate;
         EmbeddingDimension = _options.EmbeddingDim;
         DefaultThreshold = NumOps.FromDouble(_options.DefaultThreshold);
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _enrolledSpeakers = new ConcurrentDictionary<string, SpeakerProfile<T>>();
         InitializeLayers();
     }
@@ -231,7 +231,7 @@ public class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, IS
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 

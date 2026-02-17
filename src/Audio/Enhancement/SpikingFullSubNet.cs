@@ -39,7 +39,7 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private readonly SpikingFullSubNetOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ShortTimeFourierTransform<T> _stft;
     private Tensor<T>? _lastPhase;
     private Tensor<T>? _noiseProfile;
@@ -58,8 +58,8 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         _options = options ?? new SpikingFullSubNetOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         int nFft = NextPowerOfTwo(_options.FftSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
             windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
@@ -201,7 +201,7 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 

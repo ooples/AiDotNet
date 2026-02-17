@@ -44,7 +44,7 @@ public class HiFiGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
     private readonly HiFiGANOptions _options;
     public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -78,8 +78,8 @@ public class HiFiGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _options = options ?? new HiFiGANOptions();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
+        _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
@@ -185,7 +185,7 @@ public class HiFiGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
         var gt = Tensor<T>.FromVector(grad);
         for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
+        _optimizer?.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
