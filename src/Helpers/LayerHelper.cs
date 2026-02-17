@@ -21302,4 +21302,70 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Multimodal Batch 22
+
+    /// <summary>Creates default layers for Qwen2-Audio (audio encoder + adapter).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultQwen2AudioLayers(
+        int audioEncoderDim = 1280, int numAudioEncoderLayers = 32,
+        int numAudioEncoderHeads = 20, int lmHiddenDim = 3584,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Whisper-style audio encoder
+        for (int i = 0; i < numAudioEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(audioEncoderDim, audioEncoderDim, numAudioEncoderHeads);
+            yield return new LayerNormalizationLayer<T>(audioEncoderDim);
+            yield return new FullyConnectedLayer<T>(audioEncoderDim, audioEncoderDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(audioEncoderDim * 4, audioEncoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(audioEncoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Perceiver adapter: project audio to LM space
+        yield return new FullyConnectedLayer<T>(audioEncoderDim, lmHiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+        // Output projection
+        yield return new FullyConnectedLayer<T>(lmHiddenDim, lmHiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for SALMONN (dual encoder + Q-Former).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSALMONNLayers(
+        int speechEncoderDim = 1280, int audioEncoderDim = 768,
+        int qFormerDim = 768, int numQFormerLayers = 6,
+        int lmHiddenDim = 4096, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Speech encoder projection (Whisper output -> common dim)
+        yield return new FullyConnectedLayer<T>(speechEncoderDim, qFormerDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(qFormerDim);
+
+        // Audio encoder projection (BEATs output -> common dim)
+        yield return new FullyConnectedLayer<T>(audioEncoderDim, qFormerDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(qFormerDim);
+
+        // Window-level Q-Former layers
+        for (int i = 0; i < numQFormerLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(qFormerDim, qFormerDim, 12);
+            yield return new LayerNormalizationLayer<T>(qFormerDim);
+            yield return new FullyConnectedLayer<T>(qFormerDim, qFormerDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(qFormerDim * 4, qFormerDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(qFormerDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Project Q-Former output to LM input space
+        yield return new FullyConnectedLayer<T>(qFormerDim, lmHiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+
+        // Output projection
+        yield return new FullyConnectedLayer<T>(lmHiddenDim, lmHiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
 }
