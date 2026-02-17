@@ -334,6 +334,11 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             Console.WriteLine($"GlooSharp detection failed (enum mismatch): {ex.Message}");
             return false;
         }
+        catch (Exception ex) when (ex is SocketException or TimeoutException or IOException or NotSupportedException)
+        {
+            Console.WriteLine($"GlooSharp detection failed (transport error): {ex.Message}");
+            return false;
+        }
         finally
         {
             // Dispose the native context if we didn't successfully transfer ownership
@@ -579,9 +584,9 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             {
                 _nativeGlooContext.Dispose();
             }
-            catch (ObjectDisposedException ex)
+            catch (ObjectDisposedException)
             {
-                Console.WriteLine($"Warning: Gloo context already disposed: {ex.Message}");
+                // Already disposed, safe to ignore
             }
             catch (InvalidOperationException ex)
             {
@@ -796,7 +801,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             var lengthVector = PerformNativeGlooBroadcast(
                 new Vector<T>(new[] { NumOps.FromDouble(totalLength) }),
                 root);
-            totalLength = Convert.ToInt32(Convert.ToDouble(lengthVector[0]));
+            totalLength = (int)NumOps.ToDouble(lengthVector[0]);
 
             if (totalLength % _worldSize != 0)
             {
@@ -862,7 +867,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         var result = new double[vector.Length];
         for (int i = 0; i < vector.Length; i++)
         {
-            result[i] = Convert.ToDouble(vector[i]);
+            result[i] = NumOps.ToDouble(vector[i]);
         }
         return result;
     }
@@ -894,19 +899,20 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         var glooOp = MapToGlooReduceOp(operation == ReductionOperation.Average ? ReductionOperation.Sum : operation);
         _allReduceDelegate(_nativeGlooContext, doubleData, glooOp);
 
-        // Apply averaging if needed
-        if (operation == ReductionOperation.Average)
-        {
-            for (int i = 0; i < doubleData.Length; i++)
-            {
-                doubleData[i] /= _worldSize;
-            }
-        }
-
         // Write results back to the vector
         for (int i = 0; i < data.Length; i++)
         {
             data[i] = NumOps.FromDouble(doubleData[i]);
+        }
+
+        // Apply averaging using NumOps (consistent with TCP ring-allreduce path)
+        if (operation == ReductionOperation.Average)
+        {
+            T divisor = NumOps.FromDouble(_worldSize);
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = NumOps.Divide(data[i], divisor);
+            }
         }
     }
 
@@ -963,14 +969,21 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException("Native Gloo ReduceScatter invocation did not return a double[] result.");
         }
 
+        var result = DoubleArrayToVector(scattered);
+
+        // Apply averaging using NumOps (consistent with TCP ring-reduce-scatter path)
         if (operation == ReductionOperation.Average)
         {
-            for (int i = 0; i < scattered.Length; i++)
+            T divisor = NumOps.FromDouble(_worldSize);
+            var resultArray = result.ToArray();
+            for (int i = 0; i < resultArray.Length; i++)
             {
-                scattered[i] /= _worldSize;
+                resultArray[i] = NumOps.Divide(resultArray[i], divisor);
             }
+            result = new Vector<T>(resultArray);
         }
-        return DoubleArrayToVector(scattered);
+
+        return result;
     }
 
     #endregion
@@ -1221,7 +1234,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             // Receive chunk count first, then data
             // IMPORTANT: Read chunk size ONCE and store it - don't call ReceiveData twice!
             var chunkSizeData = ReceiveData(parentAbsolute, 1);
-            chunkSize = chunkSizeData[0] != null ? Convert.ToInt32(chunkSizeData[0]) : 0;
+            chunkSize = chunkSizeData[0] != null ? (int)NumOps.ToDouble(chunkSizeData[0]) : 0;
             myChunk = ReceiveData(parentAbsolute, chunkSize);
         }
 
@@ -1404,7 +1417,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             // Send data elements
             for (int i = 0; i < data.Length; i++)
             {
-                double value = Convert.ToDouble(data[i]);
+                double value = NumOps.ToDouble(data[i]);
                 writer.Write(value);
             }
             writer.Flush();
@@ -1480,7 +1493,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             // Send data elements
             for (int i = 0; i < data.Length; i++)
             {
-                double value = Convert.ToDouble(data[i]);
+                double value = NumOps.ToDouble(data[i]);
                 writer.Write(value);
             }
             writer.Flush();
