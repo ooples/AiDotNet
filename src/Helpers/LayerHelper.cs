@@ -20171,4 +20171,76 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Foundation Model Layers
+
+    /// <summary>
+    /// Creates default layers for self-supervised speech foundation models (HuBERT, WavLM, wav2vec 2.0).
+    /// Architecture: multi-layer CNN feature encoder → linear projection → N transformer encoder layers.
+    /// </summary>
+    /// <param name="featureEncoderDim">CNN feature encoder output dimension (default 512).</param>
+    /// <param name="hiddenDim">Transformer hidden dimension (default 768).</param>
+    /// <param name="numLayers">Number of transformer encoder layers (default 12).</param>
+    /// <param name="numAttentionHeads">Number of attention heads per layer (default 12).</param>
+    /// <param name="feedForwardDim">Feed-forward intermediate dimension (default 3072).</param>
+    /// <param name="dropoutRate">Dropout rate (default 0.1).</param>
+    /// <param name="maxSequenceLength">Maximum sequence length for attention (default 500, ~10 s at 50 Hz frame rate).</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultFoundationModelLayers(
+        int featureEncoderDim = 512,
+        int hiddenDim = 768,
+        int numLayers = 12,
+        int numAttentionHeads = 12,
+        int feedForwardDim = 3072,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 500)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
+
+        // --- CNN Feature Encoder ---
+        // 7-layer temporal CNN that processes raw waveform into latent representations.
+        // Stride pattern (paper): 5,2,2,2,2,2,2 reduces 16 kHz waveform to 50 Hz frame rate.
+        int[] cnnChannels = [512, 512, 512, 512, 512, featureEncoderDim, featureEncoderDim];
+        int prevDim = 1; // raw waveform is single-channel
+        foreach (int ch in cnnChannels)
+        {
+            yield return new DenseLayer<T>(prevDim, ch, geluActivation);
+            yield return new BatchNormalizationLayer<T>(ch);
+            prevDim = ch;
+        }
+
+        // --- Feature Projection ---
+        // Linear projection from CNN output to transformer hidden dimension.
+        if (featureEncoderDim != hiddenDim)
+        {
+            yield return new DenseLayer<T>(featureEncoderDim, hiddenDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+        }
+
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // --- Transformer Encoder ---
+        // N layers of multi-head self-attention + feed-forward with layer normalization.
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(
+                sequenceLength: maxSequenceLength,
+                embeddingDimension: hiddenDim,
+                headCount: numAttentionHeads);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            // Position-wise feed-forward network
+            yield return new DenseLayer<T>(hiddenDim, feedForwardDim, geluActivation);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            yield return new DenseLayer<T>(feedForwardDim, hiddenDim, identityActivation);
+
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
+    #endregion
 }
