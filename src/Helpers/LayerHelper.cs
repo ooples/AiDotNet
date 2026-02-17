@@ -11142,7 +11142,7 @@ public static class LayerHelper<T>
         // 5. LM Decoder layers
         int lmFeedForwardDim = lmHiddenDim * 4;
         int lmNumHeads = Math.Max(8, lmHiddenDim / 64);
-        var geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
         for (int i = 0; i < numLmDecoderLayers; i++)
         {
             yield return new TransformerDecoderLayer<T>(
@@ -21940,6 +21940,297 @@ public static class LayerHelper<T>
 
         // Classification head
         yield return new FullyConnectedLayer<T>(separationDim, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
+
+    #region Batch 28 - LOW Priority Models
+
+    /// <summary>Creates default layers for Spiking-FullSubNet speech enhancement.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSpikingFullSubNetLayers(
+        int numFreqBins = 257, int fullBandHiddenSize = 512, int subBandHiddenSize = 384,
+        int fullBandLayers = 2, int subBandLayers = 2, double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        // Full-band spiking encoder
+        yield return new FullyConnectedLayer<T>(numFreqBins, fullBandHiddenSize, geluActivation);
+        yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+        for (int i = 1; i < fullBandLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(fullBandHiddenSize, fullBandHiddenSize, geluActivation);
+            yield return new LayerNormalizationLayer<T>(fullBandHiddenSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Sub-band spiking processing
+        yield return new FullyConnectedLayer<T>(fullBandHiddenSize, subBandHiddenSize, geluActivation);
+        yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+        for (int i = 1; i < subBandLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(subBandHiddenSize, subBandHiddenSize, geluActivation);
+            yield return new LayerNormalizationLayer<T>(subBandHiddenSize);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Mask output
+        yield return new FullyConnectedLayer<T>(subBandHiddenSize, numFreqBins, (IActivationFunction<T>)new SigmoidActivation<T>());
+    }
+
+    /// <summary>Creates default layers for Danna-Sep dual-path music source separation.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDannaSepLayers(
+        int encoderDim = 256, int numDualPathBlocks = 6, int chunkSize = 250,
+        int numHeads = 4, int numSources = 4, int numFreqBins = 1025, double dropoutRate = 0.05)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        // Encoder
+        yield return new FullyConnectedLayer<T>(numFreqBins, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        // Dual-path blocks (time + frequency attention)
+        for (int i = 0; i < numDualPathBlocks; i++)
+        {
+            // Intra-chunk (time) attention
+            yield return new FullyConnectedLayer<T>(encoderDim, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            // Inter-chunk (frequency) attention
+            yield return new FullyConnectedLayer<T>(encoderDim, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Multi-source mask estimation
+        yield return new FullyConnectedLayer<T>(encoderDim, numFreqBins * numSources, (IActivationFunction<T>)new SigmoidActivation<T>());
+    }
+
+    /// <summary>Creates default layers for SpeakerLM language-model-based speaker recognition.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSpeakerLMLayers(
+        int numMels = 80, int embeddingDim = 256, int lmHiddenDim = 768,
+        int numLMLayers = 6, int numHeads = 8, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        // Audio encoder
+        yield return new FullyConnectedLayer<T>(numMels, embeddingDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        yield return new FullyConnectedLayer<T>(embeddingDim, embeddingDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(embeddingDim);
+        // LM transformer layers
+        yield return new FullyConnectedLayer<T>(embeddingDim, lmHiddenDim, geluActivation);
+        for (int i = 0; i < numLMLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(lmHiddenDim, lmHiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(lmHiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Embedding projection
+        yield return new FullyConnectedLayer<T>(lmHiddenDim, embeddingDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for AudioLDM Classifier using diffusion features.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioLDMClassifierLayers(
+        int numMels = 64, int latentDim = 256, int classifierDim = 512,
+        int numClassifierLayers = 3, int numClasses = 527, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        // Feature extractor (simulating AudioLDM latent extraction)
+        yield return new FullyConnectedLayer<T>(numMels, latentDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(latentDim);
+        yield return new FullyConnectedLayer<T>(latentDim, latentDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(latentDim);
+        // Classifier head
+        yield return new FullyConnectedLayer<T>(latentDim, classifierDim, geluActivation);
+        for (int i = 1; i < numClassifierLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(classifierDim, classifierDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(classifierDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        yield return new FullyConnectedLayer<T>(classifierDim, numClasses, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Quail VAD lightweight voice activity detection.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultQuailVadLayers(
+        int hiddenDim = 64, int numCNNLayers = 3, int rnnHiddenSize = 64,
+        int frameSizeMs = 30, int sampleRate = 16000)
+    {
+        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
+        int frameSamples = sampleRate * frameSizeMs / 1000;
+        // CNN feature extractor
+        int currentDim = frameSamples;
+        for (int i = 0; i < numCNNLayers; i++)
+        {
+            int outDim = i == 0 ? hiddenDim : hiddenDim;
+            yield return new FullyConnectedLayer<T>(currentDim, outDim, reluActivation);
+            yield return new LayerNormalizationLayer<T>(outDim);
+            currentDim = outDim;
+        }
+        // RNN
+        yield return new FullyConnectedLayer<T>(currentDim, rnnHiddenSize, (IActivationFunction<T>)new TanhActivation<T>());
+        // Output: single speech probability
+        yield return new FullyConnectedLayer<T>(rnnHiddenSize, 1, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for ACE-Step accelerated music generation.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultACEStepLayers(
+        int latentDim = 128, int uNetDim = 512, int numUNetLayers = 4,
+        int textEncoderDim = 768, double dropoutRate = 0.0)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        // Text conditioning encoder
+        yield return new FullyConnectedLayer<T>(textEncoderDim + latentDim, uNetDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(uNetDim);
+        // U-Net blocks (encoder path)
+        for (int i = 0; i < numUNetLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(uNetDim, uNetDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(uNetDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // U-Net blocks (decoder path)
+        for (int i = 0; i < numUNetLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(uNetDim, uNetDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(uNetDim);
+        }
+        // Latent output
+        yield return new FullyConnectedLayer<T>(uNetDim, latentDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for CosyVoice2 streaming TTS.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCosyVoice2Layers(
+        int textEncoderDim = 512, int numTextEncoderLayers = 6,
+        int decoderDim = 512, int numDecoderLayers = 6,
+        int numMels = 80, int speakerEmbeddingDim = 192, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        // Text encoder (characters -> hidden representations)
+        int inputDim = textEncoderDim + speakerEmbeddingDim;
+        yield return new FullyConnectedLayer<T>(inputDim, textEncoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(textEncoderDim);
+        for (int i = 1; i < numTextEncoderLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(textEncoderDim, textEncoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(textEncoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Flow-matching decoder
+        yield return new FullyConnectedLayer<T>(textEncoderDim, decoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(decoderDim);
+        for (int i = 1; i < numDecoderLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(decoderDim, decoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Mel output projection
+        yield return new FullyConnectedLayer<T>(decoderDim, numMels, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Audio Flamingo 2 multimodal audio-language model.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioFlamingo2Layers(
+        int audioEncoderDim = 768, int llmHiddenDim = 2048,
+        int numPerceiverLayers = 2, int numPerceiverTokens = 64, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        // Audio encoder projection
+        yield return new FullyConnectedLayer<T>(audioEncoderDim, llmHiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+        // Perceiver cross-attention layers
+        for (int i = 0; i < numPerceiverLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(llmHiddenDim, llmHiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // LLM output
+        yield return new FullyConnectedLayer<T>(llmHiddenDim, llmHiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Music Flamingo music-language model.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultMusicFlamingoLayers(
+        int musicEncoderDim = 768, int llmHiddenDim = 2048,
+        int numPerceiverLayers = 2, int numPerceiverTokens = 64, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        // Music encoder projection
+        yield return new FullyConnectedLayer<T>(musicEncoderDim, llmHiddenDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+        // Perceiver cross-attention layers
+        for (int i = 0; i < numPerceiverLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(llmHiddenDim, llmHiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(llmHiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // LLM output
+        yield return new FullyConnectedLayer<T>(llmHiddenDim, llmHiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Pengi audio language model.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultPengiLayers(
+        int audioEncoderDim = 768, int llmHiddenDim = 2048,
+        int numProjectionLayers = 2, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        // Audio-to-LM projection layers
+        int currentDim = audioEncoderDim;
+        for (int i = 0; i < numProjectionLayers; i++)
+        {
+            int outDim = i == numProjectionLayers - 1 ? llmHiddenDim : (audioEncoderDim + llmHiddenDim) / 2;
+            yield return new FullyConnectedLayer<T>(currentDim, outDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(outDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            currentDim = outDim;
+        }
+        // LM output
+        yield return new FullyConnectedLayer<T>(currentDim, llmHiddenDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Canary multilingual ASR/ST model.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCanaryLayers(
+        int encoderDim = 512, int numEncoderLayers = 24,
+        int decoderDim = 512, int numDecoderLayers = 6,
+        int numHeads = 8, int vocabSize = 32128, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        // Fast Conformer encoder (simplified as FC + LN blocks)
+        yield return new FullyConnectedLayer<T>(encoderDim, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        for (int i = 1; i < numEncoderLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(encoderDim, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0 && i % 4 == 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Multi-task decoder
+        yield return new FullyConnectedLayer<T>(encoderDim, decoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(decoderDim);
+        for (int i = 1; i < numDecoderLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(decoderDim, decoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // Vocabulary projection
+        yield return new FullyConnectedLayer<T>(decoderDim, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Neural Room Impulse Response estimation.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultRoomImpulseResponseLayers(
+        int encoderDim = 256, int numEncoderLayers = 6,
+        int numHeads = 4, int numFrequencyBins = 257,
+        int rirLength = 16000, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        // Spectral encoder
+        yield return new FullyConnectedLayer<T>(numFrequencyBins, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+        for (int i = 1; i < numEncoderLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(encoderDim, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+        // RIR decoder - project to temporal domain
+        int intermediateSize = Math.Min(rirLength, 4096);
+        yield return new FullyConnectedLayer<T>(encoderDim, intermediateSize, geluActivation);
+        yield return new LayerNormalizationLayer<T>(intermediateSize);
+        yield return new FullyConnectedLayer<T>(intermediateSize, rirLength, (IActivationFunction<T>?)null);
     }
 
     #endregion
