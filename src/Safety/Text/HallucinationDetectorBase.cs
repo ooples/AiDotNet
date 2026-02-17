@@ -49,7 +49,7 @@ public abstract class HallucinationDetectorBase<T> : TextSafetyModuleBase<T>, IH
                     Category = Enums.SafetyCategory.Hallucination,
                     Severity = Enums.SafetySeverity.Medium,
                     Confidence = 0.5,
-                    Description = $"Claim not found in reference text: \"{(claim.Length > 80 ? claim.Substring(0, 80) + "..." : claim)}\"",
+                    Description = $"Claim not found in reference text: \"{(claim.Length > 80 ? claim[..80] + "..." : claim)}\"",
                     RecommendedAction = Enums.SafetyAction.Warn,
                     SourceModule = ModuleName
                 });

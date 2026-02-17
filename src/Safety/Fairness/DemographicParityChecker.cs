@@ -76,7 +76,7 @@ public class DemographicParityChecker<T> : ITextSafetyModule<T>
     {
         "bad", "poor", "terrible", "negative", "lazy", "stupid", "incompetent",
         "unreliable", "criminal", "dangerous", "aggressive", "weak", "ignorant",
-        "inferior", "subordinate", "emotional", "irrational", "primitive"
+        "inferior", "subordinate", "primitive"
     };
 
     /// <inheritdoc />

@@ -198,8 +198,10 @@ public class NgramCopyrightDetector<T> : TextSafetyModuleBase<T>
             }
         }
 
-        // Convert from consecutive 4-gram matches to word count
-        return maxConsecutive > 0 ? maxConsecutive + 3 : 0; // +3 because each 4-gram covers 4 words
+        // Convert from count of consecutive 4-gram matches to total word count.
+        // Each 4-gram spans 4 words and consecutive 4-grams overlap by 3 words,
+        // so N consecutive matches represent N + 3 total words.
+        return maxConsecutive > 0 ? maxConsecutive + 3 : 0;
     }
 
     private static string[] TokenizeWords(string text)

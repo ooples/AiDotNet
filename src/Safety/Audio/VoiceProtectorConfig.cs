@@ -20,12 +20,17 @@ public class VoiceProtectorConfig
     /// <summary>Target sample rate. Default: 16000 Hz.</summary>
     public int? SampleRate { get; set; }
 
+    private static double Clamp(double value, double min, double max)
+    {
+        return Math.Max(min, Math.Min(max, value));
+    }
+
     internal double EffectiveStrength
     {
         get
         {
             double value = Strength ?? 0.3;
-            return Math.Max(0.0, Math.Min(1.0, value));
+            return Clamp(value, 0.0, 1.0);
         }
     }
 
