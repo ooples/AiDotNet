@@ -21426,4 +21426,132 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Speech Recognition Batch 24
+
+    /// <summary>Creates default layers for RNN-Transducer (encoder + prediction + joint).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultRNNTransducerLayers(
+        int encoderDim = 512, int numEncoderLayers = 12,
+        int numEncoderHeads = 8, int predictionDim = 512,
+        int numPredictionLayers = 2, int embeddingDim = 256,
+        int jointDim = 512, int numMels = 80, int vocabSize = 5000,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Conv subsampling front-end (mel features -> encoder dim)
+        yield return new FullyConnectedLayer<T>(numMels, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        // Conformer-style encoder layers
+        for (int i = 0; i < numEncoderLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numEncoderHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            yield return new FullyConnectedLayer<T>(encoderDim, encoderDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(encoderDim * 4, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Prediction network (LSTM-like via FC layers)
+        yield return new FullyConnectedLayer<T>(embeddingDim, predictionDim, geluActivation);
+        for (int i = 0; i < numPredictionLayers; i++)
+        {
+            yield return new FullyConnectedLayer<T>(predictionDim, predictionDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(predictionDim);
+        }
+
+        // Joint network (combines encoder + predictor)
+        yield return new FullyConnectedLayer<T>(encoderDim + predictionDim, jointDim, geluActivation);
+        yield return new FullyConnectedLayer<T>(jointDim, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Zipformer (U-Net-style multi-resolution encoder).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultZipformerLayers(
+        int[] encoderDims, int[] numLayersPerStack,
+        int[] numHeadsPerStack, int numMels = 80,
+        int vocabSize = 5000, double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        int numStacks = encoderDims.Length;
+
+        // Conv subsampling front-end
+        yield return new FullyConnectedLayer<T>(numMels, encoderDims[0], geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDims[0]);
+
+        // U-Net encoder stacks (each at different temporal resolution)
+        int prevDim = encoderDims[0];
+        for (int s = 0; s < numStacks; s++)
+        {
+            int dim = encoderDims[s];
+            int heads = s < numHeadsPerStack.Length ? numHeadsPerStack[s] : 4;
+            int layers = s < numLayersPerStack.Length ? numLayersPerStack[s] : 2;
+
+            // Dimension projection between stacks
+            if (dim != prevDim)
+            {
+                yield return new FullyConnectedLayer<T>(prevDim, dim, geluActivation);
+                yield return new LayerNormalizationLayer<T>(dim);
+            }
+
+            // Conformer-style layers within each stack
+            for (int i = 0; i < layers; i++)
+            {
+                yield return new MultiHeadAttentionLayer<T>(dim, dim, heads);
+                yield return new LayerNormalizationLayer<T>(dim);
+                yield return new FullyConnectedLayer<T>(dim, dim * 4, geluActivation);
+                yield return new FullyConnectedLayer<T>(dim * 4, dim, geluActivation);
+                yield return new LayerNormalizationLayer<T>(dim);
+                if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            }
+
+            prevDim = dim;
+        }
+
+        // CTC output projection
+        yield return new FullyConnectedLayer<T>(prevDim, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Fast Conformer (8x downsampled Conformer).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFastConformerLayers(
+        int encoderDim = 512, int numLayers = 17,
+        int numHeads = 8, int feedForwardDim = 2048,
+        int convKernelSize = 9, int downsampleFactor = 8,
+        int numMels = 80, int vocabSize = 5000,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // 8x depthwise-separable convolution downsampling front-end
+        yield return new FullyConnectedLayer<T>(numMels, encoderDim / 2, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim / 2);
+        yield return new FullyConnectedLayer<T>(encoderDim / 2, encoderDim, geluActivation);
+        yield return new LayerNormalizationLayer<T>(encoderDim);
+
+        // Conformer encoder layers (macaron-style: FF / Attention / Conv / FF)
+        for (int i = 0; i < numLayers; i++)
+        {
+            // First half-step feed-forward
+            yield return new FullyConnectedLayer<T>(encoderDim, feedForwardDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(feedForwardDim, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            // Multi-head self-attention
+            yield return new MultiHeadAttentionLayer<T>(encoderDim, encoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            // Second half-step feed-forward
+            yield return new FullyConnectedLayer<T>(encoderDim, feedForwardDim, geluActivation);
+            yield return new FullyConnectedLayer<T>(feedForwardDim, encoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(encoderDim);
+
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // CTC output projection
+        yield return new FullyConnectedLayer<T>(encoderDim, vocabSize, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
 }
