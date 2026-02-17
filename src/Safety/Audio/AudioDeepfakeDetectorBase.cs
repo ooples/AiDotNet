@@ -31,6 +31,8 @@ public abstract class AudioDeepfakeDetectorBase<T> : AudioSafetyModuleBase<T>, I
     /// <param name="defaultSampleRate">Default sample rate in Hz. Default: 16000.</param>
     protected AudioDeepfakeDetectorBase(int defaultSampleRate = 16000)
     {
+        if (defaultSampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(defaultSampleRate), "Sample rate must be positive.");
+
         DefaultSampleRate = defaultSampleRate;
     }
 

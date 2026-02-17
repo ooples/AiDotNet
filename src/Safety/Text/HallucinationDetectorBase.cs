@@ -24,9 +24,39 @@ public abstract class HallucinationDetectorBase<T> : TextSafetyModuleBase<T>, IH
     /// <inheritdoc />
     public virtual IReadOnlyList<SafetyFinding> EvaluateAgainstReference(string generatedText, string referenceText)
     {
-        // Default implementation delegates to standard text evaluation.
-        // Subclasses that support reference-based checking should override this.
-        return EvaluateText(generatedText);
+        if (string.IsNullOrWhiteSpace(referenceText))
+        {
+            // No reference available — fall back to standard evaluation
+            return EvaluateText(generatedText);
+        }
+
+        // Default reference-based evaluation: extract claims from generated text
+        // and check whether they appear in the reference text.
+        var findings = new List<SafetyFinding>();
+        var claims = ExtractClaims(generatedText);
+        string referenceLower = referenceText.ToLowerInvariant();
+
+        foreach (string claim in claims)
+        {
+            if (claim.Length < 10) continue; // Skip very short fragments
+
+            // Simple reference check: if the claim text doesn't appear in the reference,
+            // it may be hallucinated. Subclasses should override with semantic matching.
+            if (!referenceLower.Contains(claim.ToLowerInvariant()))
+            {
+                findings.Add(new SafetyFinding
+                {
+                    Category = Enums.SafetyCategory.Hallucination,
+                    Severity = Enums.SafetySeverity.Medium,
+                    Confidence = 0.5,
+                    Description = $"Claim not found in reference text: \"{(claim.Length > 80 ? claim.Substring(0, 80) + "..." : claim)}\"",
+                    RecommendedAction = Enums.SafetyAction.Warn,
+                    SourceModule = ModuleName
+                });
+            }
+        }
+
+        return findings.Count > 0 ? findings : EvaluateText(generatedText);
     }
 
     /// <summary>
@@ -36,6 +66,12 @@ public abstract class HallucinationDetectorBase<T> : TextSafetyModuleBase<T>, IH
     {
         if (string.IsNullOrWhiteSpace(text)) return Array.Empty<string>();
 
-        return text.Split(new[] { '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
+        var raw = text.Split(new[] { '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
+        var trimmed = new string[raw.Length];
+        for (int i = 0; i < raw.Length; i++)
+        {
+            trimmed[i] = raw[i].Trim();
+        }
+        return trimmed;
     }
 }

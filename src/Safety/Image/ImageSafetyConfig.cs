@@ -12,20 +12,20 @@ namespace AiDotNet.Safety.Image;
 public class ImageSafetyConfig
 {
     /// <summary>NSFW detection threshold (0.0-1.0). Default: 0.5.</summary>
-    public double? NSFWThreshold { get; set; }
+    public double? NsfwThreshold { get; set; }
 
     /// <summary>Violence detection threshold (0.0-1.0). Default: 0.5.</summary>
     public double? ViolenceThreshold { get; set; }
 
     /// <summary>Whether to detect CSAM content. Default: true (always recommended).</summary>
-    public bool? CSAMDetection { get; set; }
+    public bool? CsamDetection { get; set; }
 
     /// <summary>Classifier type to use. Default: Ensemble.</summary>
     public ImageClassifierType? ClassifierType { get; set; }
 
-    internal double EffectiveNSFWThreshold => NSFWThreshold ?? 0.5;
+    internal double EffectiveNsfwThreshold => NsfwThreshold ?? 0.5;
     internal double EffectiveViolenceThreshold => ViolenceThreshold ?? 0.5;
-    internal bool EffectiveCSAMDetection => CSAMDetection ?? true;
+    internal bool EffectiveCsamDetection => CsamDetection ?? true;
     internal ImageClassifierType EffectiveClassifierType => ClassifierType ?? ImageClassifierType.Ensemble;
 }
 

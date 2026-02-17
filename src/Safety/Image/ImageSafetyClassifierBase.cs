@@ -1,5 +1,5 @@
+using AiDotNet.Enums;
 using AiDotNet.Models;
-using AiDotNet.Safety.Image;
 
 namespace AiDotNet.Safety.Image;
 
@@ -36,5 +36,5 @@ public abstract class ImageSafetyClassifierBase<T> : ImageSafetyModuleBase<T>, I
     }
 
     /// <inheritdoc />
-    public abstract IReadOnlyDictionary<string, double> GetCategoryScores(Tensor<T> image);
+    public abstract IReadOnlyDictionary<SafetyCategory, double> GetCategoryScores(Tensor<T> image);
 }

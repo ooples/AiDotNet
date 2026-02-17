@@ -89,6 +89,11 @@ public class RuleBasedToxicityDetector<T> : TextSafetyModuleBase<T>
                         continue;
                     }
 
+                    // Use the original text for the excerpt, not the lowercased version
+                    string excerpt = match.Index + match.Length <= text.Length
+                        ? text.Substring(match.Index, match.Length)
+                        : match.Value;
+
                     findings.Add(new SafetyFinding
                     {
                         Category = category,
@@ -99,7 +104,7 @@ public class RuleBasedToxicityDetector<T> : TextSafetyModuleBase<T>
                         SourceModule = ModuleName,
                         SpanStart = match.Index,
                         SpanEnd = match.Index + match.Length,
-                        Excerpt = match.Value
+                        Excerpt = excerpt
                     });
                 }
             }

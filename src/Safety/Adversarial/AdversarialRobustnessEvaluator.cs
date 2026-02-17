@@ -104,6 +104,12 @@ public class AdversarialRobustnessEvaluator<T> : ITextSafetyModule<T>
     /// <param name="threshold">Detection threshold (0-1). Default: 0.4.</param>
     public AdversarialRobustnessEvaluator(double threshold = 0.4)
     {
+        if (threshold < 0 || threshold > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(threshold),
+                "Threshold must be between 0 and 1.");
+        }
+
         _threshold = threshold;
     }
 

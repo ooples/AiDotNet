@@ -1,5 +1,4 @@
 using AiDotNet.Models;
-using AiDotNet.Safety.Image;
 
 namespace AiDotNet.Safety.Image;
 
@@ -32,6 +31,12 @@ public abstract class DeepfakeDetectorBase<T> : ImageSafetyModuleBase<T>, IDeepf
     /// <param name="threshold">The detection threshold (0.0 to 1.0). Default: 0.5.</param>
     protected DeepfakeDetectorBase(double threshold = 0.5)
     {
+        if (threshold < 0 || threshold > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(threshold),
+                "Threshold must be between 0 and 1.");
+        }
+
         Threshold = threshold;
     }
 

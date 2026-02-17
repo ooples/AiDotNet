@@ -86,6 +86,12 @@ public class IntersectionalBiasDetector<T> : ITextSafetyModule<T>
     /// <param name="threshold">Detection threshold for bias findings (0.0-1.0). Default: 0.3.</param>
     public IntersectionalBiasDetector(double threshold = 0.3)
     {
+        if (threshold < 0 || threshold > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(threshold),
+                "Threshold must be between 0 and 1.");
+        }
+
         _threshold = threshold;
     }
 

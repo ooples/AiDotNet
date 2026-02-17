@@ -20,9 +20,25 @@ public class VoiceProtectorConfig
     /// <summary>Target sample rate. Default: 16000 Hz.</summary>
     public int? SampleRate { get; set; }
 
-    internal double EffectiveStrength => Strength ?? 0.3;
+    internal double EffectiveStrength
+    {
+        get
+        {
+            double value = Strength ?? 0.3;
+            return Math.Max(0.0, Math.Min(1.0, value));
+        }
+    }
+
     internal VoiceProtectionType EffectiveTechnique => Technique ?? VoiceProtectionType.Perturbation;
-    internal int EffectiveSampleRate => SampleRate ?? 16000;
+
+    internal int EffectiveSampleRate
+    {
+        get
+        {
+            int value = SampleRate ?? 16000;
+            return value > 0 ? value : 16000;
+        }
+    }
 }
 
 /// <summary>

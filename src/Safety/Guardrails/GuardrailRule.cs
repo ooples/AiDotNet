@@ -105,7 +105,7 @@ public class GuardrailRule
                 return EvaluateMinLength(text);
 
             case GuardrailConditionType.Custom:
-                return CustomPredicate?.Invoke(text) ?? false;
+                return EvaluateCustom(text);
 
             default:
                 return false;
@@ -117,6 +117,7 @@ public class GuardrailRule
         var comparison = CaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         foreach (string pattern in Patterns)
         {
+            if (string.IsNullOrEmpty(pattern)) continue;
             if (text.Contains(pattern, comparison)) return true;
         }
         return false;
@@ -127,6 +128,7 @@ public class GuardrailRule
         var comparison = CaseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         foreach (string pattern in Patterns)
         {
+            if (string.IsNullOrEmpty(pattern)) continue;
             if (!text.Contains(pattern, comparison)) return false;
         }
         return Patterns.Length > 0;
@@ -134,7 +136,7 @@ public class GuardrailRule
 
     private bool EvaluateRegex(string text)
     {
-        if (Patterns.Length == 0) return false;
+        if (Patterns.Length == 0 || string.IsNullOrEmpty(Patterns[0])) return false;
         try
         {
             var options = CaseInsensitive
@@ -143,8 +145,14 @@ public class GuardrailRule
             return System.Text.RegularExpressions.Regex.IsMatch(
                 text, Patterns[0], options, TimeSpan.FromMilliseconds(100));
         }
-        catch
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
         {
+            // ReDoS protection: treat timeout as no match
+            return false;
+        }
+        catch (ArgumentException)
+        {
+            // Invalid regex pattern: treat as no match
             return false;
         }
     }
@@ -167,6 +175,20 @@ public class GuardrailRule
             return text.Length < minLength;
         }
         return false;
+    }
+
+    private bool EvaluateCustom(string text)
+    {
+        if (CustomPredicate is null) return false;
+        try
+        {
+            return CustomPredicate(text);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or FormatException or TimeoutException)
+        {
+            // Custom predicates may fail; treat as no match rather than crashing the pipeline
+            return false;
+        }
     }
 }
 

@@ -87,6 +87,12 @@ public class RepresentationalBiasDetector<T> : ITextSafetyModule<T>
         double disparityThreshold = 0.3,
         string[]? protectedAttributes = null)
     {
+        if (disparityThreshold < 0 || disparityThreshold > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(disparityThreshold),
+                "Disparity threshold must be between 0 and 1.");
+        }
+
         _disparityThreshold = disparityThreshold;
         _protectedAttributes = protectedAttributes ?? new[] { "gender", "race" };
     }

@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 
@@ -31,6 +32,6 @@ public interface IImageSafetyClassifier<T> : IImageSafetyModule<T>
     /// Gets per-category safety scores for the given image.
     /// </summary>
     /// <param name="image">The image tensor to classify.</param>
-    /// <returns>A dictionary mapping safety category names to scores (0.0 = safe, 1.0 = maximum risk).</returns>
-    IReadOnlyDictionary<string, double> GetCategoryScores(Tensor<T> image);
+    /// <returns>A dictionary mapping safety categories to scores (0.0 = safe, 1.0 = maximum risk).</returns>
+    IReadOnlyDictionary<SafetyCategory, double> GetCategoryScores(Tensor<T> image);
 }

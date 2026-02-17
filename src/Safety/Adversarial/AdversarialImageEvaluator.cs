@@ -49,6 +49,12 @@ public class AdversarialImageEvaluator<T> : IImageSafetyModule<T>
     /// <param name="threshold">Detection threshold (0-1). Default: 0.5.</param>
     public AdversarialImageEvaluator(double threshold = 0.5)
     {
+        if (threshold < 0 || threshold > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(threshold),
+                "Threshold must be between 0 and 1.");
+        }
+
         _threshold = threshold;
     }
 
@@ -67,7 +73,7 @@ public class AdversarialImageEvaluator<T> : IImageSafetyModule<T>
         double histScore = ComputeHistogramAnomalyScore(span);
 
         // 3. Feature squeezing detection (compare original with bit-depth-reduced version)
-        double squeezingScore = ComputeFeeSqueezingScore(span);
+        double squeezingScore = ComputeFeatureSqueezingScore(span);
 
         double combinedScore = 0.40 * hfScore + 0.30 * histScore + 0.30 * squeezingScore;
 
@@ -194,7 +200,7 @@ public class AdversarialImageEvaluator<T> : IImageSafetyModule<T>
         return 0.6 * smoothnessScore + 0.4 * gapScore;
     }
 
-    private static double ComputeFeeSqueezingScore(ReadOnlySpan<T> span)
+    private static double ComputeFeatureSqueezingScore(ReadOnlySpan<T> span)
     {
         // Feature squeezing: reduce bit depth and measure L2 distance
         // Adversarial perturbations are removed by bit-depth reduction,

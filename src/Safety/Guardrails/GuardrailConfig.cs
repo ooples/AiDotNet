@@ -13,6 +13,12 @@ namespace AiDotNet.Safety.Guardrails;
 /// </remarks>
 public class GuardrailConfig
 {
+    /// <summary>Default maximum input length in characters.</summary>
+    internal const int DefaultMaxInputLength = 100_000;
+
+    /// <summary>Default maximum output length in characters.</summary>
+    internal const int DefaultMaxOutputLength = 100_000;
+
     /// <summary>Maximum allowed input length in characters. Default: 100000.</summary>
     public int? MaxInputLength { get; set; }
 
@@ -25,8 +31,8 @@ public class GuardrailConfig
     /// <summary>Default action for guardrail violations. Default: Block.</summary>
     public SafetyAction? DefaultAction { get; set; }
 
-    internal int EffectiveMaxInputLength => MaxInputLength ?? 100000;
-    internal int EffectiveMaxOutputLength => MaxOutputLength ?? 100000;
+    internal int EffectiveMaxInputLength => MaxInputLength ?? DefaultMaxInputLength;
+    internal int EffectiveMaxOutputLength => MaxOutputLength ?? DefaultMaxOutputLength;
     internal string[] EffectiveTopicRestrictions => TopicRestrictions ?? Array.Empty<string>();
     internal SafetyAction EffectiveDefaultAction => DefaultAction ?? SafetyAction.Block;
 }

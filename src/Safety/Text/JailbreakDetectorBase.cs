@@ -29,6 +29,12 @@ public abstract class JailbreakDetectorBase<T> : TextSafetyModuleBase<T>, IJailb
     /// <param name="sensitivity">Detection sensitivity (0.0 to 1.0). Default: 0.5.</param>
     protected JailbreakDetectorBase(double sensitivity = 0.5)
     {
+        if (sensitivity < 0 || sensitivity > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(sensitivity),
+                "Sensitivity must be between 0 and 1.");
+        }
+
         Sensitivity = sensitivity;
     }
 

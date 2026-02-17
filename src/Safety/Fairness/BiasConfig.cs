@@ -23,7 +23,8 @@ public class BiasConfig
     /// <summary>Whether to detect stereotypical associations. Default: true.</summary>
     public bool? StereotypeDetection { get; set; }
 
-    internal string[] EffectiveProtectedAttributes => ProtectedAttributes ?? new[] { "gender", "race", "age" };
+    private static readonly string[] DefaultProtectedAttributes = new[] { "gender", "race", "age" };
+    internal string[] EffectiveProtectedAttributes => ProtectedAttributes ?? DefaultProtectedAttributes;
     internal double EffectiveDisparityThreshold => DisparityThreshold ?? 0.2;
     internal bool EffectiveIntersectionalAnalysis => IntersectionalAnalysis ?? false;
     internal bool EffectiveStereotypeDetection => StereotypeDetection ?? true;

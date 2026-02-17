@@ -45,6 +45,12 @@ public class EnsembleImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
     /// <param name="threshold">Ensemble threshold (0-1). Default: 0.6.</param>
     public EnsembleImageSafetyClassifier(double threshold = 0.6)
     {
+        if (threshold < 0 || threshold > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(threshold),
+                "Threshold must be between 0 and 1.");
+        }
+
         _threshold = threshold;
         _classifiers = new IImageSafetyModule<T>[]
         {
@@ -66,9 +72,21 @@ public class EnsembleImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         double[] weights,
         double threshold = 0.6)
     {
+        if (classifiers is null) throw new ArgumentNullException(nameof(classifiers));
+        if (weights is null) throw new ArgumentNullException(nameof(weights));
+        if (classifiers.Length == 0) throw new ArgumentException("At least one classifier is required.", nameof(classifiers));
         if (classifiers.Length != weights.Length)
         {
             throw new ArgumentException("Number of classifiers must match number of weights.");
+        }
+        if (threshold < 0 || threshold > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(threshold),
+                "Threshold must be between 0 and 1.");
+        }
+        for (int i = 0; i < classifiers.Length; i++)
+        {
+            if (classifiers[i] is null) throw new ArgumentException($"Classifier at index {i} is null.", nameof(classifiers));
         }
 
         _classifiers = classifiers;

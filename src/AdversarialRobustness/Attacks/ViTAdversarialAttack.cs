@@ -57,6 +57,10 @@ public class ViTAdversarialAttack<T, TInput, TOutput> : AdversarialAttackBase<T,
         int numAttackPatches = 4,
         int numSteps = 10) : base(options)
     {
+        if (patchSize <= 0) throw new ArgumentOutOfRangeException(nameof(patchSize), "Patch size must be positive.");
+        if (numAttackPatches <= 0) throw new ArgumentOutOfRangeException(nameof(numAttackPatches), "Number of attack patches must be positive.");
+        if (numSteps <= 0) throw new ArgumentOutOfRangeException(nameof(numSteps), "Number of steps must be positive.");
+
         _patchSize = patchSize;
         _numAttackPatches = numAttackPatches;
         _numSteps = numSteps;
@@ -76,8 +80,9 @@ public class ViTAdversarialAttack<T, TInput, TOutput> : AdversarialAttackBase<T,
             return (TInput)(object)adversarial;
         }
 
-        // Fallback: apply uniform random perturbation within epsilon
-        return input;
+        // Non-vector input types are not supported for ViT attacks
+        throw new NotSupportedException(
+            $"ViT adversarial attack requires Vector<{typeof(T).Name}> input, but received {typeof(TInput).Name}.");
     }
 
     /// <inheritdoc />
@@ -89,7 +94,8 @@ public class ViTAdversarialAttack<T, TInput, TOutput> : AdversarialAttackBase<T,
             return (TInput)(object)engine.Subtract<T>(advVec, origVec);
         }
 
-        return original;
+        throw new NotSupportedException(
+            $"ViT adversarial attack requires Vector<{typeof(T).Name}> input for perturbation calculation.");
     }
 
     private Vector<T> GeneratePatchAdversarial(

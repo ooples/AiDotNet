@@ -1,5 +1,4 @@
 using AiDotNet.Safety.Text;
-using AiDotNet.Safety.Compliance;
 
 namespace AiDotNet.Safety.Compliance;
 
@@ -31,7 +30,7 @@ public abstract class ComplianceModuleBase<T> : TextSafetyModuleBase<T>, ICompli
     /// <param name="config">The safety configuration to evaluate.</param>
     protected ComplianceModuleBase(SafetyConfig config)
     {
-        Config = config;
+        Config = config ?? throw new ArgumentNullException(nameof(config));
     }
 
     /// <inheritdoc />

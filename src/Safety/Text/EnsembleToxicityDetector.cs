@@ -70,9 +70,21 @@ public class EnsembleToxicityDetector<T> : TextSafetyModuleBase<T>
         double[] weights,
         double threshold = 0.5)
     {
+        if (detectors is null) throw new ArgumentNullException(nameof(detectors));
+        if (weights is null) throw new ArgumentNullException(nameof(weights));
+        if (detectors.Length == 0) throw new ArgumentException("At least one detector is required.", nameof(detectors));
         if (detectors.Length != weights.Length)
         {
             throw new ArgumentException("Number of detectors must match number of weights.");
+        }
+        if (threshold < 0 || threshold > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(threshold),
+                "Threshold must be between 0 and 1.");
+        }
+        for (int i = 0; i < detectors.Length; i++)
+        {
+            if (detectors[i] is null) throw new ArgumentException($"Detector at index {i} is null.", nameof(detectors));
         }
 
         _threshold = threshold;

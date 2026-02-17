@@ -37,6 +37,8 @@ public abstract class VoiceProtectorBase<T> : IVoiceProtector<T>
     /// <param name="defaultSampleRate">Default sample rate in Hz. Default: 16000.</param>
     protected VoiceProtectorBase(int defaultSampleRate = 16000)
     {
+        if (defaultSampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(defaultSampleRate), "Sample rate must be positive.");
+
         DefaultSampleRate = defaultSampleRate;
     }
 
@@ -52,6 +54,8 @@ public abstract class VoiceProtectorBase<T> : IVoiceProtector<T>
     /// <inheritdoc />
     public virtual IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
+        if (content is null) throw new ArgumentNullException(nameof(content));
+
         // Voice protectors don't produce findings — they modify audio.
         return Array.Empty<SafetyFinding>();
     }

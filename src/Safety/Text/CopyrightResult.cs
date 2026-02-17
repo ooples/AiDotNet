@@ -14,21 +14,3 @@ public class CopyrightResult
     /// <summary>Detected overlapping segments with known copyrighted content.</summary>
     public IReadOnlyList<CopyrightMatch> Matches { get; init; } = Array.Empty<CopyrightMatch>();
 }
-
-/// <summary>
-/// A match between generated text and potentially copyrighted content.
-/// </summary>
-public class CopyrightMatch
-{
-    /// <summary>The matching text segment.</summary>
-    public string MatchedText { get; init; } = string.Empty;
-
-    /// <summary>Start character offset in the generated text.</summary>
-    public int StartIndex { get; init; }
-
-    /// <summary>Similarity score (0.0-1.0).</summary>
-    public double Similarity { get; init; }
-
-    /// <summary>Source of the potential copyright match, if known.</summary>
-    public string Source { get; init; } = string.Empty;
-}

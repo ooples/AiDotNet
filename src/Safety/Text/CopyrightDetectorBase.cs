@@ -29,6 +29,9 @@ public abstract class CopyrightDetectorBase<T> : TextSafetyModuleBase<T>, ICopyr
     /// <returns>A set of unique n-grams found in the text.</returns>
     protected static HashSet<string> ExtractNgrams(string text, int n)
     {
+        if (text is null) throw new ArgumentNullException(nameof(text));
+        if (n <= 0) throw new ArgumentOutOfRangeException(nameof(n), "N-gram size must be positive.");
+
         var ngrams = new HashSet<string>();
         if (text.Length < n) return ngrams;
 

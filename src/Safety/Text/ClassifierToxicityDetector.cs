@@ -52,6 +52,12 @@ public class ClassifierToxicityDetector<T> : TextSafetyModuleBase<T>
                 "Threshold must be between 0 and 1.");
         }
 
+        if (featureDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(featureDim),
+                "Feature dimension must be positive.");
+        }
+
         _threshold = NumOps.FromDouble(threshold);
         _featureDim = featureDim;
         _classifiers = BuildClassifiers();
@@ -218,21 +224,23 @@ public class ClassifierToxicityDetector<T> : TextSafetyModuleBase<T>
                 }
             }
 
-            classifiers[c] = new CategoryClassifier
-            {
-                Category = category,
-                Weights = weights,
-                Bias = bias
-            };
+            classifiers[c] = new CategoryClassifier(category, weights, bias);
         }
 
         return classifiers;
     }
 
-    private struct CategoryClassifier
+    private readonly struct CategoryClassifier
     {
-        public SafetyCategory Category;
-        public Vector<T> Weights;
-        public T Bias;
+        public readonly SafetyCategory Category;
+        public readonly Vector<T> Weights;
+        public readonly T Bias;
+
+        public CategoryClassifier(SafetyCategory category, Vector<T> weights, T bias)
+        {
+            Category = category;
+            Weights = weights;
+            Bias = bias;
+        }
     }
 }

@@ -55,6 +55,12 @@ public class EmbeddingToxicityDetector<T> : TextSafetyModuleBase<T>
                 "Threshold must be between 0 and 1.");
         }
 
+        if (embeddingDim <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(embeddingDim),
+                "Embedding dimension must be positive.");
+        }
+
         _threshold = NumOps.FromDouble(threshold);
         _embeddingDim = embeddingDim;
 
@@ -224,61 +230,47 @@ public class EmbeddingToxicityDetector<T> : TextSafetyModuleBase<T>
     {
         return new List<ToxicConcept>
         {
-            new()
+            new(SafetyCategory.ViolenceThreat, new[]
             {
-                Category = SafetyCategory.ViolenceThreat,
-                Phrases = new[]
-                {
-                    "i will hurt you", "kill you", "make you suffer",
-                    "destroy you", "find where you live", "physical harm",
-                    "beat you up", "coming after you"
-                }
-            },
-            new()
+                "i will hurt you", "kill you", "make you suffer",
+                "destroy you", "find where you live", "physical harm",
+                "beat you up", "coming after you"
+            }),
+            new(SafetyCategory.HateSpeech, new[]
             {
-                Category = SafetyCategory.HateSpeech,
-                Phrases = new[]
-                {
-                    "all of them are", "those people are inferior",
-                    "should be removed from", "don't belong here",
-                    "subhuman", "vermin", "parasites", "infestation"
-                }
-            },
-            new()
+                "all of them are", "those people are inferior",
+                "should be removed from", "don't belong here",
+                "subhuman", "vermin", "parasites", "infestation"
+            }),
+            new(SafetyCategory.Harassment, new[]
             {
-                Category = SafetyCategory.Harassment,
-                Phrases = new[]
-                {
-                    "you are worthless", "nobody likes you",
-                    "you should be ashamed", "ugly and stupid",
-                    "waste of space", "pathetic loser"
-                }
-            },
-            new()
+                "you are worthless", "nobody likes you",
+                "you should be ashamed", "ugly and stupid",
+                "waste of space", "pathetic loser"
+            }),
+            new(SafetyCategory.ViolenceSelfHarm, new[]
             {
-                Category = SafetyCategory.ViolenceSelfHarm,
-                Phrases = new[]
-                {
-                    "hurt yourself", "end it all", "not worth living",
-                    "better off without you", "no reason to go on"
-                }
-            },
-            new()
+                "hurt yourself", "end it all", "not worth living",
+                "better off without you", "no reason to go on"
+            }),
+            new(SafetyCategory.SocialEngineering, new[]
             {
-                Category = SafetyCategory.SocialEngineering,
-                Phrases = new[]
-                {
-                    "send me your password", "click this link urgently",
-                    "verify your account immediately", "your account will be suspended",
-                    "wire transfer urgent", "act now or lose access"
-                }
-            }
+                "send me your password", "click this link urgently",
+                "verify your account immediately", "your account will be suspended",
+                "wire transfer urgent", "act now or lose access"
+            })
         };
     }
 
-    private struct ToxicConcept
+    private readonly struct ToxicConcept
     {
-        public SafetyCategory Category;
-        public string[] Phrases;
+        public readonly SafetyCategory Category;
+        public readonly string[] Phrases;
+
+        public ToxicConcept(SafetyCategory category, string[] phrases)
+        {
+            Category = category;
+            Phrases = phrases;
+        }
     }
 }
