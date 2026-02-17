@@ -649,6 +649,26 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal ISafetyFilter<T>? SafetyFilter { get; private set; }
 
     /// <summary>
+    /// Gets the composable safety pipeline for content safety evaluation.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The safety pipeline provides modular content safety checks across text, image,
+    /// audio, and video modalities. It is configured via
+    /// <c>AiModelBuilder.ConfigureSafety()</c> and constructed automatically during build.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Use this to run safety checks on arbitrary content:
+    /// <code>
+    /// var report = result.SafetyPipeline?.EvaluateText("some user input");
+    /// if (report != null &amp;&amp; !report.IsSafe)
+    ///     Console.WriteLine($"Unsafe: {report.HighestSeverity}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyPipeline<T>? SafetyPipeline { get; internal set; }
+
+    /// <summary>
     /// Gets the reasoning configuration for advanced Chain-of-Thought, Tree-of-Thoughts, and Self-Consistency reasoning.
     /// </summary>
     /// <value>Reasoning configuration for advanced reasoning capabilities, or null if not configured.</value>
@@ -1408,6 +1428,40 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// Evaluates text content for safety using the configured safety pipeline.
+    /// </summary>
+    /// <param name="text">The text to evaluate.</param>
+    /// <returns>A safety report with findings, or a safe report if no pipeline is configured.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Use this to check if text content is safe before or after processing:
+    /// <code>
+    /// var report = result.EvaluateTextSafety("some user input");
+    /// if (!report.IsSafe)
+    ///     Console.WriteLine($"Blocked: {report.HighestSeverity}");
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Safety.SafetyReport EvaluateTextSafety(string text)
+    {
+        if (SafetyPipeline == null)
+        {
+            return AiDotNet.Safety.SafetyReport.Safe(Array.Empty<string>());
+        }
+
+        return SafetyPipeline.EvaluateText(text);
+    }
+
+    /// <summary>
+    /// Gets the overall safety configuration report for the current pipeline.
+    /// </summary>
+    /// <returns>The safety config, or null if safety was not configured.</returns>
+    public AiDotNet.Safety.SafetyConfig? GetSafetyConfig()
+    {
+        return SafetyPipeline?.Config;
+    }
+
+    /// <summary>
     /// Makes predictions using the model on the provided input data.
     /// </summary>
     /// <param name="newData">A matrix of input features, where each row represents an observation and each column represents a feature.</param>
@@ -1415,10 +1469,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <exception cref="InvalidOperationException">Thrown when the Model or Normalizer is not initialized.</exception>
     /// <remarks>
     /// <para>
-    /// This method makes predictions using the model on the provided input data. It first normalizes the input data using 
-    /// the normalizer from the NormalizationInfo property, then passes the normalized data to the model's Predict method, 
-    /// and finally denormalizes the model's outputs to obtain the final predictions. This process ensures that the input 
-    /// data is preprocessed in the same way as the training data was, and that the predictions are in the same scale as 
+    /// This method makes predictions using the model on the provided input data. It first normalizes the input data using
+    /// the normalizer from the NormalizationInfo property, then passes the normalized data to the model's Predict method,
+    /// and finally denormalizes the model's outputs to obtain the final predictions. This process ensures that the input
+    /// data is preprocessed in the same way as the training data was, and that the predictions are in the same scale as
     /// the original target variable.
     /// </para>
     /// <para><b>For Beginners:</b> This method makes predictions on new data using the trained model.
