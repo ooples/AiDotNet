@@ -21168,4 +21168,138 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Generation Batch 21
+
+    /// <summary>Creates default layers for AudioLM (semantic stage).</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultAudioLMLayers(
+        int semanticDim = 1024, int numSemanticLayers = 12,
+        int numSemanticHeads = 16, int semanticVocabSize = 1024,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Token embedding projection
+        yield return new FullyConnectedLayer<T>(semanticVocabSize, semanticDim, geluActivation);
+
+        // Transformer layers for semantic modeling
+        for (int i = 0; i < numSemanticLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(semanticDim, semanticDim, numSemanticHeads);
+            yield return new LayerNormalizationLayer<T>(semanticDim);
+            yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(semanticDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Output projection to vocabulary
+        yield return new FullyConnectedLayer<T>(semanticDim, semanticVocabSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for VoiceCraft codec language model.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVoiceCraftLayers(
+        int hiddenDim = 2048, int numLayers = 16,
+        int numHeads = 16, int codebookSize = 2048,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Codec embedding projection
+        yield return new FullyConnectedLayer<T>(codebookSize, hiddenDim, geluActivation);
+
+        // Transformer layers with causal masking
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(hiddenDim, hiddenDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            yield return new FullyConnectedLayer<T>(hiddenDim, hiddenDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(hiddenDim * 4, hiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(hiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Output projection to codebook
+        yield return new FullyConnectedLayer<T>(hiddenDim, codebookSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for VALL-E AR stage.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVALLELayers(
+        int arHiddenDim = 1024, int numARLayers = 12,
+        int numARHeads = 16, int codebookSize = 1024,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Input embedding: phoneme + codec
+        yield return new FullyConnectedLayer<T>(codebookSize, arHiddenDim, geluActivation);
+
+        // AR transformer layers
+        for (int i = 0; i < numARLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(arHiddenDim, arHiddenDim, numARHeads);
+            yield return new LayerNormalizationLayer<T>(arHiddenDim);
+            yield return new FullyConnectedLayer<T>(arHiddenDim, arHiddenDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(arHiddenDim * 4, arHiddenDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(arHiddenDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Output projection to first codebook
+        yield return new FullyConnectedLayer<T>(arHiddenDim, codebookSize, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for YuE semantic stage.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultYuELayers(
+        int semanticDim = 2048, int numSemanticLayers = 24,
+        int numSemanticHeads = 16, int lyricsVocabSize = 32000,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Lyrics + style embedding projection
+        yield return new FullyConnectedLayer<T>(lyricsVocabSize, semanticDim, geluActivation);
+
+        // Deep transformer for long-form generation
+        for (int i = 0; i < numSemanticLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(semanticDim, semanticDim, numSemanticHeads);
+            yield return new LayerNormalizationLayer<T>(semanticDim);
+            yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(semanticDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Output projection
+        yield return new FullyConnectedLayer<T>(semanticDim, semanticDim, (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>Creates default layers for Fish Speech semantic LM.</summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultFishSpeechLayers(
+        int semanticDim = 1024, int numSemanticLayers = 24,
+        int numSemanticHeads = 16, int codebookSize = 8192,
+        double dropoutRate = 0.1)
+    {
+        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+
+        // Text + GFSQ token embedding
+        yield return new FullyConnectedLayer<T>(codebookSize, semanticDim, geluActivation);
+
+        // Transformer layers
+        for (int i = 0; i < numSemanticLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(semanticDim, semanticDim, numSemanticHeads);
+            yield return new LayerNormalizationLayer<T>(semanticDim);
+            yield return new FullyConnectedLayer<T>(semanticDim, semanticDim * 4, geluActivation);
+            yield return new FullyConnectedLayer<T>(semanticDim * 4, semanticDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(semanticDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Output projection to GFSQ codebook
+        yield return new FullyConnectedLayer<T>(semanticDim, codebookSize, (IActivationFunction<T>?)null);
+    }
+
+    #endregion
 }
