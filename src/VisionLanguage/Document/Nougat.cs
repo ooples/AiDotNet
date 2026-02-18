@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -47,58 +48,20 @@ public class Nougat<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Swin encoder for academic document features
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Detect text-dense regions (academic documents are text-heavy)
-        int numRegions = Math.Min(visDim, 64);
-        var textDensity = new double[numRegions];
-        for (int r = 0; r < numRegions; r++)
-        {
-            // High-frequency features indicate text presence
-            int idx = r % visDim;
-            double val = NumOps.ToDouble(visualFeatures[idx]);
-            double nextVal = NumOps.ToDouble(visualFeatures[(idx + 1) % visDim]);
-            textDensity[r] = Math.Abs(val - nextVal); // Edge/text regions have high variance
-        }
-
-        // Step 3: Prompt-conditioned mBART decoder input
+        // Step 2: Tokenize prompt for mBART decoder conditioning
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            // Text-density weighted cross-attention
-            double crossAttn = 0;
-            double weightSum = 0;
-            int numPatches = Math.Min(visDim, 196);
-            for (int v = 0; v < numPatches; v++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[v % visDim]);
-                double density = textDensity[v % numRegions];
-                double weight = Math.Exp(density * 2.0) * Math.Exp(visVal * Math.Sin((d + 1) * (v + 1) * 0.004) * 0.3);
-                crossAttn += weight * visVal;
-                weightSum += weight;
-            }
-            crossAttn /= Math.Max(weightSum, 1e-8);
-
-            double promptCond = 0;
-            if (promptTokens is not null && promptLen > 0)
-                promptCond = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(crossAttn + promptCond);
-        }
+        // Step 3: Concatenate visual features with prompt tokens for mBART decoder
+        var decoderInput = visualFeatures;
+        if (promptTokens is not null)
+            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
 
         // Step 4: mBART decoder with anti-repetition
         var output = decoderInput;

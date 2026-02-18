@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -48,55 +49,22 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Swin Transformer visual encoding - multi-scale features
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        int visDim = visualFeatures.Length;
-
-        // Step 2: Create BART decoder input with prompt prefix
+        // Step 2: Tokenize prompt for BART decoder conditioning
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        // Build cross-attention conditioned input: visual features + prompt embedding
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            // Cross-attention between decoder position and encoder visual features
-            double crossAttn = 0;
-            int numPatches = Math.Min(visDim, 196);
-            double attnWeightSum = 0;
-            for (int v = 0; v < numPatches; v++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[v % visDim]);
-                // Position-dependent attention weight
-                double attnWeight = Math.Exp(visVal * Math.Sin((d + 1) * (v + 1) * 0.005) * 0.5);
-                crossAttn += attnWeight * visVal;
-                attnWeightSum += attnWeight;
-            }
-            crossAttn /= Math.Max(attnWeightSum, 1e-8);
+        // Step 3: Concatenate visual features with prompt tokens for BART decoder
+        var decoderInput = visualFeatures;
+        if (promptTokens is not null)
+            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
 
-            // Prompt prefix conditioning
-            double promptCond = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                int tIdx = d % promptLen;
-                double tv = NumOps.ToDouble(promptTokens[tIdx]);
-                promptCond = tv / _options.VocabSize * 0.5;
-            }
-
-            decoderInput[d] = NumOps.FromDouble(crossAttn + promptCond);
-        }
-
-        // Step 3: BART decoder generates text autoregressively
+        // Step 4: BART decoder generates text autoregressively
         var output = decoderInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);

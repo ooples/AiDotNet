@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -46,80 +47,21 @@ public class LayoutLMv3<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingM
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-        int maxLayoutTokens = _options.MaxLayoutTokens;
-
         // Step 1: ViT patch encoding for visual features
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Generate 2D layout embeddings for document spatial positions
-        // LayoutLMv3 encodes bounding boxes as (x0,y0,x1,y1) normalized to [0,1000]
-        int gridSize = (int)Math.Sqrt(Math.Min(visDim, maxLayoutTokens));
-        if (gridSize < 1) gridSize = 1;
-        int numLayoutTokens = gridSize * gridSize;
-        var layoutEmbeddings = new double[numLayoutTokens * 4]; // x0,y0,x1,y1
-        for (int row = 0; row < gridSize; row++)
-        {
-            for (int col = 0; col < gridSize; col++)
-            {
-                int idx = (row * gridSize + col) * 4;
-                layoutEmbeddings[idx] = (double)col / gridSize * 1000.0;      // x0
-                layoutEmbeddings[idx + 1] = (double)row / gridSize * 1000.0;  // y0
-                layoutEmbeddings[idx + 2] = (double)(col + 1) / gridSize * 1000.0; // x1
-                layoutEmbeddings[idx + 3] = (double)(row + 1) / gridSize * 1000.0; // y1
-            }
-        }
-
-        // Step 3: Unified multimodal fusion (visual + layout + text)
+        // Step 2: Tokenize prompt for multimodal fusion (visual + layout + text)
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        var fusedInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            // Visual embedding: weighted sum of patch features
-            double visEmb = 0;
-            double visWeight = 0;
-            int numPatches = Math.Min(visDim, 196);
-            for (int v = 0; v < numPatches; v++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[v % visDim]);
-                double attn = Math.Exp(visVal * Math.Cos((d + 1) * (v + 1) * 0.004) * 0.3);
-                visEmb += attn * visVal;
-                visWeight += attn;
-            }
-            visEmb /= Math.Max(visWeight, 1e-8);
-
-            // 2D layout embedding: spatial position encoding from bounding boxes
-            double layoutEmb = 0;
-            for (int lt = 0; lt < numLayoutTokens && lt < 64; lt++)
-            {
-                int bboxIdx = lt * 4;
-                double cx = (layoutEmbeddings[bboxIdx] + layoutEmbeddings[bboxIdx + 2]) / 2000.0;
-                double cy = (layoutEmbeddings[bboxIdx + 1] + layoutEmbeddings[bboxIdx + 3]) / 2000.0;
-                double w = (layoutEmbeddings[bboxIdx + 2] - layoutEmbeddings[bboxIdx]) / 1000.0;
-                double h = (layoutEmbeddings[bboxIdx + 3] - layoutEmbeddings[bboxIdx + 1]) / 1000.0;
-                // Sinusoidal 2D position encoding
-                layoutEmb += Math.Sin(cx * (d + 1) * 0.01) * w + Math.Cos(cy * (d + 1) * 0.01) * h;
-            }
-            layoutEmb /= Math.Max(numLayoutTokens, 1);
-
-            // Text embedding from prompt tokens
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-                textEmb = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            // Additive multimodal fusion (per paper: all three modalities are summed)
-            fusedInput[d] = NumOps.FromDouble(visEmb + layoutEmb * 0.3 + textEmb);
-        }
+        // Step 3: Concatenate visual features with prompt tokens
+        // LayoutLMv3 fuses visual, layout, and text modalities in the transformer
+        var fusedInput = visualFeatures;
+        if (promptTokens is not null)
+            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
 
         // Step 4: Multimodal transformer decoder
         var output = fusedInput;

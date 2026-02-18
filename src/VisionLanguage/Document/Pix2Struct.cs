@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -48,77 +49,21 @@ public class Pix2Struct<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingM
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-        int maxPatches = _options.MaxPatchesPerImage;
-
         // Step 1: Vision encoder extracts patch features
         var visualFeatures = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-        int visDim = visualFeatures.Length;
 
-        // Step 2: Variable-resolution patch extraction with 2D position embeddings
-        // Determine adaptive grid based on image aspect ratio
-        int numPatchesH = Math.Max(1, (int)Math.Sqrt(Math.Min(maxPatches, visDim)));
-        int numPatchesW = Math.Min(maxPatches / Math.Max(numPatchesH, 1), numPatchesH * 2);
-        if (numPatchesW < 1) numPatchesW = 1;
-        int totalPatches = Math.Min(numPatchesH * numPatchesW, maxPatches);
-
-        // Compute 2D positional embeddings for each patch (row, col encoding)
-        var patchFeatures = new double[totalPatches];
-        for (int ph = 0; ph < numPatchesH; ph++)
-        {
-            for (int pw = 0; pw < numPatchesW; pw++)
-            {
-                int pIdx = ph * numPatchesW + pw;
-                if (pIdx >= totalPatches) break;
-
-                // Aggregate visual features for this patch region
-                int startIdx = pIdx % visDim;
-                double patchVal = NumOps.ToDouble(visualFeatures[startIdx]);
-
-                // Add 2D sinusoidal position embedding (row, col)
-                double rowEmb = Math.Sin((double)ph / numPatchesH * Math.PI);
-                double colEmb = Math.Cos((double)pw / numPatchesW * Math.PI);
-                patchFeatures[pIdx] = patchVal + rowEmb * 0.1 + colEmb * 0.1;
-            }
-        }
-
-        // Step 3: Prompt-conditioned decoder input
+        // Step 2: Tokenize prompt for decoder conditioning
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
-        {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
-        }
 
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            // Cross-attention: decoder position attends to all patches with 2D awareness
-            double crossAttn = 0;
-            double weightSum = 0;
-            for (int pi = 0; pi < totalPatches; pi++)
-            {
-                int row = pi / numPatchesW;
-                int col = pi % numPatchesW;
-                double patchVal = patchFeatures[pi];
-
-                // Attention weight includes 2D position bias
-                double positionBias = Math.Sin((d + 1) * row * 0.02) * Math.Cos((d + 1) * col * 0.02);
-                double weight = Math.Exp((patchVal * 0.5 + positionBias) * 0.3);
-                crossAttn += weight * patchVal;
-                weightSum += weight;
-            }
-            crossAttn /= Math.Max(weightSum, 1e-8);
-
-            double promptCond = 0;
-            if (promptTokens is not null && promptLen > 0)
-                promptCond = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
-
-            decoderInput[d] = NumOps.FromDouble(crossAttn + promptCond);
-        }
+        // Step 3: Concatenate visual features with prompt tokens
+        // Pix2Struct uses variable-resolution patches; decoder cross-attends to encoder output
+        var decoderInput = visualFeatures;
+        if (promptTokens is not null)
+            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
 
         // Step 4: Autoregressive decoder generates structured output
         var output = decoderInput;

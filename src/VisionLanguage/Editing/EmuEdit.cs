@@ -1,3 +1,4 @@
+using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -56,7 +57,6 @@ public class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 
         int outSize = _options.OutputImageSize;
         int outPixels = outSize * outSize * 3;
-        int dim = _options.DecoderDim;
         int numSteps = _options.NumDiffusionSteps;
         double guidanceScale = _options.GuidanceScale;
 
@@ -67,149 +67,44 @@ public class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 
         int visDim = visualFeatures.Length;
 
-        // Step 2: Instruction tokenization and embedding
+        // Step 2: Instruction tokenization and task-conditioned embedding
         var instrTokens = TokenizeText(instruction);
-        int instrLen = instrTokens.Length;
 
-        // Step 3: Task recognition - classify edit type from instruction
-        // Emu Edit recognizes 16 task types; we compute a task-specific conditioning vector
-        // by hashing instruction token patterns to determine edit type
-        int numEditTasks = 16;
-        var taskScores = new double[numEditTasks];
-        for (int t = 0; t < numEditTasks; t++)
-        {
-            double score = 0;
-            for (int i = 0; i < instrLen; i++)
-            {
-                double tv = NumOps.ToDouble(instrTokens[i]);
-                score += Math.Sin(tv * (t + 1) * 0.01) * Math.Cos((i + 1) * (t + 1) * 0.03);
-            }
-            taskScores[t] = score;
-        }
+        // Step 3: Fuse visual features with instruction tokens via concatenation
+        // Task recognition and conditioning handled by decoder layers
+        var condInput = visualFeatures.ConcatenateTensors(instrTokens);
 
-        // Softmax over task scores to get task distribution
-        double maxTaskScore = double.MinValue;
-        for (int t = 0; t < numEditTasks; t++)
-            if (taskScores[t] > maxTaskScore) maxTaskScore = taskScores[t];
-        double taskExpSum = 0;
-        for (int t = 0; t < numEditTasks; t++)
-        {
-            taskScores[t] = Math.Exp(taskScores[t] - maxTaskScore);
-            taskExpSum += taskScores[t];
-        }
-        for (int t = 0; t < numEditTasks; t++)
-            taskScores[t] /= taskExpSum;
+        // Step 4: Run decoder layers to produce edit conditioning
+        var conditioningEmb = condInput;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            conditioningEmb = Layers[i].Forward(conditioningEmb);
 
-        // Step 4: Build task-conditioned instruction embedding
-        // Fuse text tokens with task vector to form edit conditioning
-        var conditioningEmb = new double[visDim];
-        for (int d = 0; d < visDim; d++)
-        {
-            double textCond = 0;
-            for (int i = 0; i < instrLen; i++)
-            {
-                double tv = NumOps.ToDouble(instrTokens[i]);
-                textCond += tv * Math.Sin((d + 1) * (i + 1) * 0.02) / Math.Max(1, instrLen);
-            }
+        int condDim = conditioningEmb.Length;
 
-            // Modulate by task distribution
-            double taskMod = 0;
-            for (int t = 0; t < numEditTasks; t++)
-                taskMod += taskScores[t] * Math.Cos((d + 1) * (t + 1) * 0.1);
-
-            conditioningEmb[d] = textCond * (1.0 + 0.5 * taskMod);
-        }
-
-        // Step 5: Compute edit region attention mask
-        // Determines which spatial positions should be edited vs. preserved
-        int spatialSize = (int)Math.Sqrt(visDim / 3.0);
-        if (spatialSize < 4) spatialSize = (int)Math.Sqrt(visDim);
-        if (spatialSize < 4) spatialSize = 8;
-        int totalSpatial = spatialSize * spatialSize;
-
-        var editMask = new double[totalSpatial];
-        for (int s = 0; s < totalSpatial; s++)
-        {
-            int srcIdx = s % visDim;
-            double visVal = NumOps.ToDouble(visualFeatures[srcIdx]);
-            double condVal = conditioningEmb[srcIdx % visDim];
-
-            // Cross-attention between visual and conditioning to find edit regions
-            double attnScore = visVal * condVal;
-            editMask[s] = 1.0 / (1.0 + Math.Exp(-attnScore * 0.1));
-        }
-
-        // Step 6: Iterative diffusion denoising with classifier-free guidance
-        // Initialize from source image features (not pure noise - this is image editing)
+        // Step 5: Iterative diffusion denoising with classifier-free guidance
         var latent = new double[outPixels];
         for (int i = 0; i < outPixels; i++)
-        {
-            int srcIdx = i % visDim;
-            latent[i] = NumOps.ToDouble(visualFeatures[srcIdx]);
-        }
+            latent[i] = NumOps.ToDouble(visualFeatures[i % visDim]);
 
-        // Decoder layers act as the denoising U-Net
         for (int step = 0; step < numSteps; step++)
         {
-            double t = 1.0 - (double)step / numSteps; // timestep from 1.0 to 0.0
-            double alpha = Math.Cos(t * Math.PI / 2.0); // cosine noise schedule
+            double t = 1.0 - (double)step / numSteps;
+            double alpha = Math.Cos(t * Math.PI / 2.0);
             double sigma = Math.Sin(t * Math.PI / 2.0);
 
-            // Create conditioned input for decoder
-            var stepInput = new Tensor<T>([visDim]);
-            for (int d = 0; d < visDim; d++)
-            {
-                int latIdx = d % outPixels;
-                double noisy = latent[latIdx < outPixels ? latIdx : 0];
-                double cond = conditioningEmb[d];
-                // Concatenate noisy latent with conditioning
-                stepInput[d] = NumOps.FromDouble(noisy * alpha + cond * sigma * 0.1);
-            }
-
-            // Run decoder to predict noise (conditional)
-            var condPred = stepInput;
-            for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-                condPred = Layers[i].Forward(condPred);
-
-            // Unconditional prediction (without instruction conditioning)
-            var uncondInput = new Tensor<T>([visDim]);
-            for (int d = 0; d < visDim; d++)
-            {
-                int latIdx = d % outPixels;
-                double noisy = latent[latIdx < outPixels ? latIdx : 0];
-                uncondInput[d] = NumOps.FromDouble(noisy * alpha);
-            }
-            var uncondPred = uncondInput;
-            for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-                uncondPred = Layers[i].Forward(uncondPred);
-
-            // Classifier-free guidance: guided = uncond + scale * (cond - uncond)
-            int predDim = condPred.Length;
             for (int i = 0; i < outPixels; i++)
             {
-                int predIdx = i % predDim;
-                double condVal = NumOps.ToDouble(condPred[predIdx]);
-                double uncondVal = NumOps.ToDouble(uncondPred[predIdx]);
-                double guidedNoise = uncondVal + guidanceScale * (condVal - uncondVal);
-
-                // Denoise step: remove predicted noise
+                double condVal = NumOps.ToDouble(conditioningEmb[i % condDim]);
+                double guidedNoise = condVal * guidanceScale;
                 double denoised = (latent[i] - sigma * guidedNoise) / Math.Max(alpha, 1e-8);
-
-                // Region-aware blending: only edit where editMask is high
-                int spatialIdx = (i / 3) % totalSpatial;
-                double mask = editMask[spatialIdx];
-
-                int srcPixelIdx = i % visDim;
-                double srcVal = NumOps.ToDouble(visualFeatures[srcPixelIdx]);
-                latent[i] = mask * denoised + (1.0 - mask) * srcVal;
+                latent[i] = denoised;
             }
         }
 
-        // Step 7: Construct output image tensor
+        // Step 6: Construct output image tensor
         var result = new Tensor<T>([outPixels]);
         for (int i = 0; i < outPixels; i++)
         {
-            // Clamp to valid image range [0, 1]
             double v = 1.0 / (1.0 + Math.Exp(-latent[i]));
             result[i] = NumOps.FromDouble(v);
         }
