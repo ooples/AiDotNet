@@ -41,7 +41,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// with Diffusion Features and Recursive Normalized Cut", NeurIPS 2024.
 /// </para>
 /// </remarks>
-public class DiffCut<T> : NeuralNetworkBase<T>
+public class DiffCut<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly DiffCutOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -401,6 +401,22 @@ public class DiffCut<T> : NeuralNetworkBase<T>
         if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; }
         base.Dispose(disposing);
     }
+
+    #endregion
+
+    #region ISemanticSegmentation Implementation
+
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+
+    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
+
+    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
 
     #endregion
 }

@@ -39,7 +39,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// with Deformable Convolutions", CVPR 2023.
 /// </para>
 /// </remarks>
-public class InternImage<T> : NeuralNetworkBase<T>
+public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly InternImageOptions _options;
 
@@ -517,6 +517,22 @@ public class InternImage<T> : NeuralNetworkBase<T>
         }
         base.Dispose(disposing);
     }
+
+    #endregion
+
+    #region ISemanticSegmentation Implementation
+
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+
+    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
+
+    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
 
     #endregion
 }

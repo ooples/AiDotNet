@@ -35,7 +35,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// <b>Reference:</b> Xu et al., "PIDNet: A Real-time Semantic Segmentation Network Inspired by PID Controllers", CVPR 2023.
 /// </para>
 /// </remarks>
-public class PIDNet<T> : NeuralNetworkBase<T>
+public class PIDNet<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly PIDNetOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -321,5 +321,21 @@ public class PIDNet<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void Dispose(bool disposing)
     { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    #endregion
+
+    #region ISemanticSegmentation Implementation
+
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+
+    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
+
+    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
+
     #endregion
 }

@@ -35,7 +35,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 /// <b>Reference:</b> Yang et al., "EfficientTAM: Efficient Track Anything Model", arXiv 2024.
 /// </para>
 /// </remarks>
-public class EfficientTAM<T> : NeuralNetworkBase<T>
+public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
 {
     private readonly EfficientTAMOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -320,5 +320,35 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void Dispose(bool disposing)
     { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    #endregion
+
+    #region IVideoSegmentation Implementation
+    private Tensor<T>? _trackingState;
+    private int[]? _trackedObjectIds;
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IVideoSegmentation<T>.MaxTrackedObjects => 64;
+    bool IVideoSegmentation<T>.SupportsStreaming => true;
+    void IVideoSegmentation<T>.InitializeTracking(Tensor<T> frame, Tensor<T> masks, int[]? objectIds)
+    {
+        _trackingState = Predict(frame);
+        _trackedObjectIds = objectIds ?? Enumerable.Range(1, masks.Shape.Length > 0 ? masks.Shape[0] : 1).ToArray();
+    }
+    VideoSegmentationResult<T> IVideoSegmentation<T>.PropagateToFrame(Tensor<T> frame)
+    {
+        _trackingState = Predict(frame);
+        return new VideoSegmentationResult<T>
+        {
+            Masks = _trackingState,
+            ObjectIds = _trackedObjectIds ?? [1],
+            Confidences = (_trackedObjectIds ?? [1]).Select(_ => 1.0).ToArray(),
+            IsVisible = (_trackedObjectIds ?? [1]).Select(_ => true).ToArray()
+        };
+    }
+    void IVideoSegmentation<T>.AddCorrection(int objectId, Tensor<T> correctionMask) { }
+    void IVideoSegmentation<T>.ResetTracking() { _trackingState = null; _trackedObjectIds = null; }
     #endregion
 }

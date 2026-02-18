@@ -35,7 +35,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 /// <b>Reference:</b> Xu et al., "Open-Vocabulary Panoptic Segmentation with Text-to-Image Diffusion Models", CVPR 2023.
 /// </para>
 /// </remarks>
-public class ODISE<T> : NeuralNetworkBase<T>
+public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 {
     private readonly ODISEOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -320,5 +320,25 @@ public class ODISE<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void Dispose(bool disposing)
     { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    #endregion
+
+    #region IPanopticSegmentation Implementation
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IPanopticSegmentation<T>.NumStuffClasses => Math.Max(1, _numClasses / 3);
+    int IPanopticSegmentation<T>.NumThingClasses => _numClasses - Math.Max(1, _numClasses / 3);
+    PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
+    {
+        var output = Predict(image);
+        return new PanopticSegmentationResult<T>
+        {
+            SemanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output),
+            InstanceMap = Tensor<T>.Empty(),
+            PanopticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output)
+        };
+    }
     #endregion
 }

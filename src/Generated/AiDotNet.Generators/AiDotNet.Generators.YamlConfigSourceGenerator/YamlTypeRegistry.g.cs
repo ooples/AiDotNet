@@ -7599,6 +7599,15 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "FinancialDataLoader", typeof(AiDotNet.Finance.Data.FinancialDataLoader<T>) },
     };
 
+    /// <summary>Registered implementations for InstanceSegmentation.</summary>
+    private static readonly Dictionary<string, Type> _instanceSegmentationTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "YOLO11Seg", typeof(AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.YOLO11Seg<T>) },
+        { "YOLO26Seg", typeof(AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.YOLO26Seg<T>) },
+        { "YOLOv12Seg", typeof(AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.YOLOv12Seg<T>) },
+        { "YOLOv9Seg", typeof(AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.YOLOv9Seg<T>) },
+    };
+
     /// <summary>Registered implementations for IntermediateActivationStrategy.</summary>
     private static readonly Dictionary<string, Type> _intermediateActivationStrategyTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
     {
@@ -9223,6 +9232,23 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "LLaVANeuralNetwork", typeof(AiDotNet.NeuralNetworks.LLaVANeuralNetwork<T>) },
     };
 
+    /// <summary>Registered implementations for MedicalSegmentation.</summary>
+    private static readonly Dictionary<string, Type> _medicalSegmentationTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "MedSegDiffV2Segmentation", typeof(AiDotNet.ComputerVision.Segmentation.Diffusion.MedSegDiffV2Segmentation<T>) },
+        { "BiomedParse", typeof(AiDotNet.ComputerVision.Segmentation.Medical.BiomedParse<T>) },
+        { "MedNeXt", typeof(AiDotNet.ComputerVision.Segmentation.Medical.MedNeXt<T>) },
+        { "MedSAM", typeof(AiDotNet.ComputerVision.Segmentation.Medical.MedSAM<T>) },
+        { "MedSAM2", typeof(AiDotNet.ComputerVision.Segmentation.Medical.MedSAM2<T>) },
+        { "MedSegDiffV2", typeof(AiDotNet.ComputerVision.Segmentation.Medical.MedSegDiffV2<T>) },
+        { "NnUNet", typeof(AiDotNet.ComputerVision.Segmentation.Medical.NnUNet<T>) },
+        { "SegMamba", typeof(AiDotNet.ComputerVision.Segmentation.Medical.SegMamba<T>) },
+        { "SwinUNETR", typeof(AiDotNet.ComputerVision.Segmentation.Medical.SwinUNETR<T>) },
+        { "TransUNet", typeof(AiDotNet.ComputerVision.Segmentation.Medical.TransUNet<T>) },
+        { "UMamba", typeof(AiDotNet.ComputerVision.Segmentation.Medical.UMamba<T>) },
+        { "UniverSeg", typeof(AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>) },
+    };
+
     /// <summary>Registered implementations for MetaLearnerOptions.</summary>
     private static readonly Dictionary<string, Type> _metaLearnerOptionsTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
     {
@@ -10326,6 +10352,17 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "OnnxModel", typeof(AiDotNet.Onnx.OnnxModel<T>) },
     };
 
+    /// <summary>Registered implementations for OpenVocabSegmentation.</summary>
+    private static readonly Dictionary<string, Type> _openVocabSegmentationTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "CATSeg", typeof(AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSeg<T>) },
+        { "GroundedSAM2", typeof(AiDotNet.ComputerVision.Segmentation.OpenVocabulary.GroundedSAM2<T>) },
+        { "MaskAdapter", typeof(AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapter<T>) },
+        { "OpenVocabSAM", typeof(AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAM<T>) },
+        { "SAN", typeof(AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SAN<T>) },
+        { "SED", typeof(AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SED<T>) },
+    };
+
     /// <summary>Registered implementations for OrdinalClassifier.</summary>
     private static readonly Dictionary<string, Type> _ordinalClassifierTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
     {
@@ -10338,6 +10375,24 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
     {
         { "NoOutlierRemoval", typeof(AiDotNet.AnomalyDetection.NoOutlierRemoval<T, TInput, TOutput>) },
         { "OutlierRemovalAdapter", typeof(AiDotNet.AnomalyDetection.OutlierRemovalAdapter<T, TInput, TOutput>) },
+    };
+
+    /// <summary>Registered implementations for PanopticSegmentation.</summary>
+    private static readonly Dictionary<string, Type> _panopticSegmentationTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "ODISESegmentation", typeof(AiDotNet.ComputerVision.Segmentation.Diffusion.ODISESegmentation<T>) },
+        { "EoMT", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.EoMT<T>) },
+        { "Mask2Former", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.Mask2Former<T>) },
+        { "MaskDINO", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.MaskDINO<T>) },
+        { "OMGSeg", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.OMGSeg<T>) },
+        { "OneFormer", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.OneFormer<T>) },
+        { "QueryMeldNet", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.QueryMeldNet<T>) },
+        { "U2Seg", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.U2Seg<T>) },
+        { "UNINEXT", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.UNINEXT<T>) },
+        { "XDecoder", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.XDecoder<T>) },
+        { "CUPS", typeof(AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>) },
+        { "KMaXDeepLab", typeof(AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T>) },
+        { "ODISE", typeof(AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>) },
     };
 
     /// <summary>Registered implementations for Parameterizable.</summary>
@@ -11216,6 +11271,20 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "DecisionTreeClassifier", typeof(AiDotNet.Classification.Trees.DecisionTreeClassifier<T>) },
     };
 
+    /// <summary>Registered implementations for PromptableSegmentation.</summary>
+    private static readonly Dictionary<string, Type> _promptableSegmentationTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "EdgeSAM", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.EdgeSAM<T>) },
+        { "EfficientSAM", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.EfficientSAM<T>) },
+        { "FastSAM", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.FastSAM<T>) },
+        { "MobileSAM", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.MobileSAM<T>) },
+        { "RepViTSAM", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.RepViTSAM<T>) },
+        { "SlimSAM", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.SlimSAM<T>) },
+        { "SAMHQ", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.SAMHQ<T>) },
+        { "SEEM", typeof(AiDotNet.ComputerVision.Segmentation.Interactive.SEEM<T>) },
+        { "SegGPT", typeof(AiDotNet.ComputerVision.Segmentation.Interactive.SegGPT<T>) },
+    };
+
     /// <summary>Registered implementations for PruningMask.</summary>
     private static readonly Dictionary<string, Type> _pruningMaskTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
     {
@@ -11248,6 +11317,16 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "ChainOfThoughtStrategy", typeof(AiDotNet.Reasoning.Strategies.ChainOfThoughtStrategy<T>) },
         { "SelfConsistencyStrategy", typeof(AiDotNet.Reasoning.Strategies.SelfConsistencyStrategy<T>) },
         { "TreeOfThoughtsStrategy", typeof(AiDotNet.Reasoning.Strategies.TreeOfThoughtsStrategy<T>) },
+    };
+
+    /// <summary>Registered implementations for ReferringSegmentation.</summary>
+    private static readonly Dictionary<string, Type> _referringSegmentationTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "GLaMM", typeof(AiDotNet.ComputerVision.Segmentation.Referring.GLaMM<T>) },
+        { "LISA", typeof(AiDotNet.ComputerVision.Segmentation.Referring.LISA<T>) },
+        { "OMGLLaVA", typeof(AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVA<T>) },
+        { "PixelLM", typeof(AiDotNet.ComputerVision.Segmentation.Referring.PixelLM<T>) },
+        { "VideoLISA", typeof(AiDotNet.ComputerVision.Segmentation.Referring.VideoLISA<T>) },
     };
 
     /// <summary>Registered implementations for Reranker.</summary>
@@ -11313,10 +11392,102 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "SceneClassifier", typeof(AiDotNet.Audio.Classification.SceneClassifier<T>) },
     };
 
+    /// <summary>Registered implementations for SegmentationModel.</summary>
+    private static readonly Dictionary<string, Type> _segmentationModelTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "DiffCutSegmentation", typeof(AiDotNet.ComputerVision.Segmentation.Diffusion.DiffCutSegmentation<T>) },
+        { "MedSegDiffV2Segmentation", typeof(AiDotNet.ComputerVision.Segmentation.Diffusion.MedSegDiffV2Segmentation<T>) },
+        { "ODISESegmentation", typeof(AiDotNet.ComputerVision.Segmentation.Diffusion.ODISESegmentation<T>) },
+        { "EdgeSAM", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.EdgeSAM<T>) },
+        { "EfficientSAM", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.EfficientSAM<T>) },
+        { "FastSAM", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.FastSAM<T>) },
+        { "MobileSAM", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.MobileSAM<T>) },
+        { "PIDNet", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.PIDNet<T>) },
+        { "RepViTSAM", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.RepViTSAM<T>) },
+        { "SlimSAM", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.SlimSAM<T>) },
+        { "EoMT", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.EoMT<T>) },
+        { "Mask2Former", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.Mask2Former<T>) },
+        { "MaskDINO", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.MaskDINO<T>) },
+        { "OMGSeg", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.OMGSeg<T>) },
+        { "OneFormer", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.OneFormer<T>) },
+        { "QueryMeldNet", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.QueryMeldNet<T>) },
+        { "SAMHQ", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.SAMHQ<T>) },
+        { "U2Seg", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.U2Seg<T>) },
+        { "UNINEXT", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.UNINEXT<T>) },
+        { "XDecoder", typeof(AiDotNet.ComputerVision.Segmentation.Foundation.XDecoder<T>) },
+        { "YOLO11Seg", typeof(AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.YOLO11Seg<T>) },
+        { "YOLO26Seg", typeof(AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.YOLO26Seg<T>) },
+        { "YOLOv12Seg", typeof(AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.YOLOv12Seg<T>) },
+        { "YOLOv9Seg", typeof(AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.YOLOv9Seg<T>) },
+        { "SEEM", typeof(AiDotNet.ComputerVision.Segmentation.Interactive.SEEM<T>) },
+        { "SegGPT", typeof(AiDotNet.ComputerVision.Segmentation.Interactive.SegGPT<T>) },
+        { "ViMUNet", typeof(AiDotNet.ComputerVision.Segmentation.Mamba.ViMUNet<T>) },
+        { "VisionMamba", typeof(AiDotNet.ComputerVision.Segmentation.Mamba.VisionMamba<T>) },
+        { "VMamba", typeof(AiDotNet.ComputerVision.Segmentation.Mamba.VMamba<T>) },
+        { "BiomedParse", typeof(AiDotNet.ComputerVision.Segmentation.Medical.BiomedParse<T>) },
+        { "MedNeXt", typeof(AiDotNet.ComputerVision.Segmentation.Medical.MedNeXt<T>) },
+        { "MedSAM", typeof(AiDotNet.ComputerVision.Segmentation.Medical.MedSAM<T>) },
+        { "MedSAM2", typeof(AiDotNet.ComputerVision.Segmentation.Medical.MedSAM2<T>) },
+        { "MedSegDiffV2", typeof(AiDotNet.ComputerVision.Segmentation.Medical.MedSegDiffV2<T>) },
+        { "NnUNet", typeof(AiDotNet.ComputerVision.Segmentation.Medical.NnUNet<T>) },
+        { "SegMamba", typeof(AiDotNet.ComputerVision.Segmentation.Medical.SegMamba<T>) },
+        { "SwinUNETR", typeof(AiDotNet.ComputerVision.Segmentation.Medical.SwinUNETR<T>) },
+        { "TransUNet", typeof(AiDotNet.ComputerVision.Segmentation.Medical.TransUNet<T>) },
+        { "UMamba", typeof(AiDotNet.ComputerVision.Segmentation.Medical.UMamba<T>) },
+        { "UniverSeg", typeof(AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>) },
+        { "CATSeg", typeof(AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSeg<T>) },
+        { "GroundedSAM2", typeof(AiDotNet.ComputerVision.Segmentation.OpenVocabulary.GroundedSAM2<T>) },
+        { "MaskAdapter", typeof(AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapter<T>) },
+        { "OpenVocabSAM", typeof(AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAM<T>) },
+        { "SAN", typeof(AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SAN<T>) },
+        { "SED", typeof(AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SED<T>) },
+        { "CUPS", typeof(AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>) },
+        { "KMaXDeepLab", typeof(AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T>) },
+        { "ODISE", typeof(AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>) },
+        { "Concerto", typeof(AiDotNet.ComputerVision.Segmentation.PointCloud.Concerto<T>) },
+        { "PointTransformerV3", typeof(AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>) },
+        { "Sonata", typeof(AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>) },
+        { "GLaMM", typeof(AiDotNet.ComputerVision.Segmentation.Referring.GLaMM<T>) },
+        { "LISA", typeof(AiDotNet.ComputerVision.Segmentation.Referring.LISA<T>) },
+        { "OMGLLaVA", typeof(AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVA<T>) },
+        { "PixelLM", typeof(AiDotNet.ComputerVision.Segmentation.Referring.PixelLM<T>) },
+        { "VideoLISA", typeof(AiDotNet.ComputerVision.Segmentation.Referring.VideoLISA<T>) },
+        { "DiffCut", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.DiffCut<T>) },
+        { "DiffSeg", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.DiffSeg<T>) },
+        { "InternImage", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.InternImage<T>) },
+        { "SegFormer", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.SegFormer<T>) },
+        { "SegNeXt", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.SegNeXt<T>) },
+        { "ViTAdapter", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.ViTAdapter<T>) },
+        { "ViTCoMer", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.ViTCoMer<T>) },
+        { "DEVA", typeof(AiDotNet.ComputerVision.Segmentation.Video.DEVA<T>) },
+        { "EfficientTAM", typeof(AiDotNet.ComputerVision.Segmentation.Video.EfficientTAM<T>) },
+        { "UniVS", typeof(AiDotNet.ComputerVision.Segmentation.Video.UniVS<T>) },
+    };
+
     /// <summary>Registered implementations for SelfSupervisedLoss.</summary>
     private static readonly Dictionary<string, Type> _selfSupervisedLossTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
     {
         { "RotationPredictionLoss", typeof(AiDotNet.LossFunctions.RotationPredictionLoss<T>) },
+    };
+
+    /// <summary>Registered implementations for SemanticSegmentation.</summary>
+    private static readonly Dictionary<string, Type> _semanticSegmentationTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "DiffCutSegmentation", typeof(AiDotNet.ComputerVision.Segmentation.Diffusion.DiffCutSegmentation<T>) },
+        { "PIDNet", typeof(AiDotNet.ComputerVision.Segmentation.Efficient.PIDNet<T>) },
+        { "ViMUNet", typeof(AiDotNet.ComputerVision.Segmentation.Mamba.ViMUNet<T>) },
+        { "VisionMamba", typeof(AiDotNet.ComputerVision.Segmentation.Mamba.VisionMamba<T>) },
+        { "VMamba", typeof(AiDotNet.ComputerVision.Segmentation.Mamba.VMamba<T>) },
+        { "Concerto", typeof(AiDotNet.ComputerVision.Segmentation.PointCloud.Concerto<T>) },
+        { "PointTransformerV3", typeof(AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>) },
+        { "Sonata", typeof(AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>) },
+        { "DiffCut", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.DiffCut<T>) },
+        { "DiffSeg", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.DiffSeg<T>) },
+        { "InternImage", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.InternImage<T>) },
+        { "SegFormer", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.SegFormer<T>) },
+        { "SegNeXt", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.SegNeXt<T>) },
+        { "ViTAdapter", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.ViTAdapter<T>) },
+        { "ViTCoMer", typeof(AiDotNet.ComputerVision.Segmentation.Semantic.ViTCoMer<T>) },
     };
 
     /// <summary>Registered implementations for SemiSupervisedClassifier.</summary>
@@ -11626,6 +11797,14 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "VeoModel", typeof(AiDotNet.Diffusion.Video.VeoModel<T>) },
         { "VideoCrafterModel", typeof(AiDotNet.Diffusion.Video.VideoCrafterModel<T>) },
         { "WanVideoModel", typeof(AiDotNet.Diffusion.Video.WanVideoModel<T>) },
+    };
+
+    /// <summary>Registered implementations for VideoSegmentation.</summary>
+    private static readonly Dictionary<string, Type> _videoSegmentationTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "DEVA", typeof(AiDotNet.ComputerVision.Segmentation.Video.DEVA<T>) },
+        { "EfficientTAM", typeof(AiDotNet.ComputerVision.Segmentation.Video.EfficientTAM<T>) },
+        { "UniVS", typeof(AiDotNet.ComputerVision.Segmentation.Video.UniVS<T>) },
     };
 
     /// <summary>Registered implementations for VoiceActivityDetector.</summary>
@@ -12254,6 +12433,7 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "ImageBindModel", _imageBindModelTypes },
         { "InputGradientComputable", _inputGradientComputableTypes },
         { "InputOutputDataLoader", _inputOutputDataLoaderTypes },
+        { "InstanceSegmentation", _instanceSegmentationTypes },
         { "IntermediateActivationStrategy", _intermediateActivationStrategyTypes },
         { "InterpretableModel", _interpretableModelTypes },
         { "JitCompilable", _jitCompilableTypes },
@@ -12262,6 +12442,7 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "LanguageModel", _languageModelTypes },
         { "LatentDiffusionModel", _latentDiffusionModelTypes },
         { "LLaVAModel", _lLaVAModelTypes },
+        { "MedicalSegmentation", _medicalSegmentationTypes },
         { "MetaLearnerOptions", _metaLearnerOptionsTypes },
         { "MetaLearningTask", _metaLearningTaskTypes },
         { "ModelCache", _modelCacheTypes },
@@ -12278,23 +12459,29 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "OnlineLearningModel", _onlineLearningModelTypes },
         { "DriftDetector", _driftDetectorTypes },
         { "OnnxModel", _onnxModelTypes },
+        { "OpenVocabSegmentation", _openVocabSegmentationTypes },
         { "OrdinalClassifier", _ordinalClassifierTypes },
         { "OutlierRemoval", _outlierRemovalTypes },
+        { "PanopticSegmentation", _panopticSegmentationTypes },
         { "Parameterizable", _parameterizableTypes },
         { "PitchDetector", _pitchDetectorTypes },
         { "Postprocessor", _postprocessorTypes },
         { "ProbabilisticClassifier", _probabilisticClassifierTypes },
+        { "PromptableSegmentation", _promptableSegmentationTypes },
         { "PruningMask", _pruningMaskTypes },
         { "PruningStrategy", _pruningStrategyTypes },
         { "RAGMetric", _rAGMetricTypes },
         { "ReasoningStrategy", _reasoningStrategyTypes },
+        { "ReferringSegmentation", _referringSegmentationTypes },
         { "Reranker", _rerankerTypes },
         { "ResamplingStrategy", _resamplingStrategyTypes },
         { "Retriever", _retrieverTypes },
         { "RLDataLoader", _rLDataLoaderTypes },
         { "SafetyFilter", _safetyFilterTypes },
         { "SceneClassifier", _sceneClassifierTypes },
+        { "SegmentationModel", _segmentationModelTypes },
         { "SelfSupervisedLoss", _selfSupervisedLossTypes },
+        { "SemanticSegmentation", _semanticSegmentationTypes },
         { "SemiSupervisedClassifier", _semiSupervisedClassifierTypes },
         { "SequenceLossFunction", _sequenceLossFunctionTypes },
         { "SpeakerDiarizer", _speakerDiarizerTypes },
@@ -12317,6 +12504,7 @@ internal static class YamlTypeRegistry<T, TInput, TOutput>
         { "VectorActivationFunction", _vectorActivationFunctionTypes },
         { "VideoCLIPModel", _videoCLIPModelTypes },
         { "VideoDiffusionModel", _videoDiffusionModelTypes },
+        { "VideoSegmentation", _videoSegmentationTypes },
         { "VoiceActivityDetector", _voiceActivityDetectorTypes },
         { "WeightLoadable", _weightLoadableTypes },
         { "GPUAcceleratedExplainer", _gPUAcceleratedExplainerTypes },

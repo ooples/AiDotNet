@@ -35,7 +35,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Zhu et al., "Medical SAM 2: Segment Medical Images As Video Via Segment Anything Model 2", arXiv 2024.
 /// </para>
 /// </remarks>
-public class MedSAM2<T> : NeuralNetworkBase<T>
+public class MedSAM2<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
 {
     private readonly MedSAM2Options _options;
     public override ModelOptions GetOptions() => _options;
@@ -321,5 +321,30 @@ public class MedSAM2<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void Dispose(bool disposing)
     { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    #endregion
+
+    #region IMedicalSegmentation Implementation
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    IReadOnlyList<string> IMedicalSegmentation<T>.SupportedModalities => ["CT", "MRI_T1", "MRI_T2", "Ultrasound", "Endoscopy"];
+    bool IMedicalSegmentation<T>.Supports3D => true;
+    bool IMedicalSegmentation<T>.Supports2D => true;
+    bool IMedicalSegmentation<T>.SupportsFewShot => false;
+    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentSlice(Tensor<T> slice)
+    {
+        var output = Predict(slice);
+        return new MedicalSegmentationResult<T>
+        {
+            Labels = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output),
+            Probabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(output)
+        };
+    }
+    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentVolume(Tensor<T> volume)
+        => ((IMedicalSegmentation<T>)this).SegmentSlice(volume);
+    MedicalSegmentationResult<T> IMedicalSegmentation<T>.SegmentFewShot(Tensor<T> queryImage, Tensor<T> supportImages, Tensor<T> supportMasks)
+        => ((IMedicalSegmentation<T>)this).SegmentSlice(queryImage);
     #endregion
 }

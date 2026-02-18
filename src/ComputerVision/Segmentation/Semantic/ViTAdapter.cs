@@ -39,7 +39,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// ICLR 2023 Spotlight.
 /// </para>
 /// </remarks>
-public class ViTAdapter<T> : NeuralNetworkBase<T>
+public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly ViTAdapterOptions _options;
 
@@ -470,6 +470,22 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>
         if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; }
         base.Dispose(disposing);
     }
+
+    #endregion
+
+    #region ISemanticSegmentation Implementation
+
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+
+    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
+
+    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
 
     #endregion
 }

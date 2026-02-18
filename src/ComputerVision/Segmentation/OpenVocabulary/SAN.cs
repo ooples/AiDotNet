@@ -35,7 +35,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <b>Reference:</b> Xu et al., "Side Adapter Network for Open-Vocabulary Semantic Segmentation", CVPR 2023.
 /// </para>
 /// </remarks>
-public class SAN<T> : NeuralNetworkBase<T>
+public class SAN<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
 {
     private readonly SANOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -313,5 +313,28 @@ public class SAN<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void Dispose(bool disposing)
     { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    #endregion
+
+    #region IOpenVocabSegmentation Implementation
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IOpenVocabSegmentation<T>.MaxCategories => 256;
+    int IOpenVocabSegmentation<T>.MaxPromptLength => 77;
+    OpenVocabSegmentationResult<T> IOpenVocabSegmentation<T>.SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames)
+    {
+        var output = Predict(image);
+        return new OpenVocabSegmentationResult<T>
+        {
+            Masks = output,
+            ClassNames = classNames.ToArray(),
+            Scores = classNames.Select(_ => 1.0).ToArray(),
+            SemanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(output)
+        };
+    }
+    OpenVocabSegmentationResult<T> IOpenVocabSegmentation<T>.SegmentWithPrompt(Tensor<T> image, string prompt)
+        => ((IOpenVocabSegmentation<T>)this).SegmentWithText(image, new[] { prompt });
     #endregion
 }

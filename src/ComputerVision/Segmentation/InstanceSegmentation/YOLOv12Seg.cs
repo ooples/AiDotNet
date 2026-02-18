@@ -35,7 +35,7 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 /// <b>Reference:</b> Tian et al., "YOLOv12: Attention-Centric Real-Time Object Detectors", arXiv 2025.
 /// </para>
 /// </remarks>
-public class YOLOv12Seg<T> : NeuralNetworkBase<T>
+public class YOLOv12Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
 {
     private readonly YOLOv12SegOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -323,5 +323,42 @@ public class YOLOv12Seg<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void Dispose(bool disposing)
     { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    #endregion
+
+    #region IInstanceSegmentation Implementation
+
+    private double _confidenceThreshold = 0.5;
+    private double _nmsThreshold = 0.5;
+
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IInstanceSegmentation<T>.MaxInstances => 100;
+
+    double IInstanceSegmentation<T>.ConfidenceThreshold
+    {
+        get => _confidenceThreshold;
+        set => _confidenceThreshold = value;
+    }
+
+    double IInstanceSegmentation<T>.NmsThreshold
+    {
+        get => _nmsThreshold;
+        set => _nmsThreshold = value;
+    }
+
+    InstanceSegmentationResult<T> IInstanceSegmentation<T>.DetectInstances(Tensor<T> image)
+    {
+        var output = Predict(image);
+        return new InstanceSegmentationResult<T>
+        {
+            ImageHeight = _height,
+            ImageWidth = _width,
+            InferenceTime = TimeSpan.Zero
+        };
+    }
+
     #endregion
 }

@@ -41,7 +41,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// Segmentation with Transformers", NeurIPS 2021.
 /// </para>
 /// </remarks>
-public class SegFormer<T> : NeuralNetworkBase<T>
+public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 {
     private readonly SegFormerOptions _options;
 
@@ -828,6 +828,22 @@ public class SegFormer<T> : NeuralNetworkBase<T>
         }
         base.Dispose(disposing);
     }
+
+    #endregion
+
+    #region ISemanticSegmentation Implementation
+
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+
+    Tensor<T> ISemanticSegmentation<T>.GetClassMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.ArgmaxAlongClassDim(Predict(image));
+
+    Tensor<T> ISemanticSegmentation<T>.GetProbabilityMap(Tensor<T> image)
+        => Common.SegmentationTensorOps.SoftmaxAlongClassDim(Predict(image));
 
     #endregion
 }

@@ -35,7 +35,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 /// <b>Reference:</b> Zhang et al., "OMG-LLaVA: Bridging Image-Level, Object-Level, Pixel-Level Reasoning and Understanding", arXiv 2024.
 /// </para>
 /// </remarks>
-public class OMGLLaVA<T> : NeuralNetworkBase<T>
+public class OMGLLaVA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
 {
     private readonly OMGLLaVAOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -313,5 +313,31 @@ public class OMGLLaVA<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void Dispose(bool disposing)
     { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    #endregion
+
+    #region IReferringSegmentation Implementation
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    int IReferringSegmentation<T>.MaxTextLength => 512;
+    bool IReferringSegmentation<T>.SupportsConversation => true;
+    bool IReferringSegmentation<T>.SupportsVideoInput => false;
+    ReferringSegmentationResult<T> IReferringSegmentation<T>.SegmentFromExpression(Tensor<T> image, string expression)
+    {
+        var output = Predict(image);
+        return new ReferringSegmentationResult<T>
+        {
+            Masks = output,
+            TextResponse = expression,
+            Confidence = 1.0
+        };
+    }
+    ReferringSegmentationResult<T> IReferringSegmentation<T>.SegmentFromConversation(
+        Tensor<T> image, IReadOnlyList<(string Role, string Message)> conversationHistory, string currentQuery)
+        => ((IReferringSegmentation<T>)this).SegmentFromExpression(image, currentQuery);
+    List<ReferringSegmentationResult<T>> IReferringSegmentation<T>.SegmentVideoFromExpression(Tensor<T> frames, string expression)
+        => [((IReferringSegmentation<T>)this).SegmentFromExpression(frames, expression)];
     #endregion
 }

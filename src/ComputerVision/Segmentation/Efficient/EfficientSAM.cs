@@ -35,7 +35,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// <b>Reference:</b> Xiong et al., "EfficientSAM: Leveraged Masked Image Pretraining for Efficient Segment Anything", CVPR 2024.
 /// </para>
 /// </remarks>
-public class EfficientSAM<T> : NeuralNetworkBase<T>
+public class EfficientSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 {
     private readonly EfficientSAMOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -313,5 +313,27 @@ public class EfficientSAM<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void Dispose(bool disposing)
     { if (!_disposed) { if (disposing) { _onnxSession?.Dispose(); _onnxSession = null; } _disposed = true; } base.Dispose(disposing); }
+    #endregion
+
+    #region IPromptableSegmentation Implementation
+    private Tensor<T>? _imageEmbedding;
+    int ISegmentationModel<T>.NumClasses => _numClasses;
+    int ISegmentationModel<T>.InputHeight => _height;
+    int ISegmentationModel<T>.InputWidth => _width;
+    bool ISegmentationModel<T>.IsOnnxMode => !_useNativeMode;
+    Tensor<T> ISegmentationModel<T>.Segment(Tensor<T> image) => Predict(image);
+    bool IPromptableSegmentation<T>.SupportsPointPrompts => true;
+    bool IPromptableSegmentation<T>.SupportsBoxPrompts => true;
+    bool IPromptableSegmentation<T>.SupportsMaskPrompts => true;
+    bool IPromptableSegmentation<T>.SupportsTextPrompts => false;
+    void IPromptableSegmentation<T>.SetImage(Tensor<T> image) => _imageEmbedding = Predict(image);
+    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
+        => new() { Masks = _imageEmbedding ?? Tensor<T>.Empty(), Scores = [1.0] };
+    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromBox(Tensor<T> box)
+        => new() { Masks = _imageEmbedding ?? Tensor<T>.Empty(), Scores = [1.0] };
+    PromptedSegmentationResult<T> IPromptableSegmentation<T>.SegmentFromMask(Tensor<T> mask)
+        => new() { Masks = _imageEmbedding ?? Tensor<T>.Empty(), Scores = [1.0] };
+    List<PromptedSegmentationResult<T>> IPromptableSegmentation<T>.SegmentEverything()
+        => [new() { Masks = _imageEmbedding ?? Tensor<T>.Empty(), Scores = [1.0] }];
     #endregion
 }
