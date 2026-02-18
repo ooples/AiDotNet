@@ -574,6 +574,11 @@ public partial class YamlModelConfig
     public YamlTypeSection? RLAgent { get; set; }
 
     /// <summary>
+    /// YAML configuration for ConfigureSegmentationVisualization().
+    /// </summary>
+    public AiDotNet.ComputerVision.Segmentation.Common.SegmentationVisualizationConfig? SegmentationVisualization { get; set; }
+
+    /// <summary>
     /// YAML configuration for ConfigureTimeSeriesFeatures().
     /// </summary>
     public AiDotNet.Models.Options.TimeSeriesFeatureOptions? TimeSeriesFeatures { get; set; }
