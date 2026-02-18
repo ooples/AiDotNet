@@ -23257,5 +23257,55 @@ public static class LayerHelper<T>
         }
     }
 
+    /// <summary>
+    /// Creates default layers for visual expert VLM architecture (CogVLM pattern).
+    /// Architecture: ViT encoder → projection → decoder with visual expert modules in every layer.
+    /// Each decoder block has standard self-attention, visual expert attention, standard FFN, visual expert FFN.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultVisualExpertVLMLayers(
+        int visionDim, int decoderDim, int visualExpertDim,
+        int numVisionLayers, int numDecoderLayers,
+        int numHeads, int numVisualExpertHeads, double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> geluActivation = new GELUActivation<T>();
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // Patch embedding
+        yield return new FullyConnectedLayer<T>(visionDim, visionDim, geluActivation);
+
+        // ViT encoder transformer blocks
+        for (int i = 0; i < numVisionLayers; i++)
+        {
+            yield return new MultiHeadAttentionLayer<T>(visionDim, visionDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            yield return new DenseLayer<T>(visionDim, visionDim * 4, geluActivation);
+            yield return new DenseLayer<T>(visionDim * 4, visionDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>(visionDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Projection if dims differ
+        if (visionDim != decoderDim)
+            yield return new DenseLayer<T>(visionDim, decoderDim, identityActivation);
+
+        // Decoder blocks with visual expert modules in every layer
+        for (int i = 0; i < numDecoderLayers; i++)
+        {
+            // Standard self-attention
+            yield return new MultiHeadAttentionLayer<T>(decoderDim, decoderDim, numHeads);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            // Visual expert attention (separate QKV weights for visual tokens)
+            yield return new MultiHeadAttentionLayer<T>(visualExpertDim, visualExpertDim, numVisualExpertHeads);
+            yield return new LayerNormalizationLayer<T>(visualExpertDim != decoderDim ? visualExpertDim : decoderDim);
+            // Standard FFN
+            yield return new DenseLayer<T>(decoderDim, decoderDim * 4, geluActivation);
+            yield return new DenseLayer<T>(decoderDim * 4, decoderDim, identityActivation);
+            // Visual expert FFN
+            yield return new DenseLayer<T>(decoderDim, decoderDim, geluActivation);
+            yield return new LayerNormalizationLayer<T>(decoderDim);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+    }
+
     #endregion
 }

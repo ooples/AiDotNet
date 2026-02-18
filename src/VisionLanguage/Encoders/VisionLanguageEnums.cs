@@ -211,3 +211,18 @@ public enum GenerativeArchitectureType
     /// <summary>Unified generation: single model for both understanding and image/text generation (Emu).</summary>
     UnifiedGeneration
 }
+
+/// <summary>
+/// Specifies the architecture type for instruction-tuned vision-language models.
+/// </summary>
+public enum InstructionTunedArchitectureType
+{
+    /// <summary>MLP projection: vision encoder -> MLP connector -> LLM (LLaVA, InternVL, DeepSeek-VL, Phi-3-Vision).</summary>
+    MLPProjection,
+    /// <summary>Q-Former projection: vision encoder -> Q-Former -> linear projection -> LLM (MiniGPT-4, MiniGPT-v2).</summary>
+    QFormerProjection,
+    /// <summary>Cross-attention resampler: vision encoder -> cross-attention resampler -> LLM (Qwen-VL series).</summary>
+    CrossAttentionResampler,
+    /// <summary>Visual expert: vision encoder -> visual expert modules interleaved in every LLM layer (CogVLM).</summary>
+    VisualExpert
+}
