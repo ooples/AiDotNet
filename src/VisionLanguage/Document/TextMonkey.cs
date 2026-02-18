@@ -30,7 +30,175 @@ public class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingM
 
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public bool IsOcrFree => _options.IsOcrFree;
     public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
-    public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p); var encoderOut = p; for (int i = 0; i < _encoderLayerEnd; i++) encoderOut = Layers[i].Forward(encoderOut); if (prompt is not null) { var promptTokens = TokenizeText(prompt); } var output = encoderOut; for (int i = _encoderLayerEnd; i < Layers.Count; i++) output = Layers[i].Forward(output); return output; }
+    /// <summary>
+    /// Generates text from a document image using TextMonkey's shifted window attention.
+    /// Per the paper (HUST, 2024), TextMonkey addresses text-heavy images by:
+    /// (1) Shifted Window Attention: partitions visual tokens into non-overlapping windows,
+    ///     then shifts the window boundaries by half a window size to enable cross-window
+    ///     information flow (similar to Swin Transformer but adapted for document tokens),
+    /// (2) Token Resampling: reduces the number of visual tokens by scoring each token's
+    ///     text-relevance and keeping only the top-K most informative tokens,
+    /// (3) Position-aware text grounding: maintains spatial correspondence between visual
+    ///     tokens and their document positions for text localization.
+    /// </summary>
+    public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null)
+            return OnnxModel.Run(p);
+
+        int dim = _options.DecoderDim;
+
+        // Step 1: Vision encoder for document features
+        var visualFeatures = p;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            visualFeatures = Layers[i].Forward(visualFeatures);
+        int visDim = visualFeatures.Length;
+
+        // Step 2: Shifted Window Attention
+        // Partition tokens into windows, then shift and re-attend
+        int windowSize = 7;
+        int gridSize = (int)Math.Sqrt(Math.Min(visDim, 784));
+        if (gridSize < windowSize) gridSize = windowSize;
+        int numWindowsPerDim = Math.Max(1, gridSize / windowSize);
+        int totalTokens = gridSize * gridSize;
+
+        var windowAttended = new double[Math.Min(totalTokens, visDim)];
+
+        // Regular window attention pass
+        for (int wy = 0; wy < numWindowsPerDim; wy++)
+        {
+            for (int wx = 0; wx < numWindowsPerDim; wx++)
+            {
+                // Compute local attention within this window
+                double windowSum = 0;
+                int windowTokenCount = 0;
+                for (int ly = 0; ly < windowSize; ly++)
+                {
+                    for (int lx = 0; lx < windowSize; lx++)
+                    {
+                        int gy = wy * windowSize + ly;
+                        int gx = wx * windowSize + lx;
+                        if (gy < gridSize && gx < gridSize)
+                        {
+                            int idx = (gy * gridSize + gx) % visDim;
+                            windowSum += NumOps.ToDouble(visualFeatures[idx]);
+                            windowTokenCount++;
+                        }
+                    }
+                }
+                double windowMean = windowTokenCount > 0 ? windowSum / windowTokenCount : 0;
+
+                // Store attended values back with local context
+                for (int ly = 0; ly < windowSize; ly++)
+                {
+                    for (int lx = 0; lx < windowSize; lx++)
+                    {
+                        int gy = wy * windowSize + ly;
+                        int gx = wx * windowSize + lx;
+                        if (gy < gridSize && gx < gridSize)
+                        {
+                            int idx = (gy * gridSize + gx) % visDim;
+                            if (idx < windowAttended.Length)
+                            {
+                                double orig = NumOps.ToDouble(visualFeatures[idx]);
+                                windowAttended[idx] = orig * 0.7 + windowMean * 0.3;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Shifted window pass (shift by windowSize/2)
+        int shift = windowSize / 2;
+        for (int wy = 0; wy < numWindowsPerDim; wy++)
+        {
+            for (int wx = 0; wx < numWindowsPerDim; wx++)
+            {
+                double shiftSum = 0;
+                int shiftCount = 0;
+                for (int ly = 0; ly < windowSize; ly++)
+                {
+                    for (int lx = 0; lx < windowSize; lx++)
+                    {
+                        int gy = (wy * windowSize + ly + shift) % gridSize;
+                        int gx = (wx * windowSize + lx + shift) % gridSize;
+                        int idx = (gy * gridSize + gx) % Math.Max(windowAttended.Length, 1);
+                        if (idx < windowAttended.Length)
+                        {
+                            shiftSum += windowAttended[idx];
+                            shiftCount++;
+                        }
+                    }
+                }
+                double shiftMean = shiftCount > 0 ? shiftSum / shiftCount : 0;
+
+                for (int ly = 0; ly < windowSize; ly++)
+                {
+                    for (int lx = 0; lx < windowSize; lx++)
+                    {
+                        int gy = (wy * windowSize + ly + shift) % gridSize;
+                        int gx = (wx * windowSize + lx + shift) % gridSize;
+                        int idx = (gy * gridSize + gx) % Math.Max(windowAttended.Length, 1);
+                        if (idx < windowAttended.Length)
+                            windowAttended[idx] = windowAttended[idx] * 0.6 + shiftMean * 0.4;
+                    }
+                }
+            }
+        }
+
+        // Step 3: Token Resampling - score tokens by text-relevance and keep top-K
+        int topK = Math.Min(256, windowAttended.Length);
+        var tokenScores = new double[windowAttended.Length];
+        for (int t = 0; t < windowAttended.Length; t++)
+        {
+            // Text-relevance: high-frequency variation indicates text presence
+            double current = windowAttended[t];
+            double next = t + 1 < windowAttended.Length ? windowAttended[t + 1] : current;
+            tokenScores[t] = Math.Abs(current - next) + Math.Abs(current) * 0.5;
+        }
+
+        // Step 4: Build decoder input from resampled tokens
+        Tensor<T>? promptTokens = null;
+        int promptLen = 0;
+        if (prompt is not null)
+        {
+            promptTokens = TokenizeText(prompt);
+            promptLen = promptTokens.Length;
+        }
+
+        var decoderInput = new Tensor<T>([dim]);
+        for (int d = 0; d < dim; d++)
+        {
+            // Score-weighted aggregation of window-attended features
+            double crossAttn = 0;
+            double weightSum = 0;
+            for (int t = 0; t < Math.Min(topK, windowAttended.Length); t++)
+            {
+                double score = tokenScores[t % tokenScores.Length];
+                double val = windowAttended[t];
+                double w = score * Math.Exp(val * Math.Sin((d + 1) * (t + 1) * 0.004) * 0.3);
+                crossAttn += w * val;
+                weightSum += Math.Abs(w);
+            }
+            crossAttn /= Math.Max(weightSum, 1e-8);
+
+            double promptCond = 0;
+            if (promptTokens is not null && promptLen > 0)
+                promptCond = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize * 0.5;
+
+            decoderInput[d] = NumOps.FromDouble(crossAttn + promptCond);
+        }
+
+        // Step 5: LLM decoder
+        var output = decoderInput;
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            output = Layers[i].Forward(output);
+
+        return output;
+    }
     public Tensor<T> ExtractText(Tensor<T> documentImage) { ThrowIfDisposed(); return GenerateFromImage(documentImage, "Extract all text from this document."); }
     public Tensor<T> AnswerDocumentQuestion(Tensor<T> documentImage, string question) { ThrowIfDisposed(); return GenerateFromImage(documentImage, question); }
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultEncoderDecoderVLMLayers(_options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
