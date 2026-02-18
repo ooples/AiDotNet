@@ -1,5 +1,5 @@
 using AiDotNet.TextToSpeech.EndToEnd;
-namespace AiDotNet.TextToSpeech.FlowDiffusion;
+namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>Options for NaturalSpeech TTS model.</summary>
 public class NaturalSpeechOptions : EndToEndTtsOptions
 {

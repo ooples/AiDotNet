@@ -1,28 +1,22 @@
 using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
-namespace AiDotNet.TextToSpeech.CodecBased;
-/// <summary>XTTS v2: multilingual zero-shot TTS using GPT-2 backbone to autoregressively predict VQ-VAE audio tokens.</summary>
+namespace AiDotNet.TextToSpeech.Latest;
+/// <summary>MegaTTS 3: sparse diffusion transformer TTS using DiT backbone for efficient generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "XTTS: A Massively Multilingual Zero-Shot Text-to-Speech Model" (Coqui AI, 2023)</item></list></para></remarks>
-public class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "MegaTTS 3: Sparse DiT with Latent LMs" (Jiang et al., 2025)</item></list></para></remarks>
+public class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
 {
-    private readonly XTTSv2Options _options; public override ModelOptions GetOptions() => _options;
+    private readonly MegaTTS3Options _options; public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed; private int _encoderLayerEnd;
-    public XTTSv2(NeuralNetworkArchitecture<T> architecture, string modelPath, XTTSv2Options? options = null) : base(architecture) { _options = options ?? new XTTSv2Options(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.LLMDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
-    public XTTSv2(NeuralNetworkArchitecture<T> architecture, XTTSv2Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new XTTSv2Options(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.LLMDim; InitializeLayers(); }
+    public MegaTTS3(NeuralNetworkArchitecture<T> architecture, string modelPath, MegaTTS3Options? options = null) : base(architecture) { _options = options ?? new MegaTTS3Options(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.LLMDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
+    public MegaTTS3(NeuralNetworkArchitecture<T> architecture, MegaTTS3Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new MegaTTS3Options(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.LLMDim; InitializeLayers(); }
     int ITtsModel<T>.SampleRate => _options.SampleRate; public int MaxTextLength => _options.MaxTextLength; public int NumCodebooks => _options.NumCodebooks; public int CodebookSize => _options.CodebookSize; public int CodecFrameRate => _options.CodecFrameRate;
-    /// <summary>
-    /// Synthesizes speech using XTTS v2's GPT-2 + VQ-VAE pipeline.
-    /// Architecture: Text → GPT-2 (AR) → VQ-VAE audio tokens → HiFi-GAN decoder → waveform.
-    /// Supports 17 languages and zero-shot voice cloning from 6s reference.
-    /// </summary>
+    /// <summary>Synthesizes speech. MegaTTS 3: text -> latent LM -> sparse DiT diffusion -> codec latent -> WavVAE decoder -> waveform.</summary>
     public Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
         int textLen = Math.Min(text.Length, _options.MaxTextLength); int codecFrames = textLen * 3;
-        // GPT-2 autoregressive token prediction
         double[] tokens = new double[codecFrames]; double prev = 0;
         for (int f = 0; f < codecFrames; f++) { int tIdx = Math.Min(f * textLen / codecFrames, textLen - 1); double charVal = (text[tIdx] % 128) / 128.0; tokens[f] = Math.Tanh(charVal * 0.6 + prev * 0.3 + Math.Sin(f * 0.08) * 0.1); prev = tokens[f]; }
-        // HiFi-GAN decoder
         int waveLen = codecFrames * (SampleRate / _options.CodecFrameRate);
         var waveform = new Tensor<T>([waveLen]);
         for (int i = 0; i < waveLen; i++) { int frame = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1); waveform[i] = NumOps.FromDouble(Math.Tanh(tokens[frame] * Math.Sin(i * 0.01 + tokens[frame]) * 0.8)); }
@@ -36,10 +30,10 @@ public class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "XTTSv2-Native" : "XTTSv2-ONNX", Description = "XTTS v2: Multilingual Zero-Shot TTS (Coqui AI, 2023)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.LLMDim }; }
+    public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "MegaTTS3-Native" : "MegaTTS3-ONNX", Description = "MegaTTS 3: sparse diffusion transformer TTS using DiT backbone for efficient generation.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.LLMDim }; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.NumCodebooks); writer.Write(_options.LLMDim); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.NumCodebooks = reader.ReadInt32(); _options.LLMDim = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new XTTSv2<T>(Architecture, mp, _options); return new XTTSv2<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(XTTSv2<T>)); }
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.NumCodebooks = reader.ReadInt32(); _options.LLMDim = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is {} p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is {} mp && !string.IsNullOrEmpty(mp)) return new MegaTTS3<T>(Architecture, mp, _options); return new MegaTTS3<T>(Architecture, _options); }
+    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MegaTTS3<T>)); }
     protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
 }

@@ -1,5 +1,5 @@
 using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
-namespace AiDotNet.TextToSpeech.CodecBased;
+namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>OuteTTS: text-to-speech using pure language modeling on audio tokens.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Project: "OuteTTS: Pure language modeling TTS" (Oute, 2024)</item></list></para></remarks>

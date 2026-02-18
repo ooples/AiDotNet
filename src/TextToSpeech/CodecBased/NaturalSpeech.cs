@@ -1,5 +1,5 @@
 using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
-namespace AiDotNet.TextToSpeech.FlowDiffusion;
+namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>NaturalSpeech: fully end-to-end TTS with VAE, normalizing flow, and bidirectional prior/posterior for human-level quality.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "NaturalSpeech: End-to-End Text to Speech Synthesis with Human-Level Quality" (Tan et al., 2022)</item></list></para></remarks>

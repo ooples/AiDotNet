@@ -1,5 +1,5 @@
 using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
-namespace AiDotNet.TextToSpeech.StyleEmotion;
+namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>OpenVoice: versatile instant voice cloning with decoupled tone color conversion.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "OpenVoice: Versatile Instant Voice Cloning" (Qin et al., 2023)</item></list></para></remarks>

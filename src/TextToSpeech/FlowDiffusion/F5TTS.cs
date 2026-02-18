@@ -1,5 +1,5 @@
 using AiDotNet.Helpers; using AiDotNet.Interfaces; using AiDotNet.Models.Options; using AiDotNet.NeuralNetworks; using AiDotNet.Onnx; using AiDotNet.Optimizers; using AiDotNet.TextToSpeech.Interfaces;
-namespace AiDotNet.TextToSpeech.CodecBased;
+namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <summary>F5-TTS: non-autoregressive flow-matching TTS that generates speech from text using DiT backbone.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching" (Chen et al., 2024)</item></list></para></remarks>

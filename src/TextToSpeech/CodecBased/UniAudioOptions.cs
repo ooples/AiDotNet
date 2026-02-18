@@ -1,7 +1,7 @@
 using AiDotNet.TextToSpeech.CodecBased;
-namespace AiDotNet.TextToSpeech.MultiModal;
-/// <summary>Options for AudioLM TTS model.</summary>
-public class AudioLMOptions : CodecTtsOptions
+namespace AiDotNet.TextToSpeech.CodecBased;
+/// <summary>Options for UniAudio TTS model.</summary>
+public class UniAudioOptions : CodecTtsOptions
 {
     public new int TextEncoderDim { get; set; } = 256;
     public new int LLMDim { get; set; } = 1024;

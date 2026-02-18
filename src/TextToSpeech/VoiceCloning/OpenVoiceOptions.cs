@@ -1,5 +1,5 @@
 using AiDotNet.TextToSpeech.EndToEnd;
-namespace AiDotNet.TextToSpeech.StyleEmotion;
+namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <summary>Options for OpenVoice TTS model.</summary>
 public class OpenVoiceOptions : EndToEndTtsOptions
 {
